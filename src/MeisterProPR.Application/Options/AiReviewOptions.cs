@@ -128,6 +128,25 @@ public sealed class AiReviewOptions
     [Range(1, 500, ErrorMessage = "QualityFilterThreshold must be between 1 and 500.")]
     public int QualityFilterThreshold { get; set; } = 20;
 
+    /// <summary>Maximum number of candidate findings kept after per-file importance ranking.</summary>
+    [Range(1, 100, ErrorMessage = "ImportanceRankingKeepTopN must be between 1 and 100.")]
+    public int ImportanceRankingKeepTopN { get; set; } = 8;
+
+    /// <summary>Minimum 1-10 importance score required for a ranked finding to survive.</summary>
+    [Range(1, 10, ErrorMessage = "ImportanceRankingMinScore must be between 1 and 10.")]
+    public int ImportanceRankingMinScore { get; set; } = 4;
+
+    /// <summary>Maximum number of cross-file caller sites to prefetch into the prompt evidence channel.</summary>
+    [Range(0, 20, ErrorMessage = "MaxPrefetchCallerSites must be between 0 and 20.")]
+    public int MaxPrefetchCallerSites { get; set; } = 5;
+
+    /// <summary>Maximum number of characters injected from prefetched surrounding-code regions.</summary>
+    [Range(256, 32000, ErrorMessage = "MaxPrefetchRegionChars must be between 256 and 32000.")]
+    public int MaxPrefetchRegionChars { get; set; } = 4000;
+
+    /// <summary>Controls whether a high-risk file with zero surviving findings gets one focused second look.</summary>
+    public bool EnableHighRiskEscalation { get; set; } = true;
+
     /// <summary>
     ///     Maximum number of past resolutions to retrieve per file review query.
     ///     Bound to <c>AI_MEMORY_TOP_N</c>. Range: 1–20.

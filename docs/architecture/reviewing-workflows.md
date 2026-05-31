@@ -56,6 +56,12 @@ comment threads back to the originating provider.
 
 Production execution enters through `ReviewOrchestrationService`, and offline evaluation enters through `ReviewWorkflowRunner`. Both flows resolve strategy and profile routing through `IReviewStrategyDispatcher`, which now permits only `FileByFile` execution.
 
+For `FileByFile`, the shared pipeline-profile catalog now publishes the legacy
+`file-by-file-baseline` plus `file-by-file-calm`, `file-by-file-balanced`, and
+`file-by-file-assertive`. `file-by-file-balanced` is the baseline profile. All four currently share
+the same dispatch-stage family ordering for recall-uplift groundwork: context prefetch, risk-marker
+scan, then ProRV prefilter.
+
 ## Offline Prompt Experiment Harness
 
 The offline harness can replay one fixture as a batch of baseline and named prompt variants without
@@ -319,7 +325,9 @@ as limitations rather than failing the whole request. Repository overview and fi
 results are branch-specific, structured, and cacheable within one review-context instance; missing
 neighborhood files produce explicit not-found limitations.
 
-For the file-based strategies, the common per-file post-processing shape is explicit through Reviewing-owned pipeline profiles and a shared pipeline runner. The baseline and experimental profiles differ by ordered stage composition rather than by introducing a new top-level orchestrator.
+For the file-based strategies, the common per-file post-processing shape is explicit through Reviewing-owned pipeline profiles and a shared pipeline runner. The `FileByFile` catalog now uses ordered stage composition to express `Calm`, `Balanced`, and `Assertive` behavior without introducing a new top-level orchestrator. `Balanced` keeps the confidence floor and info stripping, while `Assertive` keeps only info stripping plus importance ranking. Ahead of those per-file stages, the shared dispatch path always runs bounded context prefetch and deterministic risk-marker scanning. Risk-marked files then get a specialist augmentation pass, and files that remain silent after baseline plus specialist review can receive one bounded high-risk escalation pass before synthesis finalizes the review.
+
+The job protocol trace records those profile and risk-pass choices explicitly through `review_profile_selected`, `review_pipeline_profile_applied`, `context_prefetch_applied`, `security_specialist_pass_ran`, `high_risk_escalation_ran`, and `zero_candidate_high_risk` events.
 
 ## Final Finding Gate Rules
 

@@ -49,6 +49,15 @@ internal sealed class ClientEntityTypeConfiguration : IEntityTypeConfiguration<C
             .HasColumnName("custom_system_message")
             .IsRequired(false);
 
+        builder.Property(c => c.DefaultReviewPipelineProfileId)
+            .HasColumnName("default_review_pipeline_profile_id")
+            .HasMaxLength(128)
+            .IsRequired(false);
+
+        builder.Property(c => c.DefaultReviewPipelineProfileUpdatedAtUtc)
+            .HasColumnName("default_review_pipeline_profile_updated_at_utc")
+            .IsRequired(false);
+
         builder.Property(c => c.ScmCommentPostingEnabled)
             .HasColumnName("scm_comment_posting_enabled")
             .HasDefaultValue(true);

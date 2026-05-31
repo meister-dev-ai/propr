@@ -71,4 +71,9 @@ public interface IClientRegistry
     ///     Returns the default review strategy configured for the given client, or <see langword="null" /> if not set.
     /// </summary>
     Task<ReviewStrategy?> GetDefaultReviewStrategyAsync(Guid clientId, CancellationToken ct = default);
+
+    /// <summary>
+    ///     Returns the default review pipeline profile configured for the given client, or <see langword="null" /> if not set.
+    /// </summary>
+    Task<string?> GetDefaultReviewPipelineProfileIdAsync(Guid clientId, CancellationToken ct = default);
 }

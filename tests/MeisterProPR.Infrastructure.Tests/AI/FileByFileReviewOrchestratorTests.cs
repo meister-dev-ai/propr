@@ -31,6 +31,13 @@ public class FileByFileReviewOrchestratorTests
             new AiReviewOptions { MaxFileReviewConcurrency = 1, MaxFileReviewRetries = 3, ModelId = "test-model" });
     }
 
+    private static IOptions<AiReviewOptions> CreateOptions(Action<AiReviewOptions> configure)
+    {
+        var options = new AiReviewOptions { MaxFileReviewConcurrency = 1, MaxFileReviewRetries = 3, ModelId = "test-model" };
+        configure(options);
+        return Microsoft.Extensions.Options.Options.Create(options);
+    }
+
     private static ReviewJob CreateJob()
     {
         return new ReviewJob(Guid.NewGuid(), Guid.NewGuid(), "https://dev.azure.com/org", "proj", "repo", 1, 1);
@@ -1070,6 +1077,453 @@ public class FileByFileReviewOrchestratorTests
     }
 
     [Fact]
+    public void GetProfiles_FileByFile_PublishesRecallUpliftCatalogWithBalancedBaseline()
+    {
+        var sut = new ReviewPipelineProfileProvider();
+
+        var profiles = sut.GetProfiles(ReviewStrategy.FileByFile);
+
+        var legacyBaseline = Assert.Single(profiles.Where(profile => profile.ProfileId == ReviewPipelineProfileProvider.FileByFileBaselineProfileId));
+        var calm = Assert.Single(profiles.Where(profile => profile.ProfileId == ReviewPipelineProfileProvider.FileByFileCalmProfileId));
+        var balanced = Assert.Single(profiles.Where(profile => profile.ProfileId == ReviewPipelineProfileProvider.FileByFileBalancedProfileId));
+        var assertive = Assert.Single(profiles.Where(profile => profile.ProfileId == ReviewPipelineProfileProvider.FileByFileAssertiveProfileId));
+
+        var expectedDispatchStages = new[]
+        {
+            FileByFileContextPrefetchStage.StageIdConstant,
+            FileByFileRiskMarkerStage.StageIdConstant,
+            FileByFileProRvPrefilterStage.StageIdConstant,
+        };
+
+        Assert.False(legacyBaseline.IsBaseline);
+        Assert.Equal(expectedDispatchStages, legacyBaseline.DispatchStageIds);
+        Assert.Equal(
+            [
+                FileByFileConfidenceFloorStage.StageIdConstant,
+                FileByFileSpeculativeCommentFilterStage.StageIdConstant,
+                FileByFileInfoCommentStripStage.StageIdConstant,
+                FileByFileVagueSuggestionFilterStage.StageIdConstant,
+            ],
+            legacyBaseline.PerFileStageIds);
+
+        Assert.False(calm.IsBaseline);
+        Assert.Equal(expectedDispatchStages, calm.DispatchStageIds);
+        Assert.Equal(
+            [
+                FileByFileConfidenceFloorStage.StageIdConstant,
+                FileByFileSpeculativeCommentFilterStage.StageIdConstant,
+                FileByFileInfoCommentStripStage.StageIdConstant,
+                FileByFileVagueSuggestionFilterStage.StageIdConstant,
+            ],
+            calm.PerFileStageIds);
+
+        Assert.True(balanced.IsBaseline);
+        Assert.Equal(expectedDispatchStages, balanced.DispatchStageIds);
+        Assert.Equal(
+            [
+                FileByFileConfidenceFloorStage.StageIdConstant,
+                FileByFileInfoCommentStripStage.StageIdConstant,
+                FileByFileImportanceRankingStage.StageIdConstant,
+            ],
+            balanced.PerFileStageIds);
+
+        Assert.False(assertive.IsBaseline);
+        Assert.Equal(expectedDispatchStages, assertive.DispatchStageIds);
+        Assert.Equal(
+            [
+                FileByFileInfoCommentStripStage.StageIdConstant,
+                FileByFileImportanceRankingStage.StageIdConstant,
+            ],
+            assertive.PerFileStageIds);
+    }
+
+    [Fact]
+    public async Task ReviewAsync_WithoutExplicitProfile_UsesBalancedBaselineProfileWithRecallDispatchStages()
+    {
+        var job = CreateJob();
+        job.SelectReviewStrategy(
+            ReviewStrategy.FileByFile,
+            ReviewStrategySelectionSource.ClientDefault,
+            ReviewComparisonMode.Single,
+            ReviewPublicationMode.Publish,
+            null);
+
+        var pr = CreatePr(CreateFile("src/Foo.cs"));
+        var aiCore = Substitute.For<IAiReviewCore>();
+        aiCore.ReviewAsync(Arg.Any<PullRequest>(), Arg.Any<ReviewSystemContext>(), Arg.Any<CancellationToken>())
+            .Returns(CreateResult());
+
+        var protocolRecorder = CreateProtocolRecorder();
+        var chatClient = Substitute.For<IChatClient>();
+        chatClient.GetResponseAsync(
+                Arg.Any<IList<ChatMessage>>(),
+                Arg.Any<ChatOptions?>(),
+                Arg.Any<CancellationToken>())
+            .Returns(new ChatResponse(new ChatMessage(ChatRole.Assistant, "synthesis")));
+
+        var jobRepo = CreateJobRepo();
+        jobRepo.GetByIdWithFileResultsAsync(job.Id, Arg.Any<CancellationToken>()).Returns(job);
+
+        var sut = CreateOrchestrator(aiCore, protocolRecorder, jobRepo, chatClient);
+
+        await sut.ReviewAsync(job, pr, CreateContext(), CancellationToken.None);
+
+        await protocolRecorder.Received(1)
+            .RecordReviewStrategyEventAsync(
+                Arg.Any<Guid>(),
+                ReviewProtocolEventNames.ReviewPipelineProfileApplied,
+                Arg.Is<string?>(details =>
+                    details != null
+                    && details.Contains(ReviewPipelineProfileProvider.FileByFileBalancedProfileId, StringComparison.Ordinal)
+                    && details.Contains("src/Foo.cs", StringComparison.Ordinal)),
+                Arg.Is<string?>(output =>
+                    output != null
+                    && output.Contains(FileByFileContextPrefetchStage.StageIdConstant, StringComparison.Ordinal)
+                    && output.Contains(FileByFileRiskMarkerStage.StageIdConstant, StringComparison.Ordinal)
+                    && output.Contains(FileByFileProRvPrefilterStage.StageIdConstant, StringComparison.Ordinal)),
+                Arg.Is<string?>(error => error == null),
+                Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task ReviewAsync_WithBalancedProfile_RecordsReviewProfileSelectionSourceAndProfileId()
+    {
+        var job = CreateJob();
+        job.SelectReviewStrategy(
+            ReviewStrategy.FileByFile,
+            ReviewStrategySelectionSource.ClientDefault,
+            ReviewComparisonMode.Single,
+            ReviewPublicationMode.Publish,
+            null,
+            ReviewPipelineProfileProvider.FileByFileBalancedProfileId);
+
+        var pr = CreatePr(CreateFile("src/Foo.cs"));
+        var aiCore = Substitute.For<IAiReviewCore>();
+        aiCore.ReviewAsync(Arg.Any<PullRequest>(), Arg.Any<ReviewSystemContext>(), Arg.Any<CancellationToken>())
+            .Returns(CreateResult());
+
+        var protocolRecorder = CreateProtocolRecorder();
+        var chatClient = Substitute.For<IChatClient>();
+        chatClient.GetResponseAsync(
+                Arg.Any<IList<ChatMessage>>(),
+                Arg.Any<ChatOptions?>(),
+                Arg.Any<CancellationToken>())
+            .Returns(new ChatResponse(new ChatMessage(ChatRole.Assistant, "synthesis")));
+
+        var jobRepo = CreateJobRepo();
+        jobRepo.GetByIdWithFileResultsAsync(job.Id, Arg.Any<CancellationToken>()).Returns(job);
+
+        var sut = CreateOrchestrator(aiCore, protocolRecorder, jobRepo, chatClient);
+        var context = CreateContext();
+        context.ActiveProtocolId = Guid.NewGuid();
+        context.ProtocolRecorder = protocolRecorder;
+
+        await sut.ReviewAsync(job, pr, context, CancellationToken.None);
+
+        await protocolRecorder.Received(1)
+            .RecordReviewStrategyEventAsync(
+                context.ActiveProtocolId.Value,
+                ReviewProtocolEventNames.ReviewProfileSelected,
+                Arg.Is<string?>(details =>
+                    details != null
+                    && details.Contains("\"strategy\":\"FileByFile\"", StringComparison.Ordinal)
+                    && details.Contains("\"selectionSource\":\"ClientDefault\"", StringComparison.Ordinal)),
+                Arg.Is<string?>(output =>
+                    output != null
+                    && output.Contains(ReviewPipelineProfileProvider.FileByFileBalancedProfileId, StringComparison.Ordinal)),
+                Arg.Is<string?>(error => error == null),
+                Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task ReviewAsync_WithBalancedProfile_KeepsOnlyTopRankedPerFileComments()
+    {
+        var job = CreateJob();
+        job.SelectReviewStrategy(
+            ReviewStrategy.FileByFile,
+            ReviewStrategySelectionSource.ClientDefault,
+            ReviewComparisonMode.Single,
+            ReviewPublicationMode.Publish,
+            null,
+            ReviewPipelineProfileProvider.FileByFileBalancedProfileId);
+
+        var pr = CreatePr(CreateFile("src/Foo.cs"));
+        var aiCore = Substitute.For<IAiReviewCore>();
+        aiCore.ReviewAsync(Arg.Any<PullRequest>(), Arg.Any<ReviewSystemContext>(), Arg.Any<CancellationToken>())
+            .Returns(
+                new ReviewResult(
+                    "file summary",
+                    [
+                        new ReviewComment("src/Foo.cs", 30, CommentSeverity.Warning, "Consider renaming helper for readability."),
+                        new ReviewComment("src/Foo.cs", 18, CommentSeverity.Error, "Authorization check is missing before token-backed action."),
+                        new ReviewComment("src/Foo.cs", 40, CommentSeverity.Warning, "Maybe simplify this expression."),
+                    ]));
+
+        var storedResults = new List<ReviewFileResult>();
+        var repo = Substitute.For<IJobRepository>();
+        repo.GetByIdWithFileResultsAsync(job.Id, Arg.Any<CancellationToken>())
+            .Returns(ci => Task.FromResult<ReviewJob?>(BuildJobWithResults(job, storedResults)));
+        repo.AddFileResultAsync(Arg.Any<ReviewFileResult>(), Arg.Any<CancellationToken>())
+            .Returns(ci =>
+            {
+                storedResults.Add(ci.Arg<ReviewFileResult>());
+                return Task.CompletedTask;
+            });
+        repo.UpdateFileResultAsync(Arg.Any<ReviewFileResult>(), Arg.Any<CancellationToken>())
+            .Returns(Task.CompletedTask);
+
+        var chatClient = Substitute.For<IChatClient>();
+        chatClient.GetResponseAsync(
+                Arg.Any<IList<ChatMessage>>(),
+                Arg.Any<ChatOptions?>(),
+                Arg.Any<CancellationToken>())
+            .Returns(new ChatResponse(new ChatMessage(ChatRole.Assistant, "synthesis")));
+
+        var sut = CreateOrchestrator(
+            aiCore,
+            CreateProtocolRecorder(),
+            repo,
+            chatClient,
+            CreateOptions(options =>
+            {
+                options.ImportanceRankingKeepTopN = 1;
+                options.ImportanceRankingMinScore = 5;
+            }));
+
+        await sut.ReviewAsync(job, pr, CreateContext(), CancellationToken.None);
+
+        var completedResult = Assert.Single(storedResults.Where(result => result.IsComplete));
+        var keptComment = Assert.Single(completedResult.Comments!);
+        Assert.Equal("Authorization check is missing before token-backed action.", keptComment.Message);
+    }
+
+    [Fact]
+    public async Task ReviewAsync_ContextPrefetchStage_AddsBoundedEvidenceToPerFileHintBeforeAiReview()
+    {
+        var job = CreateJob();
+        var file = new ChangedFile(
+            "src/Foo.cs",
+            ChangeType.Edit,
+            "public sealed class FooService\n{\n    public string Create(string value)\n    {\n        return value.Trim();\n    }\n}",
+            "+ public string Create(string value)");
+        var pr = CreatePr(file);
+
+        var aiCore = Substitute.For<IAiReviewCore>();
+        aiCore.ReviewAsync(
+                Arg.Any<PullRequest>(),
+                Arg.Is<ReviewSystemContext>(reviewContext =>
+                    reviewContext.PerFileHint != null
+                    && reviewContext.PerFileHint.PrefetchedContextEvidence.Count == 2
+                    && reviewContext.PerFileHint.PrefetchedContextEvidence.Any(item =>
+                        string.Equals(item.Kind, "surrounding_definition", StringComparison.Ordinal)
+                        && string.Equals(item.SourceId, "src/Foo.cs", StringComparison.Ordinal))
+                    && reviewContext.PerFileHint.PrefetchedContextEvidence.Any(item =>
+                        string.Equals(item.Kind, "supported_caller_site", StringComparison.Ordinal)
+                        && string.Equals(item.SourceId, "src/Bar.cs:L27", StringComparison.Ordinal)
+                        && item.Truncated)),
+                Arg.Any<CancellationToken>())
+            .Returns(CreateResult());
+
+        var reviewTools = Substitute.For<IReviewContextTools>();
+        reviewTools.SearchCodeAsync(
+                Arg.Is<CodeSearchRequest>(request =>
+                    string.Equals(request.SearchMode, CodeSearchModes.RelatedSymbol, StringComparison.Ordinal)
+                    && string.Equals(request.BranchSide, RepositorySearchBranchSides.Source, StringComparison.Ordinal)
+                    && string.Equals(request.PathScope, RepositorySearchPathScopes.Repository, StringComparison.Ordinal)),
+                Arg.Any<CancellationToken>())
+            .Returns(
+                new CodeSearchResult(
+                    RepositorySearchStatuses.Success,
+                    RepositorySearchBranchSides.Source,
+                    RepositorySearchPathScopes.Repository,
+                    CodeSearchModes.RelatedSymbol,
+                    null,
+                    [new CodeSearchMatch("src/Bar.cs", 27, new string('x', 80), "csharp", 1, false)],
+                    [],
+                    false));
+
+        var protocolRecorder = CreateProtocolRecorder();
+        var chatClient = Substitute.For<IChatClient>();
+        chatClient.GetResponseAsync(
+                Arg.Any<IList<ChatMessage>>(),
+                Arg.Any<ChatOptions?>(),
+                Arg.Any<CancellationToken>())
+            .Returns(new ChatResponse(new ChatMessage(ChatRole.Assistant, "synthesis")));
+
+        var jobRepo = CreateJobRepo();
+        jobRepo.GetByIdWithFileResultsAsync(job.Id, Arg.Any<CancellationToken>()).Returns(job);
+
+        var sut = CreateOrchestrator(
+            aiCore,
+            protocolRecorder,
+            jobRepo,
+            chatClient,
+            CreateOptions(options =>
+            {
+                options.MaxPrefetchCallerSites = 1;
+                options.MaxPrefetchRegionChars = 40;
+            }));
+
+        var context = new ReviewSystemContext(null, [], reviewTools);
+
+        await sut.ReviewAsync(job, pr, context, CancellationToken.None);
+
+        await aiCore.Received(1)
+            .ReviewAsync(Arg.Any<PullRequest>(), Arg.Any<ReviewSystemContext>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task ReviewAsync_ContextPrefetchStage_RecordsContextPrefetchAppliedEvent()
+    {
+        var job = CreateJob();
+        var file = new ChangedFile(
+            "src/Foo.cs",
+            ChangeType.Edit,
+            "public sealed class FooService\n{\n    public string Create(string value)\n    {\n        return value.Trim();\n    }\n}",
+            "+ public string Create(string value)");
+        var pr = CreatePr(file);
+
+        var aiCore = Substitute.For<IAiReviewCore>();
+        aiCore.ReviewAsync(Arg.Any<PullRequest>(), Arg.Any<ReviewSystemContext>(), Arg.Any<CancellationToken>())
+            .Returns(CreateResult());
+
+        var reviewTools = Substitute.For<IReviewContextTools>();
+        reviewTools.SearchCodeAsync(Arg.Any<CodeSearchRequest>(), Arg.Any<CancellationToken>())
+            .Returns(
+                new CodeSearchResult(
+                    RepositorySearchStatuses.Success,
+                    RepositorySearchBranchSides.Source,
+                    RepositorySearchPathScopes.Repository,
+                    CodeSearchModes.RelatedSymbol,
+                    null,
+                    [new CodeSearchMatch("src/Bar.cs", 14, "FooService.Create(oldArg);", "csharp", 1, false)],
+                    [],
+                    false));
+
+        var protocolRecorder = CreateProtocolRecorder();
+        var chatClient = Substitute.For<IChatClient>();
+        chatClient.GetResponseAsync(
+                Arg.Any<IList<ChatMessage>>(),
+                Arg.Any<ChatOptions?>(),
+                Arg.Any<CancellationToken>())
+            .Returns(new ChatResponse(new ChatMessage(ChatRole.Assistant, "synthesis")));
+
+        var jobRepo = CreateJobRepo();
+        jobRepo.GetByIdWithFileResultsAsync(job.Id, Arg.Any<CancellationToken>()).Returns(job);
+
+        var sut = CreateOrchestrator(aiCore, protocolRecorder, jobRepo, chatClient);
+
+        var context = new ReviewSystemContext(null, [], reviewTools);
+
+        await sut.ReviewAsync(job, pr, context, CancellationToken.None);
+
+        await protocolRecorder.Received(1)
+            .RecordReviewStrategyEventAsync(
+                Arg.Any<Guid>(),
+                ReviewProtocolEventNames.ContextPrefetchApplied,
+                Arg.Is<string?>(details =>
+                    details != null
+                    && details.Contains("src/Foo.cs", StringComparison.Ordinal)
+                    && details.Contains("evidenceCount", StringComparison.Ordinal)),
+                Arg.Is<string?>(output =>
+                    output != null
+                    && output.Contains("surrounding_definition", StringComparison.Ordinal)
+                    && output.Contains("supported_caller_site", StringComparison.Ordinal)),
+                Arg.Is<string?>(error => error == null),
+                Arg.Any<CancellationToken>());
+    }
+
+    [Theory]
+    [InlineData("+ var token = Request.Headers[\"Authorization\"];", true, false)]
+    [InlineData("+ await Task.WhenAll(tasks);", false, true)]
+    [InlineData("+ foreach (async item in items) { }", false, true)]
+    [InlineData("+ var value = 42;", false, false)]
+    public async Task ReviewAsync_RiskMarkerStage_FlagsExpectedSecurityAndConcurrencyMarkers(
+        string diff,
+        bool expectedSecurity,
+        bool expectedConcurrency)
+    {
+        var job = CreateJob();
+        var pr = CreatePr(new ChangedFile("src/Foo.cs", ChangeType.Edit, "content", diff));
+        var aiCore = Substitute.For<IAiReviewCore>();
+        aiCore.ReviewAsync(
+                Arg.Any<PullRequest>(),
+                Arg.Is<ReviewSystemContext>(context =>
+                    context.PerFileHint != null
+                    && context.PerFileHint.RiskMarkers.HasSecurityMarkers == expectedSecurity
+                    && context.PerFileHint.RiskMarkers.HasConcurrencyMarkers == expectedConcurrency),
+                Arg.Any<CancellationToken>())
+            .Returns(CreateResult());
+
+        var chatClient = Substitute.For<IChatClient>();
+        chatClient.GetResponseAsync(
+                Arg.Any<IList<ChatMessage>>(),
+                Arg.Any<ChatOptions?>(),
+                Arg.Any<CancellationToken>())
+            .Returns(new ChatResponse(new ChatMessage(ChatRole.Assistant, "synthesis")));
+
+        var jobRepo = CreateJobRepo();
+        jobRepo.GetByIdWithFileResultsAsync(job.Id, Arg.Any<CancellationToken>()).Returns(job);
+
+        var sut = CreateOrchestrator(aiCore, CreateProtocolRecorder(), jobRepo, chatClient);
+
+        await sut.ReviewAsync(job, pr, CreateContext(), CancellationToken.None);
+
+        await aiCore.Received(1).ReviewAsync(Arg.Any<PullRequest>(), Arg.Any<ReviewSystemContext>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task ReviewAsync_WithLateAugmentationAndRiskMarkers_RecordsSecuritySpecialistPassEvent()
+    {
+        var job = CreateJob();
+        var pr = CreatePr(new ChangedFile("src/Foo.cs", ChangeType.Edit, "content", "+ var token = Request.Headers[\"Authorization\"];"));
+        var aiCore = Substitute.For<IAiReviewCore>();
+        aiCore.ReviewAsync(Arg.Any<PullRequest>(), Arg.Any<ReviewSystemContext>(), Arg.Any<CancellationToken>())
+            .Returns(
+                new ReviewResult("baseline summary", []),
+                new ReviewResult("specialist summary", [new ReviewComment("src/Foo.cs", 12, CommentSeverity.Warning, "Token handling bypasses validation.")]));
+
+        var protocolRecorder = CreateProtocolRecorder();
+        var chatClient = Substitute.For<IChatClient>();
+        chatClient.GetResponseAsync(
+                Arg.Any<IList<ChatMessage>>(),
+                Arg.Any<ChatOptions?>(),
+                Arg.Any<CancellationToken>())
+            .Returns(new ChatResponse(new ChatMessage(ChatRole.Assistant, "synthesis")));
+
+        var storedResults = new List<ReviewFileResult>();
+        var repo = Substitute.For<IJobRepository>();
+        repo.GetByIdWithFileResultsAsync(job.Id, Arg.Any<CancellationToken>())
+            .Returns(ci => Task.FromResult<ReviewJob?>(BuildJobWithResults(job, storedResults)));
+        repo.AddFileResultAsync(Arg.Any<ReviewFileResult>(), Arg.Any<CancellationToken>())
+            .Returns(ci =>
+            {
+                storedResults.Add(ci.Arg<ReviewFileResult>());
+                return Task.CompletedTask;
+            });
+        repo.UpdateFileResultAsync(Arg.Any<ReviewFileResult>(), Arg.Any<CancellationToken>())
+            .Returns(Task.CompletedTask);
+
+        var sut = CreateOrchestrator(aiCore, protocolRecorder, repo, chatClient);
+        var context = CreateContext();
+        context.AugmentationMode = ReviewAugmentationMode.LateAugmentation;
+        context.EnableProRV = true;
+        context.ActiveProtocolId = Guid.NewGuid();
+        context.ProtocolRecorder = protocolRecorder;
+
+        await sut.ReviewAsync(job, pr, context, CancellationToken.None);
+
+        await protocolRecorder.Received(1)
+            .RecordReviewStrategyEventAsync(
+                Arg.Any<Guid>(),
+                ReviewProtocolEventNames.SecuritySpecialistPassRan,
+                Arg.Is<string?>(details => details != null && details.Contains("security.auth-token", StringComparison.Ordinal)),
+                Arg.Is<string?>(output => output != null && output.Contains("addedFindings", StringComparison.Ordinal)),
+                Arg.Is<string?>(error => error == null),
+                Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
     public async Task ReviewAsync_WithProRvDisabledInContext_DoesNotInvokeProRvPrefilter()
     {
         var job = CreateJob();
@@ -1095,6 +1549,7 @@ public class FileByFileReviewOrchestratorTests
             protocolRecorder,
             jobRepo,
             defaultChatClient,
+            CreateOptions(options => options.EnableHighRiskEscalation = false),
             proRvPrefilter: proRvPrefilter);
 
         var context = CreateContext();
@@ -1123,7 +1578,7 @@ public class FileByFileReviewOrchestratorTests
     public async Task ReviewAsync_WithLateAugmentationMode_UsesProRvOnlyForAugmentationPass()
     {
         var job = CreateJob();
-        var pr = CreatePr(new ChangedFile("src/service.py", ChangeType.Edit, "content", "+ return render(title)"));
+        var pr = CreatePr(new ChangedFile("src/service.py", ChangeType.Edit, "content", "+ var token = Request.Headers[\"Authorization\"]"));
         var aiCore = Substitute.For<IAiReviewCore>();
         aiCore.ReviewAsync(Arg.Any<PullRequest>(), Arg.Any<ReviewSystemContext>(), Arg.Any<CancellationToken>())
             .Returns(CreateResult());
@@ -1145,6 +1600,7 @@ public class FileByFileReviewOrchestratorTests
             protocolRecorder,
             jobRepo,
             defaultChatClient,
+            CreateOptions(options => options.EnableHighRiskEscalation = false),
             proRvPrefilter: proRvPrefilter);
 
         var context = CreateContext();
@@ -1177,6 +1633,72 @@ public class FileByFileReviewOrchestratorTests
                     reviewContext.EnableProRV &&
                     reviewContext.PassKind == ReviewPassKind.ProRVAugmentation &&
                     reviewContext.AugmentationMode == ReviewAugmentationMode.LateAugmentation),
+                Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task ReviewAsync_WithLateAugmentationMode_WithoutRiskMarkers_SkipsAugmentationPass()
+    {
+        var job = CreateJob();
+        var pr = CreatePr(new ChangedFile("src/Foo.cs", ChangeType.Edit, "content", "+ var value = 42;"));
+        var aiCore = Substitute.For<IAiReviewCore>();
+        aiCore.ReviewAsync(Arg.Any<PullRequest>(), Arg.Any<ReviewSystemContext>(), Arg.Any<CancellationToken>())
+            .Returns(new ReviewResult("baseline summary", [new ReviewComment("src/Foo.cs", 12, CommentSeverity.Warning, "Baseline issue")]));
+
+        var protocolRecorder = CreateProtocolRecorder();
+        var chatClient = Substitute.For<IChatClient>();
+        chatClient.GetResponseAsync(
+                Arg.Any<IList<ChatMessage>>(),
+                Arg.Any<ChatOptions?>(),
+                Arg.Any<CancellationToken>())
+            .Returns(new ChatResponse(new ChatMessage(ChatRole.Assistant, "synthesis")));
+
+        var proRvPrefilter = Substitute.For<IProRVPrefilter>();
+        var storedResults = new List<ReviewFileResult>();
+        var repo = Substitute.For<IJobRepository>();
+        repo.GetByIdWithFileResultsAsync(job.Id, Arg.Any<CancellationToken>())
+            .Returns(ci => Task.FromResult<ReviewJob?>(BuildJobWithResults(job, storedResults)));
+        repo.AddFileResultAsync(Arg.Any<ReviewFileResult>(), Arg.Any<CancellationToken>())
+            .Returns(ci =>
+            {
+                storedResults.Add(ci.Arg<ReviewFileResult>());
+                return Task.CompletedTask;
+            });
+        repo.UpdateFileResultAsync(Arg.Any<ReviewFileResult>(), Arg.Any<CancellationToken>())
+            .Returns(Task.CompletedTask);
+
+        var sut = CreateOrchestrator(
+            aiCore,
+            protocolRecorder,
+            repo,
+            chatClient,
+            proRvPrefilter: proRvPrefilter);
+
+        var context = CreateContext();
+        context.AugmentationMode = ReviewAugmentationMode.LateAugmentation;
+        context.EnableProRV = true;
+
+        await sut.ReviewAsync(job, pr, context, CancellationToken.None);
+
+        await proRvPrefilter.DidNotReceive()
+            .RankRelevantItemsAsync(
+                Arg.Any<ProRVPrefilterRequest>(),
+                Arg.Any<IChatClient>(),
+                Arg.Any<ChatOptions?>(),
+                Arg.Any<CancellationToken>());
+
+        await aiCore.Received(1)
+            .ReviewAsync(
+                Arg.Any<PullRequest>(),
+                Arg.Any<ReviewSystemContext>(),
+                Arg.Any<CancellationToken>());
+
+        await aiCore.DidNotReceive()
+            .ReviewAsync(
+                Arg.Any<PullRequest>(),
+                Arg.Is<ReviewSystemContext>(reviewContext =>
+                    reviewContext.PassKind == ReviewPassKind.ProRVAugmentation &&
+                    reviewContext.EnableProRV),
                 Arg.Any<CancellationToken>());
     }
 
@@ -1241,7 +1763,7 @@ public class FileByFileReviewOrchestratorTests
     public async Task ReviewAsync_WithLateAugmentationMode_RunsSecondProRvAugmentationPass()
     {
         var job = CreateJob();
-        var pr = CreatePr(CreateFile("src/Foo.cs"));
+        var pr = CreatePr(new ChangedFile("src/Foo.cs", ChangeType.Edit, "content", "+ var token = Request.Headers[\"Authorization\"]"));
         var aiCore = Substitute.For<IAiReviewCore>();
         aiCore.ReviewAsync(Arg.Any<PullRequest>(), Arg.Any<ReviewSystemContext>(), Arg.Any<CancellationToken>())
             .Returns(
@@ -1295,7 +1817,7 @@ public class FileByFileReviewOrchestratorTests
     public async Task ReviewAsync_WithLateAugmentationMode_RecordsBaselineAugmentationAndMergeProtocolEvents()
     {
         var job = CreateJob();
-        var pr = CreatePr(CreateFile("src/Foo.cs"));
+        var pr = CreatePr(new ChangedFile("src/Foo.cs", ChangeType.Edit, "content", "+ var token = Request.Headers[\"Authorization\"]"));
         var aiCore = Substitute.For<IAiReviewCore>();
         aiCore.ReviewAsync(Arg.Any<PullRequest>(), Arg.Any<ReviewSystemContext>(), Arg.Any<CancellationToken>())
             .Returns(
@@ -1366,6 +1888,124 @@ public class FileByFileReviewOrchestratorTests
                 Arg.Is<string?>(error => error == null),
                 Arg.Any<CancellationToken>());
         });
+    }
+
+    [Fact]
+    public async Task ReviewAsync_WithLateAugmentationMode_AndZeroFindingHighRiskFile_RunsDedicatedEscalationPass()
+    {
+        var capturedContexts = new List<ReviewSystemContext>();
+        var job = CreateJob();
+        var pr = CreatePr(new ChangedFile("src/Foo.cs", ChangeType.Edit, "content", "+ var token = Request.Headers[\"Authorization\"]"));
+        var aiCore = Substitute.For<IAiReviewCore>();
+        aiCore.ReviewAsync(
+                Arg.Any<PullRequest>(),
+                Arg.Do<ReviewSystemContext>(context => capturedContexts.Add(context)),
+                Arg.Any<CancellationToken>())
+            .Returns(
+                new ReviewResult("baseline summary", []),
+                new ReviewResult("specialist summary", []),
+                new ReviewResult(
+                    "escalation summary", [new ReviewComment("src/Foo.cs", 20, CommentSeverity.Warning, "Escalation uncovered missing token validation.")]));
+
+        var storedResults = new List<ReviewFileResult>();
+        var repo = Substitute.For<IJobRepository>();
+        repo.GetByIdWithFileResultsAsync(job.Id, Arg.Any<CancellationToken>())
+            .Returns(ci => Task.FromResult<ReviewJob?>(BuildJobWithResults(job, storedResults)));
+        repo.AddFileResultAsync(Arg.Any<ReviewFileResult>(), Arg.Any<CancellationToken>())
+            .Returns(ci =>
+            {
+                storedResults.Add(ci.Arg<ReviewFileResult>());
+                return Task.CompletedTask;
+            });
+        repo.UpdateFileResultAsync(Arg.Any<ReviewFileResult>(), Arg.Any<CancellationToken>())
+            .Returns(Task.CompletedTask);
+
+        var chatClient = Substitute.For<IChatClient>();
+        chatClient.GetResponseAsync(
+                Arg.Any<IList<ChatMessage>>(),
+                Arg.Any<ChatOptions?>(),
+                Arg.Any<CancellationToken>())
+            .Returns(new ChatResponse(new ChatMessage(ChatRole.Assistant, "synthesis")));
+
+        var sut = CreateOrchestrator(aiCore, CreateProtocolRecorder(), repo, chatClient);
+        var context = CreateContext();
+        context.AugmentationMode = ReviewAugmentationMode.LateAugmentation;
+        context.EnableProRV = true;
+
+        await sut.ReviewAsync(job, pr, context, CancellationToken.None);
+
+        await aiCore.Received(3)
+            .ReviewAsync(
+                Arg.Any<PullRequest>(),
+                Arg.Any<ReviewSystemContext>(),
+                Arg.Any<CancellationToken>());
+
+        Assert.Contains(
+            capturedContexts,
+            reviewContext =>
+                reviewContext.PassKind == ReviewPassKind.ProRVAugmentation &&
+                reviewContext.PerFileHint?.FocusedReviewGuidance.Any(item => item.Id == "high-risk.zero-finding-second-look") == true);
+    }
+
+    [Fact]
+    public async Task ReviewAsync_WithLateAugmentationMode_AndSilentHighRiskEscalation_RecordsAuditEvents()
+    {
+        var job = CreateJob();
+        var pr = CreatePr(new ChangedFile("src/Foo.cs", ChangeType.Edit, "content", "+ var token = Request.Headers[\"Authorization\"]"));
+        var aiCore = Substitute.For<IAiReviewCore>();
+        aiCore.ReviewAsync(Arg.Any<PullRequest>(), Arg.Any<ReviewSystemContext>(), Arg.Any<CancellationToken>())
+            .Returns(
+                new ReviewResult("baseline summary", []),
+                new ReviewResult("specialist summary", []),
+                new ReviewResult("escalation summary", []));
+
+        var storedResults = new List<ReviewFileResult>();
+        var repo = Substitute.For<IJobRepository>();
+        repo.GetByIdWithFileResultsAsync(job.Id, Arg.Any<CancellationToken>())
+            .Returns(ci => Task.FromResult<ReviewJob?>(BuildJobWithResults(job, storedResults)));
+        repo.AddFileResultAsync(Arg.Any<ReviewFileResult>(), Arg.Any<CancellationToken>())
+            .Returns(ci =>
+            {
+                storedResults.Add(ci.Arg<ReviewFileResult>());
+                return Task.CompletedTask;
+            });
+        repo.UpdateFileResultAsync(Arg.Any<ReviewFileResult>(), Arg.Any<CancellationToken>())
+            .Returns(Task.CompletedTask);
+
+        var protocolRecorder = CreateProtocolRecorder();
+        var chatClient = Substitute.For<IChatClient>();
+        chatClient.GetResponseAsync(
+                Arg.Any<IList<ChatMessage>>(),
+                Arg.Any<ChatOptions?>(),
+                Arg.Any<CancellationToken>())
+            .Returns(new ChatResponse(new ChatMessage(ChatRole.Assistant, "synthesis")));
+
+        var sut = CreateOrchestrator(aiCore, protocolRecorder, repo, chatClient);
+        var context = CreateContext();
+        context.AugmentationMode = ReviewAugmentationMode.LateAugmentation;
+        context.EnableProRV = true;
+        context.ActiveProtocolId = Guid.NewGuid();
+        context.ProtocolRecorder = protocolRecorder;
+
+        await sut.ReviewAsync(job, pr, context, CancellationToken.None);
+
+        await protocolRecorder.Received(1)
+            .RecordReviewStrategyEventAsync(
+                context.ActiveProtocolId.Value,
+                ReviewProtocolEventNames.HighRiskEscalationRan,
+                Arg.Is<string?>(details => details != null && details.Contains("src/Foo.cs", StringComparison.Ordinal)),
+                Arg.Is<string?>(output => output != null && output.Contains("\"addedFindings\":0", StringComparison.Ordinal)),
+                Arg.Is<string?>(error => error == null),
+                Arg.Any<CancellationToken>());
+
+        await protocolRecorder.Received(1)
+            .RecordReviewStrategyEventAsync(
+                context.ActiveProtocolId.Value,
+                ReviewProtocolEventNames.ZeroCandidateHighRisk,
+                Arg.Is<string?>(details => details != null && details.Contains("security.auth-token", StringComparison.Ordinal)),
+                Arg.Any<string?>(),
+                Arg.Is<string?>(error => error == null),
+                Arg.Any<CancellationToken>());
     }
 
     // ─── T049: synthesis JSON cross_cutting_concerns ──────────────────────────────

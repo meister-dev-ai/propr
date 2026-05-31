@@ -4,6 +4,7 @@
 using MeisterProPR.Application.Exceptions;
 using MeisterProPR.Application.Features.Licensing.Models;
 using MeisterProPR.Application.Features.Licensing.Ports;
+using MeisterProPR.Application.Features.Reviewing.Execution.Models;
 using MeisterProPR.Application.Features.Reviewing.Intake.Commands.SubmitReviewJob;
 using MeisterProPR.Application.Features.Reviewing.Intake.Dtos;
 using MeisterProPR.Application.Features.Reviewing.Intake.Ports;
@@ -104,7 +105,13 @@ public sealed class SubmitReviewJobHandlerTests
                     && candidate.RepositoryId == request.RepositoryId
                     && candidate.PullRequestId == request.PullRequestId
                     && candidate.IterationId == request.IterationId
-                    && candidate.ResolvedReviewStrategySelection == ReviewStrategySelection.Default),
+                    && candidate.ResolvedReviewStrategySelection == new ReviewStrategySelection(
+                        ReviewStrategy.FileByFile,
+                        ReviewStrategySelectionSource.FallbackDefault,
+                        ReviewComparisonMode.Single,
+                        ReviewPublicationMode.Publish,
+                        null,
+                        ReviewPipelineProfileCatalog.FileByFileBalancedProfileId)),
                 Arg.Any<CancellationToken>())
             .Returns(createdJob);
         pullRequestFetcher.FetchAsync(
@@ -148,7 +155,13 @@ public sealed class SubmitReviewJobHandlerTests
                 && candidate.RepositoryId == request.RepositoryId
                 && candidate.PullRequestId == request.PullRequestId
                 && candidate.IterationId == request.IterationId
-                && candidate.ResolvedReviewStrategySelection == ReviewStrategySelection.Default),
+                && candidate.ResolvedReviewStrategySelection == new ReviewStrategySelection(
+                    ReviewStrategy.FileByFile,
+                    ReviewStrategySelectionSource.FallbackDefault,
+                    ReviewComparisonMode.Single,
+                    ReviewPublicationMode.Publish,
+                    null,
+                    ReviewPipelineProfileCatalog.FileByFileBalancedProfileId)),
             Arg.Any<CancellationToken>());
         await queue.Received(1).EnqueueAsync(createdJob.Id, Arg.Any<CancellationToken>());
         await store.Received(1)
@@ -187,7 +200,13 @@ public sealed class SubmitReviewJobHandlerTests
                     && candidate.RepositoryId == request.RepositoryId
                     && candidate.PullRequestId == request.PullRequestId
                     && candidate.IterationId == request.IterationId
-                    && candidate.ResolvedReviewStrategySelection == ReviewStrategySelection.Default),
+                    && candidate.ResolvedReviewStrategySelection == new ReviewStrategySelection(
+                        ReviewStrategy.FileByFile,
+                        ReviewStrategySelectionSource.FallbackDefault,
+                        ReviewComparisonMode.Single,
+                        ReviewPublicationMode.Publish,
+                        null,
+                        ReviewPipelineProfileCatalog.FileByFileBalancedProfileId)),
                 Arg.Any<CancellationToken>())
             .Returns(createdJob);
         pullRequestFetcher.FetchAsync(
@@ -342,5 +361,54 @@ public sealed class SubmitReviewJobHandlerTests
         await store.DidNotReceive()
             .CreatePendingJobAsync(Arg.Any<Guid>(), Arg.Any<SubmitReviewJobRequestDto>(), Arg.Any<CancellationToken>());
         await queue.DidNotReceive().EnqueueAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task HandleAsync_ClientDefaultFileByFileProfile_SnapshotsConfiguredProfileId()
+    {
+        var request = CreateRequest();
+        var createdJob = new ReviewJob(
+            Guid.NewGuid(),
+            ClientId,
+            request.ProviderScopePath,
+            request.ProviderProjectKey,
+            request.RepositoryId,
+            request.PullRequestId,
+            request.IterationId);
+        var store = Substitute.For<IReviewJobIntakeStore>();
+        var queue = Substitute.For<IReviewExecutionQueue>();
+        var clientRegistry = Substitute.For<IClientRegistry>();
+
+        store.FindActiveJobAsync(ClientId, request, Arg.Any<CancellationToken>())
+            .Returns((ReviewJob?)null);
+        store.CreatePendingJobAsync(
+                ClientId,
+                Arg.Is<SubmitReviewJobRequestDto>(candidate =>
+                    candidate.ResolvedReviewStrategySelection == new ReviewStrategySelection(
+                        ReviewStrategy.FileByFile,
+                        ReviewStrategySelectionSource.ClientDefault,
+                        ReviewComparisonMode.Single,
+                        ReviewPublicationMode.Publish,
+                        null,
+                        ReviewPipelineProfileCatalog.FileByFileAssertiveProfileId)),
+                Arg.Any<CancellationToken>())
+            .Returns(createdJob);
+        clientRegistry.GetDefaultReviewStrategyAsync(ClientId, Arg.Any<CancellationToken>())
+            .Returns(ReviewStrategy.FileByFile);
+        clientRegistry.GetDefaultReviewPipelineProfileIdAsync(ClientId, Arg.Any<CancellationToken>())
+            .Returns(ReviewPipelineProfileCatalog.FileByFileAssertiveProfileId);
+
+        var sut = new SubmitReviewJobHandler(
+            store,
+            queue,
+            NullLogger<SubmitReviewJobHandler>.Instance,
+            null,
+            null,
+            clientRegistry);
+
+        var result = await sut.HandleAsync(new SubmitReviewJobCommand(ClientId, request));
+
+        Assert.False(result.IsDuplicate);
+        await queue.Received(1).EnqueueAsync(createdJob.Id, Arg.Any<CancellationToken>());
     }
 }

@@ -616,7 +616,7 @@ public sealed partial class ReviewOrchestrationService(
             DefaultReviewModelId = job.AiModel,
             RuntimeCapabilities = runtimeCapabilities,
             EnableProRV = enableProRv,
-            AugmentationMode = enableProRv ? ReviewAugmentationMode.LateAugmentation : ReviewAugmentationMode.Disabled,
+            AugmentationMode = ReviewAugmentationMode.LateAugmentation,
             ExclusionRules = exclusionRules,
             ModelId = job.AiModel,
             ProtocolRecorder = protocolRecorder,

@@ -42,6 +42,11 @@ public static class ReviewProtocolEventNames
     public const string ProRVPrefilterCompleted = "prorv_prefilter_completed";
     public const string ProRVPrefilterFailed = "prorv_prefilter_failed";
     public const string ProRVFocusedGuidanceApplied = "prorv_focused_guidance_applied";
+    public const string ContextPrefetchApplied = "context_prefetch_applied";
+    public const string ReviewProfileSelected = "review_profile_selected";
+    public const string SecuritySpecialistPassRan = "security_specialist_pass_ran";
+    public const string HighRiskEscalationRan = "high_risk_escalation_ran";
+    public const string ZeroCandidateHighRisk = "zero_candidate_high_risk";
     public const string ReviewFindingGateSummary = "review_finding_gate_summary";
     public const string ReviewFindingGateDecision = "review_finding_gate_decision";
     public const string ReviewAgentSessionBinding = "review_agent_session_binding";

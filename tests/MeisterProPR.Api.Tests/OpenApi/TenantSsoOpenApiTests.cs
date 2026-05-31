@@ -76,4 +76,24 @@ public sealed class TenantSsoOpenApiTests
         Assert.Contains("\"totalCachedInputTokens\"", content, StringComparison.Ordinal);
         Assert.Contains("\"cacheObservability\"", content, StringComparison.Ordinal);
     }
+
+    [Fact]
+    public async Task OpenApi_DocumentsClientReviewProfileEndpoints()
+    {
+        var openApiPath = Path.GetFullPath(
+            Path.Combine(
+                AppContext.BaseDirectory,
+                "..",
+                "..",
+                "..",
+                "..",
+                "..",
+                "openapi.json"));
+        var content = await File.ReadAllTextAsync(openApiPath);
+
+        Assert.Contains("/admin/review-profiles", content, StringComparison.Ordinal);
+        Assert.Contains("/admin/clients/{clientId}/review-profile", content, StringComparison.Ordinal);
+        Assert.Contains("\"ReviewProfileCatalogResponse\"", content, StringComparison.Ordinal);
+        Assert.Contains("\"ClientReviewProfileResponse\"", content, StringComparison.Ordinal);
+    }
 }

@@ -14,11 +14,14 @@ public sealed record ReviewStrategySelection(
     Guid? ComparisonGroupId,
     string? PipelineProfileId = null)
 {
-    /// <summary>Default selection that preserves existing review behavior.</summary>
+    private const string DefaultFileByFilePipelineProfileId = "file-by-file-balanced";
+
+    /// <summary>Default fallback selection for file-by-file reviews.</summary>
     public static ReviewStrategySelection Default { get; } = new(
         ReviewStrategy.FileByFile,
         ReviewStrategySelectionSource.FallbackDefault,
         ReviewComparisonMode.Single,
         ReviewPublicationMode.Publish,
-        null);
+        null,
+        DefaultFileByFilePipelineProfileId);
 }

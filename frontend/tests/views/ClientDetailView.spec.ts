@@ -6,8 +6,9 @@ import { mount, flushPromises } from '@vue/test-utils'
 
 const mockGet = vi.fn()
 const mockPatch = vi.fn()
+const mockPut = vi.fn()
 vi.mock('@/services/api', () => ({
-  createAdminClient: vi.fn(() => ({ GET: mockGet, PATCH: mockPatch })),
+  createAdminClient: vi.fn(() => ({ GET: mockGet, PATCH: mockPatch, PUT: mockPut })),
   UnauthorizedError: class UnauthorizedError extends Error {},
 }))
 
@@ -142,7 +143,25 @@ const sampleClient = {
   isActive: true,
   createdAt: '2024-01-01T00:00:00Z',
   defaultReviewStrategy: 'fileByFile',
+  defaultReviewPipelineProfileId: 'file-by-file-balanced',
+  defaultReviewPipelineProfileUpdatedAtUtc: null,
   scmCommentPostingEnabled: true,
+  enableProRV: false,
+}
+
+const sampleReviewProfiles = {
+  profiles: [
+    { profileId: 'file-by-file-calm', displayName: 'Calm', isDefault: false },
+    { profileId: 'file-by-file-balanced', displayName: 'Balanced', isDefault: true },
+    { profileId: 'file-by-file-assertive', displayName: 'Assertive', isDefault: false },
+  ],
+}
+
+const sampleClientReviewProfile = {
+  clientId: 'client-1',
+  defaultReviewPipelineProfileId: 'file-by-file-balanced',
+  source: 'systemDefault',
+  updatedAtUtc: null,
 }
 
 function setCapabilities(capabilities: Array<{ key: string; isAvailable: boolean; message?: string }>) {
@@ -170,6 +189,12 @@ describe('ClientDetailView', () => {
       { key: 'crawl-configs', isAvailable: true },
       { key: 'multiple-scm-providers', isAvailable: true },
     ])
+    mockGet.mockReset()
+    mockGet
+      .mockResolvedValueOnce({ data: sampleClient })
+      .mockResolvedValueOnce({ data: sampleReviewProfiles })
+      .mockResolvedValueOnce({ data: sampleClientReviewProfile })
+    mockPut.mockResolvedValue({ data: sampleClientReviewProfile, response: { ok: true } })
   })
 
   afterEach(() => {
@@ -184,7 +209,6 @@ describe('ClientDetailView', () => {
   }
 
   it('fetches client on mount and renders displayName in an editable input', async () => {
-    mockGet.mockResolvedValue({ data: sampleClient })
     const { default: ClientDetailView } = await import('@/features/clients/views/ClientDetailView.vue')
     const wrapper = mount(ClientDetailView)
     await flushPromises()
@@ -195,7 +219,6 @@ describe('ClientDetailView', () => {
   }, 10000)
 
   it('calls PATCH with updated displayName on Save', async () => {
-    mockGet.mockResolvedValue({ data: sampleClient })
     mockPatch.mockResolvedValue({ data: { ...sampleClient, displayName: 'New Name' }, response: { ok: true } })
     const { default: ClientDetailView } = await import('@/features/clients/views/ClientDetailView.vue')
     const wrapper = mount(ClientDetailView)
@@ -210,7 +233,6 @@ describe('ClientDetailView', () => {
   })
 
   it('calls PATCH with toggled isActive on Disable button', async () => {
-    mockGet.mockResolvedValue({ data: sampleClient })
     mockPatch.mockResolvedValue({ data: { ...sampleClient, isActive: false }, response: { ok: true } })
     const { default: ClientDetailView } = await import('@/features/clients/views/ClientDetailView.vue')
     const wrapper = mount(ClientDetailView)
@@ -226,7 +248,6 @@ describe('ClientDetailView', () => {
   })
 
   it('loads the SCM comment posting setting and saves the disabled value', async () => {
-    mockGet.mockResolvedValue({ data: sampleClient })
     mockPatch.mockResolvedValue({ data: { ...sampleClient, scmCommentPostingEnabled: false }, response: { ok: true } })
 
     const { default: ClientDetailView } = await import('@/features/clients/views/ClientDetailView.vue')
@@ -251,7 +272,11 @@ describe('ClientDetailView', () => {
   })
 
   it('saves the SCM comment posting setting when re-enabled', async () => {
-    mockGet.mockResolvedValue({ data: { ...sampleClient, scmCommentPostingEnabled: false } })
+    mockGet.mockReset()
+    mockGet
+      .mockResolvedValueOnce({ data: { ...sampleClient, scmCommentPostingEnabled: false } })
+      .mockResolvedValueOnce({ data: sampleReviewProfiles })
+      .mockResolvedValueOnce({ data: sampleClientReviewProfile })
     mockPatch.mockResolvedValue({ data: sampleClient, response: { ok: true } })
 
     const { default: ClientDetailView } = await import('@/features/clients/views/ClientDetailView.vue')
@@ -275,7 +300,6 @@ describe('ClientDetailView', () => {
   })
 
   it('loads and saves the default review strategy from advanced settings', async () => {
-    mockGet.mockResolvedValue({ data: sampleClient })
     mockPatch.mockResolvedValue({ data: { ...sampleClient, defaultReviewStrategy: 'prWideAgentic' }, response: { ok: true } })
 
     const { default: ClientDetailView } = await import('@/features/clients/views/ClientDetailView.vue')
@@ -300,7 +324,6 @@ describe('ClientDetailView', () => {
   })
 
   it('loads and saves the agentic file-by-file default review strategy from advanced settings', async () => {
-    mockGet.mockResolvedValue({ data: sampleClient })
     mockPatch.mockResolvedValue({ data: { ...sampleClient, defaultReviewStrategy: 'agenticFileByFile' }, response: { ok: true } })
 
     const { default: ClientDetailView } = await import('@/features/clients/views/ClientDetailView.vue')
@@ -324,12 +347,45 @@ describe('ClientDetailView', () => {
   })
 
   it('shows not-found message and navigates home on 404', async () => {
-    mockGet.mockResolvedValue({ data: null, response: { status: 404, ok: false } })
+    mockGet.mockReset()
+    mockGet.mockResolvedValueOnce({ data: null, response: { status: 404, ok: false } })
     const { default: ClientDetailView } = await import('@/features/clients/views/ClientDetailView.vue')
     const wrapper = mount(ClientDetailView)
     await flushPromises()
     expect(wrapper.text()).toContain('Client not found')
     expect(mockRouterPush).toHaveBeenCalledWith({ name: 'clients' })
+  })
+
+  it('loads and saves the review aggressiveness profile from advanced settings', async () => {
+    mockPut.mockResolvedValue({
+      data: {
+        clientId: 'client-1',
+        defaultReviewPipelineProfileId: 'file-by-file-assertive',
+        source: 'clientDefault',
+        updatedAtUtc: '2026-05-31T12:00:00Z',
+      },
+      response: { ok: true },
+    })
+
+    const { default: ClientDetailView } = await import('@/features/clients/views/ClientDetailView.vue')
+    const wrapper = mount(ClientDetailView)
+    await flushPromises()
+
+    const profileSelect = wrapper.find('select[name="defaultReviewPipelineProfileId"]')
+    expect(profileSelect.exists()).toBe(true)
+    expect((profileSelect.element as HTMLSelectElement).value).toBe('file-by-file-balanced')
+
+    await profileSelect.setValue('file-by-file-assertive')
+    await wrapper.find('button.review-profile-save-btn').trigger('click')
+    await flushPromises()
+
+    expect(mockPut).toHaveBeenCalledWith(
+      '/admin/clients/{clientId}/review-profile',
+      expect.objectContaining({
+        params: { path: { clientId: 'client-1' } },
+        body: { defaultReviewPipelineProfileId: 'file-by-file-assertive' },
+      })
+    )
   })
 
   it('shows the client overview cards in the system tab', async () => {

@@ -1,6 +1,7 @@
 // Copyright (c) Andreas Rain.
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
+using MeisterProPR.Application.Features.Reviewing.Execution.Models;
 using MeisterProPR.Application.Features.Reviewing.Intake.Commands.SubmitReviewJob;
 using MeisterProPR.Application.Features.Reviewing.Intake.Dtos;
 using MeisterProPR.Application.Features.Reviewing.Intake.Ports;
@@ -59,7 +60,13 @@ public sealed class SubmitReviewJobHandlerGitHubTests
                     && candidate.IterationId == request.IterationId
                     && candidate.CodeReview == request.CodeReview
                     && candidate.ReviewRevision == request.ReviewRevision
-                    && candidate.ResolvedReviewStrategySelection == ReviewStrategySelection.Default),
+                    && candidate.ResolvedReviewStrategySelection == new ReviewStrategySelection(
+                        ReviewStrategy.FileByFile,
+                        ReviewStrategySelectionSource.FallbackDefault,
+                        ReviewComparisonMode.Single,
+                        ReviewPublicationMode.Publish,
+                        null,
+                        ReviewPipelineProfileCatalog.FileByFileBalancedProfileId)),
                 Arg.Any<CancellationToken>())
             .Returns(createdJob);
 

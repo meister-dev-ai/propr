@@ -4,6 +4,8 @@
 using MeisterProPR.Application.DTOs;
 using MeisterProPR.Application.Features.Licensing.Models;
 using MeisterProPR.Application.Features.Licensing.Ports;
+using MeisterProPR.Application.Features.Reviewing.Execution.Models;
+using MeisterProPR.Application.Features.Reviewing.Execution.Strategies.Ports;
 using MeisterProPR.Application.Interfaces;
 using MeisterProPR.Domain.Enums;
 using MeisterProPR.Infrastructure.Data;
@@ -17,6 +19,7 @@ namespace MeisterProPR.Infrastructure.Repositories;
 /// <summary>EF Implementation of <see cref="IClientAdminService" />.</summary>
 public sealed class ClientAdminService(
     MeisterProPRDbContext dbContext,
+    IReviewPipelineProfileProvider? reviewPipelineProfileProvider = null,
     IProviderActivationService? providerActivationService = null,
     ILicensingCapabilityService? licensingCapabilityService = null) : IClientAdminService
 {
@@ -73,6 +76,7 @@ public sealed class ClientAdminService(
         string? displayName,
         CommentResolutionBehavior? commentResolutionBehavior = null,
         string? customSystemMessage = null,
+        string? defaultReviewPipelineProfileId = null,
         bool? scmCommentPostingEnabled = null,
         bool? enableProRV = null,
         ReviewStrategy? defaultReviewStrategy = null,
@@ -116,6 +120,16 @@ public sealed class ClientAdminService(
             client.CustomSystemMessage = string.IsNullOrEmpty(customSystemMessage)
                 ? null
                 : customSystemMessage;
+        }
+
+        if (defaultReviewPipelineProfileId is not null)
+        {
+            client.DefaultReviewPipelineProfileId = string.IsNullOrWhiteSpace(defaultReviewPipelineProfileId)
+                ? null
+                : defaultReviewPipelineProfileId;
+            client.DefaultReviewPipelineProfileUpdatedAtUtc = client.DefaultReviewPipelineProfileId is null
+                ? null
+                : DateTimeOffset.UtcNow;
         }
 
         if (scmCommentPostingEnabled.HasValue)
@@ -220,6 +234,21 @@ public sealed class ClientAdminService(
             .AsReadOnly();
     }
 
+    /// <inheritdoc />
+    public Task<IReadOnlyList<ReviewPipelineProfile>> GetSelectableReviewPipelineProfilesAsync(CancellationToken ct = default)
+    {
+        var profiles = (reviewPipelineProfileProvider?.GetProfiles(ReviewStrategy.FileByFile) ?? [])
+            .Where(profile =>
+                string.Equals(profile.ProfileId, ReviewPipelineProfileCatalog.FileByFileCalmProfileId, StringComparison.Ordinal)
+                || string.Equals(profile.ProfileId, ReviewPipelineProfileCatalog.FileByFileBalancedProfileId, StringComparison.Ordinal)
+                || string.Equals(profile.ProfileId, ReviewPipelineProfileCatalog.FileByFileAssertiveProfileId, StringComparison.Ordinal))
+            .OrderBy(profile => profile.ProfileId, StringComparer.Ordinal)
+            .ToList()
+            .AsReadOnly();
+
+        return Task.FromResult<IReadOnlyList<ReviewPipelineProfile>>(profiles);
+    }
+
     private IQueryable<ClientRecord> ClientsWithTenantQuery(bool isCommunityEdition)
     {
         IQueryable<ClientRecord> query = dbContext.Clients
@@ -278,6 +307,8 @@ public sealed class ClientAdminService(
             client.CommentResolutionBehavior,
             client.DefaultReviewStrategy,
             client.CustomSystemMessage,
+            client.DefaultReviewPipelineProfileId,
+            client.DefaultReviewPipelineProfileUpdatedAtUtc,
             client.ScmCommentPostingEnabled,
             client.EnableProRV,
             tenantId,

@@ -1680,6 +1680,15 @@ namespace MeisterProPR.Infrastructure.Migrations
                         .HasColumnType("text")
                         .HasColumnName("custom_system_message");
 
+                    b.Property<string>("DefaultReviewPipelineProfileId")
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)")
+                        .HasColumnName("default_review_pipeline_profile_id");
+
+                    b.Property<DateTimeOffset?>("DefaultReviewPipelineProfileUpdatedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("default_review_pipeline_profile_updated_at_utc");
+
                     b.Property<int>("DefaultReviewStrategy")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("integer")

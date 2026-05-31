@@ -144,6 +144,7 @@ internal sealed partial class FileByFileReviewOrchestrator(
     {
         var effectiveClient = overrideClient ?? chatClient
             ?? throw new InvalidOperationException("No chat client available for file review orchestration.");
+        await this.RecordReviewProfileSelectedEventAsync(job, baseContext, ct);
         var dispatchResult = await this.GetDispatchPlanner().ExecuteAsync(job, pr, baseContext, effectiveClient, ct);
         await this.RecordLateSteeringBaselinePassEventAsync(baseContext, pr, dispatchResult.Exceptions.Count, ct);
         var augmentationFindings = await this.BuildAugmentationFindingsAsync(job, pr, baseContext, effectiveClient, ct);
@@ -181,6 +182,8 @@ internal sealed partial class FileByFileReviewOrchestrator(
     {
         return new ReviewPipelineRunner<PerFileReviewContext>(
         [
+            new FileByFileContextPrefetchStage(options, protocolRecorder),
+            new FileByFileRiskMarkerStage(),
             new FileByFileProRvPrefilterStage(
                 protocolRecorder,
                 proRvPrefilter,
@@ -192,6 +195,7 @@ internal sealed partial class FileByFileReviewOrchestrator(
             new FileByFileSpeculativeCommentFilterStage(),
             new FileByFileInfoCommentStripStage(),
             new FileByFileVagueSuggestionFilterStage(),
+            new FileByFileImportanceRankingStage(options),
         ]);
     }
 
@@ -230,7 +234,54 @@ internal sealed partial class FileByFileReviewOrchestrator(
         for (var index = 0; index < filesToReview.Count; index++)
         {
             var file = filesToReview[index];
+            var pipelineProfile = FileReviewer.ResolvePipelineProfile(job, null);
+            var discoveryContext = new ReviewSystemContext(baseContext.ClientSystemMessage, baseContext.RepositoryInstructions, baseContext.ReviewTools)
+            {
+                ActiveProtocolId = baseContext.ActiveProtocolId,
+                ProtocolRecorder = baseContext.ProtocolRecorder,
+                ExclusionRules = baseContext.ExclusionRules,
+                DismissedPatterns = baseContext.DismissedPatterns,
+                PromptOverrides = baseContext.PromptOverrides,
+                TierChatClient = baseContext.TierChatClient,
+                ModelId = baseContext.ModelId,
+                DefaultReviewChatClient = baseContext.DefaultReviewChatClient,
+                DefaultReviewModelId = baseContext.DefaultReviewModelId,
+                RuntimeCapabilities = baseContext.RuntimeCapabilities,
+                Temperature = baseContext.Temperature,
+                EnableProRV = false,
+                AugmentationMode = baseContext.AugmentationMode,
+                PassKind = ReviewPassKind.Baseline,
+                PerFileHint = new PerFileReviewHint(file.Path, index + 1, filesToReview.Count, pr.AllPrFileSummaries),
+                PromptExperiment = baseContext.PromptExperiment,
+                SkippedSteps = baseContext.SkippedSteps,
+            };
+
+            var riskMarkedContext = await fileReviewer.RunDispatchPipelineAsync(
+                job,
+                file,
+                new ReviewFileResult(job.Id, file.Path),
+                discoveryContext,
+                null,
+                pipelineProfile,
+                ct);
+            var riskMarkers = riskMarkedContext.PerFileHint?.RiskMarkers ?? FileRiskMarkers.None;
+            if (!riskMarkers.HasAnyMarkers)
+            {
+                continue;
+            }
+
             var augmentationResult = await fileReviewer.ReviewAugmentationAsync(
+                job,
+                pr,
+                file,
+                index + 1,
+                filesToReview.Count,
+                riskMarkedContext,
+                effectiveClient,
+                ct);
+
+            await this.RecordSecuritySpecialistPassEventAsync(baseContext, file.Path, riskMarkers, augmentationResult.Comments.Count, ct);
+            var escalationResult = await this.TryRunHighRiskEscalationAsync(
                 job,
                 pr,
                 file,
@@ -238,18 +289,201 @@ internal sealed partial class FileByFileReviewOrchestrator(
                 filesToReview.Count,
                 baseContext,
                 effectiveClient,
+                riskMarkedContext,
+                augmentationResult,
                 ct);
-            if (augmentationResult.Comments.Count == 0)
+
+            var combinedAugmentationComments = augmentationResult.Comments
+                .Concat(escalationResult?.Comments ?? [])
+                .ToList();
+
+            if (combinedAugmentationComments.Count == 0)
             {
                 continue;
             }
 
             var transientResult = new ReviewFileResult(job.Id, file.Path);
-            transientResult.MarkCompleted(augmentationResult.Summary, augmentationResult.Comments);
+            transientResult.MarkCompleted(escalationResult?.Summary ?? augmentationResult.Summary, combinedAugmentationComments);
             findings.AddRange(this.GetCandidateFindingFactory().Build([transientResult], passKind: ReviewPassKind.ProRVAugmentation));
         }
 
         return findings;
+    }
+
+    private async Task RecordSecuritySpecialistPassEventAsync(
+        ReviewSystemContext baseContext,
+        string filePath,
+        FileRiskMarkers riskMarkers,
+        int addedFindings,
+        CancellationToken ct)
+    {
+        if (!baseContext.ActiveProtocolId.HasValue || baseContext.ProtocolRecorder is null)
+        {
+            return;
+        }
+
+        await baseContext.ProtocolRecorder.RecordReviewStrategyEventAsync(
+            baseContext.ActiveProtocolId.Value,
+            ReviewProtocolEventNames.SecuritySpecialistPassRan,
+            JsonSerializer.Serialize(
+                new
+                {
+                    filePath,
+                    matchedMarkers = riskMarkers.MatchedMarkers,
+                    hasSecurityMarkers = riskMarkers.HasSecurityMarkers,
+                    hasConcurrencyMarkers = riskMarkers.HasConcurrencyMarkers,
+                }),
+            JsonSerializer.Serialize(new { addedFindings }),
+            null,
+            ct);
+    }
+
+    private async Task RecordReviewProfileSelectedEventAsync(
+        ReviewJob job,
+        ReviewSystemContext baseContext,
+        CancellationToken ct)
+    {
+        if (!baseContext.ActiveProtocolId.HasValue || baseContext.ProtocolRecorder is null)
+        {
+            return;
+        }
+
+        await baseContext.ProtocolRecorder.RecordReviewStrategyEventAsync(
+            baseContext.ActiveProtocolId.Value,
+            ReviewProtocolEventNames.ReviewProfileSelected,
+            JsonSerializer.Serialize(
+                new
+                {
+                    strategy = job.ReviewStrategy.ToString(),
+                    selectionSource = job.ReviewStrategySelectionSource.ToString(),
+                }),
+            JsonSerializer.Serialize(
+                new
+                {
+                    profileId = job.ReviewPipelineProfileId ?? ReviewPipelineProfileCatalog.FileByFileBalancedProfileId,
+                    isExplicit = !string.IsNullOrWhiteSpace(job.ReviewPipelineProfileId),
+                }),
+            null,
+            ct);
+    }
+
+    private async Task<ReviewResult?> TryRunHighRiskEscalationAsync(
+        ReviewJob job,
+        PullRequest pr,
+        ChangedFile file,
+        int fileIndex,
+        int totalFiles,
+        ReviewSystemContext baseContext,
+        IChatClient effectiveClient,
+        ReviewSystemContext riskMarkedContext,
+        ReviewResult augmentationResult,
+        CancellationToken ct)
+    {
+        if (!ShouldRunHighRiskEscalation(baseContext, riskMarkedContext, augmentationResult, this._opts))
+        {
+            return null;
+        }
+
+        var baselineResult = await this.TryGetCompletedFileResultAsync(job.Id, file.Path, ct);
+        if (baselineResult?.Comments?.Count > 0)
+        {
+            return null;
+        }
+
+        var riskMarkers = riskMarkedContext.PerFileHint?.RiskMarkers ?? FileRiskMarkers.None;
+        var escalationResult = await fileReviewer.ReviewHighRiskEscalationAsync(
+            job,
+            pr,
+            file,
+            fileIndex,
+            totalFiles,
+            riskMarkedContext,
+            riskMarkers,
+            effectiveClient,
+            ct);
+
+        await this.RecordHighRiskEscalationRanEventAsync(baseContext, file.Path, escalationResult.Comments.Count, ct);
+        if (escalationResult.Comments.Count == 0)
+        {
+            await this.RecordZeroCandidateHighRiskEventAsync(baseContext, file.Path, riskMarkers, ct);
+        }
+
+        return escalationResult;
+    }
+
+    private static bool ShouldRunHighRiskEscalation(
+        ReviewSystemContext baseContext,
+        ReviewSystemContext riskMarkedContext,
+        ReviewResult augmentationResult,
+        AiReviewOptions options)
+    {
+        if (!options.EnableHighRiskEscalation ||
+            baseContext.AugmentationMode != ReviewAugmentationMode.LateAugmentation)
+        {
+            return false;
+        }
+
+        var riskMarkers = riskMarkedContext.PerFileHint?.RiskMarkers ?? FileRiskMarkers.None;
+        if (!riskMarkers.HasAnyMarkers)
+        {
+            return false;
+        }
+
+        return augmentationResult.Comments.Count == 0;
+    }
+
+    private async Task<ReviewFileResult?> TryGetCompletedFileResultAsync(Guid jobId, string filePath, CancellationToken ct)
+    {
+        var jobWithResults = await jobRepository.GetByIdWithFileResultsAsync(jobId, ct);
+        return jobWithResults?.FileReviewResults.FirstOrDefault(result =>
+            string.Equals(result.FilePath, filePath, StringComparison.Ordinal) && result.IsComplete);
+    }
+
+    private async Task RecordHighRiskEscalationRanEventAsync(
+        ReviewSystemContext baseContext,
+        string filePath,
+        int addedFindings,
+        CancellationToken ct)
+    {
+        if (!baseContext.ActiveProtocolId.HasValue || baseContext.ProtocolRecorder is null)
+        {
+            return;
+        }
+
+        await baseContext.ProtocolRecorder.RecordReviewStrategyEventAsync(
+            baseContext.ActiveProtocolId.Value,
+            ReviewProtocolEventNames.HighRiskEscalationRan,
+            JsonSerializer.Serialize(new { filePath }),
+            JsonSerializer.Serialize(new { addedFindings }),
+            null,
+            ct);
+    }
+
+    private async Task RecordZeroCandidateHighRiskEventAsync(
+        ReviewSystemContext baseContext,
+        string filePath,
+        FileRiskMarkers riskMarkers,
+        CancellationToken ct)
+    {
+        if (!baseContext.ActiveProtocolId.HasValue || baseContext.ProtocolRecorder is null)
+        {
+            return;
+        }
+
+        await baseContext.ProtocolRecorder.RecordReviewStrategyEventAsync(
+            baseContext.ActiveProtocolId.Value,
+            ReviewProtocolEventNames.ZeroCandidateHighRisk,
+            JsonSerializer.Serialize(
+                new
+                {
+                    filePath,
+                    matchedMarkers = riskMarkers.MatchedMarkers,
+                    hasSecurityMarkers = riskMarkers.HasSecurityMarkers,
+                    hasConcurrencyMarkers = riskMarkers.HasConcurrencyMarkers,
+                }),
+            JsonSerializer.Serialize(new { addedFindings = 0 }),
+            null,
+            ct);
     }
 
     private async Task RecordLateSteeringBaselinePassEventAsync(

@@ -5,6 +5,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const mockGet = vi.fn()
 const mockPatch = vi.fn()
+const mockPut = vi.fn()
 const mockDelete = vi.fn()
 const mockRouterPush = vi.fn()
 const mockRouterReplace = vi.fn()
@@ -21,7 +22,7 @@ vi.mock('vue-router', () => ({
 }))
 
 vi.mock('@/services/api', () => ({
-  createAdminClient: () => ({ GET: mockGet, PATCH: mockPatch, DELETE: mockDelete }),
+  createAdminClient: () => ({ GET: mockGet, PATCH: mockPatch, PUT: mockPut, DELETE: mockDelete }),
 }))
 
 vi.mock('@/composables/useSession', () => ({
@@ -39,8 +40,25 @@ const sampleClient = {
   isActive: true,
   createdAt: '2026-04-25T10:00:00Z',
   defaultReviewStrategy: 'fileByFile',
+  defaultReviewPipelineProfileId: 'file-by-file-balanced',
+  defaultReviewPipelineProfileUpdatedAtUtc: null,
   scmCommentPostingEnabled: true,
   enableProRV: true,
+}
+
+const sampleReviewProfiles = {
+  profiles: [
+    { profileId: 'file-by-file-calm', displayName: 'Calm', isDefault: false },
+    { profileId: 'file-by-file-balanced', displayName: 'Balanced', isDefault: true },
+    { profileId: 'file-by-file-assertive', displayName: 'Assertive', isDefault: false },
+  ],
+}
+
+const sampleClientReviewProfile = {
+  clientId: 'client-1',
+  defaultReviewPipelineProfileId: 'file-by-file-balanced',
+  source: 'systemDefault' as const,
+  updatedAtUtc: null,
 }
 
 describe('useClientDetailViewModel (FR-007, FR-008, FR-012)', () => {
@@ -49,8 +67,13 @@ describe('useClientDetailViewModel (FR-007, FR-008, FR-012)', () => {
     mockRoute.query = {}
     hasClientRoleMock.mockImplementation((_clientId: string, minRole: 0 | 1) => minRole <= 1)
     getCapabilityMock.mockImplementation((key: string) => ({ key, isAvailable: true, message: null }))
-    mockGet.mockResolvedValue({ data: sampleClient, response: { status: 200, ok: true } })
+    mockGet.mockReset()
+    mockGet
+      .mockResolvedValueOnce({ data: sampleClient, response: { status: 200, ok: true } })
+      .mockResolvedValueOnce({ data: sampleReviewProfiles, response: { status: 200, ok: true } })
+      .mockResolvedValueOnce({ data: sampleClientReviewProfile, response: { status: 200, ok: true } })
     mockPatch.mockResolvedValue({ data: sampleClient, response: { ok: true } })
+    mockPut.mockResolvedValue({ data: sampleClientReviewProfile, response: { ok: true } })
     mockDelete.mockResolvedValue({ response: { ok: true } })
   })
 
@@ -63,6 +86,8 @@ describe('useClientDetailViewModel (FR-007, FR-008, FR-012)', () => {
     })
     expect(vm.client.value?.displayName).toBe('Acme Review Team')
     expect(vm.editedDisplayName.value).toBe('Acme Review Team')
+    expect(vm.reviewProfiles.value).toHaveLength(3)
+    expect(vm.clientReviewProfile.value?.defaultReviewPipelineProfileId).toBe('file-by-file-balanced')
     expect(vm.activeTab.value).toBe('config')
   })
 
@@ -105,6 +130,11 @@ describe('useClientDetailViewModel (FR-007, FR-008, FR-012)', () => {
   })
 
   it('saves advanced settings with strategy, scm posting, and ProRV state', async () => {
+    mockGet.mockReset()
+    mockGet
+      .mockResolvedValueOnce({ data: sampleClient, response: { status: 200, ok: true } })
+      .mockResolvedValueOnce({ data: sampleReviewProfiles, response: { status: 200, ok: true } })
+      .mockResolvedValueOnce({ data: sampleClientReviewProfile, response: { status: 200, ok: true } })
     mockPatch.mockResolvedValue({
       data: { ...sampleClient, defaultReviewStrategy: 'prWideAgentic', scmCommentPostingEnabled: false, enableProRV: false },
       response: { ok: true },
@@ -127,8 +157,38 @@ describe('useClientDetailViewModel (FR-007, FR-008, FR-012)', () => {
     })
   })
 
+  it('saves review aggressiveness through the dedicated review-profile endpoint', async () => {
+    mockGet.mockReset()
+    mockGet
+      .mockResolvedValueOnce({ data: sampleClient, response: { status: 200, ok: true } })
+      .mockResolvedValueOnce({ data: sampleReviewProfiles, response: { status: 200, ok: true } })
+      .mockResolvedValueOnce({ data: sampleClientReviewProfile, response: { status: 200, ok: true } })
+    mockPut.mockResolvedValue({
+      data: {
+        clientId: 'client-1',
+        defaultReviewPipelineProfileId: 'file-by-file-assertive',
+        source: 'clientDefault',
+        updatedAtUtc: '2026-05-31T12:00:00Z',
+      },
+      response: { ok: true },
+    })
+
+    const vm = useClientDetailViewModel({ autoLoad: false })
+    await vm.loadClient()
+    vm.editedDefaultReviewPipelineProfileId.value = 'file-by-file-assertive'
+
+    await vm.saveReviewProfile()
+
+    expect(mockPut).toHaveBeenCalledWith('/admin/clients/{clientId}/review-profile', {
+      params: { path: { clientId: 'client-1' } },
+      body: { defaultReviewPipelineProfileId: 'file-by-file-assertive' },
+    })
+    expect(vm.clientReviewProfile.value?.source).toBe('clientDefault')
+  })
+
   it('navigates back to clients when the detail record is not found', async () => {
-    mockGet.mockResolvedValue({ data: null, response: { status: 404, ok: false } })
+    mockGet.mockReset()
+    mockGet.mockResolvedValueOnce({ data: null, response: { status: 404, ok: false } })
     const vm = useClientDetailViewModel({ autoLoad: false })
     await vm.loadClient()
 

@@ -29,8 +29,23 @@ export interface ClientDetailDto {
   isActive: boolean
   createdAt: string
   defaultReviewStrategy?: ReviewStrategy
+  defaultReviewPipelineProfileId?: string | null
+  defaultReviewPipelineProfileUpdatedAtUtc?: string | null
   scmCommentPostingEnabled: boolean
   enableProRV: boolean
+}
+
+export interface ReviewProfileCatalogItemDto {
+  profileId: string
+  displayName: string
+  isDefault: boolean
+}
+
+export interface ClientReviewProfileDto {
+  clientId: string
+  defaultReviewPipelineProfileId: string
+  source: 'systemDefault' | 'clientDefault'
+  updatedAtUtc?: string | null
 }
 
 export interface ClientDetailViewModel {
@@ -44,8 +59,11 @@ export interface ClientDetailViewModel {
   showDeleteDialog: Ref<boolean>
   editedDisplayName: Ref<string>
   editedDefaultReviewStrategy: Ref<ReviewStrategy>
+  editedDefaultReviewPipelineProfileId: Ref<string>
   editedScmCommentPostingEnabled: Ref<boolean>
   editedEnableProRV: Ref<boolean>
+  reviewProfiles: Ref<ReviewProfileCatalogItemDto[]>
+  clientReviewProfile: Ref<ClientReviewProfileDto | null>
   isProviderDetailOpen: Ref<boolean>
   isWebhookDetailOpen: Ref<boolean>
   canManageClient: ComputedRef<boolean>
@@ -59,7 +77,9 @@ export interface ClientDetailViewModel {
   saveDisplayName: () => Promise<void>
   toggleStatus: () => Promise<void>
   saveAdvancedSettings: () => Promise<void>
+  saveReviewProfile: () => Promise<void>
   isAdvancedSettingsButtonEnabled: () => boolean
+  isReviewProfileButtonEnabled: () => boolean
   handleDelete: () => Promise<void>
   handleOverviewNavigate: (tab: string) => void
 }
@@ -67,6 +87,9 @@ export interface ClientDetailViewModel {
 export interface ClientDetailService {
   getClient: (clientId: string) => Promise<{ data: ClientDetailDto | null; response?: Response | { status?: number; ok?: boolean } }>
   patchClient: (clientId: string, body: Record<string, unknown>) => Promise<{ data: ClientDetailDto }>
+  getReviewProfiles: () => Promise<{ data: { profiles: ReviewProfileCatalogItemDto[] } | null }>
+  getClientReviewProfile: (clientId: string) => Promise<{ data: ClientReviewProfileDto | null }>
+  putClientReviewProfile: (clientId: string, body: { defaultReviewPipelineProfileId: string | null }) => Promise<{ data: ClientReviewProfileDto }>
   deleteClient: (clientId: string) => Promise<unknown>
 }
 
@@ -83,6 +106,23 @@ async function defaultGetClient(clientId: string) {
 
 async function defaultPatchClient(clientId: string, body: Record<string, unknown>) {
   return createAdminClient().PATCH('/clients/{clientId}', {
+    params: { path: { clientId } },
+    body,
+  })
+}
+
+async function defaultGetReviewProfiles() {
+  return createAdminClient().GET('/admin/review-profiles', {})
+}
+
+async function defaultGetClientReviewProfile(clientId: string) {
+  return createAdminClient().GET('/admin/clients/{clientId}/review-profile', {
+    params: { path: { clientId } },
+  })
+}
+
+async function defaultPutClientReviewProfile(clientId: string, body: { defaultReviewPipelineProfileId: string | null }) {
+  return createAdminClient().PUT('/admin/clients/{clientId}/review-profile', {
     params: { path: { clientId } },
     body,
   })
@@ -105,6 +145,9 @@ export function useClientDetailViewModel(options: UseClientDetailViewModelOption
   const clientId = route.params.id as string
   const getClientFn = options.clientDetailService?.getClient ?? defaultGetClient
   const patchClientFn = options.clientDetailService?.patchClient ?? defaultPatchClient
+  const getReviewProfilesFn = options.clientDetailService?.getReviewProfiles ?? defaultGetReviewProfiles
+  const getClientReviewProfileFn = options.clientDetailService?.getClientReviewProfile ?? defaultGetClientReviewProfile
+  const putClientReviewProfileFn = options.clientDetailService?.putClientReviewProfile ?? defaultPutClientReviewProfile
   const deleteClientFn = options.clientDetailService?.deleteClient ?? defaultDeleteClient
   const autoLoad = options.autoLoad ?? true
 
@@ -118,8 +161,11 @@ export function useClientDetailViewModel(options: UseClientDetailViewModelOption
   const showDeleteDialog = ref(false)
   const editedDisplayName = ref('')
   const editedDefaultReviewStrategy = ref<ReviewStrategy>('fileByFile')
+  const editedDefaultReviewPipelineProfileId = ref('file-by-file-balanced')
   const editedScmCommentPostingEnabled = ref(true)
   const editedEnableProRV = ref(false)
+  const reviewProfiles = ref<ReviewProfileCatalogItemDto[]>([])
+  const clientReviewProfile = ref<ClientReviewProfileDto | null>(null)
 
   const canManageClient = computed(() => hasClientRole(clientId, 1))
   const canViewClient = computed(() => hasClientRole(clientId, 0))
@@ -155,8 +201,14 @@ export function useClientDetailViewModel(options: UseClientDetailViewModelOption
     client.value = nextClient
     editedDisplayName.value = nextClient.displayName
     editedDefaultReviewStrategy.value = nextClient.defaultReviewStrategy ?? 'fileByFile'
+    editedDefaultReviewPipelineProfileId.value = nextClient.defaultReviewPipelineProfileId ?? 'file-by-file-balanced'
     editedScmCommentPostingEnabled.value = Boolean(nextClient.scmCommentPostingEnabled)
     editedEnableProRV.value = Boolean(nextClient.enableProRV)
+  }
+
+  function applyClientReviewProfile(nextProfile: ClientReviewProfileDto): void {
+    clientReviewProfile.value = nextProfile
+    editedDefaultReviewPipelineProfileId.value = nextProfile.defaultReviewPipelineProfileId
   }
 
   function syncActiveTabFromRoute() {
@@ -186,6 +238,19 @@ export function useClientDetailViewModel(options: UseClientDetailViewModelOption
         return
       }
       applyClient(data as ClientDetailDto)
+
+      const [catalogResult, profileResult] = await Promise.allSettled([
+        getReviewProfilesFn(),
+        getClientReviewProfileFn(clientId),
+      ])
+
+      reviewProfiles.value = catalogResult.status === 'fulfilled'
+        ? catalogResult.value.data?.profiles ?? []
+        : []
+
+      if (profileResult.status === 'fulfilled' && profileResult.value.data) {
+        applyClientReviewProfile(profileResult.value.data)
+      }
     } catch {
       notFound.value = true
       router.push({ name: 'clients' })
@@ -295,6 +360,30 @@ export function useClientDetailViewModel(options: UseClientDetailViewModelOption
     }
   }
 
+  async function saveReviewProfile() {
+    if (!canManageClient.value || !client.value) return
+    saving.value = true
+    saveError.value = ''
+    try {
+      const requestedProfileId = reviewProfiles.value.some((profile) => profile.profileId === editedDefaultReviewPipelineProfileId.value)
+        ? editedDefaultReviewPipelineProfileId.value
+        : null
+      const { data } = await putClientReviewProfileFn(clientId, {
+        defaultReviewPipelineProfileId: requestedProfileId,
+      })
+      applyClientReviewProfile(data as ClientReviewProfileDto)
+      client.value = {
+        ...client.value,
+        defaultReviewPipelineProfileId: (data as ClientReviewProfileDto).defaultReviewPipelineProfileId,
+        defaultReviewPipelineProfileUpdatedAtUtc: (data as ClientReviewProfileDto).updatedAtUtc ?? null,
+      }
+    } catch {
+      saveError.value = 'Failed to save review profile.'
+    } finally {
+      saving.value = false
+    }
+  }
+
   function isAdvancedSettingsButtonEnabled(): boolean {
     return (
       !saving.value &&
@@ -304,6 +393,14 @@ export function useClientDetailViewModel(options: UseClientDetailViewModelOption
         editedEnableProRV.value !== Boolean(client.value.enableProRV) ||
         editedDefaultReviewStrategy.value !== (client.value.defaultReviewStrategy ?? 'fileByFile')
       )
+    )
+  }
+
+  function isReviewProfileButtonEnabled(): boolean {
+    return (
+      !saving.value &&
+      clientReviewProfile.value !== null &&
+      editedDefaultReviewPipelineProfileId.value !== clientReviewProfile.value.defaultReviewPipelineProfileId
     )
   }
 
@@ -328,8 +425,11 @@ export function useClientDetailViewModel(options: UseClientDetailViewModelOption
     showDeleteDialog,
     editedDisplayName,
     editedDefaultReviewStrategy,
+    editedDefaultReviewPipelineProfileId,
     editedScmCommentPostingEnabled,
     editedEnableProRV,
+    reviewProfiles,
+    clientReviewProfile,
     isProviderDetailOpen,
     isWebhookDetailOpen,
     canManageClient,
@@ -343,7 +443,9 @@ export function useClientDetailViewModel(options: UseClientDetailViewModelOption
     saveDisplayName,
     toggleStatus,
     saveAdvancedSettings,
+    saveReviewProfile,
     isAdvancedSettingsButtonEnabled,
+    isReviewProfileButtonEnabled,
     handleDelete,
     handleOverviewNavigate,
   }

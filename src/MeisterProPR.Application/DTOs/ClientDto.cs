@@ -17,6 +17,8 @@ public sealed record ClientDto(
     CommentResolutionBehavior CommentResolutionBehavior,
     ReviewStrategy DefaultReviewStrategy,
     string? CustomSystemMessage,
+    string? DefaultReviewPipelineProfileId,
+    DateTimeOffset? DefaultReviewPipelineProfileUpdatedAtUtc,
     bool ScmCommentPostingEnabled,
     bool EnableProRV,
     Guid? TenantId = null,

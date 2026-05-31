@@ -181,6 +181,46 @@ function parseJwtPayload(authorizationHeader: string | null) {
 
 let jobTick = 0
 
+const reviewProfiles = [
+  { profileId: 'file-by-file-calm', displayName: 'Calm', isDefault: false },
+  { profileId: 'file-by-file-balanced', displayName: 'Balanced', isDefault: true },
+  { profileId: 'file-by-file-assertive', displayName: 'Assertive', isDefault: false },
+]
+
+const clientReviewProfiles: Record<string, { defaultReviewPipelineProfileId: string | null; updatedAtUtc: string | null }> = {
+  '1': { defaultReviewPipelineProfileId: 'file-by-file-balanced', updatedAtUtc: null },
+  '2': { defaultReviewPipelineProfileId: null, updatedAtUtc: null },
+  '3': { defaultReviewPipelineProfileId: 'file-by-file-assertive', updatedAtUtc: new Date().toISOString() },
+}
+
+function getEffectiveReviewProfile(clientId: string) {
+  const stored = clientReviewProfiles[clientId]?.defaultReviewPipelineProfileId ?? null
+  return {
+    clientId,
+    defaultReviewPipelineProfileId: stored ?? 'file-by-file-balanced',
+    source: stored ? 'clientDefault' : 'systemDefault',
+    updatedAtUtc: clientReviewProfiles[clientId]?.updatedAtUtc ?? null,
+  }
+}
+
+function buildMockClient(id: string, displayName = `Mocked Client ${id}`, overrides: Record<string, unknown> = {}) {
+  const storedProfile = clientReviewProfiles[id]?.defaultReviewPipelineProfileId ?? null
+  return {
+    id,
+    displayName,
+    isActive: true,
+    createdAt: new Date().toISOString(),
+    recentUsageTokens: 14520,
+    reviewerId: '0000-1111-2222-3333',
+    defaultReviewStrategy: 'fileByFile',
+    defaultReviewPipelineProfileId: storedProfile,
+    defaultReviewPipelineProfileUpdatedAtUtc: clientReviewProfiles[id]?.updatedAtUtc ?? null,
+    scmCommentPostingEnabled: true,
+    enableProRV: true,
+    ...overrides,
+  }
+}
+
 function projectTraceSearchMatches() {
   return (protocolMockData as Array<Record<string, any>>)
     .flatMap((protocol) => (protocol.events ?? []).map((event: Record<string, any>) => ({ protocol, event })))
@@ -1627,30 +1667,53 @@ export const handlers = [
   http.get(`${base}/clients`, async () => {
     await delay(300)
     return HttpResponse.json([
-      { id: '1', displayName: 'Acme Corp', isActive: true, createdAt: new Date().toISOString(), recentUsageTokens: 14520 },
-      { id: '2', displayName: 'Globex Inc', isActive: false, createdAt: new Date().toISOString(), recentUsageTokens: 0 },
-      { id: '3', displayName: 'Umbrella Corp', isActive: true, createdAt: new Date().toISOString(), recentUsageTokens: 89300 }
+      buildMockClient('1', 'Acme Corp'),
+      buildMockClient('2', 'Globex Inc', { isActive: false, recentUsageTokens: 0, enableProRV: false }),
+      buildMockClient('3', 'Umbrella Corp', { recentUsageTokens: 89300 }),
     ])
   }),
 
   http.get(`${base}/clients/:id`, async ({ params }) => {
     await delay(300)
-    return HttpResponse.json({
-        id: params.id,
-        displayName: 'Mocked Client ' + params.id,
-        isActive: true,
-        createdAt: new Date().toISOString(),
-        recentUsageTokens: 14520,
-        reviewerId: '0000-1111-2222-3333'
-    })
+    const id = String(params.id)
+    return HttpResponse.json(buildMockClient(id))
   }),
 
-  http.patch(`${base}/clients/:id`, async ({ request }) => {
+  http.patch(`${base}/clients/:id`, async ({ params, request }) => {
     await delay(300)
+    const id = String(params.id)
     const body = await request.json() as any
-    return HttpResponse.json({
-      id: '1', displayName: body.displayName ?? 'Mocked Client', isActive: body.isActive ?? true, createdAt: new Date().toISOString(), recentUsageTokens: 14520
-    })
+    return HttpResponse.json(buildMockClient(id, body.displayName ?? `Mocked Client ${id}`, body))
+  }),
+
+  http.get(`${base}/admin/review-profiles`, async () => {
+    await delay(150)
+    return HttpResponse.json({ profiles: reviewProfiles })
+  }),
+
+  http.get(`${base}/admin/clients/:clientId/review-profile`, async ({ params }) => {
+    await delay(150)
+    return HttpResponse.json(getEffectiveReviewProfile(String(params.clientId)))
+  }),
+
+  http.put(`${base}/admin/clients/:clientId/review-profile`, async ({ params, request }) => {
+    await delay(200)
+    const clientId = String(params.clientId)
+    const body = await request.json() as any
+    const requestedProfileId = typeof body?.defaultReviewPipelineProfileId === 'string'
+      ? body.defaultReviewPipelineProfileId
+      : null
+
+    if (requestedProfileId && !reviewProfiles.some((profile) => profile.profileId === requestedProfileId)) {
+      return HttpResponse.json({ title: 'Unknown review profile.' }, { status: 400 })
+    }
+
+    clientReviewProfiles[clientId] = {
+      defaultReviewPipelineProfileId: requestedProfileId,
+      updatedAtUtc: requestedProfileId ? new Date().toISOString() : null,
+    }
+
+    return HttpResponse.json(getEffectiveReviewProfile(clientId))
   }),
 
   http.get(`${base}/clients/:clientId/ado-organization-scopes`, async ({ params }) => {

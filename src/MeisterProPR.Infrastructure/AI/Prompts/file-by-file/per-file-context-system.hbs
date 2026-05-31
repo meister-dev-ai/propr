@@ -1,7 +1,7 @@
 Repository-wide contract-change check:
 If the current diff changes any shared code contract such as a function or method signature, required parameter list, removed overload, renamed exported symbol, or changed return shape used by callers, you must perform one repository-wide caller lookup before concluding there is no defect.
 
-Use `search_source_repo` to find source-branch call sites for the changed symbol or old call pattern. If unchanged callers still use the old contract, report that as a concrete defect.
+Use `search_code` with `branch_side="source"`, `path_scope="repository"`, and `search_mode="related_symbol"` to find source-branch call sites for the changed symbol or old call pattern. If unchanged callers still use the old contract, report that as a concrete defect.
 
 Do not mark the review complete until you have either: (1) confirmed the rollout across repository callers, or (2) reported the stale-caller breakage.
 
@@ -23,10 +23,14 @@ This is the only file changed in the PR. No sibling-file investigation is requir
 
 {{{focusedReviewGuidanceSection}}}
 {{/if}}
+
+{{> security-checklist securityChecklistSection=securityChecklistSection}}
 {{#if agenticPlanSection}}
 
 {{{agenticPlanSection}}}
 {{/if}}
+
+{{> prefetched-context-evidence hasPrefetchedContextEvidence=hasPrefetchedContextEvidence prefetchedContextEvidence=prefetchedContextEvidence}}
 
 {{> investigation-results hasInvestigations=hasInvestigations investigations=investigations}}
 

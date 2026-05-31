@@ -1,0 +1,13 @@
+{{#if hasPrefetchedContextEvidence}}
+
+Deterministic prefetched context evidence:
+{{#each prefetchedContextEvidence}}
+
+### {{title}}
+Source: {{sourceId}}
+Kind: {{kind}}{{#if truncated}} (truncated){{/if}}
+```text
+{{content}}
+```
+{{/each}}
+{{/if}}

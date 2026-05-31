@@ -4,6 +4,7 @@
 using MeisterProPR.Application.DTOs;
 using MeisterProPR.Application.Features.Crawling.Execution.Models;
 using MeisterProPR.Application.Features.Crawling.Execution.Ports;
+using MeisterProPR.Application.Features.Reviewing.Execution.Models;
 using MeisterProPR.Application.Interfaces;
 using MeisterProPR.Application.Services;
 using MeisterProPR.Domain.Entities;
@@ -253,7 +254,35 @@ public sealed class PrCrawlServiceTests
                 Arg.Is<ReviewJob>(j =>
                     j.PullRequestId == 42 &&
                     j.IterationId == 1 &&
-                    j.ClientId == DefaultConfig.ClientId));
+                    j.ClientId == DefaultConfig.ClientId &&
+                    j.ReviewPipelineProfileId == ReviewPipelineProfileCatalog.FileByFileBalancedProfileId));
+    }
+
+    [Fact]
+    public async Task CrawlAsync_ClientDefaultFileByFileProfile_SnapshotsConfiguredProfileId()
+    {
+        this._crawlConfigs.GetAllActiveAsync().ReturnsForAnyArgs([DefaultConfig]);
+        var pr = MakePr(42);
+        this._prFetcher.ListAssignedOpenReviewsAsync(DefaultConfig).ReturnsForAnyArgs([pr]);
+        this._jobs.FindActiveJob(
+                Arg.Any<string>(),
+                Arg.Any<string>(),
+                Arg.Any<string>(),
+                Arg.Any<int>(),
+                Arg.Any<int>())
+            .Returns((ReviewJob?)null);
+        this._clientRegistry.GetDefaultReviewStrategyAsync(DefaultConfig.ClientId, Arg.Any<CancellationToken>())
+            .Returns(ReviewStrategy.FileByFile);
+        this._clientRegistry.GetDefaultReviewPipelineProfileIdAsync(DefaultConfig.ClientId, Arg.Any<CancellationToken>())
+            .Returns(ReviewPipelineProfileCatalog.FileByFileCalmProfileId);
+
+        await this._sut.CrawlAsync();
+
+        await this._jobs.Received(1)
+            .AddAsync(
+                Arg.Is<ReviewJob>(j =>
+                    j.ClientId == DefaultConfig.ClientId
+                    && j.ReviewPipelineProfileId == ReviewPipelineProfileCatalog.FileByFileCalmProfileId));
     }
 
     [Fact]

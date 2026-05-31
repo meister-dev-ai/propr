@@ -2,6 +2,7 @@
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
 using MeisterProPR.Application.DTOs;
+using MeisterProPR.Application.Features.Reviewing.Execution.Models;
 using MeisterProPR.Domain.Enums;
 
 namespace MeisterProPR.Application.Interfaces;
@@ -43,6 +44,10 @@ public interface IClientAdminService
     ///     When non-null, updates the custom AI system message.
     ///     Pass an empty string to clear an existing value (sets the stored value to <see langword="null" />).
     /// </param>
+    /// <param name="defaultReviewPipelineProfileId">
+    ///     When non-null, updates the default review pipeline profile for newly submitted jobs.
+    ///     Pass an empty string to clear an existing value (sets the stored value to <see langword="null" />).
+    /// </param>
     /// <param name="scmCommentPostingEnabled">When non-null, sets whether new review comments are posted back to SCM.</param>
     /// <param name="enableProRV">When non-null, sets whether ProRV executes for new reviews.</param>
     /// <param name="defaultReviewStrategy">When non-null, sets the default review strategy for newly submitted jobs.</param>
@@ -53,6 +58,7 @@ public interface IClientAdminService
         string? displayName,
         CommentResolutionBehavior? commentResolutionBehavior = null,
         string? customSystemMessage = null,
+        string? defaultReviewPipelineProfileId = null,
         bool? scmCommentPostingEnabled = null,
         bool? enableProRV = null,
         ReviewStrategy? defaultReviewStrategy = null,
@@ -84,4 +90,7 @@ public interface IClientAdminService
         Guid clientId,
         int take = 20,
         CancellationToken ct = default);
+
+    /// <summary>Returns the published selectable review pipeline profiles for client administration.</summary>
+    Task<IReadOnlyList<ReviewPipelineProfile>> GetSelectableReviewPipelineProfilesAsync(CancellationToken ct = default);
 }

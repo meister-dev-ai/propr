@@ -8,6 +8,7 @@ using System.Net.Http.Json;
 using System.Security.Claims;
 using System.Text;
 using System.Text.Json;
+using MeisterProPR.Application.Features.Reviewing.Execution.Models;
 using MeisterProPR.Application.Interfaces;
 using MeisterProPR.Domain.Entities;
 using MeisterProPR.Domain.Enums;
@@ -230,6 +231,163 @@ public sealed class ClientsControllerTests(ClientsControllerTests.ClientsApiFact
 
         var body = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
         Assert.False(body.RootElement.GetProperty("isActive").GetBoolean());
+    }
+
+    [Fact]
+    public async Task GetReviewProfiles_ReturnsSelectableFileByFileProfiles()
+    {
+        var client = factory.CreateClient();
+        using var request = new HttpRequestMessage(HttpMethod.Get, "/admin/review-profiles");
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", factory.GenerateAdminToken());
+
+        var response = await client.SendAsync(request);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var body = JsonDocument.Parse(await response.Content.ReadAsStringAsync()).RootElement;
+        var profiles = body.GetProperty("profiles").EnumerateArray().ToList();
+
+        Assert.Equal(3, profiles.Count);
+        Assert.Contains(profiles, profile => profile.GetProperty("profileId").GetString() == ReviewPipelineProfileCatalog.FileByFileCalmProfileId);
+        Assert.Contains(
+            profiles,
+            profile => profile.GetProperty("profileId").GetString() == ReviewPipelineProfileCatalog.FileByFileBalancedProfileId &&
+                       profile.GetProperty("isDefault").GetBoolean());
+        Assert.Contains(profiles, profile => profile.GetProperty("profileId").GetString() == ReviewPipelineProfileCatalog.FileByFileAssertiveProfileId);
+    }
+
+    [Fact]
+    public async Task GetClientReviewProfile_WhenUnset_ReturnsSystemDefaultBalanced()
+    {
+        var clientId = Guid.NewGuid();
+        using (var scope = factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<MeisterProPRDbContext>();
+            db.Clients.Add(
+                new ClientRecord
+                {
+                    Id = clientId,
+                    TenantId = factory.TenantId,
+                    DisplayName = "Review Profile Default Client",
+                    IsActive = true,
+                    CreatedAt = DateTimeOffset.UtcNow,
+                });
+            await db.SaveChangesAsync();
+        }
+
+        var client = factory.CreateClient();
+        using var request = new HttpRequestMessage(HttpMethod.Get, $"/admin/clients/{clientId}/review-profile");
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", factory.GenerateAdminToken());
+
+        var response = await client.SendAsync(request);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var body = JsonDocument.Parse(await response.Content.ReadAsStringAsync()).RootElement;
+        Assert.Equal(ReviewPipelineProfileCatalog.FileByFileBalancedProfileId, body.GetProperty("defaultReviewPipelineProfileId").GetString());
+        Assert.Equal("systemDefault", body.GetProperty("source").GetString());
+    }
+
+    [Fact]
+    public async Task PutClientReviewProfile_WithValidProfile_PersistsAndSubsequentGetReflectsValue()
+    {
+        var clientId = Guid.NewGuid();
+        using (var scope = factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<MeisterProPRDbContext>();
+            db.Clients.Add(
+                new ClientRecord
+                {
+                    Id = clientId,
+                    TenantId = factory.TenantId,
+                    DisplayName = "Review Profile Persist Client",
+                    IsActive = true,
+                    CreatedAt = DateTimeOffset.UtcNow,
+                });
+            await db.SaveChangesAsync();
+        }
+
+        var client = factory.CreateClient();
+        using var putRequest = new HttpRequestMessage(HttpMethod.Put, $"/admin/clients/{clientId}/review-profile");
+        putRequest.Headers.Authorization = new AuthenticationHeaderValue("Bearer", factory.GenerateAdminToken());
+        putRequest.Content = JsonContent.Create(new { defaultReviewPipelineProfileId = ReviewPipelineProfileCatalog.FileByFileAssertiveProfileId });
+
+        var putResponse = await client.SendAsync(putRequest);
+
+        Assert.Equal(HttpStatusCode.OK, putResponse.StatusCode);
+        var putBody = JsonDocument.Parse(await putResponse.Content.ReadAsStringAsync()).RootElement;
+        Assert.Equal(ReviewPipelineProfileCatalog.FileByFileAssertiveProfileId, putBody.GetProperty("defaultReviewPipelineProfileId").GetString());
+        Assert.Equal("clientDefault", putBody.GetProperty("source").GetString());
+
+        using var getRequest = new HttpRequestMessage(HttpMethod.Get, $"/admin/clients/{clientId}/review-profile");
+        getRequest.Headers.Authorization = new AuthenticationHeaderValue("Bearer", factory.GenerateAdminToken());
+        var getResponse = await client.SendAsync(getRequest);
+
+        Assert.Equal(HttpStatusCode.OK, getResponse.StatusCode);
+        var getBody = JsonDocument.Parse(await getResponse.Content.ReadAsStringAsync()).RootElement;
+        Assert.Equal(ReviewPipelineProfileCatalog.FileByFileAssertiveProfileId, getBody.GetProperty("defaultReviewPipelineProfileId").GetString());
+        Assert.Equal("clientDefault", getBody.GetProperty("source").GetString());
+    }
+
+    [Fact]
+    public async Task PutClientReviewProfile_WithUnknownProfile_ReturnsBadRequest()
+    {
+        var clientId = Guid.NewGuid();
+        using (var scope = factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<MeisterProPRDbContext>();
+            db.Clients.Add(
+                new ClientRecord
+                {
+                    Id = clientId,
+                    TenantId = factory.TenantId,
+                    DisplayName = "Review Profile Invalid Client",
+                    IsActive = true,
+                    CreatedAt = DateTimeOffset.UtcNow,
+                });
+            await db.SaveChangesAsync();
+        }
+
+        var client = factory.CreateClient();
+        using var request = new HttpRequestMessage(HttpMethod.Put, $"/admin/clients/{clientId}/review-profile");
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", factory.GenerateAdminToken());
+        request.Content = JsonContent.Create(new { defaultReviewPipelineProfileId = "not-a-profile" });
+
+        var response = await client.SendAsync(request);
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task PutClientReviewProfile_WithNull_ClearsToSystemDefault()
+    {
+        var clientId = Guid.NewGuid();
+        using (var scope = factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<MeisterProPRDbContext>();
+            db.Clients.Add(
+                new ClientRecord
+                {
+                    Id = clientId,
+                    TenantId = factory.TenantId,
+                    DisplayName = "Review Profile Clear Client",
+                    IsActive = true,
+                    CreatedAt = DateTimeOffset.UtcNow,
+                    DefaultReviewPipelineProfileId = ReviewPipelineProfileCatalog.FileByFileCalmProfileId,
+                    DefaultReviewPipelineProfileUpdatedAtUtc = DateTimeOffset.UtcNow,
+                });
+            await db.SaveChangesAsync();
+        }
+
+        var client = factory.CreateClient();
+        using var request = new HttpRequestMessage(HttpMethod.Put, $"/admin/clients/{clientId}/review-profile");
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", factory.GenerateAdminToken());
+        request.Content = JsonContent.Create(new { defaultReviewPipelineProfileId = (string?)null });
+
+        var response = await client.SendAsync(request);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var body = JsonDocument.Parse(await response.Content.ReadAsStringAsync()).RootElement;
+        Assert.Equal(ReviewPipelineProfileCatalog.FileByFileBalancedProfileId, body.GetProperty("defaultReviewPipelineProfileId").GetString());
+        Assert.Equal("systemDefault", body.GetProperty("source").GetString());
     }
 
     [Fact]

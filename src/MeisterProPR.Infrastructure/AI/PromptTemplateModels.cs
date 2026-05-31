@@ -65,7 +65,10 @@ internal static class PromptTemplateModels
         int totalFiles,
         bool multipleFiles,
         string? focusedReviewGuidanceSection,
+        string? securityChecklistSection,
         string? agenticPlanSection,
+        bool hasPrefetchedContextEvidence,
+        IReadOnlyList<PromptPrefetchedContextEvidenceModel> prefetchedContextEvidence,
         bool hasInvestigations,
         IReadOnlyList<PromptInvestigationResultModel> investigations,
         string outputKeyReminder);
@@ -176,6 +179,13 @@ internal static class PromptTemplateModels
         IReadOnlyList<PromptPrWideCandidateFindingModel> candidateFindings);
 
     internal sealed record PromptSimpleEvidenceItemModel(string kind, string summary, string sourceId);
+
+    internal sealed record PromptPrefetchedContextEvidenceModel(
+        string kind,
+        string title,
+        string sourceId,
+        string content,
+        bool truncated);
 
     internal sealed record PromptPrWideCandidateFindingModel(string id, string message, string category, string confidence, string supportingFiles);
 }

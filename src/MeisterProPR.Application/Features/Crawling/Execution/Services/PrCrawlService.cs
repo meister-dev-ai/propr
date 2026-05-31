@@ -4,6 +4,7 @@
 using MeisterProPR.Application.DTOs;
 using MeisterProPR.Application.Features.Crawling.Execution.Models;
 using MeisterProPR.Application.Features.Crawling.Execution.Ports;
+using MeisterProPR.Application.Features.Reviewing.Execution.Models;
 using MeisterProPR.Application.Interfaces;
 using MeisterProPR.Application.Support;
 using MeisterProPR.Domain.Entities;
@@ -426,6 +427,7 @@ public sealed partial class PrCrawlService(
         if (clientRegistry is not null)
         {
             var clientDefault = await clientRegistry.GetDefaultReviewStrategyAsync(clientId, ct);
+            var clientDefaultProfileId = await clientRegistry.GetDefaultReviewPipelineProfileIdAsync(clientId, ct);
             if (clientDefault.HasValue)
             {
                 EnsureStrategySelectable(clientDefault.Value, "client default");
@@ -434,11 +436,24 @@ public sealed partial class PrCrawlService(
                     ReviewStrategySelectionSource.ClientDefault,
                     ReviewComparisonMode.Single,
                     ReviewPublicationMode.Publish,
-                    null);
+                    null,
+                    ResolvePipelineProfileId(clientDefault.Value, clientDefaultProfileId));
             }
         }
 
-        return ReviewStrategySelection.Default;
+        return ReviewStrategySelection.Default with { PipelineProfileId = ReviewPipelineProfileCatalog.FileByFileBalancedProfileId };
+    }
+
+    private static string? ResolvePipelineProfileId(ReviewStrategy strategy, string? configuredProfileId)
+    {
+        if (strategy != ReviewStrategy.FileByFile)
+        {
+            return null;
+        }
+
+        return string.IsNullOrWhiteSpace(configuredProfileId)
+            ? ReviewPipelineProfileCatalog.FileByFileBalancedProfileId
+            : configuredProfileId;
     }
 
     private static void EnsureStrategySelectable(ReviewStrategy strategy, string source)

@@ -15,10 +15,13 @@ internal sealed class ReviewPipelineProfileProvider : IReviewPipelineProfileProv
     // Treat renames as compatibility changes rather than local refactors.
     public const string DispatchStageFamilyId = "dispatch";
     public const string FinalizeStageFamilyId = "finalize";
-    public const string FileByFileBaselineProfileId = "file-by-file-baseline";
-    public const string AgenticBaselineProfileId = "agentic-baseline";
-    public const string AgenticExperimentalProfileId = "agentic-experimental";
-    public const string PrWideBaselineProfileId = "pr-wide-baseline";
+    public const string FileByFileBaselineProfileId = ReviewPipelineProfileCatalog.FileByFileBaselineProfileId;
+    public const string FileByFileCalmProfileId = ReviewPipelineProfileCatalog.FileByFileCalmProfileId;
+    public const string FileByFileBalancedProfileId = ReviewPipelineProfileCatalog.FileByFileBalancedProfileId;
+    public const string FileByFileAssertiveProfileId = ReviewPipelineProfileCatalog.FileByFileAssertiveProfileId;
+    public const string AgenticBaselineProfileId = ReviewPipelineProfileCatalog.AgenticBaselineProfileId;
+    public const string AgenticExperimentalProfileId = ReviewPipelineProfileCatalog.AgenticExperimentalProfileId;
+    public const string PrWideBaselineProfileId = ReviewPipelineProfileCatalog.PrWideBaselineProfileId;
 
     private static readonly IReadOnlyDictionary<ReviewStrategy, IReadOnlyList<ReviewPipelineProfile>> Profiles =
         new Dictionary<ReviewStrategy, IReadOnlyList<ReviewPipelineProfile>>
@@ -26,10 +29,14 @@ internal sealed class ReviewPipelineProfileProvider : IReviewPipelineProfileProv
             [ReviewStrategy.FileByFile] =
             [
                 new ReviewPipelineProfile(
-                    FileByFileBaselineProfileId,
+                    ReviewPipelineProfileCatalog.FileByFileBaselineProfileId,
                     "File-by-file baseline",
                     ReviewStrategy.FileByFile,
-                    [FileByFileProRvPrefilterStage.StageIdConstant],
+                    [
+                        FileByFileContextPrefetchStage.StageIdConstant,
+                        FileByFileRiskMarkerStage.StageIdConstant,
+                        FileByFileProRvPrefilterStage.StageIdConstant,
+                    ],
                     [
                         FileByFileConfidenceFloorStage.StageIdConstant,
                         FileByFileSpeculativeCommentFilterStage.StageIdConstant,
@@ -37,12 +44,60 @@ internal sealed class ReviewPipelineProfileProvider : IReviewPipelineProfileProv
                         FileByFileVagueSuggestionFilterStage.StageIdConstant,
                     ],
                     [FinalizeStageFamilyId],
+                    false),
+                new ReviewPipelineProfile(
+                    ReviewPipelineProfileCatalog.FileByFileCalmProfileId,
+                    "Calm",
+                    ReviewStrategy.FileByFile,
+                    [
+                        FileByFileContextPrefetchStage.StageIdConstant,
+                        FileByFileRiskMarkerStage.StageIdConstant,
+                        FileByFileProRvPrefilterStage.StageIdConstant,
+                    ],
+                    [
+                        FileByFileConfidenceFloorStage.StageIdConstant,
+                        FileByFileSpeculativeCommentFilterStage.StageIdConstant,
+                        FileByFileInfoCommentStripStage.StageIdConstant,
+                        FileByFileVagueSuggestionFilterStage.StageIdConstant,
+                    ],
+                    [FinalizeStageFamilyId],
+                    false),
+                new ReviewPipelineProfile(
+                    ReviewPipelineProfileCatalog.FileByFileBalancedProfileId,
+                    "Balanced",
+                    ReviewStrategy.FileByFile,
+                    [
+                        FileByFileContextPrefetchStage.StageIdConstant,
+                        FileByFileRiskMarkerStage.StageIdConstant,
+                        FileByFileProRvPrefilterStage.StageIdConstant,
+                    ],
+                    [
+                        FileByFileConfidenceFloorStage.StageIdConstant,
+                        FileByFileInfoCommentStripStage.StageIdConstant,
+                        FileByFileImportanceRankingStage.StageIdConstant,
+                    ],
+                    [FinalizeStageFamilyId],
                     true),
+                new ReviewPipelineProfile(
+                    ReviewPipelineProfileCatalog.FileByFileAssertiveProfileId,
+                    "Assertive",
+                    ReviewStrategy.FileByFile,
+                    [
+                        FileByFileContextPrefetchStage.StageIdConstant,
+                        FileByFileRiskMarkerStage.StageIdConstant,
+                        FileByFileProRvPrefilterStage.StageIdConstant,
+                    ],
+                    [
+                        FileByFileInfoCommentStripStage.StageIdConstant,
+                        FileByFileImportanceRankingStage.StageIdConstant,
+                    ],
+                    [FinalizeStageFamilyId],
+                    false),
             ],
             [ReviewStrategy.AgenticFileByFile] =
             [
                 new ReviewPipelineProfile(
-                    AgenticBaselineProfileId,
+                    ReviewPipelineProfileCatalog.AgenticBaselineProfileId,
                     "Agentic baseline",
                     ReviewStrategy.AgenticFileByFile,
                     [AgenticProRvPrefilterStage.StageIdConstant],
@@ -55,7 +110,7 @@ internal sealed class ReviewPipelineProfileProvider : IReviewPipelineProfileProv
                     [FinalizeStageFamilyId],
                     true),
                 new ReviewPipelineProfile(
-                    AgenticExperimentalProfileId,
+                    ReviewPipelineProfileCatalog.AgenticExperimentalProfileId,
                     "Agentic experimental",
                     ReviewStrategy.AgenticFileByFile,
                     [AgenticProRvPrefilterStage.StageIdConstant],
@@ -70,7 +125,7 @@ internal sealed class ReviewPipelineProfileProvider : IReviewPipelineProfileProv
             [ReviewStrategy.PrWideAgentic] =
             [
                 new ReviewPipelineProfile(
-                    PrWideBaselineProfileId,
+                    ReviewPipelineProfileCatalog.PrWideBaselineProfileId,
                     "PR-wide baseline",
                     ReviewStrategy.PrWideAgentic,
                     [DispatchStageFamilyId],

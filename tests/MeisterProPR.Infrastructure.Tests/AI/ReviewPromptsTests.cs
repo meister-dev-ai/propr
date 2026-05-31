@@ -319,6 +319,24 @@ public class ReviewPromptsTests
     }
 
     [Fact]
+    public void BuildPerFileContextPrompt_WithRiskMarkers_IncludesSecurityChecklistSection()
+    {
+        var context = new ReviewSystemContext(null, [], null)
+        {
+            PerFileHint = new PerFileReviewHint("src/Foo.cs", 1, 1, [new ChangedFileSummary("src/Foo.cs", ChangeType.Edit)])
+            {
+                RiskMarkers = new FileRiskMarkers(true, true, ["security.auth-token", "concurrency.async-loop"]),
+            },
+        };
+
+        var prompt = ReviewPrompts.BuildPerFileContextPrompt(context, "src/Foo.cs", 1, 1);
+
+        Assert.Contains("Security And Concurrency Specialist Checklist", prompt, StringComparison.Ordinal);
+        Assert.Contains("security.auth-token", prompt, StringComparison.Ordinal);
+        Assert.Contains("concurrency.async-loop", prompt, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void BuildAgenticFilePlanningSystemPrompt_WithFocusedReviewGuidance_IncludesGuidanceSection()
     {
         var context = new ReviewSystemContext(null, [], null)
@@ -603,6 +621,53 @@ public class ReviewPromptsTests
             prompt.Contains("every manifest file", StringComparison.OrdinalIgnoreCase) ||
             prompt.Contains("conditionally", StringComparison.OrdinalIgnoreCase),
             "BuildPerFileContextPrompt must reference every conditionally-cited manifest file.");
+    }
+
+    [Fact]
+    public void BuildPerFileContextPrompt_UsesSearchCodeRelatedSymbolInsteadOfRemovedSearchSourceRepo()
+    {
+        var prompt = ReviewPrompts.BuildPerFileContextPrompt(null, "src/Foo.cs", 1, 3);
+
+        Assert.Contains("search_code", prompt, StringComparison.Ordinal);
+        Assert.Contains("related_symbol", prompt, StringComparison.Ordinal);
+        Assert.DoesNotContain("search_source_repo", prompt, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void BuildPerFileContextPrompt_WithPrefetchedContextEvidence_RendersDeterministicEvidenceSection()
+    {
+        var context = new ReviewSystemContext(null, [], null)
+        {
+            PerFileHint = new PerFileReviewHint(
+                "src/Foo.cs",
+                1,
+                2,
+                [new ChangedFileSummary("src/Foo.cs", ChangeType.Edit), new ChangedFileSummary("src/Bar.cs", ChangeType.Edit)])
+            {
+                PrefetchedContextEvidence =
+                [
+                    new PrefetchedContextEvidenceItem(
+                        "surrounding_definition",
+                        "Changed definition context",
+                        "src/Foo.cs",
+                        "public sealed class FooService { }"),
+                    new PrefetchedContextEvidenceItem(
+                        "supported_caller_site",
+                        "Related caller site: src/Bar.cs",
+                        "src/Bar.cs:L14",
+                        "var value = FooService.Create(oldArg);",
+                        true),
+                ],
+            },
+        };
+
+        var prompt = ReviewPrompts.BuildPerFileContextPrompt(context, "src/Foo.cs", 1, 2);
+
+        Assert.Contains("Deterministic prefetched context evidence", prompt, StringComparison.Ordinal);
+        Assert.Contains("Changed definition context", prompt, StringComparison.Ordinal);
+        Assert.Contains("Related caller site: src/Bar.cs", prompt, StringComparison.Ordinal);
+        Assert.Contains("src/Bar.cs:L14", prompt, StringComparison.Ordinal);
+        Assert.Contains("(truncated)", prompt, StringComparison.Ordinal);
     }
 
     // T017 — AgenticLoopGuidance contains the suggestion-block fence marker

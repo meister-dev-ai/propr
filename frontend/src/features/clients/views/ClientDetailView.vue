@@ -141,6 +141,34 @@
                         <div class="section-card-body section-card-body--compact">
                             <div class="inline-field-row review-publication-row">
                                 <div class="form-field flex-1 review-publication-field">
+                                    <label for="defaultReviewPipelineProfileId">Review Aggressiveness</label>
+                                    <select
+                                        id="defaultReviewPipelineProfileId"
+                                        v-model="editedDefaultReviewPipelineProfileId"
+                                        name="defaultReviewPipelineProfileId"
+                                    >
+                                        <option
+                                            v-for="profile in reviewProfiles"
+                                            :key="profile.profileId"
+                                            :value="profile.profileId"
+                                        >
+                                            {{ profile.displayName }}
+                                        </option>
+                                    </select>
+                                    <p class="muted review-publication-copy">
+                                        Active source:
+                                        <strong>{{ clientReviewProfile?.source === 'clientDefault' ? 'Client default' : 'System default' }}</strong>
+                                        ({{ clientReviewProfile?.defaultReviewPipelineProfileId ?? editedDefaultReviewPipelineProfileId }})
+                                    </p>
+                                </div>
+                                <button :disabled="!isReviewProfileButtonEnabled()"
+                                    class="btn-primary inline-save-btn review-profile-save-btn"
+                                    @click="saveReviewProfile">
+                                    Save
+                                </button>
+                            </div>
+                            <div class="inline-field-row review-publication-row">
+                                <div class="form-field flex-1 review-publication-field">
                                     <label for="defaultReviewStrategy">Default Review Strategy</label>
                                     <select
                                         id="defaultReviewStrategy"
@@ -438,8 +466,11 @@ const {
     showDeleteDialog,
     editedDisplayName,
     editedDefaultReviewStrategy,
+    editedDefaultReviewPipelineProfileId,
     editedScmCommentPostingEnabled,
     editedEnableProRV,
+    reviewProfiles,
+    clientReviewProfile,
     canManageClient,
     canViewClient,
     availableTabs,
@@ -450,7 +481,9 @@ const {
     saveDisplayName,
     toggleStatus,
     saveAdvancedSettings,
+    saveReviewProfile,
     isAdvancedSettingsButtonEnabled,
+    isReviewProfileButtonEnabled,
     handleDelete,
     handleOverviewNavigate,
 } = vm;

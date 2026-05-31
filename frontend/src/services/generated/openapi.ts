@@ -4110,6 +4110,216 @@ export interface paths {
         };
         trace?: never;
     };
+    "/admin/review-profiles": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Lists the selectable file-by-file review aggressiveness profiles. */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Published review profiles returned. */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ReviewProfileCatalogResponse"];
+                        "application/json": components["schemas"]["ReviewProfileCatalogResponse"];
+                        "text/json": components["schemas"]["ReviewProfileCatalogResponse"];
+                    };
+                };
+                /** @description Missing or invalid credentials. */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Caller lacks administrator access. */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/clients/{clientId}/review-profile": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Gets the current default review aggressiveness profile for one client. */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    /** @description Client identifier. */
+                    clientId: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Client review profile returned. */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ClientReviewProfileResponse"];
+                        "application/json": components["schemas"]["ClientReviewProfileResponse"];
+                        "text/json": components["schemas"]["ClientReviewProfileResponse"];
+                    };
+                };
+                /** @description Missing or invalid credentials. */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Caller lacks administrator access to the client. */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Client not found. */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+            };
+        };
+        /** Sets or clears the default review aggressiveness profile for one client. */
+        put: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    /** @description Client identifier. */
+                    clientId: string;
+                };
+                cookie?: never;
+            };
+            /** @description Requested review profile selection; null clears the client override. */
+            requestBody?: {
+                content: {
+                    "application/json": components["schemas"]["PutClientReviewProfileRequest"];
+                    "text/json": components["schemas"]["PutClientReviewProfileRequest"];
+                    "application/*+json": components["schemas"]["PutClientReviewProfileRequest"];
+                };
+            };
+            responses: {
+                /** @description Client review profile updated. */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ClientReviewProfileResponse"];
+                        "application/json": components["schemas"]["ClientReviewProfileResponse"];
+                        "text/json": components["schemas"]["ClientReviewProfileResponse"];
+                    };
+                };
+                /** @description Unknown profile id. */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Missing or invalid credentials. */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Caller lacks administrator access to the client. */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Client not found. */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+            };
+        };
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/admin/clients/{clientId}/token-usage": {
         parameters: {
             query?: never;
@@ -9676,6 +9886,18 @@ export interface components {
             tenantId?: string | null;
             tenantSlug?: string | null;
             tenantDisplayName?: string | null;
+            defaultReviewPipelineProfileId?: string | null;
+            /** Format: date-time */
+            defaultReviewPipelineProfileUpdatedAtUtc?: string | null;
+        };
+        /** @description Client-scoped review profile response. */
+        ClientReviewProfileResponse: {
+            /** Format: uuid */
+            clientId?: string;
+            defaultReviewPipelineProfileId?: string | null;
+            source?: components["schemas"]["ReviewProfileSource"];
+            /** Format: date-time */
+            updatedAtUtc?: string | null;
         };
         /** @description Client-scoped provider reviewer-trigger identity returned by admin APIs. */
         ClientReviewerIdentityDto: {
@@ -11033,6 +11255,10 @@ export interface components {
             connections?: components["schemas"]["ProviderConnectionOperationalStatusDto"][] | null;
             providerFamilies?: components["schemas"]["ProviderFamilyOperationalStatusDto"][] | null;
         };
+        /** @description Request body for setting a client's default review profile. */
+        PutClientReviewProfileRequest: {
+            defaultReviewPipelineProfileId?: string | null;
+        };
         /** @description Refresh token request payload. */
         RefreshRequest: {
             refreshToken?: string | null;
@@ -11224,6 +11450,21 @@ export interface components {
             codeReview?: components["schemas"]["ReviewCodeReviewRefDto"];
             reviewRevision?: components["schemas"]["ReviewRevisionRefDto"];
         };
+        /** @description One selectable review profile entry. */
+        ReviewProfileCatalogItemResponse: {
+            profileId?: string | null;
+            displayName?: string | null;
+            isDefault?: boolean;
+        };
+        /** @description Catalog response for selectable client review profiles. */
+        ReviewProfileCatalogResponse: {
+            profiles?: components["schemas"]["ReviewProfileCatalogItemResponse"][] | null;
+        };
+        /**
+         * @description Indicates whether the effective review profile comes from the client or the system default.
+         * @enum {string}
+         */
+        ReviewProfileSource: "systemDefault" | "clientDefault";
         /**
          * @description Controls whether a strategy run is allowed to publish review findings.
          * @enum {string}

@@ -1305,7 +1305,7 @@ internal sealed partial class AgenticFileReviewer(
         if (pipelineProfileProvider is null)
         {
             return new ReviewPipelineProfile(
-                ReviewPipelineProfileProvider.AgenticBaselineProfileId,
+                ReviewPipelineProfileCatalog.AgenticBaselineProfileId,
                 "Agentic baseline",
                 ReviewStrategy.AgenticFileByFile,
                 [AgenticProRvPrefilterStage.StageIdConstant],
@@ -1332,7 +1332,7 @@ internal sealed partial class AgenticFileReviewer(
         return profiles.FirstOrDefault(profile => profile.IsBaseline)
                ?? profiles.FirstOrDefault()
                ?? new ReviewPipelineProfile(
-                   ReviewPipelineProfileProvider.AgenticBaselineProfileId,
+                   ReviewPipelineProfileCatalog.AgenticBaselineProfileId,
                    "Agentic baseline",
                    ReviewStrategy.AgenticFileByFile,
                    [AgenticProRvPrefilterStage.StageIdConstant],

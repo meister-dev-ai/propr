@@ -1,10 +1,12 @@
 // Copyright (c) Andreas Rain.
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
+using System.Globalization;
 using MeisterProPR.Application.DTOs;
 using MeisterProPR.Application.Features.Crawling.Execution.Models;
 using MeisterProPR.Application.Features.Crawling.Execution.Services;
 using MeisterProPR.Application.Features.Crawling.Webhooks.Ports;
+using MeisterProPR.Application.Features.Reviewing.Execution.Models;
 using MeisterProPR.Application.Interfaces;
 using MeisterProPR.Domain.Entities;
 using MeisterProPR.Domain.Enums;
@@ -34,6 +36,10 @@ public sealed class PullRequestSynchronizationServiceTests
         var threadMemoryService = Substitute.For<IThreadMemoryService>();
         var scanRepository = Substitute.For<IReviewPrScanRepository>();
         var clientRegistry = Substitute.For<IClientRegistry>();
+        clientRegistry.GetDefaultReviewStrategyAsync(ClientId, Arg.Any<CancellationToken>())
+            .Returns(ReviewStrategy.FileByFile);
+        clientRegistry.GetDefaultReviewPipelineProfileIdAsync(ClientId, Arg.Any<CancellationToken>())
+            .Returns(ReviewPipelineProfileCatalog.FileByFileAssertiveProfileId);
 
         jobs.FindActiveJob("https://dev.azure.com/org", "project", "repo-1", 42, 7)
             .Returns((ReviewJob?)null);
@@ -75,7 +81,8 @@ public sealed class PullRequestSynchronizationServiceTests
             iterationResolver,
             threadStatusFetcher,
             threadMemoryService,
-            scanRepository);
+            scanRepository,
+            clientRegistry);
 
         var outcome = await sut.SynchronizeAsync(
             CreateRequest(activationSource, summaryLabel) with
@@ -100,7 +107,8 @@ public sealed class PullRequestSynchronizationServiceTests
                     job.RepositoryId == "repo-1" &&
                     job.PullRequestId == 42 &&
                     job.IterationId == 7 &&
-                    job.ReviewTemperature == 0.4f),
+                    job.ReviewTemperature == 0.4f &&
+                    job.ReviewPipelineProfileId == ReviewPipelineProfileCatalog.FileByFileAssertiveProfileId),
                 Arg.Any<CancellationToken>());
         await threadMemoryService.Received(1)
             .HandleThreadResolvedAsync(
@@ -462,7 +470,7 @@ public sealed class PullRequestSynchronizationServiceTests
                     "head-sha",
                     "base-sha",
                     "base-sha",
-                    providerIterationId.ToString(System.Globalization.CultureInfo.InvariantCulture),
+                    providerIterationId.ToString(CultureInfo.InvariantCulture),
                     "base-sha...head-sha"),
             });
 

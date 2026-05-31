@@ -10,6 +10,7 @@ using MeisterProPR.Application.DTOs;
 using MeisterProPR.Application.Features.Crawling.Execution.Models;
 using MeisterProPR.Application.Features.Crawling.Execution.Ports;
 using MeisterProPR.Application.Features.Crawling.Webhooks.Ports;
+using MeisterProPR.Application.Features.Reviewing.Execution.Models;
 using MeisterProPR.Application.Interfaces;
 using MeisterProPR.Application.Support;
 using MeisterProPR.Domain.Entities;
@@ -768,12 +769,14 @@ public sealed class PullRequestSynchronizationService(
                 ReviewStrategySelectionSource.JobOverride,
                 request.ComparisonMode,
                 request.PublicationMode,
-                null);
+                null,
+                ResolvePipelineProfileId(request.ReviewStrategy.Value, null));
         }
 
         if (clientRegistry is not null)
         {
             var clientDefault = await clientRegistry.GetDefaultReviewStrategyAsync(request.ClientId, ct);
+            var clientDefaultProfileId = await clientRegistry.GetDefaultReviewPipelineProfileIdAsync(request.ClientId, ct);
             if (clientDefault.HasValue)
             {
                 EnsureStrategySelectable(clientDefault.Value, "client default");
@@ -782,7 +785,8 @@ public sealed class PullRequestSynchronizationService(
                     ReviewStrategySelectionSource.ClientDefault,
                     request.ComparisonMode,
                     request.PublicationMode,
-                    null);
+                    null,
+                    ResolvePipelineProfileId(clientDefault.Value, clientDefaultProfileId));
             }
         }
 
@@ -791,7 +795,20 @@ public sealed class PullRequestSynchronizationService(
             ReviewStrategySelectionSource.FallbackDefault,
             request.ComparisonMode,
             request.PublicationMode,
-            null);
+            null,
+            ReviewPipelineProfileCatalog.FileByFileBalancedProfileId);
+    }
+
+    private static string? ResolvePipelineProfileId(ReviewStrategy strategy, string? configuredProfileId)
+    {
+        if (strategy != ReviewStrategy.FileByFile)
+        {
+            return null;
+        }
+
+        return string.IsNullOrWhiteSpace(configuredProfileId)
+            ? ReviewPipelineProfileCatalog.FileByFileBalancedProfileId
+            : configuredProfileId;
     }
 
     private static void EnsureStrategySelectable(ReviewStrategy strategy, string source)

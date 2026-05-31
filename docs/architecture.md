@@ -114,7 +114,12 @@ feature ownership stays visible at the composition root.
 | `AddProCursorModule()` | ProCursor-owned execution, query, indexing, and operational-persistence composition used by the extracted ProCursor host |
 
 This composition model keeps feature-owned registrations in module roots while shared support stays
-cross-cutting and feature-agnostic. DB-backed registrations are enabled whenever
+cross-cutting and feature-agnostic. The file-by-file reviewing path also publishes a shared profile
+catalog with `Calm`, `Balanced`, and `Assertive` compositions, where `Balanced` is the baseline
+profile resolved for jobs without an explicit `ReviewPipelineProfileId`. The same path also applies
+deterministic context-prefetch and risk-marker dispatch stages ahead of review, then conditionally
+runs a security/concurrency specialist augmentation pass and one bounded high-risk zero-finding
+escalation pass before synthesis. DB-backed registrations are enabled whenever
 `DB_CONNECTION_STRING` is configured, including in `Testing`.
 
 When `PROCURSOR_REMOTE_MODE=proprManagedRemote`, the API host binds `IProCursorGateway` to the remote

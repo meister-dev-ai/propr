@@ -104,6 +104,7 @@ internal sealed partial class FileReviewer(
                 []);
 
             var pipelineProfile = ResolvePipelineProfile(job, pipelineProfileProvider);
+            await this.RecordPipelineProfileAsync(protocolId, file.Path, pipelineProfile, ct);
             fileContext = await this.RunDispatchPipelineAsync(
                 job,
                 file,
@@ -290,7 +291,7 @@ internal sealed partial class FileReviewer(
             tierClient,
             tierCapabilities,
             effectiveClient,
-            []);
+            augmentationContext.PerFileHint?.FocusedReviewGuidance ?? []);
 
         var pipelineProfile = ResolvePipelineProfile(job, pipelineProfileProvider);
         fileContext = await this.RunDispatchPipelineAsync(
@@ -313,6 +314,47 @@ internal sealed partial class FileReviewer(
             reviewInvariantFactProviders?.SelectMany(provider => provider.GetFacts()).ToList() ?? []);
 
         return await this.RunReviewResultPipelineAsync(pipelineState, result, pipelineProfile, ct);
+    }
+
+    public async Task<ReviewResult> ReviewHighRiskEscalationAsync(
+        ReviewJob job,
+        PullRequest pr,
+        ChangedFile file,
+        int fileIndex,
+        int totalFiles,
+        ReviewSystemContext baseContext,
+        FileRiskMarkers riskMarkers,
+        IChatClient effectiveClient,
+        CancellationToken ct)
+    {
+        var escalationContext = CreateAugmentationContext(baseContext);
+        var perFileHint = escalationContext.PerFileHint
+                          ?? new PerFileReviewHint(file.Path, fileIndex, totalFiles, pr.AllPrFileSummaries);
+        var existingGuidance = perFileHint.FocusedReviewGuidance;
+        escalationContext.PerFileHint = perFileHint with
+        {
+            FocusedReviewGuidance =
+            [
+                .. existingGuidance,
+                new FocusedReviewGuidanceItem(
+                    "high-risk.zero-finding-second-look",
+                    "High-risk zero-finding second look",
+                    "This high-risk file produced no findings in earlier passes.",
+                    "Perform one focused second look using the already gathered evidence. Prioritize the top 1-3 most likely concrete correctness or security failures that would explain a risky silent outcome. Report only defects you can ground in the diff and supplied evidence.",
+                    $"Risk markers matched: {string.Join(", ", riskMarkers.MatchedMarkers)}. Earlier passes returned zero findings.",
+                    100),
+            ],
+        };
+
+        return await this.ReviewAugmentationAsync(
+            job,
+            pr,
+            file,
+            fileIndex,
+            totalFiles,
+            escalationContext,
+            effectiveClient,
+            ct);
     }
 
     private static ReviewSystemContext CreateAugmentationContext(ReviewSystemContext baseContext)
@@ -401,7 +443,7 @@ internal sealed partial class FileReviewer(
         return true;
     }
 
-    private async Task<ReviewSystemContext> RunDispatchPipelineAsync(
+    internal async Task<ReviewSystemContext> RunDispatchPipelineAsync(
         ReviewJob job,
         ChangedFile file,
         ReviewFileResult fileResult,
@@ -430,22 +472,25 @@ internal sealed partial class FileReviewer(
         return pipelineContext.FileReviewContext;
     }
 
-    private static ReviewPipelineProfile ResolvePipelineProfile(
+    internal static ReviewPipelineProfile ResolvePipelineProfile(
         ReviewJob job,
         IReviewPipelineProfileProvider? pipelineProfileProvider)
     {
         if (pipelineProfileProvider is null)
         {
             return new ReviewPipelineProfile(
-                ReviewPipelineProfileProvider.FileByFileBaselineProfileId,
-                "File-by-file baseline",
+                ReviewPipelineProfileCatalog.FileByFileBalancedProfileId,
+                "Balanced",
                 ReviewStrategy.FileByFile,
-                [FileByFileProRvPrefilterStage.StageIdConstant],
+                [
+                    FileByFileContextPrefetchStage.StageIdConstant,
+                    FileByFileRiskMarkerStage.StageIdConstant,
+                    FileByFileProRvPrefilterStage.StageIdConstant,
+                ],
                 [
                     FileByFileConfidenceFloorStage.StageIdConstant,
-                    FileByFileSpeculativeCommentFilterStage.StageIdConstant,
                     FileByFileInfoCommentStripStage.StageIdConstant,
-                    FileByFileVagueSuggestionFilterStage.StageIdConstant,
+                    FileByFileImportanceRankingStage.StageIdConstant,
                 ],
                 [ReviewPipelineProfileProvider.FinalizeStageFamilyId],
                 true);
@@ -464,18 +509,54 @@ internal sealed partial class FileReviewer(
         return profiles.FirstOrDefault(profile => profile.IsBaseline)
                ?? profiles.FirstOrDefault()
                ?? new ReviewPipelineProfile(
-                   ReviewPipelineProfileProvider.FileByFileBaselineProfileId,
-                   "File-by-file baseline",
+                   ReviewPipelineProfileCatalog.FileByFileBalancedProfileId,
+                   "Balanced",
                    ReviewStrategy.FileByFile,
-                   [FileByFileProRvPrefilterStage.StageIdConstant],
+                   [
+                       FileByFileContextPrefetchStage.StageIdConstant,
+                       FileByFileRiskMarkerStage.StageIdConstant,
+                       FileByFileProRvPrefilterStage.StageIdConstant,
+                   ],
                    [
                        FileByFileConfidenceFloorStage.StageIdConstant,
-                       FileByFileSpeculativeCommentFilterStage.StageIdConstant,
                        FileByFileInfoCommentStripStage.StageIdConstant,
-                       FileByFileVagueSuggestionFilterStage.StageIdConstant,
+                       FileByFileImportanceRankingStage.StageIdConstant,
                    ],
                    [ReviewPipelineProfileProvider.FinalizeStageFamilyId],
                    true);
+    }
+
+    private async Task RecordPipelineProfileAsync(
+        Guid? protocolId,
+        string filePath,
+        ReviewPipelineProfile pipelineProfile,
+        CancellationToken ct)
+    {
+        if (!protocolId.HasValue)
+        {
+            return;
+        }
+
+        await protocolRecorder.RecordReviewStrategyEventAsync(
+            protocolId.Value,
+            ReviewProtocolEventNames.ReviewPipelineProfileApplied,
+            JsonSerializer.Serialize(
+                new
+                {
+                    filePath,
+                    profileId = pipelineProfile.ProfileId,
+                    strategy = pipelineProfile.Strategy.ToString(),
+                }),
+            JsonSerializer.Serialize(
+                new
+                {
+                    pipelineProfile.ProfileId,
+                    pipelineProfile.DispatchStageIds,
+                    pipelineProfile.PerFileStageIds,
+                    pipelineProfile.FinalizationStageIds,
+                }),
+            null,
+            ct);
     }
 
     private static async Task RecordFocusedGuidanceUsageAsync(

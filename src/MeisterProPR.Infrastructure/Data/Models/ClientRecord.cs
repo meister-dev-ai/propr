@@ -27,6 +27,18 @@ public sealed class ClientRecord
     public string? CustomSystemMessage { get; set; }
 
     /// <summary>
+    ///     Optional default review pipeline profile for newly created review jobs.
+    ///     When null, the system baseline profile is used.
+    /// </summary>
+    public string? DefaultReviewPipelineProfileId { get; set; }
+
+    /// <summary>
+    ///     Timestamp of the most recent explicit default review pipeline profile change.
+    ///     Null when the client has never stored an explicit profile override.
+    /// </summary>
+    public DateTimeOffset? DefaultReviewPipelineProfileUpdatedAtUtc { get; set; }
+
+    /// <summary>
     ///     Controls whether newly generated review comments are published back to the SCM provider.
     ///     Defaults to <see langword="true" /> so existing clients continue using visible review publication.
     /// </summary>

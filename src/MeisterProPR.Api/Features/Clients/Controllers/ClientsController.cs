@@ -6,6 +6,7 @@ using FluentValidation.Results;
 using MeisterProPR.Api.Extensions;
 using MeisterProPR.Application.DTOs;
 using MeisterProPR.Application.DTOs.AzureDevOps;
+using MeisterProPR.Application.Features.Reviewing.Execution.Models;
 using MeisterProPR.Application.Interfaces;
 using MeisterProPR.Domain.Enums;
 using MeisterProPR.Infrastructure.Features.IdentityAndAccess;
@@ -33,7 +34,30 @@ public sealed class ClientsController(
             client.EnableProRV,
             client.TenantId,
             client.TenantSlug,
-            client.TenantDisplayName);
+            client.TenantDisplayName,
+            client.DefaultReviewPipelineProfileId,
+            client.DefaultReviewPipelineProfileUpdatedAtUtc);
+    }
+
+    private static ReviewProfileCatalogItemResponse ToReviewProfileCatalogItemResponse(ReviewPipelineProfile profile)
+    {
+        return new ReviewProfileCatalogItemResponse(profile.ProfileId, profile.DisplayName, profile.IsBaseline);
+    }
+
+    private static ClientReviewProfileResponse ToClientReviewProfileResponse(Guid clientId, ClientDto client)
+    {
+        var effectiveProfileId = string.IsNullOrWhiteSpace(client.DefaultReviewPipelineProfileId)
+            ? ReviewPipelineProfileCatalog.FileByFileBalancedProfileId
+            : client.DefaultReviewPipelineProfileId;
+        var source = string.IsNullOrWhiteSpace(client.DefaultReviewPipelineProfileId)
+            ? ReviewProfileSource.SystemDefault
+            : ReviewProfileSource.ClientDefault;
+
+        return new ClientReviewProfileResponse(
+            clientId,
+            effectiveProfileId,
+            source,
+            client.DefaultReviewPipelineProfileUpdatedAtUtc);
     }
 
     private IActionResult? ValidateRequest(ValidationResult result)
@@ -233,6 +257,97 @@ public sealed class ClientsController(
         return this.Ok(scoped.Select(ToClientResponse).ToList());
     }
 
+    /// <summary>Lists the selectable file-by-file review aggressiveness profiles.</summary>
+    /// <param name="ct">Cancellation token.</param>
+    /// <response code="200">Published review profiles returned.</response>
+    /// <response code="401">Missing or invalid credentials.</response>
+    /// <response code="403">Caller lacks administrator access.</response>
+    [HttpGet("/admin/review-profiles")]
+    [ProducesResponseType(typeof(ReviewProfileCatalogResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    public async Task<IActionResult> GetReviewProfiles(CancellationToken ct = default)
+    {
+        var auth = AuthHelpers.RequireAnyClientRole(this.HttpContext, ClientRole.ClientAdministrator);
+        if (auth is not null)
+        {
+            return auth;
+        }
+
+        var profiles = await clientAdminService.GetSelectableReviewPipelineProfilesAsync(ct);
+        return this.Ok(new ReviewProfileCatalogResponse(profiles.Select(ToReviewProfileCatalogItemResponse).ToList()));
+    }
+
+    /// <summary>Gets the current default review aggressiveness profile for one client.</summary>
+    /// <param name="clientId">Client identifier.</param>
+    /// <param name="ct">Cancellation token.</param>
+    /// <response code="200">Client review profile returned.</response>
+    /// <response code="401">Missing or invalid credentials.</response>
+    /// <response code="403">Caller lacks administrator access to the client.</response>
+    /// <response code="404">Client not found.</response>
+    [HttpGet("/admin/clients/{clientId:guid}/review-profile")]
+    [ProducesResponseType(typeof(ClientReviewProfileResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> GetClientReviewProfile(Guid clientId, CancellationToken ct = default)
+    {
+        var auth = this.RequireClientAccess(clientId, ClientRole.ClientAdministrator);
+        if (auth is not null)
+        {
+            return auth;
+        }
+
+        var client = await clientAdminService.GetByIdAsync(clientId, ct);
+        return client is null ? this.NotFound() : this.Ok(ToClientReviewProfileResponse(clientId, client));
+    }
+
+    /// <summary>Sets or clears the default review aggressiveness profile for one client.</summary>
+    /// <param name="clientId">Client identifier.</param>
+    /// <param name="request">Requested review profile selection; <see langword="null" /> clears the client override.</param>
+    /// <param name="ct">Cancellation token.</param>
+    /// <response code="200">Client review profile updated.</response>
+    /// <response code="400">Unknown profile id.</response>
+    /// <response code="401">Missing or invalid credentials.</response>
+    /// <response code="403">Caller lacks administrator access to the client.</response>
+    /// <response code="404">Client not found.</response>
+    [HttpPut("/admin/clients/{clientId:guid}/review-profile")]
+    [ProducesResponseType(typeof(ClientReviewProfileResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> PutClientReviewProfile(
+        Guid clientId,
+        [FromBody] PutClientReviewProfileRequest request,
+        CancellationToken ct = default)
+    {
+        var auth = this.RequireClientAccess(clientId, ClientRole.ClientAdministrator);
+        if (auth is not null)
+        {
+            return auth;
+        }
+
+        var profiles = await clientAdminService.GetSelectableReviewPipelineProfilesAsync(ct);
+        if (!string.IsNullOrWhiteSpace(request.DefaultReviewPipelineProfileId)
+            && profiles.All(profile => !string.Equals(profile.ProfileId, request.DefaultReviewPipelineProfileId, StringComparison.Ordinal)))
+        {
+            this.ModelState.AddModelError(
+                nameof(request.DefaultReviewPipelineProfileId),
+                "DefaultReviewPipelineProfileId must reference a published file-by-file review profile.");
+            return this.ValidationProblem();
+        }
+
+        var client = await clientAdminService.PatchAsync(
+            clientId,
+            null,
+            null,
+            defaultReviewPipelineProfileId: request.DefaultReviewPipelineProfileId ?? string.Empty,
+            ct: ct);
+
+        return client is null ? this.NotFound() : this.Ok(ToClientReviewProfileResponse(clientId, client));
+    }
+
     /// <summary>
     ///     Updates one or more fields of a client (display name, active status, review settings, custom system message).
     ///     Requires a global admin JWT or <c>X-User-Pat</c>.
@@ -274,6 +389,7 @@ public sealed class ClientsController(
             request.DisplayName,
             request.CommentResolutionBehavior,
             request.CustomSystemMessage,
+            null,
             request.ScmCommentPostingEnabled,
             request.EnableProRV,
             request.DefaultReviewStrategy,
@@ -295,7 +411,32 @@ public sealed record ClientResponse(
     bool EnableProRV,
     Guid? TenantId,
     string? TenantSlug,
-    string? TenantDisplayName);
+    string? TenantDisplayName,
+    string? DefaultReviewPipelineProfileId,
+    DateTimeOffset? DefaultReviewPipelineProfileUpdatedAtUtc);
+
+/// <summary>Catalog response for selectable client review profiles.</summary>
+public sealed record ReviewProfileCatalogResponse(IReadOnlyList<ReviewProfileCatalogItemResponse> Profiles);
+
+/// <summary>One selectable review profile entry.</summary>
+public sealed record ReviewProfileCatalogItemResponse(string ProfileId, string DisplayName, bool IsDefault);
+
+/// <summary>Client-scoped review profile response.</summary>
+public sealed record ClientReviewProfileResponse(
+    Guid ClientId,
+    string DefaultReviewPipelineProfileId,
+    ReviewProfileSource Source,
+    DateTimeOffset? UpdatedAtUtc);
+
+/// <summary>Request body for setting a client's default review profile.</summary>
+public sealed record PutClientReviewProfileRequest(string? DefaultReviewPipelineProfileId);
+
+/// <summary>Indicates whether the effective review profile comes from the client or the system default.</summary>
+public enum ReviewProfileSource
+{
+    SystemDefault,
+    ClientDefault,
+}
 
 /// <summary>Crawl configuration response.</summary>
 public sealed record CrawlConfigResponse(

@@ -46,7 +46,15 @@ internal static partial class ReviewPrompts
                 totalFiles,
                 totalFiles > 1,
                 BuildFocusedReviewGuidanceSection(context?.PerFileHint?.FocusedReviewGuidance),
+                BuildSecurityChecklistSection(context?.PerFileHint?.RiskMarkers),
                 BuildAgenticPlanSection(context?.PerFileHint),
+                context?.PerFileHint?.PrefetchedContextEvidence.Count > 0,
+                context?.PerFileHint?.PrefetchedContextEvidence.Select(item => new PromptTemplateModels.PromptPrefetchedContextEvidenceModel(
+                    item.Kind,
+                    item.Title,
+                    item.SourceId,
+                    item.Content,
+                    item.Truncated)).ToList() ?? [],
                 context?.PerFileHint?.AgenticInvestigations.Count > 0,
                 context?.PerFileHint?.AgenticInvestigations.Select(investigation => new PromptTemplateModels.PromptInvestigationResultModel(
                     investigation.TaskId,
@@ -177,6 +185,34 @@ internal static partial class ReviewPrompts
             }
         }
 
+        return sb.ToString().TrimEnd();
+    }
+
+    private static string? BuildSecurityChecklistSection(FileRiskMarkers? riskMarkers)
+    {
+        if (riskMarkers is null || !riskMarkers.HasAnyMarkers)
+        {
+            return null;
+        }
+
+        var sb = new StringBuilder();
+        sb.AppendLine("## Security And Concurrency Specialist Checklist");
+        sb.AppendLine("This file triggered deterministic high-risk markers. Perform an explicit specialist check in addition to the general review.");
+        sb.AppendLine("Matched markers: " + string.Join(", ", riskMarkers.MatchedMarkers));
+
+        if (riskMarkers.HasSecurityMarkers)
+        {
+            sb.AppendLine(
+                "- Check authentication, token, redirect, iframe/frame, origin/referer, and allow/deny-list logic for concrete exploitable breakage.");
+        }
+
+        if (riskMarkers.HasConcurrencyMarkers)
+        {
+            sb.AppendLine(
+                "- Check async control flow, locking, shared mutable state, counters, cache-key construction, and fan-out for races or lost updates.");
+        }
+
+        sb.AppendLine("Report only concrete correctness or security failures grounded in the supplied diff and gathered evidence.");
         return sb.ToString().TrimEnd();
     }
 

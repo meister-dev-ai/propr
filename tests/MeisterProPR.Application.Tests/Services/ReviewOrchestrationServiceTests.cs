@@ -2907,7 +2907,7 @@ public class ReviewOrchestrationServiceTests
     }
 
     [Fact]
-    public async Task ProcessAsync_ProRvSetting_ReachesAiReviewCore()
+    public async Task ProcessAsync_ProRvDisabled_UsesLateAugmentationMode()
     {
         var (jobs, prFetcher, orchestrator, commentPoster, reviewerManager, clientRegistry, prScanRepository, _, _,
                 logger) =
@@ -2954,7 +2954,7 @@ public class ReviewOrchestrationServiceTests
             .ReviewAsync(
                 Arg.Any<ReviewJob>(),
                 Arg.Any<PullRequest>(),
-                Arg.Is<ReviewSystemContext>(ctx => !ctx.EnableProRV && ctx.AugmentationMode == ReviewAugmentationMode.Disabled),
+                Arg.Is<ReviewSystemContext>(ctx => !ctx.EnableProRV && ctx.AugmentationMode == ReviewAugmentationMode.LateAugmentation),
                 Arg.Any<CancellationToken>(),
                 Arg.Any<IChatClient?>());
     }

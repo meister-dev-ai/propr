@@ -72,4 +72,42 @@ public sealed record PerFileReviewHint(
     ///     Surviving agentic candidate findings after local verification, preserving provenance and support metadata.
     /// </summary>
     public IReadOnlyList<CandidateReviewFinding> VerifiedAgenticCandidateFindings { get; init; } = [];
+
+    /// <summary>
+    ///     Deterministically prefetched surrounding-code and caller evidence injected before the file review runs.
+    /// </summary>
+    public IReadOnlyList<PrefetchedContextEvidenceItem> PrefetchedContextEvidence { get; init; } = [];
+
+    /// <summary>
+    ///     Deterministic security and concurrency risk markers extracted from the current diff.
+    /// </summary>
+    public FileRiskMarkers RiskMarkers { get; init; } = FileRiskMarkers.None;
+}
+
+/// <summary>
+///     One deterministic prefetch evidence item captured before the per-file review starts.
+/// </summary>
+/// <param name="Kind">Machine-readable evidence kind.</param>
+/// <param name="Title">Short display title for the prompt.</param>
+/// <param name="SourceId">Stable source identifier such as a path or symbol key.</param>
+/// <param name="Content">Bounded evidence content rendered into the prompt.</param>
+/// <param name="Truncated">Whether the content was trimmed to stay within the budget.</param>
+public sealed record PrefetchedContextEvidenceItem(
+    string Kind,
+    string Title,
+    string SourceId,
+    string Content,
+    bool Truncated = false);
+
+/// <summary>
+///     Deterministic risk markers extracted from a changed file diff.
+/// </summary>
+public sealed record FileRiskMarkers(
+    bool HasSecurityMarkers,
+    bool HasConcurrencyMarkers,
+    IReadOnlyList<string> MatchedMarkers)
+{
+    public static FileRiskMarkers None { get; } = new(false, false, []);
+
+    public bool HasAnyMarkers => this.HasSecurityMarkers || this.HasConcurrencyMarkers;
 }

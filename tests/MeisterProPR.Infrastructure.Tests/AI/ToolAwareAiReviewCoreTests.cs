@@ -1880,6 +1880,58 @@ public class ToolAwareAiReviewCoreTests
                 Arg.Any<bool?>());
     }
 
+    [Fact]
+    public async Task ReviewAsync_PerFilePath_SystemPromptUsesSearchCodeContractGuidance()
+    {
+        string? capturedPerFileSystemPrompt = null;
+
+        var mockClient = Substitute.For<IChatClient>();
+        mockClient
+            .GetResponseAsync(
+                Arg.Do<IEnumerable<ChatMessage>>(messages =>
+                {
+                    capturedPerFileSystemPrompt ??= messages
+                        .Where(message => message.Role == ChatRole.System)
+                        .Skip(1)
+                        .FirstOrDefault()
+                        ?.Text;
+                }),
+                Arg.Any<ChatOptions?>(),
+                Arg.Any<CancellationToken>())
+            .Returns(CreateFinalReviewResponse("Done."));
+
+        var file = new ChangedFile("src/Foo.cs", ChangeType.Edit, "code", "+code");
+        var pr = new PullRequest(
+            "https://dev.azure.com/org",
+            "proj",
+            "repo",
+            "repo",
+            1,
+            1,
+            "PR",
+            null,
+            "feature/x",
+            "main",
+            new List<ChangedFile> { file }.AsReadOnly());
+
+        var context = new ReviewSystemContext(null, [], null)
+        {
+            PerFileHint = new PerFileReviewHint("src/Foo.cs", 1, 1, pr.AllPrFileSummaries),
+        };
+
+        var sut = new ToolAwareAiReviewCore(
+            mockClient,
+            DefaultOptions(10),
+            Substitute.For<ILogger<ToolAwareAiReviewCore>>());
+
+        await sut.ReviewAsync(pr, context);
+
+        Assert.NotNull(capturedPerFileSystemPrompt);
+        Assert.Contains("search_code", capturedPerFileSystemPrompt, StringComparison.Ordinal);
+        Assert.Contains("related_symbol", capturedPerFileSystemPrompt, StringComparison.Ordinal);
+        Assert.DoesNotContain("search_source_repo", capturedPerFileSystemPrompt, StringComparison.Ordinal);
+    }
+
     // T019 — Two per-file reviews of the same PR share a byte-for-byte identical first System message
     [Fact]
     public async Task ReviewAsync_TwoParallelPerFileReviews_GlobalSystemPromptIdentical()

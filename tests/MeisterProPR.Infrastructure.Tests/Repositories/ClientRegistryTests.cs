@@ -10,6 +10,7 @@ using MeisterProPR.Infrastructure.Data;
 using MeisterProPR.Infrastructure.Data.Models;
 using MeisterProPR.Infrastructure.Features.IdentityAndAccess;
 using MeisterProPR.Infrastructure.Features.Providers.GitHub.Security;
+using MeisterProPR.Infrastructure.Features.Reviewing.Execution.Strategies;
 using MeisterProPR.Infrastructure.Repositories;
 using MeisterProPR.Infrastructure.Services;
 using MeisterProPR.Infrastructure.Tests.Fixtures;
@@ -349,6 +350,37 @@ public sealed class ClientRegistryTests(PostgresContainerFixture fixture) : IAsy
         var result = await this._registry.GetProRvEnabledAsync(Guid.NewGuid(), CancellationToken.None);
 
         Assert.False(result);
+    }
+
+    [Fact]
+    public async Task DefaultReviewPipelineProfileId_RoundTripsNullableValueAcrossPersistence()
+    {
+        var client = await this.SeedClientAsync();
+        var adminService = new ClientAdminService(this._dbContext);
+
+        client.DefaultReviewPipelineProfileId = ReviewPipelineProfileProvider.FileByFileAssertiveProfileId;
+        client.DefaultReviewPipelineProfileUpdatedAtUtc = DateTimeOffset.UtcNow;
+        await this._dbContext.SaveChangesAsync();
+
+        var persistedProfileId = await this._registry.GetDefaultReviewPipelineProfileIdAsync(client.Id, CancellationToken.None);
+        var persistedClient = await adminService.GetByIdAsync(client.Id, CancellationToken.None);
+
+        Assert.Equal(ReviewPipelineProfileProvider.FileByFileAssertiveProfileId, persistedProfileId);
+        Assert.NotNull(persistedClient);
+        Assert.Equal(ReviewPipelineProfileProvider.FileByFileAssertiveProfileId, persistedClient!.DefaultReviewPipelineProfileId);
+        Assert.NotNull(persistedClient.DefaultReviewPipelineProfileUpdatedAtUtc);
+
+        client.DefaultReviewPipelineProfileId = null;
+        client.DefaultReviewPipelineProfileUpdatedAtUtc = null;
+        await this._dbContext.SaveChangesAsync();
+
+        var clearedProfileId = await this._registry.GetDefaultReviewPipelineProfileIdAsync(client.Id, CancellationToken.None);
+        var clearedClient = await adminService.GetByIdAsync(client.Id, CancellationToken.None);
+
+        Assert.Null(clearedProfileId);
+        Assert.NotNull(clearedClient);
+        Assert.Null(clearedClient!.DefaultReviewPipelineProfileId);
+        Assert.Null(clearedClient.DefaultReviewPipelineProfileUpdatedAtUtc);
     }
 
     private async Task<ClientRecord> SeedClientAsync()
