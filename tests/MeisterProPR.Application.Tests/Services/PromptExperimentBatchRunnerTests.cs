@@ -411,6 +411,7 @@ public sealed class PromptExperimentBatchRunnerTests
                     userPrompt,
                     systemPrompt,
                     "summary",
+                    "ai-call",
                     null),
             ]);
     }
@@ -450,6 +451,7 @@ public sealed class PromptExperimentBatchRunnerTests
                     $"user-{variantName}",
                     $"system-{variantName}",
                     "summary",
+                    "ai-call",
                     null),
                 new ProtocolEventDto(
                     Guid.NewGuid(),
@@ -461,6 +463,7 @@ public sealed class PromptExperimentBatchRunnerTests
                     $"user-{variantName}",
                     $"system-{variantName}",
                     $"{{\"stageKey\":\"{stageKey}\",\"variantName\":\"{variantName}\",\"compositionMode\":\"{compositionMode.ToString().ToLowerInvariant()}\",\"usedDefaultConstruction\":false}}",
+                    "review-strategy",
                     null),
             ]);
     }

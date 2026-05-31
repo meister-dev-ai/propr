@@ -23,7 +23,7 @@ let capabilityState: Array<{ key?: string | null; isAvailable?: boolean; message
 vi.mock('vue-router', () => ({
   useRouter: () => ({ push: mockRouterPush, replace: mockRouterReplace }),
   useRoute: () => mockRoute,
-  RouterLink: { template: '<a><slot /></a>' },
+  RouterLink: { props: ['to'], template: '<a :data-to="JSON.stringify(to)"><slot /></a>' },
 }))
 
 vi.mock('@/composables/useSession', () => ({

@@ -4,13 +4,36 @@
 using MeisterProPR.Application.Interfaces;
 using MeisterProPR.Domain.Entities;
 using MeisterProPR.Domain.Enums;
+using MeisterProPR.Infrastructure.Data;
 using MeisterProPR.Infrastructure.Features.Reviewing.Diagnostics.Persistence;
+using Microsoft.EntityFrameworkCore;
 using NSubstitute;
 
 namespace MeisterProPR.Infrastructure.Tests.Features.Reviewing.Diagnostics;
 
 public sealed class EfReviewDiagnosticsReaderVerificationTests
 {
+    [Fact]
+    public async Task ProtocolEventModel_IncludesEventCategoryColumnAndIndexes()
+    {
+        var options = new DbContextOptionsBuilder<MeisterProPRDbContext>()
+            .UseInMemoryDatabase($"EfReviewDiagnosticsReaderVerification-{Guid.NewGuid():N}")
+            .Options;
+
+        await using var db = new MeisterProPRDbContext(options);
+        var entityType = db.Model.FindEntityType(typeof(ProtocolEvent));
+
+        Assert.NotNull(entityType);
+        Assert.NotNull(entityType!.FindProperty(nameof(ProtocolEvent.EventCategory)));
+
+        var indexColumns = entityType.GetIndexes()
+            .Select(index => string.Join('|', index.Properties.Select(property => property.Name)))
+            .ToArray();
+
+        Assert.Contains(nameof(ProtocolEvent.EventCategory), indexColumns);
+        Assert.Contains(nameof(ProtocolEvent.OccurredAt), indexColumns);
+    }
+
     [Fact]
     public async Task GetJobProtocolAsync_WhenAgenticFilePassDegrades_MarksFileOutcomeAsDegraded()
     {

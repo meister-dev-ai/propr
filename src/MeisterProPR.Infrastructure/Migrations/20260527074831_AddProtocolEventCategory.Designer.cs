@@ -3,6 +3,7 @@ using System;
 using MeisterProPR.Infrastructure.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 using Pgvector;
@@ -12,9 +13,11 @@ using Pgvector;
 namespace MeisterProPR.Infrastructure.Migrations
 {
     [DbContext(typeof(MeisterProPRDbContext))]
-    partial class MeisterProPRDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260527074831_AddProtocolEventCategory")]
+    partial class AddProtocolEventCategory
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -492,49 +495,9 @@ namespace MeisterProPR.Infrastructure.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("id");
 
-                    b.Property<long?>("ActiveDurationMs")
-                        .HasColumnType("bigint")
-                        .HasColumnName("active_duration_ms");
-
-                    b.Property<string>("CacheMissCategory")
-                        .HasMaxLength(128)
-                        .HasColumnType("character varying(128)")
-                        .HasColumnName("cache_miss_category");
-
-                    b.Property<short>("CacheStatus")
-                        .HasColumnType("smallint")
-                        .HasColumnName("cache_status");
-
-                    b.Property<long?>("CachedInputTokens")
-                        .HasColumnType("bigint")
-                        .HasColumnName("cached_input_tokens");
-
-                    b.Property<DateTimeOffset?>("CompletedAt")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("completed_at");
-
-                    b.Property<long?>("DurationMs")
-                        .HasColumnType("bigint")
-                        .HasColumnName("duration_ms");
-
                     b.Property<string>("Error")
                         .HasColumnType("text")
                         .HasColumnName("error");
-
-                    b.Property<string>("FinalizationAttemptKind")
-                        .HasMaxLength(64)
-                        .HasColumnType("character varying(64)")
-                        .HasColumnName("finalization_attempt_kind");
-
-                    b.Property<string>("FinalizationOutcome")
-                        .HasMaxLength(128)
-                        .HasColumnType("character varying(128)")
-                        .HasColumnName("finalization_outcome");
-
-                    b.Property<string>("FinalizationReason")
-                        .HasMaxLength(256)
-                        .HasColumnType("character varying(256)")
-                        .HasColumnName("finalization_reason");
 
                     b.Property<string>("EventCategory")
                         .HasMaxLength(64)
@@ -571,61 +534,13 @@ namespace MeisterProPR.Infrastructure.Migrations
                         .HasColumnType("bigint")
                         .HasColumnName("output_tokens");
 
-                    b.Property<string>("PhaseTimings")
-                        .HasColumnType("jsonb")
-                        .HasColumnName("phase_timings");
-
-                    b.Property<short>("PrefixEligibility")
-                        .HasColumnType("smallint")
-                        .HasColumnName("prefix_eligibility");
-
                     b.Property<Guid>("ProtocolId")
                         .HasColumnType("uuid")
                         .HasColumnName("protocol_id");
 
-                    b.Property<DateTimeOffset?>("StartedAt")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("started_at");
-
                     b.Property<string>("SystemPrompt")
                         .HasColumnType("text")
                         .HasColumnName("system_prompt");
-
-                    b.Property<string>("TimingAvailability")
-                        .HasMaxLength(32)
-                        .HasColumnType("character varying(32)")
-                        .HasColumnName("timing_availability");
-
-                    b.Property<string>("ToolEvidenceAction")
-                        .HasMaxLength(64)
-                        .HasColumnType("character varying(64)")
-                        .HasColumnName("tool_evidence_action");
-
-                    b.Property<int?>("ToolEvidenceBoundedPayloadTokens")
-                        .HasColumnType("integer")
-                        .HasColumnName("tool_evidence_bounded_payload_tokens");
-
-                    b.Property<int?>("ToolEvidenceOriginalPayloadTokens")
-                        .HasColumnType("integer")
-                        .HasColumnName("tool_evidence_original_payload_tokens");
-
-                    b.Property<bool?>("ToolEvidenceRefreshable")
-                        .HasColumnType("boolean")
-                        .HasColumnName("tool_evidence_refreshable");
-
-                    b.Property<string>("ToolEvidenceSourceToolName")
-                        .HasMaxLength(128)
-                        .HasColumnType("character varying(128)")
-                        .HasColumnName("tool_evidence_source_tool_name");
-
-                    b.Property<string>("ToolOutcome")
-                        .HasMaxLength(32)
-                        .HasColumnType("character varying(32)")
-                        .HasColumnName("tool_outcome");
-
-                    b.Property<long?>("WaitDurationMs")
-                        .HasColumnType("bigint")
-                        .HasColumnName("wait_duration_ms");
 
                     b.HasKey("Id");
 
@@ -963,10 +878,6 @@ namespace MeisterProPR.Infrastructure.Migrations
                         .HasColumnType("integer")
                         .HasColumnName("attempt_number");
 
-                    b.Property<short>("CacheObservability")
-                        .HasColumnType("smallint")
-                        .HasColumnName("cache_observability");
-
                     b.Property<DateTimeOffset?>("CompletedAt")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("completed_at");
@@ -1009,10 +920,6 @@ namespace MeisterProPR.Infrastructure.Migrations
                     b.Property<int?>("ToolCallCount")
                         .HasColumnType("integer")
                         .HasColumnName("tool_call_count");
-
-                    b.Property<long?>("TotalCachedInputTokens")
-                        .HasColumnType("bigint")
-                        .HasColumnName("total_cached_input_tokens");
 
                     b.Property<long?>("TotalInputTokens")
                         .HasColumnType("bigint")
@@ -1857,11 +1764,6 @@ namespace MeisterProPR.Infrastructure.Migrations
                     b.Property<DateTimeOffset>("UpdatedAt")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("updated_at");
-
-                    b.Property<string>("UserName")
-                        .HasMaxLength(256)
-                        .HasColumnType("character varying(256)")
-                        .HasColumnName("username");
 
                     b.Property<string>("VerificationStatus")
                         .IsRequired()

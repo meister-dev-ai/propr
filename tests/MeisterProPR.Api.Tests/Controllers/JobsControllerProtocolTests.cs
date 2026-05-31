@@ -526,6 +526,53 @@ public sealed class JobsControllerProtocolTests(JobsControllerProtocolTests.Prot
     }
 
     [Fact]
+    public async Task GetJobProtocol_DerivesEventCategoryForLegacyProtocolRows()
+    {
+        using var scope = factory.Services.CreateScope();
+        var jobRepo = scope.ServiceProvider.GetRequiredService<IJobRepository>();
+        var job = new ReviewJob(Guid.NewGuid(), Guid.NewGuid(), "https://dev.azure.com/org", "proj", "repo", 67, 1);
+
+        var protocol = new ReviewJobProtocol
+        {
+            Id = Guid.NewGuid(),
+            JobId = job.Id,
+            AttemptNumber = 1,
+            Label = "src/Trace.cs",
+            StartedAt = DateTimeOffset.UtcNow.AddMinutes(-1),
+            CompletedAt = DateTimeOffset.UtcNow,
+            Outcome = "Completed",
+        };
+        protocol.Events.Add(
+            new ProtocolEvent
+            {
+                Id = Guid.NewGuid(),
+                ProtocolId = protocol.Id,
+                Kind = ProtocolEventKind.ToolCall,
+                Name = ReviewProtocolEventNames.VerificationEvidenceCollected,
+                OccurredAt = DateTimeOffset.UtcNow,
+                EventCategory = null,
+            });
+
+        job.Protocols.Add(protocol);
+        await jobRepo.AddAsync(job);
+
+        var client = factory.CreateClient();
+        using var request = new HttpRequestMessage(HttpMethod.Get, $"/reviewing/jobs/{job.Id}/protocol");
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", factory.GenerateAdminToken());
+        request.Headers.Add("X-Client-Key", "test-key-123");
+
+        var response = await client.SendAsync(request);
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+
+        var protocolJson = JsonDocument.Parse(await response.Content.ReadAsStringAsync())
+            .RootElement.EnumerateArray()
+            .Single();
+
+        var verificationEvent = protocolJson.GetProperty("events").EnumerateArray().Single();
+        Assert.Equal("verification", verificationEvent.GetProperty("eventCategory").GetString());
+    }
+
+    [Fact]
     public async Task GetJobProtocolPass_ReturnsFullEventBodiesForSelectedProtocol()
     {
         using var scope = factory.Services.CreateScope();

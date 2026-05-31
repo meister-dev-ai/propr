@@ -170,6 +170,24 @@ For Agent Framework-backed managed remote conversations, the first successful ma
 session and binds it to the remote conversation. Later turns continue through that same session using
 only the current prompt and do not re-pass the remote conversation identifier on each turn.
 
+## Diagnostics Trace Search
+
+The diagnostics surface keeps trace investigation inside one opened review's execution traces tab.
+
+1. `JobsController` exposes the existing job protocol endpoints and applies the same client-role
+   boundary used by the rest of the diagnostics endpoints.
+2. `IReviewDiagnosticsReader.GetJobProtocolAsync(...)` and `GetJobProtocolPassAsync(...)` read existing
+   `ReviewJob`, `ReviewJobProtocol`, and `ProtocolEvent` records without duplicating protocol payloads
+   into a second store.
+3. `ProtocolEvent.EventCategory` is stored as additive metadata on the existing trace rows and derived
+   best-effort for legacy rows when the persisted category is absent.
+4. The frontend execution traces tab loads all passes for the current review, derives suggestion-backed
+   filters from that review-local data, and filters rows in place without navigating to a separate
+   diagnostics route.
+
+This keeps Job Protocol as the authoritative investigation experience while making stored execution
+traces searchable across all traces in one review.
+
 ## ProRV Focused Guidance
 
 The Reviewing module can run a ProRV prefilter stage before each file review. ProRV is a bounded

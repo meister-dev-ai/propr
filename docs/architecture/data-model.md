@@ -137,9 +137,12 @@ Verification metadata is stored in review-domain records and protocol payloads:
 - `ReviewJobProtocol` records claim extraction, local verification, evidence collection, PR-level
     verification, degraded verification states, summary reconciliation, final-gate audit payloads,
     total cached input tokens, and cache observability for each pass.
-- `ProtocolEvent` records per-call cache status, cached input tokens, cache miss category, prefix
-    eligibility, bounded tool-evidence token estimates, and finalization attempt details on existing
-    AI/tool events.
+- `ProtocolEvent` remains the source of truth for searchable execution-trace evidence. Searchable
+  metadata stays additive on the existing row through normalized `EventCategory`, while the
+  review-local execution traces experience derives best-effort categories for older persisted events
+  when that metadata is absent. Existing AI/tool events also capture per-call cache status, cached
+  input tokens, cache miss category, prefix eligibility, bounded tool-evidence token estimates, and
+  finalization attempt details.
 - Final-gate payloads store summary reconciliation metadata, including original and final summary
     text, dropped finding ids, summary-only finding ids, and whether a summary rewrite was required.
 
@@ -203,6 +206,15 @@ erDiagram
         int CachedInputTokens
         int OutputTokens
         string CacheObservability
+    }
+
+    ProtocolEvent {
+        uuid Id PK
+        uuid ProtocolId FK
+        string Kind
+        string Name
+        string EventCategory
+        datetime OccurredAt
     }
 
     ReviewFileResult {
@@ -309,12 +321,16 @@ erDiagram
     ReviewJob ||--o{ ReviewJobProtocol : "has passes"
     ReviewJob ||--o{ ReviewFileResult : "has file results"
     ReviewJobProtocol }o--|| ReviewFileResult : "linked to"
+    ReviewJobProtocol ||--o{ ProtocolEvent : "stores"
     AppUser ||--o{ UserClientRole : "has"
     AppUser ||--o{ UserPat : "has"
     AppUser ||--o{ RefreshToken : "has"
     ReviewPrScan ||--o{ ReviewPrScanThread : "has"
     CrawlConfiguration ||--o{ PromptOverride : "can have (crawl-config scope)"
 ```
+
+Review-local execution trace filtering reads only from the existing `ReviewJob`, `ReviewJobProtocol`,
+and `ProtocolEvent` persistence path. It does not maintain a second diagnostics index or shadow trace store.
 
 ## Tenancy And Identity Slice
 

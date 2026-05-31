@@ -374,6 +374,14 @@ The receiver acknowledges authenticated deliveries quickly and returns a small s
 Typical values are `accepted`, `ignored`, or `failed`. Repository and branch scope are always
 enforced from the saved webhook configuration, not from caller intent.
 
+## Review Diagnostics
+
+Execution trace investigation stays inside the existing review-local job protocol experience.
+
+- `GET /api/jobs/{id}/protocol` returns the review's protocol passes and event metadata needed by the execution traces tab, including review-local trace filtering fields such as `eventCategory`. The optional `includeEvents` query controls whether the overview omits bulky event bodies while preserving visible trace rows.
+- Each protocol event now includes `eventCategory` so the frontend can derive review-local filters and suggestions without calling a separate diagnostics endpoint.
+- Operators investigate one opened review in place; there is no standalone client-wide trace investigation API in this slice.
+
 ## Observability
 
 Health check endpoint:

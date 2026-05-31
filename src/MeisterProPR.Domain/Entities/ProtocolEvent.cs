@@ -107,6 +107,12 @@ public sealed class ProtocolEvent
     /// </summary>
     public string? OutputSummary { get; init; }
 
+    /// <summary>
+    ///     Normalized protocol-step category used for cross-job trace search (for example <c>memory</c> or
+    ///     <c>verification</c>). <see langword="null" /> for legacy rows recorded before search metadata existed.
+    /// </summary>
+    public string? EventCategory { get; init; }
+
     /// <summary>Error message if this step failed. <see langword="null" /> on success.</summary>
     public string? Error { get; init; }
 }

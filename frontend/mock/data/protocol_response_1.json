@@ -17,6 +17,7 @@
             {
                 "id": "1b0aa38f-d14f-4a47-b827-c3246dd6e654",
                 "kind": "aiCall",
+                "eventCategory": "ai-call",
                 "name": "ai_call_iter_1",
                 "occurredAt": "2026-03-26T19:41:54.320252+00:00",
                 "inputTokens": 2243,
@@ -28,6 +29,7 @@
             {
                 "id": "007bd229-5f9f-4094-ab95-6f5af184b51b",
                 "kind": "toolCall",
+                "eventCategory": "tool-call",
                 "name": "get_file_content",
                 "occurredAt": "2026-03-26T19:41:54.529041+00:00",
                 "inputTokens": null,
@@ -39,6 +41,7 @@
             {
                 "id": "55dafbc5-0de8-4b4b-8219-d71b81e991f5",
                 "kind": "aiCall",
+                "eventCategory": "ai-call",
                 "name": "ai_call_iter_2",
                 "occurredAt": "2026-03-26T19:42:05.229915+00:00",
                 "inputTokens": 2305,
@@ -67,6 +70,7 @@
             {
                 "id": "54454061-fd65-47c9-8bd1-acca6e002639",
                 "kind": "aiCall",
+                "eventCategory": "ai-call",
                 "name": "ai_call_iter_1",
                 "occurredAt": "2026-03-26T19:41:13.204561+00:00",
                 "inputTokens": 7409,
@@ -78,6 +82,7 @@
             {
                 "id": "1db2acff-7944-438a-b30a-2ba49f9c4db9",
                 "kind": "toolCall",
+                "eventCategory": "tool-call",
                 "name": "get_file_content",
                 "occurredAt": "2026-03-26T19:41:13.353172+00:00",
                 "inputTokens": null,
@@ -89,6 +94,7 @@
             {
                 "id": "60b2f7f8-d555-4714-bef3-261c9ff01cde",
                 "kind": "aiCall",
+                "eventCategory": "ai-call",
                 "name": "ai_call_iter_2",
                 "occurredAt": "2026-03-26T19:41:30.138573+00:00",
                 "inputTokens": 7469,

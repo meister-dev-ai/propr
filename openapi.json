@@ -17485,6 +17485,11 @@
             "description": "First 1000 characters of output, or null.",
             "nullable": true
           },
+          "eventCategory": {
+            "type": "string",
+            "description": "Normalized protocol-step category captured for this event, or null for legacy rows.",
+            "nullable": true
+          },
           "error": {
             "type": "string",
             "description": "Error message if this event failed, or null.",

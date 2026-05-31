@@ -391,7 +391,7 @@ public sealed class EfReviewDiagnosticsReader(
         if (!includeEvents)
         {
             return protocol.Events
-                .Select(e => CreateEventDto(e, null, null, BuildOverviewOutputSummary(e, isInherited), true))
+                .Select(e => CreateEventDto(e, null, null, BuildOverviewOutputSummary(e, isInherited)))
                 .ToList()
                 .AsReadOnly();
         }
@@ -401,8 +401,7 @@ public sealed class EfReviewDiagnosticsReader(
                 e,
                 isInherited ? null : e.InputTextSample,
                 isInherited ? null : e.SystemPrompt,
-                isInherited ? BuildInheritedOutputSummary(e) : e.OutputSummary,
-                isInherited))
+                isInherited ? BuildInheritedOutputSummary(e) : e.OutputSummary))
             .ToList()
             .AsReadOnly();
     }
@@ -411,10 +410,8 @@ public sealed class EfReviewDiagnosticsReader(
         ProtocolEvent e,
         string? inputTextSample,
         string? systemPrompt,
-        string? outputSummary,
-        bool isInherited)
+        string? outputSummary)
     {
-        _ = isInherited;
         return new ProtocolEventDto(
             e.Id,
             e.Kind,
@@ -425,6 +422,8 @@ public sealed class EfReviewDiagnosticsReader(
             inputTextSample,
             systemPrompt,
             outputSummary,
+            TraceSearchSupport.NormalizeEventCategory(e.EventCategory)
+            ?? TraceSearchSupport.DeriveEventCategory(e.Kind, e.Name),
             e.Error)
         {
             CachedInputTokens = e.CachedInputTokens,

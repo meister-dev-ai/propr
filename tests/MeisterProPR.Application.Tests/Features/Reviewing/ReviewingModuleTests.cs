@@ -105,6 +105,7 @@ public sealed class ReviewingModuleTests
                             "{\"filePath\":\"src/Foo.cs\"}",
                             null,
                             "{\"discarded\":[{\"reasonCodes\":[\"summary_level_only\"]}],\"degradedComponents\":[]}",
+                            "comment-relevance",
                             null),
                     ]),
             ]);

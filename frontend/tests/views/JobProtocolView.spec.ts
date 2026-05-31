@@ -130,6 +130,60 @@ const makeProtocolEvent = (overrides: Record<string, unknown> = {}) => ({
   ...overrides,
 })
 
+const traceRichProtocol = {
+  ...sampleProtocols[0],
+  modelId: 'gpt-4.1',
+  events: [
+    makeProtocolEvent({
+      id: 'event-ai-1',
+      kind: 'aiCall',
+      name: 'ai_call_iter_1',
+      inputTextSample: 'Review src/foo.ts for suspicious auth behavior',
+      outputSummary: 'Calling verification tool for src/foo.ts',
+    }),
+    makeProtocolEvent({
+      id: 'event-tool-1',
+      kind: 'toolCall',
+      name: 'verification_evidence_collected',
+      inputTextSample: 'searching src/foo.ts for suspicious evidence',
+      outputSummary: 'Found suspicious evidence in auth flow [REDACTED]',
+      occurredAt: '2024-01-01T00:00:31Z',
+    }),
+    makeProtocolEvent({
+      id: 'event-op-1',
+      kind: 'operational',
+      name: 'summary_reconciliation',
+      inputTextSample: null,
+      outputSummary: 'summary reconciliation completed for synthesis',
+      occurredAt: '2024-01-01T00:00:32Z',
+    }),
+  ],
+}
+
+const traceReviewWideProtocols = [
+  {
+    ...sampleProtocols[0],
+    id: 'pass-posting',
+    label: 'posting',
+    fileOutcome: null,
+    events: [
+      makeProtocolEvent({
+        id: 'event-posting-1',
+        kind: 'operational',
+        name: 'dedup_summary',
+        inputTextSample: '{"candidateCount":0}',
+        outputSummary: 'posting duplicate suppression metadata',
+        occurredAt: '2024-01-01T00:00:25Z',
+      }),
+    ],
+  },
+  {
+    ...traceRichProtocol,
+    id: 'pass-src-foo',
+    label: 'src/foo.ts',
+  },
+]
+
 const sampleJobResult = {
   status: 'completed',
   submittedAt: '2024-01-01T00:00:00Z',
@@ -216,6 +270,14 @@ async function openTraceEventModal(wrapper: Awaited<ReturnType<typeof mountView>
   expect(eventRow.exists()).toBe(true)
   await eventRow.trigger('click')
   await flushPromises()
+}
+
+async function openTraceSearchPanel(wrapper: Awaited<ReturnType<typeof mountView>>) {
+  const toggleButton = wrapper.get('[data-testid="trace-search-toggle"]')
+  expect(wrapper.find('[data-testid="trace-search-panel"]').isVisible()).toBe(false)
+  await toggleButton.trigger('click')
+  await flushPromises()
+  await nextTick()
 }
 
 describe('JobProtocolView — comment search and filter (T042)', () => {
@@ -1857,5 +1919,302 @@ describe('JobProtocolView — comment search and filter (T042)', () => {
     expect(wrapper.text()).toContain('gpt-5.4-mini')
     expect(wrapper.text()).toContain('js/incomplete-sanitization')
     expect(wrapper.text()).toContain('js/path-injection')
+  })
+
+  it('selects the focused protocol and marks the targeted event row from route query', async () => {
+    mockRoute.query = { clientId: 'client-123', protocolId: 'pass-2', eventId: 'event-2' }
+    mockGet.mockImplementation((path: string, options?: MockGetOptions) => {
+      if (path === '/jobs/{id}/protocol') {
+        return Promise.resolve({
+          data: [
+            { ...sampleProtocols[0], id: 'pass-1', events: [] },
+            { ...sampleProtocols[0], id: 'pass-2', label: 'src/focused.ts', events: [] },
+          ],
+          response: { ok: true },
+        })
+      }
+
+      if (path === '/jobs/{id}/protocol/{protocolId}') {
+        return Promise.resolve({
+          data: {
+            ...sampleProtocols[0],
+            id: 'pass-2',
+            label: 'src/focused.ts',
+            events: [
+              makeProtocolEvent({ id: 'event-2', name: 'verification_evidence_collected' }),
+            ],
+          },
+          response: { ok: true },
+        })
+      }
+
+      if (path === '/jobs/{id}') return Promise.resolve({ data: sampleJobDetail, response: { ok: true } })
+      return Promise.resolve({ data: sampleJobResult, response: { ok: true } })
+    })
+
+    const wrapper = await mountView()
+    const tracesTab = wrapper.findAll('button.tab-btn').find((btn) => btn.text() === 'Execution Traces')
+    await tracesTab!.trigger('click')
+    await flushPromises()
+
+    const focusedRow = wrapper.find('[data-event-id="event-2"]')
+    expect(focusedRow.exists()).toBe(true)
+    expect(focusedRow.classes()).toContain('row-focused')
+  })
+
+  it('filters execution traces within the opened review and shows suggestion-backed metadata', async () => {
+    mockGet.mockImplementation((path: string) => {
+      if (path.includes('/protocol')) {
+        return Promise.resolve({
+          data: traceReviewWideProtocols,
+          response: { ok: true },
+        })
+      }
+
+      if (path === '/jobs/{id}') return Promise.resolve({ data: sampleJobDetail, response: { ok: true } })
+      return Promise.resolve({ data: sampleJobResult, response: { ok: true } })
+    })
+
+    const wrapper = await mountView()
+    const tracesTab = wrapper.findAll('button.tab-btn').find((btn) => btn.text() === 'Execution Traces')
+    await tracesTab!.trigger('click')
+    await flushPromises()
+
+    const traceWorkspace = wrapper.find('.trace-workspace')
+    expect(traceWorkspace.exists()).toBe(true)
+    const globalToolbar = traceWorkspace.find('.trace-filter-toolbar--global')
+    expect(globalToolbar.exists()).toBe(true)
+    expect(globalToolbar.text()).toContain('Trace Search')
+    expect(wrapper.get('[data-testid="trace-findings-only-toggle"]').text()).toContain('Final findings only')
+    expect(wrapper.get('[data-testid="trace-search-toggle"]').text()).toContain('Show filters')
+    expect(wrapper.find('[data-testid="trace-search-panel"]').isVisible()).toBe(false)
+
+    expect(wrapper.text()).toContain('posting')
+    expect(wrapper.text()).toContain('4 visible rows across this review.')
+    expect(wrapper.findAll('article.event-card.row-clickable')).toHaveLength(1)
+
+    await openTraceSearchPanel(wrapper)
+
+    const filePathField = wrapper.get('[data-testid="trace-filter-file-path"]')
+    const filePathInput = wrapper.get('[data-testid="trace-filter-file-path"] input')
+    expect(filePathField.classes()).toContain('v-autocomplete')
+
+    const queryInput = wrapper.get('[data-testid="trace-filter-query"] input')
+    expect(queryInput.exists()).toBe(true)
+    await queryInput.setValue('suspicious')
+    await flushPromises()
+
+    const fooPassButton = wrapper.findAll('button.pass-nav-item').find((btn) => btn.text().includes('foo.ts'))
+    expect(fooPassButton?.classes()).toContain('trace-match')
+
+    expect(wrapper.text()).toContain('2 visible rows across this review.')
+    expect(wrapper.text()).toContain('Events (2)')
+    expect(wrapper.findAll('article.event-card.row-clickable')).toHaveLength(2)
+    expect(wrapper.text()).not.toContain('posting duplicate suppression metadata')
+    expect(wrapper.text()).toContain('Review src/foo.ts for suspicious auth behavior')
+    expect(wrapper.text()).toContain('searching src/foo.ts for suspicious evidence')
+    expect(wrapper.text()).toContain('Found suspicious evidence in auth flow [REDACTED]')
+    expect(wrapper.text()).toContain('Redacted')
+  })
+
+  it('shows an in-place empty state when trace filters remove all rows', async () => {
+    mockGet.mockImplementation((path: string) => {
+      if (path.includes('/protocol')) {
+        return Promise.resolve({
+          data: [traceRichProtocol],
+          response: { ok: true },
+        })
+      }
+
+      if (path === '/jobs/{id}') return Promise.resolve({ data: sampleJobDetail, response: { ok: true } })
+      return Promise.resolve({ data: sampleJobResult, response: { ok: true } })
+    })
+
+    const wrapper = await mountView()
+    const tracesTab = wrapper.findAll('button.tab-btn').find((btn) => btn.text() === 'Execution Traces')
+    await tracesTab!.trigger('click')
+    await flushPromises()
+
+    await openTraceSearchPanel(wrapper)
+
+    const queryInput = wrapper.get('[data-testid="trace-filter-query"] input')
+    expect(queryInput.exists()).toBe(true)
+    await queryInput.setValue('no-such-trace')
+    await flushPromises()
+
+    expect(wrapper.findAll('article.event-card.row-clickable')).toHaveLength(0)
+    expect(wrapper.text()).toContain('No trace rows in this review match the current filters.')
+  })
+
+  it('shows explicit limitation messaging when a matching row has sparse metadata and no surrounding context', async () => {
+    mockGet.mockImplementation((path: string) => {
+      if (path.includes('/protocol')) {
+        return Promise.resolve({
+          data: [{
+            ...sampleProtocols[0],
+            id: 'pass-limited',
+            label: null,
+            modelId: null,
+            fileOutcome: null,
+            events: [makeProtocolEvent({
+              id: 'event-limited',
+              kind: 'operational',
+              name: 'summary_reconciliation',
+              inputTextSample: null,
+              outputSummary: null,
+              error: null,
+            })],
+          }],
+          response: { ok: true },
+        })
+      }
+
+      if (path === '/jobs/{id}') return Promise.resolve({ data: sampleJobDetail, response: { ok: true } })
+      return Promise.resolve({ data: sampleJobResult, response: { ok: true } })
+    })
+
+    const wrapper = await mountView()
+    const tracesTab = wrapper.findAll('button.tab-btn').find((btn) => btn.text() === 'Execution Traces')
+    await tracesTab!.trigger('click')
+    await flushPromises()
+
+    expect(wrapper.text()).toContain('Limited metadata')
+    expect(wrapper.text()).toContain('Supporting metadata or nearby trace context was not captured for this row.')
+  })
+
+  it('can quickly filter the trace tree to files with final findings only', async () => {
+    mockGet.mockImplementation((path: string) => {
+      if (path.includes('/protocol')) {
+        return Promise.resolve({
+          data: [
+            {
+              ...traceRichProtocol,
+              id: 'pass-with-findings',
+              label: 'src/with-findings.ts',
+              finalComments: [
+                makeComment('warning', 'Final finding kept for tree filter', 'src/with-findings.ts', 7),
+              ],
+            },
+            {
+              ...sampleProtocols[0],
+              id: 'pass-without-findings',
+              label: 'src/without-findings.ts',
+              finalComments: null,
+              events: [
+                makeProtocolEvent({
+                  id: 'event-no-findings',
+                  kind: 'operational',
+                  name: 'summary_reconciliation',
+                  inputTextSample: 'still visible before toggle',
+                  outputSummary: 'no final findings here',
+                }),
+              ],
+            },
+          ],
+          response: { ok: true },
+        })
+      }
+
+      if (path === '/jobs/{id}') return Promise.resolve({ data: sampleJobDetail, response: { ok: true } })
+      return Promise.resolve({ data: sampleJobResult, response: { ok: true } })
+    })
+
+    const wrapper = await mountView()
+    const tracesTab = wrapper.findAll('button.tab-btn').find((btn) => btn.text() === 'Execution Traces')
+    await tracesTab!.trigger('click')
+    await flushPromises()
+
+    const findingsOnlyToggle = wrapper.get('[data-testid="trace-findings-only-toggle"]')
+    const passButtonsBefore = wrapper.findAll('button.pass-nav-item').map((btn) => btn.text())
+    expect(passButtonsBefore.some((text) => text.includes('with-findings.ts'))).toBe(true)
+    expect(passButtonsBefore.some((text) => text.includes('without-findings.ts'))).toBe(true)
+    expect(findingsOnlyToggle.attributes('aria-pressed')).toBe('false')
+    await findingsOnlyToggle.trigger('click')
+    await flushPromises()
+
+    const passButtonsAfter = wrapper.findAll('button.pass-nav-item').map((btn) => btn.text())
+    expect(findingsOnlyToggle.attributes('aria-pressed')).toBe('true')
+    expect(passButtonsAfter.some((text) => text.includes('with-findings.ts'))).toBe(true)
+    expect(passButtonsAfter.some((text) => text.includes('without-findings.ts'))).toBe(false)
+    expect(wrapper.text()).toContain('Final finding kept for tree filter')
+  })
+
+  it('updates trace suggestions as filters narrow the visible review-local result space and can reset them', async () => {
+    const suggestionProtocols = [
+      {
+        ...traceRichProtocol,
+        id: 'pass-foo',
+        label: 'src/foo.ts',
+      },
+      {
+        ...sampleProtocols[0],
+        id: 'pass-bar',
+        label: 'src/bar.ts',
+        modelId: 'gpt-4.1-mini',
+        fileOutcome: {
+          ...sampleProtocols[0].fileOutcome,
+          filePath: 'src/bar.ts',
+        },
+        events: [
+          makeProtocolEvent({
+            id: 'event-bar',
+            kind: 'operational',
+            name: 'summary_reconciliation',
+            inputTextSample: 'bar trace payload',
+            outputSummary: 'bar trace output',
+          }),
+        ],
+      },
+    ]
+
+    mockGet.mockImplementation((path: string) => {
+      if (path.includes('/protocol')) {
+        return Promise.resolve({
+          data: suggestionProtocols,
+          response: { ok: true },
+        })
+      }
+
+      if (path === '/jobs/{id}') return Promise.resolve({ data: sampleJobDetail, response: { ok: true } })
+      return Promise.resolve({ data: sampleJobResult, response: { ok: true } })
+    })
+
+    const wrapper = await mountView()
+    const tracesTab = wrapper.findAll('button.tab-btn').find((btn) => btn.text() === 'Execution Traces')
+    await tracesTab!.trigger('click')
+    await flushPromises()
+
+    await openTraceSearchPanel(wrapper)
+
+    const filePathField = wrapper.get('[data-testid="trace-filter-file-path"]')
+    const filePathInput = wrapper.get('[data-testid="trace-filter-file-path"] input')
+    expect(filePathField.classes()).toContain('v-autocomplete')
+
+    await filePathInput.setValue('src/bar.ts')
+    await flushPromises()
+
+    expect(filePathInput.element.value).toBe('src/bar.ts')
+    expect(wrapper.text()).toContain('bar trace output')
+    expect(wrapper.text()).not.toContain('Found suspicious evidence in auth flow [REDACTED]')
+
+    const clearButton = wrapper.find('button.trace-filter-clear')
+    expect(clearButton.exists()).toBe(true)
+    await clearButton.trigger('click')
+    await flushPromises()
+
+    expect(wrapper.get('[data-testid="trace-search-toggle"]').text()).toContain('Hide filters')
+    expect(filePathInput.element.value).toBe('')
+  })
+
+  it('ignores unrelated execution-trace query keys when no matching pass or event exists', async () => {
+    mockRoute.query = { clientId: 'client-123', protocolId: 'missing-pass', eventId: 'missing-event' }
+
+    const wrapper = await mountView()
+    const tracesTab = wrapper.findAll('button.tab-btn').find((btn) => btn.text() === 'Execution Traces')
+    await tracesTab!.trigger('click')
+    await flushPromises()
+
+    expect(wrapper.find('.error').exists()).toBe(false)
+    expect(wrapper.find('[data-event-id="missing-event"]').exists()).toBe(false)
   })
 })

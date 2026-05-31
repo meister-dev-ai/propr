@@ -37,4 +37,12 @@ describe('ReviewHistoryView', () => {
 
     expect(refreshMock).toHaveBeenCalledOnce()
   })
+
+  it('keeps review history focused on history actions rather than separate trace investigation navigation', async () => {
+    const { default: ReviewHistoryView } = await import('@/features/reviews/views/ReviewHistoryView.vue')
+    const wrapper = mount(ReviewHistoryView)
+
+    expect(wrapper.text()).not.toContain('Trace Search')
+    expect(wrapper.text()).toContain('Review History')
+  })
 })

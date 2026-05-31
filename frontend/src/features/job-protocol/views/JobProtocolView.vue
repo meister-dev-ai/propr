@@ -205,7 +205,94 @@
             </div>
 
             <!-- Tab 2: Master-Detail Layout -->
-            <div class="protocol-master-detail" v-else-if="activeTab === 'traces'">
+            <div class="trace-workspace" v-else-if="activeTab === 'traces'">
+                <div class="trace-filter-toolbar trace-filter-toolbar--global">
+                    <div class="trace-filter-heading-row">
+                        <div class="trace-filter-title-group">
+                            <h4>Trace Search</h4>
+                            <p class="trace-filter-subtitle">
+                                Search across all loaded passes in this review. Matching passes stay visible in the tree while the detail pane focuses the active match set.
+                            </p>
+                        </div>
+                        <div class="trace-filter-heading-actions">
+                            <p class="trace-filter-summary">
+                                {{ visibleTraceRows.length }} visible row{{ visibleTraceRows.length === 1 ? '' : 's' }} across this review.
+                            </p>
+                            <button
+                                type="button"
+                                class="btn-ghost btn-sm trace-filter-toggle"
+                                :class="{ 'trace-filter-toggle--active': traceFindingsOnly }"
+                                :aria-pressed="String(traceFindingsOnly)"
+                                data-testid="trace-findings-only-toggle"
+                                @click="traceFindingsOnly = !traceFindingsOnly"
+                            >
+                                Final findings only
+                            </button>
+                            <button
+                                type="button"
+                                class="btn-ghost btn-sm trace-filter-collapse"
+                                :aria-expanded="String(!isTraceSearchCollapsed)"
+                                data-testid="trace-search-toggle"
+                                @click="isTraceSearchCollapsed = !isTraceSearchCollapsed"
+                            >
+                                <span>{{ traceSearchToggleLabel }}</span>
+                                <i class="mdi" :class="traceSearchToggleIcon" aria-hidden="true"></i>
+                            </button>
+                        </div>
+                    </div>
+                    <div
+                        v-show="!isTraceSearchCollapsed"
+                        class="trace-filter-grid"
+                        data-testid="trace-search-panel"
+                    >
+                        <v-text-field
+                            v-model="traceFilters.queryText"
+                            type="search"
+                            class="trace-filter-input trace-filter-query"
+                            data-testid="trace-filter-query"
+                            hide-details
+                            placeholder="Search prompts, outputs, tool calls, memory, errors..."
+                            prepend-inner-icon="mdi-magnify"
+                        />
+                        <v-autocomplete
+                            :model-value="traceAutocompleteValue(traceFilters.filePath)"
+                            v-model:search="traceFilters.filePath"
+                            class="trace-filter-input"
+                            data-testid="trace-filter-file-path"
+                            :items="traceSuggestions.filePaths"
+                            hide-details
+                            clearable
+                            menu-icon="mdi-chevron-down"
+                            label="File path"
+                            placeholder="Start typing a file path"
+                            no-data-text="No matching file paths"
+                            @update:model-value="setTraceFilterValue('filePath', $event)"
+                        />
+                        <v-autocomplete
+                            :model-value="traceAutocompleteValue(traceFilters.modelId)"
+                            v-model:search="traceFilters.modelId"
+                            class="trace-filter-input"
+                            data-testid="trace-filter-model"
+                            :items="traceSuggestions.modelIds"
+                            hide-details
+                            clearable
+                            menu-icon="mdi-chevron-down"
+                            label="Model"
+                            placeholder="Start typing a model"
+                            no-data-text="No matching models"
+                            @update:model-value="setTraceFilterValue('modelId', $event)"
+                        />
+                        <button
+                            class="btn-secondary btn-sm trace-filter-clear"
+                            :disabled="!hasActiveTraceFilters"
+                            @click="clearTraceFilters"
+                        >
+                            Clear filters
+                        </button>
+                    </div>
+                </div>
+
+                <div class="protocol-master-detail">
                 <!-- Left Sidebar: Pass Navigation -->
                 <nav class="protocol-sidebar" aria-label="Pass Navigation">
                     <div
@@ -232,7 +319,10 @@
                         <button
                             v-else
                             class="pass-nav-item tree-pass-btn"
-                            :class="{ 'active': activePassId === item.protocol.id || (!activePassId && protocols.indexOf(item.protocol) === 0) }"
+                            :class="{
+                                'active': activePass?.id === item.protocol.id,
+                                'trace-match': hasActiveTraceFilters && protocolHasVisibleTraceRows(item.protocol.id),
+                            }"
                             :style="{ paddingLeft: (item.depth * 1.5) + 'rem' }"
                             @click="activePassId = item.protocol.id || null"
                         >
@@ -418,8 +508,16 @@
                         </section>
 
                         <section class="events-section">
-                            <h4>Events ({{ activePassEventRows.length }})</h4>
-                            <p v-if="!activePass.events?.length" class="empty-state">{{ emptyPassMessage(activePass) }}</p>
+                            <div class="events-section-header">
+                                <h4>Events ({{ activePassEventRows.length }})</h4>
+                                <p v-if="hasActiveTraceFilters" class="events-section-context">
+                                    Global trace search is active for this review.
+                                </p>
+                            </div>
+                            <p v-if="!activePass.events?.length && !hasActiveTraceFilters" class="empty-state">{{ emptyPassMessage(activePass) }}</p>
+                            <p v-else-if="activePassEventRows.length === 0" class="empty-state trace-empty-state">
+                                {{ visibleTraceRows.length === 0 ? 'No trace rows in this review match the current filters.' : 'No trace rows in this pass match the current filters.' }}
+                            </p>
                             <TransitionGroup v-else name="list" tag="div" class="events-list">
                                 <article
                                     v-for="row in activePassEventRows"
@@ -428,8 +526,10 @@
                                     :class="{
                                         'row-error': !!row.merged.callDetails.error || !!row.merged.resultDetails?.error,
                                         'row-processing': isMergedEventProcessing(row.merged),
-                                        'row-child': row.depth > 0
+                                        'row-child': row.depth > 0,
+                                        'row-focused': focusedEventId === row.id
                                     }"
+                                    :data-event-id="row.id"
                                     :data-event-name="row.merged.name"
                                     :data-event-depth="row.depth"
                                     :data-parent-event-id="row.parentId ?? ''"
@@ -469,6 +569,27 @@
                                                         <span v-if="row.timingDetail" class="timing-detail">{{ row.timingDetail }}</span>
                                                     </div>
                                                 </div>
+                                            </div>
+
+                                            <div class="event-meta-line">
+                                                <span v-if="row.traceFilePath" class="event-meta-pill event-meta-pill--path" :title="row.traceFilePath">
+                                                    {{ row.traceFilePath }}
+                                                </span>
+                                                <span class="event-meta-pill">{{ row.traceEventCategory }}</span>
+                                                <span v-if="row.traceModelId" class="event-meta-pill event-meta-pill--model" :title="row.traceModelId">
+                                                    {{ row.traceModelId }}
+                                                </span>
+                                                <span v-if="row.traceIsRedacted" class="event-meta-pill event-meta-pill--flag">Redacted</span>
+                                                <span v-if="row.traceHasLimitedMetadata" class="event-meta-pill event-meta-pill--flag">Limited metadata</span>
+                                            </div>
+                                            <div v-if="row.traceMatchSnippet" class="event-match-snippet">
+                                                <strong>{{ row.traceMatchedField }}:</strong> {{ row.traceMatchSnippet }}
+                                            </div>
+                                            <div v-if="row.traceContextSnippet" class="event-context-snippet">
+                                                {{ row.traceContextSnippet }}
+                                            </div>
+                                            <div v-else-if="row.traceHasLimitedMetadata" class="event-context-limitation">
+                                                Supporting metadata or nearby trace context was not captured for this row.
                                             </div>
 
                                             <div v-if="hasToolTiming(row.merged.callDetails)" class="timing-badges">
@@ -516,6 +637,7 @@
                             </TransitionGroup>
                         </section>
                     </div>
+                </div>
                 </div>
             </div>
 
@@ -1326,6 +1448,7 @@ interface MergedEvent {
 interface EventDisplayRow {
     id: string
     merged: MergedEvent
+    protocolId: string | null
     depth: number
     parentId: string | null
     parentName: string | null
@@ -1334,6 +1457,14 @@ interface EventDisplayRow {
     isExpanded: boolean
     timingSummary: string | null
     timingDetail: string | null
+    traceFilePath: string | null
+    traceEventCategory: string
+    traceModelId: string | null
+    traceMatchedField: string | null
+    traceMatchSnippet: string | null
+    traceContextSnippet: string | null
+    traceHasLimitedMetadata: boolean
+    traceIsRedacted: boolean
 }
 
 interface PendingToolRow {
@@ -1413,6 +1544,16 @@ const collapsedFolders = ref<Set<string>>(new Set())
 const collapsedEventParents = ref<Set<string>>(new Set())
 const selectedCommentPath = ref<string | null>(null)
 const isSummaryModalOpen = ref(false)
+const focusedEventId = ref<string | null>(null)
+const isTraceSearchCollapsed = ref(true)
+const traceFindingsOnly = ref(false)
+const traceFilters = ref({
+    queryText: '',
+    filePath: '',
+    modelId: '',
+})
+
+type TraceFilterKey = keyof typeof traceFilters.value
 
 // clientId: prefer route query (from ReviewHistorySection navigation), fall back to job result data
 const routeClientId = computed(() =>
@@ -1569,11 +1710,227 @@ function parseFilePath(label: string | null | undefined) {
     return { filename, directory };
 }
 
+const normalizedTraceFilters = computed(() => ({
+    queryText: traceFilters.value.queryText.trim().toLowerCase(),
+    filePath: traceFilters.value.filePath.trim().toLowerCase(),
+    modelId: traceFilters.value.modelId.trim().toLowerCase(),
+}))
+
+const hasActiveTraceFilters = computed(() =>
+    Object.values(normalizedTraceFilters.value).some(value => value.length > 0),
+)
+
+const traceSearchToggleLabel = computed(() => isTraceSearchCollapsed.value ? 'Show filters' : 'Hide filters')
+const traceSearchToggleIcon = computed(() => isTraceSearchCollapsed.value ? 'mdi-chevron-down' : 'mdi-chevron-up')
+
+function normalizeTraceFilterValue(value: unknown): string {
+    if (typeof value === 'string') {
+        return value
+    }
+
+    if (typeof value === 'number') {
+        return String(value)
+    }
+
+    if (Array.isArray(value)) {
+        return normalizeTraceFilterValue(value[0])
+    }
+
+    return ''
+}
+
+function traceAutocompleteValue(value: string): string | null {
+    return value.trim().length > 0 ? value : null
+}
+
+function setTraceFilterValue(key: TraceFilterKey, value: unknown): void {
+    traceFilters.value[key] = normalizeTraceFilterValue(value)
+}
+
+function protocolHasFinalFindings(protocol: ReviewProtocolPass): boolean {
+    return (protocol.finalComments?.length ?? 0) > 0
+}
+
+type TraceSearchableRow = {
+    filePath: string | null
+    protocolLabel: string | null
+    eventKind: string
+    eventCategory: string
+    eventName: string
+    modelId: string | null
+    matchedField: string | null
+    matchSnippet: string | null
+    contextSnippet: string | null
+    hasLimitedMetadata: boolean
+    isRedacted: boolean
+}
+
+function normalizeTraceCategory(kind: string | null | undefined, name: string | null | undefined, eventCategory?: string | null): string {
+    const normalizedCategory = (eventCategory ?? '').trim().toLowerCase()
+    if (normalizedCategory) return normalizedCategory
+
+    const normalizedKind = (kind ?? '').trim().toLowerCase()
+    const normalizedName = (name ?? '').trim().toLowerCase()
+
+    if (normalizedKind === 'memoryoperation') return 'memory'
+    if (normalizedName.startsWith('dedup_')) return 'duplicate-suppression'
+    if (normalizedName.includes('comment_relevance')) return 'comment-relevance'
+    if (normalizedName.includes('verification')) return 'verification'
+    if (normalizedName.includes('review_finding_gate') || normalizedName.includes('summary_reconciliation') || normalizedName.includes('repeated_judgment')) return 'review-finding-gate'
+    if (normalizedName.includes('prorv')) return 'prorv-prefilter'
+    if (normalizedName.includes('pr_wide')) return 'pr-wide-review'
+    if (normalizedName.includes('review_strategy') || normalizedName.includes('agentic_file') || normalizedName.includes('review_agent_session') || normalizedName.includes('prompt_stage_evidence') || normalizedName.includes('review_step_skipped')) return 'review-strategy'
+    if (normalizedKind === 'aicall') return 'ai-call'
+    if (normalizedKind === 'toolcall') return 'tool-call'
+    return 'operational'
+}
+
+function buildTraceSnippet(value: string | null | undefined, queryText: string): string | null {
+    const normalized = value?.trim()
+    if (!normalized) {
+        return null
+    }
+
+    const maxLength = 220
+    if (!queryText) {
+        return normalized.length <= maxLength ? normalized : `${normalized.slice(0, maxLength).trim()}...`
+    }
+
+    const index = normalized.toLowerCase().indexOf(queryText)
+    if (index < 0) {
+        return null
+    }
+
+    const start = Math.max(0, index - 80)
+    const end = Math.min(normalized.length, start + maxLength)
+    let snippet = normalized.slice(start, end).trim()
+    if (start > 0) snippet = `...${snippet}`
+    if (end < normalized.length) snippet = `${snippet}...`
+    return snippet
+}
+
+function firstTraceValue(...values: Array<string | null | undefined>): string | null {
+    return values.find(value => !!value && value.trim().length > 0)?.trim() ?? null
+}
+
+function detectTraceRedaction(...values: Array<string | null | undefined>): boolean {
+    const markers = ['[REDACTED]', '***REDACTED***', '<redacted>']
+    return values.some(value => !!value && markers.some(marker => value.includes(marker)))
+}
+
+function buildTraceSearchableRow(protocol: ReviewProtocolPass, event: ProtocolEventDto): TraceSearchableRow {
+    const filters = normalizedTraceFilters.value
+    const candidates: Array<{ field: string; value: string | null | undefined }> = [
+        { field: 'eventName', value: event.name },
+        { field: 'inputTextSample', value: event.inputTextSample },
+        { field: 'systemPrompt', value: event.systemPrompt },
+        { field: 'outputSummary', value: event.outputSummary },
+        { field: 'error', value: event.error },
+    ]
+
+    const firstVisibleField = candidates.find(candidate => !!candidate.value && candidate.value.trim().length > 0) ?? null
+    const matchingField = filters.queryText
+        ? candidates.find(candidate => candidate.value?.toLowerCase().includes(filters.queryText)) ?? null
+        : firstVisibleField
+
+    const matchedField = matchingField?.field ?? null
+    const matchSnippet = buildTraceSnippet(matchingField?.value, filters.queryText)
+    const contextSource = matchedField === 'inputTextSample'
+        ? firstTraceValue(event.outputSummary, event.systemPrompt, event.error)
+        : matchedField === 'systemPrompt'
+            ? firstTraceValue(event.inputTextSample, event.outputSummary, event.error)
+            : matchedField === 'outputSummary'
+                ? firstTraceValue(event.inputTextSample, event.systemPrompt, event.error)
+                : matchedField === 'error'
+                    ? firstTraceValue(event.outputSummary, event.inputTextSample, event.systemPrompt)
+                    : firstTraceValue(event.outputSummary, event.inputTextSample, event.systemPrompt, event.error)
+
+    return {
+        filePath: protocol.fileOutcome?.filePath ?? protocol.label ?? null,
+        protocolLabel: protocol.label ?? null,
+        eventKind: String(event.kind ?? 'unknown'),
+        eventCategory: normalizeTraceCategory(String(event.kind ?? ''), event.name, event.eventCategory ?? null),
+        eventName: event.name ?? 'Unknown',
+        modelId: protocol.modelId ?? null,
+        matchedField,
+        matchSnippet,
+        contextSnippet: buildTraceSnippet(contextSource, ''),
+        hasLimitedMetadata: !protocol.label || !protocol.modelId,
+        isRedacted: detectTraceRedaction(matchSnippet, contextSource, event.inputTextSample, event.systemPrompt, event.outputSummary, event.error),
+    }
+}
+
+function matchesTraceFilters(protocol: ReviewProtocolPass, event: ProtocolEventDto): boolean {
+    const filters = normalizedTraceFilters.value
+    const row = buildTraceSearchableRow(protocol, event)
+
+    if (filters.queryText && !row.matchSnippet) return false
+    if (filters.filePath && !(row.filePath ?? '').toLowerCase().includes(filters.filePath)) return false
+    if (filters.modelId && !(row.modelId ?? '').toLowerCase().includes(filters.modelId)) return false
+    return true
+}
+
+const traceSuggestions = computed(() => {
+    const matchingRows = protocols.value.flatMap(protocol =>
+        (protocol.events ?? [])
+            .filter(event => matchesTraceFilters(protocol, event))
+            .map(event => buildTraceSearchableRow(protocol, event)),
+    )
+
+    const collect = (values: Array<string | null | undefined>) => Array.from(new Set(values.filter((value): value is string => !!value && value.trim().length > 0))).sort((left, right) => left.localeCompare(right))
+
+    return {
+        filePaths: collect(matchingRows.map(row => row.filePath)),
+        modelIds: collect(matchingRows.map(row => row.modelId)),
+    }
+})
+
+const traceTotalMatchCount = computed(() => protocols.value.reduce(
+    (sum, protocol) => sum + (protocol.events ?? []).filter(event => matchesTraceFilters(protocol, event)).length,
+    0,
+))
+
+function protocolHasVisibleTraceRows(protocolId: string | null | undefined): boolean {
+    if (!protocolId) {
+        return false
+    }
+
+    return protocols.value.some(protocol =>
+        protocol.id === protocolId && (protocol.events ?? []).some(event => matchesTraceFilters(protocol, event)),
+    )
+}
+
+function clearTraceFilters() {
+    traceFilters.value = {
+        queryText: '',
+        filePath: '',
+        modelId: '',
+    }
+}
+
+const treeVisiblePasses = computed<ReviewProtocolPass[]>(() =>
+    sidebarItems.value
+        .filter((item): item is { type: 'pass'; protocol: ReviewProtocolPass } => item.type === 'pass')
+        .map(item => item.protocol),
+)
+
 const sidebarItems = computed(() => {
     // Build tree
     const root: any = { children: {} };
 
-    protocols.value.forEach(p => {
+    const visibleProtocols = protocols.value.filter(protocol => {
+        if (traceFindingsOnly.value && !protocolHasFinalFindings(protocol)) {
+            return false
+        }
+
+        if (!hasActiveTraceFilters.value) {
+            return true
+        }
+
+        return (protocol.events ?? []).some(event => matchesTraceFilters(protocol, event))
+    })
+
+    visibleProtocols.forEach(p => {
         const { directory } = parseFilePath(p.label);
 
         // Robust directory detection for root files
@@ -1793,9 +2150,30 @@ watch(activePassId, (protocolId) => {
     void ensureProtocolPassLoaded(protocolId)
 }, { flush: 'post' })
 
-const activePassEventRows = computed<EventDisplayRow[]>(() => {
-    return buildEventRows(activePass.value?.events)
-})
+watch([treeVisiblePasses, activeTab, traceFindingsOnly], ([visiblePasses, tab, findingsOnly]) => {
+    if (tab !== 'traces') {
+        return
+    }
+
+    if (visiblePasses.length === 0 && findingsOnly) {
+        activePassId.value = null
+        return
+    }
+
+    if (findingsOnly && !visiblePasses.some(protocol => protocol.id === activePassId.value)) {
+        activePassId.value = visiblePasses[0]?.id ?? null
+    }
+}, { flush: 'post' })
+
+const reviewTraceRows = computed<EventDisplayRow[]>(() =>
+    protocols.value.flatMap(protocol => buildEventRows(protocol)),
+)
+
+const activePassEventRows = computed<EventDisplayRow[]>(() =>
+    buildEventRows(activePass.value),
+)
+
+const visibleTraceRows = computed<EventDisplayRow[]>(() => reviewTraceRows.value)
 
 const traceTimingInsights = computed<TimingInsight[]>(() => {
     const protocol = activePass.value
@@ -2661,6 +3039,8 @@ function resetProtocolState() {
     reviewStatus.value = null
     jobDetail.value = null
     activePassId.value = null
+    focusedEventId.value = null
+    clearTraceFilters()
 
     if (pollInterval) {
         clearInterval(pollInterval)
@@ -2706,8 +3086,11 @@ async function loadProtocol(showLoading = false) {
                 activePassId.value = normalizedProtocols[0].id
             }
 
-            const protocolIdToLoad = activePassId.value && normalizedProtocols.some(protocol => protocol.id === activePassId.value)
-                ? activePassId.value
+            const routeProtocolId = typeof route.query.protocolId === 'string' ? route.query.protocolId : null
+            const protocolIdToLoad = routeProtocolId && normalizedProtocols.some(protocol => protocol.id === routeProtocolId)
+                ? routeProtocolId
+                : activePassId.value && normalizedProtocols.some(protocol => protocol.id === activePassId.value)
+                    ? activePassId.value
                 : normalizedProtocols[0]?.id
 
             if (protocolIdToLoad) {
@@ -2716,6 +3099,7 @@ async function loadProtocol(showLoading = false) {
                 }
 
                 await ensureProtocolPassLoaded(protocolIdToLoad)
+                await focusRouteEventIfRequested()
             }
             const isProcessing = normalizedProtocols.some((p: any) => !p.completedAt) || (resultRes.data?.status === 'processing')
             if (isProcessing && !pollInterval) {
@@ -2781,12 +3165,26 @@ async function ensureProtocolPassLoaded(protocolId: string) {
     }
 }
 
+async function focusRouteEventIfRequested() {
+    const routeEventId = typeof route.query.eventId === 'string' ? route.query.eventId : null
+    focusedEventId.value = routeEventId
+    if (!routeEventId) {
+        return
+    }
+
+    await nextTick()
+    const row = document.querySelector(`[data-event-id="${routeEventId}"]`)
+    if (row instanceof HTMLElement && typeof row.scrollIntoView === 'function') {
+        row.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    }
+}
+
 onMounted(() => {
     loadProtocol(true)
 })
 
 watch(
-    () => `${String(route.params.id ?? '')}|${String(route.query.clientId ?? '')}`,
+    () => `${String(route.params.id ?? '')}|${String(route.query.clientId ?? '')}|${String(route.query.protocolId ?? '')}|${String(route.query.eventId ?? '')}`,
     (nextKey, previousKey) => {
         if (nextKey === previousKey) {
             return
@@ -2796,6 +3194,32 @@ watch(
         loadProtocol(true)
     }
 )
+
+watch(activeTab, async (tab) => {
+    if (tab !== 'traces') {
+        return
+    }
+
+    await Promise.all(protocols.value
+        .map(protocol => protocol.id)
+        .filter((protocolId): protocolId is string => !!protocolId)
+        .map(protocolId => ensureProtocolPassLoaded(protocolId)))
+})
+
+watch(reviewTraceRows, (rows) => {
+    if (activeTab.value !== 'traces' || !hasActiveTraceFilters.value || rows.length === 0) {
+        return
+    }
+
+    if (activePassEventRows.value.length > 0) {
+        return
+    }
+
+    const nextProtocolId = rows[0]?.protocolId
+    if (nextProtocolId && activePassId.value !== nextProtocolId) {
+        activePassId.value = nextProtocolId
+    }
+}, { flush: 'post' })
 
 onUnmounted(() => {
     if (pollInterval) clearInterval(pollInterval)
@@ -2812,27 +3236,54 @@ function processEvents(events: ProtocolEventDto[] | undefined | null): MergedEve
     }))
 }
 
-function buildEventRows(events: ProtocolEventDto[] | undefined | null): EventDisplayRow[] {
-    const mergedEvents = processEvents(events)
+function buildEventRows(protocol: ReviewProtocolPass | null | undefined): EventDisplayRow[] {
+    const mergedEvents = processEvents(protocol?.events)
+    const filteredMergedEvents = protocol
+        ? mergedEvents.filter(merged => matchesTraceFilters(protocol, merged.callDetails))
+        : mergedEvents
     const rows: EventDisplayRow[] = []
     let activeAiTurnParentId: string | null = null
     let pendingToolRows: PendingToolRow[] = []
     const childEventsByParentId = new Map<string, MergedEvent[]>()
     const standaloneEvents: MergedEvent[] = []
 
+    const createDisplayRow = (
+        merged: MergedEvent,
+        depth: number,
+        parentId: string | null,
+        parentName: string | null,
+        isToolChild: boolean,
+        childCount: number,
+        isExpanded: boolean,
+    ): EventDisplayRow => {
+        const timing = getEventTimingPresentation(merged.callDetails)
+        const traceRow = protocol ? buildTraceSearchableRow(protocol, merged.callDetails) : null
+
+        return {
+            id: merged.id,
+            merged,
+            protocolId: protocol?.id ?? null,
+            depth,
+            parentId,
+            parentName,
+            isToolChild,
+            childCount,
+            isExpanded,
+            timingSummary: timing.summary,
+            timingDetail: timing.detail,
+            traceFilePath: traceRow?.filePath ?? null,
+            traceEventCategory: traceRow?.eventCategory ?? 'operational',
+            traceModelId: traceRow?.modelId ?? null,
+            traceMatchedField: traceRow?.matchedField ?? null,
+            traceMatchSnippet: traceRow?.matchSnippet ?? null,
+            traceContextSnippet: traceRow?.contextSnippet ?? null,
+            traceHasLimitedMetadata: traceRow?.hasLimitedMetadata ?? false,
+            traceIsRedacted: traceRow?.isRedacted ?? false,
+        }
+    }
+
     const appendStandaloneRow = (merged: MergedEvent) => {
-            rows.push({
-                id: merged.id,
-                merged,
-                depth: 0,
-                parentId: null,
-                parentName: null,
-                isToolChild: false,
-                childCount: 0,
-                isExpanded: false,
-                timingSummary: getEventTimingPresentation(merged.callDetails).summary,
-                timingDetail: getEventTimingPresentation(merged.callDetails).detail,
-            })
+        rows.push(createDisplayRow(merged, 0, null, null, false, 0, false))
     }
 
     const flushPendingToolRows = () => {
@@ -2843,7 +3294,7 @@ function buildEventRows(events: ProtocolEventDto[] | undefined | null): EventDis
         pendingToolRows = []
     }
 
-    for (const merged of mergedEvents) {
+    for (const merged of filteredMergedEvents) {
         const isToolCall = (merged.callDetails.kind ?? '').toLowerCase() === 'toolcall'
 
         if (isPrimaryAiTurnEvent(merged)) {
@@ -2882,38 +3333,15 @@ function buildEventRows(events: ProtocolEventDto[] | undefined | null): EventDis
 
     flushPendingToolRows()
 
-    for (const merged of mergedEvents) {
+    for (const merged of filteredMergedEvents) {
         if (isPrimaryAiTurnEvent(merged)) {
             const children = childEventsByParentId.get(merged.id) ?? []
             const isExpanded = !collapsedEventParents.value.has(merged.id)
-
-            rows.push({
-                id: merged.id,
-                merged,
-                depth: 0,
-                parentId: null,
-                parentName: null,
-                isToolChild: false,
-                childCount: children.length,
-                isExpanded,
-                timingSummary: getEventTimingPresentation(merged.callDetails).summary,
-                timingDetail: getEventTimingPresentation(merged.callDetails).detail,
-            })
+            rows.push(createDisplayRow(merged, 0, null, null, false, children.length, isExpanded))
 
             if (isExpanded) {
                 for (const child of children) {
-                    rows.push({
-                        id: child.id,
-                        merged: child,
-                        depth: 1,
-                        parentId: merged.id,
-                        parentName: merged.name,
-                        isToolChild: true,
-                        childCount: 0,
-                        isExpanded: false,
-                        timingSummary: getEventTimingPresentation(child.callDetails).summary,
-                        timingDetail: getEventTimingPresentation(child.callDetails).detail,
-                    })
+                    rows.push(createDisplayRow(child, 1, merged.id, merged.name, true, 0, false))
                 }
             }
             continue
@@ -2988,15 +3416,20 @@ const isEventModalOpen = ref(false)
 async function openMergedModal(event: MergedEvent): Promise<void> {
     resetEventModalExpansionState()
 
-    const protocolId = activePass.value?.id
+    const protocolId = visibleTraceRows.value.find(row => row.id === event.id)?.protocolId ?? activePass.value?.id
     if (protocolId && !loadedProtocolIds.value.has(protocolId)) {
+        activePassId.value = protocolId
         await ensureProtocolPassLoaded(protocolId)
-        const refreshedEvent = buildEventRows(activePass.value?.events)
+        const refreshedEvent = buildEventRows(activePass.value)
             .find(row => row.id === event.id)?.merged
         selectedMergedEvent.value = refreshedEvent ?? event
         isEventModalOpen.value = true
         void scheduleModalPhaseGrouping()
         return
+    }
+
+    if (protocolId && activePassId.value !== protocolId) {
+        activePassId.value = protocolId
     }
 
     selectedMergedEvent.value = event
@@ -3446,6 +3879,136 @@ function formatConfidence(val: number | string | null | undefined): string {
     align-items: start;
 }
 
+.trace-workspace {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+}
+
+.trace-filter-toolbar {
+    display: flex;
+    flex-direction: column;
+    gap: 0.9rem;
+    padding: 1rem 1.1rem;
+    border: 1px solid var(--color-border);
+    border-radius: 14px;
+    background: linear-gradient(180deg, rgba(255, 255, 255, 0.03), rgba(255, 255, 255, 0.015));
+}
+
+.trace-filter-toolbar--global {
+    position: sticky;
+    top: 0.5rem;
+    z-index: 4;
+    backdrop-filter: blur(10px);
+}
+
+.trace-filter-heading-row {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 0.75rem 1rem;
+    flex-wrap: wrap;
+}
+
+.trace-filter-heading-actions {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 0.75rem;
+    flex-wrap: wrap;
+}
+
+.trace-filter-title-group {
+    display: flex;
+    flex-direction: column;
+    gap: 0.2rem;
+    min-width: 0;
+}
+
+.trace-filter-title-group h4 {
+    margin: 0;
+}
+
+.trace-filter-subtitle,
+.trace-filter-summary,
+.events-section-context,
+.event-context-limitation {
+    margin: 0;
+    color: var(--color-text-muted);
+    font-size: 0.85rem;
+    line-height: 1.45;
+}
+
+.trace-filter-grid {
+    display: grid;
+    grid-template-columns: minmax(16rem, 2.2fr) repeat(2, minmax(10rem, 1fr)) auto;
+    gap: 0.65rem;
+    align-items: start;
+}
+
+.trace-filter-input {
+    min-width: 0;
+}
+
+.trace-filter-input :deep(.v-field) {
+    background: rgba(15, 17, 22, 0.72);
+    box-shadow: none;
+}
+
+.trace-filter-input :deep(.v-field__input) {
+    min-height: 2.75rem;
+}
+
+.trace-filter-input :deep(input) {
+    border: none;
+    box-shadow: none;
+    background: transparent;
+    padding: 0;
+}
+
+.trace-filter-input :deep(input:focus) {
+    border: none;
+    box-shadow: none;
+}
+
+.trace-filter-input :deep(input) {
+    font-size: 0.95rem;
+}
+
+.trace-filter-input :deep(.v-label) {
+    color: var(--color-text-muted);
+}
+
+.trace-filter-query {
+    width: 100%;
+}
+
+.trace-filter-collapse {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.45rem;
+    white-space: nowrap;
+}
+
+.trace-filter-toggle--active {
+    color: var(--color-text);
+    background: rgba(34, 211, 238, 0.12);
+    border-color: rgba(34, 211, 238, 0.28);
+}
+
+.events-section-header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 0.75rem;
+    flex-wrap: wrap;
+    margin-bottom: 0.75rem;
+}
+
+.events-section-header h4 {
+    margin: 0;
+}
+
 @media (max-width: 1024px) {
     .protocol-master-detail {
         grid-template-columns: 1fr;
@@ -3603,6 +4166,11 @@ function formatConfidence(val: number | string | null | undefined): string {
 
 .tree-pass-btn.active {
     background: rgba(59, 130, 246, 0.12) !important;
+}
+
+.tree-pass-btn.trace-match:not(.active) {
+    background: rgba(34, 211, 238, 0.08) !important;
+    border: 1px solid rgba(34, 211, 238, 0.12) !important;
 }
 
 .tree-pass-btn .pass-nav-info {
@@ -4110,10 +4678,10 @@ function formatConfidence(val: number | string | null | undefined): string {
 
 .event-title-stack {
     display: flex;
-    align-items: baseline;
-    justify-content: space-between;
-    gap: 0.75rem 1rem;
-    flex-wrap: wrap;
+    flex-direction: column;
+    align-items: stretch;
+    justify-content: flex-start;
+    gap: 0.45rem;
     min-width: 0;
     width: 100%;
 }
@@ -4136,6 +4704,59 @@ function formatConfidence(val: number | string | null | undefined): string {
     gap: 0.45rem;
     flex-wrap: wrap;
     min-width: 0;
+}
+
+.event-meta-line {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.45rem;
+    min-width: 0;
+}
+
+.event-meta-pill {
+    display: inline-flex;
+    align-items: center;
+    min-width: 0;
+    max-width: 100%;
+    padding: 0.16rem 0.5rem;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.06);
+    color: var(--color-text-muted);
+    font-size: 0.76rem;
+    line-height: 1.25;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.event-meta-pill--path,
+.event-meta-pill--model {
+    max-width: min(100%, 26rem);
+}
+
+.event-meta-pill--flag {
+    color: var(--color-text);
+    background: rgba(34, 211, 238, 0.09);
+}
+
+.event-match-snippet,
+.event-context-snippet,
+.event-context-limitation {
+    max-width: 100%;
+    overflow-wrap: anywhere;
+    word-break: break-word;
+}
+
+.event-match-snippet {
+    color: var(--color-text);
+    font-size: 0.88rem;
+    line-height: 1.5;
+}
+
+.event-context-snippet {
+    color: var(--color-text-muted);
+    font-size: 0.84rem;
+    line-height: 1.5;
 }
 
 .timing-duration {
@@ -4957,7 +5578,21 @@ function formatConfidence(val: number | string | null | undefined): string {
     font-weight: 600;
     line-height: 1.45;
     padding: 0.05rem 0;
+    max-width: 100%;
     word-break: break-word;
+    overflow-wrap: anywhere;
+}
+
+@media (max-width: 1400px) {
+    .trace-filter-grid {
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+}
+
+@media (max-width: 900px) {
+    .trace-filter-grid {
+        grid-template-columns: minmax(0, 1fr);
+    }
 }
 
 .event-parent-pill {

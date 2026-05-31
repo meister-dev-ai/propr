@@ -121,6 +121,7 @@ public sealed record ProtocolInheritanceDto(
 /// <param name="InputTextSample">First 4000 characters of input text, or null.</param>
 /// <param name="SystemPrompt">First 4000 characters of the system prompt used for this AI call, or null.</param>
 /// <param name="OutputSummary">First 1000 characters of output, or null.</param>
+/// <param name="EventCategory">Normalized protocol-step category captured for this event, or null for legacy rows.</param>
 /// <param name="Error">Error message if this event failed, or null.</param>
 public sealed partial record ProtocolEventDto(
     Guid Id,
@@ -132,6 +133,7 @@ public sealed partial record ProtocolEventDto(
     string? InputTextSample,
     string? SystemPrompt,
     string? OutputSummary,
+    string? EventCategory,
     string? Error);
 
 /// <summary>

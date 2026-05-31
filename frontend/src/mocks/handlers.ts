@@ -181,6 +181,42 @@ function parseJwtPayload(authorizationHeader: string | null) {
 
 let jobTick = 0
 
+function projectTraceSearchMatches() {
+  return (protocolMockData as Array<Record<string, any>>)
+    .flatMap((protocol) => (protocol.events ?? []).map((event: Record<string, any>) => ({ protocol, event })))
+    .filter(({ event }) => typeof event.id === 'string')
+    .map(({ protocol, event }) => ({
+      jobId: String(protocol.jobId ?? ''),
+      protocolId: String(protocol.id ?? ''),
+      eventId: String(event.id),
+      pullRequestId: 42,
+      protocolLabel: typeof protocol.label === 'string' ? protocol.label : null,
+      filePath: typeof protocol.label === 'string' ? protocol.label : null,
+      eventKind: typeof event.kind === 'string' ? event.kind : null,
+      eventCategory: typeof event.eventCategory === 'string' ? event.eventCategory : null,
+      eventName: typeof event.name === 'string' ? event.name : 'unknown_event',
+      modelId: 'gpt-5.4-mini',
+      occurredAt: typeof event.occurredAt === 'string' ? event.occurredAt : null,
+      matchedField: 'inputTextSample',
+      matchSnippet: String(event.inputTextSample ?? event.outputSummary ?? '').slice(0, 240),
+      contextSnippet: typeof event.outputSummary === 'string' && event.outputSummary.length > 0
+        ? event.outputSummary.slice(0, 240)
+        : null,
+      isRedacted: false,
+      hasLimitedMetadata: false,
+      focus: {
+        clientId: '1',
+        jobId: String(protocol.jobId ?? ''),
+        protocolId: String(protocol.id ?? ''),
+        eventId: String(event.id),
+        routeName: 'job-protocol',
+        isContextAvailable: true,
+        unavailableReason: null,
+      },
+      limitations: [],
+    }))
+}
+
 let crawlConfigs = [
   {
     id: 'config-1',

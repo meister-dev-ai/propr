@@ -5,6 +5,7 @@ using System.Text.Json;
 using MeisterProPR.Application.DTOs;
 using MeisterProPR.Application.Features.Reviewing.Diagnostics.Ports;
 using MeisterProPR.Application.Features.Reviewing.Diagnostics.Queries.GetReviewJobProtocol;
+using MeisterProPR.Domain.Enums;
 using MeisterProPR.Domain.Entities;
 using MeisterProPR.Domain.ValueObjects;
 using MeisterProPR.Infrastructure.Features.Reviewing.Diagnostics.Persistence;
@@ -207,6 +208,8 @@ public sealed class InMemoryReviewDiagnosticsReader(InMemoryReviewJobRepository 
             inputTextSample,
             systemPrompt,
             outputSummary,
+            TraceSearchSupport.NormalizeEventCategory(e.EventCategory)
+            ?? TraceSearchSupport.DeriveEventCategory(e.Kind, e.Name),
             e.Error)
         {
             CachedInputTokens = e.CachedInputTokens,

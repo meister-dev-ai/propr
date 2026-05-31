@@ -10787,6 +10787,8 @@ export interface components {
             systemPrompt?: string | null;
             /** @description First 1000 characters of output, or null. */
             outputSummary?: string | null;
+            /** @description Normalized protocol-step category captured for this event, or null for legacy rows. */
+            eventCategory?: string | null;
             /** @description Error message if this event failed, or null. */
             error?: string | null;
             /**

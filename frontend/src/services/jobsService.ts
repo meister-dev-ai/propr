@@ -10,6 +10,8 @@ import { useSession } from '@/composables/useSession'
 import { getActiveRuntime } from '@/app/runtime/runtimeContext'
 import type { RuntimeMode } from '@/app/runtime/createRuntime'
 import { sanitizeErrorMessage } from '@/services/credentialSafety'
+import { createAdminClient } from '@/services/api'
+import type { components } from '@/types'
 
 function getJobsBaseUrl(): string {
   return getActiveRuntime().apiBaseUrl
@@ -74,6 +76,10 @@ export interface JobDetailResponse {
   reviewTemperature: number | null
   tokenBreakdown: TokenBreakdownEntry[]
   breakdownConsistent: boolean | null
+}
+
+export interface GetJobProtocolOptions {
+  includeEvents?: boolean
 }
 
 export interface PrJobSummaryDto {
@@ -173,15 +179,27 @@ async function getJobDetailInternal(id: string): Promise<JobDetailResponse> {
 }
 
 /** Returns the protocol trace for a single review job. */
-export async function getJobProtocol(id: string): Promise<unknown> {
-  return resolveJobsService().getJobProtocol(id)
+export async function getJobProtocol(
+  id: string,
+  options: GetJobProtocolOptions = {},
+): Promise<components['schemas']['ReviewJobProtocolDto'][]> {
+  return resolveJobsService().getJobProtocol(id, options)
 }
 
-async function getJobProtocolInternal(id: string): Promise<unknown> {
+async function getJobProtocolInternal(
+  id: string,
+  options: GetJobProtocolOptions = {},
+): Promise<components['schemas']['ReviewJobProtocolDto'][]> {
   try {
-    const res = await fetch(`${getJobsBaseUrl()}/jobs/${id}/protocol`, { headers: await authHeaders() })
+    const query = new URLSearchParams()
+    if (typeof options.includeEvents === 'boolean') {
+      query.set('includeEvents', String(options.includeEvents))
+    }
+
+    const suffix = query.size > 0 ? `?${query}` : ''
+    const res = await fetch(`${getJobsBaseUrl()}/jobs/${id}/protocol${suffix}`, { headers: await authHeaders() })
     if (!res.ok) throw new Error(`GET /jobs/${id}/protocol: ${res.status}`)
-    return res.json()
+    return res.json() as Promise<components['schemas']['ReviewJobProtocolDto'][]>
   } catch (error) {
     throw new Error(sanitizeErrorMessage(error, `Failed to load protocol for job ${id}.`))
   }
@@ -232,7 +250,10 @@ export interface JobsService {
   runtimeMode: RuntimeMode
   listJobs: (params?: ListJobsParams) => Promise<JobListResponse>
   getJobDetail: (id: string) => Promise<JobDetailResponse>
-  getJobProtocol: (id: string) => Promise<unknown>
+  getJobProtocol: (
+    id: string,
+    options?: GetJobProtocolOptions,
+  ) => Promise<components['schemas']['ReviewJobProtocolDto'][]>
   getPrView: (clientId: string, params: GetPrViewParams) => Promise<PrReviewViewDto>
 }
 

@@ -5,6 +5,7 @@ using System.Diagnostics;
 using System.IdentityModel.Tokens.Jwt;
 using System.Net;
 using System.Net.Http.Headers;
+using System.Net.Http.Json;
 using System.Security.Claims;
 using System.Text;
 using System.Text.Json;
@@ -265,6 +266,25 @@ public sealed class JobsControllerTests(JobsControllerTests.JobsApiFactory facto
                 [
                     new Claim("sub", Guid.NewGuid().ToString()),
                     new Claim("global_role", "Admin"),
+                ]),
+                Expires = DateTime.UtcNow.AddHours(1),
+                SigningCredentials = new SigningCredentials(key, SecurityAlgorithms.HmacSha256),
+                Issuer = "meisterpropr",
+                Audience = "meisterpropr",
+            };
+            return handler.WriteToken(handler.CreateToken(descriptor));
+        }
+
+        public string GenerateUserToken()
+        {
+            var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(TestJwtSecret));
+            var handler = new JwtSecurityTokenHandler { MapInboundClaims = false };
+            var descriptor = new SecurityTokenDescriptor
+            {
+                Subject = new ClaimsIdentity(
+                [
+                    new Claim("sub", Guid.NewGuid().ToString()),
+                    new Claim("global_role", "User"),
                 ]),
                 Expires = DateTime.UtcNow.AddHours(1),
                 SigningCredentials = new SigningCredentials(key, SecurityAlgorithms.HmacSha256),

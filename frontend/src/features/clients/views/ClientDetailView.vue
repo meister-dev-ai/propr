@@ -54,9 +54,9 @@
                         </button>
                         <button v-if="canManageClient" class="sidebar-nav-link"
                             :class="{ active: activeTab === 'dismissals' }" @click="
-                                activeTab = 'dismissals';
-                            loadDismissals();
-                            ">
+                                 activeTab = 'dismissals';
+                             loadDismissals();
+                             ">
                             <i class="fi fi-rr-ban"></i> Dismissed Findings
                         </button>
                         <button v-if="canManageClient" class="sidebar-nav-link"

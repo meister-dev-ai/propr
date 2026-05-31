@@ -95,6 +95,7 @@ public sealed class EfProtocolRecorder(
                 InputTextSample = Sanitize(inputTextSample),
                 SystemPrompt = Sanitize(systemPrompt),
                 OutputSummary = Sanitize(outputTextSample),
+                EventCategory = TraceSearchSupport.DeriveEventCategory(ProtocolEventKind.AiCall, name ?? $"ai_call_iter_{iteration}"),
                 Error = Sanitize(error),
             };
             db.ProtocolEvents.Add(ev);
@@ -138,6 +139,7 @@ public sealed class EfProtocolRecorder(
                             compositionMode = compositionMode.ToString().ToLowerInvariant(),
                             usedDefaultConstruction,
                         })),
+                EventCategory = TraceSearchSupport.DeriveEventCategory(ProtocolEventKind.Operational, ReviewProtocolEventNames.PromptStageEvidenceRecorded),
             };
             db.ProtocolEvents.Add(ev);
             await db.SaveChangesAsync(ct);
@@ -195,6 +197,7 @@ public sealed class EfProtocolRecorder(
                 ToolEvidenceOriginalPayloadTokens = toolEvidenceOriginalPayloadTokens,
                 ToolEvidenceBoundedPayloadTokens = toolEvidenceBoundedPayloadTokens,
                 ToolEvidenceRefreshable = toolEvidenceRefreshable,
+                EventCategory = TraceSearchSupport.DeriveEventCategory(ProtocolEventKind.ToolCall, toolName),
             };
             db.ProtocolEvents.Add(ev);
             await db.SaveChangesAsync(ct);
@@ -429,6 +432,7 @@ public sealed class EfProtocolRecorder(
                 OccurredAt = DateTimeOffset.UtcNow,
                 InputTextSample = Sanitize(details),
                 OutputSummary = Sanitize(output),
+                EventCategory = TraceSearchSupport.NormalizeEventCategory(eventCategory),
                 Error = Sanitize(error),
             };
             db.ProtocolEvents.Add(ev);

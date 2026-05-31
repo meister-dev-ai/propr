@@ -3,6 +3,7 @@
 
 using MeisterProPR.Application.Features.Reviewing.Execution.Models;
 using MeisterProPR.Application.Interfaces;
+using MeisterProPR.Application.DTOs;
 using MeisterProPR.Domain.Entities;
 using MeisterProPR.Domain.Enums;
 using MeisterProPR.Domain.ValueObjects;
@@ -817,6 +818,7 @@ public sealed class EfReviewDiagnosticsReaderTests
         Assert.Equal("ai_call_iter_1", inherited.Events[0].Name);
         Assert.Null(inherited.Events[0].InputTextSample);
         Assert.Null(inherited.Events[0].SystemPrompt);
+        Assert.Equal("ai-call", inherited.Events[0].EventCategory);
         Assert.Equal(
             "Inherited event payload omitted from this view to keep large same-revision retry traces responsive. Open the source job protocol to inspect the original captured body.",
             inherited.Events[0].OutputSummary);

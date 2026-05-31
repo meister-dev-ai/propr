@@ -60,8 +60,14 @@ internal sealed class ProtocolEventConfiguration : IEntityTypeConfiguration<Prot
             .HasColumnName("output_summary")
             .HasColumnType("text")
             .IsRequired(false);
+        builder.Property(e => e.EventCategory)
+            .HasColumnName("event_category")
+            .HasMaxLength(64)
+            .IsRequired(false);
         builder.Property(e => e.Error).HasColumnName("error").IsRequired(false);
 
         builder.HasIndex(e => e.ProtocolId).HasDatabaseName("ix_protocol_events_protocol_id");
+        builder.HasIndex(e => e.EventCategory).HasDatabaseName("ix_protocol_events_event_category");
+        builder.HasIndex(e => e.OccurredAt).HasDatabaseName("ix_protocol_events_occurred_at");
     }
 }
