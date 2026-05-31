@@ -6,6 +6,7 @@ using MeisterProPR.Application.Features.Reviewing.Execution.Models;
 using MeisterProPR.Application.Interfaces;
 using MeisterProPR.Domain.Entities;
 using MeisterProPR.Domain.Enums;
+using MeisterProPR.Domain.ValueObjects;
 using MeisterProPR.Infrastructure.Data;
 using MeisterProPR.Infrastructure.Features.Reviewing.Diagnostics.Persistence;
 using Microsoft.EntityFrameworkCore;
@@ -155,6 +156,14 @@ public sealed class EfProtocolRecorder(
         string result,
         int iteration,
         CancellationToken ct = default,
+        DateTimeOffset? startedAt = null,
+        DateTimeOffset? completedAt = null,
+        long? durationMs = null,
+        long? waitDurationMs = null,
+        long? activeDurationMs = null,
+        string? timingAvailability = null,
+        string? toolOutcome = null,
+        IReadOnlyList<ProtocolEventPhaseTiming>? phaseTimings = null,
         string? toolEvidenceAction = null,
         int? toolEvidenceOriginalPayloadTokens = null,
         int? toolEvidenceBoundedPayloadTokens = null,
@@ -172,6 +181,14 @@ public sealed class EfProtocolRecorder(
                 Name = toolName,
                 OccurredAt = DateTimeOffset.UtcNow,
                 InputTextSample = Sanitize(sample),
+                StartedAt = startedAt,
+                CompletedAt = completedAt,
+                DurationMs = durationMs,
+                WaitDurationMs = waitDurationMs,
+                ActiveDurationMs = activeDurationMs,
+                TimingAvailability = Sanitize(timingAvailability),
+                ToolOutcome = Sanitize(toolOutcome),
+                PhaseTimings = phaseTimings?.ToList(),
                 OutputSummary = Sanitize(result),
                 ToolEvidenceAction = Sanitize(toolEvidenceAction),
                 ToolEvidenceSourceToolName = toolEvidenceAction is null ? null : toolName,

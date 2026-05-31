@@ -6,6 +6,7 @@ using MeisterProPR.Application.Features.Reviewing.Execution.Models;
 using MeisterProPR.Application.Interfaces;
 using MeisterProPR.Domain.Entities;
 using MeisterProPR.Domain.Enums;
+using MeisterProPR.Domain.ValueObjects;
 using MeisterProPR.Infrastructure.Features.Reviewing.Diagnostics.Persistence;
 
 namespace MeisterProPR.Infrastructure.Features.Reviewing.Offline;
@@ -139,6 +140,14 @@ public sealed class InMemoryProtocolRecorder(InMemoryReviewJobRepository jobs) :
         string result,
         int iteration,
         CancellationToken ct = default,
+        DateTimeOffset? startedAt = null,
+        DateTimeOffset? completedAt = null,
+        long? durationMs = null,
+        long? waitDurationMs = null,
+        long? activeDurationMs = null,
+        string? timingAvailability = null,
+        string? toolOutcome = null,
+        IReadOnlyList<ProtocolEventPhaseTiming>? phaseTimings = null,
         string? toolEvidenceAction = null,
         int? toolEvidenceOriginalPayloadTokens = null,
         int? toolEvidenceBoundedPayloadTokens = null,
@@ -159,6 +168,14 @@ public sealed class InMemoryProtocolRecorder(InMemoryReviewJobRepository jobs) :
                 Name = toolName,
                 OccurredAt = DateTimeOffset.UtcNow,
                 InputTextSample = Sanitize($"args={arguments}"),
+                StartedAt = startedAt,
+                CompletedAt = completedAt,
+                DurationMs = durationMs,
+                WaitDurationMs = waitDurationMs,
+                ActiveDurationMs = activeDurationMs,
+                TimingAvailability = Sanitize(timingAvailability),
+                ToolOutcome = Sanitize(toolOutcome),
+                PhaseTimings = phaseTimings?.ToList(),
                 OutputSummary = Sanitize(result),
                 ToolEvidenceAction = Sanitize(toolEvidenceAction),
                 ToolEvidenceSourceToolName = toolEvidenceAction is null ? null : toolName,

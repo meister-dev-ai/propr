@@ -3,6 +3,7 @@
 
 using MeisterProPR.Application.Features.Reviewing.Execution.Models;
 using MeisterProPR.Domain.Enums;
+using MeisterProPR.Domain.ValueObjects;
 
 namespace MeisterProPR.Application.Interfaces;
 
@@ -109,6 +110,14 @@ public interface IProtocolRecorder
         string result,
         int iteration,
         CancellationToken ct = default,
+        DateTimeOffset? startedAt = null,
+        DateTimeOffset? completedAt = null,
+        long? durationMs = null,
+        long? waitDurationMs = null,
+        long? activeDurationMs = null,
+        string? timingAvailability = null,
+        string? toolOutcome = null,
+        IReadOnlyList<ProtocolEventPhaseTiming>? phaseTimings = null,
         string? toolEvidenceAction = null,
         int? toolEvidenceOriginalPayloadTokens = null,
         int? toolEvidenceBoundedPayloadTokens = null,

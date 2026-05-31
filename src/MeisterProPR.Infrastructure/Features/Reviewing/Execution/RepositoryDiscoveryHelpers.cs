@@ -2,6 +2,7 @@
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
 using MeisterProPR.Application.Features.Reviewing.Execution.Models;
+using MeisterProPR.Domain.ValueObjects;
 using Microsoft.Extensions.FileSystemGlobbing;
 
 namespace MeisterProPR.Infrastructure.Features.Reviewing.Execution;
@@ -45,7 +46,11 @@ internal static class RepositoryDiscoveryHelpers
         {
             try
             {
-                rawPaths = await loadFileTreeAsync(branch, ct);
+                rawPaths = await ToolTimingCollectorContext.RecordAsync(
+                    ProtocolEventToolPhaseNames.ScmFileTreeFetch,
+                    "SCM file tree fetch",
+                    () => loadFileTreeAsync(branch, ct),
+                    paths => $"candidate_paths={paths.Count}");
             }
             catch (Exception ex)
             {
@@ -75,7 +80,12 @@ internal static class RepositoryDiscoveryHelpers
             return new CandidatePathResolution(branch, [], limitations.AsReadOnly());
         }
 
-        var filteredPaths = ApplyFilters(rawPaths, normalizedFilters, out var excludedCount);
+        var filteredPaths = ToolTimingCollectorContext.Record(
+            ProtocolEventToolPhaseNames.RequestPreparation,
+            "Request preparation",
+            () => ApplyFilters(rawPaths, normalizedFilters, out var excludedCount),
+            paths => $"filtered_candidates={paths.Count}");
+        var excludedCount = rawPaths.Count - filteredPaths.Count;
         if (excludedCount > 0)
         {
             limitations.Add(

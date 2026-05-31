@@ -12,6 +12,7 @@ using MeisterProPR.Domain.Enums;
 using MeisterProPR.Domain.ValueObjects;
 using MeisterProPR.Infrastructure.Features.Providers.Common;
 using MeisterProPR.Infrastructure.Features.Providers.GitHub.Security;
+using MeisterProPR.Infrastructure.Features.Reviewing.Execution;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
@@ -51,75 +52,89 @@ internal sealed class GitHubReviewContextTools(
 
     protected override async Task<IReadOnlyList<ChangedFileSummary>> LoadChangedFilesAsync(CancellationToken ct)
     {
-        var context = await this.VerifyAsync(ct);
-        using var request = await context.CreateAuthenticatedRequestAsync(
-            GitHubConnectionVerifier.BuildApiUri(
-                this._host,
-                $"/repos/{this._repositoryPath}/pulls/{this._pullRequestNumber}/files",
-                "per_page=100"),
-            ct: ct);
-        using var response = await this._httpClientFactory.CreateClient("GitHubProvider").SendAsync(request, ct);
-        if (!response.IsSuccessStatusCode)
-        {
-            throw new InvalidOperationException($"GitHub changed-file lookup failed with status {(int)response.StatusCode}.");
-        }
+        return await ToolTimingCollectorContext.RecordAsync(
+            ProtocolEventToolPhaseNames.ProviderApiCall,
+            "Provider API call",
+            async () =>
+            {
+                var context = await this.VerifyAsync(ct);
+                using var request = await context.CreateAuthenticatedRequestAsync(
+                    GitHubConnectionVerifier.BuildApiUri(
+                        this._host,
+                        $"/repos/{this._repositoryPath}/pulls/{this._pullRequestNumber}/files",
+                        "per_page=100"),
+                    ct: ct);
+                using var response = await this._httpClientFactory.CreateClient("GitHubProvider").SendAsync(request, ct);
+                if (!response.IsSuccessStatusCode)
+                {
+                    throw new InvalidOperationException($"GitHub changed-file lookup failed with status {(int)response.StatusCode}.");
+                }
 
-        var payload = await response.Content.ReadFromJsonAsync<IReadOnlyList<GitHubPullRequestFileResponse>>(ct)
-                      ?? [];
+                var payload = await response.Content.ReadFromJsonAsync<IReadOnlyList<GitHubPullRequestFileResponse>>(ct)
+                              ?? [];
 
-        return payload
-            .Select(file => new ChangedFileSummary(this.NormalizePath(file.FileName), MapChangeType(file.Status)))
-            .ToList()
-            .AsReadOnly();
+                return payload
+                    .Select(file => new ChangedFileSummary(this.NormalizePath(file.FileName), MapChangeType(file.Status)))
+                    .ToList()
+                    .AsReadOnly();
+            },
+            files => $"operation=github_changed_files;count={files.Count}");
     }
 
     protected override async Task<IReadOnlyList<string>> LoadFileTreeAsync(
         string normalizedBranch,
         CancellationToken ct)
     {
-        var context = await this.VerifyAsync(ct);
-        using var branchRequest = await context.CreateAuthenticatedRequestAsync(
-            GitHubConnectionVerifier.BuildApiUri(
-                this._host,
-                $"/repos/{this._repositoryPath}/branches/{Uri.EscapeDataString(normalizedBranch)}"),
-            ct: ct);
-        using var branchResponse =
-            await this._httpClientFactory.CreateClient("GitHubProvider").SendAsync(branchRequest, ct);
-        if (!branchResponse.IsSuccessStatusCode)
-        {
-            throw new InvalidOperationException($"GitHub branch lookup failed with status {(int)branchResponse.StatusCode}.");
-        }
+        return await ToolTimingCollectorContext.RecordAsync(
+            ProtocolEventToolPhaseNames.ProviderApiCall,
+            "Provider API call",
+            async () =>
+            {
+                var context = await this.VerifyAsync(ct);
+                using var branchRequest = await context.CreateAuthenticatedRequestAsync(
+                    GitHubConnectionVerifier.BuildApiUri(
+                        this._host,
+                        $"/repos/{this._repositoryPath}/branches/{Uri.EscapeDataString(normalizedBranch)}"),
+                    ct: ct);
+                using var branchResponse =
+                    await this._httpClientFactory.CreateClient("GitHubProvider").SendAsync(branchRequest, ct);
+                if (!branchResponse.IsSuccessStatusCode)
+                {
+                    throw new InvalidOperationException($"GitHub branch lookup failed with status {(int)branchResponse.StatusCode}.");
+                }
 
-        var branchPayload = await branchResponse.Content.ReadFromJsonAsync<GitHubBranchResponse>(ct)
-                            ?? throw new InvalidOperationException("GitHub branch lookup returned an empty payload.");
-        var commitSha = branchPayload.Commit?.Sha;
-        if (string.IsNullOrWhiteSpace(commitSha))
-        {
-            return [];
-        }
+                var branchPayload = await branchResponse.Content.ReadFromJsonAsync<GitHubBranchResponse>(ct)
+                                    ?? throw new InvalidOperationException("GitHub branch lookup returned an empty payload.");
+                var commitSha = branchPayload.Commit?.Sha;
+                if (string.IsNullOrWhiteSpace(commitSha))
+                {
+                    return [];
+                }
 
-        using var treeRequest = await context.CreateAuthenticatedRequestAsync(
-            GitHubConnectionVerifier.BuildApiUri(
-                this._host,
-                $"/repos/{this._repositoryPath}/git/trees/{commitSha}",
-                "recursive=1"),
-            ct: ct);
-        using var treeResponse =
-            await this._httpClientFactory.CreateClient("GitHubProvider").SendAsync(treeRequest, ct);
-        if (!treeResponse.IsSuccessStatusCode)
-        {
-            throw new InvalidOperationException($"GitHub tree lookup failed with status {(int)treeResponse.StatusCode}.");
-        }
+                using var treeRequest = await context.CreateAuthenticatedRequestAsync(
+                    GitHubConnectionVerifier.BuildApiUri(
+                        this._host,
+                        $"/repos/{this._repositoryPath}/git/trees/{commitSha}",
+                        "recursive=1"),
+                    ct: ct);
+                using var treeResponse =
+                    await this._httpClientFactory.CreateClient("GitHubProvider").SendAsync(treeRequest, ct);
+                if (!treeResponse.IsSuccessStatusCode)
+                {
+                    throw new InvalidOperationException($"GitHub tree lookup failed with status {(int)treeResponse.StatusCode}.");
+                }
 
-        var treePayload = await treeResponse.Content.ReadFromJsonAsync<GitHubTreeResponse>(ct)
-                          ?? throw new InvalidOperationException("GitHub tree lookup returned an empty payload.");
+                var treePayload = await treeResponse.Content.ReadFromJsonAsync<GitHubTreeResponse>(ct)
+                                  ?? throw new InvalidOperationException("GitHub tree lookup returned an empty payload.");
 
-        return treePayload.Tree
-            .Where(entry => string.Equals(entry.Type, "blob", StringComparison.OrdinalIgnoreCase))
-            .Select(entry => this.NormalizePath(entry.Path ?? string.Empty))
-            .Where(path => !string.IsNullOrWhiteSpace(path))
-            .ToList()
-            .AsReadOnly();
+                return treePayload.Tree
+                    .Where(entry => string.Equals(entry.Type, "blob", StringComparison.OrdinalIgnoreCase))
+                    .Select(entry => this.NormalizePath(entry.Path ?? string.Empty))
+                    .Where(path => !string.IsNullOrWhiteSpace(path))
+                    .ToList()
+                    .AsReadOnly();
+            },
+            paths => $"operation=github_tree;branch={normalizedBranch};count={paths.Count}");
     }
 
     protected internal override async Task<string?> FetchRawFileContentAsync(
@@ -127,34 +142,43 @@ internal sealed class GitHubReviewContextTools(
         string normalizedBranch,
         CancellationToken ct)
     {
-        var context = await this.VerifyAsync(ct);
-        using var request = await context.CreateAuthenticatedRequestAsync(
-            GitHubConnectionVerifier.BuildApiUri(
-                this._host,
-                $"/repos/{this._repositoryPath}/contents/{Uri.EscapeDataString(normalizedPath)}",
-                $"ref={Uri.EscapeDataString(normalizedBranch)}"),
-            ct: ct);
-        using var response = await this._httpClientFactory.CreateClient("GitHubProvider").SendAsync(request, ct);
-        if (response.StatusCode == HttpStatusCode.NotFound)
-        {
-            return null;
-        }
+        return await ToolTimingCollectorContext.RecordAsync(
+            ProtocolEventToolPhaseNames.ProviderApiCall,
+            "Provider API call",
+            async () =>
+            {
+                var context = await this.VerifyAsync(ct);
+                using var request = await context.CreateAuthenticatedRequestAsync(
+                    GitHubConnectionVerifier.BuildApiUri(
+                        this._host,
+                        $"/repos/{this._repositoryPath}/contents/{Uri.EscapeDataString(normalizedPath)}",
+                        $"ref={Uri.EscapeDataString(normalizedBranch)}"),
+                    ct: ct);
+                using var response = await this._httpClientFactory.CreateClient("GitHubProvider").SendAsync(request, ct);
+                if (response.StatusCode == HttpStatusCode.NotFound)
+                {
+                    return null;
+                }
 
-        if (!response.IsSuccessStatusCode)
-        {
-            throw new InvalidOperationException($"GitHub file lookup failed with status {(int)response.StatusCode}.");
-        }
+                if (!response.IsSuccessStatusCode)
+                {
+                    throw new InvalidOperationException($"GitHub file lookup failed with status {(int)response.StatusCode}.");
+                }
 
-        var payload = await response.Content.ReadFromJsonAsync<GitHubContentResponse>(ct)
-                      ?? throw new InvalidOperationException("GitHub file lookup returned an empty payload.");
-        if (string.Equals(payload.Encoding, "base64", StringComparison.OrdinalIgnoreCase) &&
-            !string.IsNullOrWhiteSpace(payload.Content))
-        {
-            var raw = payload.Content.Replace("\n", string.Empty, StringComparison.Ordinal);
-            return Encoding.UTF8.GetString(Convert.FromBase64String(raw));
-        }
+                var payload = await response.Content.ReadFromJsonAsync<GitHubContentResponse>(ct)
+                              ?? throw new InvalidOperationException("GitHub file lookup returned an empty payload.");
+                if (string.Equals(payload.Encoding, "base64", StringComparison.OrdinalIgnoreCase) &&
+                    !string.IsNullOrWhiteSpace(payload.Content))
+                {
+                    var raw = payload.Content.Replace("\n", string.Empty, StringComparison.Ordinal);
+                    return Encoding.UTF8.GetString(Convert.FromBase64String(raw));
+                }
 
-        return payload.Content;
+                return payload.Content;
+            },
+            content => content is null
+                ? $"operation=github_content;path={normalizedPath};branch={normalizedBranch};missing=true"
+                : $"operation=github_content;path={normalizedPath};branch={normalizedBranch};chars={content.Length}");
     }
 
     private async Task<GitHubConnectionVerifier.GitHubConnectionContext> VerifyAsync(CancellationToken ct)

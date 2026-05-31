@@ -11,6 +11,7 @@ using MeisterProPR.Domain.Enums;
 using MeisterProPR.Domain.ValueObjects;
 using MeisterProPR.Infrastructure.Features.Providers.Common;
 using MeisterProPR.Infrastructure.Features.Providers.GitLab.Security;
+using MeisterProPR.Infrastructure.Features.Reviewing.Execution;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
@@ -50,57 +51,71 @@ internal sealed class GitLabReviewContextTools(
 
     protected override async Task<IReadOnlyList<ChangedFileSummary>> LoadChangedFilesAsync(CancellationToken ct)
     {
-        var context = await this.VerifyAsync(ct);
-        using var request = GitLabConnectionVerifier.CreateAuthenticatedRequest(
-            GitLabConnectionVerifier.BuildApiUri(
-                this._host,
-                $"/projects/{Uri.EscapeDataString(this._repositoryId)}/merge_requests/{this._pullRequestNumber}/changes"),
-            context.Connection.Secret);
-        using var response = await this._httpClientFactory.CreateClient("GitLabProvider").SendAsync(request, ct);
-        if (!response.IsSuccessStatusCode)
-        {
-            throw new InvalidOperationException($"GitLab change lookup failed with status {(int)response.StatusCode}.");
-        }
+        return await ToolTimingCollectorContext.RecordAsync(
+            ProtocolEventToolPhaseNames.ProviderApiCall,
+            "Provider API call",
+            async () =>
+            {
+                var context = await this.VerifyAsync(ct);
+                using var request = GitLabConnectionVerifier.CreateAuthenticatedRequest(
+                    GitLabConnectionVerifier.BuildApiUri(
+                        this._host,
+                        $"/projects/{Uri.EscapeDataString(this._repositoryId)}/merge_requests/{this._pullRequestNumber}/changes"),
+                    context.Connection.Secret);
+                using var response = await this._httpClientFactory.CreateClient("GitLabProvider").SendAsync(request, ct);
+                if (!response.IsSuccessStatusCode)
+                {
+                    throw new InvalidOperationException($"GitLab change lookup failed with status {(int)response.StatusCode}.");
+                }
 
-        var payload = await response.Content.ReadFromJsonAsync<GitLabMergeRequestChangesResponse>(ct)
-                      ?? throw new InvalidOperationException("GitLab change lookup returned an empty payload.");
+                var payload = await response.Content.ReadFromJsonAsync<GitLabMergeRequestChangesResponse>(ct)
+                              ?? throw new InvalidOperationException("GitLab change lookup returned an empty payload.");
 
-        return payload.Changes
-            .Select(change => new ChangedFileSummary(
-                this.NormalizePath(change.NewPath ?? change.OldPath ?? string.Empty),
-                change.NewFile ? ChangeType.Add :
-                change.DeletedFile ? ChangeType.Delete :
-                change.RenamedFile ? ChangeType.Rename : ChangeType.Edit))
-            .ToList()
-            .AsReadOnly();
+                return payload.Changes
+                    .Select(change => new ChangedFileSummary(
+                        this.NormalizePath(change.NewPath ?? change.OldPath ?? string.Empty),
+                        change.NewFile ? ChangeType.Add :
+                        change.DeletedFile ? ChangeType.Delete :
+                        change.RenamedFile ? ChangeType.Rename : ChangeType.Edit))
+                    .ToList()
+                    .AsReadOnly();
+            },
+            files => $"operation=gitlab_changed_files;count={files.Count}");
     }
 
     protected override async Task<IReadOnlyList<string>> LoadFileTreeAsync(
         string normalizedBranch,
         CancellationToken ct)
     {
-        var context = await this.VerifyAsync(ct);
-        using var request = GitLabConnectionVerifier.CreateAuthenticatedRequest(
-            GitLabConnectionVerifier.BuildApiUri(
-                this._host,
-                $"/projects/{Uri.EscapeDataString(this._repositoryId)}/repository/tree",
-                $"recursive=true&per_page=100&ref={Uri.EscapeDataString(normalizedBranch)}"),
-            context.Connection.Secret);
-        using var response = await this._httpClientFactory.CreateClient("GitLabProvider").SendAsync(request, ct);
-        if (!response.IsSuccessStatusCode)
-        {
-            throw new InvalidOperationException($"GitLab tree lookup failed with status {(int)response.StatusCode}.");
-        }
+        return await ToolTimingCollectorContext.RecordAsync(
+            ProtocolEventToolPhaseNames.ProviderApiCall,
+            "Provider API call",
+            async () =>
+            {
+                var context = await this.VerifyAsync(ct);
+                using var request = GitLabConnectionVerifier.CreateAuthenticatedRequest(
+                    GitLabConnectionVerifier.BuildApiUri(
+                        this._host,
+                        $"/projects/{Uri.EscapeDataString(this._repositoryId)}/repository/tree",
+                        $"recursive=true&per_page=100&ref={Uri.EscapeDataString(normalizedBranch)}"),
+                    context.Connection.Secret);
+                using var response = await this._httpClientFactory.CreateClient("GitLabProvider").SendAsync(request, ct);
+                if (!response.IsSuccessStatusCode)
+                {
+                    throw new InvalidOperationException($"GitLab tree lookup failed with status {(int)response.StatusCode}.");
+                }
 
-        var payload = await response.Content.ReadFromJsonAsync<IReadOnlyList<GitLabTreeEntryResponse>>(ct)
-                      ?? [];
+                var payload = await response.Content.ReadFromJsonAsync<IReadOnlyList<GitLabTreeEntryResponse>>(ct)
+                              ?? [];
 
-        return payload
-            .Where(entry => string.Equals(entry.Type, "blob", StringComparison.OrdinalIgnoreCase))
-            .Select(entry => this.NormalizePath(entry.Path ?? string.Empty))
-            .Where(path => !string.IsNullOrWhiteSpace(path))
-            .ToList()
-            .AsReadOnly();
+                return payload
+                    .Where(entry => string.Equals(entry.Type, "blob", StringComparison.OrdinalIgnoreCase))
+                    .Select(entry => this.NormalizePath(entry.Path ?? string.Empty))
+                    .Where(path => !string.IsNullOrWhiteSpace(path))
+                    .ToList()
+                    .AsReadOnly();
+            },
+            paths => $"operation=gitlab_tree;branch={normalizedBranch};count={paths.Count}");
     }
 
     protected internal override async Task<string?> FetchRawFileContentAsync(
@@ -108,25 +123,34 @@ internal sealed class GitLabReviewContextTools(
         string normalizedBranch,
         CancellationToken ct)
     {
-        var context = await this.VerifyAsync(ct);
-        using var request = GitLabConnectionVerifier.CreateAuthenticatedRequest(
-            GitLabConnectionVerifier.BuildApiUri(
-                this._host,
-                $"/projects/{Uri.EscapeDataString(this._repositoryId)}/repository/files/{Uri.EscapeDataString(normalizedPath)}/raw",
-                $"ref={Uri.EscapeDataString(normalizedBranch)}"),
-            context.Connection.Secret);
-        using var response = await this._httpClientFactory.CreateClient("GitLabProvider").SendAsync(request, ct);
-        if (response.StatusCode == HttpStatusCode.NotFound)
-        {
-            return null;
-        }
+        return await ToolTimingCollectorContext.RecordAsync(
+            ProtocolEventToolPhaseNames.ProviderApiCall,
+            "Provider API call",
+            async () =>
+            {
+                var context = await this.VerifyAsync(ct);
+                using var request = GitLabConnectionVerifier.CreateAuthenticatedRequest(
+                    GitLabConnectionVerifier.BuildApiUri(
+                        this._host,
+                        $"/projects/{Uri.EscapeDataString(this._repositoryId)}/repository/files/{Uri.EscapeDataString(normalizedPath)}/raw",
+                        $"ref={Uri.EscapeDataString(normalizedBranch)}"),
+                    context.Connection.Secret);
+                using var response = await this._httpClientFactory.CreateClient("GitLabProvider").SendAsync(request, ct);
+                if (response.StatusCode == HttpStatusCode.NotFound)
+                {
+                    return null;
+                }
 
-        if (!response.IsSuccessStatusCode)
-        {
-            throw new InvalidOperationException($"GitLab file lookup failed with status {(int)response.StatusCode}.");
-        }
+                if (!response.IsSuccessStatusCode)
+                {
+                    throw new InvalidOperationException($"GitLab file lookup failed with status {(int)response.StatusCode}.");
+                }
 
-        return await response.Content.ReadAsStringAsync(ct);
+                return await response.Content.ReadAsStringAsync(ct);
+            },
+            content => content is null
+                ? $"operation=gitlab_content;path={normalizedPath};branch={normalizedBranch};missing=true"
+                : $"operation=gitlab_content;path={normalizedPath};branch={normalizedBranch};chars={content.Length}");
     }
 
     private async Task<GitLabConnectionVerifier.GitLabConnectionContext> VerifyAsync(CancellationToken ct)

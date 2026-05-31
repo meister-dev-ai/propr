@@ -2,6 +2,7 @@
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
 using MeisterProPR.Application.Features.Reviewing.Execution.Models;
+using MeisterProPR.Domain.ValueObjects;
 
 namespace MeisterProPR.Infrastructure.Features.Reviewing.Execution;
 
@@ -80,10 +81,14 @@ internal static class RepositoryPathSearchExecutor
         }
 
         var limitations = candidateResolution.Limitations.ToList();
-        var matchingPaths = candidateResolution.Paths
-            .Where(path => PathMatches(path, queryText, matchMode))
-            .Select((path, index) => new PathSearchMatch(path, RepositoryDiscoveryHelpers.InferLanguage(path), index + 1))
-            .ToList();
+        var matchingPaths = ToolTimingCollectorContext.Record(
+            ProtocolEventToolPhaseNames.RepositorySearch,
+            "Repository search",
+            () => candidateResolution.Paths
+                .Where(path => PathMatches(path, queryText, matchMode))
+                .Select((path, index) => new PathSearchMatch(path, RepositoryDiscoveryHelpers.InferLanguage(path), index + 1))
+                .ToList(),
+            paths => $"matches={paths.Count}");
         var truncated = matchingPaths.Count > RepositoryDiscoveryHelpers.MaxReturnedMatches;
         if (truncated)
         {
@@ -109,7 +114,8 @@ internal static class RepositoryPathSearchExecutor
             filters,
             matchingPaths.AsReadOnly(),
             limitations.AsReadOnly(),
-            truncated);
+            truncated,
+            ToolTimingCollectorContext.CaptureSnapshot());
     }
 
     private static string NormalizeMatchMode(string? matchMode)

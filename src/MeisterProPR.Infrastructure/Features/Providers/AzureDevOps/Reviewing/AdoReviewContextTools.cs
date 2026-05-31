@@ -102,26 +102,33 @@ public partial class AdoReviewContextTools : IReviewContextTools, IProCursorAvai
     /// <inheritdoc />
     public async Task<IReadOnlyList<ChangedFileSummary>> GetChangedFilesAsync(CancellationToken ct)
     {
-        var gitClient = await this.GetGitClientAsync(ct);
-        var changeEntries = await AdoPullRequestIterationChangePager.LoadAllAsync(
-            (top, skip, cancellationToken) => gitClient.GetPullRequestIterationChangesAsync(
-                this._projectId,
-                this._repositoryId,
-                this._pullRequestId,
-                this._iterationId,
-                top,
-                skip,
-                cancellationToken: cancellationToken),
-            ct);
+        return await ToolTimingCollectorContext.RecordAsync(
+            ProtocolEventToolPhaseNames.ProviderApiCall,
+            "Provider API call",
+            async () =>
+            {
+                var gitClient = await this.GetGitClientAsync(ct);
+                var changeEntries = await AdoPullRequestIterationChangePager.LoadAllAsync(
+                    (top, skip, cancellationToken) => gitClient.GetPullRequestIterationChangesAsync(
+                        this._projectId,
+                        this._repositoryId,
+                        this._pullRequestId,
+                        this._iterationId,
+                        top,
+                        skip,
+                        cancellationToken: cancellationToken),
+                    ct);
 
-        var summaries = (
-            from change in changeEntries
-            where change.Item?.IsFolder != true
-            let path = change.Item?.Path ?? string.Empty
-            where !string.IsNullOrEmpty(path)
-            select new ChangedFileSummary(path, MapChangeType(change.ChangeType))).ToList();
+                var summaries = (
+                    from change in changeEntries
+                    where change.Item?.IsFolder != true
+                    let path = change.Item?.Path ?? string.Empty
+                    where !string.IsNullOrEmpty(path)
+                    select new ChangedFileSummary(path, MapChangeType(change.ChangeType))).ToList();
 
-        return summaries.AsReadOnly();
+                return summaries.AsReadOnly();
+            },
+            files => $"operation=ado_changed_files;count={files.Count}");
     }
 
     /// <inheritdoc />
@@ -129,7 +136,11 @@ public partial class AdoReviewContextTools : IReviewContextTools, IProCursorAvai
     {
         var normalizedBranch = NormalizeBranchName(this._sourceBranch);
 
-        return await this.FetchFileTreePathsAsync(normalizedBranch, ct);
+        return await ToolTimingCollectorContext.RecordAsync(
+            ProtocolEventToolPhaseNames.ScmFileTreeFetch,
+            "SCM file tree fetch",
+            () => this.FetchFileTreePathsAsync(normalizedBranch, ct),
+            paths => $"branch={normalizedBranch};count={paths.Count}");
     }
 
     /// <inheritdoc />
@@ -153,7 +164,13 @@ public partial class AdoReviewContextTools : IReviewContextTools, IProCursorAvai
             string? rawContent;
             try
             {
-                rawContent = await this.FetchRawFileContentAsync(path, normalizedBranch, ct);
+                rawContent = await ToolTimingCollectorContext.RecordAsync(
+                    ProtocolEventToolPhaseNames.ScmFileContentFetch,
+                    "SCM file content fetch",
+                    () => this.FetchRawFileContentAsync(path, normalizedBranch, ct),
+                    fetched => fetched is null
+                        ? $"path={path};branch={normalizedBranch};missing=true"
+                        : $"path={path};branch={normalizedBranch};chars={fetched.Length}");
             }
             catch
             {
@@ -182,11 +199,18 @@ public partial class AdoReviewContextTools : IReviewContextTools, IProCursorAvai
             return string.Empty;
         }
 
-        var lines = content.Split('\n');
-        var clampedStart = Math.Max(1, startLine);
-        var clampedEnd = Math.Min(lines.Length, endLine);
+        return ToolTimingCollectorContext.Record(
+            ProtocolEventToolPhaseNames.ResultShaping,
+            "Result shaping",
+            () =>
+            {
+                var lines = content.Split('\n');
+                var clampedStart = Math.Max(1, startLine);
+                var clampedEnd = Math.Min(lines.Length, endLine);
 
-        return clampedStart > clampedEnd ? string.Empty : string.Join("\n", lines[(clampedStart - 1)..clampedEnd]);
+                return clampedStart > clampedEnd ? string.Empty : string.Join("\n", lines[(clampedStart - 1)..clampedEnd]);
+            },
+            snippet => $"path={path};chars={snippet.Length};start={startLine};end={endLine}");
     }
 
     public Task<RepositorySearchResult> SearchSourceRepoAsync(string searchTerm, string? fileMask, CancellationToken ct)
@@ -263,7 +287,11 @@ public partial class AdoReviewContextTools : IReviewContextTools, IProCursorAvai
             return RepositoryOverview.CreateBlocked(normalizedBranchSide, RepositorySearchStatuses.InvalidRequest);
         }
 
-        var paths = await this.FetchFileTreePathsAsync(branch, ct);
+        var paths = await ToolTimingCollectorContext.RecordAsync(
+            ProtocolEventToolPhaseNames.ScmFileTreeFetch,
+            "SCM file tree fetch",
+            () => this.FetchFileTreePathsAsync(branch, ct),
+            result => $"branch={branch};count={result.Count}");
         var overview = RepositoryOverviewBuilder.Build(normalizedBranchSide, branch, paths);
         this._repositoryOverviewCache[normalizedBranchSide] = overview;
         return overview;
@@ -289,7 +317,11 @@ public partial class AdoReviewContextTools : IReviewContextTools, IProCursorAvai
             return FileNeighborhood.CreateBlocked(normalizedBranchSide, normalizedPath, RepositorySearchStatuses.InvalidRequest);
         }
 
-        var paths = await this.FetchFileTreePathsAsync(branch, ct);
+        var paths = await ToolTimingCollectorContext.RecordAsync(
+            ProtocolEventToolPhaseNames.ScmFileTreeFetch,
+            "SCM file tree fetch",
+            () => this.FetchFileTreePathsAsync(branch, ct),
+            result => $"branch={branch};count={result.Count}");
         var neighborhood = FileNeighborhoodBuilder.Build(normalizedBranchSide, branch, normalizedPath, paths);
         this._fileNeighborhoodCache[cacheKey] = neighborhood;
         return neighborhood;
@@ -308,17 +340,21 @@ public partial class AdoReviewContextTools : IReviewContextTools, IProCursorAvai
 
         try
         {
-            return await this._proCursorGateway.AskKnowledgeAsync(
-                new ProCursorKnowledgeQueryRequest(
-                    this._clientId.Value,
-                    question,
-                    this._knowledgeSourceIds,
-                    new ProCursorRepositoryContextDto(
-                        this._organizationUrl,
-                        this._projectId,
-                        this._repositoryId,
-                        NormalizeBranchName(this._sourceBranch))),
-                ct);
+            return await ToolTimingCollectorContext.RecordAsync(
+                ProtocolEventToolPhaseNames.ProviderApiCall,
+                "Provider API call",
+                () => this._proCursorGateway.AskKnowledgeAsync(
+                    new ProCursorKnowledgeQueryRequest(
+                        this._clientId.Value,
+                        question,
+                        this._knowledgeSourceIds,
+                        new ProCursorRepositoryContextDto(
+                            this._organizationUrl,
+                            this._projectId,
+                            this._repositoryId,
+                            NormalizeBranchName(this._sourceBranch))),
+                    ct),
+                result => $"operation=procursor_knowledge;status={result.Status};results={result.Results.Count}");
         }
         catch (ProCursorDependencyUnavailableException ex)
         {
@@ -347,19 +383,23 @@ public partial class AdoReviewContextTools : IReviewContextTools, IProCursorAvai
 
         try
         {
-            return await this._proCursorGateway.GetSymbolInsightAsync(
-                new ProCursorSymbolQueryRequest(
-                    this._clientId.Value,
-                    symbol,
-                    string.IsNullOrWhiteSpace(queryMode) ? "name" : queryMode.Trim(),
-                    StateMode: "reviewTarget",
-                    ReviewContext: new ProCursorReviewContextDto(
-                        this._repositoryId,
-                        NormalizeBranchName(this._sourceBranch),
-                        this._pullRequestId,
-                        this._iterationId),
-                    MaxRelations: maxRelations),
-                ct);
+            return await ToolTimingCollectorContext.RecordAsync(
+                ProtocolEventToolPhaseNames.ProviderApiCall,
+                "Provider API call",
+                () => this._proCursorGateway.GetSymbolInsightAsync(
+                    new ProCursorSymbolQueryRequest(
+                        this._clientId.Value,
+                        symbol,
+                        string.IsNullOrWhiteSpace(queryMode) ? "name" : queryMode.Trim(),
+                        StateMode: "reviewTarget",
+                        ReviewContext: new ProCursorReviewContextDto(
+                            this._repositoryId,
+                            NormalizeBranchName(this._sourceBranch),
+                            this._pullRequestId,
+                            this._iterationId),
+                        MaxRelations: maxRelations),
+                    ct),
+                result => $"operation=procursor_symbol;status={result.Status};has_symbol={result.Symbol is not null}");
         }
         catch (ProCursorDependencyUnavailableException ex)
         {
@@ -378,37 +418,44 @@ public partial class AdoReviewContextTools : IReviewContextTools, IProCursorAvai
         string branch,
         CancellationToken ct)
     {
-        var gitClient = await this.GetGitClientAsync(ct);
+        return await ToolTimingCollectorContext.RecordAsync(
+            ProtocolEventToolPhaseNames.ProviderApiCall,
+            "Provider API call",
+            async () =>
+            {
+                var gitClient = await this.GetGitClientAsync(ct);
 
-        var versionDescriptor = new GitVersionDescriptor
-        {
-            VersionType = GitVersionType.Branch,
-            Version = branch,
-        };
+                var versionDescriptor = new GitVersionDescriptor
+                {
+                    VersionType = GitVersionType.Branch,
+                    Version = branch,
+                };
 
-        List<GitItem>? items;
-        try
-        {
-            items = await gitClient.GetItemsAsync(
-                this._projectId,
-                this._repositoryId,
-                null,
-                VersionControlRecursionType.Full,
-                versionDescriptor: versionDescriptor,
-                cancellationToken: ct);
-        }
-        catch (VssServiceResponseException)
-        {
-            // Branch does not exist in this repository, or the tree cannot be resolved.
-            return [];
-        }
+                List<GitItem>? items;
+                try
+                {
+                    items = await gitClient.GetItemsAsync(
+                        this._projectId,
+                        this._repositoryId,
+                        null,
+                        VersionControlRecursionType.Full,
+                        versionDescriptor: versionDescriptor,
+                        cancellationToken: ct);
+                }
+                catch (VssServiceResponseException)
+                {
+                    // Branch does not exist in this repository, or the tree cannot be resolved.
+                    return [];
+                }
 
-        return (items ?? [])
-            .Where(item => !item.IsFolder)
-            .Select(item => NormalizeRepositoryPath(item.Path ?? string.Empty))
-            .Where(p => !string.IsNullOrEmpty(p))
-            .ToList()
-            .AsReadOnly();
+                return (items ?? [])
+                    .Where(item => !item.IsFolder)
+                    .Select(item => NormalizeRepositoryPath(item.Path ?? string.Empty))
+                    .Where(p => !string.IsNullOrEmpty(p))
+                    .ToList()
+                    .AsReadOnly();
+            },
+            paths => $"operation=ado_tree;branch={branch};count={paths.Count}");
     }
 
     /// <summary>
@@ -423,28 +470,37 @@ public partial class AdoReviewContextTools : IReviewContextTools, IProCursorAvai
         string branch,
         CancellationToken ct)
     {
-        var gitClient = await this.GetGitClientAsync(ct);
-        var item = await gitClient.GetItemAsync(
-            this._projectId,
-            this._repositoryId,
-            path,
-            null, // scopePath
-            null, // recursionLevel
-            null, // includeContentMetadata
-            null, // latestProcessedChange
-            null, // download
-            new GitVersionDescriptor
+        return await ToolTimingCollectorContext.RecordAsync(
+            ProtocolEventToolPhaseNames.ProviderApiCall,
+            "Provider API call",
+            async () =>
             {
-                VersionType = GitVersionType.Branch,
-                Version = branch,
-            },
-            true, // includeContent
-            null, // resolveLfs
-            null, // sanitize
-            null, // userState
-            ct);
+                var gitClient = await this.GetGitClientAsync(ct);
+                var item = await gitClient.GetItemAsync(
+                    this._projectId,
+                    this._repositoryId,
+                    path,
+                    null, // scopePath
+                    null, // recursionLevel
+                    null, // includeContentMetadata
+                    null, // latestProcessedChange
+                    null, // download
+                    new GitVersionDescriptor
+                    {
+                        VersionType = GitVersionType.Branch,
+                        Version = branch,
+                    },
+                    true, // includeContent
+                    null, // resolveLfs
+                    null, // sanitize
+                    null, // userState
+                    ct);
 
-        return item?.Content;
+                return item?.Content;
+            },
+            content => content is null
+                ? $"operation=ado_content;path={path};branch={branch};missing=true"
+                : $"operation=ado_content;path={path};branch={branch};chars={content.Length}");
     }
 
     private Task<RepositorySearchResult> SearchAsync(RepositorySearchRequest request, CancellationToken ct)

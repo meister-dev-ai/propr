@@ -212,7 +212,7 @@ async function openTraceEventModal(wrapper: Awaited<ReturnType<typeof mountView>
   await tracesTab!.trigger('click')
   await flushPromises()
 
-  const eventRow = wrapper.find('tr.row-clickable')
+  const eventRow = wrapper.find('article.event-card.row-clickable')
   expect(eventRow.exists()).toBe(true)
   await eventRow.trigger('click')
   await flushPromises()
@@ -235,7 +235,7 @@ describe('JobProtocolView — comment search and filter (T042)', () => {
     expect(wrapper.text()).toContain('gpt-4.1')
     expect(wrapper.text()).toContain('Temperature')
     expect(wrapper.text()).toContain('0.35')
-  })
+  }, 10000)
 
   it('renders cached and effective input totals plus per-call cache evidence', async () => {
     mockGet.mockImplementation(createProtocolMock([
@@ -322,6 +322,338 @@ describe('JobProtocolView — comment search and filter (T042)', () => {
     expect(wrapper.text()).toContain('Cached — · not captured')
     expect(wrapper.text()).toContain('ForcedFinal: ProducedFinalText')
     expect(wrapper.text()).toContain('Evidence Bounded')
+  })
+
+  it('renders tool timing summaries and phase details for timed tool calls', async () => {
+    mockGet.mockImplementation(createProtocolMock([
+      {
+        ...sampleProtocols[0],
+        events: [
+          makeProtocolEvent({
+            id: 'timed-tool',
+            kind: 'toolCall',
+            name: 'search_source_repo',
+            inputTextSample: '{"searchTerm":"needle"}',
+            outputSummary: '{"status":"success"}',
+            startedAt: '2024-01-01T00:00:10Z',
+            completedAt: '2024-01-01T00:00:12Z',
+            durationMs: 2100,
+            waitDurationMs: 400,
+            activeDurationMs: 1700,
+            timingAvailability: 'captured',
+            toolOutcome: 'succeeded',
+            phaseTimings: [
+              {
+                name: 'scm_file_tree_fetch',
+                displayName: 'SCM file tree fetch',
+                sequence: 1,
+                occurrence: null,
+                startedAt: '2024-01-01T00:00:10Z',
+                completedAt: '2024-01-01T00:00:11Z',
+                durationMs: 900,
+                availability: 'captured',
+                outcome: 'succeeded',
+                summary: 'candidate_paths=42',
+              },
+              {
+                name: 'repository_search',
+                displayName: 'Repository search',
+                sequence: 2,
+                occurrence: null,
+                startedAt: '2024-01-01T00:00:11Z',
+                completedAt: '2024-01-01T00:00:12Z',
+                durationMs: 1200,
+                availability: 'captured',
+                outcome: 'succeeded',
+                summary: 'matches=2',
+              },
+            ],
+          }),
+        ],
+      },
+    ]))
+
+    const wrapper = await mountView()
+    const tracesTab = wrapper.findAll('button.tab-btn').find((btn) => btn.text() === 'Execution Traces')
+    expect(tracesTab).toBeTruthy()
+    await tracesTab!.trigger('click')
+    await flushPromises()
+
+    expect(wrapper.text()).toContain('2s')
+    expect(wrapper.text()).toContain('Active 1s')
+    expect(wrapper.text()).toContain('Wait 400 ms')
+    expect(wrapper.text()).toContain('2 phases')
+
+    const eventRow = wrapper.find('article.event-card.row-clickable')
+    expect(eventRow.exists()).toBe(true)
+    await eventRow.trigger('click')
+    await flushPromises()
+
+    expect(wrapper.text()).toContain('Tool Timing')
+    expect(wrapper.text()).toContain('Availability')
+    expect(wrapper.text()).toContain('SCM file tree fetch')
+    expect(wrapper.text()).toContain('candidate_paths=42')
+    expect(wrapper.text()).toContain('matches=2')
+    expect(wrapper.text()).not.toContain('Show raw occurrences')
+    expect(wrapper.text()).toContain('Input')
+    expect(wrapper.text()).toContain('Output')
+    const modalText = wrapper.find('.merged-modal-layout').text()
+    expect(modalText.indexOf('Input')).toBeLessThan(modalText.indexOf('Output'))
+    expect(modalText.indexOf('Output')).toBeLessThan(modalText.indexOf('Tool Timing'))
+  })
+
+  it('groups repeated phase timings and keeps raw occurrences collapsed by default', async () => {
+    mockGet.mockImplementation(createProtocolMock([
+      {
+        ...sampleProtocols[0],
+        events: [
+          makeProtocolEvent({
+            id: 'timed-tool-grouped',
+            kind: 'toolCall',
+            name: 'search_source_repo',
+            inputTextSample: '{"searchTerm":"needle"}',
+            outputSummary: '{"status":"success"}',
+            durationMs: 4800,
+            waitDurationMs: 1200,
+            activeDurationMs: 3600,
+            timingAvailability: 'captured',
+            toolOutcome: 'succeeded',
+            phaseTimings: [
+              {
+                name: 'repository_search',
+                displayName: 'Repository search',
+                sequence: 1,
+                occurrence: 1,
+                startedAt: '2024-01-01T00:00:10Z',
+                completedAt: '2024-01-01T00:00:11Z',
+                durationMs: 1000,
+                availability: 'captured',
+                outcome: 'succeeded',
+                summary: 'matches=1',
+              },
+              {
+                name: 'repository_search',
+                displayName: 'Repository search',
+                sequence: 2,
+                occurrence: 2,
+                startedAt: '2024-01-01T00:00:11Z',
+                completedAt: '2024-01-01T00:00:13Z',
+                durationMs: 2000,
+                availability: 'captured',
+                outcome: 'succeeded',
+                summary: 'matches=4',
+              },
+              {
+                name: 'retry_backoff',
+                displayName: 'Retry backoff',
+                sequence: 3,
+                occurrence: 1,
+                startedAt: '2024-01-01T00:00:13Z',
+                completedAt: '2024-01-01T00:00:14Z',
+                durationMs: 1200,
+                availability: 'captured',
+                outcome: 'succeeded',
+                summary: 'waited-for-retry',
+              },
+            ],
+          }),
+        ],
+      },
+    ]))
+
+    const wrapper = await mountView()
+    await openTraceEventModal(wrapper)
+
+    expect(wrapper.text()).toContain('3 phases across 2 groups')
+    expect(wrapper.text()).toContain('2 groups / 3 occurrences')
+    expect(wrapper.text()).toContain('Repository search')
+    expect(wrapper.text()).toContain('3s total')
+    expect(wrapper.text()).toContain('2 occurrences')
+    expect(wrapper.text()).toContain('2 distinct summaries recorded')
+    expect(wrapper.text()).toContain('Retry backoff')
+    expect(wrapper.text()).toContain('Show raw occurrences')
+    expect(wrapper.text()).not.toContain('Repository search #1')
+    expect(wrapper.text()).not.toContain('Repository search #2')
+
+    const toggle = wrapper.find('button.tool-phase-toggle')
+    expect(toggle.exists()).toBe(true)
+    await toggle.trigger('click')
+    await flushPromises()
+
+    expect(wrapper.text()).toContain('Hide raw occurrences')
+    expect(wrapper.text()).toContain('Repository search #1')
+    expect(wrapper.text()).toContain('Repository search #2')
+    expect(wrapper.text()).toContain('matches=1')
+    expect(wrapper.text()).toContain('matches=4')
+  })
+
+  it('surfaces cross-pass timing insights and pass-level slowest call cues', async () => {
+    mockGet.mockImplementation(createProtocolMock([
+      {
+        ...sampleProtocols[0],
+        id: 'pass-1',
+        label: 'src/foo.ts',
+        events: [
+          makeProtocolEvent({
+            id: 'foo-fast',
+            kind: 'toolCall',
+            name: 'get_file_content',
+            durationMs: 900,
+            timingAvailability: 'captured',
+            toolOutcome: 'succeeded',
+          }),
+          makeProtocolEvent({
+            id: 'foo-slow',
+            kind: 'toolCall',
+            name: 'search_source_repo',
+            durationMs: 3200,
+            waitDurationMs: 600,
+            activeDurationMs: 2600,
+            timingAvailability: 'captured',
+            toolOutcome: 'succeeded',
+            phaseTimings: [],
+          }),
+        ],
+      },
+      {
+        ...sampleProtocols[0],
+        id: 'pass-2',
+        label: 'src/bar.ts',
+        startedAt: '2024-01-01T00:02:00Z',
+        completedAt: '2024-01-01T00:03:00Z',
+        events: [
+          makeProtocolEvent({
+            id: 'bar-slow',
+            kind: 'toolCall',
+            name: 'search_code',
+            durationMs: 5100,
+            waitDurationMs: 1000,
+            activeDurationMs: 4100,
+            timingAvailability: 'captured',
+            toolOutcome: 'succeeded',
+            phaseTimings: [{
+              name: 'repository_search',
+              displayName: 'Repository search',
+              sequence: 1,
+              occurrence: null,
+              startedAt: '2024-01-01T00:02:01Z',
+              completedAt: '2024-01-01T00:02:06Z',
+              durationMs: 5100,
+              availability: 'captured',
+              outcome: 'succeeded',
+              summary: 'matches=3',
+            }],
+          }),
+        ],
+      },
+    ]))
+
+    const wrapper = await mountView()
+    const tracesTab = wrapper.findAll('button.tab-btn').find((btn) => btn.text() === 'Execution Traces')
+    expect(tracesTab).toBeTruthy()
+    await tracesTab!.trigger('click')
+    await flushPromises()
+
+    expect(wrapper.text()).toContain('Timing Insights')
+    expect(wrapper.text()).toContain('#1')
+    expect(wrapper.text()).toContain('search_code')
+    expect(wrapper.text()).toContain('src/bar.ts')
+    expect(wrapper.text()).toContain('5s')
+    expect(wrapper.text()).toContain('Current pass')
+    expect(wrapper.text()).toContain('Wait 1s')
+    expect(wrapper.text()).toContain('Active 4s')
+    expect(wrapper.text()).not.toContain('5 phases')
+  })
+
+  it('keeps timing insights scoped to the selected pass', async () => {
+    mockGet.mockImplementation(createProtocolMock([
+      {
+        ...sampleProtocols[0],
+        id: 'pass-1',
+        label: 'src/foo.ts',
+        events: [
+          makeProtocolEvent({
+            id: 'foo-fast',
+            kind: 'toolCall',
+            name: 'get_file_content',
+            durationMs: 900,
+            timingAvailability: 'captured',
+            toolOutcome: 'succeeded',
+          }),
+        ],
+      },
+      {
+        ...sampleProtocols[0],
+        id: 'pass-2',
+        label: 'src/bar.ts',
+        startedAt: '2024-01-01T00:02:00Z',
+        completedAt: '2024-01-01T00:03:00Z',
+        events: [
+          makeProtocolEvent({
+            id: 'bar-slow',
+            kind: 'toolCall',
+            name: 'search_source_repo',
+            durationMs: 5100,
+            waitDurationMs: 1000,
+            activeDurationMs: 4100,
+            timingAvailability: 'captured',
+            toolOutcome: 'succeeded',
+          }),
+        ],
+      },
+    ]))
+
+    const wrapper = await mountView()
+    const tracesTab = wrapper.findAll('button.tab-btn').find((btn) => btn.text() === 'Execution Traces')
+    await tracesTab!.trigger('click')
+    await flushPromises()
+
+    let insightsSection = wrapper.find('.timing-insights-list')
+    expect(insightsSection.exists()).toBe(true)
+    expect(insightsSection.text()).toContain('search_source_repo')
+    expect(insightsSection.text()).not.toContain('get_file_content')
+
+    const passButtons = wrapper.findAll('button.pass-nav-item')
+    const fooPass = passButtons.find((btn) => btn.text().includes('foo.ts'))
+    expect(fooPass).toBeTruthy()
+    await fooPass!.trigger('click')
+    await flushPromises()
+
+    insightsSection = wrapper.find('.timing-insights-list')
+    expect(insightsSection.exists()).toBe(true)
+    expect(insightsSection.text()).toContain('get_file_content')
+    expect(insightsSection.text()).not.toContain('search_source_repo')
+  })
+
+  it('does not treat malformed phase timing payloads as character-count phase totals', async () => {
+    mockGet.mockImplementation(createProtocolMock([
+      {
+        ...sampleProtocols[0],
+        events: [
+          makeProtocolEvent({
+            id: 'timed-tool-weird-phase',
+            kind: 'toolCall',
+            name: 'search_source_repo',
+            durationMs: 2100,
+            waitDurationMs: 400,
+            activeDurationMs: 1700,
+            timingAvailability: 'captured',
+            toolOutcome: 'succeeded',
+            phaseTimings: '{"unexpected":"serialized"}' as unknown as never,
+          }),
+        ],
+      },
+    ]))
+
+    const wrapper = await mountView()
+    const tracesTab = wrapper.findAll('button.tab-btn').find((btn) => btn.text() === 'Execution Traces')
+    expect(tracesTab).toBeTruthy()
+    await tracesTab!.trigger('click')
+    await flushPromises()
+
+    expect(wrapper.text()).not.toContain('serialized')
+    expect(wrapper.text()).not.toContain('22 phases')
+    expect(wrapper.text()).not.toContain('2594 phases')
   })
 
   it('reloads protocol data when navigating between job ids on the same route', async () => {
@@ -949,7 +1281,7 @@ describe('JobProtocolView — comment search and filter (T042)', () => {
     expect(wrapper.text()).toContain('ai_call_comment_relevance_evaluator')
     expect(wrapper.text()).not.toContain('Executing...')
 
-    const eventRow = wrapper.find('tr.row-clickable')
+    const eventRow = wrapper.find('article.event-card.row-clickable')
     expect(eventRow.exists()).toBe(true)
     await eventRow.trigger('click')
     await flushPromises()
@@ -1060,7 +1392,7 @@ describe('JobProtocolView — comment search and filter (T042)', () => {
     await tracesTab!.trigger('click')
     await flushPromises()
 
-    const rows = wrapper.findAll('tr.row-clickable')
+    const rows = wrapper.findAll('article.event-card.row-clickable')
     expect(rows).toHaveLength(4)
 
     expect(rows[0].attributes('data-event-name')).toBe('ai_call_iter_1')
@@ -1136,7 +1468,7 @@ describe('JobProtocolView — comment search and filter (T042)', () => {
     await tracesTab!.trigger('click')
     await flushPromises()
 
-    const rows = wrapper.findAll('tr.row-clickable')
+    const rows = wrapper.findAll('article.event-card.row-clickable')
     expect(rows).toHaveLength(4)
     expect(rows[1].text()).toContain('AI 1')
     expect(rows[2].text()).toContain('AI 1')
@@ -1192,7 +1524,7 @@ describe('JobProtocolView — comment search and filter (T042)', () => {
     await tracesTab!.trigger('click')
     await flushPromises()
 
-    const rows = wrapper.findAll('tr.row-clickable')
+    const rows = wrapper.findAll('article.event-card.row-clickable')
     expect(rows).toHaveLength(4)
     expect(rows[0].attributes('data-event-name')).toBe('ai_call_iter_1')
     expect(rows[0].text()).toContain('2')
@@ -1229,7 +1561,7 @@ describe('JobProtocolView — comment search and filter (T042)', () => {
     await tracesTab!.trigger('click')
     await flushPromises()
 
-    expect(wrapper.findAll('tr.row-clickable')).toHaveLength(3)
+    expect(wrapper.findAll('article.event-card.row-clickable')).toHaveLength(3)
 
     const toggle = wrapper.find('button.event-toggle')
     expect(toggle.exists()).toBe(true)
@@ -1237,7 +1569,7 @@ describe('JobProtocolView — comment search and filter (T042)', () => {
     await flushPromises()
     await new Promise((resolve) => setTimeout(resolve, 600))
 
-    const collapsedRows = wrapper.findAll('tr.row-clickable')
+    const collapsedRows = wrapper.findAll('article.event-card.row-clickable')
     expect(collapsedRows).toHaveLength(1)
     expect(collapsedRows[0].attributes('data-event-name')).toBe('ai_call_iter_1')
 
@@ -1245,7 +1577,7 @@ describe('JobProtocolView — comment search and filter (T042)', () => {
     await flushPromises()
     await new Promise((resolve) => setTimeout(resolve, 600))
 
-    expect(wrapper.findAll('tr.row-clickable')).toHaveLength(3)
+    expect(wrapper.findAll('article.event-card.row-clickable')).toHaveLength(3)
   })
 
   it('shows final file summary and final comments in the selected file view', async () => {

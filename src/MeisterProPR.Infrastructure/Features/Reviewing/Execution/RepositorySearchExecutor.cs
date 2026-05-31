@@ -4,6 +4,7 @@
 using System.Text;
 using System.Text.RegularExpressions;
 using MeisterProPR.Application.Features.Reviewing.Execution.Models;
+using MeisterProPR.Domain.ValueObjects;
 
 namespace MeisterProPR.Infrastructure.Features.Reviewing.Execution;
 
@@ -43,7 +44,10 @@ internal static class RepositorySearchExecutor
         Regex regex;
         try
         {
-            regex = new Regex(searchTerm, RegexOptions.CultureInvariant);
+            regex = ToolTimingCollectorContext.Record(
+                ProtocolEventToolPhaseNames.RequestPreparation,
+                "Request preparation",
+                () => new Regex(searchTerm, RegexOptions.CultureInvariant));
         }
         catch (ArgumentException ex)
         {
@@ -100,7 +104,11 @@ internal static class RepositorySearchExecutor
             string? content;
             try
             {
-                content = await fetchRawFileContentAsync(candidatePath, branch, ct);
+                content = await ToolTimingCollectorContext.RecordAsync(
+                    ProtocolEventToolPhaseNames.ScmFileContentFetch,
+                    "SCM file content fetch",
+                    () => fetchRawFileContentAsync(candidatePath, branch, ct),
+                    fetched => fetched is null ? $"file={candidatePath};missing=true" : $"file={candidatePath};chars={fetched.Length}");
             }
             catch (Exception ex)
             {
@@ -128,35 +136,53 @@ internal static class RepositorySearchExecutor
             }
 
             var lines = content.Split('\n');
-            for (var i = 0; i < lines.Length; i++)
+            var searchTerminated = ToolTimingCollectorContext.Record(
+                ProtocolEventToolPhaseNames.RepositorySearch,
+                "Repository search",
+                () =>
+                {
+                    for (var i = 0; i < lines.Length; i++)
+                    {
+                        if (!regex.IsMatch(lines[i]))
+                        {
+                            continue;
+                        }
+
+                        matches.Add(new RepositorySearchMatch(candidatePath, i + 1, lines[i].TrimEnd('\r')));
+                        if (matches.Count < RepositoryDiscoveryHelpers.MaxReturnedMatches)
+                        {
+                            continue;
+                        }
+
+                        truncated = HasMoreMatches(regex, lines, i + 1) || HasMoreCandidates(candidatePaths, candidatePath);
+                        if (truncated)
+                        {
+                            limitations.Add(
+                                new RepositorySearchLimitation(
+                                    null,
+                                    RepositorySearchLimitationReasons.ResultTruncated,
+                                    $"Only the first {RepositoryDiscoveryHelpers.MaxReturnedMatches} matches were returned."));
+                        }
+
+                        return true;
+                    }
+
+                    return false;
+                },
+                terminated => $"file={candidatePath};matches={matches.Count};terminated={terminated}");
+
+            if (searchTerminated)
             {
-                if (!regex.IsMatch(lines[i]))
-                {
-                    continue;
-                }
-
-                matches.Add(new RepositorySearchMatch(candidatePath, i + 1, lines[i].TrimEnd('\r')));
-                if (matches.Count < RepositoryDiscoveryHelpers.MaxReturnedMatches)
-                {
-                    continue;
-                }
-
-                truncated = HasMoreMatches(regex, lines, i + 1) || HasMoreCandidates(candidatePaths, candidatePath);
-                if (truncated)
-                {
-                    limitations.Add(
-                        new RepositorySearchLimitation(
-                            null,
-                            RepositorySearchLimitationReasons.ResultTruncated,
-                            $"Only the first {RepositoryDiscoveryHelpers.MaxReturnedMatches} matches were returned."));
-                }
-
                 goto Complete;
             }
         }
 
         Complete:
-        var status = ResolveStatus(matches.Count, limitations.Count, truncated);
+        var status = ToolTimingCollectorContext.Record(
+            ProtocolEventToolPhaseNames.ResultShaping,
+            "Result shaping",
+            () => ResolveStatus(matches.Count, limitations.Count, truncated),
+            resolved => $"matches={matches.Count};limitations={limitations.Count};status={resolved}");
         return new RepositorySearchResult(
             status,
             request.BranchSide,
@@ -164,7 +190,8 @@ internal static class RepositorySearchExecutor
             fileMask,
             matches.AsReadOnly(),
             limitations.AsReadOnly(),
-            truncated);
+            truncated,
+            ToolTimingCollectorContext.CaptureSnapshot());
     }
 
     private static string ResolveStatus(int matchCount, int limitationCount, bool truncated)

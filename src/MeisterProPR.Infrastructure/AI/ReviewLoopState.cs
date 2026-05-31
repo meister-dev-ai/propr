@@ -67,9 +67,33 @@ internal sealed class ReviewLoopState
     /// <param name="toolName">Name of the tool called.</param>
     /// <param name="arguments">Serialised arguments passed to the tool.</param>
     /// <param name="result">Serialised result returned by the tool.</param>
-    public void RecordToolCall(string toolName, string arguments, string result)
+    public void RecordToolCall(
+        string toolName,
+        string arguments,
+        string result,
+        DateTimeOffset? startedAt = null,
+        DateTimeOffset? completedAt = null,
+        long? durationMs = null,
+        long? waitDurationMs = null,
+        long? activeDurationMs = null,
+        string? timingAvailability = null,
+        string? outcome = null,
+        IReadOnlyList<ProtocolEventPhaseTiming>? phaseTimings = null)
     {
-        this.ToolCallHistory.Add(new ReviewToolCall(toolName, arguments, result, DateTimeOffset.UtcNow));
+        this.ToolCallHistory.Add(
+            new ReviewToolCall(
+                toolName,
+                arguments,
+                result,
+                startedAt ?? DateTimeOffset.UtcNow,
+                startedAt,
+                completedAt,
+                durationMs,
+                waitDurationMs,
+                activeDurationMs,
+                timingAvailability,
+                outcome,
+                phaseTimings));
         this.ToolCallCount++;
     }
 

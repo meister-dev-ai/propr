@@ -2,6 +2,7 @@
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
 using MeisterProPR.Domain.Enums;
+using MeisterProPR.Domain.ValueObjects;
 
 namespace MeisterProPR.Domain.Entities;
 
@@ -72,6 +73,30 @@ public sealed class ProtocolEvent
 
     /// <summary>Truncated sample of the input text sent (max 4,000 characters). <see langword="null" /> when not applicable.</summary>
     public string? InputTextSample { get; init; }
+
+    /// <summary>UTC timestamp at which a tool call started when captured.</summary>
+    public DateTimeOffset? StartedAt { get; init; }
+
+    /// <summary>UTC timestamp at which a tool call completed when captured.</summary>
+    public DateTimeOffset? CompletedAt { get; init; }
+
+    /// <summary>Total elapsed duration of a tool call in milliseconds.</summary>
+    public long? DurationMs { get; init; }
+
+    /// <summary>Measured wait or backoff duration in milliseconds when available.</summary>
+    public long? WaitDurationMs { get; init; }
+
+    /// <summary>Measured active execution duration in milliseconds when available.</summary>
+    public long? ActiveDurationMs { get; init; }
+
+    /// <summary>Availability state for the timing fields projected for this event.</summary>
+    public string? TimingAvailability { get; init; }
+
+    /// <summary>Tool-call outcome state projected for this event.</summary>
+    public string? ToolOutcome { get; init; }
+
+    /// <summary>Optional ordered phase timings captured within a tool invocation.</summary>
+    public IReadOnlyList<ProtocolEventPhaseTiming>? PhaseTimings { get; init; }
 
     /// <summary>Truncated system prompt used for this AI call (max 4,000 characters). <see langword="null" /> when not applicable.</summary>
     public string? SystemPrompt { get; init; }

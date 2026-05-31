@@ -274,6 +274,38 @@
                             <div><dt>Strategy</dt><dd>{{ activePassReviewStrategyDisplay }}</dd></div>
                         </dl>
 
+                        <section v-if="traceTimingInsights.length" class="pass-file-outcome-section">
+                            <div class="pass-final-result-header">
+                                <h4>Timing Insights</h4>
+                                <span class="chip chip-muted">Current pass</span>
+                            </div>
+
+                            <ol class="timing-insights-list" aria-label="Slowest visible tool calls">
+                                <li
+                                    v-for="insight in traceTimingInsights"
+                                    :key="insight.eventId"
+                                >
+                                    <button
+                                        type="button"
+                                        class="timing-insight-row"
+                                        @click="openTimingInsight(insight)"
+                                    >
+                                        <span class="timing-insight-rank">#{{ insight.rank }}</span>
+                                        <span class="timing-insight-tool">{{ insight.toolName }}</span>
+                                        <span class="timing-insight-context">{{ insight.passLabel }}</span>
+                                        <span class="timing-insight-duration">{{ formatDurationWithMs(insight.durationMs) }}</span>
+                                        <span class="timing-insight-meta">
+                                            <template v-if="insight.waitDurationMs != null || insight.activeDurationMs != null">
+                                                <span v-if="insight.waitDurationMs != null">Wait {{ formatDurationWithMs(insight.waitDurationMs) }}</span>
+                                                <span v-if="insight.activeDurationMs != null">Active {{ formatDurationWithMs(insight.activeDurationMs) }}</span>
+                                            </template>
+                                            <span v-else-if="insight.hasPhaseDetail">Phase detail available</span>
+                                        </span>
+                                    </button>
+                                </li>
+                            </ol>
+                        </section>
+
                         <section v-if="activePassInheritance" class="pass-file-outcome-section">
                             <div class="pass-final-result-header">
                                 <h4>Inheritance</h4>
@@ -388,78 +420,100 @@
                         <section class="events-section">
                             <h4>Events ({{ activePassEventRows.length }})</h4>
                             <p v-if="!activePass.events?.length" class="empty-state">{{ emptyPassMessage(activePass) }}</p>
-                            <table v-else class="events-table">
-                                <thead>
-                                    <tr>
-                                        <th>Time</th>
-                                        <th>Kind</th>
-                                        <th>Name</th>
-                                        <th>Input Tokens</th>
-                                        <th>Output Tokens</th>
-                                        <th>Error</th>
-                                    </tr>
-                                </thead>
-                                <TransitionGroup name="list" tag="tbody">
-                                    <tr
-                                        v-for="row in activePassEventRows"
-                                        :key="row.id"
-                                        class="row-clickable"
-                                        :class="{
-                                            'row-error': !!row.merged.callDetails.error || !!row.merged.resultDetails?.error,
-                                            'row-processing': isMergedEventProcessing(row.merged),
-                                            'row-child': row.depth > 0
-                                        }"
-                                        :data-event-name="row.merged.name"
-                                        :data-event-depth="row.depth"
-                                        :data-parent-event-id="row.parentId ?? ''"
-                                        @click="openMergedModal(row.merged)"
-                                    >
-                                        <td class="date-cell">{{ formatDate(row.merged.time) }}</td>
-                                        <td class="kind-cell" :class="{ 'kind-cell--child': row.isToolChild }">
-                                            <div class="kind-cell-stack">
-                                                <span class="kind-badge" :class="kindBadgeClass(row.merged.callDetails.kind)">{{ row.merged.callDetails.kind ?? 'unknown' }}</span>
-                                                <span v-if="row.isToolChild && row.parentName" class="kind-parent-pill">{{ parentIterationLabel(row.parentName) }}</span>
+                            <TransitionGroup v-else name="list" tag="div" class="events-list">
+                                <article
+                                    v-for="row in activePassEventRows"
+                                    :key="row.id"
+                                    class="event-card row-clickable"
+                                    :class="{
+                                        'row-error': !!row.merged.callDetails.error || !!row.merged.resultDetails?.error,
+                                        'row-processing': isMergedEventProcessing(row.merged),
+                                        'row-child': row.depth > 0
+                                    }"
+                                    :data-event-name="row.merged.name"
+                                    :data-event-depth="row.depth"
+                                    :data-parent-event-id="row.parentId ?? ''"
+                                    @click="openMergedModal(row.merged)"
+                                >
+                                    <div v-if="row.isToolChild" class="event-child-gutter" aria-hidden="true">
+                                        <span class="event-child-rail"></span>
+                                    </div>
+                                    <div class="event-card-main">
+                                        <div class="event-card-header">
+                                            <div class="event-card-meta-row">
+                                                <div class="event-card-kind-group" :class="{ 'kind-cell--child': row.isToolChild }">
+                                                    <span class="kind-badge" :class="kindBadgeClass(row.merged.callDetails.kind)">{{ row.merged.callDetails.kind ?? 'unknown' }}</span>
+                                                    <span v-if="row.isToolChild && row.parentName" class="kind-parent-pill">{{ parentIterationLabel(row.parentName) }}</span>
+                                                    <span v-if="isMergedEventProcessing(row.merged)" class="status-badge status-processing">Executing...</span>
+                                                </div>
+                                                <span class="date-cell">{{ formatDate(row.merged.time) }}</span>
                                             </div>
-                                        </td>
-                                        <td class="name-cell" :class="{ 'tool-name': row.merged.callDetails.kind === 'toolCall', 'ai-name': row.merged.callDetails.kind === 'aiCall', 'memory-name': row.merged.callDetails.kind === 'memoryOperation', 'operational-name': row.merged.callDetails.kind === 'operational' }">
-                                            <div class="event-name-stack">
-                                                <div class="event-name-content" :class="{ 'event-name-content--child': row.depth > 0 }">
-                                                    <button
-                                                        v-if="row.childCount > 0"
-                                                        class="event-toggle"
-                                                        :aria-label="row.isExpanded ? 'Collapse child tool calls' : 'Expand child tool calls'"
-                                                        @click.stop="toggleEventParent(row.id)"
-                                                    >
-                                                        <span class="event-toggle-icon" aria-hidden="true">
-                                                            <i class="fi fi-rr-angle-small-down event-toggle-chevron" :class="{ 'event-toggle-chevron--collapsed': !row.isExpanded }"></i>
-                                                        </span>
-                                                        <span class="event-toggle-count">{{ row.childCount }}</span>
-                                                    </button>
-                                                    <span v-else-if="row.isToolChild" class="event-child-rail" aria-hidden="true"></span>
+
+                                            <div class="event-card-title-row" :class="{ 'event-card-title-row--child': row.depth > 0 }">
+                                                <button
+                                                    v-if="row.childCount > 0"
+                                                    class="event-toggle"
+                                                    :aria-label="row.isExpanded ? 'Collapse child tool calls' : 'Expand child tool calls'"
+                                                    @click.stop="toggleEventParent(row.id)"
+                                                >
+                                                    <span class="event-toggle-icon" aria-hidden="true">
+                                                        <i class="fi fi-rr-angle-small-down event-toggle-chevron" :class="{ 'event-toggle-chevron--collapsed': !row.isExpanded }"></i>
+                                                    </span>
+                                                    <span class="event-toggle-count">{{ row.childCount }}</span>
+                                                </button>
+
+                                                <div class="event-title-stack" :class="{ 'tool-name': row.merged.callDetails.kind === 'toolCall', 'ai-name': row.merged.callDetails.kind === 'aiCall', 'memory-name': row.merged.callDetails.kind === 'memoryOperation', 'operational-name': row.merged.callDetails.kind === 'operational' }">
                                                     <span class="event-name-label">{{ row.merged.name }}</span>
-                                                    <span v-if="isMergedEventProcessing(row.merged)" class="status-badge status-processing" style="margin-left: 0.5rem">Executing...</span>
+                                                    <div v-if="hasToolTiming(row.merged.callDetails)" class="timing-inline-group">
+                                                        <span class="timing-duration">{{ row.timingSummary }}</span>
+                                                        <span v-if="row.timingDetail" class="timing-detail">{{ row.timingDetail }}</span>
+                                                    </div>
                                                 </div>
                                             </div>
-                                        </td>
-                                        <td class="tokens-cell fat-tokens">
-                                            <div>{{ formatTokens(row.merged.callDetails.inputTokens) }}</div>
-                                            <small v-if="row.merged.callDetails.kind === 'aiCall'" class="cache-token-detail">
-                                                Cached {{ formatTokens(row.merged.callDetails.cachedInputTokens) }} · {{ formatCacheStatus(row.merged.callDetails.cacheStatus) }}
-                                            </small>
-                                        </td>
-                                        <td class="tokens-cell fat-tokens">{{ formatTokens(row.merged.callDetails.outputTokens) }}</td>
-                                        <td class="error-cell">
-                                            <span>{{ row.merged.callDetails.error ?? '' }}</span>
-                                            <span v-if="row.merged.callDetails.finalizationAttemptKind" class="status-badge status-processing">
-                                                {{ row.merged.callDetails.finalizationAttemptKind }}: {{ row.merged.callDetails.finalizationOutcome ?? row.merged.callDetails.finalizationReason }}
-                                            </span>
-                                            <span v-if="row.merged.callDetails.toolEvidence" class="status-badge status-processing">
-                                                Evidence {{ row.merged.callDetails.toolEvidence.action }}
-                                            </span>
-                                        </td>
-                                    </tr>
-                                </TransitionGroup>
-                            </table>
+
+                                            <div v-if="hasToolTiming(row.merged.callDetails)" class="timing-badges">
+                                                <span v-if="row.merged.callDetails.timingAvailability" class="status-badge" :class="statusBadgeClass(row.merged.callDetails.timingAvailability)">
+                                                    {{ formatTimingAvailability(row.merged.callDetails.timingAvailability) }}
+                                                </span>
+                                                <span v-if="row.merged.callDetails.toolOutcome" class="status-badge" :class="statusBadgeClass(row.merged.callDetails.toolOutcome)">
+                                                    {{ formatToolOutcome(row.merged.callDetails.toolOutcome) }}
+                                                </span>
+                                            </div>
+                                            <span v-else class="timing-empty">No timing captured</span>
+                                        </div>
+
+                                        <div v-if="hasEventTokens(row.merged.callDetails) || hasEventError(row.merged.callDetails)" class="event-card-secondary">
+                                            <div v-if="hasEventTokens(row.merged.callDetails)" class="event-metric-card event-metric-card--tokens">
+                                                <span class="event-card-label">Input Tokens</span>
+                                                <div class="tokens-cell fat-tokens">
+                                                    <div>{{ formatTokens(row.merged.callDetails.inputTokens) }}</div>
+                                                    <small v-if="row.merged.callDetails.kind === 'aiCall'" class="cache-token-detail">
+                                                        Cached {{ formatTokens(row.merged.callDetails.cachedInputTokens) }} · {{ formatCacheStatus(row.merged.callDetails.cacheStatus) }}
+                                                    </small>
+                                                </div>
+                                            </div>
+
+                                            <div v-if="hasEventTokens(row.merged.callDetails)" class="event-metric-card event-metric-card--tokens">
+                                                <span class="event-card-label">Output Tokens</span>
+                                                <div class="tokens-cell fat-tokens">{{ formatTokens(row.merged.callDetails.outputTokens) }}</div>
+                                            </div>
+
+                                            <div v-if="hasEventError(row.merged.callDetails)" class="event-metric-card event-metric-card--error">
+                                                <span class="event-card-label">Error</span>
+                                                <div class="error-cell">
+                                                    <span v-if="row.merged.callDetails.error">{{ row.merged.callDetails.error }}</span>
+                                                    <span v-if="row.merged.callDetails.finalizationAttemptKind" class="status-badge status-processing">
+                                                        {{ row.merged.callDetails.finalizationAttemptKind }}: {{ row.merged.callDetails.finalizationOutcome ?? row.merged.callDetails.finalizationReason }}
+                                                    </span>
+                                                    <span v-if="row.merged.callDetails.toolEvidence" class="status-badge status-processing">
+                                                        Evidence {{ row.merged.callDetails.toolEvidence.action }}
+                                                    </span>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </article>
+                            </TransitionGroup>
                         </section>
                     </div>
                 </div>
@@ -489,7 +543,8 @@
                 <div v-if="selectedMergedEvent" class="merged-modal-layout">
                     <section class="drawer-section">
                         <h4>Input</h4>
-                        <div v-if="parsedInputResult" class="parsed-json-block">
+                        <template v-if="parsedInputResult">
+                        <div class="parsed-json-block">
                             <template v-if="selectedCommentRelevanceInput">
                                 <div class="json-field">
                                     <span class="json-key">Implementation:</span>
@@ -608,13 +663,10 @@
                             </template>
                             <pre v-else class="content-block">{{ JSON.stringify(parsedInputResult, null, 2) }}</pre>
                         </div>
+                        </template>
                         <pre v-else-if="selectedMergedEvent.callDetails.inputTextSample" class="content-block">{{ selectedMergedEvent.callDetails.inputTextSample }}</pre>
                         <p v-else class="no-content">No input captured.</p>
                     </section>
-
-                    <div class="modal-arrow">
-                        <i class="fi fi-rr-arrow-right"></i>
-                    </div>
 
                     <section class="drawer-section">
                         <div class="drawer-section-header">
@@ -843,6 +895,103 @@
                             <p v-else class="no-content">No output captured for this completed step.</p>
                         </template>
                     </section>
+
+                    <section v-if="hasToolTiming(selectedMergedEvent.callDetails)" class="tool-timing-panel">
+                        <div class="tool-timing-header">
+                            <h4>Tool Timing</h4>
+                            <span v-if="selectedToolPhaseTimings.length" class="tool-phase-overview-chip">
+                                {{ formatPhaseCountSummary(selectedToolPhaseTimings.length, modalPhaseGroups.length || getEventTimingPresentation(selectedMergedEvent.callDetails).phaseGroupCount, true) }}
+                            </span>
+                        </div>
+                        <dl class="tool-timing-grid">
+                            <div>
+                                <dt>Availability</dt>
+                                <dd>{{ formatTimingAvailability(selectedMergedEvent.callDetails.timingAvailability) }}</dd>
+                            </div>
+                            <div v-if="selectedMergedEvent.callDetails.toolOutcome">
+                                <dt>Outcome</dt>
+                                <dd>{{ formatToolOutcome(selectedMergedEvent.callDetails.toolOutcome) }}</dd>
+                            </div>
+                            <div v-if="selectedMergedEvent.callDetails.startedAt">
+                                <dt>Started</dt>
+                                <dd>{{ formatDate(selectedMergedEvent.callDetails.startedAt) }}</dd>
+                            </div>
+                            <div v-if="selectedMergedEvent.callDetails.completedAt">
+                                <dt>Completed</dt>
+                                <dd>{{ formatDate(selectedMergedEvent.callDetails.completedAt) }}</dd>
+                            </div>
+                            <div v-if="selectedMergedEvent.callDetails.durationMs != null">
+                                <dt>Duration</dt>
+                                <dd>{{ formatDurationWithMs(selectedMergedEvent.callDetails.durationMs) }}</dd>
+                            </div>
+                            <div v-if="selectedMergedEvent.callDetails.activeDurationMs != null">
+                                <dt>Active</dt>
+                                <dd>{{ formatDurationWithMs(selectedMergedEvent.callDetails.activeDurationMs) }}</dd>
+                            </div>
+                            <div v-if="selectedMergedEvent.callDetails.waitDurationMs != null">
+                                <dt>Wait</dt>
+                                <dd>{{ formatDurationWithMs(selectedMergedEvent.callDetails.waitDurationMs) }}</dd>
+                            </div>
+                            <div v-if="selectedToolPhaseTimings.length">
+                                <dt>Phases</dt>
+                                <dd>{{ formatPhaseCountSummary(selectedToolPhaseTimings.length, modalPhaseGroups.length || getEventTimingPresentation(selectedMergedEvent.callDetails).phaseGroupCount) }}</dd>
+                            </div>
+                        </dl>
+                        <div v-if="modalPhaseGroupsPending" class="tool-phase-section">
+                            <h5>Phase Breakdown</h5>
+                            <p class="tool-phase-loading">Preparing phase breakdown…</p>
+                        </div>
+                        <div v-else-if="modalPhaseGroups.length" class="tool-phase-section">
+                            <div class="tool-phase-section-header">
+                                <h5>Phase Breakdown</h5>
+                            </div>
+                            <ol class="tool-phase-list">
+                                <li v-for="group in modalPhaseGroups" :key="group.key" class="tool-phase-item">
+                                    <div class="tool-phase-header">
+                                        <div class="tool-phase-title-group">
+                                            <span class="tool-phase-title">{{ group.title }}</span>
+                                            <span v-if="group.count > 1" class="tool-phase-count-pill">{{ group.count }} occurrences</span>
+                                        </div>
+                                        <span class="tool-phase-duration">{{ formatToolPhaseGroupDuration(group) }}</span>
+                                    </div>
+                                    <div class="tool-phase-meta">
+                                        <span>{{ formatTimingAvailability(group.availability) }}</span>
+                                        <span v-if="group.outcome">{{ formatToolOutcome(group.outcome) }}</span>
+                                        <span v-if="group.startedAt">First started {{ formatDate(group.startedAt) }}</span>
+                                        <span v-if="group.completedAt">Last completed {{ formatDate(group.completedAt) }}</span>
+                                    </div>
+                                    <p v-if="group.summary" class="tool-phase-summary">{{ group.summary }}</p>
+                                    <button
+                                        v-if="group.count > 1"
+                                        type="button"
+                                        class="tool-phase-toggle"
+                                        @click="togglePhaseGroup(group.key)"
+                                    >
+                                        {{ isPhaseGroupExpanded(group.key) ? 'Hide raw occurrences' : 'Show raw occurrences' }}
+                                    </button>
+                                    <ol v-if="group.count > 1 && isPhaseGroupExpanded(group.key)" class="tool-phase-occurrence-list">
+                                        <li
+                                            v-for="phase in group.phases"
+                                            :key="`${group.key}:${phase.sequence ?? phase.occurrence ?? formatPhaseTitle(phase)}`"
+                                            class="tool-phase-occurrence-item"
+                                        >
+                                            <div class="tool-phase-header">
+                                                <span class="tool-phase-title">{{ formatPhaseTitle(phase) }}</span>
+                                                <span class="tool-phase-duration">{{ formatPhaseDuration(phase) }}</span>
+                                            </div>
+                                            <div class="tool-phase-meta">
+                                                <span>{{ formatTimingAvailability(phase.availability) }}</span>
+                                                <span v-if="phase.outcome">{{ formatToolOutcome(phase.outcome) }}</span>
+                                                <span v-if="phase.startedAt">Started {{ formatDate(phase.startedAt) }}</span>
+                                                <span v-if="phase.completedAt">Completed {{ formatDate(phase.completedAt) }}</span>
+                                            </div>
+                                            <p v-if="phase.summary" class="tool-phase-summary">{{ phase.summary }}</p>
+                                        </li>
+                                    </ol>
+                                </li>
+                            </ol>
+                        </div>
+                    </section>
                 </div>
             </ModalDialog>
 
@@ -931,7 +1080,7 @@
 </template>
 
 <script lang="ts" setup>
-import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
+import { computed, nextTick, onMounted, onUnmounted, ref, shallowRef, watch } from 'vue'
 import { RouterLink, useRoute } from 'vue-router'
 import { AppTopBar } from '@/components'
 import ModalDialog from '@/components/ModalDialog.vue'
@@ -958,6 +1107,7 @@ import type { components } from '@/services/generated/openapi'
 
 type ReviewJobProtocolDto = components['schemas']['ReviewJobProtocolDto']
 type ProtocolEventDto = components['schemas']['ProtocolEventDto']
+type ProtocolEventPhaseTimingDto = components['schemas']['ProtocolEventPhaseTimingDto']
 type ReviewJobResultDto = components['schemas']['ReviewJobResultDto']
 type ReviewStrategy = components['schemas']['ReviewStrategy']
 type ReviewJobProtocolPassResponse = components['schemas']['ReviewJobProtocolDto']
@@ -1182,10 +1332,44 @@ interface EventDisplayRow {
     isToolChild: boolean
     childCount: number
     isExpanded: boolean
+    timingSummary: string | null
+    timingDetail: string | null
 }
 
 interface PendingToolRow {
     merged: MergedEvent
+}
+
+interface TimingInsight {
+    rank: number
+    protocolId: string | null
+    eventId: string
+    passLabel: string
+    toolName: string
+    durationMs: number
+    waitDurationMs: number | null
+    activeDurationMs: number | null
+    hasPhaseDetail: boolean
+}
+
+interface ToolPhaseGroup {
+    key: string
+    title: string
+    count: number
+    totalDurationMs: number | null
+    availability: string | null
+    outcome: string | null
+    startedAt: string | null
+    completedAt: string | null
+    summary: string | null
+    phases: ProtocolEventPhaseTimingDto[]
+}
+
+interface EventTimingPresentation {
+    phaseTimings: ProtocolEventPhaseTimingDto[]
+    phaseGroupCount: number
+    summary: string | null
+    detail: string | null
 }
 
 type ReviewProtocolPass = ReviewJobProtocolDto & {
@@ -1215,11 +1399,14 @@ type ReviewProtocolPass = ReviewJobProtocolDto & {
 const loading = ref(false)
 const error = ref('')
 const activeTab = ref<'summary' | 'traces' | 'tokens'>('summary')
-const protocols = ref<ReviewProtocolPass[]>([])
+const protocols = shallowRef<ReviewProtocolPass[]>([])
 const loadedProtocolIds = ref<Set<string>>(new Set())
 const loadingProtocolIds = ref<Set<string>>(new Set())
 const activePassId = ref<string | null>(null)
 const selectedMergedEvent = ref<MergedEvent | null>(null)
+const expandedPhaseGroups = ref<Set<string>>(new Set())
+const modalPhaseGroups = shallowRef<ToolPhaseGroup[]>([])
+const modalPhaseGroupsPending = ref(false)
 const reviewStatus = ref<ReviewJobResultDto | null>(null)
 const jobDetail = ref<JobDetail | null>(null)
 const collapsedFolders = ref<Set<string>>(new Set())
@@ -1456,6 +1643,7 @@ const sidebarItems = computed(() => {
                 name: parseFilePath(p.label).filename,
                 depth,
                 protocol: p,
+                slowestToolLabel: slowestToolDurationLabel(p),
                 isLast
             });
         });
@@ -1603,10 +1791,52 @@ watch(activePassId, (protocolId) => {
     }
 
     void ensureProtocolPassLoaded(protocolId)
-})
+}, { flush: 'post' })
 
 const activePassEventRows = computed<EventDisplayRow[]>(() => {
     return buildEventRows(activePass.value?.events)
+})
+
+const traceTimingInsights = computed<TimingInsight[]>(() => {
+    const protocol = activePass.value
+    if (!protocol) {
+        return []
+    }
+
+    const protocolId = protocol.id ?? null
+    const passLabel = protocol.label ?? 'Unknown pass'
+
+    return (protocol.events ?? [])
+        .filter(event => (event.kind ?? '').toLowerCase() === 'toolcall' && event.durationMs != null)
+        .map(event => ({
+            protocolId,
+            eventId: event.id ?? `${protocolId ?? 'protocol'}:${event.name ?? 'tool'}`,
+            passLabel,
+            toolName: event.name ?? 'Unknown tool',
+            durationMs: event.durationMs ?? 0,
+            waitDurationMs: event.waitDurationMs ?? null,
+            activeDurationMs: event.activeDurationMs ?? null,
+            hasPhaseDetail: getPhaseTimings(event).length > 0,
+        }))
+        .sort((left, right) => right.durationMs - left.durationMs)
+        .slice(0, 3)
+        .map((insight, index) => ({
+            rank: index + 1,
+            ...insight,
+        }))
+})
+
+const activePassSlowestToolSummary = computed(() => {
+    const events = (activePass.value?.events ?? [])
+        .filter(event => (event.kind ?? '').toLowerCase() === 'toolcall' && event.durationMs != null)
+        .sort((left, right) => (right.durationMs ?? 0) - (left.durationMs ?? 0))
+
+    const slowest = events[0]
+    if (!slowest || slowest.durationMs == null) {
+        return 'No captured tool timing'
+    }
+
+    return `${slowest.name ?? 'Unknown tool'} (${formatDurationWithMs(slowest.durationMs)})`
 })
 
 const totalInputTokens = computed(() =>
@@ -1766,6 +1996,199 @@ const parsedOutputResult = computed(() => {
         return null;
     }
 });
+
+function getPhaseTimings(event: ProtocolEventDto | null | undefined): ProtocolEventPhaseTimingDto[] {
+    const raw = event?.phaseTimings
+    if (Array.isArray(raw)) {
+        return raw.filter((phase): phase is ProtocolEventPhaseTimingDto => !!phase && typeof phase === 'object')
+    }
+
+    return []
+}
+
+const eventTimingPresentationCache = new WeakMap<ProtocolEventDto, EventTimingPresentation>()
+
+function getPhaseTimingDurationMs(phase: ProtocolEventPhaseTimingDto): number | null {
+    if (phase.durationMs != null) {
+        return phase.durationMs
+    }
+
+    if (phase.startedAt && phase.completedAt) {
+        const duration = new Date(phase.completedAt).getTime() - new Date(phase.startedAt).getTime()
+        if (!Number.isNaN(duration) && duration >= 0) {
+            return duration
+        }
+    }
+
+    return null
+}
+
+function summarizeSharedValue(values: Array<string | null | undefined>): string | null {
+    const distinct = [...new Set(values.filter((value): value is string => !!value && value.trim().length > 0))]
+    if (distinct.length === 0) {
+        return null
+    }
+
+    return distinct.length === 1 ? distinct[0] : 'mixed'
+}
+
+function summarizePhaseGroupSummary(phases: ProtocolEventPhaseTimingDto[]): string | null {
+    const summaries = [...new Set(phases
+        .map(phase => phase.summary?.trim())
+        .filter((summary): summary is string => !!summary))]
+
+    if (summaries.length === 0) {
+        return null
+    }
+
+    if (summaries.length === 1) {
+        return summaries[0]
+    }
+
+    return `${summaries.length} distinct summaries recorded`
+}
+
+function buildToolPhaseGroups(phases: ProtocolEventPhaseTimingDto[]): ToolPhaseGroup[] {
+    const groups = new Map<string, ToolPhaseGroup>()
+
+    for (const phase of phases) {
+        const key = (phase.name ?? phase.displayName ?? 'unnamed-phase').trim().toLowerCase() || 'unnamed-phase'
+        const existing = groups.get(key)
+
+        if (existing) {
+            existing.count += 1
+            existing.phases.push(phase)
+            const durationMs = getPhaseTimingDurationMs(phase)
+            if (durationMs != null) {
+                existing.totalDurationMs = (existing.totalDurationMs ?? 0) + durationMs
+            }
+
+            if (!existing.startedAt || (phase.startedAt && new Date(phase.startedAt).getTime() < new Date(existing.startedAt).getTime())) {
+                existing.startedAt = phase.startedAt ?? existing.startedAt
+            }
+
+            if (!existing.completedAt || (phase.completedAt && new Date(phase.completedAt).getTime() > new Date(existing.completedAt).getTime())) {
+                existing.completedAt = phase.completedAt ?? existing.completedAt
+            }
+
+            existing.availability = summarizeSharedValue(existing.phases.map(entry => entry.availability))
+            existing.outcome = summarizeSharedValue(existing.phases.map(entry => entry.outcome))
+            existing.summary = summarizePhaseGroupSummary(existing.phases)
+            continue
+        }
+
+        const durationMs = getPhaseTimingDurationMs(phase)
+        groups.set(key, {
+            key,
+            title: phase.displayName ?? phase.name ?? 'Unnamed phase',
+            count: 1,
+            totalDurationMs: durationMs,
+            availability: phase.availability ?? null,
+            outcome: phase.outcome ?? null,
+            startedAt: phase.startedAt ?? null,
+            completedAt: phase.completedAt ?? null,
+            summary: phase.summary?.trim() ?? null,
+            phases: [phase],
+        })
+    }
+
+    return [...groups.values()]
+}
+
+function getEventTimingPresentation(event: ProtocolEventDto | null | undefined): EventTimingPresentation {
+    if (!event) {
+        return {
+            phaseTimings: [],
+            phaseGroupCount: 0,
+            summary: null,
+            detail: null,
+        }
+    }
+
+    const cached = eventTimingPresentationCache.get(event)
+    if (cached) {
+        return cached
+    }
+
+    const phaseTimings = getPhaseTimings(event)
+    const phaseGroupCount = phaseTimings.length > 0 ? buildToolPhaseGroups(phaseTimings).length : 0
+
+    let summary: string | null
+    if (event.durationMs != null) {
+        summary = formatDurationWithMs(event.durationMs)
+    } else if (event.startedAt && event.completedAt) {
+        const duration = new Date(event.completedAt).getTime() - new Date(event.startedAt).getTime()
+        summary = !Number.isNaN(duration) && duration >= 0 ? formatDurationWithMs(duration) : 'Timing recorded'
+    } else {
+        summary = hasToolTiming(event) ? 'Timing recorded' : null
+    }
+
+    const parts: string[] = []
+    if (event.activeDurationMs != null) {
+        parts.push(`Active ${formatDurationWithMs(event.activeDurationMs)}`)
+    }
+
+    if (event.waitDurationMs != null) {
+        parts.push(`Wait ${formatDurationWithMs(event.waitDurationMs)}`)
+    }
+
+    if (phaseTimings.length > 0) {
+        parts.push(formatPhaseCountSummary(phaseTimings.length, phaseGroupCount))
+    }
+
+    const presentation: EventTimingPresentation = {
+        phaseTimings,
+        phaseGroupCount,
+        summary,
+        detail: parts.length > 0 ? parts.join(' · ') : null,
+    }
+
+    eventTimingPresentationCache.set(event, presentation)
+    return presentation
+}
+
+const selectedToolPhaseTimings = computed(() => getEventTimingPresentation(selectedMergedEvent.value?.callDetails).phaseTimings)
+
+function resetEventModalExpansionState(): void {
+    expandedPhaseGroups.value = new Set()
+    modalPhaseGroups.value = []
+    modalPhaseGroupsPending.value = false
+}
+
+async function scheduleModalPhaseGrouping(): Promise<void> {
+    const event = selectedMergedEvent.value?.callDetails
+    const phaseTimings = getEventTimingPresentation(event).phaseTimings
+    if (phaseTimings.length === 0) {
+        modalPhaseGroups.value = []
+        modalPhaseGroupsPending.value = false
+        return
+    }
+
+    modalPhaseGroupsPending.value = true
+    await nextTick()
+
+    if (selectedMergedEvent.value?.callDetails !== event) {
+        return
+    }
+
+    modalPhaseGroups.value = buildToolPhaseGroups(phaseTimings)
+    modalPhaseGroupsPending.value = false
+}
+
+function togglePhaseGroup(key: string): void {
+    const next = new Set(expandedPhaseGroups.value)
+    if (next.has(key)) {
+        next.delete(key)
+    } else {
+        next.add(key)
+    }
+
+    expandedPhaseGroups.value = next
+}
+
+function isPhaseGroupExpanded(key: string): boolean {
+    return expandedPhaseGroups.value.has(key)
+}
 
 const selectedAiCallSessionTurn = computed(() => {
     if (!activePass.value?.events?.length || !selectedMergedEvent.value) {
@@ -2398,16 +2821,18 @@ function buildEventRows(events: ProtocolEventDto[] | undefined | null): EventDis
     const standaloneEvents: MergedEvent[] = []
 
     const appendStandaloneRow = (merged: MergedEvent) => {
-        rows.push({
-            id: merged.id,
-            merged,
-            depth: 0,
-            parentId: null,
-            parentName: null,
-            isToolChild: false,
-            childCount: 0,
-            isExpanded: false,
-        })
+            rows.push({
+                id: merged.id,
+                merged,
+                depth: 0,
+                parentId: null,
+                parentName: null,
+                isToolChild: false,
+                childCount: 0,
+                isExpanded: false,
+                timingSummary: getEventTimingPresentation(merged.callDetails).summary,
+                timingDetail: getEventTimingPresentation(merged.callDetails).detail,
+            })
     }
 
     const flushPendingToolRows = () => {
@@ -2471,6 +2896,8 @@ function buildEventRows(events: ProtocolEventDto[] | undefined | null): EventDis
                 isToolChild: false,
                 childCount: children.length,
                 isExpanded,
+                timingSummary: getEventTimingPresentation(merged.callDetails).summary,
+                timingDetail: getEventTimingPresentation(merged.callDetails).detail,
             })
 
             if (isExpanded) {
@@ -2484,6 +2911,8 @@ function buildEventRows(events: ProtocolEventDto[] | undefined | null): EventDis
                         isToolChild: true,
                         childCount: 0,
                         isExpanded: false,
+                        timingSummary: getEventTimingPresentation(child.callDetails).summary,
+                        timingDetail: getEventTimingPresentation(child.callDetails).detail,
                     })
                 }
             }
@@ -2557,6 +2986,8 @@ function statusIconClass(status: string | undefined | null): string {
 const isEventModalOpen = ref(false)
 
 async function openMergedModal(event: MergedEvent): Promise<void> {
+    resetEventModalExpansionState()
+
     const protocolId = activePass.value?.id
     if (protocolId && !loadedProtocolIds.value.has(protocolId)) {
         await ensureProtocolPassLoaded(protocolId)
@@ -2564,11 +2995,27 @@ async function openMergedModal(event: MergedEvent): Promise<void> {
             .find(row => row.id === event.id)?.merged
         selectedMergedEvent.value = refreshedEvent ?? event
         isEventModalOpen.value = true
+        void scheduleModalPhaseGrouping()
         return
     }
 
     selectedMergedEvent.value = event
     isEventModalOpen.value = true
+    void scheduleModalPhaseGrouping()
+}
+
+async function openTimingInsight(insight: TimingInsight): Promise<void> {
+    if (insight.protocolId && activePassId.value !== insight.protocolId) {
+        activePassId.value = insight.protocolId
+        await ensureProtocolPassLoaded(insight.protocolId)
+    }
+
+    const targetEvent = buildEventRows(activePass.value?.events)
+        .find(row => row.id === insight.eventId)?.merged
+
+    if (targetEvent) {
+        await openMergedModal(targetEvent)
+    }
 }
 
 function statusBadgeClass(status: string | undefined | null): string {
@@ -2659,6 +3106,123 @@ function formatDurationMs(ms: number): string {
     if (h > 0) return `${h}h ${m % 60}m`;
     if (m > 0) return `${m}m ${s % 60}s`;
     return `${s}s`;
+}
+
+function hasToolTiming(event: ProtocolEventDto | null | undefined): boolean {
+    return event?.durationMs != null
+        || event?.waitDurationMs != null
+        || event?.activeDurationMs != null
+        || !!event?.startedAt
+        || !!event?.completedAt
+        || !!event?.timingAvailability
+        || !!event?.toolOutcome
+        || !!event?.phaseTimings?.length
+}
+
+function hasEventTokens(event: ProtocolEventDto | null | undefined): boolean {
+    return event?.inputTokens != null
+        || event?.outputTokens != null
+        || event?.cachedInputTokens != null
+}
+
+function hasEventError(event: ProtocolEventDto | null | undefined): boolean {
+    return !!event?.error
+        || !!event?.finalizationAttemptKind
+        || !!event?.finalizationOutcome
+        || !!event?.finalizationReason
+        || !!event?.toolEvidence
+}
+
+function formatDurationWithMs(ms: number | null | undefined): string {
+    if (ms == null) return '—'
+    if (ms < 1000) return `${ms} ms`
+    return formatDurationMs(ms)
+}
+
+function humanizeStatusValue(value: string): string {
+    return value
+        .replace(/_/g, ' ')
+        .replace(/\b\w/g, character => character.toUpperCase())
+}
+
+function formatTimingAvailability(value: string | null | undefined): string {
+    if (!value) return 'Not recorded'
+    switch (value.toLowerCase()) {
+        case 'captured': return 'Captured'
+        case 'partial': return 'Partial'
+        case 'missing': return 'Missing'
+        case 'not_applicable':
+        case 'notapplicable':
+            return 'Not applicable'
+        default:
+            return humanizeStatusValue(value)
+    }
+}
+
+function formatToolOutcome(value: string | null | undefined): string {
+    if (!value) return 'Unknown'
+    switch (value.toLowerCase()) {
+        case 'succeeded': return 'Succeeded'
+        case 'failed': return 'Failed'
+        case 'degraded': return 'Degraded'
+        case 'cancelled': return 'Cancelled'
+        default:
+            return humanizeStatusValue(value)
+    }
+}
+
+function formatPhaseCountSummary(phaseCount: number, groupCount: number, compact = false): string {
+    if (phaseCount <= 0) {
+        return 'No phases'
+    }
+
+    if (phaseCount === groupCount) {
+        return `${phaseCount} phase${phaseCount === 1 ? '' : 's'}`
+    }
+
+    if (compact) {
+        return `${groupCount} group${groupCount === 1 ? '' : 's'} / ${phaseCount} occurrence${phaseCount === 1 ? '' : 's'}`
+    }
+
+    return `${phaseCount} phase${phaseCount === 1 ? '' : 's'} across ${groupCount} group${groupCount === 1 ? '' : 's'}`
+}
+
+function formatPhaseTitle(phase: ProtocolEventPhaseTimingDto): string {
+    const baseName = phase.displayName ?? phase.name ?? 'Unnamed phase'
+    return phase.occurrence != null ? `${baseName} #${phase.occurrence}` : baseName
+}
+
+function formatPhaseDuration(phase: ProtocolEventPhaseTimingDto): string {
+    const duration = getPhaseTimingDurationMs(phase)
+    return duration == null ? 'Duration unavailable' : formatDurationWithMs(duration)
+}
+
+function formatToolPhaseGroupDuration(group: ToolPhaseGroup): string {
+    if (group.totalDurationMs == null) {
+        return group.count === 1 ? 'Duration unavailable' : `${group.count} occurrences`
+    }
+
+    return group.count === 1
+        ? formatDurationWithMs(group.totalDurationMs)
+        : `${formatDurationWithMs(group.totalDurationMs)} total`
+}
+
+function slowestToolDurationLabel(protocol: ReviewProtocolPass): string | null {
+    const slowestDuration = (protocol.events ?? [])
+        .filter(event => (event.kind ?? '').toLowerCase() === 'toolcall' && event.durationMs != null)
+        .reduce<number | null>((current, event) => {
+            if (event.durationMs == null) {
+                return current
+            }
+
+            if (current == null || event.durationMs > current) {
+                return event.durationMs
+            }
+
+            return current
+        }, null)
+
+    return slowestDuration == null ? null : formatDurationWithMs(slowestDuration)
 }
 
 function computePassDuration(pass: any): string {
@@ -2772,12 +3336,28 @@ function formatConfidence(val: number | string | null | undefined): string {
     animation: flash 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
 }
 
+.status-completed {
+    background: rgba(34, 197, 94, 0.15);
+    color: #86efac;
+}
+
+.status-failed {
+    background: rgba(239, 68, 68, 0.16);
+    color: #fca5a5;
+}
+
+.status-pending {
+    background: rgba(148, 163, 184, 0.16);
+    color: #cbd5f5;
+}
+
 .pass-file-outcome-section {
     margin-top: 0;
+    padding: 0 1.5rem 1.25rem;
 }
 
 .pass-file-outcome-section .pass-final-result-header {
-    padding: 1.35rem 1.5rem 0.35rem;
+    padding: 1.35rem 0 0.35rem;
     margin-bottom: 0;
 }
 
@@ -2856,31 +3436,6 @@ function formatConfidence(val: number | string | null | undefined): string {
     display: flex;
     flex-direction: column;
     gap: 1.5rem;
-}
-
-@media (min-width: 768px) {
-    .merged-modal-layout {
-        flex-direction: row;
-        align-items: stretch;
-    }
-    .merged-modal-layout .drawer-section {
-        flex: 1;
-        min-width: 0;
-        margin: 0;
-    }
-}
-
-.modal-arrow {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    color: var(--color-text-muted);
-}
-
-@media (max-width: 767px) {
-    .modal-arrow {
-        transform: rotate(90deg);
-    }
 }
 
 /* Master-Detail Architecture */
@@ -3302,6 +3857,68 @@ function formatConfidence(val: number | string | null | undefined): string {
     padding: 1.25rem 1.5rem 0;
 }
 
+.timing-insights-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+.timing-insight-row {
+    width: 100%;
+    display: grid;
+    grid-template-columns: auto minmax(0, 1.4fr) minmax(0, 1.6fr) auto minmax(0, 1.2fr);
+    gap: 0.75rem;
+    align-items: center;
+    padding: 0.7rem 0.85rem;
+    border-radius: 10px;
+    border: 1px solid var(--color-border);
+    background: rgba(255, 255, 255, 0.02);
+    color: var(--color-text);
+    text-align: left;
+    cursor: pointer;
+    box-sizing: border-box;
+}
+
+.timing-insight-row:hover {
+    border-color: rgba(255, 255, 255, 0.12);
+    background: rgba(255, 255, 255, 0.04);
+}
+
+.timing-insight-rank,
+.timing-insight-duration,
+.timing-insight-tool {
+    font-weight: 600;
+}
+
+.timing-insight-context,
+.timing-insight-meta {
+    color: var(--color-text-muted);
+    font-size: 0.85rem;
+    min-width: 0;
+}
+
+.timing-insight-tool,
+.timing-insight-context,
+.timing-insight-meta {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+@media (max-width: 1024px) {
+    .timing-insight-row {
+        grid-template-columns: auto 1fr auto;
+    }
+
+    .timing-insight-context,
+    .timing-insight-meta {
+        grid-column: 2 / 4;
+    }
+}
+
 .pass-final-result-header {
     display: flex;
     align-items: center;
@@ -3368,90 +3985,346 @@ function formatConfidence(val: number | string | null | undefined): string {
     letter-spacing: 0.05em;
 }
 
-.events-table {
+.events-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.9rem;
+}
+
+.event-card {
+    position: relative;
+    display: flex;
+    align-items: stretch;
+    gap: 0.8rem;
+    padding: 1rem 1.1rem;
+    border: 1px solid var(--color-border);
+    border-radius: 14px;
+    background: linear-gradient(180deg, rgba(255, 255, 255, 0.028), rgba(255, 255, 255, 0.018));
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.12);
+}
+
+.event-card-main {
+    flex: 1 1 auto;
     width: 100%;
-    border-collapse: collapse;
-    font-size: 0.9rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.85rem;
+    min-width: 0;
 }
 
-.events-table th,
-.events-table td {
-    padding: 0.75rem 1rem;
-    text-align: left;
-    border-bottom: 1px solid var(--color-border);
-    vertical-align: middle;
+.event-card-header,
+.event-card-secondary {
+    min-width: 0;
 }
 
-.events-table th {
-    background: var(--color-surface);
+.event-card-header {
+    display: flex;
+    flex-direction: column;
+    gap: 0.65rem;
+}
+
+.event-card-secondary {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    display: grid;
+    gap: 0.75rem;
+    padding-top: 0.85rem;
+    border-top: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.event-metric-card {
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+    padding: 0.75rem 0.85rem;
+    border-radius: 12px;
+    background: rgba(255, 255, 255, 0.025);
+    border: 1px solid rgba(255, 255, 255, 0.04);
+    min-width: 0;
+}
+
+.event-card-meta-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+    flex-wrap: wrap;
+}
+
+.event-card-label {
+    font-size: 0.72rem;
     font-weight: 600;
-    color: var(--color-text);
+    color: var(--color-text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
 }
 
-.row-error td {
-    background: rgba(239, 68, 68, 0.1);
+.row-error {
+    border-color: rgba(239, 68, 68, 0.28);
+    background: linear-gradient(180deg, rgba(239, 68, 68, 0.08), rgba(255, 255, 255, 0.018));
 }
 
 .row-clickable {
     cursor: pointer;
-    transition: background 0.15s;
+    transition: background 0.15s, border-color 0.15s, transform 0.15s;
 }
 
-.row-clickable:hover td {
-    background: var(--color-border);
+.row-clickable:hover {
+    background: linear-gradient(180deg, rgba(255, 255, 255, 0.04), rgba(255, 255, 255, 0.024));
+    border-color: rgba(255, 255, 255, 0.1);
+    transform: translateY(-1px);
 }
 
-.row-child td {
-    background: rgba(34, 211, 238, 0.04);
+.row-child {
+    background: linear-gradient(180deg, rgba(34, 211, 238, 0.05), rgba(255, 255, 255, 0.018));
+    margin-left: 1.35rem;
 }
 
-.row-child .name-cell {
-    position: relative;
-    padding-left: 0.75rem;
+.event-card-kind-group {
+    display: flex;
+    align-items: center;
+    gap: 0.45rem;
+    flex-wrap: wrap;
+    min-width: 0;
 }
 
-.row-child .name-cell::before {
-    content: '';
-    position: absolute;
-    left: 1.15rem;
-    top: -1px;
-    bottom: -1px;
-    width: 1px;
-    background: linear-gradient(to bottom, rgba(34, 211, 238, 0.06), rgba(34, 211, 238, 0.24), rgba(34, 211, 238, 0.06));
+.kind-cell--child {
+    padding-left: 0;
 }
 
 .row-child .date-cell,
-.row-child .kind-cell,
 .row-child .tokens-cell,
 .row-child .error-cell {
     color: var(--color-text-muted);
 }
 
-.row-selected td {
-    background: var(--color-border);
-    border-left: 2px solid var(--color-accent);
+.event-card-title-row {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.7rem;
+    min-width: 0;
 }
 
-.row-selected.row-error td {
-    background: rgba(239, 68, 68, 0.2);
+.event-card-title-row--child {
+    padding-left: 0;
+}
+
+.event-title-stack {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 0.75rem 1rem;
+    flex-wrap: wrap;
+    min-width: 0;
+    width: 100%;
 }
 
 .date-cell {
-    white-space: nowrap;
+    font-size: 0.83rem;
     color: var(--color-text-muted);
-    min-width: 11rem;
-}
-
-.kind-cell {
-    white-space: nowrap;
-    color: var(--color-text-muted);
-    vertical-align: middle;
+    min-width: 0;
 }
 
 .tokens-cell {
-    text-align: right;
     font-family: monospace;
     color: var(--color-text);
+    min-width: 0;
+}
+
+.timing-inline-group {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.45rem;
+    flex-wrap: wrap;
+    min-width: 0;
+}
+
+.timing-duration {
+    font-weight: 600;
+    white-space: nowrap;
+    color: var(--color-text);
+}
+
+.timing-detail,
+.timing-empty {
+    font-size: 0.82rem;
+    color: var(--color-text-muted);
+}
+
+.timing-badges {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.25rem;
+}
+
+@media (max-width: 1200px) {
+    .event-card-secondary {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+}
+
+@media (max-width: 900px) {
+    .event-card-secondary {
+        grid-template-columns: minmax(0, 1fr);
+    }
+
+    .event-title-stack {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+}
+
+.tool-timing-panel {
+    margin-bottom: 1rem;
+    padding: 1rem;
+    border: 1px solid var(--color-border);
+    border-radius: 12px;
+    background: rgba(255, 255, 255, 0.02);
+}
+
+.tool-timing-header,
+.tool-phase-section-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+    flex-wrap: wrap;
+}
+
+.tool-timing-header {
+    margin-bottom: 0.75rem;
+}
+
+.tool-timing-header h4,
+.tool-phase-section-header h5 {
+    margin: 0;
+}
+
+.tool-phase-overview-chip,
+.tool-phase-count-pill {
+    display: inline-flex;
+    align-items: center;
+    padding: 0.2rem 0.55rem;
+    border-radius: 9999px;
+    background: rgba(34, 211, 238, 0.12);
+    color: var(--color-accent);
+    font-size: 0.75rem;
+    font-weight: 600;
+}
+
+.tool-phase-loading {
+    margin: 0;
+    color: var(--color-text-muted);
+    font-size: 0.85rem;
+}
+
+.tool-timing-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(10rem, 1fr));
+    gap: 0.75rem 1rem;
+    margin: 0 0 1rem;
+}
+
+.tool-timing-grid div {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+}
+
+.tool-timing-grid dt {
+    font-size: 0.75rem;
+    color: var(--color-text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+.tool-timing-grid dd {
+    margin: 0;
+}
+
+.tool-phase-section h5 {
+    margin: 0 0 0.75rem;
+    font-size: 0.8rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--color-text-muted);
+}
+
+.tool-phase-list {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+}
+
+.tool-phase-item {
+    padding: 0.85rem 1rem;
+    border-radius: 10px;
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid rgba(255, 255, 255, 0.04);
+}
+
+.tool-phase-title-group {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+}
+
+.tool-phase-header,
+.tool-phase-meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem 0.75rem;
+    justify-content: space-between;
+}
+
+.tool-phase-title,
+.tool-phase-duration {
+    font-weight: 600;
+}
+
+.tool-phase-meta {
+    margin-top: 0.35rem;
+    color: var(--color-text-muted);
+    font-size: 0.8rem;
+}
+
+.tool-phase-summary {
+    margin: 0.5rem 0 0;
+    color: var(--color-text);
+}
+
+.tool-phase-toggle {
+    appearance: none;
+    border: 1px solid var(--color-border);
+    background: rgba(255, 255, 255, 0.03);
+    color: var(--color-text);
+    border-radius: 8px;
+    padding: 0.35rem 0.7rem;
+    font-size: 0.8rem;
+    cursor: pointer;
+}
+
+.tool-phase-toggle:hover {
+    background: rgba(255, 255, 255, 0.06);
+}
+
+.tool-phase-occurrence-list {
+    list-style: decimal;
+    margin: 0.85rem 0 0;
+    padding-left: 1.25rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.65rem;
+}
+
+.tool-phase-occurrence-item {
+    padding: 0.75rem 0.85rem;
+    border-radius: 8px;
+    background: rgba(255, 255, 255, 0.025);
+    border: 1px solid rgba(255, 255, 255, 0.035);
 }
 
 /* Markdown Adjustments */
@@ -3743,30 +4616,15 @@ function formatConfidence(val: number | string | null | undefined): string {
     }
 
     .events-section {
-        overflow-x: auto;
+        overflow-x: visible;
     }
 
-    .events-table {
-        min-width: 760px;
+    .event-card {
+        padding: 0.9rem;
     }
 
-    .kind-cell--child {
-        position: relative;
-    }
-
-    .kind-cell--child::before {
-        content: '';
-        position: absolute;
-        left: 0.2rem;
-        top: 0.6rem;
-        bottom: 0.6rem;
-        width: 3px;
-        border-radius: 999px;
-        background: rgba(168, 85, 247, 0.55);
-    }
-
-    .kind-cell-stack {
-        padding-left: 0.6rem;
+    .row-child {
+        margin-left: 0.85rem;
     }
 }
 
@@ -3961,14 +4819,16 @@ function formatConfidence(val: number | string | null | undefined): string {
     width: 100%;
 }
 
-/* Events Table badges */
+/* Event cards */
 .kind-badge {
-    display: inline-block;
-    padding: 0.15rem 0.5rem;
-    border-radius: 4px;
-    font-size: 0.7rem;
-    font-weight: 600;
+    display: inline-flex;
+    align-items: center;
+    padding: 0.18rem 0.58rem;
+    border-radius: 999px;
+    font-size: 0.68rem;
+    font-weight: 700;
     text-transform: uppercase;
+    letter-spacing: 0.04em;
 }
 .badge-purple { background: rgba(168, 85, 247, 0.15); color: #c084fc; }
 .badge-cyan { background: rgba(34, 211, 238, 0.15); color: #22d3ee; }
@@ -3976,24 +4836,17 @@ function formatConfidence(val: number | string | null | undefined): string {
 .badge-gray { background: rgba(255, 255, 255, 0.1); color: var(--color-text-muted); }
 
 .tool-name { font-weight: 600; font-family: monospace; }
-.ai-name { font-style: italic; color: var(--color-text-muted); }
+.ai-name { font-style: italic; color: #d7d0f5; }
 .memory-name { color: #34d399; }
 .operational-name { color: var(--color-text-muted); }
-
-.kind-cell-stack {
-    display: flex;
-    flex-direction: column;
-    align-items: flex-start;
-    gap: 0.35rem;
-}
 
 .kind-parent-pill {
     display: inline-flex;
     align-items: center;
-    padding: 0.08rem 0.4rem;
+    padding: 0.12rem 0.48rem;
     border-radius: 999px;
-    background: rgba(168, 85, 247, 0.12);
-    color: #d8b4fe;
+    background: rgba(168, 85, 247, 0.14);
+    color: #e9d5ff;
     font-size: 0.68rem;
     font-weight: 700;
     line-height: 1.1;
@@ -4047,69 +4900,64 @@ function formatConfidence(val: number | string | null | undefined): string {
     text-align: center;
 }
 
-.event-name-stack {
-    display: flex;
-    flex-direction: column;
-    align-items: flex-start;
-    gap: 0.25rem;
-}
-
 .event-parent-context {
     display: flex;
     align-items: center;
     gap: 0.35rem;
 }
 
-.event-name-content {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.55rem;
-    min-height: 1.75rem;
-}
-
-.event-name-content--child {
-    position: relative;
-    padding-left: 0.25rem;
-}
-
 .event-child-rail {
     position: relative;
+    display: block;
     width: 1rem;
-    height: 1rem;
-    margin-right: 0.1rem;
+    height: 100%;
     flex: 0 0 auto;
-    align-self: center;
+    min-height: 3.5rem;
 }
 
 .event-child-rail::before {
     content: '';
     position: absolute;
-    left: 0;
-    top: 50%;
-    width: 0.72rem;
+    right: 0.18rem;
+    top: 1.2rem;
+    width: 0.78rem;
     height: 1.5px;
     background: rgba(34, 211, 238, 0.42);
     border-radius: 999px;
-    transform: translateY(-50%);
+    transform: none;
 }
 
 .event-child-rail::after {
     content: '';
     position: absolute;
     right: 0;
-    top: 50%;
+    top: 1.05rem;
     width: 0.34rem;
     height: 0.34rem;
     border-radius: 999px;
     background: rgba(34, 211, 238, 0.78);
     box-shadow: 0 0 0 0.18rem rgba(34, 211, 238, 0.12);
-    transform: translateY(-50%);
+    transform: none;
+}
+
+.event-child-gutter {
+    position: absolute;
+    left: -1rem;
+    top: 0.7rem;
+    bottom: 0.7rem;
+    display: flex;
+    align-items: stretch;
+    justify-content: flex-end;
+    width: 1rem;
 }
 
 .event-name-label {
     display: inline-block;
+    font-size: 0.98rem;
+    font-weight: 600;
     line-height: 1.45;
-    padding: 0.15rem 0;
+    padding: 0.05rem 0;
+    word-break: break-word;
 }
 
 .event-parent-pill {
@@ -4264,6 +5112,7 @@ function formatConfidence(val: number | string | null | undefined): string {
     align-items: center;
     margin-bottom: 0.75rem;
 }
+
 .drawer-section-header h4 { margin-bottom: 0; }
 .ai-disclaimer {
     font-size: 0.75rem;

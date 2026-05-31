@@ -59,12 +59,21 @@ internal abstract class ProviderReviewContextToolsBase(
 
     public Task<IReadOnlyList<ChangedFileSummary>> GetChangedFilesAsync(CancellationToken ct)
     {
-        return this.LoadChangedFilesAsync(ct);
+        return ToolTimingCollectorContext.RecordAsync(
+            ProtocolEventToolPhaseNames.ProviderApiCall,
+            "Provider API call",
+            () => this.LoadChangedFilesAsync(ct),
+            files => $"operation=changed_files;count={files.Count}");
     }
 
     public Task<IReadOnlyList<string>> GetFileTreeAsync(string branch, CancellationToken ct)
     {
-        return this.LoadFileTreeAsync(this.NormalizeBranch(this._sourceBranch), ct);
+        var normalizedBranch = this.NormalizeBranch(this._sourceBranch);
+        return ToolTimingCollectorContext.RecordAsync(
+            ProtocolEventToolPhaseNames.ScmFileTreeFetch,
+            "SCM file tree fetch",
+            () => this.LoadFileTreeAsync(normalizedBranch, ct),
+            paths => $"branch={normalizedBranch};count={paths.Count}");
     }
 
     public async Task<string> GetFileContentAsync(
@@ -87,7 +96,13 @@ internal abstract class ProviderReviewContextToolsBase(
             string? rawContent;
             try
             {
-                rawContent = await this.FetchRawFileContentAsync(normalizedPath, normalizedBranch, ct);
+                rawContent = await ToolTimingCollectorContext.RecordAsync(
+                    ProtocolEventToolPhaseNames.ScmFileContentFetch,
+                    "SCM file content fetch",
+                    () => this.FetchRawFileContentAsync(normalizedPath, normalizedBranch, ct),
+                    fetched => fetched is null
+                        ? $"path={normalizedPath};branch={normalizedBranch};missing=true"
+                        : $"path={normalizedPath};branch={normalizedBranch};chars={fetched.Length}");
             }
             catch (Exception ex)
             {
@@ -123,10 +138,17 @@ internal abstract class ProviderReviewContextToolsBase(
             return string.Empty;
         }
 
-        var lines = content.Split('\n');
-        var clampedStart = Math.Max(1, startLine);
-        var clampedEnd = Math.Min(lines.Length, endLine);
-        return clampedStart > clampedEnd ? string.Empty : string.Join("\n", lines[(clampedStart - 1)..clampedEnd]);
+        return ToolTimingCollectorContext.Record(
+            ProtocolEventToolPhaseNames.ResultShaping,
+            "Result shaping",
+            () =>
+            {
+                var lines = content.Split('\n');
+                var clampedStart = Math.Max(1, startLine);
+                var clampedEnd = Math.Min(lines.Length, endLine);
+                return clampedStart > clampedEnd ? string.Empty : string.Join("\n", lines[(clampedStart - 1)..clampedEnd]);
+            },
+            snippet => $"path={normalizedPath};chars={snippet.Length};start={startLine};end={endLine}");
     }
 
     public Task<RepositorySearchResult> SearchSourceRepoAsync(string searchTerm, string? fileMask, CancellationToken ct)
@@ -203,7 +225,11 @@ internal abstract class ProviderReviewContextToolsBase(
             return RepositoryOverview.CreateBlocked(normalizedBranchSide, RepositorySearchStatuses.InvalidRequest);
         }
 
-        var paths = await this.LoadFileTreeAsync(branch, ct);
+        var paths = await ToolTimingCollectorContext.RecordAsync(
+            ProtocolEventToolPhaseNames.ScmFileTreeFetch,
+            "SCM file tree fetch",
+            () => this.LoadFileTreeAsync(branch, ct),
+            result => $"branch={branch};count={result.Count}");
         var overview = RepositoryOverviewBuilder.Build(normalizedBranchSide, branch, paths.Select(this.NormalizePath).ToList().AsReadOnly());
         this._repositoryOverviewCache[normalizedBranchSide] = overview;
         return overview;
@@ -229,7 +255,11 @@ internal abstract class ProviderReviewContextToolsBase(
             return FileNeighborhood.CreateBlocked(normalizedBranchSide, normalizedPath, RepositorySearchStatuses.InvalidRequest);
         }
 
-        var paths = await this.LoadFileTreeAsync(branch, ct);
+        var paths = await ToolTimingCollectorContext.RecordAsync(
+            ProtocolEventToolPhaseNames.ScmFileTreeFetch,
+            "SCM file tree fetch",
+            () => this.LoadFileTreeAsync(branch, ct),
+            result => $"branch={branch};count={result.Count}");
         var neighborhood = FileNeighborhoodBuilder.Build(
             normalizedBranchSide,
             branch,
@@ -294,17 +324,21 @@ internal abstract class ProviderReviewContextToolsBase(
     {
         try
         {
-            return await this._proCursorGateway.AskKnowledgeAsync(
-                new ProCursorKnowledgeQueryRequest(
-                    this._clientId!.Value,
-                    question,
-                    this._knowledgeSourceIds,
-                    new ProCursorRepositoryContextDto(
-                        this._providerScopePath,
-                        this._repository.OwnerOrNamespace,
-                        this._repository.ExternalRepositoryId,
-                        this.NormalizeBranch(this._sourceBranch))),
-                ct);
+            return await ToolTimingCollectorContext.RecordAsync(
+                ProtocolEventToolPhaseNames.ProviderApiCall,
+                "Provider API call",
+                () => this._proCursorGateway.AskKnowledgeAsync(
+                    new ProCursorKnowledgeQueryRequest(
+                        this._clientId!.Value,
+                        question,
+                        this._knowledgeSourceIds,
+                        new ProCursorRepositoryContextDto(
+                            this._providerScopePath,
+                            this._repository.OwnerOrNamespace,
+                            this._repository.ExternalRepositoryId,
+                            this.NormalizeBranch(this._sourceBranch))),
+                    ct),
+                result => $"operation=procursor_knowledge;status={result.Status};results={result.Results.Count}");
         }
         catch (ProCursorDependencyUnavailableException ex)
         {
@@ -321,19 +355,23 @@ internal abstract class ProviderReviewContextToolsBase(
     {
         try
         {
-            return await this._proCursorGateway.GetSymbolInsightAsync(
-                new ProCursorSymbolQueryRequest(
-                    this._clientId!.Value,
-                    symbol,
-                    string.IsNullOrWhiteSpace(queryMode) ? "name" : queryMode.Trim(),
-                    StateMode: "reviewTarget",
-                    ReviewContext: new ProCursorReviewContextDto(
-                        this._repository.ExternalRepositoryId,
-                        this.NormalizeBranch(this._sourceBranch),
-                        this._pullRequestNumber,
-                        this._iterationId),
-                    MaxRelations: maxRelations),
-                ct);
+            return await ToolTimingCollectorContext.RecordAsync(
+                ProtocolEventToolPhaseNames.ProviderApiCall,
+                "Provider API call",
+                () => this._proCursorGateway.GetSymbolInsightAsync(
+                    new ProCursorSymbolQueryRequest(
+                        this._clientId!.Value,
+                        symbol,
+                        string.IsNullOrWhiteSpace(queryMode) ? "name" : queryMode.Trim(),
+                        StateMode: "reviewTarget",
+                        ReviewContext: new ProCursorReviewContextDto(
+                            this._repository.ExternalRepositoryId,
+                            this.NormalizeBranch(this._sourceBranch),
+                            this._pullRequestNumber,
+                            this._iterationId),
+                        MaxRelations: maxRelations),
+                    ct),
+                result => $"operation=procursor_symbol;status={result.Status};has_symbol={result.Symbol is not null}");
         }
         catch (ProCursorDependencyUnavailableException ex)
         {

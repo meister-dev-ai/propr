@@ -2,6 +2,7 @@
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
 using MeisterProPR.Application.Features.Reviewing.Execution.Models;
+using MeisterProPR.Domain.ValueObjects;
 
 namespace MeisterProPR.Infrastructure.Features.Reviewing.Execution;
 
@@ -20,17 +21,21 @@ internal static class RepositoryOverviewBuilder
             .OrderBy(path => path, StringComparer.Ordinal)
             .ToList();
 
-        var sections = new[]
-        {
-            SelectSection("projects", normalizedPaths, IsProjectPath),
-            SelectSection("entry_points", normalizedPaths, IsEntryPointPath),
-            SelectSection("module_boundaries", normalizedPaths, IsModuleBoundaryPath),
-            SelectSection("test_locations", normalizedPaths, IsTestPath),
-            SelectSection("config_touchpoints", normalizedPaths, IsConfigPath),
-            SelectSection("persistence_paths", normalizedPaths, IsPersistencePath),
-            SelectSection("registration_locations", normalizedPaths, IsRegistrationPath),
-            SelectSection("docs_and_specs", normalizedPaths, IsDocsOrSpecPath),
-        };
+        var sections = ToolTimingCollectorContext.Record(
+            ProtocolEventToolPhaseNames.ResultShaping,
+            "Result shaping",
+            () => new[]
+            {
+                SelectSection("projects", normalizedPaths, IsProjectPath),
+                SelectSection("entry_points", normalizedPaths, IsEntryPointPath),
+                SelectSection("module_boundaries", normalizedPaths, IsModuleBoundaryPath),
+                SelectSection("test_locations", normalizedPaths, IsTestPath),
+                SelectSection("config_touchpoints", normalizedPaths, IsConfigPath),
+                SelectSection("persistence_paths", normalizedPaths, IsPersistencePath),
+                SelectSection("registration_locations", normalizedPaths, IsRegistrationPath),
+                SelectSection("docs_and_specs", normalizedPaths, IsDocsOrSpecPath),
+            },
+            _ => $"path_count={normalizedPaths.Count}");
         var truncated = sections.Any(section => section.Paths.Count >= MaxSectionPaths);
         IReadOnlyList<RepositorySearchLimitation> limitations = truncated
             ?
@@ -55,7 +60,8 @@ internal static class RepositoryOverviewBuilder
             sections[6],
             sections[7],
             limitations,
-            truncated);
+            truncated,
+            ToolTimingCollectorContext.CaptureSnapshot());
     }
 
     private static RepositoryOverviewSection SelectSection(

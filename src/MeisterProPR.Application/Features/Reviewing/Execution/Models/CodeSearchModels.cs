@@ -1,6 +1,8 @@
 // Copyright (c) Andreas Rain.
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
+using MeisterProPR.Domain.ValueObjects;
+
 namespace MeisterProPR.Application.Features.Reviewing.Execution.Models;
 
 /// <summary>
@@ -70,7 +72,9 @@ public sealed record CodeSearchResult(
     CodeSearchFilterSet? FiltersApplied,
     IReadOnlyList<CodeSearchMatch> Matches,
     IReadOnlyList<RepositorySearchLimitation> Limitations,
-    bool Truncated)
+    bool Truncated,
+    IReadOnlyList<ProtocolEventPhaseTiming>? PhaseTimings = null)
+    : IToolExecutionTimingCarrier
 {
     /// <summary>Creates a blocked result that keeps the request shape serializable.</summary>
     public static CodeSearchResult CreateBlocked(CodeSearchRequest request, string status)
@@ -115,7 +119,9 @@ public sealed record PathSearchResult(
     CodeSearchFilterSet? FiltersApplied,
     IReadOnlyList<PathSearchMatch> Paths,
     IReadOnlyList<RepositorySearchLimitation> Limitations,
-    bool Truncated)
+    bool Truncated,
+    IReadOnlyList<ProtocolEventPhaseTiming>? PhaseTimings = null)
+    : IToolExecutionTimingCarrier
 {
     /// <summary>Creates a blocked result that keeps the request shape serializable.</summary>
     public static PathSearchResult CreateBlocked(PathSearchRequest request, string status)

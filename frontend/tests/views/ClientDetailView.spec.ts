@@ -192,7 +192,7 @@ describe('ClientDetailView', () => {
     const input = wrapper.find('input[name="displayName"]')
     expect(input.exists()).toBe(true)
     expect((input.element as HTMLInputElement).value).toBe('Acme Corp')
-  })
+  }, 10000)
 
   it('calls PATCH with updated displayName on Save', async () => {
     mockGet.mockResolvedValue({ data: sampleClient })

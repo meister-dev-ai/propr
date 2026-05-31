@@ -231,6 +231,11 @@ finally
 /// </summary>
 public partial class Program
 {
+    private static readonly HttpClient HealthCheckHttpClient = new()
+    {
+        Timeout = TimeSpan.FromSeconds(5),
+    };
+
     internal static async Task<bool> TryRunHealthCheckAsync(string[] args)
     {
         if (args.Length != 2 || !string.Equals(args[0], "--healthcheck", StringComparison.OrdinalIgnoreCase))
@@ -240,11 +245,7 @@ public partial class Program
 
         try
         {
-            using var httpClient = new HttpClient
-            {
-                Timeout = TimeSpan.FromSeconds(5),
-            };
-            using var response = await httpClient.GetAsync(args[1], HttpCompletionOption.ResponseHeadersRead);
+            using var response = await HealthCheckHttpClient.GetAsync(args[1], HttpCompletionOption.ResponseHeadersRead);
             Environment.ExitCode = response.IsSuccessStatusCode ? 0 : 1;
         }
         catch

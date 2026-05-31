@@ -2,6 +2,7 @@
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
 using System.Text.Json;
+using MeisterProPR.Domain.ValueObjects;
 using Microsoft.EntityFrameworkCore.ChangeTracking;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 
@@ -48,4 +49,16 @@ internal static class JsonPropertyConversions
                          == JsonSerializer.Serialize(right ?? Array.Empty<string>(), SerializerOptions),
         value => JsonSerializer.Serialize(value ?? Array.Empty<string>(), SerializerOptions).GetHashCode(),
         value => value == null ? Array.Empty<string>() : value.ToArray());
+
+    public static readonly ValueConverter<IReadOnlyList<ProtocolEventPhaseTiming>?, string?> NullableProtocolEventPhaseTimingListConverter = new(
+        value => value == null ? null : JsonSerializer.Serialize(value, SerializerOptions),
+        value => string.IsNullOrWhiteSpace(value)
+            ? null
+            : JsonSerializer.Deserialize<List<ProtocolEventPhaseTiming>>(value, SerializerOptions));
+
+    public static readonly ValueComparer<IReadOnlyList<ProtocolEventPhaseTiming>?> NullableProtocolEventPhaseTimingListComparer = new(
+        (left, right) => JsonSerializer.Serialize(left ?? Array.Empty<ProtocolEventPhaseTiming>(), SerializerOptions)
+                         == JsonSerializer.Serialize(right ?? Array.Empty<ProtocolEventPhaseTiming>(), SerializerOptions),
+        value => JsonSerializer.Serialize(value ?? Array.Empty<ProtocolEventPhaseTiming>(), SerializerOptions).GetHashCode(),
+        value => value == null ? null : value.ToList());
 }

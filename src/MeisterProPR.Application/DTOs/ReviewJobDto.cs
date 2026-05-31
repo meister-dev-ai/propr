@@ -2,6 +2,7 @@
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
 using MeisterProPR.Domain.Enums;
+using MeisterProPR.Domain.ValueObjects;
 
 namespace MeisterProPR.Application.DTOs;
 
@@ -51,7 +52,27 @@ public sealed record ReviewJobDto(
 /// <param name="Arguments">Serialised arguments passed to the tool.</param>
 /// <param name="Result">Serialised result returned by the tool.</param>
 /// <param name="InvokedAt">UTC timestamp at which the tool was invoked.</param>
-public sealed record ReviewToolCallDto(string ToolName, string Arguments, string Result, DateTimeOffset InvokedAt);
+/// <param name="StartedAt">UTC timestamp at which the tool started.</param>
+/// <param name="CompletedAt">UTC timestamp at which the tool completed.</param>
+/// <param name="DurationMs">Elapsed duration in milliseconds.</param>
+/// <param name="WaitDurationMs">Measured wait duration in milliseconds.</param>
+/// <param name="ActiveDurationMs">Measured active duration in milliseconds.</param>
+/// <param name="TimingAvailability">Availability state for timing capture.</param>
+/// <param name="Outcome">Tool invocation outcome.</param>
+/// <param name="PhaseTimings">Ordered phase timings captured inside the tool invocation.</param>
+public sealed record ReviewToolCallDto(
+    string ToolName,
+    string Arguments,
+    string Result,
+    DateTimeOffset InvokedAt,
+    DateTimeOffset? StartedAt,
+    DateTimeOffset? CompletedAt,
+    long? DurationMs,
+    long? WaitDurationMs,
+    long? ActiveDurationMs,
+    string? TimingAvailability,
+    string? Outcome,
+    IReadOnlyList<ProtocolEventPhaseTiming>? PhaseTimings);
 
 /// <summary>
 ///     Represents a confidence evaluation snapshot for a single review concern.

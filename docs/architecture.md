@@ -9,7 +9,7 @@ instead of as a single long page.
 | Document | Focus |
 |----------|-------|
 | [docs/architecture/licensing-and-feature-flags.md](architecture/licensing-and-feature-flags.md) | Installation edition persistence, premium capability resolution, feature-management integration, and onboarding steps for new licensed features |
-| [docs/architecture/reviewing-workflows.md](architecture/reviewing-workflows.md) | Review intake, ProRV-focused per-file guidance, filtering, verification, synthesis, deterministic final finding gate, job lifecycle, and token optimization |
+| [docs/architecture/reviewing-workflows.md](architecture/reviewing-workflows.md) | Review intake, ProRV-focused per-file guidance, filtering, verification, synthesis, deterministic final finding gate, job lifecycle, token optimization, and protocol timing observability |
 | [docs/architecture/configuration-and-crawling.md](architecture/configuration-and-crawling.md) | Provider connection onboarding, mixed-provider webhook activation, Azure DevOps crawl compatibility, and operational audit |
 | [docs/architecture/security-and-access.md](architecture/security-and-access.md) | Login, PATs, request auth evaluation, and Azure credential resolution |
 | [docs/architecture/procursor.md](architecture/procursor.md) | ProCursor runtime boundary, verification-time evidence retrieval, refresh flow, and token reporting |
@@ -28,9 +28,11 @@ that ranks file-specific review guidance before the main file review, followed b
 verification before publication: local contradiction checks precede per-file persistence, PR-level
     evidence retrieval and bounded AI micro-verification precede the deterministic final gate, summary
     reconciliation aligns the final summary with surviving outcomes, token-optimization diagnostics
-    separate raw, cached, effective, replay, and finalization costs, and a client-owned publication
-    policy can suppress outbound SCM comments without skipping internal review result persistence or
-    diagnostics.
+     separate raw, cached, effective, replay, and finalization costs, and a client-owned publication
+     policy can suppress outbound SCM comments without skipping internal review result persistence or
+     diagnostics. Persisted protocol diagnostics now also keep whole-tool and repository-search phase
+     timing on the same pass and event records so slow calls can be compared by file, pass, and tool
+     without consulting separate logs.
 
 ```mermaid
 flowchart TD

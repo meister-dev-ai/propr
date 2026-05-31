@@ -10805,12 +10805,61 @@ export interface components {
             finalizationReason?: string | null;
             /** @description Outcome for a forced-final or schema-repair attempt. */
             finalizationOutcome?: string | null;
+            /**
+             * Format: date-time
+             * @description UTC timestamp at which a tool call started when captured.
+             */
+            startedAt?: string | null;
+            /**
+             * Format: date-time
+             * @description UTC timestamp at which a tool call completed when captured.
+             */
+            completedAt?: string | null;
+            /**
+             * Format: int64
+             * @description Total elapsed duration of a tool call in milliseconds when captured.
+             */
+            durationMs?: number | null;
+            /**
+             * Format: int64
+             * @description Measured wait or backoff duration in milliseconds when available.
+             */
+            waitDurationMs?: number | null;
+            /**
+             * Format: int64
+             * @description Measured active execution duration in milliseconds when available.
+             */
+            activeDurationMs?: number | null;
+            /** @description Availability state for the timing dimensions on this event. */
+            timingAvailability?: string | null;
+            /** @description Outcome of the tool invocation when this event represents a tool call. */
+            toolOutcome?: string | null;
+            /** @description Ordered timing phases captured inside the tool invocation when available. */
+            phaseTimings?: components["schemas"]["ProtocolEventPhaseTimingDto"][] | null;
         };
         /**
          * @description Discriminates the kind of event recorded in a MeisterProPR.Domain.Entities.ProtocolEvent.
          * @enum {string}
          */
         ProtocolEventKind: "aiCall" | "toolCall" | "memoryOperation" | "operational";
+        /** @description One ordered timed phase captured inside a tool invocation. */
+        ProtocolEventPhaseTimingDto: {
+            name?: string | null;
+            displayName?: string | null;
+            /** Format: int32 */
+            sequence?: number;
+            /** Format: int32 */
+            occurrence?: number | null;
+            /** Format: date-time */
+            startedAt?: string | null;
+            /** Format: date-time */
+            completedAt?: string | null;
+            /** Format: int64 */
+            durationMs?: number | null;
+            availability?: string | null;
+            outcome?: string | null;
+            summary?: string | null;
+        };
         /** @description Terminal outcome metadata for one file-linked protocol pass. */
         ProtocolFileOutcomeDto: {
             filePath?: string | null;

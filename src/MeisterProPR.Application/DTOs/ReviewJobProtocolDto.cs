@@ -162,6 +162,30 @@ public partial record ProtocolEventDto
 
     /// <summary>Outcome for a forced-final or schema-repair attempt.</summary>
     public string? FinalizationOutcome { get; init; }
+
+    /// <summary>UTC timestamp at which a tool call started when captured.</summary>
+    public DateTimeOffset? StartedAt { get; init; }
+
+    /// <summary>UTC timestamp at which a tool call completed when captured.</summary>
+    public DateTimeOffset? CompletedAt { get; init; }
+
+    /// <summary>Total elapsed duration of a tool call in milliseconds when captured.</summary>
+    public long? DurationMs { get; init; }
+
+    /// <summary>Measured wait or backoff duration in milliseconds when available.</summary>
+    public long? WaitDurationMs { get; init; }
+
+    /// <summary>Measured active execution duration in milliseconds when available.</summary>
+    public long? ActiveDurationMs { get; init; }
+
+    /// <summary>Availability state for the timing dimensions on this event.</summary>
+    public string? TimingAvailability { get; init; }
+
+    /// <summary>Outcome of the tool invocation when this event represents a tool call.</summary>
+    public string? ToolOutcome { get; init; }
+
+    /// <summary>Ordered timing phases captured inside the tool invocation when available.</summary>
+    public IReadOnlyList<ProtocolEventPhaseTimingDto>? PhaseTimings { get; init; }
 }
 
 /// <summary>
@@ -173,6 +197,21 @@ public sealed record ProtocolToolEvidenceDto(
     int BoundedPayloadTokens,
     string Action,
     bool Refreshable);
+
+/// <summary>
+///     One ordered timed phase captured inside a tool invocation.
+/// </summary>
+public sealed record ProtocolEventPhaseTimingDto(
+    string Name,
+    string DisplayName,
+    int Sequence,
+    int? Occurrence,
+    DateTimeOffset? StartedAt,
+    DateTimeOffset? CompletedAt,
+    long? DurationMs,
+    string Availability,
+    string Outcome,
+    string? Summary);
 
 /// <summary>
 ///     Carries one final review comment attributable to a protocol pass.

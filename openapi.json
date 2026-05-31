@@ -17524,6 +17524,54 @@
             "type": "string",
             "description": "Outcome for a forced-final or schema-repair attempt.",
             "nullable": true
+          },
+          "startedAt": {
+            "type": "string",
+            "description": "UTC timestamp at which a tool call started when captured.",
+            "format": "date-time",
+            "nullable": true
+          },
+          "completedAt": {
+            "type": "string",
+            "description": "UTC timestamp at which a tool call completed when captured.",
+            "format": "date-time",
+            "nullable": true
+          },
+          "durationMs": {
+            "type": "integer",
+            "description": "Total elapsed duration of a tool call in milliseconds when captured.",
+            "format": "int64",
+            "nullable": true
+          },
+          "waitDurationMs": {
+            "type": "integer",
+            "description": "Measured wait or backoff duration in milliseconds when available.",
+            "format": "int64",
+            "nullable": true
+          },
+          "activeDurationMs": {
+            "type": "integer",
+            "description": "Measured active execution duration in milliseconds when available.",
+            "format": "int64",
+            "nullable": true
+          },
+          "timingAvailability": {
+            "type": "string",
+            "description": "Availability state for the timing dimensions on this event.",
+            "nullable": true
+          },
+          "toolOutcome": {
+            "type": "string",
+            "description": "Outcome of the tool invocation when this event represents a tool call.",
+            "nullable": true
+          },
+          "phaseTimings": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ProtocolEventPhaseTimingDto"
+            },
+            "description": "Ordered timing phases captured inside the tool invocation when available.",
+            "nullable": true
           }
         },
         "additionalProperties": false,
@@ -17538,6 +17586,57 @@
         ],
         "type": "string",
         "description": "Discriminates the kind of event recorded in a MeisterProPR.Domain.Entities.ProtocolEvent."
+      },
+      "ProtocolEventPhaseTimingDto": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "nullable": true
+          },
+          "displayName": {
+            "type": "string",
+            "nullable": true
+          },
+          "sequence": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "occurrence": {
+            "type": "integer",
+            "format": "int32",
+            "nullable": true
+          },
+          "startedAt": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "completedAt": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "durationMs": {
+            "type": "integer",
+            "format": "int64",
+            "nullable": true
+          },
+          "availability": {
+            "type": "string",
+            "nullable": true
+          },
+          "outcome": {
+            "type": "string",
+            "nullable": true
+          },
+          "summary": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false,
+        "description": "One ordered timed phase captured inside a tool invocation."
       },
       "ProtocolFileOutcomeDto": {
         "type": "object",

@@ -251,27 +251,43 @@ internal sealed partial class ToolAwareAiReviewCore(
                     var toolResultContents = new List<AIContent>();
                     foreach (var call in functionCalls)
                     {
-                        var resultText = await this.InvokeToolAsync(call, rawTools, cancellationToken);
-                        var originalPayloadTokens = EstimateTokenCount(resultText);
-                        var boundedResultText = BoundToolResult(resultText, opts.MaxToolResultReplayCharacters);
-                        var boundedPayloadTokens = EstimateTokenCount(boundedResultText);
-                        var toolEvidenceAction = boundedResultText.Length < resultText.Length ? "Bounded" : null;
+                        var invocation = await this.InvokeToolAsync(call, rawTools, cancellationToken);
+                        var boundedResultText = invocation.BoundedResultJson;
                         toolResultContents.Add(new FunctionResultContent(call.CallId, boundedResultText));
-                        state.RecordToolCall(call.Name ?? "", JsonSerializer.Serialize(call.Arguments), boundedResultText);
+                        state.RecordToolCall(
+                            call.Name ?? "",
+                            invocation.ArgumentsJson,
+                            boundedResultText,
+                            invocation.StartedAt,
+                            invocation.CompletedAt,
+                            invocation.DurationMs,
+                            invocation.WaitDurationMs,
+                            invocation.ActiveDurationMs,
+                            invocation.TimingAvailability,
+                            invocation.ToolOutcome,
+                            invocation.PhaseTimings);
 
                         if (systemContext.ActiveProtocolId.HasValue && systemContext.ProtocolRecorder is not null)
                         {
                             await systemContext.ProtocolRecorder.RecordToolCallAsync(
                                 systemContext.ActiveProtocolId.Value,
                                 call.Name ?? "",
-                                JsonSerializer.Serialize(call.Arguments),
+                                invocation.ArgumentsJson,
                                 boundedResultText,
                                 state.Iteration,
                                 cancellationToken,
-                                toolEvidenceAction,
-                                toolEvidenceAction is not null ? originalPayloadTokens : null,
-                                toolEvidenceAction is not null ? boundedPayloadTokens : null,
-                                toolEvidenceAction is not null ? true : null);
+                                invocation.StartedAt,
+                                invocation.CompletedAt,
+                                invocation.DurationMs,
+                                invocation.WaitDurationMs,
+                                invocation.ActiveDurationMs,
+                                invocation.TimingAvailability,
+                                invocation.ToolOutcome,
+                                invocation.PhaseTimings,
+                                invocation.WasBounded ? "Bounded" : null,
+                                invocation.WasBounded ? invocation.OriginalPayloadTokens : null,
+                                invocation.WasBounded ? invocation.BoundedPayloadTokens : null,
+                                invocation.WasBounded ? true : null);
                         }
                     }
 
@@ -1019,15 +1035,6 @@ internal sealed partial class ToolAwareAiReviewCore(
                     "Get the content of a file at a specific line range (1-based, inclusive). Use this to read full file contents when you only have a partial diff. Always use the PR source branch (shown in the per-file header) — never main or master.",
             });
 
-        var searchSourceRepo = AIFunctionFactory.Create(
-            (string searchTerm, string? fileMask) => reviewTools.SearchSourceRepoAsync(searchTerm, fileMask, cancellationToken),
-            new AIFunctionFactoryOptions
-            {
-                Name = BoundedReviewContextTools.SearchSourceRepoToolName,
-                Description =
-                    "Search the PR source branch across the whole repository using a regex search_term and an optional glob file_mask. Returns structured matches, limitations, and truncation metadata.",
-            });
-
         var searchSourceChangedFiles = AIFunctionFactory.Create(
             (string searchTerm, string? fileMask) => reviewTools.SearchSourceChangedFilesAsync(searchTerm, fileMask, cancellationToken),
             new AIFunctionFactoryOptions
@@ -1130,7 +1137,6 @@ internal sealed partial class ToolAwareAiReviewCore(
             getChangedFiles,
             getFileTree,
             getFileContent,
-            searchSourceRepo,
             searchSourceChangedFiles,
             searchTargetRepo,
             searchTargetChangedFiles,
@@ -1176,11 +1182,9 @@ internal sealed partial class ToolAwareAiReviewCore(
     {
         return tools
             .Select(tool => new RecordingAIFunction(
-                tool, logger, maxToolResultReplayCharacters, (toolName, argumentsJson, resultJson) =>
+                tool, logger, maxToolResultReplayCharacters, invocation =>
                     this.RecordManagedToolInvocationAsync(
-                        toolName,
-                        argumentsJson,
-                        resultJson,
+                        invocation,
                         state,
                         systemContext,
                         cancellationToken)))
@@ -1189,42 +1193,66 @@ internal sealed partial class ToolAwareAiReviewCore(
     }
 
     private async Task RecordManagedToolInvocationAsync(
-        string toolName,
-        string argumentsJson,
-        string resultJson,
+        ToolInvocationTelemetry invocation,
         ReviewLoopState state,
         ReviewSystemContext systemContext,
         CancellationToken cancellationToken)
     {
-        state.RecordToolCall(toolName, argumentsJson, resultJson);
+        state.RecordToolCall(
+            invocation.ToolName,
+            invocation.ArgumentsJson,
+            invocation.BoundedResultJson,
+            invocation.StartedAt,
+            invocation.CompletedAt,
+            invocation.DurationMs,
+            invocation.WaitDurationMs,
+            invocation.ActiveDurationMs,
+            invocation.TimingAvailability,
+            invocation.ToolOutcome,
+            invocation.PhaseTimings);
 
         if (systemContext.ActiveProtocolId.HasValue && systemContext.ProtocolRecorder is not null)
         {
-            var wasBounded = resultJson.Contains("[Tool evidence bounded:", StringComparison.Ordinal);
             await systemContext.ProtocolRecorder.RecordToolCallAsync(
                 systemContext.ActiveProtocolId.Value,
-                toolName,
-                argumentsJson,
-                resultJson,
+                invocation.ToolName,
+                invocation.ArgumentsJson,
+                invocation.BoundedResultJson,
                 state.Iteration,
                 cancellationToken,
-                wasBounded ? "Bounded" : null,
-                EstimateTokenCount(resultJson),
-                EstimateTokenCount(resultJson),
-                wasBounded);
+                invocation.StartedAt,
+                invocation.CompletedAt,
+                invocation.DurationMs,
+                invocation.WaitDurationMs,
+                invocation.ActiveDurationMs,
+                invocation.TimingAvailability,
+                invocation.ToolOutcome,
+                invocation.PhaseTimings,
+                invocation.WasBounded ? "Bounded" : null,
+                invocation.WasBounded ? invocation.OriginalPayloadTokens : null,
+                invocation.WasBounded ? invocation.BoundedPayloadTokens : null,
+                invocation.WasBounded ? true : null);
         }
     }
 
-    private async Task<string> InvokeToolAsync(
+    private async Task<ToolInvocationTelemetry> InvokeToolAsync(
         FunctionCallContent call,
         IReadOnlyList<AIFunction> tools,
         CancellationToken cancellationToken)
     {
+        var toolName = call.Name ?? string.Empty;
+        var argumentsJson = JsonSerializer.Serialize(call.Arguments);
         var matchingTool = tools.FirstOrDefault(t => t.Name == call.Name);
         if (matchingTool is null)
         {
-            return $"[Unknown tool: {call.Name}]";
+            var now = DateTimeOffset.UtcNow;
+            var resultText = $"[Unknown tool: {call.Name}]";
+            return CreateToolInvocationTelemetry(toolName, argumentsJson, resultText, resultText, now, now, 0, ProtocolEventToolOutcomes.Failed, null);
         }
+
+        var startedAt = DateTimeOffset.UtcNow;
+        var stopwatch = Stopwatch.StartNew();
+        using var timingScope = ToolTimingCollectorContext.BeginCollection();
 
         try
         {
@@ -1235,13 +1263,91 @@ internal sealed partial class ToolAwareAiReviewCore(
             }
 
             var result = await matchingTool.InvokeAsync(functionArgs, cancellationToken);
-            return JsonSerializer.Serialize(result, JsonOptions);
+            var resultText = JsonSerializer.Serialize(result, JsonOptions);
+            var boundedResultText = BoundToolResult(resultText, options.Value.MaxToolResultReplayCharacters);
+            return CreateToolInvocationTelemetry(
+                toolName,
+                argumentsJson,
+                resultText,
+                boundedResultText,
+                startedAt,
+                DateTimeOffset.UtcNow,
+                stopwatch.ElapsedMilliseconds,
+                ProtocolEventToolOutcomes.Succeeded,
+                ToolTimingCollectorContext.CaptureSnapshot());
+        }
+        catch (OperationCanceledException ex)
+        {
+            LogToolInvocationFailed(logger, toolName, ex);
+            var resultText = $"[Tool error: {ex.Message}]";
+            return CreateToolInvocationTelemetry(
+                toolName,
+                argumentsJson,
+                resultText,
+                resultText,
+                startedAt,
+                DateTimeOffset.UtcNow,
+                stopwatch.ElapsedMilliseconds,
+                ProtocolEventToolOutcomes.Cancelled,
+                ToolTimingCollectorContext.CaptureSnapshot());
         }
         catch (Exception ex)
         {
-            LogToolInvocationFailed(logger, call.Name ?? "", ex);
-            return $"[Tool error: {ex.Message}]";
+            LogToolInvocationFailed(logger, toolName, ex);
+            var resultText = $"[Tool error: {ex.Message}]";
+            return CreateToolInvocationTelemetry(
+                toolName,
+                argumentsJson,
+                resultText,
+                resultText,
+                startedAt,
+                DateTimeOffset.UtcNow,
+                stopwatch.ElapsedMilliseconds,
+                ProtocolEventToolOutcomes.Failed,
+                ToolTimingCollectorContext.CaptureSnapshot());
         }
+    }
+
+    private static ToolInvocationTelemetry CreateToolInvocationTelemetry(
+        string toolName,
+        string argumentsJson,
+        string resultJson,
+        string boundedResultJson,
+        DateTimeOffset startedAt,
+        DateTimeOffset completedAt,
+        long durationMs,
+        string toolOutcome,
+        IReadOnlyList<ProtocolEventPhaseTiming>? phaseTimings)
+    {
+        var wasBounded = boundedResultJson.Length < resultJson.Length;
+        var waitDurationMs = phaseTimings?
+            .Where(phase => string.Equals(phase.Name, ProtocolEventToolPhaseNames.RetryBackoff, StringComparison.Ordinal))
+            .Sum(phase => phase.DurationMs ?? 0L);
+        if (waitDurationMs == 0)
+        {
+            waitDurationMs = null;
+        }
+
+        long? activeDurationMs = waitDurationMs.HasValue
+            ? Math.Max(0L, durationMs - waitDurationMs.Value)
+            : null;
+
+        return new ToolInvocationTelemetry(
+            toolName,
+            argumentsJson,
+            resultJson,
+            boundedResultJson,
+            startedAt,
+            completedAt,
+            durationMs,
+            waitDurationMs,
+            activeDurationMs,
+            ProtocolEventTimingAvailabilities.Captured,
+            toolOutcome,
+            phaseTimings,
+            wasBounded,
+            EstimateTokenCount(resultJson),
+            EstimateTokenCount(boundedResultJson));
     }
 
     private static string? GetInputSample(IList<ChatMessage> messages)
@@ -1803,7 +1909,7 @@ internal sealed partial class ToolAwareAiReviewCore(
         AIFunction inner,
         ILogger logger,
         int maxToolResultReplayCharacters,
-        Func<string, string, string, Task> onInvoked) : AIFunction
+        Func<ToolInvocationTelemetry, Task> onInvoked) : AIFunction
     {
         public override MethodInfo? UnderlyingMethod => inner.UnderlyingMethod;
 
@@ -1826,21 +1932,79 @@ internal sealed partial class ToolAwareAiReviewCore(
             var argumentsJson = JsonSerializer.Serialize(
                 arguments.ToDictionary(argument => argument.Key, argument => argument.Value),
                 JsonOptions);
+            var startedAt = DateTimeOffset.UtcNow;
+            var stopwatch = Stopwatch.StartNew();
+            using var timingScope = ToolTimingCollectorContext.BeginCollection();
 
             try
             {
                 var result = await inner.InvokeAsync(arguments, cancellationToken);
-                var resultJson = BoundToolResult(JsonSerializer.Serialize(result, JsonOptions), maxToolResultReplayCharacters);
-                await onInvoked(this.Name, argumentsJson, resultJson);
-                return resultJson;
+                var resultJson = JsonSerializer.Serialize(result, JsonOptions);
+                var boundedResultJson = BoundToolResult(resultJson, maxToolResultReplayCharacters);
+                await onInvoked(
+                    CreateToolInvocationTelemetry(
+                        this.Name,
+                        argumentsJson,
+                        resultJson,
+                        boundedResultJson,
+                        startedAt,
+                        DateTimeOffset.UtcNow,
+                        stopwatch.ElapsedMilliseconds,
+                        ProtocolEventToolOutcomes.Succeeded,
+                        ToolTimingCollectorContext.CaptureSnapshot()));
+                return boundedResultJson;
+            }
+            catch (OperationCanceledException ex)
+            {
+                LogToolInvocationFailed(logger, this.Name, ex);
+                var errorResult = $"[Tool error: {ex.Message}]";
+                await onInvoked(
+                    CreateToolInvocationTelemetry(
+                        this.Name,
+                        argumentsJson,
+                        errorResult,
+                        errorResult,
+                        startedAt,
+                        DateTimeOffset.UtcNow,
+                        stopwatch.ElapsedMilliseconds,
+                        ProtocolEventToolOutcomes.Cancelled,
+                        ToolTimingCollectorContext.CaptureSnapshot()));
+                return errorResult;
             }
             catch (Exception ex)
             {
                 LogToolInvocationFailed(logger, this.Name, ex);
                 var errorResult = $"[Tool error: {ex.Message}]";
-                await onInvoked(this.Name, argumentsJson, errorResult);
+                await onInvoked(
+                    CreateToolInvocationTelemetry(
+                        this.Name,
+                        argumentsJson,
+                        errorResult,
+                        errorResult,
+                        startedAt,
+                        DateTimeOffset.UtcNow,
+                        stopwatch.ElapsedMilliseconds,
+                        ProtocolEventToolOutcomes.Failed,
+                        ToolTimingCollectorContext.CaptureSnapshot()));
                 return errorResult;
             }
         }
     }
+
+    private sealed record ToolInvocationTelemetry(
+        string ToolName,
+        string ArgumentsJson,
+        string ResultJson,
+        string BoundedResultJson,
+        DateTimeOffset StartedAt,
+        DateTimeOffset? CompletedAt,
+        long? DurationMs,
+        long? WaitDurationMs,
+        long? ActiveDurationMs,
+        string TimingAvailability,
+        string ToolOutcome,
+        IReadOnlyList<ProtocolEventPhaseTiming>? PhaseTimings,
+        bool WasBounded,
+        int OriginalPayloadTokens,
+        int BoundedPayloadTokens);
 }

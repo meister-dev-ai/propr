@@ -1,6 +1,8 @@
 // Copyright (c) Andreas Rain.
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
+using MeisterProPR.Domain.ValueObjects;
+
 namespace MeisterProPR.Application.Features.Reviewing.Execution.Models;
 
 /// <summary>
@@ -27,7 +29,9 @@ public sealed record RepositoryOverview(
     RepositoryOverviewSection RegistrationLocations,
     RepositoryOverviewSection DocsAndSpecs,
     IReadOnlyList<RepositorySearchLimitation> Limitations,
-    bool Truncated)
+    bool Truncated,
+    IReadOnlyList<ProtocolEventPhaseTiming>? PhaseTimings = null)
+    : IToolExecutionTimingCarrier
 {
     /// <summary>Creates a blocked overview result that remains serializable and auditable.</summary>
     public static RepositoryOverview CreateBlocked(string branchSide, string status)
@@ -68,7 +72,9 @@ public sealed record FileNeighborhood(
     IReadOnlyList<string> RegistrationLocations,
     IReadOnlyList<string> DocsAndSpecs,
     IReadOnlyList<RepositorySearchLimitation> Limitations,
-    bool Truncated)
+    bool Truncated,
+    IReadOnlyList<ProtocolEventPhaseTiming>? PhaseTimings = null)
+    : IToolExecutionTimingCarrier
 {
     /// <summary>Creates a blocked neighborhood result that remains serializable and auditable.</summary>
     public static FileNeighborhood CreateBlocked(string branchSide, string filePath, string status)

@@ -435,6 +435,14 @@ public sealed class EfReviewDiagnosticsReader(
             FinalizationAttemptKind = e.FinalizationAttemptKind,
             FinalizationReason = e.FinalizationReason,
             FinalizationOutcome = e.FinalizationOutcome,
+            StartedAt = e.StartedAt,
+            CompletedAt = e.CompletedAt,
+            DurationMs = e.DurationMs,
+            WaitDurationMs = e.WaitDurationMs,
+            ActiveDurationMs = e.ActiveDurationMs,
+            TimingAvailability = e.TimingAvailability,
+            ToolOutcome = e.ToolOutcome,
+            PhaseTimings = CreatePhaseTimingDtos(e.PhaseTimings),
         };
     }
 
@@ -451,6 +459,29 @@ public sealed class EfReviewDiagnosticsReader(
             e.ToolEvidenceBoundedPayloadTokens ?? 0,
             e.ToolEvidenceAction,
             e.ToolEvidenceRefreshable ?? false);
+    }
+
+    private static IReadOnlyList<ProtocolEventPhaseTimingDto>? CreatePhaseTimingDtos(IReadOnlyList<ProtocolEventPhaseTiming>? phaseTimings)
+    {
+        if (phaseTimings is not { Count: > 0 })
+        {
+            return null;
+        }
+
+        return phaseTimings
+            .Select(phase => new ProtocolEventPhaseTimingDto(
+                phase.Name,
+                phase.DisplayName,
+                phase.Sequence,
+                phase.Occurrence,
+                phase.StartedAt,
+                phase.CompletedAt,
+                phase.DurationMs,
+                phase.Availability,
+                phase.Outcome,
+                phase.Summary))
+            .ToList()
+            .AsReadOnly();
     }
 
     private static string? BuildOverviewOutputSummary(ProtocolEvent e, bool isInherited)

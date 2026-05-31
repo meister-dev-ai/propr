@@ -436,6 +436,96 @@ public sealed class JobsControllerProtocolTests(JobsControllerProtocolTests.Prot
     }
 
     [Fact]
+    public async Task GetJobProtocol_IncludesToolTimingAndPhaseDiagnostics()
+    {
+        using var scope = factory.Services.CreateScope();
+        var jobRepo = scope.ServiceProvider.GetRequiredService<IJobRepository>();
+        var job = new ReviewJob(Guid.NewGuid(), Guid.NewGuid(), "https://dev.azure.com/org", "proj", "repo", 64, 1);
+
+        var protocol = new ReviewJobProtocol
+        {
+            Id = Guid.NewGuid(),
+            JobId = job.Id,
+            AttemptNumber = 1,
+            Label = "src/Timing.cs",
+            StartedAt = DateTimeOffset.UtcNow.AddMinutes(-1),
+            CompletedAt = DateTimeOffset.UtcNow,
+            Outcome = "Completed",
+        };
+        protocol.Events.Add(
+            new ProtocolEvent
+            {
+                Id = Guid.NewGuid(),
+                ProtocolId = protocol.Id,
+                Kind = ProtocolEventKind.ToolCall,
+                Name = "search_source_repo",
+                OccurredAt = DateTimeOffset.UtcNow.AddSeconds(-5),
+                StartedAt = DateTimeOffset.UtcNow.AddSeconds(-7),
+                CompletedAt = DateTimeOffset.UtcNow.AddSeconds(-5),
+                DurationMs = 2100,
+                WaitDurationMs = 400,
+                ActiveDurationMs = 1700,
+                TimingAvailability = ProtocolEventTimingAvailabilities.Captured,
+                ToolOutcome = ProtocolEventToolOutcomes.Succeeded,
+                PhaseTimings =
+                [
+                    new ProtocolEventPhaseTiming(
+                        ProtocolEventToolPhaseNames.ScmFileTreeFetch,
+                        "SCM file tree fetch",
+                        1,
+                        null,
+                        DateTimeOffset.UtcNow.AddSeconds(-7),
+                        DateTimeOffset.UtcNow.AddSeconds(-6),
+                        900,
+                        ProtocolEventTimingAvailabilities.Captured,
+                        ProtocolEventToolOutcomes.Succeeded,
+                        "candidate_paths=42"),
+                    new ProtocolEventPhaseTiming(
+                        ProtocolEventToolPhaseNames.RepositorySearch,
+                        "Repository search",
+                        2,
+                        null,
+                        DateTimeOffset.UtcNow.AddSeconds(-6),
+                        DateTimeOffset.UtcNow.AddSeconds(-5),
+                        1200,
+                        ProtocolEventTimingAvailabilities.Captured,
+                        ProtocolEventToolOutcomes.Succeeded,
+                        "matches=2"),
+                ],
+            });
+        job.Protocols.Add(protocol);
+        await jobRepo.AddAsync(job);
+
+        var client = factory.CreateClient();
+        using var request = new HttpRequestMessage(HttpMethod.Get, $"/reviewing/jobs/{job.Id}/protocol");
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", factory.GenerateAdminToken());
+        request.Headers.Add("X-Client-Key", "test-key-123");
+
+        var response = await client.SendAsync(request);
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+
+        var toolEvent = JsonDocument.Parse(await response.Content.ReadAsStringAsync())
+            .RootElement.EnumerateArray()
+            .Single()
+            .GetProperty("events")
+            .EnumerateArray()
+            .Single(e => e.GetProperty("name").GetString() == "search_source_repo");
+
+        Assert.Equal(2100, toolEvent.GetProperty("durationMs").GetInt64());
+        Assert.Equal(400, toolEvent.GetProperty("waitDurationMs").GetInt64());
+        Assert.Equal(1700, toolEvent.GetProperty("activeDurationMs").GetInt64());
+        Assert.Equal("captured", toolEvent.GetProperty("timingAvailability").GetString());
+        Assert.Equal("succeeded", toolEvent.GetProperty("toolOutcome").GetString());
+
+        var phases = toolEvent.GetProperty("phaseTimings").EnumerateArray().ToList();
+        Assert.Equal(2, phases.Count);
+        Assert.Equal("scm_file_tree_fetch", phases[0].GetProperty("name").GetString());
+        Assert.Equal("SCM file tree fetch", phases[0].GetProperty("displayName").GetString());
+        Assert.Equal(900, phases[0].GetProperty("durationMs").GetInt64());
+        Assert.Equal("matches=2", phases[1].GetProperty("summary").GetString());
+    }
+
+    [Fact]
     public async Task GetJobProtocolPass_ReturnsFullEventBodiesForSelectedProtocol()
     {
         using var scope = factory.Services.CreateScope();
@@ -480,6 +570,94 @@ public sealed class JobsControllerProtocolTests(JobsControllerProtocolTests.Prot
         Assert.Equal("full input", ev.GetProperty("inputTextSample").GetString());
         Assert.Equal("full system", ev.GetProperty("systemPrompt").GetString());
         Assert.Equal("full output", ev.GetProperty("outputSummary").GetString());
+    }
+
+    [Fact]
+    public async Task GetJobProtocol_PreservesTimingAttributionAcrossVisiblePasses()
+    {
+        using var scope = factory.Services.CreateScope();
+        var jobRepo = scope.ServiceProvider.GetRequiredService<IJobRepository>();
+        var job = new ReviewJob(Guid.NewGuid(), Guid.NewGuid(), "https://dev.azure.com/org", "proj", "repo", 66, 1);
+
+        var firstFileResultId = Guid.NewGuid();
+        var secondFileResultId = Guid.NewGuid();
+
+        var firstProtocol = new ReviewJobProtocol
+        {
+            Id = Guid.NewGuid(),
+            JobId = job.Id,
+            AttemptNumber = 1,
+            Label = "src/Foo.cs",
+            FileResultId = firstFileResultId,
+            StartedAt = DateTimeOffset.UtcNow.AddMinutes(-3),
+            CompletedAt = DateTimeOffset.UtcNow.AddMinutes(-2),
+            Outcome = "Completed",
+        };
+        firstProtocol.Events.Add(
+            new ProtocolEvent
+            {
+                Id = Guid.NewGuid(),
+                ProtocolId = firstProtocol.Id,
+                Kind = ProtocolEventKind.ToolCall,
+                Name = "search_source_repo",
+                OccurredAt = DateTimeOffset.UtcNow.AddMinutes(-3),
+                DurationMs = 3200,
+                TimingAvailability = ProtocolEventTimingAvailabilities.Captured,
+                ToolOutcome = ProtocolEventToolOutcomes.Succeeded,
+            });
+
+        var secondProtocol = new ReviewJobProtocol
+        {
+            Id = Guid.NewGuid(),
+            JobId = job.Id,
+            AttemptNumber = 2,
+            Label = "src/Bar.cs",
+            FileResultId = secondFileResultId,
+            StartedAt = DateTimeOffset.UtcNow.AddMinutes(-2),
+            CompletedAt = DateTimeOffset.UtcNow.AddMinutes(-1),
+            Outcome = "Completed",
+        };
+        secondProtocol.Events.Add(
+            new ProtocolEvent
+            {
+                Id = Guid.NewGuid(),
+                ProtocolId = secondProtocol.Id,
+                Kind = ProtocolEventKind.ToolCall,
+                Name = "search_code",
+                OccurredAt = DateTimeOffset.UtcNow.AddMinutes(-2),
+                DurationMs = 5100,
+                TimingAvailability = ProtocolEventTimingAvailabilities.Captured,
+                ToolOutcome = ProtocolEventToolOutcomes.Succeeded,
+            });
+
+        job.Protocols.Add(firstProtocol);
+        job.Protocols.Add(secondProtocol);
+        await jobRepo.AddAsync(job);
+
+        var client = factory.CreateClient();
+        using var request = new HttpRequestMessage(HttpMethod.Get, $"/reviewing/jobs/{job.Id}/protocol?includeEvents=false");
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", factory.GenerateAdminToken());
+        request.Headers.Add("X-Client-Key", "test-key-123");
+
+        var response = await client.SendAsync(request);
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+
+        var protocols = JsonDocument.Parse(await response.Content.ReadAsStringAsync())
+            .RootElement
+            .EnumerateArray()
+            .ToList();
+
+        Assert.Equal(2, protocols.Count);
+        Assert.Contains(
+            protocols, protocol =>
+                protocol.GetProperty("label").GetString() == "src/Foo.cs"
+                && protocol.GetProperty("fileResultId").GetString() == firstFileResultId.ToString()
+                && protocol.GetProperty("events").EnumerateArray().Single().GetProperty("durationMs").GetInt64() == 3200);
+        Assert.Contains(
+            protocols, protocol =>
+                protocol.GetProperty("label").GetString() == "src/Bar.cs"
+                && protocol.GetProperty("fileResultId").GetString() == secondFileResultId.ToString()
+                && protocol.GetProperty("events").EnumerateArray().Single().GetProperty("durationMs").GetInt64() == 5100);
     }
 
     [Fact]

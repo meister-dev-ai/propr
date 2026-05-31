@@ -367,7 +367,7 @@ public class ToolAwareAiReviewCoreTests
         Assert.Contains("get_changed_files", toolNames);
         Assert.Contains("get_file_tree", toolNames);
         Assert.Contains("get_file_content", toolNames);
-        Assert.Contains("search_source_repo", toolNames);
+        Assert.DoesNotContain("search_source_repo", toolNames);
         Assert.Contains("search_source_changed_files", toolNames);
         Assert.Contains("search_target_repo", toolNames);
         Assert.Contains("search_target_changed_files", toolNames);
@@ -1289,7 +1289,19 @@ public class ToolAwareAiReviewCoreTests
                 Arg.Any<string>(),
                 Arg.Any<string>(),
                 1,
-                Arg.Any<CancellationToken>());
+                Arg.Any<CancellationToken>(),
+                Arg.Any<DateTimeOffset?>(),
+                Arg.Any<DateTimeOffset?>(),
+                Arg.Any<long?>(),
+                Arg.Any<long?>(),
+                Arg.Any<long?>(),
+                Arg.Any<string?>(),
+                Arg.Any<string?>(),
+                Arg.Any<IReadOnlyList<ProtocolEventPhaseTiming>?>(),
+                Arg.Any<string?>(),
+                Arg.Any<int?>(),
+                Arg.Any<int?>(),
+                Arg.Any<bool?>());
     }
 
     [Fact]
@@ -1341,6 +1353,14 @@ public class ToolAwareAiReviewCoreTests
                 Arg.Is<string>(result => result.Length <= 1200 && result.Contains("[Tool evidence bounded", StringComparison.Ordinal)),
                 1,
                 Arg.Any<CancellationToken>(),
+                Arg.Any<DateTimeOffset?>(),
+                Arg.Any<DateTimeOffset?>(),
+                Arg.Any<long?>(),
+                Arg.Any<long?>(),
+                Arg.Any<long?>(),
+                Arg.Any<string?>(),
+                Arg.Any<string?>(),
+                Arg.Any<IReadOnlyList<ProtocolEventPhaseTiming>?>(),
                 "Bounded",
                 Arg.Is<int?>(tokens => tokens > 1000),
                 Arg.Is<int?>(tokens => tokens < 400),
@@ -1445,10 +1465,21 @@ public class ToolAwareAiReviewCoreTests
                 protocolId,
                 "search_source_repo",
                 Arg.Any<string>(),
-                Arg.Is<string>(result => result.Contains("\"status\":\"success\"", StringComparison.Ordinal) &&
-                                         result.Contains("\"filePath\":\"src/Foo.cs\"", StringComparison.Ordinal)),
+                Arg.Is<string>(result => string.Equals(result, "[Unknown tool: search_source_repo]", StringComparison.Ordinal)),
                 1,
-                Arg.Any<CancellationToken>());
+                Arg.Any<CancellationToken>(),
+                Arg.Any<DateTimeOffset?>(),
+                Arg.Any<DateTimeOffset?>(),
+                Arg.Any<long?>(),
+                Arg.Any<long?>(),
+                Arg.Any<long?>(),
+                Arg.Any<string?>(),
+                Arg.Any<string?>(),
+                Arg.Any<IReadOnlyList<ProtocolEventPhaseTiming>?>(),
+                Arg.Any<string?>(),
+                Arg.Any<int?>(),
+                Arg.Any<int?>(),
+                Arg.Any<bool?>());
     }
 
     [Theory]
@@ -1644,7 +1675,19 @@ public class ToolAwareAiReviewCoreTests
                 Arg.Any<string>(),
                 Arg.Is<string>(result => result.Contains("\"status\":\"no_match\"", StringComparison.Ordinal)),
                 1,
-                Arg.Any<CancellationToken>());
+                Arg.Any<CancellationToken>(),
+                Arg.Any<DateTimeOffset?>(),
+                Arg.Any<DateTimeOffset?>(),
+                Arg.Any<long?>(),
+                Arg.Any<long?>(),
+                Arg.Any<long?>(),
+                Arg.Any<string?>(),
+                Arg.Any<string?>(),
+                Arg.Any<IReadOnlyList<ProtocolEventPhaseTiming>?>(),
+                Arg.Any<string?>(),
+                Arg.Any<int?>(),
+                Arg.Any<int?>(),
+                Arg.Any<bool?>());
         await recorder.Received(1)
             .RecordToolCallAsync(
                 protocolId,
@@ -1652,7 +1695,19 @@ public class ToolAwareAiReviewCoreTests
                 Arg.Any<string>(),
                 Arg.Is<string>(result => result.Contains("\"filePath\":\"src/Foo.cs\"", StringComparison.Ordinal)),
                 1,
-                Arg.Any<CancellationToken>());
+                Arg.Any<CancellationToken>(),
+                Arg.Any<DateTimeOffset?>(),
+                Arg.Any<DateTimeOffset?>(),
+                Arg.Any<long?>(),
+                Arg.Any<long?>(),
+                Arg.Any<long?>(),
+                Arg.Any<string?>(),
+                Arg.Any<string?>(),
+                Arg.Any<IReadOnlyList<ProtocolEventPhaseTiming>?>(),
+                Arg.Any<string?>(),
+                Arg.Any<int?>(),
+                Arg.Any<int?>(),
+                Arg.Any<bool?>());
     }
 
     [Fact]
@@ -1810,7 +1865,19 @@ public class ToolAwareAiReviewCoreTests
                 Arg.Any<string>(),
                 Arg.Any<string>(),
                 1,
-                Arg.Any<CancellationToken>());
+                Arg.Any<CancellationToken>(),
+                Arg.Any<DateTimeOffset?>(),
+                Arg.Any<DateTimeOffset?>(),
+                Arg.Any<long?>(),
+                Arg.Any<long?>(),
+                Arg.Any<long?>(),
+                Arg.Any<string?>(),
+                Arg.Any<string?>(),
+                Arg.Any<IReadOnlyList<ProtocolEventPhaseTiming>?>(),
+                Arg.Any<string?>(),
+                Arg.Any<int?>(),
+                Arg.Any<int?>(),
+                Arg.Any<bool?>());
     }
 
     // T019 — Two per-file reviews of the same PR share a byte-for-byte identical first System message

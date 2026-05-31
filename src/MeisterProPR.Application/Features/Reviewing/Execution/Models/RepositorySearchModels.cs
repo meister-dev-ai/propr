@@ -207,7 +207,9 @@ public sealed record RepositorySearchResult(
     string? FileMaskApplied,
     IReadOnlyList<RepositorySearchMatch> Matches,
     IReadOnlyList<RepositorySearchLimitation> Limitations,
-    bool Truncated)
+    bool Truncated,
+    IReadOnlyList<ProtocolEventPhaseTiming>? PhaseTimings = null)
+    : IToolExecutionTimingCarrier
 {
     /// <summary>
     ///     Creates a blocked repository-search result that stays serializable and auditable.

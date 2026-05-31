@@ -38,6 +38,20 @@ internal sealed class ProtocolEventConfiguration : IEntityTypeConfiguration<Prot
             .HasColumnName("input_text_sample")
             .HasColumnType("text")
             .IsRequired(false);
+        builder.Property(e => e.StartedAt).HasColumnName("started_at").IsRequired(false);
+        builder.Property(e => e.CompletedAt).HasColumnName("completed_at").IsRequired(false);
+        builder.Property(e => e.DurationMs).HasColumnName("duration_ms").IsRequired(false);
+        builder.Property(e => e.WaitDurationMs).HasColumnName("wait_duration_ms").IsRequired(false);
+        builder.Property(e => e.ActiveDurationMs).HasColumnName("active_duration_ms").IsRequired(false);
+        builder.Property(e => e.TimingAvailability).HasColumnName("timing_availability").HasMaxLength(32).IsRequired(false);
+        builder.Property(e => e.ToolOutcome).HasColumnName("tool_outcome").HasMaxLength(32).IsRequired(false);
+        builder.Property(e => e.PhaseTimings)
+            .HasColumnName("phase_timings")
+            .HasColumnType("jsonb")
+            .IsRequired(false)
+            .HasConversion(
+                JsonPropertyConversions.NullableProtocolEventPhaseTimingListConverter,
+                JsonPropertyConversions.NullableProtocolEventPhaseTimingListComparer);
         builder.Property(e => e.SystemPrompt)
             .HasColumnName("system_prompt")
             .HasColumnType("text")

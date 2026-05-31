@@ -2,6 +2,7 @@
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
 using MeisterProPR.Application.Features.Reviewing.Execution.Models;
+using MeisterProPR.Domain.ValueObjects;
 
 namespace MeisterProPR.Infrastructure.Features.Reviewing.Execution;
 
@@ -46,7 +47,10 @@ internal static class FileNeighborhoodBuilder
             .Where(path => IsSameArea(path, directory, root, stem))
             .ToList();
 
-        var nearbyTests = TakeRelated(areaPaths, path => IsTestPath(path));
+        var nearbyTests = ToolTimingCollectorContext.Record(
+            ProtocolEventToolPhaseNames.ResultShaping,
+            "Result shaping",
+            () => TakeRelated(areaPaths, path => IsTestPath(path)));
         var configTouchpoints = TakeRelated(areaPaths, IsConfigPath);
         var registrations = TakeRelated(areaPaths, IsRegistrationPath);
         var docs = TakeRelated(normalizedPaths, IsDocsOrSpecPath);
@@ -72,7 +76,8 @@ internal static class FileNeighborhoodBuilder
             registrations.Paths,
             docs.Paths,
             limitations,
-            truncated);
+            truncated,
+            ToolTimingCollectorContext.CaptureSnapshot());
     }
 
     private static RelatedPaths TakeRelated(IEnumerable<string> paths, Func<string, bool> predicate)

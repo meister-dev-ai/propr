@@ -76,6 +76,7 @@ Meister DEV's ProPR automates your pull and merge request reviews, ensuring high
 - **Strategy and file-outcome diagnostics** — review history and job protocol views expose the resolved review strategy, strategy-selection source, and per-file terminal outcomes, including degraded `Agentic File-by-File` investigations
 - **Follow-up and repeated-judgment diagnostics** — job protocol views expose trigger family, follow-up completion/dependency, and repeated-judgment agreement or disagreement details so rollout reviews can distinguish diagnostics from actionable output
 - **Token optimization diagnostics** — job protocol views expose cache observability, per-call raw/cached/effective input, bounded tool-evidence replay, and forced-final or repair attempt reasons so operators can separate provider cache behavior from prompt/replay reductions
+- **Execution-trace timing diagnostics** — job protocol views expose per-tool start/end time, total duration, optional wait-versus-active split, repository-search phase timing, and slowest-call comparison cues across visible passes without requiring raw logs
 - **Token usage dashboard** — per-client AI token consumption tracked by model and date
 
 ### Knowledge

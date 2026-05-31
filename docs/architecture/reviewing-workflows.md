@@ -257,7 +257,35 @@ states in the evidence bundle.
 11. Summary reconciliation rewrites or preserves the synthesis summary so the final summary matches
      surviving `Publish` and `SummaryOnly` outcomes rather than repeating dropped claims.
 12. The protocol records machine-readable ProRV, verification, final-gate, and token-optimization events, including
-     `prorv_prefilter_started`, `prorv_prefilter_skipped`, `prorv_prefilter_completed`,
+      `prorv_prefilter_started`, `prorv_prefilter_skipped`, `prorv_prefilter_completed`,
+
+## Protocol Timing Observability
+
+The job protocol diagnostics surface preserves tool timing on the existing pass and event records rather
+than sending timing to a separate telemetry store.
+
+1. Each timing-enabled tool call records `startedAt`, `completedAt`, `durationMs`, optional
+   `waitDurationMs`, optional `activeDurationMs`, `timingAvailability`, `toolOutcome`, and ordered
+   `phaseTimings` directly on the protocol event.
+1. Repository-search-related tools can record nested phases such as request preparation,
+   provider/API work, SCM file tree or content fetches, repository search, retry backoff, result
+   shaping, summarization, and payload bounding.
+1. `timingAvailability` is explicit. `captured` means the displayed timing was measured,
+   `not_captured` means the historical or legacy execution path never emitted that timing,
+   `unavailable` means the path could not measure that dimension reliably, and `incomplete` means
+   execution started but no trustworthy terminal timing was observed.
+1. Operators should interpret `waitDurationMs` and `activeDurationMs` as optional refinements of
+   `durationMs`, not independent totals. When those split values are absent, the UI should keep the
+   whole-tool duration visible without implying zero wait or zero active time.
+1. Phase lists are sparse by design. Missing phases mean the execution path did not capture them, not
+   that the phase consumed zero time.
+1. Large or sensitive tool arguments and results remain bounded summaries. Timing fidelity survives
+   bounded payload replay so operators can compare slow calls without requiring raw large payload
+   storage.
+1. The traces experience keeps timing attributable to the pass and file context that already exists in
+   `ReviewJobProtocol`. The sidebar can show each visible pass's slowest captured tool call, and the
+   active pass can rank the slowest visible tool calls across loaded passes without leaving the job
+   protocol page.
      `prorv_prefilter_failed`, `prorv_focused_guidance_applied`,
      `verification_claims_extracted`, `verification_local_decision`,
     `verification_evidence_collected`, `verification_pr_decision`, `verification_degraded`,

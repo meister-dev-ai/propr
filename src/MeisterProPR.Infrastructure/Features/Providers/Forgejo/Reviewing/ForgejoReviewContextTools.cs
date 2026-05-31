@@ -12,6 +12,7 @@ using MeisterProPR.Domain.Enums;
 using MeisterProPR.Domain.ValueObjects;
 using MeisterProPR.Infrastructure.Features.Providers.Common;
 using MeisterProPR.Infrastructure.Features.Providers.Forgejo.Security;
+using MeisterProPR.Infrastructure.Features.Reviewing.Execution;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
@@ -51,75 +52,89 @@ internal sealed class ForgejoReviewContextTools(
 
     protected override async Task<IReadOnlyList<ChangedFileSummary>> LoadChangedFilesAsync(CancellationToken ct)
     {
-        var context = await this.VerifyAsync(ct);
-        using var request = ForgejoConnectionVerifier.CreateAuthenticatedRequest(
-            ForgejoConnectionVerifier.BuildApiUri(
-                this._host,
-                $"/repos/{this._repositoryPath}/pulls/{this._pullRequestNumber}/files",
-                "limit=100"),
-            context.Connection.Secret);
-        using var response = await this._httpClientFactory.CreateClient("ForgejoProvider").SendAsync(request, ct);
-        if (!response.IsSuccessStatusCode)
-        {
-            throw new InvalidOperationException($"Forgejo changed-file lookup failed with status {(int)response.StatusCode}.");
-        }
+        return await ToolTimingCollectorContext.RecordAsync(
+            ProtocolEventToolPhaseNames.ProviderApiCall,
+            "Provider API call",
+            async () =>
+            {
+                var context = await this.VerifyAsync(ct);
+                using var request = ForgejoConnectionVerifier.CreateAuthenticatedRequest(
+                    ForgejoConnectionVerifier.BuildApiUri(
+                        this._host,
+                        $"/repos/{this._repositoryPath}/pulls/{this._pullRequestNumber}/files",
+                        "limit=100"),
+                    context.Connection.Secret);
+                using var response = await this._httpClientFactory.CreateClient("ForgejoProvider").SendAsync(request, ct);
+                if (!response.IsSuccessStatusCode)
+                {
+                    throw new InvalidOperationException($"Forgejo changed-file lookup failed with status {(int)response.StatusCode}.");
+                }
 
-        var payload = await response.Content.ReadFromJsonAsync<IReadOnlyList<ForgejoPullRequestFileResponse>>(ct)
-                      ?? [];
+                var payload = await response.Content.ReadFromJsonAsync<IReadOnlyList<ForgejoPullRequestFileResponse>>(ct)
+                              ?? [];
 
-        return payload
-            .Select(file => new ChangedFileSummary(this.NormalizePath(file.FileName), MapChangeType(file.Status)))
-            .ToList()
-            .AsReadOnly();
+                return payload
+                    .Select(file => new ChangedFileSummary(this.NormalizePath(file.FileName), MapChangeType(file.Status)))
+                    .ToList()
+                    .AsReadOnly();
+            },
+            files => $"operation=forgejo_changed_files;count={files.Count}");
     }
 
     protected override async Task<IReadOnlyList<string>> LoadFileTreeAsync(
         string normalizedBranch,
         CancellationToken ct)
     {
-        var context = await this.VerifyAsync(ct);
-        using var branchRequest = ForgejoConnectionVerifier.CreateAuthenticatedRequest(
-            ForgejoConnectionVerifier.BuildApiUri(
-                this._host,
-                $"/repos/{this._repositoryPath}/branches/{Uri.EscapeDataString(normalizedBranch)}"),
-            context.Connection.Secret);
-        using var branchResponse =
-            await this._httpClientFactory.CreateClient("ForgejoProvider").SendAsync(branchRequest, ct);
-        if (!branchResponse.IsSuccessStatusCode)
-        {
-            throw new InvalidOperationException($"Forgejo branch lookup failed with status {(int)branchResponse.StatusCode}.");
-        }
+        return await ToolTimingCollectorContext.RecordAsync(
+            ProtocolEventToolPhaseNames.ProviderApiCall,
+            "Provider API call",
+            async () =>
+            {
+                var context = await this.VerifyAsync(ct);
+                using var branchRequest = ForgejoConnectionVerifier.CreateAuthenticatedRequest(
+                    ForgejoConnectionVerifier.BuildApiUri(
+                        this._host,
+                        $"/repos/{this._repositoryPath}/branches/{Uri.EscapeDataString(normalizedBranch)}"),
+                    context.Connection.Secret);
+                using var branchResponse =
+                    await this._httpClientFactory.CreateClient("ForgejoProvider").SendAsync(branchRequest, ct);
+                if (!branchResponse.IsSuccessStatusCode)
+                {
+                    throw new InvalidOperationException($"Forgejo branch lookup failed with status {(int)branchResponse.StatusCode}.");
+                }
 
-        var branchPayload = await branchResponse.Content.ReadFromJsonAsync<ForgejoBranchResponse>(ct)
-                            ?? throw new InvalidOperationException("Forgejo branch lookup returned an empty payload.");
-        var commitSha = branchPayload.Commit?.Id ?? branchPayload.Commit?.Sha;
-        if (string.IsNullOrWhiteSpace(commitSha))
-        {
-            return [];
-        }
+                var branchPayload = await branchResponse.Content.ReadFromJsonAsync<ForgejoBranchResponse>(ct)
+                                    ?? throw new InvalidOperationException("Forgejo branch lookup returned an empty payload.");
+                var commitSha = branchPayload.Commit?.Id ?? branchPayload.Commit?.Sha;
+                if (string.IsNullOrWhiteSpace(commitSha))
+                {
+                    return [];
+                }
 
-        using var treeRequest = ForgejoConnectionVerifier.CreateAuthenticatedRequest(
-            ForgejoConnectionVerifier.BuildApiUri(
-                this._host,
-                $"/repos/{this._repositoryPath}/git/trees/{commitSha}",
-                "recursive=true"),
-            context.Connection.Secret);
-        using var treeResponse =
-            await this._httpClientFactory.CreateClient("ForgejoProvider").SendAsync(treeRequest, ct);
-        if (!treeResponse.IsSuccessStatusCode)
-        {
-            throw new InvalidOperationException($"Forgejo tree lookup failed with status {(int)treeResponse.StatusCode}.");
-        }
+                using var treeRequest = ForgejoConnectionVerifier.CreateAuthenticatedRequest(
+                    ForgejoConnectionVerifier.BuildApiUri(
+                        this._host,
+                        $"/repos/{this._repositoryPath}/git/trees/{commitSha}",
+                        "recursive=true"),
+                    context.Connection.Secret);
+                using var treeResponse =
+                    await this._httpClientFactory.CreateClient("ForgejoProvider").SendAsync(treeRequest, ct);
+                if (!treeResponse.IsSuccessStatusCode)
+                {
+                    throw new InvalidOperationException($"Forgejo tree lookup failed with status {(int)treeResponse.StatusCode}.");
+                }
 
-        var treePayload = await treeResponse.Content.ReadFromJsonAsync<ForgejoTreeResponse>(ct)
-                          ?? throw new InvalidOperationException("Forgejo tree lookup returned an empty payload.");
+                var treePayload = await treeResponse.Content.ReadFromJsonAsync<ForgejoTreeResponse>(ct)
+                                  ?? throw new InvalidOperationException("Forgejo tree lookup returned an empty payload.");
 
-        return treePayload.Tree
-            .Where(entry => string.Equals(entry.Type, "blob", StringComparison.OrdinalIgnoreCase))
-            .Select(entry => this.NormalizePath(entry.Path ?? string.Empty))
-            .Where(path => !string.IsNullOrWhiteSpace(path))
-            .ToList()
-            .AsReadOnly();
+                return treePayload.Tree
+                    .Where(entry => string.Equals(entry.Type, "blob", StringComparison.OrdinalIgnoreCase))
+                    .Select(entry => this.NormalizePath(entry.Path ?? string.Empty))
+                    .Where(path => !string.IsNullOrWhiteSpace(path))
+                    .ToList()
+                    .AsReadOnly();
+            },
+            paths => $"operation=forgejo_tree;branch={normalizedBranch};count={paths.Count}");
     }
 
     protected internal override async Task<string?> FetchRawFileContentAsync(
@@ -127,34 +142,43 @@ internal sealed class ForgejoReviewContextTools(
         string normalizedBranch,
         CancellationToken ct)
     {
-        var context = await this.VerifyAsync(ct);
-        using var request = ForgejoConnectionVerifier.CreateAuthenticatedRequest(
-            ForgejoConnectionVerifier.BuildApiUri(
-                this._host,
-                $"/repos/{this._repositoryPath}/contents/{Uri.EscapeDataString(normalizedPath)}",
-                $"ref={Uri.EscapeDataString(normalizedBranch)}"),
-            context.Connection.Secret);
-        using var response = await this._httpClientFactory.CreateClient("ForgejoProvider").SendAsync(request, ct);
-        if (response.StatusCode == HttpStatusCode.NotFound)
-        {
-            return null;
-        }
+        return await ToolTimingCollectorContext.RecordAsync(
+            ProtocolEventToolPhaseNames.ProviderApiCall,
+            "Provider API call",
+            async () =>
+            {
+                var context = await this.VerifyAsync(ct);
+                using var request = ForgejoConnectionVerifier.CreateAuthenticatedRequest(
+                    ForgejoConnectionVerifier.BuildApiUri(
+                        this._host,
+                        $"/repos/{this._repositoryPath}/contents/{Uri.EscapeDataString(normalizedPath)}",
+                        $"ref={Uri.EscapeDataString(normalizedBranch)}"),
+                    context.Connection.Secret);
+                using var response = await this._httpClientFactory.CreateClient("ForgejoProvider").SendAsync(request, ct);
+                if (response.StatusCode == HttpStatusCode.NotFound)
+                {
+                    return null;
+                }
 
-        if (!response.IsSuccessStatusCode)
-        {
-            throw new InvalidOperationException($"Forgejo file lookup failed with status {(int)response.StatusCode}.");
-        }
+                if (!response.IsSuccessStatusCode)
+                {
+                    throw new InvalidOperationException($"Forgejo file lookup failed with status {(int)response.StatusCode}.");
+                }
 
-        var payload = await response.Content.ReadFromJsonAsync<ForgejoContentResponse>(ct)
-                      ?? throw new InvalidOperationException("Forgejo file lookup returned an empty payload.");
-        if (string.Equals(payload.Encoding, "base64", StringComparison.OrdinalIgnoreCase) &&
-            !string.IsNullOrWhiteSpace(payload.Content))
-        {
-            var raw = payload.Content.Replace("\n", string.Empty, StringComparison.Ordinal);
-            return Encoding.UTF8.GetString(Convert.FromBase64String(raw));
-        }
+                var payload = await response.Content.ReadFromJsonAsync<ForgejoContentResponse>(ct)
+                              ?? throw new InvalidOperationException("Forgejo file lookup returned an empty payload.");
+                if (string.Equals(payload.Encoding, "base64", StringComparison.OrdinalIgnoreCase) &&
+                    !string.IsNullOrWhiteSpace(payload.Content))
+                {
+                    var raw = payload.Content.Replace("\n", string.Empty, StringComparison.Ordinal);
+                    return Encoding.UTF8.GetString(Convert.FromBase64String(raw));
+                }
 
-        return payload.Content;
+                return payload.Content;
+            },
+            content => content is null
+                ? $"operation=forgejo_content;path={normalizedPath};branch={normalizedBranch};missing=true"
+                : $"operation=forgejo_content;path={normalizedPath};branch={normalizedBranch};chars={content.Length}");
     }
 
     private async Task<ForgejoConnectionVerifier.ForgejoConnectionContext> VerifyAsync(CancellationToken ct)
