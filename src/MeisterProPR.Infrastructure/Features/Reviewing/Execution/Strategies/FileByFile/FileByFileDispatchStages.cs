@@ -1,10 +1,12 @@
 // Copyright (c) Andreas Rain.
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
+using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using MeisterProPR.Application.Features.Reviewing.Execution.Models;
 using MeisterProPR.Application.Features.Reviewing.Execution.Ports;
+using MeisterProPR.Application.Features.Reviewing.Execution.Services;
 using MeisterProPR.Application.Interfaces;
 using MeisterProPR.Application.Options;
 using MeisterProPR.Application.ValueObjects;
@@ -34,9 +36,11 @@ internal sealed class FileByFileContextPrefetchStage(AiReviewOptions? options = 
         }
 
         var evidence = new List<PrefetchedContextEvidenceItem>();
-        var surroundingContent = TrimToBudget(
-            context.ChangedFile.FullContent, this._options.MaxPrefetchRegionChars,
-            out var surroundingTruncated);
+        var (surroundingContent, surroundingTruncated, windowedInjection, windowCount, firstWindowStartLine) =
+            BuildSurroundingContext(
+                context.ChangedFile.FullContent,
+                context.ChangedFile.UnifiedDiff,
+                this._options);
 
         if (!string.IsNullOrWhiteSpace(surroundingContent))
         {
@@ -104,6 +108,9 @@ internal sealed class FileByFileContextPrefetchStage(AiReviewOptions? options = 
                         filePath = context.ChangedFile.Path,
                         evidenceCount = evidence.Count,
                         callerSiteCount = evidence.Count(item => string.Equals(item.Kind, "supported_caller_site", StringComparison.Ordinal)),
+                        windowCount,
+                        firstWindowStartLine,
+                        windowedInjection,
                     }),
                 JsonSerializer.Serialize(
                     evidence.Select(item => new
@@ -118,6 +125,175 @@ internal sealed class FileByFileContextPrefetchStage(AiReviewOptions? options = 
         }
 
         return context;
+    }
+
+    /// <summary>
+    ///     Builds the surrounding context evidence for the changed file.
+    ///     When the full content fits within the budget, returns the whole file.
+    ///     Otherwise, extracts hunk-centered windows from the diff and renders them with line-range markers.
+    ///     Falls back to head-trim on any parse failure.
+    /// </summary>
+    internal static (string Content, bool Truncated, bool WindowedInjection, int WindowCount, int? FirstWindowStartLine)
+        BuildSurroundingContext(
+            string? fullContent,
+            string? unifiedDiff,
+            AiReviewOptions options)
+    {
+        if (string.IsNullOrWhiteSpace(fullContent))
+        {
+            return (string.Empty, false, false, 0, null);
+        }
+
+        var normalized = fullContent.Trim();
+        var maxChars = options.MaxPrefetchRegionChars;
+
+        // If the whole file fits within budget, inject it (unchanged behavior).
+        if (normalized.Length <= maxChars)
+        {
+            return (normalized, false, false, 0, null);
+        }
+
+        // Try hunk-centered windowed injection.
+        try
+        {
+            var hunkRanges = ReviewDiffProcessor.ExtractChangedNewLineRanges(unifiedDiff);
+            if (hunkRanges.Count > 0)
+            {
+                var lines = normalized.Replace("\r\n", "\n", StringComparison.Ordinal).Split('\n');
+                var totalLines = lines.Length;
+                var windows = BuildExpandedWindows(hunkRanges, lines, options.PrefetchWindowLinesBefore, options.PrefetchWindowLinesAfter, totalLines);
+                var merged = MergeWindows(windows);
+
+                var (content, truncated) = RenderWindows(merged, lines, totalLines, maxChars);
+                var firstStart = merged.Count > 0 ? (int?)merged[0].Start : null;
+                return (content, truncated, true, merged.Count, firstStart);
+            }
+        }
+        catch
+        {
+            // On any parse failure, fall through to head-trim (never throw, never drop evidence).
+        }
+
+        // Fallback: head-trim (original behavior).
+        return (normalized[..maxChars].TrimEnd(), true, false, 0, null);
+    }
+
+    /// <summary>
+    ///     Expands each hunk range by <paramref name="linesBefore" /> / <paramref name="linesAfter" />,
+    ///     then snaps the window start upward (max 30 extra lines) to the nearest structural boundary line.
+    /// </summary>
+    private static List<(int Start, int End)> BuildExpandedWindows(
+        IReadOnlyList<(int Start, int End)> hunkRanges,
+        string[] lines,
+        int linesBefore,
+        int linesAfter,
+        int totalLines)
+    {
+        var windows = new List<(int Start, int End)>(hunkRanges.Count);
+        foreach (var (hunkStart, hunkEnd) in hunkRanges)
+        {
+            // Convert to 0-based indices for array access.
+            var rawStart = Math.Max(0, hunkStart - 1 - linesBefore);
+            var rawEnd = Math.Min(totalLines - 1, hunkEnd - 1 + linesAfter);
+
+            // Snap start upward (toward lower line numbers, i.e. search backward from rawStart)
+            // to the nearest boundary line: column-0 non-whitespace or following a blank line.
+            // Max 30 extra lines of snap.
+            // TODO R-6: replace with Tree-sitter structural boundary resolver.
+            var snappedStart = rawStart;
+            for (var snap = 0; snap < 30 && snappedStart > 0; snap++)
+            {
+                var line = lines[snappedStart];
+                var prevLine = lines[snappedStart - 1];
+                var isBoundary = (line.Length > 0 && !char.IsWhiteSpace(line[0])) || string.IsNullOrWhiteSpace(prevLine);
+                if (isBoundary)
+                {
+                    break;
+                }
+
+                snappedStart--;
+            }
+
+            windows.Add((snappedStart, rawEnd));
+        }
+
+        return windows;
+    }
+
+    private static List<(int Start, int End)> MergeWindows(List<(int Start, int End)> windows)
+    {
+        if (windows.Count == 0)
+        {
+            return windows;
+        }
+
+        windows.Sort((a, b) => a.Start.CompareTo(b.Start));
+        var merged = new List<(int Start, int End)>();
+        var (ms, me) = windows[0];
+        for (var i = 1; i < windows.Count; i++)
+        {
+            var (s, e) = windows[i];
+            if (s <= me + 1)
+            {
+                me = Math.Max(me, e);
+            }
+            else
+            {
+                merged.Add((ms, me));
+                ms = s;
+                me = e;
+            }
+        }
+
+        merged.Add((ms, me));
+        return merged;
+    }
+
+    private static (string Content, bool Truncated) RenderWindows(
+        List<(int Start, int End)> windows,
+        string[] lines,
+        int totalLines,
+        int maxChars)
+    {
+        var sb = new StringBuilder(maxChars);
+        var truncated = false;
+
+        foreach (var (start, end) in windows)
+        {
+            // 1-based line markers
+            var markerLine = $"[lines {start + 1}-{Math.Min(end + 1, totalLines)} of {totalLines}]";
+            if (sb.Length > 0)
+            {
+                sb.AppendLine();
+            }
+
+            sb.AppendLine(markerLine);
+
+            for (var i = start; i <= end && i < lines.Length; i++)
+            {
+                sb.AppendLine(lines[i]);
+
+                if (sb.Length >= maxChars)
+                {
+                    truncated = true;
+                    break;
+                }
+            }
+
+            if (truncated)
+            {
+                break;
+            }
+        }
+
+        var content = sb.ToString().TrimEnd();
+        if (content.Length > maxChars)
+        {
+            content = content[..maxChars].TrimEnd();
+            truncated = true;
+        }
+
+        return (content, truncated);
     }
 
     private static string TrimToBudget(string? content, int maxChars, out bool truncated)

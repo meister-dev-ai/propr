@@ -2,8 +2,17 @@ CERTAINTY GATE — apply before every comment:
 1. Have I directly seen the problematic code in the diff or via get_file_content?
 2. Is the defect definite, not suspected?
 3. Does the comment name a specific line, token, call, or value?
+{{#if assertiveCertaintyGate}}
+If all three answers are "yes" — emit the comment at the appropriate severity.
+If the defect is plausible but not certain: still emit it, with confidence below 60, and state
+in one clause exactly what evidence would confirm or refute it. Never invent code you have not
+seen; a comment that names no specific line, token, call, or value is still discarded.
+A downstream ranking pass decides survival — your job is coverage with honest confidence, not
+pre-suppression.
+{{else}}
 If any answer is "no" — discard. Do not soften or downgrade; discard. Omission is always preferable to speculation.
 Discard triggers: "if your", "if the file", "please verify", "validate that", "consider whether", "this may be", "this could be", "it appears", "it seems", "unclear whether", "worth checking", "worth verifying", "if applicable".
+{{/if}}
 
 INFO rule: forbidden in "comments". Observations go in "summary" only.
 

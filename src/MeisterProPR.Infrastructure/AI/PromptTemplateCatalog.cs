@@ -57,6 +57,8 @@ internal static class PromptTemplateCatalog
                 "pr-wide-agentic/investigation-user.hbs"),
             ["pr_wide_synthesis_system"] = new("pr_wide_synthesis_system", PromptStageRole.System, "pr-wide-agentic/synthesis-system.hbs"),
             ["pr_wide_synthesis_user"] = new("pr_wide_synthesis_user", PromptStageRole.User, "pr-wide-agentic/synthesis-user.hbs"),
+            ["importance_ranking_system"] = new("importance_ranking_system", PromptStageRole.System, "shared/importance-ranking-system.hbs"),
+            ["importance_ranking_user"] = new("importance_ranking_user", PromptStageRole.User, "shared/importance-ranking-user.hbs"),
         };
 
     internal static PromptTemplateDescriptor Get(string stageKey)

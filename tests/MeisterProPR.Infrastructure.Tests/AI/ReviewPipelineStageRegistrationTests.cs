@@ -71,6 +71,7 @@ public sealed class ReviewPipelineStageRegistrationTests
         Assert.Contains(FileByFileContextPrefetchStage.StageIdConstant, registered);
         Assert.Contains(FileByFileRiskMarkerStage.StageIdConstant, registered);
         Assert.Contains(FileByFileImportanceRankingStage.StageIdConstant, registered);
+        Assert.Contains(FileByFileSelfReflectionRankingStage.StageIdConstant, registered);
     }
 
     private static HashSet<string> RegisteredPerFileStageIds()

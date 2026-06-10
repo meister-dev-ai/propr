@@ -196,6 +196,7 @@ internal sealed partial class FileByFileReviewOrchestrator(
             new FileByFileInfoCommentStripStage(),
             new FileByFileVagueSuggestionFilterStage(),
             new FileByFileImportanceRankingStage(options),
+            new FileByFileSelfReflectionRankingStage(options, NullLogger<FileByFileSelfReflectionRankingStage>.Instance),
         ]);
     }
 

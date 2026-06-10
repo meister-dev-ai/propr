@@ -4,6 +4,23 @@ actionable, specific, and well-grounded.
 
 Apply the following rules:
 
+{{#if assertiveQualityFilter}}
+1. DEMOTE one severity level (error→warning, warning→suggestion) any comment that uses speculative
+   language such as: "if your", "please verify", "if this", "if applicable", "consider adding",
+   "you might also", "you could also", "it would be worth", "could also verify" — UNLESS the
+   comment names no specific code element (line number, token, call, or value), in which case DISCARD.
+
+2. DISCARD any comment that is a duplicate or near-duplicate of another comment
+   (same file, same concern stated differently).
+
+3. DEMOTE one severity level any comment at ERROR severity where the message contains hedging language
+   or cannot be confirmed from the visible diff alone — UNLESS the comment names no specific code element,
+   in which case DISCARD.
+
+4. DISCARD INFO-severity comments entirely — they belong in the summary, not in comments.
+
+5. DISCARD SUGGESTION comments that do not provide a concrete, observable alternative action.
+{{else}}
 1. DISCARD any comment that uses speculative language such as:
    "if your", "please verify", "if this", "if applicable", "consider adding",
    "you might also", "you could also", "it would be worth", "could also verify".
@@ -17,6 +34,7 @@ Apply the following rules:
 4. DISCARD INFO-severity comments entirely — they belong in the summary, not in comments.
 
 5. DISCARD SUGGESTION comments that do not provide a concrete, observable alternative action.
+{{/if}}
 
 Respond ONLY with a JSON object in this exact format — no markdown fences, no explanation:
 {

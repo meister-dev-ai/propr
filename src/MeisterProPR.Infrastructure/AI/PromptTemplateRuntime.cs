@@ -40,4 +40,24 @@ internal static class PromptTemplateRuntime
             throw new InvalidOperationException($"Failed to read prompt shared partial '{partialName}': {ex.Message}", ex);
         }
     }
+
+    /// <summary>
+    ///     Renders the <c>agentic-loop-guidance</c> shared partial with the given
+    ///     <paramref name="assertiveCertaintyGate" /> flag, so that
+    ///     <c>{{#if assertiveCertaintyGate}}</c> blocks resolve correctly before the
+    ///     guidance text is embedded into the global system prompt via triple-mustache.
+    /// </summary>
+    internal static string RenderAgenticLoopGuidance(bool assertiveCertaintyGate)
+    {
+        try
+        {
+            var template = FileProvider.Value.ReadSharedPartial("agentic-loop-guidance");
+            var partials = PartialRegistry.Value.GetPartials();
+            return Renderer.Value.Render(template, new { assertiveCertaintyGate }, partials).TrimEnd();
+        }
+        catch (InvalidOperationException ex)
+        {
+            throw new InvalidOperationException($"Failed to render agentic-loop-guidance partial: {ex.Message}", ex);
+        }
+    }
 }

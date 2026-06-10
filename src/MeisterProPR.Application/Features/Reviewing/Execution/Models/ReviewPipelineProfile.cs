@@ -20,7 +20,9 @@ public sealed record ReviewPipelineProfile
         IReadOnlyList<string>? dispatchStageIds,
         IReadOnlyList<string>? perFileStageIds,
         IReadOnlyList<string>? finalizationStageIds,
-        bool isBaseline)
+        bool isBaseline,
+        ReviewAggressiveness aggressiveness = ReviewAggressiveness.Balanced,
+        int? qualityFilterThresholdOverride = null)
     {
         if (string.IsNullOrWhiteSpace(profileId))
         {
@@ -39,6 +41,8 @@ public sealed record ReviewPipelineProfile
         this.PerFileStageIds = NormalizeStageIds(perFileStageIds);
         this.FinalizationStageIds = NormalizeStageIds(finalizationStageIds);
         this.IsBaseline = isBaseline;
+        this.Aggressiveness = aggressiveness;
+        this.QualityFilterThresholdOverride = qualityFilterThresholdOverride;
     }
 
     /// <summary>Stable internal profile identifier.</summary>
@@ -61,6 +65,20 @@ public sealed record ReviewPipelineProfile
 
     /// <summary>True when this profile is the trusted baseline for its strategy.</summary>
     public bool IsBaseline { get; }
+
+    /// <summary>
+    ///     Controls how aggressively this profile emits and retains findings.
+    ///     Assertive uses the emit-with-confidence certainty gate and LLM self-reflection ranking.
+    ///     Calm/Balanced use the discard gate and deterministic ranking.
+    /// </summary>
+    public ReviewAggressiveness Aggressiveness { get; init; }
+
+    /// <summary>
+    ///     Optional override for the quality-filter threshold (<see cref="AiReviewOptions.QualityFilterThreshold" />).
+    ///     When <see langword="null" />, the global option value is used.
+    ///     Assertive → 1 (always filter at synthesis), Balanced → 10, Calm/baseline → null.
+    /// </summary>
+    public int? QualityFilterThresholdOverride { get; init; }
 
     private static IReadOnlyList<string> NormalizeStageIds(IReadOnlyList<string>? stageIds)
     {

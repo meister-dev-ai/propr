@@ -61,7 +61,8 @@ internal sealed class ReviewPipelineProfileProvider : IReviewPipelineProfileProv
                         FileByFileVagueSuggestionFilterStage.StageIdConstant,
                     ],
                     [FinalizeStageFamilyId],
-                    false),
+                    false,
+                    ReviewAggressiveness.Calm),
                 new ReviewPipelineProfile(
                     ReviewPipelineProfileCatalog.FileByFileBalancedProfileId,
                     "Balanced",
@@ -74,10 +75,12 @@ internal sealed class ReviewPipelineProfileProvider : IReviewPipelineProfileProv
                     [
                         FileByFileConfidenceFloorStage.StageIdConstant,
                         FileByFileInfoCommentStripStage.StageIdConstant,
-                        FileByFileImportanceRankingStage.StageIdConstant,
+                        FileByFileSelfReflectionRankingStage.StageIdConstant,
                     ],
                     [FinalizeStageFamilyId],
-                    true),
+                    true,
+                    ReviewAggressiveness.Balanced,
+                    10),
                 new ReviewPipelineProfile(
                     ReviewPipelineProfileCatalog.FileByFileAssertiveProfileId,
                     "Assertive",
@@ -89,10 +92,12 @@ internal sealed class ReviewPipelineProfileProvider : IReviewPipelineProfileProv
                     ],
                     [
                         FileByFileInfoCommentStripStage.StageIdConstant,
-                        FileByFileImportanceRankingStage.StageIdConstant,
+                        FileByFileSelfReflectionRankingStage.StageIdConstant,
                     ],
                     [FinalizeStageFamilyId],
-                    false),
+                    false,
+                    ReviewAggressiveness.Assertive,
+                    1),
             ],
             [ReviewStrategy.AgenticFileByFile] =
             [

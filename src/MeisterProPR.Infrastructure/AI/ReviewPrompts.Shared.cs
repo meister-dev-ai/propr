@@ -3,8 +3,11 @@
 
 using MeisterProPR.Application.DTOs;
 using MeisterProPR.Application.Features.Reviewing.Execution.Models;
+using MeisterProPR.Application.Options;
 using MeisterProPR.Application.ValueObjects;
 using MeisterProPR.Domain.ValueObjects;
+using MeisterProPR.Infrastructure.Features.Reviewing.Execution.Strategies;
+using MeisterProPR.Infrastructure.Features.Reviewing.Execution.Strategies.FileByFile;
 
 namespace MeisterProPR.Infrastructure.AI;
 
@@ -35,7 +38,20 @@ internal static partial class ReviewPrompts
         }
         else
         {
-            var agenticGuidance = context?.PromptOverrides.GetValueOrDefault("AgenticLoopGuidance") ?? AgenticLoopGuidance;
+            var assertiveCertaintyGate = context?.Aggressiveness == ReviewAggressiveness.Assertive;
+            // Pre-render the agentic loop guidance with the assertiveCertaintyGate flag so that
+            // {{#if assertiveCertaintyGate}} blocks in agentic-loop-guidance.hbs are resolved.
+            // The override path (if set) bypasses this and injects the override text directly.
+            string agenticGuidance;
+            if (context?.PromptOverrides.TryGetValue("AgenticLoopGuidance", out var overrideGuidance) == true)
+            {
+                agenticGuidance = overrideGuidance!;
+            }
+            else
+            {
+                agenticGuidance = PromptTemplateRuntime.RenderAgenticLoopGuidance(assertiveCertaintyGate);
+            }
+
             baseSystemPrompt = PromptTemplateRuntime.RenderStage(
                 PromptStageKeys.GlobalSystem,
                 new PromptTemplateModels.GlobalSystemModel(
@@ -48,7 +64,8 @@ internal static partial class ReviewPrompts
                         instruction.WhenToUse,
                         instruction.Body)).ToList() ?? [],
                     context is { DismissedPatterns.Count: > 0 },
-                    context?.DismissedPatterns ?? []));
+                    context?.DismissedPatterns ?? [],
+                    assertiveCertaintyGate));
         }
 
         return ComposePrompt(context, PromptStageKeys.GlobalSystem, PromptStageRole.System, baseSystemPrompt);
@@ -92,6 +109,8 @@ internal static partial class ReviewPrompts
     /// <summary>
     ///     System prompt for the cross-file quality-filter AI pass (IMP-08).
     ///     Instructs the model to discard low-quality comments and return the survivors as JSON.
+    ///     When <paramref name="context" /> has <see cref="ReviewAggressiveness.Assertive" /> posture,
+    ///     rules 1 and 3 are relaxed to demote rather than discard.
     /// </summary>
     internal static string BuildQualityFilterSystemPrompt(ReviewSystemContext? context)
     {
@@ -100,7 +119,40 @@ internal static partial class ReviewPrompts
             return overrideText!;
         }
 
-        return PromptTemplateRuntime.RenderStage("quality_filter_system", new PromptTemplateModels.QualityFilterSystemModel());
+        var assertive = context?.Aggressiveness == ReviewAggressiveness.Assertive;
+        return PromptTemplateRuntime.RenderStage("quality_filter_system", new PromptTemplateModels.QualityFilterSystemModel(assertive));
+    }
+
+    /// <summary>
+    ///     System prompt for the per-file LLM self-reflection importance-ranking pass.
+    /// </summary>
+    internal static string BuildImportanceRankingSystemPrompt(ReviewSystemContext? context)
+    {
+        if (context?.PromptOverrides.TryGetValue("ImportanceRankingSystemPrompt", out var overrideText) == true)
+        {
+            return overrideText!;
+        }
+
+        return PromptTemplateRuntime.RenderStage("importance_ranking_system", new PromptTemplateModels.ImportanceRankingSystemModel());
+    }
+
+    /// <summary>
+    ///     User message for the per-file LLM self-reflection importance-ranking pass.
+    ///     Formats each candidate comment with its severity, deterministic score, hedging flag, and message text.
+    /// </summary>
+    internal static string BuildImportanceRankingUserMessage(IReadOnlyList<ReviewComment> comments, AiReviewOptions options)
+    {
+        ArgumentNullException.ThrowIfNull(comments);
+        ArgumentNullException.ThrowIfNull(options);
+
+        var candidates = comments.Select((comment, index) => new PromptTemplateModels.PromptImportanceRankingCandidateModel(
+            index,
+            comment.Severity.ToString().ToLowerInvariant(),
+            comment.Message,
+            FileByFileImportanceRankingStage.ScoreComment(comment),
+            ReviewCommentProcessing.IsHedged(comment.Message))).ToList();
+
+        return PromptTemplateRuntime.RenderStage("importance_ranking_user", new PromptTemplateModels.ImportanceRankingUserModel(candidates));
     }
 
     /// <summary>

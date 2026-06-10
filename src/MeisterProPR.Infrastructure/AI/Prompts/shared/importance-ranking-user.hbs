@@ -1,0 +1,8 @@
+Re-score the following {{candidates.length}} candidate findings for this file review. For each candidate, return an importance score and whether to keep it.
+
+Candidates:
+{{#each candidates}}
+[{{index}}] severity={{severity}} deterministic_score={{deterministicScore}} hedging={{hedging}}
+{{message}}
+
+{{/each}}

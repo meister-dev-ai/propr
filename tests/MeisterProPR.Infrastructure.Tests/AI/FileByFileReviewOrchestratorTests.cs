@@ -1123,7 +1123,7 @@ public class FileByFileReviewOrchestratorTests
             [
                 FileByFileConfidenceFloorStage.StageIdConstant,
                 FileByFileInfoCommentStripStage.StageIdConstant,
-                FileByFileImportanceRankingStage.StageIdConstant,
+                FileByFileSelfReflectionRankingStage.StageIdConstant,
             ],
             balanced.PerFileStageIds);
 
@@ -1132,7 +1132,7 @@ public class FileByFileReviewOrchestratorTests
         Assert.Equal(
             [
                 FileByFileInfoCommentStripStage.StageIdConstant,
-                FileByFileImportanceRankingStage.StageIdConstant,
+                FileByFileSelfReflectionRankingStage.StageIdConstant,
             ],
             assertive.PerFileStageIds);
     }

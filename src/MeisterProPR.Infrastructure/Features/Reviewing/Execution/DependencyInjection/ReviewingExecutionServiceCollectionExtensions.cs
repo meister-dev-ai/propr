@@ -41,6 +41,7 @@ public static class ReviewingExecutionServiceCollectionExtensions
         services.AddScoped<IReviewPipelineStage<PerFileReviewContext>, FileByFileContextPrefetchStage>();
         services.AddSingleton<IReviewPipelineStage<PerFileReviewContext>, FileByFileRiskMarkerStage>();
         services.AddSingleton<IReviewPipelineStage<PerFileReviewContext>, FileByFileImportanceRankingStage>();
+        services.AddSingleton<IReviewPipelineStage<PerFileReviewContext>, FileByFileSelfReflectionRankingStage>();
         services.AddSingleton<IReviewPipelineStage<PerFileReviewContext>, FileByFileConfidenceFloorStage>();
         services.AddSingleton<IReviewPipelineStage<PerFileReviewContext>, FileByFileSpeculativeCommentFilterStage>();
         services.AddSingleton<IReviewPipelineStage<PerFileReviewContext>, FileByFileInfoCommentStripStage>();

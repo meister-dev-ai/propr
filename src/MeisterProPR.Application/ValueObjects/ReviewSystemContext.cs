@@ -161,4 +161,12 @@ public sealed class ReviewSystemContext
     ///     Offline-only explicit step skips applied to this workflow execution.
     /// </summary>
     public ReviewStepSkips SkippedSteps { get; init; } = new();
+
+    /// <summary>
+    ///     Aggressiveness posture resolved from the active review pipeline profile.
+    ///     Controls whether the certainty gate discards uncertain findings (Calm/Balanced)
+    ///     or emits them with confidence for downstream ranking (Assertive).
+    ///     Defaults to <see cref="ReviewAggressiveness.Balanced" />.
+    /// </summary>
+    public ReviewAggressiveness Aggressiveness { get; set; } = ReviewAggressiveness.Balanced;
 }

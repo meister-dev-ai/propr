@@ -136,6 +136,122 @@ public static class ReviewDiffProcessor
         return insertedLines;
     }
 
+    /// <summary>
+    ///     Extracts merged, ascending new-file line ranges touched by each hunk in a unified diff.
+    ///     Both added and context lines advance the new-file cursor; deletion-only hunks yield a single-line range.
+    ///     Overlapping or adjacent ranges are merged. Returns an empty list when the diff is null, empty, or unparseable.
+    /// </summary>
+    public static IReadOnlyList<(int Start, int End)> ExtractChangedNewLineRanges(string? unifiedDiff)
+    {
+        if (string.IsNullOrWhiteSpace(unifiedDiff))
+        {
+            return [];
+        }
+
+        var rawRanges = new List<(int Start, int End)>();
+        var diffLines = unifiedDiff.Replace("\r\n", "\n", StringComparison.Ordinal).Split('\n');
+        var hasHunkHeader = false;
+        var currentNewLine = 0;
+        int? hunkStart = null;
+        var hunkEnd = 0;
+
+        foreach (var diffLine in diffLines)
+        {
+            if (diffLine.StartsWith("@@", StringComparison.Ordinal))
+            {
+                // Flush previous hunk range
+                if (hunkStart.HasValue)
+                {
+                    rawRanges.Add((hunkStart.Value, Math.Max(hunkStart.Value, hunkEnd)));
+                }
+
+                hunkStart = null;
+                hunkEnd = 0;
+
+                if (TryParseUnifiedDiffNewLineStart(diffLine, out var newLineStart))
+                {
+                    currentNewLine = newLineStart;
+                    hunkStart = currentNewLine;
+                    hunkEnd = currentNewLine;
+                    hasHunkHeader = true;
+                }
+                else
+                {
+                    hasHunkHeader = false;
+                }
+
+                continue;
+            }
+
+            if (!hasHunkHeader)
+            {
+                continue;
+            }
+
+            if (diffLine.StartsWith("+++", StringComparison.Ordinal) ||
+                diffLine.StartsWith("---", StringComparison.Ordinal))
+            {
+                continue;
+            }
+
+            if (diffLine.StartsWith("+", StringComparison.Ordinal))
+            {
+                // Added line — advances new-file cursor
+                hunkEnd = currentNewLine;
+                currentNewLine++;
+                continue;
+            }
+
+            if (diffLine.StartsWith("-", StringComparison.Ordinal))
+            {
+                // Deleted line — does not advance new-file cursor; ensure range covers at least this position
+                if (hunkStart.HasValue && currentNewLine > 0)
+                {
+                    hunkEnd = Math.Max(hunkEnd, currentNewLine);
+                }
+
+                continue;
+            }
+
+            // Context line — advances cursor
+            hunkEnd = currentNewLine;
+            currentNewLine++;
+        }
+
+        // Flush last hunk
+        if (hunkStart.HasValue)
+        {
+            rawRanges.Add((hunkStart.Value, Math.Max(hunkStart.Value, hunkEnd)));
+        }
+
+        if (rawRanges.Count == 0)
+        {
+            return [];
+        }
+
+        // Merge overlapping/adjacent ranges (sort by start first)
+        rawRanges.Sort((a, b) => a.Start.CompareTo(b.Start));
+        var merged = new List<(int Start, int End)>();
+        var (ms, me) = rawRanges[0];
+        for (var i = 1; i < rawRanges.Count; i++)
+        {
+            var (s, e) = rawRanges[i];
+            if (s <= me + 1)
+            {
+                me = Math.Max(me, e);
+            }
+            else
+            {
+                merged.Add((ms, me));
+                ms = s;
+                me = e;
+            }
+        }
+
+        merged.Add((ms, me));
+        return merged;
+    }
+
     private static bool TryParseUnifiedDiffNewLineStart(string diffLine, out int newLineStart)
     {
         newLineStart = 0;

@@ -126,6 +126,20 @@ internal sealed class FileByFileImportanceRankingStage : IReviewPipelineStage<Pe
 
     private static int Score(ReviewComment comment)
     {
+        return ScoreComment(comment);
+    }
+
+    private static bool ContainsAny(string text, params string[] needles)
+    {
+        return needles.Any(needle => text.Contains(needle, StringComparison.OrdinalIgnoreCase));
+    }
+
+    /// <summary>
+    ///     Computes a deterministic 1-10 importance score for a comment based on severity and keyword signals.
+    ///     Shared with <c>FileByFileSelfReflectionRankingStage</c> as a fallback and feature input.
+    /// </summary>
+    internal static int ScoreComment(ReviewComment comment)
+    {
         var message = comment.Message;
         var severityScore = comment.Severity switch
         {
@@ -135,14 +149,14 @@ internal sealed class FileByFileImportanceRankingStage : IReviewPipelineStage<Pe
             _ => 1,
         };
 
-        if (ContainsAny(
+        if (ContainsAnyStatic(
                 message, "security", "auth", "authorization", "token", "secret", "credential", "permission", "bypass", "race", "deadlock", "concurrency",
                 "injection", "vulnerability"))
         {
             severityScore += 2;
         }
 
-        if (ContainsAny(message, "missing", "break", "broken", "fails", "incorrect", "invalid", "unsafe", "exposed", "lost", "stale"))
+        if (ContainsAnyStatic(message, "missing", "break", "broken", "fails", "incorrect", "invalid", "unsafe", "exposed", "lost", "stale"))
         {
             severityScore += 1;
         }
@@ -150,7 +164,7 @@ internal sealed class FileByFileImportanceRankingStage : IReviewPipelineStage<Pe
         return Math.Min(severityScore, 10);
     }
 
-    private static bool ContainsAny(string text, params string[] needles)
+    private static bool ContainsAnyStatic(string text, params string[] needles)
     {
         return needles.Any(needle => text.Contains(needle, StringComparison.OrdinalIgnoreCase));
     }

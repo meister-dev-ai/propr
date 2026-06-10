@@ -61,4 +61,5 @@ public static class ReviewProtocolEventNames
     public const string RepeatedJudgmentDecision = "repeated_judgment_decision";
     public const string PromptStageEvidenceRecorded = "prompt_stage_evidence_recorded";
     public const string ReviewStepSkipped = "review_step_skipped";
+    public const string ImportanceRankingApplied = "importance_ranking_applied";
 }

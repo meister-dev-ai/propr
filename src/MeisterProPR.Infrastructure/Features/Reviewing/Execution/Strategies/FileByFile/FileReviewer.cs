@@ -104,6 +104,7 @@ internal sealed partial class FileReviewer(
                 []);
 
             var pipelineProfile = ResolvePipelineProfile(job, pipelineProfileProvider);
+            fileContext.Aggressiveness = pipelineProfile.Aggressiveness;
             await this.RecordPipelineProfileAsync(protocolId, file.Path, pipelineProfile, ct);
             fileContext = await this.RunDispatchPipelineAsync(
                 job,
@@ -490,10 +491,12 @@ internal sealed partial class FileReviewer(
                 [
                     FileByFileConfidenceFloorStage.StageIdConstant,
                     FileByFileInfoCommentStripStage.StageIdConstant,
-                    FileByFileImportanceRankingStage.StageIdConstant,
+                    FileByFileSelfReflectionRankingStage.StageIdConstant,
                 ],
                 [ReviewPipelineProfileProvider.FinalizeStageFamilyId],
-                true);
+                true,
+                ReviewAggressiveness.Balanced,
+                10);
         }
 
         var profiles = pipelineProfileProvider.GetProfiles(ReviewStrategy.FileByFile);
@@ -520,10 +523,12 @@ internal sealed partial class FileReviewer(
                    [
                        FileByFileConfidenceFloorStage.StageIdConstant,
                        FileByFileInfoCommentStripStage.StageIdConstant,
-                       FileByFileImportanceRankingStage.StageIdConstant,
+                       FileByFileSelfReflectionRankingStage.StageIdConstant,
                    ],
                    [ReviewPipelineProfileProvider.FinalizeStageFamilyId],
-                   true);
+                   true,
+                   ReviewAggressiveness.Balanced,
+                   10);
     }
 
     private async Task RecordPipelineProfileAsync(

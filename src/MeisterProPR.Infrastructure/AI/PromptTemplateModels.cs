@@ -12,7 +12,8 @@ internal static class PromptTemplateModels
         bool hasRepositoryInstructions,
         IReadOnlyList<PromptRepositoryInstructionModel> repositoryInstructions,
         bool hasDismissedPatterns,
-        IReadOnlyList<string> dismissedPatterns);
+        IReadOnlyList<string> dismissedPatterns,
+        bool assertiveCertaintyGate = false);
 
     internal sealed record LegacyPrReviewUserModel(
         bool hasChangedFiles,
@@ -25,7 +26,13 @@ internal static class PromptTemplateModels
         bool hasThreads,
         IReadOnlyList<PromptThreadModel> threads);
 
-    internal sealed record QualityFilterSystemModel;
+    internal sealed record QualityFilterSystemModel(bool assertiveQualityFilter = false);
+
+    internal sealed record ImportanceRankingSystemModel;
+
+    internal sealed record ImportanceRankingUserModel(IReadOnlyList<PromptImportanceRankingCandidateModel> candidates);
+
+    internal sealed record PromptImportanceRankingCandidateModel(int index, string severity, string message, int deterministicScore, bool hedging);
 
     internal sealed record QualityFilterUserModel(IReadOnlyList<PromptQualityFilterCommentModel> comments);
 

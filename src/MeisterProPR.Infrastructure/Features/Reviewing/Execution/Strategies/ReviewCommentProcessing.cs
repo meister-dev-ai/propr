@@ -25,6 +25,16 @@ internal static class ReviewCommentProcessing
         "could be strengthened", "could be made", "could also verify",
     ];
 
+    /// <summary>
+    ///     Returns <see langword="true" /> when <paramref name="message" /> contains a hedge phrase
+    ///     that indicates the reviewer is guessing rather than confirming. Used as a feature input
+    ///     to the LLM self-reflection ranking stage (not an automatic disqualifier there).
+    /// </summary>
+    internal static bool IsHedged(string message)
+    {
+        return HedgePhrases.Any(phrase => message.Contains(phrase, StringComparison.OrdinalIgnoreCase));
+    }
+
     internal static ReviewComment CreateReviewComment(string? filePath, int? lineNumber, CommentSeverity severity, string message)
     {
         return new ReviewComment(filePath, NormalizeLineNumber(lineNumber), severity, message);

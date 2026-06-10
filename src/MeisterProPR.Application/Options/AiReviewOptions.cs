@@ -144,6 +144,22 @@ public sealed class AiReviewOptions
     [Range(256, 32000, ErrorMessage = "MaxPrefetchRegionChars must be between 256 and 32000.")]
     public int MaxPrefetchRegionChars { get; set; } = 4000;
 
+    /// <summary>
+    ///     Number of lines before each changed hunk to include in the hunk-centered prefetch window.
+    ///     Asymmetrically larger than <see cref="PrefetchWindowLinesAfter" /> because code before a change
+    ///     (signatures, setup) matters more for context than code after.
+    ///     Bound to <c>AI_PREFETCH_WINDOW_LINES_BEFORE</c>.
+    /// </summary>
+    [Range(0, 500, ErrorMessage = "PrefetchWindowLinesBefore must be between 0 and 500.")]
+    public int PrefetchWindowLinesBefore { get; set; } = 40;
+
+    /// <summary>
+    ///     Number of lines after each changed hunk to include in the hunk-centered prefetch window.
+    ///     Bound to <c>AI_PREFETCH_WINDOW_LINES_AFTER</c>.
+    /// </summary>
+    [Range(0, 500, ErrorMessage = "PrefetchWindowLinesAfter must be between 0 and 500.")]
+    public int PrefetchWindowLinesAfter { get; set; } = 15;
+
     /// <summary>Controls whether a high-risk file with zero surviving findings gets one focused second look.</summary>
     public bool EnableHighRiskEscalation { get; set; } = true;
 

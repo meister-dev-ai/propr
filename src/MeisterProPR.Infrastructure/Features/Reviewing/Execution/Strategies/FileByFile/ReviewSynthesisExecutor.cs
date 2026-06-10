@@ -96,7 +96,8 @@ internal sealed class ReviewSynthesisExecutor(
             ct);
 
         var deduped = FindingDeduplicator.Deduplicate(allComments).ToList();
-        if (deduped.Count >= options.QualityFilterThreshold
+        var effectiveQualityFilterThreshold = ResolveQualityFilterThreshold(job, options);
+        if (deduped.Count >= effectiveQualityFilterThreshold
             && !await this.TryRecordSkippedStepAsync(protocolId, baseContext, FileByFileReviewStepIds.QualityFilter, ct))
         {
             deduped = await qualityFilterExecutor.ApplyAsync(job.Id, deduped, baseContext, effectiveClient, ct);
@@ -613,6 +614,23 @@ internal sealed class ReviewSynthesisExecutor(
         }
 
         return true;
+    }
+
+    /// <summary>
+    ///     Resolves the effective quality-filter threshold for a job by consulting the profile catalog.
+    ///     Profile overrides take precedence; falls back to the global <see cref="AiReviewOptions.QualityFilterThreshold" />.
+    /// </summary>
+    private static int ResolveQualityFilterThreshold(ReviewJob job, AiReviewOptions opts)
+    {
+        // Resolve via the profile catalog constants directly (no provider injection needed for a static lookup).
+        int? profileOverride = job.ReviewPipelineProfileId switch
+        {
+            ReviewPipelineProfileCatalog.FileByFileAssertiveProfileId => 1,
+            ReviewPipelineProfileCatalog.FileByFileBalancedProfileId => 10,
+            _ => null,
+        };
+
+        return profileOverride ?? opts.QualityFilterThreshold;
     }
 
     private static FinalGateDecision CreatePublishDecision(CandidateReviewFinding finding)
