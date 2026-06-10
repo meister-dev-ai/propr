@@ -4,11 +4,17 @@
 using System.Security.Claims;
 using MeisterProPR.Api.Extensions;
 using MeisterProPR.Api.Middleware;
+using MeisterProPR.Application.Features.Licensing.Dtos;
+using MeisterProPR.Application.Features.Licensing.Models;
+using MeisterProPR.Application.Features.Licensing.Ports;
 using MeisterProPR.Application.Interfaces;
 using MeisterProPR.Domain.Entities;
 using MeisterProPR.Domain.Enums;
+using MeisterProPR.Infrastructure.Data;
+using MeisterProPR.Infrastructure.Data.Models;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using NSubstitute;
 
@@ -154,6 +160,87 @@ public sealed class TenantAuthMiddlewareTests
         await patRepository.Received(1).GetActiveByRawTokenAsync("valid-pat", cts.Token);
         await userRepository.Received(1).GetByIdWithAssignmentsAsync(userId, cts.Token);
         await userRepository.DidNotReceive().GetUserClientRolesAsync(userId, Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task InvokeAsync_WithCommunityEditionAndHiddenTenant_DoesNotDeriveClientRoles()
+    {
+        var userId = Guid.NewGuid();
+        var hiddenTenantId = Guid.NewGuid();
+        var hiddenClientId = Guid.NewGuid();
+        var jwtTokenService = Substitute.For<IJwtTokenService>();
+        jwtTokenService.ValidateAccessToken("valid-token")
+            .Returns(
+                new ClaimsPrincipal(
+                    new ClaimsIdentity(
+                        new[]
+                        {
+                            new Claim("sub", userId.ToString()),
+                            new Claim("global_role", AppUserRole.User.ToString()),
+                        },
+                        "Bearer")));
+
+        var userRepository = Substitute.For<IUserRepository>();
+        var user = new AppUser
+        {
+            Id = userId,
+            Username = "community.user",
+            GlobalRole = AppUserRole.User,
+            IsActive = true,
+            CreatedAt = DateTimeOffset.UtcNow,
+        };
+        user.TenantMemberships.Add(
+            new TenantMembership
+            {
+                Id = Guid.NewGuid(),
+                TenantId = hiddenTenantId,
+                UserId = userId,
+                Role = TenantRole.TenantAdministrator,
+                AssignedAt = DateTimeOffset.UtcNow,
+                UpdatedAt = DateTimeOffset.UtcNow,
+            });
+        userRepository.GetByIdWithAssignmentsAsync(userId, Arg.Any<CancellationToken>())
+            .Returns(user);
+
+        var licensingCapabilityService = Substitute.For<ILicensingCapabilityService>();
+        licensingCapabilityService.GetSummaryAsync(Arg.Any<CancellationToken>())
+            .Returns(new LicensingSummaryDto(InstallationEdition.Community, DateTimeOffset.UtcNow, []));
+
+        var services = new ServiceCollection();
+        services.AddSingleton(jwtTokenService);
+        services.AddSingleton(userRepository);
+        services.AddSingleton(licensingCapabilityService);
+        services.AddDbContext<MeisterProPRDbContext>(options =>
+            options.UseInMemoryDatabase($"TenantAuthMiddlewareTests_{Guid.NewGuid()}"));
+
+        await using var provider = services.BuildServiceProvider();
+        await using (var scope = provider.CreateAsyncScope())
+        {
+            var dbContext = scope.ServiceProvider.GetRequiredService<MeisterProPRDbContext>();
+            dbContext.Clients.Add(
+                new ClientRecord
+                {
+                    Id = hiddenClientId,
+                    TenantId = hiddenTenantId,
+                    DisplayName = "Hidden client",
+                    IsActive = true,
+                    CreatedAt = DateTimeOffset.UtcNow,
+                });
+            await dbContext.SaveChangesAsync();
+        }
+
+        await using var requestScope = provider.CreateAsyncScope();
+        var context = new DefaultHttpContext { RequestServices = requestScope.ServiceProvider };
+        context.Request.Headers.Authorization = "Bearer valid-token";
+
+        var middleware = new AuthMiddleware(_ => Task.CompletedTask);
+
+        await middleware.InvokeAsync(context);
+
+        var clientRoles = Assert.IsType<Dictionary<Guid, ClientRole>>(context.Items["ClientRoles"]);
+        Assert.Empty(clientRoles);
+        var tenantRoles = Assert.IsType<Dictionary<Guid, TenantRole>>(context.Items["TenantRoles"]);
+        Assert.Equal(TenantRole.TenantAdministrator, tenantRoles[hiddenTenantId]);
     }
 
     [Fact]

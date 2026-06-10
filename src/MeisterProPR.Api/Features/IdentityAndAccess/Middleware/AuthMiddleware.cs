@@ -153,10 +153,16 @@ public sealed class AuthMiddleware(RequestDelegate next)
         var explicitClientIds = explicitClientRoles.Keys.ToArray();
         var tenantIds = tenantRoles.Keys.ToArray();
         var isCommunityEdition = await IsCommunityEditionAsync(context, ct);
-        var visibleClients = await dbContext.Clients
+        var visibleClientsQuery = dbContext.Clients
             .AsNoTracking()
-            .Where(client => explicitClientIds.Contains(client.Id) || tenantIds.Contains(client.TenantId))
-            .Where(client => TenantCatalog.IsClientVisible(client.TenantId, isCommunityEdition))
+            .Where(client => explicitClientIds.Contains(client.Id) || tenantIds.Contains(client.TenantId));
+
+        if (isCommunityEdition)
+        {
+            visibleClientsQuery = visibleClientsQuery.Where(client => client.TenantId == Guid.Empty || client.TenantId == TenantCatalog.SystemTenantId);
+        }
+
+        var visibleClients = await visibleClientsQuery
             .Select(client => new { client.Id, client.TenantId })
             .ToListAsync(ct);
 
