@@ -6,29 +6,31 @@ using MeisterProPR.Application.Interfaces;
 using MeisterProPR.Application.Options;
 using MeisterProPR.Domain.Enums;
 using MeisterProPR.Infrastructure.Features.Providers.Common;
-using MeisterProPR.Infrastructure.Features.Providers.Forgejo.Security;
+using MeisterProPR.Infrastructure.Features.Reviewing.Execution;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
 namespace MeisterProPR.Infrastructure.Features.Providers.Forgejo.Reviewing;
 
 internal sealed class ForgejoReviewContextToolsFactory(
-    ForgejoConnectionVerifier connectionVerifier,
-    IHttpClientFactory httpClientFactory,
     IProCursorGateway proCursorGateway,
     IOptions<AiReviewOptions> options,
-    ILogger<ForgejoReviewContextTools> logger) : IProviderReviewContextToolsFactory
+    ILoggerFactory loggerFactory) : IProviderReviewContextToolsFactory
 {
     public ScmProvider Provider => ScmProvider.Forgejo;
 
     public IReviewContextTools Create(ReviewContextToolsRequest request)
     {
-        return new ForgejoReviewContextTools(
-            connectionVerifier,
-            httpClientFactory,
+        if (request.Workspace is null)
+        {
+            throw new InvalidOperationException("A local review workspace is required but was not provided to the review context tools factory.");
+        }
+
+        return new LocalGitReviewContextTools(
+            request.Workspace,
             proCursorGateway,
             options,
             request,
-            logger);
+            loggerFactory.CreateLogger<LocalGitReviewContextTools>());
     }
 }

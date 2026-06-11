@@ -37,6 +37,7 @@ internal static class GitHubProviderServiceCollectionExtensions
         services.TryAddScoped<GitHubLifecyclePublicationService>();
         services.TryAddScoped<GitHubRepositoryExclusionFetcher>();
         services.TryAddScoped<GitHubReviewThreadStatusProvider>();
+        services.TryAddEnumerable(ServiceDescriptor.Scoped<IProviderReviewWorkspaceRemoteResolver, GitHubReviewWorkspaceRemoteResolver>());
         services.TryAddEnumerable(ServiceDescriptor.Scoped<IProviderRepositoryExclusionFetcher, GitHubRepositoryExclusionFetcher>());
         services.TryAddEnumerable(ServiceDescriptor.Scoped<IProviderReviewerThreadStatusFetcher, GitHubReviewThreadStatusProvider>());
         services.TryAddEnumerable(ServiceDescriptor.Scoped<IProviderPullRequestFetcher, GitHubPullRequestFetcher>());

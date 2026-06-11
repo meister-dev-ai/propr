@@ -74,7 +74,7 @@ public sealed record ReviewPipelineProfile
     public ReviewAggressiveness Aggressiveness { get; init; }
 
     /// <summary>
-    ///     Optional override for the quality-filter threshold (<see cref="AiReviewOptions.QualityFilterThreshold" />).
+    ///     Optional override for the quality-filter threshold (<see cref="MeisterProPR.Application.Options.AiReviewOptions.QualityFilterThreshold" />).
     ///     When <see langword="null" />, the global option value is used.
     ///     Assertive → 1 (always filter at synthesis), Balanced → 10, Calm/baseline → null.
     /// </summary>

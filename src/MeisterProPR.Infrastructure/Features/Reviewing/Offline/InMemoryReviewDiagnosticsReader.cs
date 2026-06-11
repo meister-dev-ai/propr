@@ -5,7 +5,6 @@ using System.Text.Json;
 using MeisterProPR.Application.DTOs;
 using MeisterProPR.Application.Features.Reviewing.Diagnostics.Ports;
 using MeisterProPR.Application.Features.Reviewing.Diagnostics.Queries.GetReviewJobProtocol;
-using MeisterProPR.Domain.Enums;
 using MeisterProPR.Domain.Entities;
 using MeisterProPR.Domain.ValueObjects;
 using MeisterProPR.Infrastructure.Features.Reviewing.Diagnostics.Persistence;
@@ -162,11 +161,56 @@ public sealed class InMemoryReviewDiagnosticsReader(InMemoryReviewJobRepository 
             FileOutcome = ResolveFileOutcome(projectionJob, protocol, fileResultOverride),
             FollowUp = ResolveFollowUp(protocol),
             RepeatedJudgment = ResolveRepeatedJudgment(protocol),
+            Workspace = ResolveWorkspace(protocol),
             TotalCachedInputTokens = protocol.TotalCachedInputTokens,
             CacheObservability = protocol.CacheObservability,
             IsInherited = inheritance is not null,
             Inheritance = inheritance,
         };
+    }
+
+    private static ProtocolWorkspaceDto? ResolveWorkspace(ReviewJobProtocol protocol)
+    {
+        var prepared = protocol.Events.FirstOrDefault(evt => string.Equals(evt.Name, "local_workspace_prepared", StringComparison.Ordinal));
+        var failed = protocol.Events.FirstOrDefault(evt => string.Equals(evt.Name, "local_workspace_failed", StringComparison.Ordinal));
+        var fallback = protocol.Events.FirstOrDefault(evt => string.Equals(evt.Name, "local_workspace_fallback_applied", StringComparison.Ordinal));
+        if (prepared is null && failed is null && fallback is null)
+        {
+            return null;
+        }
+
+        return new ProtocolWorkspaceDto(
+            true,
+            prepared is not null,
+            fallback is not null,
+            TryGetWorkspaceString(prepared?.OutputSummary, "workspaceKey"),
+            TryGetWorkspaceString(failed?.OutputSummary, "stage"),
+            TryGetWorkspaceString(failed?.OutputSummary, "code"),
+            TryGetWorkspaceString(failed?.OutputSummary, "message"));
+    }
+
+    private static string? TryGetWorkspaceString(string? json, string propertyName)
+    {
+        if (string.IsNullOrWhiteSpace(json))
+        {
+            return null;
+        }
+
+        try
+        {
+            using var document = JsonDocument.Parse(json);
+            if (document.RootElement.ValueKind == JsonValueKind.Object &&
+                document.RootElement.TryGetProperty(propertyName, out var property) &&
+                property.ValueKind == JsonValueKind.String)
+            {
+                return property.GetString();
+            }
+        }
+        catch (JsonException)
+        {
+        }
+
+        return null;
     }
 
     private static IReadOnlyList<ProtocolEventDto> CreateEventDtos(

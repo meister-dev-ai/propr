@@ -112,7 +112,20 @@ public sealed record ReviewStatusResponse(
 
     /// <summary>Comparison group identifier when this job participates in one.</summary>
     public Guid? ComparisonGroupId { get; init; }
+
+    /// <summary>Local workspace visibility metadata when available.</summary>
+    public ReviewWorkspaceStatusDto? Workspace { get; init; }
 }
+
+/// <summary>DTO representing local review workspace adoption and fallback visibility.</summary>
+public sealed record ReviewWorkspaceStatusDto(
+    bool Attempted,
+    bool Prepared,
+    bool FallbackApplied,
+    string? WorkspaceKey,
+    string? FailureStage,
+    string? FailureCode,
+    string? FailureMessage);
 
 /// <summary>DTO representing the textual review result and comments.</summary>
 public sealed record ReviewResultDto(string Summary, ReviewCommentDto[] Comments);

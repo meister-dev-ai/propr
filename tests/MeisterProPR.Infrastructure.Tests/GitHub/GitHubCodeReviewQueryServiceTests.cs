@@ -5,15 +5,11 @@ using System.Net;
 using System.Text;
 using System.Text.Json;
 using MeisterProPR.Application.DTOs;
-using MeisterProPR.Application.DTOs.ProCursor;
-using MeisterProPR.Application.Features.Reviewing.Execution.Models;
 using MeisterProPR.Application.Interfaces;
-using MeisterProPR.Application.Options;
 using MeisterProPR.Domain.Enums;
 using MeisterProPR.Domain.ValueObjects;
 using MeisterProPR.Infrastructure.Features.Providers.GitHub.Reviewing;
 using MeisterProPR.Infrastructure.Features.Providers.GitHub.Security;
-using Microsoft.Extensions.Logging.Abstractions;
 using NSubstitute;
 
 namespace MeisterProPR.Infrastructure.Tests.GitHub;
@@ -692,80 +688,6 @@ public sealed class GitHubCodeReviewQueryServiceTests
         var thread = Assert.Single(result.ExistingThreads!);
         Assert.Equal(3197004556L, thread.ThreadId);
         Assert.Equal(3197004556L, Assert.Single(thread.Comments).CommentId);
-    }
-
-    [Fact]
-    public async Task ReviewContextTools_ReturnChangedFilesTreeContentAndProCursorContext()
-    {
-        var clientId = Guid.NewGuid();
-        var host = new ProviderHostRef(ScmProvider.GitHub, "https://github.com");
-        var repository = new RepositoryRef(host, "101", "acme", "acme/propr");
-        var review = new CodeReviewRef(repository, CodeReviewPlatformKind.PullRequest, "42", 42);
-        var connectionRepository = CreateConnectionRepository(clientId, host);
-        var gateway = Substitute.For<IProCursorGateway>();
-        gateway.AskKnowledgeAsync(Arg.Any<ProCursorKnowledgeQueryRequest>(), Arg.Any<CancellationToken>())
-            .Returns(new ProCursorKnowledgeAnswerDto("ok", []));
-        var httpClientFactory = CreateHttpClientFactory(request => request.RequestUri!.AbsoluteUri switch
-        {
-            "https://api.github.com/user" => CreateJsonResponse(new { login = "meister-dev" }),
-            "https://api.github.com/repos/acme/propr/pulls/42/files?per_page=100" => CreateJsonResponse(
-                new object[]
-                {
-                    new { filename = "src/Fetcher.cs", status = "added" },
-                    new { filename = "src/NewProvider.cs", status = "renamed" },
-                }),
-            "https://api.github.com/repos/acme/propr/branches/feature%2Fproviders" => CreateJsonResponse(new { commit = new { sha = "head-sha" } }),
-            "https://api.github.com/repos/acme/propr/git/trees/head-sha?recursive=1" => CreateJsonResponse(
-                new
-                {
-                    tree = new object[]
-                    {
-                        new { path = "src/Fetcher.cs", type = "blob" },
-                        new { path = "docs/notes.md", type = "blob" },
-                        new { path = "src", type = "tree" },
-                    },
-                }),
-            "https://api.github.com/repos/acme/propr/contents/src%2FFetcher.cs?ref=feature%2Fproviders" =>
-                CreateContentResponse("line1\nline2\nline3\nline4"),
-            _ => new HttpResponseMessage(HttpStatusCode.NotFound),
-        });
-
-        var factory = new GitHubReviewContextToolsFactory(
-            new GitHubConnectionVerifier(connectionRepository, httpClientFactory),
-            httpClientFactory,
-            gateway,
-            Microsoft.Extensions.Options.Options.Create(new AiReviewOptions { MaxFileSizeBytes = 1024 * 1024 }),
-            NullLogger<GitHubReviewContextTools>.Instance);
-
-        var tools = factory.Create(new ReviewContextToolsRequest(review, "feature/providers", 7, clientId, null, host.HostBaseUrl));
-
-        var changedFiles = await tools.GetChangedFilesAsync(CancellationToken.None);
-        var tree = await tools.GetFileTreeAsync("main", CancellationToken.None);
-        var content = await tools.GetFileContentAsync("src/Fetcher.cs", "main", 2, 3, CancellationToken.None);
-        await tools.AskProCursorKnowledgeAsync("where is the fetcher?", CancellationToken.None);
-
-        Assert.Collection(
-            changedFiles,
-            item =>
-            {
-                Assert.Equal("src/Fetcher.cs", item.Path);
-                Assert.Equal(ChangeType.Add, item.ChangeType);
-            },
-            item =>
-            {
-                Assert.Equal("src/NewProvider.cs", item.Path);
-                Assert.Equal(ChangeType.Rename, item.ChangeType);
-            });
-        Assert.Equal(["src/Fetcher.cs", "docs/notes.md"], tree);
-        Assert.Equal("line2\nline3", content);
-        await gateway.Received(1)
-            .AskKnowledgeAsync(
-                Arg.Is<ProCursorKnowledgeQueryRequest>(request =>
-                    request.RepositoryContext!.ProviderScopePath == host.HostBaseUrl
-                    && request.RepositoryContext.ProviderProjectKey == "acme"
-                    && request.RepositoryContext.RepositoryId == "101"
-                    && request.RepositoryContext.Branch == "feature/providers"),
-                Arg.Any<CancellationToken>());
     }
 
     private static IClientScmConnectionRepository CreateConnectionRepository(Guid clientId, ProviderHostRef host)

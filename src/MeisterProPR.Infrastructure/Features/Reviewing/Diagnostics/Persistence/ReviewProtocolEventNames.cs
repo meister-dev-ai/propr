@@ -62,4 +62,7 @@ public static class ReviewProtocolEventNames
     public const string PromptStageEvidenceRecorded = "prompt_stage_evidence_recorded";
     public const string ReviewStepSkipped = "review_step_skipped";
     public const string ImportanceRankingApplied = "importance_ranking_applied";
+    public const string LocalWorkspacePrepared = "local_workspace_prepared";
+    public const string LocalWorkspaceFailed = "local_workspace_failed";
+    public const string LocalWorkspaceFallbackApplied = "local_workspace_fallback_applied";
 }

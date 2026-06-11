@@ -127,11 +127,11 @@ internal sealed class AdoWebhookIngressService(
     {
         var repositoryName = TryReadString(payload, "resource", "repository", "name")
                              ?? delivery.RepositoryId;
-        var projectIdOrName = TryReadString(payload, "resource", "repository", "project", "id")
-                              ?? TryReadString(payload, "resource", "repository", "project", "name")
-                              ?? repositoryName;
+        var projectName = TryReadString(payload, "resource", "repository", "project", "name")
+                          ?? TryReadString(payload, "resource", "repository", "project", "id")
+                          ?? repositoryName;
 
-        return new RepositoryRef(host, delivery.RepositoryId, projectIdOrName, projectIdOrName);
+        return new RepositoryRef(host, delivery.RepositoryId, projectName, projectName, repositoryName);
     }
 
     private static string BuildDeliveryId(JsonElement payload, IncomingAdoWebhookDelivery delivery)

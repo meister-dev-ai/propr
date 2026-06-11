@@ -5,17 +5,13 @@ using System.Net;
 using System.Text;
 using System.Text.Json;
 using MeisterProPR.Application.DTOs;
-using MeisterProPR.Application.DTOs.ProCursor;
-using MeisterProPR.Application.Features.Reviewing.Execution.Models;
 using MeisterProPR.Application.Interfaces;
-using MeisterProPR.Application.Options;
 using MeisterProPR.Domain.Enums;
 using MeisterProPR.Domain.ValueObjects;
 using MeisterProPR.Infrastructure.Features.Providers.Forgejo.Discovery;
 using MeisterProPR.Infrastructure.Features.Providers.Forgejo.Identity;
 using MeisterProPR.Infrastructure.Features.Providers.Forgejo.Reviewing;
 using MeisterProPR.Infrastructure.Features.Providers.Forgejo.Security;
-using Microsoft.Extensions.Logging.Abstractions;
 using NSubstitute;
 
 namespace MeisterProPR.Infrastructure.Tests.Forgejo;
@@ -525,92 +521,6 @@ public sealed class ForgejoPullRequestFetcherTests
         Assert.Equal("Fetch path-based Forgejo identifiers", result.Title);
         Assert.Equal("feature/providers", result.SourceBranch);
         Assert.Empty(result.ChangedFiles);
-    }
-}
-
-public sealed class ForgejoReviewContextToolsTests
-{
-    [Fact]
-    public async Task FactoryCreatedTools_ReturnChangedFilesTreeContentAndProCursorContext()
-    {
-        var clientId = Guid.NewGuid();
-        var host = new ProviderHostRef(ScmProvider.Forgejo, "https://codeberg.example.com");
-        var repository = new RepositoryRef(host, "101", "acme", "acme/propr");
-        var review = new CodeReviewRef(repository, CodeReviewPlatformKind.PullRequest, "4201", 42);
-        var connectionRepository = ForgejoTestHelpers.CreateConnectionRepository(clientId, host);
-        var gateway = Substitute.For<IProCursorGateway>();
-        gateway.AskKnowledgeAsync(Arg.Any<ProCursorKnowledgeQueryRequest>(), Arg.Any<CancellationToken>())
-            .Returns(new ProCursorKnowledgeAnswerDto("ok", []));
-        var httpClientFactory = ForgejoTestHelpers.CreateHttpClientFactory(request =>
-            request.RequestUri!.AbsoluteUri switch
-            {
-                "https://codeberg.example.com/api/v1/user" => ForgejoTestHelpers.CreateJsonResponse(new { login = "meister-dev" }),
-                "https://codeberg.example.com/api/v1/repos/acme/propr/pulls/42/files?limit=100" => ForgejoTestHelpers
-                    .CreateJsonResponse(
-                        new object[]
-                        {
-                            new { filename = "src/Fetcher.cs", status = "added" },
-                            new { filename = "src/NewProvider.cs", status = "renamed" },
-                        }),
-                "https://codeberg.example.com/api/v1/repos/acme/propr/branches/feature%2Fproviders" =>
-                    ForgejoTestHelpers.CreateJsonResponse(new { commit = new { id = "head-sha" } }),
-                "https://codeberg.example.com/api/v1/repos/acme/propr/git/trees/head-sha?recursive=true" =>
-                    ForgejoTestHelpers.CreateJsonResponse(
-                        new
-                        {
-                            tree = new object[]
-                            {
-                                new { path = "src/Fetcher.cs", type = "blob" },
-                                new { path = "docs/notes.md", type = "blob" },
-                                new { path = "src", type = "tree" },
-                            },
-                        }),
-                "https://codeberg.example.com/api/v1/repos/acme/propr/contents/src%2FFetcher.cs?ref=feature%2Fproviders"
-                    => ForgejoTestHelpers.CreateJsonResponse(
-                        new
-                        {
-                            content = Convert.ToBase64String(Encoding.UTF8.GetBytes("line1\nline2\nline3\nline4")),
-                            encoding = "base64",
-                        }),
-                _ => new HttpResponseMessage(HttpStatusCode.NotFound),
-            });
-
-        var factory = new ForgejoReviewContextToolsFactory(
-            new ForgejoConnectionVerifier(connectionRepository, httpClientFactory),
-            httpClientFactory,
-            gateway,
-            Microsoft.Extensions.Options.Options.Create(new AiReviewOptions { MaxFileSizeBytes = 1024 * 1024 }),
-            NullLogger<ForgejoReviewContextTools>.Instance);
-
-        var tools = factory.Create(new ReviewContextToolsRequest(review, "feature/providers", 7, clientId, null, host.HostBaseUrl));
-
-        var changedFiles = await tools.GetChangedFilesAsync(CancellationToken.None);
-        var tree = await tools.GetFileTreeAsync("main", CancellationToken.None);
-        var content = await tools.GetFileContentAsync("src/Fetcher.cs", "main", 2, 3, CancellationToken.None);
-        await tools.AskProCursorKnowledgeAsync("where is the fetcher?", CancellationToken.None);
-
-        Assert.Collection(
-            changedFiles,
-            item =>
-            {
-                Assert.Equal("src/Fetcher.cs", item.Path);
-                Assert.Equal(ChangeType.Add, item.ChangeType);
-            },
-            item =>
-            {
-                Assert.Equal("src/NewProvider.cs", item.Path);
-                Assert.Equal(ChangeType.Rename, item.ChangeType);
-            });
-        Assert.Equal(["src/Fetcher.cs", "docs/notes.md"], tree);
-        Assert.Equal("line2\nline3", content);
-        await gateway.Received(1)
-            .AskKnowledgeAsync(
-                Arg.Is<ProCursorKnowledgeQueryRequest>(request =>
-                    request.RepositoryContext!.ProviderScopePath == host.HostBaseUrl
-                    && request.RepositoryContext.ProviderProjectKey == "acme"
-                    && request.RepositoryContext.RepositoryId == "101"
-                    && request.RepositoryContext.Branch == "feature/providers"),
-                Arg.Any<CancellationToken>());
     }
 }
 

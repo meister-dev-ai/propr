@@ -47,6 +47,7 @@ Meister DEV's ProPR automates your pull and merge request reviews, ensuring high
 ### Review Optimizations
 
 - **Token-optimized reviews** — diff-only input (full file available on demand via tool call), cache-friendly stable-prefix ordering, cached/effective input diagnostics, bounded tool-result replay, tier-sized output budgets, and explicit finalization-attempt reporting
+- **Local git-backed review workspaces** — repository-content inspection now hydrates a commit-pinned local workspace per review job across Azure DevOps, GitHub, GitLab, and Forgejo-family providers, reducing repeated provider content reads while keeping provider APIs for metadata and publication
 - **ProRV-focused review guidance** — an optional per-file ProRV prefilter ranks relevant review checks from the changed diff and feeds focused guidance into baseline and agentic file review before verification and publication
 - **Per-automation temperature control** - crawl configurations and webhook configurations can override the review temperature with a value between `0.0` and `2.0`
 - **Comment relevance filtering** — optional code-selected `heuristic-v1` and `hybrid-v1` per-file filters run after the existing hard guards and before thread memory, persistence, synthesis, and publication; each pass records the same comparison-friendly output shape plus filter AI token usage when hybrid adjudication runs
@@ -80,6 +81,7 @@ Meister DEV's ProPR automates your pull and merge request reviews, ensuring high
 - **Follow-up and repeated-judgment diagnostics** — job protocol views expose trigger family, follow-up completion/dependency, and repeated-judgment agreement or disagreement details so rollout reviews can distinguish diagnostics from actionable output
 - **Token optimization diagnostics** — job protocol views expose cache observability, per-call raw/cached/effective input, bounded tool-evidence replay, and forced-final or repair attempt reasons so operators can separate provider cache behavior from prompt/replay reductions
 - **Execution-trace timing diagnostics** — job protocol views expose per-tool start/end time, total duration, optional wait-versus-active split, repository-search phase timing, and slowest-call comparison cues across visible passes without requiring raw logs
+- **Workspace adoption diagnostics** — review status and Job Protocol views expose whether a local review workspace was prepared, whether the run fell back to remote provider inspection, and any structured workspace failure stage/code/message details
 - **Token usage dashboard** — per-client AI token consumption tracked by model and date
 
 ### Knowledge

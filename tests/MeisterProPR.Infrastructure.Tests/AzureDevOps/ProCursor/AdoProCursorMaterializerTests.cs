@@ -196,7 +196,7 @@ public sealed class AdoProCursorMaterializerTests
         materializer.SetContent("commit-head", "/README.md", "# Readme\n");
 
         var trackedBranchWorkspaceRoot = Path.Combine(
-            Path.GetTempPath(),
+            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData, Environment.SpecialFolderOption.DoNotVerify),
             "meisterpropr-procursor",
             source.Id.ToString("N"),
             trackedBranch.Id.ToString("N"));

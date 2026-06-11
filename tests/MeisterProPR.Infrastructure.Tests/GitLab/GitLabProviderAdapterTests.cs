@@ -4,17 +4,13 @@
 using System.Net;
 using System.Text.Json;
 using MeisterProPR.Application.DTOs;
-using MeisterProPR.Application.DTOs.ProCursor;
-using MeisterProPR.Application.Features.Reviewing.Execution.Models;
 using MeisterProPR.Application.Interfaces;
-using MeisterProPR.Application.Options;
 using MeisterProPR.Domain.Enums;
 using MeisterProPR.Domain.ValueObjects;
 using MeisterProPR.Infrastructure.Features.Providers.GitLab.Discovery;
 using MeisterProPR.Infrastructure.Features.Providers.GitLab.Identity;
 using MeisterProPR.Infrastructure.Features.Providers.GitLab.Reviewing;
 using MeisterProPR.Infrastructure.Features.Providers.GitLab.Security;
-using Microsoft.Extensions.Logging.Abstractions;
 using NSubstitute;
 
 namespace MeisterProPR.Infrastructure.Tests.GitLab;
@@ -434,101 +430,6 @@ public sealed class GitLabPullRequestFetcherTests
                 Assert.Equal("src/Stable.cs", item.Path);
                 Assert.Equal(ChangeType.Edit, item.ChangeType);
             });
-    }
-}
-
-public sealed class GitLabReviewContextToolsTests
-{
-    [Fact]
-    public async Task FactoryCreatedTools_ReturnChangedFilesTreeContentAndProCursorContext()
-    {
-        var clientId = Guid.NewGuid();
-        var host = new ProviderHostRef(ScmProvider.GitLab, "https://gitlab.example.com");
-        var repository = new RepositoryRef(host, "101", "acme/platform", "acme/platform/propr");
-        var review = new CodeReviewRef(repository, CodeReviewPlatformKind.PullRequest, "4201", 42);
-        var connectionRepository = GitLabTestHelpers.CreateConnectionRepository(clientId, host);
-        var gateway = Substitute.For<IProCursorGateway>();
-        gateway.AskKnowledgeAsync(Arg.Any<ProCursorKnowledgeQueryRequest>(), Arg.Any<CancellationToken>())
-            .Returns(new ProCursorKnowledgeAnswerDto("ok", []));
-        var httpClientFactory = GitLabTestHelpers.CreateHttpClientFactory(request =>
-            request.RequestUri!.AbsoluteUri switch
-            {
-                "https://gitlab.example.com/api/v4/user" => GitLabTestHelpers.CreateJsonResponse(new { username = "meister-dev" }),
-                "https://gitlab.example.com/api/v4/projects/101/merge_requests/42/changes" => GitLabTestHelpers
-                    .CreateJsonResponse(
-                        new
-                        {
-                            changes = new object[]
-                            {
-                                new
-                                {
-                                    old_path = "src/OldProvider.cs", new_path = "src/NewProvider.cs", new_file = false,
-                                    deleted_file = false, renamed_file = true,
-                                },
-                                new
-                                {
-                                    old_path = (string?)null, new_path = "src/Fetcher.cs", new_file = true,
-                                    deleted_file = false, renamed_file = false,
-                                },
-                            },
-                        }),
-                "https://gitlab.example.com/api/v4/projects/101/repository/tree?recursive=true&per_page=100&ref=feature%2Fproviders"
-                    => GitLabTestHelpers.CreateJsonResponse(
-                        new object[]
-                        {
-                            new { path = "src/Fetcher.cs", type = "blob" },
-                            new { path = "docs/notes.md", type = "blob" },
-                            new { path = "src", type = "tree" },
-                        }),
-                "https://gitlab.example.com/api/v4/projects/101/repository/files/src%2FFetcher.cs/raw?ref=feature%2Fproviders"
-                    => new HttpResponseMessage(HttpStatusCode.OK)
-                    {
-                        Content = new StringContent("line1\nline2\nline3\nline4"),
-                    },
-                _ => new HttpResponseMessage(HttpStatusCode.NotFound),
-            });
-
-        var factory = new GitLabReviewContextToolsFactory(
-            new GitLabConnectionVerifier(connectionRepository, httpClientFactory),
-            httpClientFactory,
-            gateway,
-            Microsoft.Extensions.Options.Options.Create(new AiReviewOptions { MaxFileSizeBytes = 1024 * 1024 }),
-            NullLogger<GitLabReviewContextTools>.Instance);
-
-        var tools = factory.Create(new ReviewContextToolsRequest(review, "feature/providers", 7, clientId, null, host.HostBaseUrl));
-
-        var changedFiles = await tools.GetChangedFilesAsync(CancellationToken.None);
-        var tree = await tools.GetFileTreeAsync("main", CancellationToken.None);
-        var content = await tools.GetFileContentAsync("src/Fetcher.cs", "main", 2, 3, CancellationToken.None);
-        await tools.AskProCursorKnowledgeAsync("where is the fetcher?", CancellationToken.None);
-        var symbol = await tools.GetProCursorSymbolInfoAsync("Fetcher", "qualifiedName", 8, CancellationToken.None);
-
-        Assert.Collection(
-            changedFiles,
-            item =>
-            {
-                Assert.Equal("src/NewProvider.cs", item.Path);
-                Assert.Equal(ChangeType.Rename, item.ChangeType);
-            },
-            item =>
-            {
-                Assert.Equal("src/Fetcher.cs", item.Path);
-                Assert.Equal(ChangeType.Add, item.ChangeType);
-            });
-        Assert.Equal(["src/Fetcher.cs", "docs/notes.md"], tree);
-        Assert.Equal("line2\nline3", content);
-        Assert.Equal("unavailable", symbol.Status);
-        Assert.Null(symbol.Symbol);
-        await gateway.Received(1)
-            .AskKnowledgeAsync(
-                Arg.Is<ProCursorKnowledgeQueryRequest>(request =>
-                    request.RepositoryContext!.ProviderScopePath == host.HostBaseUrl
-                    && request.RepositoryContext.ProviderProjectKey == "acme/platform"
-                    && request.RepositoryContext.RepositoryId == "101"
-                    && request.RepositoryContext.Branch == "feature/providers"),
-                Arg.Any<CancellationToken>());
-        await gateway.DidNotReceive()
-            .GetSymbolInsightAsync(Arg.Any<ProCursorSymbolQueryRequest>(), Arg.Any<CancellationToken>());
     }
 }
 

@@ -55,6 +55,59 @@ public sealed class VssConnectionFactory(TokenCredential credential)
         return conn;
     }
 
+    /// <summary>
+    ///     Returns the HTTP <c>Authorization</c> header value suitable for git HTTPS operations, or <c>null</c>
+    ///     when the authentication kind cannot be represented as an HTTP header (e.g. Windows/NTLM).
+    /// </summary>
+    public async Task<string?> GetHttpAuthorizationHeaderAsync(
+        string organizationUrl,
+        AdoConnectionCredentials? credentials,
+        CancellationToken ct)
+    {
+        if (credentials?.AuthenticationKind == ScmAuthenticationKind.PersonalAccessToken)
+        {
+            var payload = Convert.ToBase64String(Encoding.UTF8.GetBytes($":{credentials.Secret}"));
+            return $"AUTHORIZATION: Basic {payload}";
+        }
+
+        if (credentials?.AuthenticationKind == ScmAuthenticationKind.WindowsUserAccount)
+        {
+            return null;
+        }
+
+        // OAuthClientCredentials or global managed identity — acquire a Bearer token.
+        var token = await this.GetRawTokenAsync(organizationUrl, credentials, ct);
+        return $"AUTHORIZATION: Bearer {token}";
+    }
+
+    private async Task<string> GetRawTokenAsync(
+        string organizationUrl,
+        AdoConnectionCredentials? credentials,
+        CancellationToken ct)
+    {
+        var normalizedUrl = organizationUrl.TrimEnd('/');
+
+        if (credentials?.AuthenticationKind == ScmAuthenticationKind.OAuthClientCredentials)
+        {
+            if (string.IsNullOrWhiteSpace(credentials.OAuthTenantId) || string.IsNullOrWhiteSpace(credentials.OAuthClientId))
+            {
+                throw new InvalidOperationException("Azure DevOps OAuth credentials require OAuth tenant and client identifiers.");
+            }
+
+            var effectiveCredential = new ClientSecretCredential(
+                credentials.OAuthTenantId,
+                credentials.OAuthClientId,
+                credentials.Secret);
+            var token = await effectiveCredential.GetTokenAsync(new TokenRequestContext([AdoResourceScope]), ct);
+            return token.Token;
+        }
+
+        // Global managed identity / default credential.
+        _ = normalizedUrl;
+        var globalToken = await credential.GetTokenAsync(new TokenRequestContext([AdoResourceScope]), ct);
+        return globalToken.Token;
+    }
+
     private async Task<(VssConnection Connection, DateTimeOffset ExpiresOn)> CreateConnectionAsync(
         string normalizedUrl,
         AdoConnectionCredentials? credentials,

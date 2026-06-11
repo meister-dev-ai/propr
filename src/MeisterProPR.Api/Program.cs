@@ -36,6 +36,7 @@ using MeisterProPR.Infrastructure.Features.ProCursor.Broker;
 using MeisterProPR.Infrastructure.Features.ProCursor.Remote;
 using MeisterProPR.Infrastructure.Features.PromptCustomization;
 using MeisterProPR.Infrastructure.Features.Reviewing;
+using MeisterProPR.Infrastructure.Features.Reviewing.DependencyInjection;
 using MeisterProPR.Infrastructure.Features.UsageReporting;
 using MeisterProPR.Infrastructure.Repositories;
 using MeisterProPR.Infrastructure.Services;
@@ -175,6 +176,7 @@ try
         builder.Configuration,
         builder.Environment,
         GetSelectedCommentRelevanceFilterId());
+    builder.Services.AddReviewWorkspaceServices(builder.Configuration);
     builder.Services.AddCrawlingModule(builder.Configuration, builder.Environment);
     builder.Services.AddClientsModule(builder.Configuration, builder.Environment);
     builder.Services.AddIdentityAndAccessModule(builder.Configuration, builder.Environment);

@@ -1083,10 +1083,10 @@ public class FileByFileReviewOrchestratorTests
 
         var profiles = sut.GetProfiles(ReviewStrategy.FileByFile);
 
-        var legacyBaseline = Assert.Single(profiles.Where(profile => profile.ProfileId == ReviewPipelineProfileProvider.FileByFileBaselineProfileId));
-        var calm = Assert.Single(profiles.Where(profile => profile.ProfileId == ReviewPipelineProfileProvider.FileByFileCalmProfileId));
-        var balanced = Assert.Single(profiles.Where(profile => profile.ProfileId == ReviewPipelineProfileProvider.FileByFileBalancedProfileId));
-        var assertive = Assert.Single(profiles.Where(profile => profile.ProfileId == ReviewPipelineProfileProvider.FileByFileAssertiveProfileId));
+        var legacyBaseline = Assert.Single(profiles, profile => profile.ProfileId == ReviewPipelineProfileProvider.FileByFileBaselineProfileId);
+        var calm = Assert.Single(profiles, profile => profile.ProfileId == ReviewPipelineProfileProvider.FileByFileCalmProfileId);
+        var balanced = Assert.Single(profiles, profile => profile.ProfileId == ReviewPipelineProfileProvider.FileByFileBalancedProfileId);
+        var assertive = Assert.Single(profiles, profile => profile.ProfileId == ReviewPipelineProfileProvider.FileByFileAssertiveProfileId);
 
         var expectedDispatchStages = new[]
         {
@@ -1292,7 +1292,7 @@ public class FileByFileReviewOrchestratorTests
 
         await sut.ReviewAsync(job, pr, CreateContext(), CancellationToken.None);
 
-        var completedResult = Assert.Single(storedResults.Where(result => result.IsComplete));
+        var completedResult = Assert.Single(storedResults, result => result.IsComplete);
         var keptComment = Assert.Single(completedResult.Comments!);
         Assert.Equal("Authorization check is missing before token-backed action.", keptComment.Message);
     }

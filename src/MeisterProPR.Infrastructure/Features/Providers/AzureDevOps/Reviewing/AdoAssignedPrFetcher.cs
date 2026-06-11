@@ -118,7 +118,8 @@ public sealed partial class AdoAssignedPrFetcher(
                     host,
                     repositoryId,
                     config.ProviderProjectKey,
-                    config.ProviderProjectKey);
+                    config.ProviderProjectKey,
+                    pr.Repository?.Name);
                 var review = new CodeReviewRef(
                     repository,
                     CodeReviewPlatformKind.PullRequest,

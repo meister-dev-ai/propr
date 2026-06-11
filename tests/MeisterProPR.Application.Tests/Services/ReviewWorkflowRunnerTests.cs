@@ -895,6 +895,7 @@ public sealed class ReviewWorkflowRunnerTests
             exclusionFetcher,
             instructionEvaluator,
             reviewStrategyDispatcher,
+            null,
             [boundaryIssue]);
 
         var result = await sut.RunAsync(request, CancellationToken.None);

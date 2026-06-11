@@ -42,8 +42,13 @@ public sealed partial class ReviewOrchestrationService(
     IReviewStrategyDispatcher reviewStrategyDispatcher,
     IPromptOverrideService? promptOverrideService = null,
     IProviderActivationService? providerActivationService = null,
-    IAiRuntimeResolver? aiRuntimeResolver = null) : IReviewJobProcessor
+    IAiRuntimeResolver? aiRuntimeResolver = null,
+    IReviewRepositoryWorkspaceManager? workspaceManager = null) : IReviewJobProcessor
 {
+    private const string LocalWorkspacePreparedEventName = "local_workspace_prepared";
+    private const string LocalWorkspaceFailedEventName = "local_workspace_failed";
+    private const string LocalWorkspaceFallbackAppliedEventName = "local_workspace_fallback_applied";
+
     private readonly AiReviewOptions _opts = options.Value;
 
     /// <summary>Processes the given review job end-to-end.</summary>
@@ -566,6 +571,33 @@ public sealed partial class ReviewOrchestrationService(
         var customSystemMessage = await clientRegistry.GetCustomSystemMessageAsync(job.ClientId, ct);
         var enableProRv = await clientRegistry.GetProRvEnabledAsync(job.ClientId, ct);
 
+        if (workspaceManager is null)
+        {
+            throw new InvalidOperationException("No workspace manager is registered. Local review workspace support is required.");
+        }
+
+        var workspacePreparation = await workspaceManager.PrepareAsync(
+            new ReviewRepositoryWorkspaceRequest(
+                job.Id,
+                job.ClientId,
+                job.Provider,
+                job.OrganizationUrl,
+                job.CodeReviewReference.Repository,
+                job.PullRequestId,
+                job.ReviewRevisionReference ?? throw new InvalidOperationException("A review revision is required for local workspace preparation."),
+                pr.SourceBranch,
+                pr.TargetBranch,
+                pr.ChangedFiles.Select(ChangedPathSnapshot.FromChangedFile).ToList().AsReadOnly()),
+            ct);
+
+        if (!workspacePreparation.Succeeded)
+        {
+            var failure = workspacePreparation.Failure;
+            throw new InvalidOperationException($"Local review workspace preparation failed at stage '{failure?.Stage}' ({failure?.Code}): {failure?.Message}");
+        }
+
+        await this.RecordWorkspaceProtocolAsync(job, workspacePreparation, ct);
+
         var reviewTools = reviewContextToolsFactory.Create(
             new ReviewContextToolsRequest(
                 job.CodeReviewReference,
@@ -577,7 +609,10 @@ public sealed partial class ReviewOrchestrationService(
                     : null,
                 job.OrganizationUrl,
                 pr.TargetBranch,
-                pr.ChangedFiles.Select(ChangedPathSnapshot.FromChangedFile).ToList().AsReadOnly()));
+                pr.ChangedFiles.Select(ChangedPathSnapshot.FromChangedFile).ToList().AsReadOnly(),
+                Workspace: workspacePreparation.Workspace,
+                WorkspaceLease: workspacePreparation.Workspace?.Lease,
+                WorkspaceFailure: workspacePreparation.Failure));
         IReadOnlyList<RepositoryInstruction> relevantInstructions = [];
         var exclusionRules = ReviewExclusionRules.Default;
 
@@ -622,9 +657,82 @@ public sealed partial class ReviewOrchestrationService(
             ProtocolRecorder = protocolRecorder,
             Temperature = job.ReviewTemperature,
             PromptOverrides = await LoadPromptOverridesAsync(job.ClientId, promptOverrideService, logger, ct),
+            ReviewWorkspace = workspacePreparation.Workspace,
         };
 
         return (systemContext, carriedForwardPaths);
+    }
+
+    private async Task RecordWorkspaceProtocolAsync(
+        ReviewJob job,
+        ReviewRepositoryWorkspacePreparationResult workspacePreparation,
+        CancellationToken ct)
+    {
+        if (!workspacePreparation.Succeeded && workspacePreparation.Failure is null)
+        {
+            return;
+        }
+
+        if (protocolRecorder is null)
+        {
+            return;
+        }
+
+        var protocolId = jobs.GetById(job.Id)?.Protocols
+            .OrderByDescending(protocol => protocol.StartedAt)
+            .FirstOrDefault()?.Id;
+        if (!protocolId.HasValue)
+        {
+            return;
+        }
+
+        if (workspacePreparation.Workspace is not null)
+        {
+            var details = JsonSerializer.Serialize(
+                new
+                {
+                    attempted = true,
+                    prepared = true,
+                    fallbackApplied = false,
+                    workspaceKey = workspacePreparation.Workspace.Lease.WorkspaceKey,
+                });
+            await protocolRecorder.RecordReviewStrategyEventAsync(
+                protocolId.Value,
+                LocalWorkspacePreparedEventName,
+                details,
+                details,
+                null,
+                ct);
+            return;
+        }
+
+        if (workspacePreparation.Failure is not null)
+        {
+            var failureDetails = JsonSerializer.Serialize(
+                new
+                {
+                    attempted = true,
+                    prepared = false,
+                    fallbackApplied = true,
+                    stage = workspacePreparation.Failure.Stage,
+                    code = workspacePreparation.Failure.Code,
+                    message = workspacePreparation.Failure.Message,
+                });
+            await protocolRecorder.RecordReviewStrategyEventAsync(
+                protocolId.Value,
+                LocalWorkspaceFailedEventName,
+                failureDetails,
+                failureDetails,
+                null,
+                ct);
+            await protocolRecorder.RecordReviewStrategyEventAsync(
+                protocolId.Value,
+                LocalWorkspaceFallbackAppliedEventName,
+                failureDetails,
+                failureDetails,
+                null,
+                ct);
+        }
     }
 
     // T075: Dispatch the file-by-file review and merge carry-forward paths into the result.
@@ -635,7 +743,18 @@ public sealed partial class ReviewOrchestrationService(
         IChatClient chatClient,
         CancellationToken ct)
     {
-        return await reviewStrategyDispatcher.ReviewAsync(job, pr, systemContext, ct, chatClient);
+        try
+        {
+            return await reviewStrategyDispatcher.ReviewAsync(job, pr, systemContext, ct, chatClient);
+        }
+        finally
+        {
+            if (systemContext.ReviewWorkspace is not null)
+            {
+                await systemContext.ReviewWorkspace.DisposeAsync();
+                systemContext.ReviewWorkspace = null;
+            }
+        }
     }
 
     private async Task HandlePartialReviewFailureAsync(

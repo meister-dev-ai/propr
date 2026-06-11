@@ -662,8 +662,8 @@ public sealed class AdoCompatibilityAdapterTests
         Assert.Equal("reviewer_assignment", envelope.DeliveryKind);
         Assert.Equal("git.pullrequest.updated", envelope.EventName);
         Assert.Equal(repositoryId, envelope.Repository!.ExternalRepositoryId);
-        Assert.Equal("project-1", envelope.Repository.OwnerOrNamespace);
-        Assert.Equal("project-1", envelope.Repository.ProjectPath);
+        Assert.Equal("Project One", envelope.Repository.OwnerOrNamespace);
+        Assert.Equal("Project One", envelope.Repository.ProjectPath);
         Assert.Equal(42, envelope.Review!.Number);
         Assert.Equal("refs/heads/feature/providers", envelope.SourceBranch);
         Assert.Equal("refs/heads/main", envelope.TargetBranch);

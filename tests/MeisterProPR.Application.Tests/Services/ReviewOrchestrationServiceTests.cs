@@ -196,7 +196,9 @@ public class ReviewOrchestrationServiceTests
 
     private static ReviewJob CreateJob()
     {
-        return new ReviewJob(Guid.NewGuid(), Guid.NewGuid(), "https://dev.azure.com/org", "proj", "repo", 1, 1);
+        var job = new ReviewJob(Guid.NewGuid(), Guid.NewGuid(), "https://dev.azure.com/org", "proj", "repo", 1, 1);
+        job.SetReviewRevision(new ReviewRevision("head-sha", "base-sha", null, "1", null));
+        return job;
     }
 
     private static PullRequest CreatePullRequest(
@@ -284,7 +286,18 @@ public class ReviewOrchestrationServiceTests
             aiDependencies.chatFactory,
             reviewStrategyDispatcher ?? CreateDispatcher(orchestrator),
             providerActivationService: providerActivationService,
-            aiRuntimeResolver: aiRuntimeResolver);
+            aiRuntimeResolver: aiRuntimeResolver,
+            workspaceManager: CreateDefaultWorkspaceManager());
+    }
+
+    private static IReviewRepositoryWorkspaceManager CreateDefaultWorkspaceManager()
+    {
+        var workspace = Substitute.For<IReviewRepositoryWorkspace>();
+        workspace.DisposeAsync().Returns(ValueTask.CompletedTask);
+        var manager = Substitute.For<IReviewRepositoryWorkspaceManager>();
+        manager.PrepareAsync(Arg.Any<ReviewRepositoryWorkspaceRequest>(), Arg.Any<CancellationToken>())
+            .Returns(new ReviewRepositoryWorkspacePreparationResult(workspace, null));
+        return manager;
     }
 
     private static IReviewStrategyDispatcher CreateDispatcher(IFileByFileReviewOrchestrator orchestrator)
@@ -1136,6 +1149,7 @@ public class ReviewOrchestrationServiceTests
 
         var clientId = Guid.NewGuid();
         var job = new ReviewJob(Guid.NewGuid(), clientId, "https://dev.azure.com/org", "proj", "repo", 1, 1);
+        job.SetReviewRevision(new ReviewRevision("head-sha", "base-sha", null, null, null));
         var reviewResult = CreateReviewResult();
         var pr = CreatePullRequest(authorizedIdentityName: "propr-review[bot]");
 
@@ -3408,6 +3422,7 @@ public class ReviewOrchestrationServiceTests
 
         // Job is for iteration 2; prior iteration was 1
         var job = new ReviewJob(Guid.NewGuid(), Guid.NewGuid(), "https://dev.azure.com/org", "proj", "repo", 1, 2);
+        job.SetReviewRevision(new ReviewRevision("head-sha", "base-sha", null, null, null));
         var changedFile = new ChangedFile("src/Changed.cs", ChangeType.Edit, "new content", "diff");
         var pr = new PullRequest(
             job.OrganizationUrl,
@@ -3895,6 +3910,7 @@ public class ReviewOrchestrationServiceTests
             CreateDeps();
 
         var job = new ReviewJob(Guid.NewGuid(), Guid.NewGuid(), "https://dev.azure.com/org", "proj", "repo", 1, 2);
+        job.SetReviewRevision(new ReviewRevision("head-sha", "base-sha", null, null, null));
         var changedFile = new ChangedFile("src/AFile.cs", ChangeType.Edit, "content", "diff");
         var pr = new PullRequest(
             job.OrganizationUrl,
@@ -4164,6 +4180,7 @@ public class ReviewOrchestrationServiceTests
             CreateDeps();
 
         var job = new ReviewJob(Guid.NewGuid(), Guid.NewGuid(), "https://dev.azure.com/org", "proj", "repo", 1, 2);
+        job.SetReviewRevision(new ReviewRevision("head-sha", "base-sha", null, null, null));
         // PR has NO changed files
         var pr = new PullRequest(
             job.OrganizationUrl,
@@ -4241,6 +4258,7 @@ public class ReviewOrchestrationServiceTests
             CreateDeps();
 
         var job = new ReviewJob(Guid.NewGuid(), Guid.NewGuid(), "https://dev.azure.com/org", "proj", "repo", 1, 2);
+        job.SetReviewRevision(new ReviewRevision("head-sha", "base-sha", null, null, null));
         var changedFile = new ChangedFile("src/Changed.cs", ChangeType.Edit, "content", "diff");
         var pr = new PullRequest(
             job.OrganizationUrl,

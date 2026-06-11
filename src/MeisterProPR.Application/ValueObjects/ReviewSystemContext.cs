@@ -2,6 +2,7 @@
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
 using MeisterProPR.Application.Features.Reviewing.Execution.Models;
+using MeisterProPR.Application.Features.Reviewing.Execution.Ports;
 using MeisterProPR.Application.Interfaces;
 using MeisterProPR.Domain.ValueObjects;
 using Microsoft.Extensions.AI;
@@ -169,4 +170,9 @@ public sealed class ReviewSystemContext
     ///     Defaults to <see cref="ReviewAggressiveness.Balanced" />.
     /// </summary>
     public ReviewAggressiveness Aggressiveness { get; set; } = ReviewAggressiveness.Balanced;
+
+    /// <summary>
+    ///     Prepared local repository workspace bound to this review execution when available.
+    /// </summary>
+    public IReviewRepositoryWorkspace? ReviewWorkspace { get; set; }
 }

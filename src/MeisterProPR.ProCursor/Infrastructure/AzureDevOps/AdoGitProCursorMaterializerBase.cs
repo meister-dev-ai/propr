@@ -321,7 +321,7 @@ public abstract class AdoGitProCursorMaterializerBase(
     private static string GetTrackedBranchWorkspaceRoot(Guid sourceId, Guid trackedBranchId)
     {
         return Path.Combine(
-            Path.GetTempPath(),
+            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData, Environment.SpecialFolderOption.DoNotVerify),
             WorkspaceRootDirectoryName,
             sourceId.ToString("N"),
             trackedBranchId.ToString("N"));

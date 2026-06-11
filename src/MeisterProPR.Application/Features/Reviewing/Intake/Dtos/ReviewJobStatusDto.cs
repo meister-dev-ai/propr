@@ -52,7 +52,20 @@ public sealed record ReviewJobStatusDto(
 
     /// <summary>Comparison group identifier when the stored job participates in one.</summary>
     public Guid? ComparisonGroupId { get; init; }
+
+    /// <summary>Local workspace visibility metadata when available.</summary>
+    public ReviewJobWorkspaceStatusDto? Workspace { get; init; }
 }
+
+/// <summary>Application DTO representing local workspace adoption and fallback visibility.</summary>
+public sealed record ReviewJobWorkspaceStatusDto(
+    bool Attempted,
+    bool Prepared,
+    bool FallbackApplied,
+    string? WorkspaceKey,
+    string? FailureStage,
+    string? FailureCode,
+    string? FailureMessage);
 
 /// <summary>Application DTO representing the textual review result and comments.</summary>
 public sealed record ReviewJobResultDto(string Summary, IReadOnlyList<ReviewJobCommentDto> Comments);

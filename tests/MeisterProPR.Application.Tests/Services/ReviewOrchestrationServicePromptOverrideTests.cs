@@ -171,7 +171,18 @@ public class ReviewOrchestrationServicePromptOverrideTests
             aiRepo,
             Substitute.For<IAiChatClientFactory>(),
             reviewStrategyDispatcher,
-            promptOverrideService);
+            promptOverrideService,
+            workspaceManager: CreateDefaultWorkspaceManager());
+    }
+
+    private static IReviewRepositoryWorkspaceManager CreateDefaultWorkspaceManager()
+    {
+        var workspace = Substitute.For<IReviewRepositoryWorkspace>();
+        workspace.DisposeAsync().Returns(ValueTask.CompletedTask);
+        var manager = Substitute.For<IReviewRepositoryWorkspaceManager>();
+        manager.PrepareAsync(Arg.Any<ReviewRepositoryWorkspaceRequest>(), Arg.Any<CancellationToken>())
+            .Returns(new ReviewRepositoryWorkspacePreparationResult(workspace, null));
+        return manager;
     }
 
     private static IReviewStrategyDispatcher CreateDispatcher(IFileByFileReviewOrchestrator orchestrator)
@@ -197,6 +208,7 @@ public class ReviewOrchestrationServicePromptOverrideTests
         IReviewPrScanRepository prScanRepository) BuildDefaults()
     {
         var job = new ReviewJob(Guid.NewGuid(), Guid.NewGuid(), "https://dev.azure.com/org", "proj", "repo", 1, 1);
+        job.SetReviewRevision(new ReviewRevision("head-sha", "base-sha", null, null, null));
         var prFetcher = Substitute.For<IPullRequestFetcher>();
         var clientRegistry = Substitute.For<IClientRegistry>();
         var prScanRepository = Substitute.For<IReviewPrScanRepository>();

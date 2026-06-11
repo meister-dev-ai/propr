@@ -87,6 +87,9 @@ public partial record ReviewJobProtocolDto
     /// <summary>Managed file-review session visibility metadata associated with this pass, when available.</summary>
     public ProtocolAgentSessionDto? AgentSession { get; init; }
 
+    /// <summary>Local review workspace visibility metadata associated with this pass, when available.</summary>
+    public ProtocolWorkspaceDto? Workspace { get; init; }
+
     /// <summary>Sum of cached input tokens across AI calls where the provider reported cached usage.</summary>
     public long? TotalCachedInputTokens { get; init; }
 
@@ -214,6 +217,18 @@ public sealed record ProtocolEventPhaseTimingDto(
     string Availability,
     string Outcome,
     string? Summary);
+
+/// <summary>
+///     Local workspace preparation and fallback visibility metadata for one protocol pass.
+/// </summary>
+public sealed record ProtocolWorkspaceDto(
+    bool Attempted,
+    bool Prepared,
+    bool FallbackApplied,
+    string? WorkspaceKey,
+    string? FailureStage,
+    string? FailureCode,
+    string? FailureMessage);
 
 /// <summary>
 ///     Carries one final review comment attributable to a protocol pass.

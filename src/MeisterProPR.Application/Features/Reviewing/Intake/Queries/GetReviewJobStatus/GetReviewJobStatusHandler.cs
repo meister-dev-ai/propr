@@ -1,8 +1,10 @@
 // Copyright (c) Andreas Rain.
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
+using System.Text.Json;
 using MeisterProPR.Application.Features.Reviewing.Intake.Dtos;
 using MeisterProPR.Application.Features.Reviewing.Intake.Ports;
+using MeisterProPR.Domain.Entities;
 
 namespace MeisterProPR.Application.Features.Reviewing.Intake.Queries.GetReviewJobStatus;
 
@@ -54,6 +56,52 @@ public sealed class GetReviewJobStatusHandler(IReviewJobIntakeStore intakeStore)
             ComparisonMode = job.ReviewComparisonMode,
             PublicationMode = job.ReviewPublicationMode,
             ComparisonGroupId = job.ComparisonGroupId,
+            Workspace = ResolveWorkspace(job),
         };
+    }
+
+    private static ReviewJobWorkspaceStatusDto? ResolveWorkspace(ReviewJob job)
+    {
+        var events = job.Protocols.SelectMany(protocol => protocol.Events).ToList();
+        var prepared = events.FirstOrDefault(evt => string.Equals(evt.Name, "local_workspace_prepared", StringComparison.Ordinal));
+        var failed = events.FirstOrDefault(evt => string.Equals(evt.Name, "local_workspace_failed", StringComparison.Ordinal));
+        var fallback = events.FirstOrDefault(evt => string.Equals(evt.Name, "local_workspace_fallback_applied", StringComparison.Ordinal));
+        if (prepared is null && failed is null && fallback is null)
+        {
+            return null;
+        }
+
+        return new ReviewJobWorkspaceStatusDto(
+            true,
+            prepared is not null,
+            fallback is not null,
+            TryGetString(prepared?.OutputSummary, "workspaceKey"),
+            TryGetString(failed?.OutputSummary, "stage"),
+            TryGetString(failed?.OutputSummary, "code"),
+            TryGetString(failed?.OutputSummary, "message"));
+    }
+
+    private static string? TryGetString(string? json, string propertyName)
+    {
+        if (string.IsNullOrWhiteSpace(json))
+        {
+            return null;
+        }
+
+        try
+        {
+            using var document = JsonDocument.Parse(json);
+            if (document.RootElement.ValueKind == JsonValueKind.Object &&
+                document.RootElement.TryGetProperty(propertyName, out var property) &&
+                property.ValueKind == JsonValueKind.String)
+            {
+                return property.GetString();
+            }
+        }
+        catch (JsonException)
+        {
+        }
+
+        return null;
     }
 }

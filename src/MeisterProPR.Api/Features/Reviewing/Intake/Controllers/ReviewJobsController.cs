@@ -148,6 +148,16 @@ public sealed partial class ReviewJobsController(
             ComparisonMode = status.ComparisonMode,
             PublicationMode = status.PublicationMode,
             ComparisonGroupId = status.ComparisonGroupId,
+            Workspace = status.Workspace is null
+                ? null
+                : new ReviewWorkspaceStatusDto(
+                    status.Workspace.Attempted,
+                    status.Workspace.Prepared,
+                    status.Workspace.FallbackApplied,
+                    status.Workspace.WorkspaceKey,
+                    status.Workspace.FailureStage,
+                    status.Workspace.FailureCode,
+                    status.Workspace.FailureMessage),
         };
     }
 

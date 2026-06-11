@@ -6,29 +6,31 @@ using MeisterProPR.Application.Interfaces;
 using MeisterProPR.Application.Options;
 using MeisterProPR.Domain.Enums;
 using MeisterProPR.Infrastructure.Features.Providers.Common;
-using MeisterProPR.Infrastructure.Features.Providers.GitLab.Security;
+using MeisterProPR.Infrastructure.Features.Reviewing.Execution;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
 namespace MeisterProPR.Infrastructure.Features.Providers.GitLab.Reviewing;
 
 internal sealed class GitLabReviewContextToolsFactory(
-    GitLabConnectionVerifier connectionVerifier,
-    IHttpClientFactory httpClientFactory,
     IProCursorGateway proCursorGateway,
     IOptions<AiReviewOptions> options,
-    ILogger<GitLabReviewContextTools> logger) : IProviderReviewContextToolsFactory
+    ILoggerFactory loggerFactory) : IProviderReviewContextToolsFactory
 {
     public ScmProvider Provider => ScmProvider.GitLab;
 
     public IReviewContextTools Create(ReviewContextToolsRequest request)
     {
-        return new GitLabReviewContextTools(
-            connectionVerifier,
-            httpClientFactory,
+        if (request.Workspace is null)
+        {
+            throw new InvalidOperationException("A local review workspace is required but was not provided to the review context tools factory.");
+        }
+
+        return new LocalGitReviewContextTools(
+            request.Workspace,
             proCursorGateway,
             options,
             request,
-            logger);
+            loggerFactory.CreateLogger<LocalGitReviewContextTools>());
     }
 }

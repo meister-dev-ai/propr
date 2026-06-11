@@ -238,13 +238,18 @@ flowchart TD
 ```
 
 1. `ReviewOrchestrationService.BuildReviewContextAsync(...)` creates `ReviewSystemContext` with
-   repository instructions, exclusion rules, `IReviewContextTools`, and the client default review
-   runtime (`DefaultReviewChatClient` and `DefaultReviewModelId`).
-2. Before the main file prompt, ProRV can rank a small set of focused review guidance items from the
-   changed diff by using the dedicated `proRvPrefilter` AI purpose when configured, or the review
-   runtime as a fallback.
-3. `ToolAwareAiReviewCore` reviews each file against diff-only prompts and can call
-    `get_changed_files`, `get_file_tree`, `get_file_content`, the legacy scoped regex tools
+    repository instructions, exclusion rules, `IReviewContextTools`, and the client default review
+    runtime (`DefaultReviewChatClient` and `DefaultReviewModelId`).
+2. Before the file-review loop begins, the Reviewing module attempts to prepare a provider-neutral
+   local git workspace pinned to the job's captured `ReviewRevision`. The workspace manager fetches
+   provider pull-request refs into a shared local mirror and creates isolated per-review base/head
+   worktrees so repository-content tools can read local source instead of repeating provider content
+   calls.
+3. Before the main file prompt, ProRV can rank a small set of focused review guidance items from the
+    changed diff by using the dedicated `proRvPrefilter` AI purpose when configured, or the review
+    runtime as a fallback.
+4. `ToolAwareAiReviewCore` reviews each file against diff-only prompts and can call
+     `get_changed_files`, `get_file_tree`, `get_file_content`, the legacy scoped regex tools
     (`search_source_repo`, `search_source_changed_files`, `search_target_repo`,
     `search_target_changed_files`), the structured discovery tools (`search_code`,
     `search_paths`, `get_repository_overview`, `get_file_neighborhood`),
@@ -253,11 +258,17 @@ flowchart TD
     partial, invalid-request, and bounded-tool blocked outcomes, and they reuse shared branch/scope
     resolution for exact identifier, exact phrase, regex, related-code, path-name, filter,
     deterministic ordering, truncation, and limitation reporting across live providers and offline fixtures. The per-file prompt carries a bounded changed-file manifest; full PR file lists remain available through `get_changed_files` when needed.
-4. `FileByFileReviewOrchestrator` applies the confidence floor, speculative-language removal,
-   `INFO` stripping, vague-suggestion removal, the selected comment relevance filter, and optional
-   thread-memory reconsideration before extracting structured claims and running local verification.
-   Deterministic contradiction checks use curated invariant facts, while evidence-needing local
-   generic claims are withheld conservatively until a bounded verifier can support them.
+5. `FileByFileReviewOrchestrator` applies the confidence floor, speculative-language removal,
+    `INFO` stripping, vague-suggestion removal, the selected comment relevance filter, and optional
+    thread-memory reconsideration before extracting structured claims and running local verification.
+    Deterministic contradiction checks use curated invariant facts, while evidence-needing local
+    generic claims are withheld conservatively until a bounded verifier can support them.
+
+When the local workspace path succeeds, the review status and Job Protocol surfaces record
+`local_workspace_prepared` metadata including the prepared workspace key. When preparation fails,
+the Reviewing flow records `local_workspace_failed` followed by `local_workspace_fallback_applied`
+and continues with the existing provider-backed `IReviewContextTools` path instead of failing the
+job solely because local source hydration was unavailable.
 5. Only publishable verified local findings are persisted through `ReviewFileResult.MarkCompleted(...)`.
    Contradicted claims are dropped, local claims that remain `SummaryOnly` are withheld from the
    stored comment set, and the per-file summary is rewritten from the surviving verified findings so

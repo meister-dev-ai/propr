@@ -133,6 +133,14 @@ configuration and request logging records only whether the service-auth header w
 value. OTLP resource identity is emitted separately for `MeisterProPR.Api` and
 `MeisterProPR.ProCursor.Service` so cross-service traces are attributable.
 
+Reviewing execution also maintains a provider-neutral local git workspace layer under the Reviewing
+module. For supported SCM providers, repository-content reads, changed-file inspection, and
+repository-wide search hydrate a commit-pinned local workspace from provider pull-request fetch refs
+and then operate on that local source. Provider APIs remain authoritative only for review metadata,
+thread publication, and other provider-native review operations. When local workspace preparation
+cannot complete safely, the Reviewing flow records the failure and falls back automatically to the
+existing remote provider-backed repository inspection path.
+
 ProPR is the durable owner of client, provider, AI, and ProCursor source configuration. The ProCursor
 host keeps runtime configuration in memory only,
 refreshes it from ProPR over the shared-key-authenticated internal boundary, and persists only

@@ -25,6 +25,7 @@ internal static class GitLabProviderServiceCollectionExtensions
         services.TryAddScoped<GitLabWebhookEventClassifier>();
         services.TryAddScoped<GitLabWebhookPayloadParser>();
         services.TryAddScoped<GitLabReviewThreadStatusProvider>();
+        services.TryAddEnumerable(ServiceDescriptor.Scoped<IProviderReviewWorkspaceRemoteResolver, GitLabReviewWorkspaceRemoteResolver>());
         services.TryAddEnumerable(ServiceDescriptor.Scoped<IProviderReviewerThreadStatusFetcher, GitLabReviewThreadStatusProvider>());
         services.TryAddEnumerable(ServiceDescriptor.Scoped<IProviderPullRequestFetcher, GitLabPullRequestFetcher>());
         services.TryAddEnumerable(ServiceDescriptor.Scoped<IProviderReviewContextToolsFactory, GitLabReviewContextToolsFactory>());

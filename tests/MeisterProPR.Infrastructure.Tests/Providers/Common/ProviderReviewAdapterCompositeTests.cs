@@ -126,6 +126,48 @@ public sealed class ProviderReviewContextToolsFactoryTests
     }
 }
 
+public sealed class ProviderReviewWorkspaceRemoteResolverTests
+{
+    [Fact]
+    public async Task ResolveAsync_GitHubRequest_DelegatesToGitHubResolver()
+    {
+        var gitHubResolver = Substitute.For<IProviderReviewWorkspaceRemoteResolver>();
+        gitHubResolver.Provider.Returns(ScmProvider.GitHub);
+        var expected = new ReviewWorkspaceRemoteRef(
+            ScmProvider.GitHub,
+            "https://github.com/acme/propr.git",
+            [],
+            "repo-key",
+            "credential-key",
+            true);
+        gitHubResolver.ResolveAsync(Arg.Any<ReviewRepositoryWorkspaceRequest>(), Arg.Any<CancellationToken>())
+            .Returns(expected);
+
+        var gitLabResolver = Substitute.For<IProviderReviewWorkspaceRemoteResolver>();
+        gitLabResolver.Provider.Returns(ScmProvider.GitLab);
+
+        var sut = new ProviderReviewWorkspaceRemoteResolver([gitLabResolver, gitHubResolver]);
+        var host = new ProviderHostRef(ScmProvider.GitHub, "https://github.com");
+        var repository = new RepositoryRef(host, "101", "acme", "acme/propr");
+        var request = new ReviewRepositoryWorkspaceRequest(
+            Guid.NewGuid(),
+            Guid.NewGuid(),
+            ScmProvider.GitHub,
+            host.HostBaseUrl,
+            repository,
+            42,
+            new ReviewRevision("head-sha", "base-sha", null, null, null),
+            "feature/providers",
+            "main");
+
+        var result = await sut.ResolveAsync(request, CancellationToken.None);
+
+        Assert.Same(expected, result);
+        await gitHubResolver.Received(1).ResolveAsync(request, Arg.Any<CancellationToken>());
+        await gitLabResolver.DidNotReceiveWithAnyArgs().ResolveAsync(default!, default);
+    }
+}
+
 public sealed class ProviderReviewerThreadStatusFetcherTests
 {
     [Fact]

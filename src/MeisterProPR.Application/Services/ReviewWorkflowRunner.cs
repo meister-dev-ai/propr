@@ -6,7 +6,9 @@ using MeisterProPR.Application.Features.Reviewing.Execution.Models;
 using MeisterProPR.Application.Features.Reviewing.Execution.Ports;
 using MeisterProPR.Application.Interfaces;
 using MeisterProPR.Application.ValueObjects;
+using MeisterProPR.Domain.Entities;
 using MeisterProPR.Domain.Enums;
+using MeisterProPR.Domain.ValueObjects;
 
 namespace MeisterProPR.Application.Services;
 
@@ -25,6 +27,7 @@ public sealed class ReviewWorkflowRunner(
     IRepositoryExclusionFetcher exclusionFetcher,
     IRepositoryInstructionEvaluator instructionEvaluator,
     IReviewStrategyDispatcher reviewStrategyDispatcher,
+    IReviewRepositoryWorkspaceManager? workspaceManager = null,
     IEnumerable<BoundaryIssueReport>? boundaryIssues = null) : IReviewWorkflowRunner
 {
     private readonly IReadOnlyList<BoundaryIssueReport> _boundaryIssues = boundaryIssues?.ToList() ?? [];
@@ -83,6 +86,24 @@ public sealed class ReviewWorkflowRunner(
                 job.ClientId,
                 cancellationToken);
 
+            var workspacePreparation = workspaceManager is null
+                ? new ReviewRepositoryWorkspacePreparationResult(null, null)
+                : await workspaceManager.PrepareAsync(
+                    new ReviewRepositoryWorkspaceRequest(
+                        job.Id,
+                        job.ClientId,
+                        fixture.PullRequestSnapshot.CodeReview.Repository.Host.Provider,
+                        job.OrganizationUrl,
+                        fixture.PullRequestSnapshot.CodeReview.Repository,
+                        job.PullRequestId,
+                        job.ReviewRevisionReference ?? fixture.PullRequestSnapshot.Revision,
+                        pullRequest.SourceBranch,
+                        pullRequest.TargetBranch,
+                        pullRequest.ChangedFiles.Select(ChangedPathSnapshot.FromChangedFile).ToList().AsReadOnly()),
+                    cancellationToken);
+
+            await this.RecordWorkspaceProtocolAsync(job, workspacePreparation, cancellationToken);
+
             var reviewTools = reviewContextToolsFactory.Create(
                 new ReviewContextToolsRequest(
                     fixture.PullRequestSnapshot.CodeReview,
@@ -94,7 +115,10 @@ public sealed class ReviewWorkflowRunner(
                         : null,
                     job.OrganizationUrl,
                     pullRequest.TargetBranch,
-                    pullRequest.ChangedFiles.Select(ChangedPathSnapshot.FromChangedFile).ToList().AsReadOnly()));
+                    pullRequest.ChangedFiles.Select(ChangedPathSnapshot.FromChangedFile).ToList().AsReadOnly(),
+                    Workspace: workspacePreparation.Workspace,
+                    WorkspaceLease: workspacePreparation.Workspace?.Lease,
+                    WorkspaceFailure: workspacePreparation.Failure));
 
             var changedFilePaths = pullRequest.ChangedFiles.Select(file => file.Path).ToList();
             var fetchedInstructions = await instructionFetcher.FetchAsync(
@@ -130,15 +154,28 @@ public sealed class ReviewWorkflowRunner(
                 AugmentationMode = request.EffectiveAugmentationMode,
                 PromptExperiment = promptExperimentContext,
                 SkippedSteps = request.EffectiveSkippedSteps,
+                ReviewWorkspace = workspacePreparation.Workspace,
             };
 
-            var result = await reviewStrategyDispatcher.ReviewAsync(
-                job,
-                pullRequest,
-                context,
-                cancellationToken,
-                request.ChatClient,
-                request.PipelineProfileId);
+            ReviewResult result;
+            try
+            {
+                result = await reviewStrategyDispatcher.ReviewAsync(
+                    job,
+                    pullRequest,
+                    context,
+                    cancellationToken,
+                    request.ChatClient,
+                    request.PipelineProfileId);
+            }
+            finally
+            {
+                if (workspacePreparation.Workspace is not null)
+                {
+                    await workspacePreparation.Workspace.DisposeAsync();
+                    context.ReviewWorkspace = null;
+                }
+            }
 
             await jobs.SetResultAsync(job.Id, result, cancellationToken);
 
@@ -165,5 +202,16 @@ public sealed class ReviewWorkflowRunner(
             fixtureAccessor.ScenarioId = null;
             fixtureAccessor.Fixture = null;
         }
+    }
+
+    private async Task RecordWorkspaceProtocolAsync(
+        ReviewJob? job,
+        ReviewRepositoryWorkspacePreparationResult workspacePreparation,
+        CancellationToken ct)
+    {
+        _ = job;
+        _ = workspacePreparation;
+        await Task.CompletedTask;
+        _ = ct;
     }
 }

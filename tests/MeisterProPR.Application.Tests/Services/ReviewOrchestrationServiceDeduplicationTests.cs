@@ -166,7 +166,18 @@ public class ReviewOrchestrationServiceDeduplicationTests
             Substitute.For<ILogger<ReviewOrchestrationService>>(),
             aiRepo,
             Substitute.For<IAiChatClientFactory>(),
-            reviewStrategyDispatcher);
+            reviewStrategyDispatcher,
+            workspaceManager: CreateDefaultWorkspaceManager());
+    }
+
+    private static IReviewRepositoryWorkspaceManager CreateDefaultWorkspaceManager()
+    {
+        var workspace = Substitute.For<IReviewRepositoryWorkspace>();
+        workspace.DisposeAsync().Returns(ValueTask.CompletedTask);
+        var manager = Substitute.For<IReviewRepositoryWorkspaceManager>();
+        manager.PrepareAsync(Arg.Any<ReviewRepositoryWorkspaceRequest>(), Arg.Any<CancellationToken>())
+            .Returns(new ReviewRepositoryWorkspacePreparationResult(workspace, null));
+        return manager;
     }
 
     private static IReviewStrategyDispatcher CreateDispatcher(IFileByFileReviewOrchestrator orchestrator)
@@ -202,6 +213,7 @@ public class ReviewOrchestrationServiceDeduplicationTests
         var prScanRepository = Substitute.For<IReviewPrScanRepository>();
 
         var job = new ReviewJob(Guid.NewGuid(), Guid.NewGuid(), "https://dev.azure.com/org", "proj", "repo", 1, 1);
+        job.SetReviewRevision(new ReviewRevision("head-sha", "base-sha", null, null, null));
         var reviewerId = Guid.NewGuid();
         var reviewerIdentity = new ReviewerIdentity(
             job.ProviderHost,
@@ -304,6 +316,7 @@ public class ReviewOrchestrationServiceDeduplicationTests
         var prScanRepository = Substitute.For<IReviewPrScanRepository>();
 
         var job = new ReviewJob(Guid.NewGuid(), Guid.NewGuid(), "https://dev.azure.com/org", "proj", "repo", 1, 1);
+        job.SetReviewRevision(new ReviewRevision("head-sha", "base-sha", null, null, null));
         var reviewerId = Guid.NewGuid();
         var reviewerIdentity = new ReviewerIdentity(
             job.ProviderHost,
@@ -403,6 +416,7 @@ public class ReviewOrchestrationServiceDeduplicationTests
         var prScanRepository = Substitute.For<IReviewPrScanRepository>();
 
         var job = new ReviewJob(Guid.NewGuid(), Guid.NewGuid(), "https://dev.azure.com/org", "proj", "repo", 1, 1);
+        job.SetReviewRevision(new ReviewRevision("head-sha", "base-sha", null, "1", null));
         var reviewerId = Guid.NewGuid();
         var reviewerIdentity = new ReviewerIdentity(
             job.ProviderHost,

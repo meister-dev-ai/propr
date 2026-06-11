@@ -35,6 +35,8 @@ public static class ProtocolEventToolPhaseNames
     public const string ProviderApiCall = "provider_api_call";
     public const string ScmFileTreeFetch = "scm_file_tree_fetch";
     public const string ScmFileContentFetch = "scm_file_content_fetch";
+    public const string LocalWorkspacePreparation = "local_workspace_preparation";
+    public const string LocalWorkspaceRead = "local_workspace_read";
     public const string RepositorySearch = "repository_search";
     public const string RetryBackoff = "retry_backoff";
     public const string ResultShaping = "result_shaping";

@@ -8,10 +8,14 @@ public sealed record RepositoryRef
 {
     /// <summary>Initializes a new instance of the <see cref="RepositoryRef" /> class.</summary>
     /// <param name="host">The provider host reference.</param>
-    /// <param name="externalRepositoryId">The external repository identifier.</param>
+    /// <param name="externalRepositoryId">The external repository identifier (stable GUID or provider key).</param>
     /// <param name="ownerOrNamespace">The owner or namespace.</param>
     /// <param name="projectPath">The project path.</param>
-    public RepositoryRef(ProviderHostRef host, string externalRepositoryId, string ownerOrNamespace, string projectPath)
+    /// <param name="repositoryName">
+    ///     Human-readable repository name used for git remote URLs. Falls back to
+    ///     <paramref name="externalRepositoryId" /> when not supplied.
+    /// </param>
+    public RepositoryRef(ProviderHostRef host, string externalRepositoryId, string ownerOrNamespace, string projectPath, string? repositoryName = null)
     {
         this.Host = host ?? throw new ArgumentNullException(nameof(host));
         ArgumentException.ThrowIfNullOrWhiteSpace(externalRepositoryId);
@@ -21,12 +25,15 @@ public sealed record RepositoryRef
         this.ExternalRepositoryId = externalRepositoryId.Trim();
         this.OwnerOrNamespace = ownerOrNamespace.Trim();
         this.ProjectPath = projectPath.Trim();
+        this.RepositoryName = string.IsNullOrWhiteSpace(repositoryName)
+            ? this.ExternalRepositoryId
+            : repositoryName.Trim();
     }
 
     /// <summary>Gets the provider host reference.</summary>
     public ProviderHostRef Host { get; }
 
-    /// <summary>Gets the external repository identifier.</summary>
+    /// <summary>Gets the external repository identifier (stable GUID or provider key, used for API calls).</summary>
     public string ExternalRepositoryId { get; }
 
     /// <summary>Gets the owner or namespace.</summary>
@@ -34,4 +41,7 @@ public sealed record RepositoryRef
 
     /// <summary>Gets the project path.</summary>
     public string ProjectPath { get; }
+
+    /// <summary>Gets the human-readable repository name, used for git remote URL construction.</summary>
+    public string RepositoryName { get; }
 }

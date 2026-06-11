@@ -44,6 +44,6 @@ Use this ownership map when introducing or moving backend features so each slice
 
 ## Reviewing Boundary Notes
 
-- Reviewing execution owns strategy ports, pipeline profile models, shared per-file stage composition, and concrete strategy implementations under `Application/Features/Reviewing/Execution` and `Infrastructure/Features/Reviewing/Execution`.
+- Reviewing execution owns strategy ports, pipeline profile models, shared per-file stage composition, concrete strategy implementations, and the provider-neutral local review workspace layer under `Application/Features/Reviewing/Execution`, `Infrastructure/Features/Reviewing/Execution`, and `Infrastructure/Features/Reviewing/Workspace`.
 - Cross-cutting AI runtime support remains in `MeisterProPR.Infrastructure/AI` by design and is not treated as a Reviewing-owned workflow boundary in this slice.
 - `ReviewOrchestrationService` and `ReviewWorkflowRunner` both resolve strategy and profile selection through the shared `IReviewStrategyDispatcher`.

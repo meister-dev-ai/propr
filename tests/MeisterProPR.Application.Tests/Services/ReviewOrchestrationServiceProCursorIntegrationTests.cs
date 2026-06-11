@@ -1,7 +1,6 @@
 // Copyright (c) Andreas Rain.
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
-using Azure.Core;
 using MeisterProPR.Application.DTOs;
 using MeisterProPR.Application.DTOs.ProCursor;
 using MeisterProPR.Application.Exceptions;
@@ -319,8 +318,6 @@ public sealed class ReviewOrchestrationServiceProCursorIntegrationTests
             .Returns(Task.FromResult<ClientScmConnectionCredentialDto?>(null));
 
         var reviewContextToolsFactory = new AdoReviewContextToolsFactory(
-            new VssConnectionFactory(Substitute.For<TokenCredential>()),
-            connectionRepository,
             proCursorGateway,
             Microsoft.Extensions.Options.Options.Create(new AiReviewOptions { MaxFileSizeBytes = 1024 * 1024, ModelId = "gpt-4o" }),
             NullLoggerFactory.Instance);
@@ -342,7 +339,8 @@ public sealed class ReviewOrchestrationServiceProCursorIntegrationTests
             NullLogger<ReviewOrchestrationService>.Instance,
             aiConnectionRepository,
             chatClientFactory,
-            reviewStrategyDispatcher);
+            reviewStrategyDispatcher,
+            workspaceManager: CreateDefaultWorkspaceManager());
 
         await service.ProcessAsync(job, CancellationToken.None);
 
@@ -488,8 +486,6 @@ public sealed class ReviewOrchestrationServiceProCursorIntegrationTests
             .Returns(Task.FromResult<ClientScmConnectionCredentialDto?>(null));
 
         var reviewContextToolsFactory = new AdoReviewContextToolsFactory(
-            new VssConnectionFactory(Substitute.For<TokenCredential>()),
-            connectionRepository,
             proCursorGateway,
             Microsoft.Extensions.Options.Options.Create(new AiReviewOptions { MaxFileSizeBytes = 1024 * 1024, ModelId = "gpt-4o" }),
             NullLoggerFactory.Instance);
@@ -511,7 +507,18 @@ public sealed class ReviewOrchestrationServiceProCursorIntegrationTests
             NullLogger<ReviewOrchestrationService>.Instance,
             aiConnectionRepository,
             chatClientFactory,
-            reviewStrategyDispatcher);
+            reviewStrategyDispatcher,
+            workspaceManager: CreateDefaultWorkspaceManager());
+    }
+
+    private static IReviewRepositoryWorkspaceManager CreateDefaultWorkspaceManager()
+    {
+        var workspace = Substitute.For<IReviewRepositoryWorkspace>();
+        workspace.DisposeAsync().Returns(ValueTask.CompletedTask);
+        var manager = Substitute.For<IReviewRepositoryWorkspaceManager>();
+        manager.PrepareAsync(Arg.Any<ReviewRepositoryWorkspaceRequest>(), Arg.Any<CancellationToken>())
+            .Returns(new ReviewRepositoryWorkspacePreparationResult(workspace, null));
+        return manager;
     }
 
     private static IReviewStrategyDispatcher CreateDispatcher(IFileByFileReviewOrchestrator orchestrator)
@@ -535,7 +542,7 @@ public sealed class ReviewOrchestrationServiceProCursorIntegrationTests
 
     private static ReviewJob CreateJob()
     {
-        return new ReviewJob(
+        var job = new ReviewJob(
             Guid.NewGuid(),
             Guid.Parse("90000000-0000-0000-0000-000000000001"),
             "https://dev.azure.com/test-org",
@@ -543,6 +550,8 @@ public sealed class ReviewOrchestrationServiceProCursorIntegrationTests
             "repo-a",
             42,
             7);
+        job.SetReviewRevision(new ReviewRevision("head-sha", "base-sha", null, null, null));
+        return job;
     }
 
     private static PullRequest CreatePullRequest(ReviewJob job)

@@ -25,6 +25,7 @@ internal static class ForgejoProviderServiceCollectionExtensions
         services.TryAddScoped<ForgejoWebhookEventClassifier>();
         services.TryAddScoped<ForgejoWebhookPayloadParser>();
         services.TryAddScoped<ForgejoReviewThreadStatusProvider>();
+        services.TryAddEnumerable(ServiceDescriptor.Scoped<IProviderReviewWorkspaceRemoteResolver, ForgejoReviewWorkspaceRemoteResolver>());
         services.TryAddEnumerable(ServiceDescriptor.Scoped<IProviderReviewerThreadStatusFetcher, ForgejoReviewThreadStatusProvider>());
         services.TryAddEnumerable(ServiceDescriptor.Scoped<IProviderRepositoryExclusionFetcher, ForgejoRepositoryExclusionFetcher>());
         services.TryAddEnumerable(ServiceDescriptor.Scoped<IProviderPullRequestFetcher, ForgejoPullRequestFetcher>());

@@ -1,6 +1,7 @@
 // Copyright (c) Andreas Rain.
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
+using MeisterProPR.Application.Features.Reviewing.Execution.Ports;
 using MeisterProPR.Domain.ValueObjects;
 
 namespace MeisterProPR.Application.Features.Reviewing.Execution.Models;
@@ -15,4 +16,7 @@ public sealed record ReviewContextToolsRequest(
     string? ProviderScopePath = null,
     string? TargetBranch = null,
     IReadOnlyList<ChangedPathSnapshot>? ChangedPathSnapshots = null,
-    bool EnableRepositoryDiscoveryCache = true);
+    bool EnableRepositoryDiscoveryCache = true,
+    IReviewRepositoryWorkspace? Workspace = null,
+    ReviewRepositoryWorkspaceLease? WorkspaceLease = null,
+    ReviewWorkspaceFailure? WorkspaceFailure = null);

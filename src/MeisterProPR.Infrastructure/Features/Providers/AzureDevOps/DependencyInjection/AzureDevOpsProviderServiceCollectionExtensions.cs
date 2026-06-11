@@ -115,6 +115,7 @@ internal static class AzureDevOpsProviderServiceCollectionExtensions
         }
 
         services.TryAddEnumerable(ServiceDescriptor.Scoped<IProviderReviewContextToolsFactory, AdoReviewContextToolsFactory>());
+        services.TryAddEnumerable(ServiceDescriptor.Scoped<IProviderReviewWorkspaceRemoteResolver, AdoReviewWorkspaceRemoteResolver>());
         services.TryAddScoped<IReviewContextToolsFactory, ProviderReviewContextToolsFactory>();
         services.TryAddEnumerable(ServiceDescriptor.Scoped<IProviderRepositoryInstructionFetcher, AdoRepositoryInstructionFetcher>());
         services.TryAddEnumerable(ServiceDescriptor.Scoped<IProviderRepositoryExclusionFetcher, AdoRepositoryExclusionFetcher>());
