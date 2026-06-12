@@ -1114,7 +1114,18 @@ export function useJobProtocolViewModel() {
         return presentation
     }
 
+    // Cache keyed by (protocol object, collapsed-set identity, filter snapshot) so unchanged passes skip full recompute
+    const eventRowsCache = new WeakMap<ReviewProtocolPass, { collapseKey: Set<string>, filterKey: string, rows: EventDisplayRow[] }>()
+
     function buildEventRows(protocol: ReviewProtocolPass | null | undefined): EventDisplayRow[] {
+        if (protocol) {
+            const collapsed = collapsedEventParents.value
+            const filterKey = JSON.stringify(normalizedTraceFilters.value)
+            const cached = eventRowsCache.get(protocol)
+            if (cached && cached.collapseKey === collapsed && cached.filterKey === filterKey) {
+                return cached.rows
+            }
+        }
         const mergedEvents = processEvents(protocol?.events)
         const filteredMergedEvents = protocol
             ? mergedEvents.filter(merged => matchesTraceFilters(protocol, merged.callDetails))
@@ -1211,6 +1222,13 @@ export function useJobProtocolViewModel() {
 
         flushPendingToolRows()
 
+        const childEventIds = new Set<string>()
+        for (const children of childEventsByParentId.values()) {
+            for (const child of children) {
+                childEventIds.add(child.id)
+            }
+        }
+
         for (const merged of filteredMergedEvents) {
             if (isPrimaryAiTurnEvent(merged)) {
                 const children = childEventsByParentId.get(merged.id) ?? []
@@ -1225,13 +1243,17 @@ export function useJobProtocolViewModel() {
                 continue
             }
 
-            const belongsToParent = Array.from(childEventsByParentId.values()).some(children =>
-                children.some(child => child.id === merged.id),
-            )
-
-            if (!belongsToParent) {
+            if (!childEventIds.has(merged.id)) {
                 appendStandaloneRow(merged)
             }
+        }
+
+        if (protocol) {
+            eventRowsCache.set(protocol, {
+                collapseKey: collapsedEventParents.value,
+                filterKey: JSON.stringify(normalizedTraceFilters.value),
+                rows,
+            })
         }
 
         return rows

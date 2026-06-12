@@ -210,6 +210,10 @@ public class ReviewOrchestrationServicePromptOverrideTests
         var job = new ReviewJob(Guid.NewGuid(), Guid.NewGuid(), "https://dev.azure.com/org", "proj", "repo", 1, 1);
         job.SetReviewRevision(new ReviewRevision("head-sha", "base-sha", null, null, null));
         var prFetcher = Substitute.For<IPullRequestFetcher>();
+        prFetcher.FetchRefAsync(
+                Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(),
+                Arg.Any<int>(), Arg.Any<Guid?>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(new PullRequestRef("feature/test", "main", PrStatus.Active)));
         var clientRegistry = Substitute.For<IClientRegistry>();
         var prScanRepository = Substitute.For<IReviewPrScanRepository>();
 
@@ -252,7 +256,9 @@ public class ReviewOrchestrationServicePromptOverrideTests
                 Arg.Any<int>(),
                 Arg.Any<int?>(),
                 Arg.Any<Guid?>(),
-                Arg.Any<CancellationToken>())
+                Arg.Any<CancellationToken>(),
+                Arg.Any<ReviewRevision?>(),
+                Arg.Any<IReviewRepositoryWorkspace?>())
             .Returns(pr);
 
         return (job, prFetcher, clientRegistry, prScanRepository);
@@ -463,7 +469,9 @@ public class ReviewOrchestrationServicePromptOverrideTests
                 Arg.Any<int>(),
                 Arg.Any<int?>(),
                 Arg.Any<Guid?>(),
-                Arg.Any<CancellationToken>())
+                Arg.Any<CancellationToken>(),
+                Arg.Any<ReviewRevision?>(),
+                Arg.Any<IReviewRepositoryWorkspace?>())
             .Returns(authorizedPr);
 
         var publicationService = CreatePublicationService();

@@ -1,6 +1,7 @@
 // Copyright (c) Andreas Rain.
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
+using MeisterProPR.Application.Features.Reviewing.Execution.Ports;
 using MeisterProPR.Domain.ValueObjects;
 
 namespace MeisterProPR.Application.Interfaces;
@@ -10,6 +11,19 @@ namespace MeisterProPR.Application.Interfaces;
 /// </summary>
 public interface IPullRequestFetcher
 {
+    /// <summary>
+    ///     Fetches only the branch names and status of a pull request in a single lightweight call.
+    ///     Use this to obtain the branch names needed for local workspace preparation before the
+    ///     full content fetch.
+    /// </summary>
+    Task<PullRequestRef> FetchRefAsync(
+        string organizationUrl,
+        string projectId,
+        string repositoryId,
+        int pullRequestId,
+        Guid? clientId = null,
+        CancellationToken cancellationToken = default);
+
     /// <summary>
     ///     Fetches pull request details and changed files from the source control provider.
     /// </summary>
@@ -30,6 +44,10 @@ public interface IPullRequestFetcher
     ///     Optional provider-neutral review revision used by non-Azure DevOps adapters to compute delta files.
     ///     Pass <c>null</c> to fetch the full current pull request scope.
     /// </param>
+    /// <param name="workspace">
+    ///     When provided, file content is read from the local git workspace instead of downloading
+    ///     it from the remote SCM API. Pass <c>null</c> to use the remote API (default behaviour).
+    /// </param>
     /// <returns>A task that represents the asynchronous operation, containing the fetched pull request.</returns>
     Task<PullRequest> FetchAsync(
         string organizationUrl,
@@ -40,5 +58,6 @@ public interface IPullRequestFetcher
         int? compareToIterationId = null,
         Guid? clientId = null,
         CancellationToken cancellationToken = default,
-        ReviewRevision? compareToReviewRevision = null);
+        ReviewRevision? compareToReviewRevision = null,
+        IReviewRepositoryWorkspace? workspace = null);
 }

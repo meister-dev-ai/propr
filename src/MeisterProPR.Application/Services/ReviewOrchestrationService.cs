@@ -119,10 +119,28 @@ public sealed partial class ReviewOrchestrationService(
 
         var (scan, isNewIteration, baselineJob, resumeJob, compareToIterationId, compareToReviewRevision) = await this.LoadScanStateAsync(job, ct);
 
-        var pr = await this.FetchPullRequestAsync(job, compareToIterationId, compareToReviewRevision, ct);
-        if (pr is null)
+        // Lightweight fetch: get branch names so the workspace can be prepared before the
+        // full content fetch — avoids N GetItemAsync calls for ADO-backed reviews.
+        var prRef = await this.FetchPullRequestRefAsync(job, ct);
+
+        // Prepare workspace early using branch names; full content fetch uses it below.
+        var workspacePreparation = await this.PrepareWorkspaceForFetchAsync(job, prRef, ct);
+        var earlyWorkspace = workspacePreparation.Workspace;
+
+        PullRequest? pr;
+        try
         {
-            return null;
+            pr = await this.FetchPullRequestAsync(job, compareToIterationId, compareToReviewRevision, earlyWorkspace, ct);
+            if (pr is null)
+            {
+                await DisposeEarlyWorkspaceAsync(earlyWorkspace, workspacePreparation);
+                return null;
+            }
+        }
+        catch
+        {
+            await DisposeEarlyWorkspaceAsync(earlyWorkspace, workspacePreparation);
+            throw;
         }
 
         var reviewerThreads = GetReviewerThreads(pr, reviewerId);
@@ -131,6 +149,7 @@ public sealed partial class ReviewOrchestrationService(
         if (!isNewIteration && !HasNewThreadReplies(reviewerThreads, scan!, reviewerId, pr.AuthorizedIdentityId, pr.AuthorizedIdentityName))
         {
             LogSkippedNoChange(logger, job.Id, job.PullRequestId);
+            await DisposeEarlyWorkspaceAsync(earlyWorkspace, workspacePreparation);
             await this.SaveScanAndDeleteJobAsync(job, pr, reviewerId, ct);
             return null;
         }
@@ -158,6 +177,7 @@ public sealed partial class ReviewOrchestrationService(
         if (!isNewIteration)
         {
             LogSkippedNoChange(logger, job.Id, job.PullRequestId);
+            await DisposeEarlyWorkspaceAsync(earlyWorkspace, workspacePreparation);
             await this.SaveScanAndDeleteJobAsync(job, pr, reviewerId, ct);
             return null;
         }
@@ -169,11 +189,13 @@ public sealed partial class ReviewOrchestrationService(
             resumeJob,
             overrideChatClient,
             runtimeCapabilities,
+            workspacePreparation,
             ct);
 
         if (systemContext is null)
         {
             LogSkippedNoChange(logger, job.Id, job.PullRequestId);
+            await DisposeEarlyWorkspaceAsync(earlyWorkspace, workspacePreparation);
             await this.SaveScanAndDeleteJobAsync(job, pr, reviewerId, ct);
             return null;
         }
@@ -441,10 +463,56 @@ public sealed partial class ReviewOrchestrationService(
     }
 
     // T072: Fetch PR and guard the active status — returns null if PR is no longer active (job already updated).
+    private async Task<PullRequestRef> FetchPullRequestRefAsync(ReviewJob job, CancellationToken ct)
+    {
+        return await prFetcher.FetchRefAsync(
+            job.OrganizationUrl,
+            job.ProjectId,
+            job.RepositoryId,
+            job.PullRequestId,
+            job.ClientId,
+            ct);
+    }
+
+    private static async Task DisposeEarlyWorkspaceAsync(
+        IReviewRepositoryWorkspace? workspace,
+        ReviewRepositoryWorkspacePreparationResult preparation)
+    {
+        if (workspace is not null && preparation.Succeeded)
+        {
+            await workspace.DisposeAsync();
+        }
+    }
+
+    private async Task<ReviewRepositoryWorkspacePreparationResult> PrepareWorkspaceForFetchAsync(
+        ReviewJob job,
+        PullRequestRef prRef,
+        CancellationToken ct)
+    {
+        if (workspaceManager is null)
+        {
+            throw new InvalidOperationException("No workspace manager is registered. Local review workspace support is required.");
+        }
+
+        return await workspaceManager.PrepareAsync(
+            new ReviewRepositoryWorkspaceRequest(
+                job.Id,
+                job.ClientId,
+                job.Provider,
+                job.OrganizationUrl,
+                job.CodeReviewReference.Repository,
+                job.PullRequestId,
+                job.ReviewRevisionReference ?? throw new InvalidOperationException("A review revision is required for local workspace preparation."),
+                prRef.SourceBranch,
+                prRef.TargetBranch),
+            ct);
+    }
+
     private async Task<PullRequest?> FetchPullRequestAsync(
         ReviewJob job,
         int? compareToIterationId,
         ReviewRevision? compareToReviewRevision,
+        IReviewRepositoryWorkspace? workspace,
         CancellationToken ct)
     {
         var pr = await prFetcher.FetchAsync(
@@ -456,7 +524,8 @@ public sealed partial class ReviewOrchestrationService(
             compareToIterationId,
             job.ClientId,
             ct,
-            compareToReviewRevision);
+            compareToReviewRevision,
+            workspace);
 
         if (pr.Status == PrStatus.Active)
         {
@@ -530,6 +599,7 @@ public sealed partial class ReviewOrchestrationService(
         ReviewJob? resumeJob,
         IChatClient chatClient,
         AgentReviewRuntimeCapabilities runtimeCapabilities,
+        ReviewRepositoryWorkspacePreparationResult preparedWorkspace,
         CancellationToken ct)
     {
         var changedFilePaths = pr.ChangedFiles.Select(f => f.Path).ToList();
@@ -571,24 +641,7 @@ public sealed partial class ReviewOrchestrationService(
         var customSystemMessage = await clientRegistry.GetCustomSystemMessageAsync(job.ClientId, ct);
         var enableProRv = await clientRegistry.GetProRvEnabledAsync(job.ClientId, ct);
 
-        if (workspaceManager is null)
-        {
-            throw new InvalidOperationException("No workspace manager is registered. Local review workspace support is required.");
-        }
-
-        var workspacePreparation = await workspaceManager.PrepareAsync(
-            new ReviewRepositoryWorkspaceRequest(
-                job.Id,
-                job.ClientId,
-                job.Provider,
-                job.OrganizationUrl,
-                job.CodeReviewReference.Repository,
-                job.PullRequestId,
-                job.ReviewRevisionReference ?? throw new InvalidOperationException("A review revision is required for local workspace preparation."),
-                pr.SourceBranch,
-                pr.TargetBranch,
-                pr.ChangedFiles.Select(ChangedPathSnapshot.FromChangedFile).ToList().AsReadOnly()),
-            ct);
+        var workspacePreparation = preparedWorkspace;
 
         if (!workspacePreparation.Succeeded)
         {

@@ -181,6 +181,90 @@ function parseJwtPayload(authorizationHeader: string | null) {
 
 let jobTick = 0
 
+// Generates 25 passes × 40 events for stress-testing the protocol trace view
+function generateLargeReviewProtocols() {
+    const JOB_ID = 'job-large'
+    const FILES = [
+        'src/components/UserProfile.vue', 'src/components/Dashboard.vue', 'src/components/Settings.vue',
+        'src/stores/authStore.ts', 'src/stores/userStore.ts', 'src/stores/notificationStore.ts',
+        'src/services/apiClient.ts', 'src/services/authService.ts', 'src/services/userService.ts',
+        'src/utils/validation.ts', 'src/utils/formatting.ts', 'src/utils/dateHelpers.ts',
+        'src/router/index.ts', 'src/router/guards.ts',
+        'src/composables/useAuth.ts', 'src/composables/useForm.ts', 'src/composables/usePagination.ts',
+        'backend/api/controllers/UserController.cs', 'backend/api/controllers/AuthController.cs',
+        'backend/services/UserService.cs', 'backend/services/TokenService.cs',
+        'backend/repositories/UserRepository.cs', 'backend/repositories/AuditRepository.cs',
+        'backend/infrastructure/Database.cs', 'backend/infrastructure/CacheService.cs',
+    ]
+    const TOOL_NAMES = ['get_file_content', 'search_codebase', 'read_symbol', 'list_directory', 'get_git_diff', 'search_by_name']
+    const OUTCOMES = ['Completed', 'Completed', 'Completed', 'Completed', 'Warning']
+
+    const baseTime = new Date('2026-06-12T18:00:00Z').getTime()
+
+    return FILES.map((file, passIdx) => {
+        const passStart = baseTime + passIdx * 90_000
+        const events: any[] = []
+        let eventTime = passStart + 1000
+        let eventIdx = 0
+
+        // 5 AI iterations, each with 1 aiCall + 7 tool calls = 40 events per pass
+        for (let iter = 1; iter <= 5; iter++) {
+            events.push({
+                id: `pass${passIdx}-iter${iter}-ai`,
+                kind: 'aiCall',
+                eventCategory: 'ai-call',
+                name: `ai_call_iter_${iter}`,
+                occurredAt: new Date(eventTime).toISOString(),
+                durationMs: 3200 + Math.floor((passIdx * 17 + iter * 31) % 2800),
+                inputTokens: 1800 + (iter * 120) + (passIdx * 37),
+                outputTokens: 40 + (iter * 8),
+                inputTextSample: `Reviewing ${file} (pass ${passIdx + 1} of ${FILES.length}). Iteration ${iter}. Checking for correctness, security, and style issues.`,
+                outputSummary: iter < 5 ? `Identified ${iter} potential issues. Requesting additional context.` : `Review complete for ${file}. Found ${passIdx % 4} issues.`,
+                error: null,
+            })
+            eventTime += 3500
+            eventIdx++
+
+            for (let t = 0; t < 7; t++) {
+                const toolName = TOOL_NAMES[(passIdx * 7 + iter * 3 + t) % TOOL_NAMES.length]
+                events.push({
+                    id: `pass${passIdx}-iter${iter}-tool${t}`,
+                    kind: 'toolCall',
+                    eventCategory: 'tool-call',
+                    name: toolName,
+                    occurredAt: new Date(eventTime).toISOString(),
+                    durationMs: 120 + ((passIdx + t) * 13) % 400,
+                    inputTokens: null,
+                    outputTokens: null,
+                    inputTextSample: `{"path":"${file}","offset":${t * 50}}`,
+                    outputSummary: `Tool result for ${toolName} on ${file} line ${t * 20 + 1}.`,
+                    error: null,
+                })
+                eventTime += 200
+                eventIdx++
+            }
+        }
+
+        const outcome = OUTCOMES[passIdx % OUTCOMES.length]
+        return {
+            id: `large-pass-${passIdx}`,
+            jobId: JOB_ID,
+            attemptNumber: 1,
+            label: file,
+            fileResultId: `large-result-${passIdx}`,
+            startedAt: new Date(passStart).toISOString(),
+            completedAt: new Date(passStart + 85_000).toISOString(),
+            outcome,
+            totalInputTokens: events.filter(e => e.kind === 'aiCall').reduce((s, e) => s + (e.inputTokens ?? 0), 0),
+            totalOutputTokens: events.filter(e => e.kind === 'aiCall').reduce((s, e) => s + (e.outputTokens ?? 0), 0),
+            iterationCount: 5,
+            toolCallCount: 35,
+            finalConfidence: 70 + (passIdx % 30),
+            events,
+        }
+    })
+}
+
 const reviewProfiles = [
   { profileId: 'file-by-file-calm', displayName: 'Calm', isDefault: false },
   { profileId: 'file-by-file-balanced', displayName: 'Balanced', isDefault: true },
@@ -2483,6 +2567,27 @@ export const handlers = [
           prTargetBranch: 'main',
           aiModel: 'gemini-2.5-pro',
           clientId: '1'
+        },
+        {
+          id: 'job-large',
+          providerProjectKey: 'proj-w',
+          repositoryId: 'large-monorepo',
+          pullRequestId: 301,
+          providerScopePath: 'https://dev.azure.com/acme',
+          status: 'completed',
+          iterationId: 1,
+          submittedAt: new Date('2026-06-12T18:00:00Z').toISOString(),
+          processingStartedAt: new Date('2026-06-12T18:00:05Z').toISOString(),
+          completedAt: new Date('2026-06-12T19:00:00Z').toISOString(),
+          totalInputTokens: 250000,
+          totalOutputTokens: 18000,
+          resultSummary: 'Large review: 25 files, 1000 events. Used for performance testing.',
+          prTitle: 'feat: Full authentication and dashboard overhaul (25 files)',
+          prRepositoryName: 'large-monorepo',
+          prSourceBranch: 'feature/auth-dashboard-overhaul',
+          prTargetBranch: 'main',
+          aiModel: 'claude-sonnet-4-6',
+          clientId: '1'
         }
       ]
     })
@@ -2525,6 +2630,24 @@ export const handlers = [
         errorMessage: 'Failed to access ADO repository due to expired token.',
         aiModel: 'gemini-2.5-pro',
         reviewTemperature: 0.2,
+        tokenBreakdown: [],
+        breakdownConsistent: true,
+      })
+    }
+
+    if (id === 'job-large') {
+      return HttpResponse.json({
+        id,
+        clientId: '1',
+        status: 2,
+        submittedAt: new Date('2026-06-12T18:00:00Z').toISOString(),
+        processingStartedAt: new Date('2026-06-12T18:00:05Z').toISOString(),
+        completedAt: new Date('2026-06-12T19:00:00Z').toISOString(),
+        totalInputTokens: 250000,
+        totalOutputTokens: 18000,
+        errorMessage: null,
+        aiModel: 'claude-sonnet-4-6',
+        reviewTemperature: 0.35,
         tokenBreakdown: [],
         breakdownConsistent: true,
       })
@@ -2629,6 +2752,23 @@ export const handlers = [
       })
     }
 
+    if (id === 'job-large') {
+      return HttpResponse.json({
+        jobId: id,
+        status: 'completed',
+        submittedAt: new Date('2026-06-12T18:00:00Z').toISOString(),
+        completedAt: new Date('2026-06-12T19:00:00Z').toISOString(),
+        result: {
+          summary: "**Large Review Summary (Performance Test)**\n\n25 files reviewed across frontend components, stores, services, composables, and backend controllers. The authentication overhaul is well-structured but several files have security concerns around token handling. Dashboard components have minor performance issues. Overall the PR is approvable with the noted fixes.",
+          comments: [
+            { filePath: 'src/services/authService.ts', lineNumber: 42, severity: 'error', message: 'Tokens are stored in localStorage instead of an httpOnly cookie, making them vulnerable to XSS.' },
+            { filePath: 'src/composables/useAuth.ts', lineNumber: 18, severity: 'warning', message: 'No token refresh logic — sessions will expire silently.' },
+            { filePath: 'backend/api/controllers/AuthController.cs', lineNumber: 87, severity: 'suggestion', message: 'Consider adding rate limiting to the login endpoint.' },
+          ]
+        }
+      })
+    }
+
     return HttpResponse.json({
       jobId: id,
       status: 'completed',
@@ -2711,7 +2851,27 @@ export const handlers = [
         ])
     }
 
+    if (params.id === 'job-large') {
+        // Return passes without events (events loaded per-pass via the detail endpoint)
+        const passes = generateLargeReviewProtocols().map(({ events: _events, ...pass }) => ({ ...pass, events: [] }))
+        return HttpResponse.json(passes)
+    }
+
     return HttpResponse.json(protocolMockData)
+  }),
+
+  // Per-protocol detail endpoint (returns a single pass with full events)
+  http.get(`${base}/jobs/:id/protocol/:protocolId`, async ({ params }) => {
+    await delay(400)
+
+    if (params.id === 'job-large') {
+        const all = generateLargeReviewProtocols()
+        const pass = all.find(p => p.id === params.protocolId)
+        if (!pass) return new HttpResponse(null, { status: 404 })
+        return HttpResponse.json(pass)
+    }
+
+    return new HttpResponse(null, { status: 404 })
   }),
 
   // Crawl Configurations

@@ -63,9 +63,14 @@ public class ReviewOrchestrationServiceTests
                 Arg.Any<IReadOnlyList<string>>(),
                 Arg.Any<CancellationToken>())
             .Returns(Task.FromResult<IReadOnlyList<RepositoryInstruction>>([]));
+        var prFetcher = Substitute.For<IPullRequestFetcher>();
+        prFetcher.FetchRefAsync(
+                Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(),
+                Arg.Any<int>(), Arg.Any<Guid?>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(new PullRequestRef("feature/test", "main", PrStatus.Active)));
         return (
             Substitute.For<IReviewJobExecutionStore>(),
-            Substitute.For<IPullRequestFetcher>(),
+            prFetcher,
             Substitute.For<IFileByFileReviewOrchestrator>(),
             CreateCommentPoster(),
             CreateReviewerManager(),
@@ -516,7 +521,9 @@ public class ReviewOrchestrationServiceTests
                 Arg.Any<int>(),
                 Arg.Any<int?>(),
                 Arg.Any<Guid?>(),
-                Arg.Any<CancellationToken>())
+                Arg.Any<CancellationToken>(),
+                Arg.Any<ReviewRevision?>(),
+                Arg.Any<IReviewRepositoryWorkspace?>())
             .Returns(pr);
         orchestrator.ReviewAsync(
                 Arg.Any<ReviewJob>(),
@@ -602,7 +609,9 @@ public class ReviewOrchestrationServiceTests
                 Arg.Any<int>(),
                 Arg.Any<int?>(),
                 Arg.Any<Guid?>(),
-                Arg.Any<CancellationToken>())
+                Arg.Any<CancellationToken>(),
+                Arg.Any<ReviewRevision?>(),
+                Arg.Any<IReviewRepositoryWorkspace?>())
             .Returns(pr);
 
         orchestrator.ReviewAsync(
@@ -668,7 +677,9 @@ public class ReviewOrchestrationServiceTests
                 Arg.Any<int>(),
                 Arg.Any<int?>(),
                 Arg.Any<Guid?>(),
-                Arg.Any<CancellationToken>())
+                Arg.Any<CancellationToken>(),
+                Arg.Any<ReviewRevision?>(),
+                Arg.Any<IReviewRepositoryWorkspace?>())
             .Returns(pr);
 
         orchestrator.ReviewAsync(
@@ -804,7 +815,9 @@ public class ReviewOrchestrationServiceTests
                 Arg.Any<int>(),
                 Arg.Any<int?>(),
                 Arg.Any<Guid?>(),
-                Arg.Any<CancellationToken>())
+                Arg.Any<CancellationToken>(),
+                Arg.Any<ReviewRevision?>(),
+                Arg.Any<IReviewRepositoryWorkspace?>())
             .Returns(pr);
         orchestrator.ReviewAsync(
                 Arg.Any<ReviewJob>(),
@@ -864,7 +877,9 @@ public class ReviewOrchestrationServiceTests
                 Arg.Any<int>(),
                 Arg.Any<int?>(),
                 Arg.Any<Guid?>(),
-                Arg.Any<CancellationToken>())
+                Arg.Any<CancellationToken>(),
+                Arg.Any<ReviewRevision?>(),
+                Arg.Any<IReviewRepositoryWorkspace?>())
             .Returns(pr);
         orchestrator.ReviewAsync(
                 Arg.Any<ReviewJob>(),
@@ -940,7 +955,9 @@ public class ReviewOrchestrationServiceTests
                 Arg.Any<int>(),
                 Arg.Any<int?>(),
                 Arg.Any<Guid?>(),
-                Arg.Any<CancellationToken>())
+                Arg.Any<CancellationToken>(),
+                Arg.Any<ReviewRevision?>(),
+                Arg.Any<IReviewRepositoryWorkspace?>())
             .Returns(pr);
         orchestrator.ReviewAsync(
                 Arg.Any<ReviewJob>(),
@@ -1023,7 +1040,9 @@ public class ReviewOrchestrationServiceTests
                 Arg.Any<int>(),
                 Arg.Any<int?>(),
                 Arg.Any<Guid?>(),
-                Arg.Any<CancellationToken>())
+                Arg.Any<CancellationToken>(),
+                Arg.Any<ReviewRevision?>(),
+                Arg.Any<IReviewRepositoryWorkspace?>())
             .Returns(pr);
         orchestrator.ReviewAsync(
                 Arg.Any<ReviewJob>(),
@@ -1074,7 +1093,9 @@ public class ReviewOrchestrationServiceTests
                 Arg.Any<int>(),
                 Arg.Any<int?>(),
                 Arg.Any<Guid?>(),
-                Arg.Any<CancellationToken>())
+                Arg.Any<CancellationToken>(),
+                Arg.Any<ReviewRevision?>(),
+                Arg.Any<IReviewRepositoryWorkspace?>())
             .Returns(pr);
         orchestrator.ReviewAsync(
                 Arg.Any<ReviewJob>(),
@@ -1117,7 +1138,9 @@ public class ReviewOrchestrationServiceTests
                 Arg.Any<int>(),
                 Arg.Any<int?>(),
                 Arg.Any<Guid?>(),
-                Arg.Any<CancellationToken>())
+                Arg.Any<CancellationToken>(),
+                Arg.Any<ReviewRevision?>(),
+                Arg.Any<IReviewRepositoryWorkspace?>())
             .Throws(new Exception("ADO fetch error"));
 
         var service = CreateService(
@@ -1163,7 +1186,9 @@ public class ReviewOrchestrationServiceTests
                 Arg.Any<int>(),
                 Arg.Any<int?>(),
                 Arg.Any<Guid?>(),
-                Arg.Any<CancellationToken>())
+                Arg.Any<CancellationToken>(),
+                Arg.Any<ReviewRevision?>(),
+                Arg.Any<IReviewRepositoryWorkspace?>())
             .Returns(pr);
         orchestrator.ReviewAsync(
                 Arg.Any<ReviewJob>(),
@@ -1233,7 +1258,9 @@ public class ReviewOrchestrationServiceTests
                 Arg.Any<int>(),
                 Arg.Any<int?>(),
                 Arg.Any<Guid?>(),
-                Arg.Any<CancellationToken>())
+                Arg.Any<CancellationToken>(),
+                Arg.Any<ReviewRevision?>(),
+                Arg.Any<IReviewRepositoryWorkspace?>())
             .Returns(pr);
         orchestrator.ReviewAsync(
                 Arg.Any<ReviewJob>(),
@@ -1291,7 +1318,9 @@ public class ReviewOrchestrationServiceTests
                 Arg.Any<int>(),
                 Arg.Any<int?>(),
                 Arg.Any<Guid?>(),
-                Arg.Any<CancellationToken>())
+                Arg.Any<CancellationToken>(),
+                Arg.Any<ReviewRevision?>(),
+                Arg.Any<IReviewRepositoryWorkspace?>())
             .Returns(pr);
         orchestrator.ReviewAsync(
                 Arg.Any<ReviewJob>(),
@@ -1350,7 +1379,9 @@ public class ReviewOrchestrationServiceTests
                 Arg.Any<int>(),
                 Arg.Any<int?>(),
                 Arg.Any<Guid?>(),
-                Arg.Any<CancellationToken>())
+                Arg.Any<CancellationToken>(),
+                Arg.Any<ReviewRevision?>(),
+                Arg.Any<IReviewRepositoryWorkspace?>())
             .Returns(pr);
         orchestrator.ReviewAsync(
                 Arg.Any<ReviewJob>(),
@@ -1434,7 +1465,9 @@ public class ReviewOrchestrationServiceTests
                 Arg.Any<int>(),
                 Arg.Any<int?>(),
                 Arg.Any<Guid?>(),
-                Arg.Any<CancellationToken>())
+                Arg.Any<CancellationToken>(),
+                Arg.Any<ReviewRevision?>(),
+                Arg.Any<IReviewRepositoryWorkspace?>())
             .Returns(pr);
         orchestrator.ReviewAsync(
                 Arg.Any<ReviewJob>(),
@@ -1525,7 +1558,9 @@ public class ReviewOrchestrationServiceTests
                 Arg.Any<int>(),
                 Arg.Any<int?>(),
                 Arg.Any<Guid?>(),
-                Arg.Any<CancellationToken>())
+                Arg.Any<CancellationToken>(),
+                Arg.Any<ReviewRevision?>(),
+                Arg.Any<IReviewRepositoryWorkspace?>())
             .Returns(pr);
         orchestrator.ReviewAsync(
                 Arg.Any<ReviewJob>(),
@@ -1576,7 +1611,9 @@ public class ReviewOrchestrationServiceTests
                 Arg.Any<int>(),
                 Arg.Any<int?>(),
                 Arg.Any<Guid?>(),
-                Arg.Any<CancellationToken>())
+                Arg.Any<CancellationToken>(),
+                Arg.Any<ReviewRevision?>(),
+                Arg.Any<IReviewRepositoryWorkspace?>())
             .Returns(pr);
         orchestrator.ReviewAsync(
                 Arg.Any<ReviewJob>(),
@@ -1630,7 +1667,9 @@ public class ReviewOrchestrationServiceTests
                 Arg.Any<int>(),
                 Arg.Any<int?>(),
                 Arg.Any<Guid?>(),
-                Arg.Any<CancellationToken>())
+                Arg.Any<CancellationToken>(),
+                Arg.Any<ReviewRevision?>(),
+                Arg.Any<IReviewRepositoryWorkspace?>())
             .Returns(closedPr);
 
         var sut = CreateService(
@@ -1677,7 +1716,9 @@ public class ReviewOrchestrationServiceTests
                 Arg.Any<int>(),
                 Arg.Any<int?>(),
                 Arg.Any<Guid?>(),
-                Arg.Any<CancellationToken>())
+                Arg.Any<CancellationToken>(),
+                Arg.Any<ReviewRevision?>(),
+                Arg.Any<IReviewRepositoryWorkspace?>())
             .Returns(pr);
         reviewerManager.AddOptionalReviewerAsync(
                 Arg.Any<Guid>(),
@@ -1723,7 +1764,9 @@ public class ReviewOrchestrationServiceTests
                 Arg.Any<int>(),
                 Arg.Any<int?>(),
                 Arg.Any<Guid?>(),
-                Arg.Any<CancellationToken>())
+                Arg.Any<CancellationToken>(),
+                Arg.Any<ReviewRevision?>(),
+                Arg.Any<IReviewRepositoryWorkspace?>())
             .Returns(pr);
         orchestrator.ReviewAsync(
                 Arg.Any<ReviewJob>(),
@@ -1779,7 +1822,9 @@ public class ReviewOrchestrationServiceTests
                 Arg.Any<int>(),
                 Arg.Any<int?>(),
                 Arg.Any<Guid?>(),
-                Arg.Any<CancellationToken>())
+                Arg.Any<CancellationToken>(),
+                Arg.Any<ReviewRevision?>(),
+                Arg.Any<IReviewRepositoryWorkspace?>())
             .Returns(pr);
         orchestrator.ReviewAsync(
                 Arg.Any<ReviewJob>(),
@@ -1830,7 +1875,9 @@ public class ReviewOrchestrationServiceTests
                 Arg.Any<int>(),
                 Arg.Any<int?>(),
                 Arg.Any<Guid?>(),
-                Arg.Any<CancellationToken>())
+                Arg.Any<CancellationToken>(),
+                Arg.Any<ReviewRevision?>(),
+                Arg.Any<IReviewRepositoryWorkspace?>())
             .Returns(pr);
 
         // Scan exists with same iteration ID as job.IterationId (1 → "1")
@@ -1880,7 +1927,9 @@ public class ReviewOrchestrationServiceTests
                 Arg.Any<int>(),
                 Arg.Any<int?>(),
                 Arg.Any<Guid?>(),
-                Arg.Any<CancellationToken>())
+                Arg.Any<CancellationToken>(),
+                Arg.Any<ReviewRevision?>(),
+                Arg.Any<IReviewRepositoryWorkspace?>())
             .Returns(pr);
         orchestrator.ReviewAsync(
                 Arg.Any<ReviewJob>(),
@@ -1950,7 +1999,9 @@ public class ReviewOrchestrationServiceTests
                 Arg.Any<int>(),
                 Arg.Any<int?>(),
                 Arg.Any<Guid?>(),
-                Arg.Any<CancellationToken>())
+                Arg.Any<CancellationToken>(),
+                Arg.Any<ReviewRevision?>(),
+                Arg.Any<IReviewRepositoryWorkspace?>())
             .Returns(pr);
 
         // Scan has same iteration but stored 0 non-reviewer replies for this thread.
@@ -2051,7 +2102,9 @@ public class ReviewOrchestrationServiceTests
                 Arg.Any<int>(),
                 Arg.Any<int?>(),
                 Arg.Any<Guid?>(),
-                Arg.Any<CancellationToken>())
+                Arg.Any<CancellationToken>(),
+                Arg.Any<ReviewRevision?>(),
+                Arg.Any<IReviewRepositoryWorkspace?>())
             .Returns(pr);
 
         var existingScan = new ReviewPrScan(Guid.NewGuid(), job.ClientId, job.RepositoryId, job.PullRequestId, "1");
@@ -2142,7 +2195,9 @@ public class ReviewOrchestrationServiceTests
                 Arg.Any<int>(),
                 Arg.Any<int?>(),
                 Arg.Any<Guid?>(),
-                Arg.Any<CancellationToken>())
+                Arg.Any<CancellationToken>(),
+                Arg.Any<ReviewRevision?>(),
+                Arg.Any<IReviewRepositoryWorkspace?>())
             .Returns(pr);
 
         var resolutionCore = Substitute.For<IAiCommentResolutionCore>();
@@ -2229,7 +2284,9 @@ public class ReviewOrchestrationServiceTests
                 Arg.Any<int>(),
                 Arg.Any<int?>(),
                 Arg.Any<Guid?>(),
-                Arg.Any<CancellationToken>())
+                Arg.Any<CancellationToken>(),
+                Arg.Any<ReviewRevision?>(),
+                Arg.Any<IReviewRepositoryWorkspace?>())
             .Returns(pr);
 
         var resolutionCore = Substitute.For<IAiCommentResolutionCore>();
@@ -2311,7 +2368,9 @@ public class ReviewOrchestrationServiceTests
                 Arg.Any<int>(),
                 Arg.Any<int?>(),
                 Arg.Any<Guid?>(),
-                Arg.Any<CancellationToken>())
+                Arg.Any<CancellationToken>(),
+                Arg.Any<ReviewRevision?>(),
+                Arg.Any<IReviewRepositoryWorkspace?>())
             .Returns(pr);
 
         var resolutionCore = Substitute.For<IAiCommentResolutionCore>();
@@ -2394,7 +2453,9 @@ public class ReviewOrchestrationServiceTests
                 Arg.Any<int>(),
                 Arg.Any<int?>(),
                 Arg.Any<Guid?>(),
-                Arg.Any<CancellationToken>())
+                Arg.Any<CancellationToken>(),
+                Arg.Any<ReviewRevision?>(),
+                Arg.Any<IReviewRepositoryWorkspace?>())
             .Returns(pr);
 
         // No existing scan → new iteration path
@@ -2498,7 +2559,9 @@ public class ReviewOrchestrationServiceTests
                 Arg.Any<int>(),
                 Arg.Any<int?>(),
                 Arg.Any<Guid?>(),
-                Arg.Any<CancellationToken>())
+                Arg.Any<CancellationToken>(),
+                Arg.Any<ReviewRevision?>(),
+                Arg.Any<IReviewRepositoryWorkspace?>())
             .Returns(pr);
 
         prScanRepository.GetAsync(Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
@@ -2568,7 +2631,9 @@ public class ReviewOrchestrationServiceTests
                 Arg.Any<int>(),
                 Arg.Any<int?>(),
                 Arg.Any<Guid?>(),
-                Arg.Any<CancellationToken>())
+                Arg.Any<CancellationToken>(),
+                Arg.Any<ReviewRevision?>(),
+                Arg.Any<IReviewRepositoryWorkspace?>())
             .Returns(pr);
         orchestrator.ReviewAsync(
                 Arg.Any<ReviewJob>(),
@@ -2622,7 +2687,9 @@ public class ReviewOrchestrationServiceTests
                 Arg.Any<int>(),
                 Arg.Any<int?>(),
                 Arg.Any<Guid?>(),
-                Arg.Any<CancellationToken>())
+                Arg.Any<CancellationToken>(),
+                Arg.Any<ReviewRevision?>(),
+                Arg.Any<IReviewRepositoryWorkspace?>())
             .Returns(pr);
         orchestrator.ReviewAsync(
                 Arg.Any<ReviewJob>(),
@@ -2692,7 +2759,9 @@ public class ReviewOrchestrationServiceTests
                 Arg.Any<int>(),
                 Arg.Any<int?>(),
                 Arg.Any<Guid?>(),
-                Arg.Any<CancellationToken>())
+                Arg.Any<CancellationToken>(),
+                Arg.Any<ReviewRevision?>(),
+                Arg.Any<IReviewRepositoryWorkspace?>())
             .Returns(pr);
         orchestrator.ReviewAsync(
                 Arg.Any<ReviewJob>(),
@@ -2758,7 +2827,9 @@ public class ReviewOrchestrationServiceTests
                 Arg.Any<int>(),
                 Arg.Any<int?>(),
                 Arg.Any<Guid?>(),
-                Arg.Any<CancellationToken>())
+                Arg.Any<CancellationToken>(),
+                Arg.Any<ReviewRevision?>(),
+                Arg.Any<IReviewRepositoryWorkspace?>())
             .Returns(pr);
         orchestrator.ReviewAsync(
                 Arg.Any<ReviewJob>(),
@@ -2816,7 +2887,9 @@ public class ReviewOrchestrationServiceTests
                 Arg.Any<int>(),
                 Arg.Any<int?>(),
                 Arg.Any<Guid?>(),
-                Arg.Any<CancellationToken>())
+                Arg.Any<CancellationToken>(),
+                Arg.Any<ReviewRevision?>(),
+                Arg.Any<IReviewRepositoryWorkspace?>())
             .Returns(pr);
         orchestrator.ReviewAsync(
                 Arg.Any<ReviewJob>(),
@@ -2887,7 +2960,9 @@ public class ReviewOrchestrationServiceTests
                 Arg.Any<int>(),
                 Arg.Any<int?>(),
                 Arg.Any<Guid?>(),
-                Arg.Any<CancellationToken>())
+                Arg.Any<CancellationToken>(),
+                Arg.Any<ReviewRevision?>(),
+                Arg.Any<IReviewRepositoryWorkspace?>())
             .Returns(pr);
         orchestrator.ReviewAsync(
                 Arg.Any<ReviewJob>(),
@@ -2942,7 +3017,9 @@ public class ReviewOrchestrationServiceTests
                 Arg.Any<int>(),
                 Arg.Any<int?>(),
                 Arg.Any<Guid?>(),
-                Arg.Any<CancellationToken>())
+                Arg.Any<CancellationToken>(),
+                Arg.Any<ReviewRevision?>(),
+                Arg.Any<IReviewRepositoryWorkspace?>())
             .Returns(pr);
         orchestrator.ReviewAsync(
                 Arg.Any<ReviewJob>(),
@@ -2995,7 +3072,9 @@ public class ReviewOrchestrationServiceTests
                 Arg.Any<int>(),
                 Arg.Any<int?>(),
                 Arg.Any<Guid?>(),
-                Arg.Any<CancellationToken>())
+                Arg.Any<CancellationToken>(),
+                Arg.Any<ReviewRevision?>(),
+                Arg.Any<IReviewRepositoryWorkspace?>())
             .Returns(pr);
         orchestrator.ReviewAsync(
                 Arg.Any<ReviewJob>(),
@@ -3065,7 +3144,9 @@ public class ReviewOrchestrationServiceTests
                 Arg.Any<int>(),
                 Arg.Any<int?>(),
                 Arg.Any<Guid?>(),
-                Arg.Any<CancellationToken>())
+                Arg.Any<CancellationToken>(),
+                Arg.Any<ReviewRevision?>(),
+                Arg.Any<IReviewRepositoryWorkspace?>())
             .Returns(pr);
 
         var resolutionCore = Substitute.For<IAiCommentResolutionCore>();
@@ -3135,7 +3216,9 @@ public class ReviewOrchestrationServiceTests
                 Arg.Any<int>(),
                 Arg.Any<int?>(),
                 Arg.Any<Guid?>(),
-                Arg.Any<CancellationToken>())
+                Arg.Any<CancellationToken>(),
+                Arg.Any<ReviewRevision?>(),
+                Arg.Any<IReviewRepositoryWorkspace?>())
             .Returns(pr);
 
         var resolutionCore = Substitute.For<IAiCommentResolutionCore>();
@@ -3186,7 +3269,9 @@ public class ReviewOrchestrationServiceTests
                 Arg.Any<int>(),
                 Arg.Any<int?>(),
                 Arg.Any<Guid?>(),
-                Arg.Any<CancellationToken>())
+                Arg.Any<CancellationToken>(),
+                Arg.Any<ReviewRevision?>(),
+                Arg.Any<IReviewRepositoryWorkspace?>())
             .Returns(abandonedPr);
 
         var sut = CreateService(
@@ -3233,7 +3318,9 @@ public class ReviewOrchestrationServiceTests
                 Arg.Any<int>(),
                 Arg.Any<int?>(),
                 Arg.Any<Guid?>(),
-                Arg.Any<CancellationToken>())
+                Arg.Any<CancellationToken>(),
+                Arg.Any<ReviewRevision?>(),
+                Arg.Any<IReviewRepositoryWorkspace?>())
             .Returns(pr);
 
         // GetById returns a Cancelled job (CAS by another worker)
@@ -3291,7 +3378,9 @@ public class ReviewOrchestrationServiceTests
                 Arg.Any<int>(),
                 Arg.Any<int?>(),
                 Arg.Any<Guid?>(),
-                Arg.Any<CancellationToken>())
+                Arg.Any<CancellationToken>(),
+                Arg.Any<ReviewRevision?>(),
+                Arg.Any<IReviewRepositoryWorkspace?>())
             .Returns(pr);
 
         var reviewResult = new ReviewResult("A thorough review summary.", new List<ReviewComment>().AsReadOnly());
@@ -3364,7 +3453,9 @@ public class ReviewOrchestrationServiceTests
                 Arg.Any<int>(),
                 Arg.Any<int?>(),
                 Arg.Any<Guid?>(),
-                Arg.Any<CancellationToken>())
+                Arg.Any<CancellationToken>(),
+                Arg.Any<ReviewRevision?>(),
+                Arg.Any<IReviewRepositoryWorkspace?>())
             .Returns(completedPr);
 
         var sut = CreateService(
@@ -3446,7 +3537,9 @@ public class ReviewOrchestrationServiceTests
                 Arg.Any<int>(),
                 Arg.Any<int?>(),
                 Arg.Any<Guid?>(),
-                Arg.Any<CancellationToken>())
+                Arg.Any<CancellationToken>(),
+                Arg.Any<ReviewRevision?>(),
+                Arg.Any<IReviewRepositoryWorkspace?>())
             .Returns(pr);
         orchestrator.ReviewAsync(
                 Arg.Any<ReviewJob>(),
@@ -3551,7 +3644,8 @@ public class ReviewOrchestrationServiceTests
                 Arg.Any<int?>(),
                 Arg.Any<Guid?>(),
                 Arg.Any<CancellationToken>(),
-                Arg.Any<ReviewRevision?>())
+                Arg.Any<ReviewRevision?>(),
+                Arg.Any<IReviewRepositoryWorkspace?>())
             .Returns(pr);
         orchestrator.ReviewAsync(
                 Arg.Any<ReviewJob>(),
@@ -3683,7 +3777,8 @@ public class ReviewOrchestrationServiceTests
                 Arg.Any<int?>(),
                 Arg.Any<Guid?>(),
                 Arg.Any<CancellationToken>(),
-                Arg.Any<ReviewRevision?>())
+                Arg.Any<ReviewRevision?>(),
+                Arg.Any<IReviewRepositoryWorkspace?>())
             .Returns(pr);
         orchestrator.ReviewAsync(
                 Arg.Any<ReviewJob>(),
@@ -3774,7 +3869,8 @@ public class ReviewOrchestrationServiceTests
                 Arg.Any<int?>(),
                 Arg.Any<Guid?>(),
                 Arg.Any<CancellationToken>(),
-                Arg.Any<ReviewRevision?>())
+                Arg.Any<ReviewRevision?>(),
+                Arg.Any<IReviewRepositoryWorkspace?>())
             .Returns(pr);
         orchestrator.ReviewAsync(
                 Arg.Any<ReviewJob>(),
@@ -3842,7 +3938,8 @@ public class ReviewOrchestrationServiceTests
                 Arg.Any<int?>(),
                 Arg.Any<Guid?>(),
                 Arg.Any<CancellationToken>(),
-                Arg.Any<ReviewRevision?>())
+                Arg.Any<ReviewRevision?>(),
+                Arg.Any<IReviewRepositoryWorkspace?>())
             .Returns(pr);
         orchestrator.ReviewAsync(
                 Arg.Any<ReviewJob>(),
@@ -3934,7 +4031,9 @@ public class ReviewOrchestrationServiceTests
                 Arg.Any<int>(),
                 Arg.Any<int?>(),
                 Arg.Any<Guid?>(),
-                Arg.Any<CancellationToken>())
+                Arg.Any<CancellationToken>(),
+                Arg.Any<ReviewRevision?>(),
+                Arg.Any<IReviewRepositoryWorkspace?>())
             .Returns(pr);
         orchestrator.ReviewAsync(
                 Arg.Any<ReviewJob>(),
@@ -4041,7 +4140,8 @@ public class ReviewOrchestrationServiceTests
                 Arg.Any<int?>(),
                 Arg.Any<Guid?>(),
                 Arg.Any<CancellationToken>(),
-                Arg.Any<ReviewRevision?>())
+                Arg.Any<ReviewRevision?>(),
+                Arg.Any<IReviewRepositoryWorkspace?>())
             .Returns(pr);
         orchestrator.ReviewAsync(
                 Arg.Any<ReviewJob>(),
@@ -4072,7 +4172,9 @@ public class ReviewOrchestrationServiceTests
                 job.IterationId,
                 null,
                 job.ClientId,
-                Arg.Any<CancellationToken>());
+                Arg.Any<CancellationToken>(),
+                Arg.Any<ReviewRevision?>(),
+                Arg.Any<IReviewRepositoryWorkspace?>());
         await jobs.DidNotReceive()
             .AddFileResultAsync(
                 Arg.Is<ReviewFileResult>(r => r.IsCarriedForward),
@@ -4132,7 +4234,8 @@ public class ReviewOrchestrationServiceTests
                 Arg.Any<int?>(),
                 Arg.Any<Guid?>(),
                 Arg.Any<CancellationToken>(),
-                Arg.Any<ReviewRevision?>())
+                Arg.Any<ReviewRevision?>(),
+                Arg.Any<IReviewRepositoryWorkspace?>())
             .Returns(pr);
         orchestrator.ReviewAsync(
                 Arg.Any<ReviewJob>(),
@@ -4163,7 +4266,9 @@ public class ReviewOrchestrationServiceTests
                 job.IterationId,
                 null,
                 job.ClientId,
-                Arg.Any<CancellationToken>());
+                Arg.Any<CancellationToken>(),
+                Arg.Any<ReviewRevision?>(),
+                Arg.Any<IReviewRepositoryWorkspace?>());
         await jobs.DidNotReceive()
             .AddFileResultAsync(
                 Arg.Is<ReviewFileResult>(r => r.IsCarriedForward),
@@ -4204,7 +4309,9 @@ public class ReviewOrchestrationServiceTests
                 Arg.Any<int>(),
                 Arg.Any<int?>(),
                 Arg.Any<Guid?>(),
-                Arg.Any<CancellationToken>())
+                Arg.Any<CancellationToken>(),
+                Arg.Any<ReviewRevision?>(),
+                Arg.Any<IReviewRepositoryWorkspace?>())
             .Returns(pr);
 
         // Scan shows prior iteration 1
@@ -4282,7 +4389,9 @@ public class ReviewOrchestrationServiceTests
                 Arg.Any<int>(),
                 Arg.Any<int?>(),
                 Arg.Any<Guid?>(),
-                Arg.Any<CancellationToken>())
+                Arg.Any<CancellationToken>(),
+                Arg.Any<ReviewRevision?>(),
+                Arg.Any<IReviewRepositoryWorkspace?>())
             .Returns(pr);
         orchestrator.ReviewAsync(
                 Arg.Any<ReviewJob>(),
@@ -4372,7 +4481,9 @@ public class ReviewOrchestrationServiceTests
                 Arg.Any<int>(),
                 Arg.Any<int?>(),
                 Arg.Any<Guid?>(),
-                Arg.Any<CancellationToken>())
+                Arg.Any<CancellationToken>(),
+                Arg.Any<ReviewRevision?>(),
+                Arg.Any<IReviewRepositoryWorkspace?>())
             .Returns(completedPr);
 
         var sut = CreateService(
@@ -4456,7 +4567,9 @@ public class ReviewOrchestrationServiceTests
                 Arg.Any<int>(),
                 Arg.Any<int?>(),
                 Arg.Any<Guid?>(),
-                Arg.Any<CancellationToken>())
+                Arg.Any<CancellationToken>(),
+                Arg.Any<ReviewRevision?>(),
+                Arg.Any<IReviewRepositoryWorkspace?>())
             .Returns(activePr);
 
         var sut = CreateService(
@@ -4521,7 +4634,9 @@ public class ReviewOrchestrationServiceTests
                 Arg.Any<int>(),
                 Arg.Any<int?>(),
                 Arg.Any<Guid?>(),
-                Arg.Any<CancellationToken>())
+                Arg.Any<CancellationToken>(),
+                Arg.Any<ReviewRevision?>(),
+                Arg.Any<IReviewRepositoryWorkspace?>())
             .Returns(activePr);
 
         var reviewResult = new ReviewResult("Summary of review.", new List<ReviewComment>().AsReadOnly());
@@ -4579,7 +4694,9 @@ public class ReviewOrchestrationServiceTests
                 Arg.Any<int>(),
                 Arg.Any<int?>(),
                 Arg.Any<Guid?>(),
-                Arg.Any<CancellationToken>())
+                Arg.Any<CancellationToken>(),
+                Arg.Any<ReviewRevision?>(),
+                Arg.Any<IReviewRepositoryWorkspace?>())
             .Returns(activePr);
         orchestrator.ReviewAsync(
                 Arg.Any<ReviewJob>(),
@@ -4610,7 +4727,9 @@ public class ReviewOrchestrationServiceTests
                 Arg.Any<int>(),
                 Arg.Any<int?>(),
                 Arg.Any<Guid?>(),
-                Arg.Any<CancellationToken>());
+                Arg.Any<CancellationToken>(),
+                Arg.Any<ReviewRevision?>(),
+                Arg.Any<IReviewRepositoryWorkspace?>());
         await orchestrator.Received(1)
             .ReviewAsync(
                 Arg.Any<ReviewJob>(),
@@ -4664,7 +4783,9 @@ public class ReviewOrchestrationServiceTests
                 Arg.Any<int>(),
                 Arg.Any<int?>(),
                 Arg.Any<Guid?>(),
-                Arg.Any<CancellationToken>())
+                Arg.Any<CancellationToken>(),
+                Arg.Any<ReviewRevision?>(),
+                Arg.Any<IReviewRepositoryWorkspace?>())
             .Returns(gitLabPr);
 
         var reviewResult = new ReviewResult("Summary of review.", []);
@@ -4801,7 +4922,9 @@ public class ReviewOrchestrationServiceTests
                 Arg.Any<int>(),
                 Arg.Any<int?>(),
                 Arg.Any<Guid?>(),
-                Arg.Any<CancellationToken>())
+                Arg.Any<CancellationToken>(),
+                Arg.Any<ReviewRevision?>(),
+                Arg.Any<IReviewRepositoryWorkspace?>())
             .Returns(gitLabPr);
 
         var reviewResult = new ReviewResult(
@@ -4898,7 +5021,9 @@ public class ReviewOrchestrationServiceTests
                 Arg.Any<int>(),
                 Arg.Any<int?>(),
                 Arg.Any<Guid?>(),
-                Arg.Any<CancellationToken>())
+                Arg.Any<CancellationToken>(),
+                Arg.Any<ReviewRevision?>(),
+                Arg.Any<IReviewRepositoryWorkspace?>())
             .Returns(gitLabPr);
 
         var reviewResult = new ReviewResult(
@@ -4995,7 +5120,9 @@ public class ReviewOrchestrationServiceTests
                 Arg.Any<int>(),
                 Arg.Any<int?>(),
                 Arg.Any<Guid?>(),
-                Arg.Any<CancellationToken>())
+                Arg.Any<CancellationToken>(),
+                Arg.Any<ReviewRevision?>(),
+                Arg.Any<IReviewRepositoryWorkspace?>())
             .Returns(forgejoPr);
 
         var reviewResult = new ReviewResult(
@@ -5108,7 +5235,9 @@ public class ReviewOrchestrationServiceTests
                 Arg.Any<int>(),
                 Arg.Any<int?>(),
                 Arg.Any<Guid?>(),
-                Arg.Any<CancellationToken>())
+                Arg.Any<CancellationToken>(),
+                Arg.Any<ReviewRevision?>(),
+                Arg.Any<IReviewRepositoryWorkspace?>())
             .Returns(forgejoPr);
 
         var reviewResult = new ReviewResult(

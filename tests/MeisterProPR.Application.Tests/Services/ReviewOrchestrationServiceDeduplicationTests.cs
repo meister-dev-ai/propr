@@ -207,6 +207,10 @@ public class ReviewOrchestrationServiceDeduplicationTests
         // Arrange
         var jobs = Substitute.For<IReviewJobExecutionStore>();
         var prFetcher = Substitute.For<IPullRequestFetcher>();
+        prFetcher.FetchRefAsync(
+                Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(),
+                Arg.Any<int>(), Arg.Any<Guid?>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(new PullRequestRef("feature/test", "main", PrStatus.Active)));
         var orchestrator = Substitute.For<IFileByFileReviewOrchestrator>();
         var commentPoster = CreatePublicationService();
         var clientRegistry = Substitute.For<IClientRegistry>();
@@ -256,7 +260,9 @@ public class ReviewOrchestrationServiceDeduplicationTests
                 Arg.Any<int>(),
                 Arg.Any<int?>(),
                 Arg.Any<Guid?>(),
-                Arg.Any<CancellationToken>())
+                Arg.Any<CancellationToken>(),
+                Arg.Any<ReviewRevision?>(),
+                Arg.Any<IReviewRepositoryWorkspace?>())
             .Returns(pr);
 
         // The orchestrator returns two comments on different files
@@ -310,6 +316,10 @@ public class ReviewOrchestrationServiceDeduplicationTests
     {
         var jobs = Substitute.For<IReviewJobExecutionStore>();
         var prFetcher = Substitute.For<IPullRequestFetcher>();
+        prFetcher.FetchRefAsync(
+                Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(),
+                Arg.Any<int>(), Arg.Any<Guid?>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(new PullRequestRef("feature/test", "main", PrStatus.Active)));
         var orchestrator = Substitute.For<IFileByFileReviewOrchestrator>();
         var commentPoster = CreatePublicationService();
         var clientRegistry = Substitute.For<IClientRegistry>();
@@ -359,7 +369,9 @@ public class ReviewOrchestrationServiceDeduplicationTests
                 Arg.Any<int>(),
                 Arg.Any<int?>(),
                 Arg.Any<Guid?>(),
-                Arg.Any<CancellationToken>())
+                Arg.Any<CancellationToken>(),
+                Arg.Any<ReviewRevision?>(),
+                Arg.Any<IReviewRepositoryWorkspace?>())
             .Returns(pr);
 
         var orchestratorResult = new ReviewResult("Incremental summary", [])
@@ -410,6 +422,10 @@ public class ReviewOrchestrationServiceDeduplicationTests
     {
         var jobs = Substitute.For<IReviewJobExecutionStore>();
         var prFetcher = Substitute.For<IPullRequestFetcher>();
+        prFetcher.FetchRefAsync(
+                Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(),
+                Arg.Any<int>(), Arg.Any<Guid?>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(new PullRequestRef("feature/test", "main", PrStatus.Active)));
         var orchestrator = Substitute.For<IFileByFileReviewOrchestrator>();
         var commentPoster = CreatePublicationService();
         var clientRegistry = Substitute.For<IClientRegistry>();
@@ -457,7 +473,9 @@ public class ReviewOrchestrationServiceDeduplicationTests
                 Arg.Any<int>(),
                 Arg.Any<int?>(),
                 Arg.Any<Guid?>(),
-                Arg.Any<CancellationToken>())
+                Arg.Any<CancellationToken>(),
+                Arg.Any<ReviewRevision?>(),
+                Arg.Any<IReviewRepositoryWorkspace?>())
             .Returns(pr);
 
         prScanRepository.GetAsync(Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<int>(), Arg.Any<CancellationToken>())

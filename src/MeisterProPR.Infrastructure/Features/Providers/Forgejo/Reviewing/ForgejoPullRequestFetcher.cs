@@ -5,6 +5,7 @@ using System.Net;
 using System.Net.Http.Json;
 using System.Text;
 using System.Text.Json.Serialization;
+using MeisterProPR.Application.Features.Reviewing.Execution.Ports;
 using MeisterProPR.Application.Support;
 using MeisterProPR.Domain.Enums;
 using MeisterProPR.Domain.ValueObjects;
@@ -28,7 +29,8 @@ internal sealed class ForgejoPullRequestFetcher(
         int? compareToIterationId = null,
         Guid? clientId = null,
         CancellationToken cancellationToken = default,
-        ReviewRevision? compareToReviewRevision = null)
+        ReviewRevision? compareToReviewRevision = null,
+        IReviewRepositoryWorkspace? workspace = null)
     {
         if (!clientId.HasValue)
         {

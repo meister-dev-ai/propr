@@ -279,15 +279,98 @@ public sealed class EfReviewDiagnosticsReader(
                 continue;
             }
 
-            var selectedProtocols = await db.ReviewJobProtocols
+            var selectedProtocolsProj = await db.ReviewJobProtocols
                 .AsNoTracking()
                 .Where(protocol => selectedProtocolIds.Contains(protocol.Id))
-                .Include(protocol => protocol.Events.OrderBy(evt => evt.OccurredAt))
+                .Select(protocol => new
+                {
+                    Protocol = protocol,
+                    Events = protocol.Events
+                        .OrderBy(evt => evt.OccurredAt)
+                        .Select(evt => new
+                        {
+                            evt.Id,
+                            evt.ProtocolId,
+                            evt.Kind,
+                            evt.Name,
+                            evt.OccurredAt,
+                            evt.InputTokens,
+                            evt.OutputTokens,
+                            evt.CachedInputTokens,
+                            evt.CacheStatus,
+                            evt.CacheMissCategory,
+                            evt.PrefixEligibility,
+                            evt.ToolEvidenceAction,
+                            evt.ToolEvidenceSourceToolName,
+                            evt.ToolEvidenceOriginalPayloadTokens,
+                            evt.ToolEvidenceBoundedPayloadTokens,
+                            evt.ToolEvidenceRefreshable,
+                            evt.FinalizationAttemptKind,
+                            evt.FinalizationReason,
+                            evt.FinalizationOutcome,
+                            evt.StartedAt,
+                            evt.CompletedAt,
+                            evt.DurationMs,
+                            evt.WaitDurationMs,
+                            evt.ActiveDurationMs,
+                            evt.TimingAvailability,
+                            evt.ToolOutcome,
+                            evt.PhaseTimings,
+                            evt.EventCategory,
+                            evt.Error,
+                            evt.OutputSummary,
+                        })
+                        .ToList(),
+                })
                 .ToListAsync(ct);
 
-            foreach (var protocol in selectedProtocols.Where(protocol => protocol.FileResultId.HasValue))
+            foreach (var proj in selectedProtocolsProj)
             {
-                sourceProtocols[(sourceJobGroup.Key, protocol.FileResultId!.Value)] = protocol;
+                var protocol = proj.Protocol;
+                foreach (var evtProj in proj.Events)
+                {
+                    var evt = new ProtocolEvent
+                    {
+                        Id = evtProj.Id,
+                        ProtocolId = evtProj.ProtocolId,
+                        Kind = evtProj.Kind,
+                        Name = evtProj.Name,
+                        OccurredAt = evtProj.OccurredAt,
+                        InputTokens = evtProj.InputTokens,
+                        OutputTokens = evtProj.OutputTokens,
+                        CachedInputTokens = evtProj.CachedInputTokens,
+                        CacheStatus = evtProj.CacheStatus,
+                        CacheMissCategory = evtProj.CacheMissCategory,
+                        PrefixEligibility = evtProj.PrefixEligibility,
+                        ToolEvidenceAction = evtProj.ToolEvidenceAction,
+                        ToolEvidenceSourceToolName = evtProj.ToolEvidenceSourceToolName,
+                        ToolEvidenceOriginalPayloadTokens = evtProj.ToolEvidenceOriginalPayloadTokens,
+                        ToolEvidenceBoundedPayloadTokens = evtProj.ToolEvidenceBoundedPayloadTokens,
+                        ToolEvidenceRefreshable = evtProj.ToolEvidenceRefreshable,
+                        FinalizationAttemptKind = evtProj.FinalizationAttemptKind,
+                        FinalizationReason = evtProj.FinalizationReason,
+                        FinalizationOutcome = evtProj.FinalizationOutcome,
+                        StartedAt = evtProj.StartedAt,
+                        CompletedAt = evtProj.CompletedAt,
+                        DurationMs = evtProj.DurationMs,
+                        WaitDurationMs = evtProj.WaitDurationMs,
+                        ActiveDurationMs = evtProj.ActiveDurationMs,
+                        TimingAvailability = evtProj.TimingAvailability,
+                        ToolOutcome = evtProj.ToolOutcome,
+                        PhaseTimings = evtProj.PhaseTimings,
+                        EventCategory = evtProj.EventCategory,
+                        Error = evtProj.Error,
+                        OutputSummary = evtProj.OutputSummary,
+                        InputTextSample = null,
+                        SystemPrompt = null,
+                    };
+                    protocol.Events.Add(evt);
+                }
+
+                if (protocol.FileResultId.HasValue)
+                {
+                    sourceProtocols[(sourceJobGroup.Key, protocol.FileResultId.Value)] = protocol;
+                }
             }
         }
 

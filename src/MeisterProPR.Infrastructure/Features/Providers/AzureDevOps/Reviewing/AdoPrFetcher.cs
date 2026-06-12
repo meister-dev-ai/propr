@@ -1,6 +1,7 @@
 // Copyright (c) Andreas Rain.
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
+using MeisterProPR.Application.Features.Reviewing.Execution.Ports;
 using MeisterProPR.Application.Interfaces;
 using MeisterProPR.Domain.Enums;
 using MeisterProPR.Domain.ValueObjects;
@@ -17,6 +18,38 @@ public sealed partial class AdoPrFetcher(
 {
     public ScmProvider Provider => ScmProvider.AzureDevOps;
 
+    public async Task<PullRequestRef> FetchRefAsync(
+        string organizationUrl,
+        string projectId,
+        string repositoryId,
+        int pullRequestId,
+        Guid? clientId = null,
+        CancellationToken cancellationToken = default)
+    {
+        var credentials = await AdoProviderAdapterHelpers.ResolveCredentialsAsync(
+            connectionRepository,
+            clientId,
+            organizationUrl,
+            cancellationToken);
+        var connection = await connectionFactory.GetConnectionAsync(organizationUrl, credentials, cancellationToken);
+        var gitClient = connection.GetClient<GitHttpClient>();
+
+        var pr = await gitClient.GetPullRequestAsync(
+            projectId,
+            repositoryId,
+            pullRequestId,
+            cancellationToken: cancellationToken);
+
+        var status = pr.Status switch
+        {
+            PullRequestStatus.Abandoned => PrStatus.Abandoned,
+            PullRequestStatus.Completed => PrStatus.Completed,
+            _ => PrStatus.Active,
+        };
+
+        return new PullRequestRef(pr.SourceRefName ?? "", pr.TargetRefName ?? "", status);
+    }
+
     public async Task<PullRequest> FetchAsync(
         string organizationUrl,
         string projectId,
@@ -26,7 +59,8 @@ public sealed partial class AdoPrFetcher(
         int? compareToIterationId = null,
         Guid? clientId = null,
         CancellationToken cancellationToken = default,
-        ReviewRevision? compareToReviewRevision = null)
+        ReviewRevision? compareToReviewRevision = null,
+        IReviewRepositoryWorkspace? workspace = null)
     {
         var credentials = await AdoProviderAdapterHelpers.ResolveCredentialsAsync(
             connectionRepository,
@@ -84,7 +118,8 @@ public sealed partial class AdoPrFetcher(
                 sourceCommit,
                 baseCommit,
                 change,
-                cancellationToken);
+                cancellationToken,
+                workspace);
 
             if (changedFile != null)
             {
@@ -169,7 +204,8 @@ public sealed partial class AdoPrFetcher(
         string sourceCommit,
         string baseCommit,
         GitPullRequestChange change,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        IReviewRepositoryWorkspace? workspace = null)
     {
         if (change.Item?.IsFolder == true)
         {
@@ -205,48 +241,74 @@ public sealed partial class AdoPrFetcher(
 
         var headContent = "";
         var baseContent = "";
+        string? diff = null;
 
         if (!isBinary)
         {
-            if (changeType != ChangeType.Delete && sourceCommit.Length >= 6)
+            if (workspace is not null)
             {
-                headContent = await this.TryResolveHeadContentAsync(
-                    gitClient,
-                    projectId,
-                    repositoryId,
-                    path,
-                    sourceCommit,
-                    cancellationToken);
-            }
+                // Read content directly from the local git workspace — avoids N GetItemAsync calls
+                if (changeType != ChangeType.Delete)
+                {
+                    headContent = await workspace.ReadFileAsync(path, "source", cancellationToken) ?? "";
+                }
 
-            if (changeType != ChangeType.Add && !renameWithMissingSource && baseCommit.Length >= 6)
-            {
-                var basePathToFetch = originalPath ?? path;
-                baseContent = await this.TryResolveBaseContentAsync(
-                    gitClient,
-                    projectId,
-                    repositoryId,
-                    basePathToFetch,
-                    baseCommit,
-                    cancellationToken);
+                if (changeType != ChangeType.Add && !renameWithMissingSource)
+                {
+                    var basePathToRead = originalPath ?? path;
+                    baseContent = await workspace.ReadFileAsync(basePathToRead, "target", cancellationToken) ?? "";
+                }
+                else if (renameWithMissingSource)
+                {
+                    logger.LogInformation(
+                        "Skipping base content fetch for renamed file {Path}: SourceServerItem is not available",
+                        path);
+                }
+
+                diff = await workspace.GetUnifiedDiffAsync(path, cancellationToken);
             }
-            else if (renameWithMissingSource)
+            else
             {
-                logger.LogInformation(
-                    "Skipping base content fetch for renamed file {Path}: SourceServerItem is not available",
-                    path);
-            }
-            else if (changeType != ChangeType.Add && baseCommit.Length < 6)
-            {
-                logger.LogInformation(
-                    "Skipping base content fetch for {Path}: base commit SHA is absent or malformed",
-                    path);
+                if (changeType != ChangeType.Delete && sourceCommit.Length >= 6)
+                {
+                    headContent = await this.TryResolveHeadContentAsync(
+                        gitClient,
+                        projectId,
+                        repositoryId,
+                        path,
+                        sourceCommit,
+                        cancellationToken);
+                }
+
+                if (changeType != ChangeType.Add && !renameWithMissingSource && baseCommit.Length >= 6)
+                {
+                    var basePathToFetch = originalPath ?? path;
+                    baseContent = await this.TryResolveBaseContentAsync(
+                        gitClient,
+                        projectId,
+                        repositoryId,
+                        basePathToFetch,
+                        baseCommit,
+                        cancellationToken);
+                }
+                else if (renameWithMissingSource)
+                {
+                    logger.LogInformation(
+                        "Skipping base content fetch for renamed file {Path}: SourceServerItem is not available",
+                        path);
+                }
+                else if (changeType != ChangeType.Add && baseCommit.Length < 6)
+                {
+                    logger.LogInformation(
+                        "Skipping base content fetch for {Path}: base commit SHA is absent or malformed",
+                        path);
+                }
             }
         }
 
-        var diff = isBinary ? "" : BuildUnifiedDiff(baseContent, headContent);
+        var resolvedDiff = isBinary ? "" : diff ?? BuildUnifiedDiff(baseContent, headContent);
 
-        return new ChangedFile(path, changeType, headContent, diff, isBinary, originalPath);
+        return new ChangedFile(path, changeType, headContent, resolvedDiff, isBinary, originalPath);
     }
 
     /// <summary>

@@ -1,6 +1,7 @@
 // Copyright (c) Andreas Rain.
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
+using MeisterProPR.Application.Features.Reviewing.Execution.Ports;
 using MeisterProPR.Application.Interfaces;
 using MeisterProPR.Domain.Enums;
 using MeisterProPR.Domain.ValueObjects;
@@ -20,6 +21,19 @@ public sealed partial class StubPullRequestFetcher(ILogger<StubPullRequestFetche
     public ScmProvider Provider => ScmProvider.AzureDevOps;
 
     /// <inheritdoc />
+    public Task<PullRequestRef> FetchRefAsync(
+        string organizationUrl,
+        string projectId,
+        string repositoryId,
+        int pullRequestId,
+        Guid? clientId = null,
+        CancellationToken cancellationToken = default)
+    {
+        LogStubFetch(logger, pullRequestId);
+        return Task.FromResult(new PullRequestRef("feature/stub-branch", "main", PrStatus.Active));
+    }
+
+    /// <inheritdoc />
     public Task<PullRequest> FetchAsync(
         string organizationUrl,
         string projectId,
@@ -29,7 +43,8 @@ public sealed partial class StubPullRequestFetcher(ILogger<StubPullRequestFetche
         int? compareToIterationId = null,
         Guid? clientId = null,
         CancellationToken cancellationToken = default,
-        ReviewRevision? compareToReviewRevision = null)
+        ReviewRevision? compareToReviewRevision = null,
+        IReviewRepositoryWorkspace? workspace = null)
     {
         LogStubFetch(logger, pullRequestId);
 

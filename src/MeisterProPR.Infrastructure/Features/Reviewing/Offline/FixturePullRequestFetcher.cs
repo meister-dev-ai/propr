@@ -13,6 +13,19 @@ namespace MeisterProPR.Infrastructure.Features.Reviewing.Offline;
 /// </summary>
 public sealed class FixturePullRequestFetcher(IReviewEvaluationFixtureAccessor fixtureAccessor) : IPullRequestFetcher
 {
+    public Task<PullRequestRef> FetchRefAsync(
+        string organizationUrl,
+        string projectId,
+        string repositoryId,
+        int pullRequestId,
+        Guid? clientId = null,
+        CancellationToken cancellationToken = default)
+    {
+        var fixture = fixtureAccessor.Fixture ?? throw new InvalidOperationException("No review evaluation fixture is active for this scope.");
+        var snapshot = fixture.PullRequestSnapshot;
+        return Task.FromResult(new PullRequestRef(snapshot.SourceBranch, snapshot.TargetBranch, PrStatus.Active));
+    }
+
     public Task<PullRequest> FetchAsync(
         string organizationUrl,
         string projectId,
@@ -22,7 +35,8 @@ public sealed class FixturePullRequestFetcher(IReviewEvaluationFixtureAccessor f
         int? compareToIterationId = null,
         Guid? clientId = null,
         CancellationToken cancellationToken = default,
-        ReviewRevision? compareToReviewRevision = null)
+        ReviewRevision? compareToReviewRevision = null,
+        IReviewRepositoryWorkspace? workspace = null)
     {
         var fixture = fixtureAccessor.Fixture ?? throw new InvalidOperationException("No review evaluation fixture is active for this scope.");
         var snapshot = fixture.PullRequestSnapshot;

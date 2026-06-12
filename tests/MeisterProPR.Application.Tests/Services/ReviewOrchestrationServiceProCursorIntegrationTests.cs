@@ -203,6 +203,10 @@ public sealed class ReviewOrchestrationServiceProCursorIntegrationTests
         jobs.GetById(job.Id).Returns(job);
 
         var prFetcher = Substitute.For<IPullRequestFetcher>();
+        prFetcher.FetchRefAsync(
+                Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(),
+                Arg.Any<int>(), Arg.Any<Guid?>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(new PullRequestRef("feature/test", "main", PrStatus.Active)));
         prFetcher.FetchAsync(
                 job.OrganizationUrl,
                 job.ProjectId,
@@ -211,7 +215,9 @@ public sealed class ReviewOrchestrationServiceProCursorIntegrationTests
                 job.IterationId,
                 Arg.Any<int?>(),
                 job.ClientId,
-                Arg.Any<CancellationToken>())
+                Arg.Any<CancellationToken>(),
+                Arg.Any<ReviewRevision?>(),
+                Arg.Any<IReviewRepositoryWorkspace?>())
             .Returns(CreatePullRequest(job));
 
         var reviewerManager = Substitute.For<IReviewAssignmentService>();
@@ -358,6 +364,10 @@ public sealed class ReviewOrchestrationServiceProCursorIntegrationTests
         jobs.GetById(job.Id).Returns(job);
 
         var prFetcher = Substitute.For<IPullRequestFetcher>();
+        prFetcher.FetchRefAsync(
+                Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(),
+                Arg.Any<int>(), Arg.Any<Guid?>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(new PullRequestRef("feature/test", "main", PrStatus.Active)));
         prFetcher.FetchAsync(
                 job.OrganizationUrl,
                 job.ProjectId,
@@ -366,7 +376,9 @@ public sealed class ReviewOrchestrationServiceProCursorIntegrationTests
                 job.IterationId,
                 Arg.Any<int?>(),
                 job.ClientId,
-                Arg.Any<CancellationToken>())
+                Arg.Any<CancellationToken>(),
+                Arg.Any<ReviewRevision?>(),
+                Arg.Any<IReviewRepositoryWorkspace?>())
             .Returns(CreatePullRequest(job));
 
         var reviewerManager = Substitute.For<IReviewAssignmentService>();
