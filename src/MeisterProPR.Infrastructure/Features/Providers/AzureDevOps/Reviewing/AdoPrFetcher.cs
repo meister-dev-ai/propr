@@ -175,6 +175,76 @@ public sealed partial class AdoPrFetcher(
             AuthorizedIdentityId: authorizedIdentityId);
     }
 
+    public async Task<ChangedFile?> FetchFileDiffAsync(
+        string organizationUrl,
+        string projectId,
+        string repositoryId,
+        int pullRequestId,
+        int iterationId,
+        string filePath,
+        int? compareToIterationId = null,
+        Guid? clientId = null,
+        CancellationToken cancellationToken = default)
+    {
+        var credentials = await AdoProviderAdapterHelpers.ResolveCredentialsAsync(
+            connectionRepository,
+            clientId,
+            organizationUrl,
+            cancellationToken);
+        var connection = await connectionFactory.GetConnectionAsync(organizationUrl, credentials, cancellationToken);
+        await connection.ConnectAsync(cancellationToken);
+        var gitClient = connection.GetClient<GitHttpClient>();
+
+        var pr = await gitClient.GetPullRequestAsync(
+            projectId,
+            repositoryId,
+            pullRequestId,
+            cancellationToken: cancellationToken);
+
+        var iteration = await gitClient.GetPullRequestIterationAsync(
+            projectId,
+            repositoryId,
+            pullRequestId,
+            iterationId,
+            cancellationToken: cancellationToken);
+
+        var sourceCommit = iteration.SourceRefCommit?.CommitId
+                           ?? pr.LastMergeSourceCommit?.CommitId ?? "";
+
+        var baseCommit = iteration.CommonRefCommit?.CommitId
+                         ?? pr.LastMergeTargetCommit?.CommitId ?? "";
+
+        var isBinary = BinaryFileDetector.IsBinary(filePath);
+
+        if (isBinary)
+        {
+            return new ChangedFile(filePath, ChangeType.Edit, string.Empty, string.Empty, true);
+        }
+
+        var headContent = sourceCommit.Length >= 6
+            ? await this.TryResolveHeadContentAsync(gitClient, projectId, repositoryId, filePath, sourceCommit, cancellationToken)
+            : string.Empty;
+
+        var baseContent = baseCommit.Length >= 6
+            ? await this.TryResolveBaseContentAsync(gitClient, projectId, repositoryId, filePath, baseCommit, cancellationToken)
+            : string.Empty;
+
+        if (string.IsNullOrEmpty(headContent) && string.IsNullOrEmpty(baseContent))
+        {
+            return null;
+        }
+
+        var changeType = string.IsNullOrEmpty(baseContent)
+            ? ChangeType.Add
+            : string.IsNullOrEmpty(headContent)
+                ? ChangeType.Delete
+                : ChangeType.Edit;
+
+        var diff = BuildUnifiedDiff(baseContent, headContent);
+
+        return new ChangedFile(filePath, changeType, headContent, diff, false);
+    }
+
     private static ChangedFileSummary? CreateSummaryFromChange(GitPullRequestChange change)
     {
         if (change.Item?.IsFolder == true || string.IsNullOrEmpty(change.Item?.Path))

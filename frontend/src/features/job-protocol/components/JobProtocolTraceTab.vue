@@ -81,62 +81,47 @@
             </div>
         </div>
 
-        <div class="protocol-master-detail">
-            <nav class="protocol-sidebar" aria-label="Pass Navigation">
-                <div
-                    v-for="item in vm.sidebarItems"
-                    :key="item.type === 'folder' ? item.path : (item.protocol.id || item.name)"
-                    class="sidebar-tree-node"
-                    :class="{ 'is-last-in-group': item.isLast }"
-                    :style="{ '--depth': item.depth }"
-                >
-                    <button
-                        v-if="item.type === 'folder'"
-                        class="folder-header tree-folder-btn"
-                        :style="{ paddingLeft: `${item.depth * 1.5}rem` }"
-                        :aria-expanded="!item.isCollapsed"
-                        @click="vm.toggleFolder(item.path)"
-                    >
-                        <i class="fi fi-rr-angle-small-down folder-chevron" :class="{ collapsed: item.isCollapsed }"></i>
-                        <i class="fi" :class="item.isCollapsed ? 'fi-rr-folder' : 'fi-rr-folder-open'"></i>
-                        <span class="folder-name">{{ item.name }}</span>
-                    </button>
-
-                    <button
-                        v-else
-                        class="pass-nav-item tree-pass-btn"
-                        :class="{
-                            active: vm.activePass?.id === item.protocol.id,
-                            'trace-match': vm.hasActiveTraceFilters && vm.protocolHasVisibleTraceRows(item.protocol.id),
-                        }"
-                        :style="{ paddingLeft: `${item.depth * 1.5}rem` }"
-                        @click="vm.activePassId = item.protocol.id || null"
-                    >
-                        <i class="fi fi-rr-file-code pass-file-icon" :class="vm.statusIconClass(item.protocol.outcome)"></i>
-                        <div class="pass-nav-info">
-                            <div class="pass-nav-path">
-                                <span class="pass-nav-filename">{{ item.name }}</span>
-                                <span v-if="item.protocol.isInherited" class="pass-nav-badge">Inherited</span>
-                            </div>
-                            <div class="pass-nav-stats-grid">
-                                <div class="stat-item" title="Tokens">
-                                    <i class="fi fi-rr-coins stat-icon"></i>
-                                    <span class="stat-text">{{ vm.formatTokens((item.protocol.totalInputTokens ?? 0) + (item.protocol.totalOutputTokens ?? 0)) }}</span>
-                                </div>
-                            </div>
-                        </div>
-                    </button>
-                </div>
-            </nav>
-
-            <div class="protocol-content">
-                <div v-if="vm.activePass" class="pass-main">
+        <div class="protocol-content">
+            <PassSelector
+                :items="vm.sidebarItems"
+                :model-value="vm.activePassId"
+                @update:model-value="vm.activePassId = $event"
+            />
+            <div v-if="vm.activePass" class="pass-main">
                     <div class="pass-detail-header">
                         <div class="pass-detail-filepath">
                             <span v-if="vm.parseFilePath(vm.activePass.label).directory" class="pass-detail-dir">{{ vm.parseFilePath(vm.activePass.label).directory }}/</span>
                             <span class="pass-detail-filename">{{ vm.parseFilePath(vm.activePass.label).filename }}</span>
                         </div>
                         <span v-if="vm.activePass.isInherited" class="chip chip-inherited">Inherited trace</span>
+                    </div>
+
+                    <div class="pass-detail-tabs" role="tablist" aria-label="Reviewed file detail">
+                        <button
+                            type="button"
+                            role="tab"
+                            :aria-selected="String(vm.detailTab === 'events')"
+                            class="pass-detail-tab"
+                            :class="{ 'is-active': vm.detailTab === 'events' }"
+                            data-testid="trace-tab-events"
+                            @click="vm.clearDiff()"
+                        >
+                            <i class="fi fi-rr-list" aria-hidden="true"></i>
+                            Events
+                            <span class="pass-detail-tab-count">({{ vm.activePassEventRows.length }})</span>
+                        </button>
+                        <button
+                            type="button"
+                            role="tab"
+                            :aria-selected="String(vm.detailTab === 'diff')"
+                            class="pass-detail-tab"
+                            :class="{ 'is-active': vm.detailTab === 'diff' }"
+                            data-testid="trace-tab-diff"
+                            @click="selectDiffTab"
+                        >
+                            <i class="fi fi-rr-document-signed" aria-hidden="true"></i>
+                            Diff
+                        </button>
                     </div>
 
                     <dl class="summary-grid pass-summary">
@@ -151,7 +136,7 @@
                         <div><dt>Strategy</dt><dd>{{ vm.activePassReviewStrategyDisplay }}</dd></div>
                     </dl>
 
-                    <section v-if="vm.traceTimingInsights.length" class="pass-file-outcome-section">
+                    <section v-if="vm.detailTab === 'events' && vm.traceTimingInsights.length" class="pass-file-outcome-section">
                         <div class="pass-final-result-header">
                             <h4>Timing Insights</h4>
                             <span class="chip chip-muted">Current pass</span>
@@ -175,7 +160,7 @@
                         </ol>
                     </section>
 
-                    <section v-if="vm.activePassInheritance" class="pass-file-outcome-section">
+                    <section v-if="vm.detailTab === 'events' && vm.activePassInheritance" class="pass-file-outcome-section">
                         <div class="pass-final-result-header">
                             <h4>Inheritance</h4>
                             <span class="chip chip-muted">Same revision retry reuse</span>
@@ -191,7 +176,7 @@
                         </p>
                     </section>
 
-                    <section v-if="vm.activePassFileOutcome" class="pass-file-outcome-section">
+                    <section v-if="vm.detailTab === 'events' && vm.activePassFileOutcome" class="pass-file-outcome-section">
                         <div class="pass-final-result-header">
                             <h4>File Outcome</h4>
                             <span class="chip chip-muted">{{ vm.formatFileOutcomeStatus(vm.activePassFileOutcome) }}</span>
@@ -207,7 +192,7 @@
                         </p>
                     </section>
 
-                    <section v-if="vm.activePassFollowUp" class="pass-file-outcome-section">
+                    <section v-if="vm.detailTab === 'events' && vm.activePassFollowUp" class="pass-file-outcome-section">
                         <div class="pass-final-result-header">
                             <h4>Follow-up</h4>
                             <span class="chip chip-muted">{{ vm.formatFollowUpStatus(vm.activePassFollowUp) }}</span>
@@ -220,7 +205,7 @@
                         </dl>
                     </section>
 
-                    <section v-if="vm.activePassRepeatedJudgment" class="pass-file-outcome-section">
+                    <section v-if="vm.detailTab === 'events' && vm.activePassRepeatedJudgment" class="pass-file-outcome-section">
                         <div class="pass-final-result-header">
                             <h4>Repeated Judgment</h4>
                             <span class="chip chip-muted">{{ vm.formatRepeatedJudgmentStatus(vm.activePassRepeatedJudgment) }}</span>
@@ -235,7 +220,7 @@
                         </dl>
                     </section>
 
-                    <section v-if="vm.activePassProRvPrefilter" class="pass-file-outcome-section">
+                    <section v-if="vm.detailTab === 'events' && vm.activePassProRvPrefilter" class="pass-file-outcome-section">
                         <div class="pass-final-result-header">
                             <h4>ProRV Prefilter</h4>
                             <span class="chip chip-muted">{{ vm.activePassProRvPrefilter.executionState ?? 'Not recorded' }}</span>
@@ -257,7 +242,7 @@
                         </dl>
                     </section>
 
-                    <section v-if="vm.activePass.finalSummary || vm.activePassFinalComments.length" class="pass-final-result-section">
+                    <section v-if="vm.detailTab === 'events' && (vm.activePass.finalSummary || vm.activePassFinalComments.length)" class="pass-final-result-section">
                         <div class="pass-final-result-header">
                             <h4>Final File Result</h4>
                             <span v-if="vm.activePassFinalComments.length" class="chip chip-muted">{{ vm.activePassFinalComments.length }} final comment{{ vm.activePassFinalComments.length === 1 ? '' : 's' }}</span>
@@ -272,7 +257,7 @@
                         />
                     </section>
 
-                    <section class="events-section">
+                    <section v-if="vm.detailTab === 'events'" class="events-section">
                         <div class="events-section-header">
                             <h4>Events ({{ vm.activePassEventRows.length }})</h4>
                             <p v-if="vm.hasActiveTraceFilters" class="events-section-context">Global trace search is active for this review.</p>
@@ -381,18 +366,60 @@
                             </article>
                         </TransitionGroup>
                     </section>
+
+                    <section v-if="vm.detailTab === 'diff'" class="diff-section" data-testid="trace-diff-section">
+                        <JobProtocolDiffViewer
+                            :file-result-id="activeDiffFileResultId"
+                            :diff="vm.fileDiff"
+                            :loading="vm.diffLoading"
+                            :diff-error="vm.diffError"
+                            :on-retry="retryFileDiff"
+                        />
+                                        </section>
                 </div>
             </div>
         </div>
-    </div>
 </template>
-
 <script setup lang="ts">
+import { computed } from 'vue'
 import { RouterLink } from 'vue-router'
 import type { JobProtocolViewModel } from '@/features/job-protocol/composables/useJobProtocolViewModel'
 import JobProtocolCommentGroups from './JobProtocolCommentGroups.vue'
+import JobProtocolDiffViewer from './JobProtocolDiffViewer.vue'
+import PassSelector from './PassSelector.vue'
 
-defineProps<{ vm: JobProtocolViewModel }>()
+const props = defineProps<{ vm: JobProtocolViewModel }>()
+
+const activeDiffFileResultId = computed<string | null>(() => {
+    const pass = props.vm.activePass
+    if (!pass) return null
+    const fileResultId = pass.fileResultId
+    return fileResultId ?? null
+})
+
+function selectDiffTab() {
+    props.vm.detailTab = 'diff'
+    const pass = props.vm.activePass
+    if (!pass) return
+    const fileResultId = pass.fileResultId
+    if (!fileResultId) {
+        props.vm.fileDiff = null
+        props.vm.diffError = null
+        return
+    }
+    const jobId = pass.jobId ?? ''
+    if (!jobId) return
+    void props.vm.loadFileDiff(jobId, fileResultId)
+}
+
+function retryFileDiff() {
+    const pass = props.vm.activePass
+    if (!pass) return
+    const fileResultId = pass.fileResultId
+    const jobId = pass.jobId ?? ''
+    if (!jobId || !fileResultId) return
+    void props.vm.loadFileDiff(jobId, fileResultId)
+}
 </script>
 
 <style scoped>
@@ -524,49 +551,11 @@ defineProps<{ vm: JobProtocolViewModel }>()
     border-color: rgba(34, 211, 238, 0.28);
 }
 
-.protocol-master-detail {
-    display: grid;
-    grid-template-columns: 320px 1fr;
-    gap: 2rem;
-    align-items: start;
+.protocol-content {
+    min-width: 0;
 }
 
 @media (max-width: 1024px) {
-    .protocol-master-detail {
-        grid-template-columns: 1fr;
-        gap: 1rem;
-    }
-}
-
-.protocol-sidebar {
-    display: flex;
-    flex-direction: column;
-    gap: 0;
-    position: sticky;
-    top: 1rem;
-    max-height: calc(100vh - 4rem);
-    overflow-y: auto;
-    padding: 0 1rem 1rem 0.5rem;
-    scrollbar-gutter: stable;
-    width: 100%;
-    max-width: 320px;
-    flex-shrink: 0;
-}
-
-@media (max-width: 1024px) {
-    .protocol-sidebar {
-        max-width: none;
-        width: 100%;
-        position: static;
-        top: auto;
-        max-height: none;
-        padding: 0;
-    }
-
-    .protocol-content {
-        min-width: 0;
-    }
-
     .events-section {
         overflow-x: visible;
     }
@@ -580,216 +569,9 @@ defineProps<{ vm: JobProtocolViewModel }>()
     }
 }
 
-.sidebar-tree-node {
-    position: relative;
-    display: flex;
-    flex-direction: column;
-    width: 100%;
-}
-
-.sidebar-tree-node.is-last-in-group::before,
-.sidebar-tree-node[style*='--depth: 0']::before,
-.sidebar-tree-node[style*='--depth: 0']::after {
-    display: none;
-}
-
-.folder-header {
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-    padding: 0.5rem 0.25rem;
-    background: transparent !important;
-    border: none;
-    color: var(--color-text-muted);
-    font-size: 0.75rem;
-    font-weight: 700;
-    text-transform: uppercase;
-    letter-spacing: 0.08em;
-    cursor: pointer;
-    width: 100%;
-    border-radius: 0 !important;
-}
-
-.tree-folder-btn {
-    appearance: none;
-    background: transparent !important;
-    border: none;
-    display: flex;
-    align-items: center;
-    justify-content: flex-start !important;
-    text-align: left !important;
-    gap: 0.2rem;
-    padding: 0.25rem 0.5rem;
-    color: var(--color-accent);
-    font-size: 0.75rem;
-    font-weight: 700;
-    text-transform: none;
-    cursor: pointer;
-    width: 100%;
-    transition: all 0.1s ease;
-    border-radius: 4px;
-    z-index: 2;
-    margin: 1px 0;
-}
-
-.tree-folder-btn:hover {
-    background: rgba(255, 255, 255, 0.06) !important;
-}
-
-.tree-folder-btn i.fi {
-    color: var(--color-accent);
-}
-
-.folder-chevron {
-    font-size: 0.6rem;
-    transition: transform 0.15s ease;
-    opacity: 0.6;
-    width: 0.8rem;
-    display: inline-flex;
-    justify-content: center;
-    margin-right: 0.2rem;
-}
-
-.folder-chevron.collapsed {
-    transform: rotate(-90deg);
-}
-
-.folder-name {
-    flex: 1;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-}
-
-.tree-pass-btn {
-    appearance: none;
-    background: transparent !important;
-    border: none !important;
-    box-shadow: none !important;
-    display: flex;
-    align-items: center;
-    justify-content: flex-start !important;
-    text-align: left !important;
-    gap: 0.6rem;
-    padding: 0.2rem 0.5rem;
-    cursor: pointer;
-    width: 100%;
-    border-radius: 4px;
-    transition: all 0.1s ease;
-    margin: 1px 0;
-    z-index: 2;
-    min-height: auto !important;
-}
-
-.tree-pass-btn:hover {
-    background: rgba(255, 255, 255, 0.04) !important;
-}
-
-.tree-pass-btn.active {
-    background: rgba(59, 130, 246, 0.12) !important;
-}
-
-.tree-pass-btn.trace-match:not(.active) {
-    background: rgba(34, 211, 238, 0.08) !important;
-    border: 1px solid rgba(34, 211, 238, 0.12) !important;
-}
-
-.pass-file-icon {
-    font-size: 1rem;
-    margin-top: 0.15rem;
-    flex-shrink: 0;
-    color: var(--color-text-muted) !important;
-    z-index: 2;
-    opacity: 0.9;
-}
-
-.pass-file-icon.icon-success { color: var(--color-success) !important; opacity: 1; }
-.pass-file-icon.icon-failed { color: var(--color-danger) !important; opacity: 1; }
-.pass-file-icon.icon-processing { color: var(--color-accent) !important; animation: pulse 2s infinite; }
-.pass-file-icon.icon-pending { color: var(--color-text-muted) !important; opacity: 0.5; }
-
-@keyframes pulse {
-    0% { opacity: 0.6; }
-    50% { opacity: 1; }
-    100% { opacity: 0.6; }
-}
-
-.pass-nav-info {
-    display: flex;
-    flex-direction: row;
-    align-items: center;
-    gap: 0.1rem;
-    flex: 1;
-    min-width: 0;
-}
-
-.pass-nav-path {
-    flex: 1;
-    min-width: 0;
-    display: flex;
-    flex-direction: column;
-    gap: 0.1rem;
-}
-
-.pass-nav-filename {
-    font-weight: 600;
-    font-size: 0.9rem;
-    color: var(--color-text);
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    display: block;
-}
-
-.pass-nav-badge {
-    display: inline-flex;
-    align-items: center;
-    align-self: flex-start;
-    margin-top: 0.2rem;
-    padding: 0.08rem 0.45rem;
-    border-radius: 999px;
-    background: rgba(59, 130, 246, 0.12);
-    color: #93c5fd;
-    font-size: 0.68rem;
-    font-weight: 700;
-    line-height: 1.1;
-}
-
-.pass-nav-stats-grid {
-    display: flex;
-    flex-wrap: nowrap;
-    gap: 0.5rem;
-    font-size: 0.72rem;
-    color: var(--color-text-muted);
-    overflow: hidden;
-    text-overflow: ellipsis;
-    margin-left: auto;
-    padding-right: 0.5rem;
-}
-
-.stat-item {
-    display: flex;
-    align-items: center;
-    gap: 0.25rem;
-    background: rgba(255, 255, 255, 0.04);
-    padding: 0.15rem 0.4rem;
-    border-radius: 4px;
-    border: 1px solid rgba(255, 255, 255, 0.03);
-    white-space: nowrap;
-}
-
-.stat-icon {
-    font-size: 0.75rem;
-    opacity: 0.7;
-}
-
-.stat-text {
-    font-weight: 500;
-}
-
 .protocol-content {
     background: var(--color-surface);
-    border-radius: 12px;
+    border-radius: var(--radius-lg);
     padding: 0;
     border: 1px solid var(--color-border);
     overflow: hidden;
@@ -809,6 +591,59 @@ defineProps<{ vm: JobProtocolViewModel }>()
     padding: 1rem 1.5rem;
     background: rgba(255, 255, 255, 0.02);
     border-bottom: 1px solid var(--color-border);
+    min-width: 0;
+}
+
+.pass-detail-tabs {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    padding: 0.6rem 1.5rem 0;
+    border-bottom: 1px solid var(--color-border);
+    background: rgba(255, 255, 255, 0.015);
+}
+
+.pass-detail-tab {
+    appearance: none;
+    background: transparent;
+    border: none;
+    color: var(--color-text-muted);
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    padding: 0.45rem 0.85rem;
+    border-radius: 8px 8px 0 0;
+    font: inherit;
+    font-size: 0.78rem;
+    font-weight: 600;
+    letter-spacing: 0.03em;
+    text-transform: uppercase;
+    cursor: pointer;
+    border-bottom: 2px solid transparent;
+    transition: color 0.15s, border-color 0.15s, background 0.15s;
+}
+
+.pass-detail-tab:hover {
+    color: var(--color-text);
+}
+
+.pass-detail-tab.is-active {
+    color: var(--color-accent);
+    border-bottom-color: var(--color-accent);
+    background: rgba(34, 211, 238, 0.06);
+}
+
+.pass-detail-tab-count {
+    font-size: 0.7rem;
+    font-weight: 500;
+    color: var(--color-text-muted);
+    letter-spacing: 0;
+    text-transform: none;
+}
+
+.diff-section {
+    padding: 1.25rem 1.5rem 1.5rem;
+    overflow: hidden;
     min-width: 0;
 }
 
@@ -835,7 +670,7 @@ defineProps<{ vm: JobProtocolViewModel }>()
     display: inline-flex;
     align-items: center;
     padding: 0.2rem 0.65rem;
-    border-radius: 999px;
+    border-radius: var(--radius-pill);
     font-size: 0.72rem;
     font-weight: 700;
     line-height: 1.2;
@@ -1093,7 +928,7 @@ defineProps<{ vm: JobProtocolViewModel }>()
     flex-direction: column;
     gap: 0.35rem;
     padding: 0.75rem 0.85rem;
-    border-radius: 12px;
+    border-radius: var(--radius-lg);
     background: rgba(255, 255, 255, 0.025);
     border: 1px solid rgba(255, 255, 255, 0.04);
     min-width: 0;
@@ -1216,7 +1051,7 @@ defineProps<{ vm: JobProtocolViewModel }>()
     min-width: 0;
     max-width: 100%;
     padding: 0.16rem 0.5rem;
-    border-radius: 999px;
+    border-radius: var(--radius-pill);
     background: rgba(255, 255, 255, 0.06);
     color: var(--color-text-muted);
     font-size: 0.76rem;
@@ -1277,7 +1112,7 @@ defineProps<{ vm: JobProtocolViewModel }>()
 .status-badge {
     display: inline-block;
     padding: 0.15rem 0.6rem;
-    border-radius: 9999px;
+    border-radius: var(--radius-pill);
     font-size: 0.75rem;
     font-weight: 600;
     text-transform: capitalize;
@@ -1313,7 +1148,7 @@ defineProps<{ vm: JobProtocolViewModel }>()
     display: inline-flex;
     align-items: center;
     padding: 0.18rem 0.58rem;
-    border-radius: 999px;
+    border-radius: var(--radius-pill);
     font-size: 0.68rem;
     font-weight: 700;
     text-transform: uppercase;
@@ -1334,7 +1169,7 @@ defineProps<{ vm: JobProtocolViewModel }>()
     display: inline-flex;
     align-items: center;
     padding: 0.12rem 0.48rem;
-    border-radius: 999px;
+    border-radius: var(--radius-pill);
     background: rgba(168, 85, 247, 0.14);
     color: #e9d5ff;
     font-size: 0.68rem;
@@ -1350,7 +1185,7 @@ defineProps<{ vm: JobProtocolViewModel }>()
     border: 1px solid rgba(168, 85, 247, 0.18);
     background: rgba(168, 85, 247, 0.14);
     color: #d8b4fe;
-    border-radius: 999px;
+    border-radius: var(--radius-pill);
     padding: 0.14rem 0.48rem 0.14rem 0.22rem;
     cursor: pointer;
     font: inherit;
@@ -1364,7 +1199,7 @@ defineProps<{ vm: JobProtocolViewModel }>()
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    border-radius: 999px;
+    border-radius: var(--radius-pill);
     background: rgba(255, 255, 255, 0.08);
     flex: 0 0 auto;
 }
@@ -1407,7 +1242,7 @@ defineProps<{ vm: JobProtocolViewModel }>()
     width: 0.78rem;
     height: 1.5px;
     background: rgba(34, 211, 238, 0.42);
-    border-radius: 999px;
+    border-radius: var(--radius-pill);
 }
 
 .event-child-rail::after {
@@ -1417,7 +1252,7 @@ defineProps<{ vm: JobProtocolViewModel }>()
     top: 1.05rem;
     width: 0.34rem;
     height: 0.34rem;
-    border-radius: 999px;
+    border-radius: var(--radius-pill);
     background: rgba(34, 211, 238, 0.78);
     box-shadow: 0 0 0 0.18rem rgba(34, 211, 238, 0.12);
 }

@@ -78,7 +78,7 @@ defineProps<{
 .synthesis-comment {
     background: var(--color-bg);
     border: 1px solid var(--color-border);
-    border-radius: 8px;
+    border-radius: var(--radius-md);
     padding: 1.5rem;
     display: flex;
     flex-direction: column;
@@ -145,7 +145,7 @@ defineProps<{
     padding: 0.15rem 0.6rem;
     font-size: 0.75rem;
     border: 1px solid var(--color-border);
-    border-radius: 4px;
+    border-radius: var(--radius-xs);
     background: rgba(255, 255, 255, 0.05);
     color: var(--color-text-muted);
     cursor: pointer;
@@ -186,7 +186,7 @@ defineProps<{
 .markdown-content :deep(code) {
     background: rgba(255, 255, 255, 0.1);
     padding: 0.1rem 0.3rem;
-    border-radius: 4px;
+    border-radius: var(--radius-xs);
     font-family: monospace;
 }
 
@@ -194,7 +194,7 @@ defineProps<{
     background: var(--color-bg);
     border: 1px solid var(--color-border);
     padding: 1rem;
-    border-radius: 8px;
+    border-radius: var(--radius-md);
     overflow-x: auto;
     margin-bottom: 1rem;
 }

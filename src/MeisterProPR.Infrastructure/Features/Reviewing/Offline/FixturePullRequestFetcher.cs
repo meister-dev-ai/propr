@@ -91,4 +91,30 @@ public sealed class FixturePullRequestFetcher(IReviewEvaluationFixtureAccessor f
 
         return Task.FromResult(pullRequest);
     }
+
+    public async Task<ChangedFile?> FetchFileDiffAsync(
+        string organizationUrl,
+        string projectId,
+        string repositoryId,
+        int pullRequestId,
+        int iterationId,
+        string filePath,
+        int? compareToIterationId = null,
+        Guid? clientId = null,
+        CancellationToken cancellationToken = default)
+    {
+        var pr = await this.FetchAsync(
+            organizationUrl,
+            projectId,
+            repositoryId,
+            pullRequestId,
+            iterationId,
+            compareToIterationId,
+            clientId,
+            cancellationToken);
+
+        return pr.ChangedFiles.FirstOrDefault(file =>
+            string.Equals(file.Path, filePath, StringComparison.Ordinal)
+            || string.Equals(file.OriginalPath, filePath, StringComparison.Ordinal));
+    }
 }

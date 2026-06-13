@@ -1,7 +1,8 @@
 // Copyright (c) Andreas Rain.
-// Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
+// Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license information.
 
 using MeisterProPR.Application.Features.Reviewing.Diagnostics.Ports;
+using MeisterProPR.Application.Features.Reviewing.Diagnostics.Queries.GetFileDiff;
 using MeisterProPR.Application.Features.Reviewing.Diagnostics.Queries.GetReviewJobProtocol;
 using MeisterProPR.Application.Interfaces;
 using MeisterProPR.Infrastructure.Data;
@@ -31,6 +32,7 @@ public static class ReviewingDiagnosticsServiceCollectionExtensions
                 : new EfReviewDiagnosticsReader(jobRepository, dbContextFactory);
         });
         services.AddScoped<GetReviewJobProtocolHandler>();
+        services.AddScoped<GetFileDiffHandler>();
 
         return services;
     }

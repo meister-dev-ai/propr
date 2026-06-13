@@ -326,7 +326,7 @@ defineProps<{ vm: JobProtocolViewModel }>()
 .content-block {
     background: var(--color-bg);
     border: 1px solid var(--color-border);
-    border-radius: 8px;
+    border-radius: var(--radius-md);
     padding: 1rem;
     font-size: 0.85rem;
     overflow-x: auto;
@@ -374,7 +374,7 @@ defineProps<{ vm: JobProtocolViewModel }>()
 .json-content {
     background: var(--color-bg);
     border: 1px solid var(--color-border);
-    border-radius: 6px;
+    border-radius: var(--radius-sm);
     padding: 0.75rem;
     margin: 0;
     white-space: pre-wrap;
@@ -411,7 +411,7 @@ defineProps<{ vm: JobProtocolViewModel }>()
     font-family: var(--font-mono, monospace);
     background: rgba(255, 255, 255, 0.05);
     padding: 0.1rem 0.4rem;
-    border-radius: 4px;
+    border-radius: var(--radius-xs);
     font-size: 0.8rem;
 }
 
@@ -425,7 +425,7 @@ defineProps<{ vm: JobProtocolViewModel }>()
 .memory-comment-row {
     background: rgba(255, 255, 255, 0.025);
     border: 1px solid var(--color-border);
-    border-radius: 8px;
+    border-radius: var(--radius-md);
     padding: 0.6rem 0.875rem;
     display: flex;
     flex-direction: column;
@@ -467,7 +467,7 @@ defineProps<{ vm: JobProtocolViewModel }>()
     display: inline-flex;
     align-items: center;
     padding: 0.1rem 0.5rem;
-    border-radius: 9999px;
+    border-radius: var(--radius-pill);
     font-size: 0.68rem;
     font-weight: 700;
     letter-spacing: 0.04em;
@@ -507,7 +507,7 @@ defineProps<{ vm: JobProtocolViewModel }>()
     align-items: flex-start;
     margin-bottom: 0.75rem;
     padding: 0.65rem 0.8rem;
-    border-radius: 8px;
+    border-radius: var(--radius-md);
     border: 1px solid rgba(59, 130, 246, 0.22);
     background: rgba(59, 130, 246, 0.08);
     color: var(--color-text-muted);
@@ -525,7 +525,7 @@ defineProps<{ vm: JobProtocolViewModel }>()
     margin-bottom: 1rem;
     padding: 1rem;
     border: 1px solid var(--color-border);
-    border-radius: 12px;
+    border-radius: var(--radius-lg);
     background: rgba(255, 255, 255, 0.02);
 }
 
@@ -553,7 +553,7 @@ defineProps<{ vm: JobProtocolViewModel }>()
     display: inline-flex;
     align-items: center;
     padding: 0.2rem 0.55rem;
-    border-radius: 9999px;
+    border-radius: var(--radius-pill);
     background: rgba(34, 211, 238, 0.12);
     color: var(--color-accent);
     font-size: 0.75rem;
@@ -644,7 +644,7 @@ defineProps<{ vm: JobProtocolViewModel }>()
     border: 1px solid var(--color-border);
     background: rgba(255, 255, 255, 0.03);
     color: var(--color-text);
-    border-radius: 8px;
+    border-radius: var(--radius-md);
     padding: 0.35rem 0.7rem;
     font-size: 0.8rem;
     cursor: pointer;
@@ -665,7 +665,7 @@ defineProps<{ vm: JobProtocolViewModel }>()
 
 .tool-phase-occurrence-item {
     padding: 0.75rem 0.85rem;
-    border-radius: 8px;
+    border-radius: var(--radius-md);
     background: rgba(255, 255, 255, 0.025);
     border: 1px solid rgba(255, 255, 255, 0.035);
 }

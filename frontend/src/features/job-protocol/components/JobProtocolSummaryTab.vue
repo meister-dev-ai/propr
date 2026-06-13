@@ -272,7 +272,7 @@ const severities = ['error', 'warning', 'info', 'suggestion']
     cursor: pointer;
     width: 100%;
     transition: all 0.1s ease;
-    border-radius: 4px;
+    border-radius: var(--radius-xs);
     z-index: 2;
     margin: 1px 0;
 }
@@ -315,7 +315,7 @@ const severities = ['error', 'warning', 'info', 'suggestion']
     padding: 0.2rem 0.5rem;
     cursor: pointer;
     width: 100%;
-    border-radius: 4px;
+    border-radius: var(--radius-xs);
     transition: all 0.1s ease;
     margin: 1px 0;
     z-index: 2;
@@ -377,7 +377,7 @@ const severities = ['error', 'warning', 'info', 'suggestion']
 
 .protocol-content {
     background: var(--color-surface);
-    border-radius: 12px;
+    border-radius: var(--radius-lg);
     padding: 0;
     border: 1px solid var(--color-border);
     overflow: hidden;
@@ -396,7 +396,7 @@ const severities = ['error', 'warning', 'info', 'suggestion']
     background: rgba(139, 92, 246, 0.1);
     border: 1px solid rgba(139, 92, 246, 0.3);
     padding: 1rem 1.25rem;
-    border-radius: 8px;
+    border-radius: var(--radius-md);
     margin: 1.5rem 2rem;
 }
 
@@ -520,7 +520,7 @@ const severities = ['error', 'warning', 'info', 'suggestion']
     align-items: center;
     gap: 0.5rem;
     padding: 0.35rem 0.85rem;
-    border-radius: 8px;
+    border-radius: var(--radius-md);
     font-size: 0.85rem;
     font-weight: 600;
     text-transform: capitalize;
@@ -572,7 +572,7 @@ const severities = ['error', 'warning', 'info', 'suggestion']
 .comment-search-input {
     background: rgba(255, 255, 255, 0.05);
     border: 1px solid var(--color-border);
-    border-radius: 6px;
+    border-radius: var(--radius-sm);
     padding: 0.35rem 0.75rem;
     color: var(--color-text);
     font-size: 0.85rem;
@@ -593,7 +593,7 @@ const severities = ['error', 'warning', 'info', 'suggestion']
 
 .severity-pill {
     padding: 0.35rem 0.85rem;
-    border-radius: 8px;
+    border-radius: var(--radius-md);
     font-size: 0.85rem;
     font-weight: 600;
     cursor: pointer;
@@ -623,7 +623,7 @@ const severities = ['error', 'warning', 'info', 'suggestion']
     display: flex;
     justify-content: center;
     border: 1px dashed var(--color-border);
-    border-radius: 12px;
+    border-radius: var(--radius-lg);
     background: rgba(255, 255, 255, 0.02);
 }
 

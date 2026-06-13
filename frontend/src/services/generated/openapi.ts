@@ -5137,6 +5137,136 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/reviewing/jobs/{jobId}/files/{fileResultId}/diff": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Returns the unified diff that was reviewed for a single file result on a review job. The diff is re-fetched on demand from the source control provider using the job's stored coordinates. */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    /** @description The review job identifier. */
+                    jobId: string;
+                    /** @description The file result identifier whose diff should be returned. */
+                    fileResultId: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description File diff (or availability) returned. */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["FileDiffDto"];
+                        "application/json": components["schemas"]["FileDiffDto"];
+                        "text/json": components["schemas"]["FileDiffDto"];
+                    };
+                };
+                /** @description Missing or invalid credentials. */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Job or file result not found. */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/jobs/{jobId}/files/{fileResultId}/diff": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Returns the unified diff that was reviewed for a single file result on a review job. The diff is re-fetched on demand from the source control provider using the job's stored coordinates. */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    /** @description The review job identifier. */
+                    jobId: string;
+                    /** @description The file result identifier whose diff should be returned. */
+                    fileResultId: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description File diff (or availability) returned. */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["FileDiffDto"];
+                        "application/json": components["schemas"]["FileDiffDto"];
+                        "text/json": components["schemas"]["FileDiffDto"];
+                    };
+                };
+                /** @description Missing or invalid credentials. */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Job or file result not found. */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/clients/{clientId}/reviewing/pr-view": {
         parameters: {
             query?: never;
@@ -11314,6 +11444,23 @@ export interface components {
              * @description Comparison group identifier when this job participates in one.
              */
             comparisonGroupId?: string | null;
+        };
+        /** @description Carries the unified diff for a single file that was reviewed in a review job. The diff is re-fetched on demand from the source control provider. */
+        FileDiffDto: {
+            /** @description Repository-relative path of the file. */
+            filePath?: string | null;
+            /** @description The unified diff content (empty when the file is binary or unavailable). */
+            unifiedDiff?: string | null;
+            /** @description Type of change: Added, Modified, Deleted, Renamed, Copied, or Unknown. */
+            changeType?: string | null;
+            /** @description True when the file is binary and the diff cannot be rendered. */
+            isBinary?: boolean;
+            /** @description Previous path if the file was renamed; null otherwise. */
+            originalPath?: string | null;
+            /** @description Indicates whether the diff is renderable: Available, Binary, NotFound, or ProviderUnavailable. */
+            availability?: string | null;
+            /** @description Human-readable explanation when the diff is not available. */
+            availabilityMessage?: string | null;
         };
         /** @description Carries protocol data for a single review job execution attempt. */
         ReviewJobProtocolDto: {

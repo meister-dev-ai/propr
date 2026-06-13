@@ -7591,6 +7591,190 @@
         }
       }
     },
+    "/reviewing/jobs/{jobId}/files/{fileResultId}/diff": {
+      "get": {
+        "tags": [
+          "Jobs"
+        ],
+        "summary": "Returns the unified diff that was reviewed for a single file result on a review job. The diff is re-fetched on demand from the source control provider using the job's stored coordinates.",
+        "parameters": [
+          {
+            "name": "jobId",
+            "in": "path",
+            "description": "The review job identifier.",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "fileResultId",
+            "in": "path",
+            "description": "The file result identifier whose diff should be returned.",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "File diff (or availability) returned.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/FileDiffDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FileDiffDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FileDiffDto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid credentials.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Job or file result not found.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/jobs/{jobId}/files/{fileResultId}/diff": {
+      "get": {
+        "tags": [
+          "Jobs"
+        ],
+        "summary": "Returns the unified diff that was reviewed for a single file result on a review job. The diff is re-fetched on demand from the source control provider using the job's stored coordinates.",
+        "parameters": [
+          {
+            "name": "jobId",
+            "in": "path",
+            "description": "The review job identifier.",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "fileResultId",
+            "in": "path",
+            "description": "The file result identifier whose diff should be returned.",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "File diff (or availability) returned.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/FileDiffDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FileDiffDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FileDiffDto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid credentials.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Job or file result not found.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/clients/{clientId}/reviewing/pr-view": {
       "get": {
         "tags": [
@@ -18633,6 +18817,47 @@
         },
         "additionalProperties": false,
         "description": "Response returned when a review job is accepted or a duplicate is found."
+      },
+      "FileDiffDto": {
+        "type": "object",
+        "properties": {
+          "filePath": {
+            "type": "string",
+            "description": "Repository-relative path of the file.",
+            "nullable": true
+          },
+          "unifiedDiff": {
+            "type": "string",
+            "description": "The unified diff content (empty when the file is binary or unavailable).",
+            "nullable": true
+          },
+          "changeType": {
+            "type": "string",
+            "description": "Type of change: Added, Modified, Deleted, Renamed, Copied, or Unknown.",
+            "nullable": true
+          },
+          "isBinary": {
+            "type": "boolean",
+            "description": "True when the file is binary and the diff cannot be rendered."
+          },
+          "originalPath": {
+            "type": "string",
+            "description": "Previous path if the file was renamed; null otherwise.",
+            "nullable": true
+          },
+          "availability": {
+            "type": "string",
+            "description": "Indicates whether the diff is renderable: Available, Binary, NotFound, or ProviderUnavailable.",
+            "nullable": true
+          },
+          "availabilityMessage": {
+            "type": "string",
+            "description": "Human-readable explanation when the diff is not available.",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false,
+        "description": "Carries the unified diff for a single file that was reviewed in a review job. The diff is re-fetched on demand from the source control provider."
       },
       "ReviewJobProtocolDto": {
         "type": "object",

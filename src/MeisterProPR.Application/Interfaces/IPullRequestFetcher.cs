@@ -60,4 +60,32 @@ public interface IPullRequestFetcher
         CancellationToken cancellationToken = default,
         ReviewRevision? compareToReviewRevision = null,
         IReviewRepositoryWorkspace? workspace = null);
+
+    /// <summary>
+    ///     Fetches the diff for a single file within a pull request, avoiding the cost of a full PR fetch.
+    ///     Returns <c>null</c> when the file is not part of the pull request's changed files.
+    /// </summary>
+    /// <param name="organizationUrl">The URL of the organization.</param>
+    /// <param name="projectId">The ID of the project.</param>
+    /// <param name="repositoryId">The ID of the repository.</param>
+    /// <param name="pullRequestId">The ID of the pull request.</param>
+    /// <param name="iterationId">The ID of the iteration.</param>
+    /// <param name="filePath">The repository-relative path of the file to fetch.</param>
+    /// <param name="compareToIterationId">
+    ///     When provided, the file is resolved against the delta between this iteration and
+    ///     <paramref name="iterationId" />.
+    /// </param>
+    /// <param name="clientId">Optional client ID for credential retrieval.</param>
+    /// <param name="cancellationToken">A token to monitor for cancellation requests.</param>
+    /// <returns>A task that represents the asynchronous operation, containing the changed file or <c>null</c>.</returns>
+    Task<ChangedFile?> FetchFileDiffAsync(
+        string organizationUrl,
+        string projectId,
+        string repositoryId,
+        int pullRequestId,
+        int iterationId,
+        string filePath,
+        int? compareToIterationId = null,
+        Guid? clientId = null,
+        CancellationToken cancellationToken = default);
 }

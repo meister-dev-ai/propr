@@ -128,7 +128,7 @@ const severities = ['error', 'warning', 'info', 'suggestion']
     align-items: center;
     gap: 0.5rem;
     padding: 0.35rem 0.85rem;
-    border-radius: 8px;
+    border-radius: var(--radius-md);
     font-size: 0.85rem;
     font-weight: 600;
     text-transform: capitalize;
@@ -166,7 +166,7 @@ const severities = ['error', 'warning', 'info', 'suggestion']
 .comment-search-input {
     background: rgba(255, 255, 255, 0.05);
     border: 1px solid var(--color-border);
-    border-radius: 6px;
+    border-radius: var(--radius-sm);
     padding: 0.35rem 0.75rem;
     color: var(--color-text);
     font-size: 0.85rem;
@@ -187,7 +187,7 @@ const severities = ['error', 'warning', 'info', 'suggestion']
 
 .severity-pill {
     padding: 0.35rem 0.85rem;
-    border-radius: 8px;
+    border-radius: var(--radius-md);
     font-size: 0.85rem;
     font-weight: 600;
     cursor: pointer;
@@ -214,7 +214,7 @@ const severities = ['error', 'warning', 'info', 'suggestion']
 
 .summary-details {
     background: rgba(255, 255, 255, 0.02);
-    border-radius: 12px;
+    border-radius: var(--radius-lg);
     border: 1px solid var(--color-border);
     margin-bottom: 2rem;
 }
@@ -267,7 +267,7 @@ const severities = ['error', 'warning', 'info', 'suggestion']
 .markdown-content :deep(code) {
     background: rgba(255, 255, 255, 0.1);
     padding: 0.1rem 0.3rem;
-    border-radius: 4px;
+    border-radius: var(--radius-xs);
     font-family: monospace;
 }
 
@@ -275,7 +275,7 @@ const severities = ['error', 'warning', 'info', 'suggestion']
     background: var(--color-bg);
     border: 1px solid var(--color-border);
     padding: 1rem;
-    border-radius: 8px;
+    border-radius: var(--radius-md);
     overflow-x: auto;
     margin-bottom: 1rem;
 }

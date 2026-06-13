@@ -34,25 +34,7 @@
 
             <JobProtocolSummaryTab v-if="vm.activeTab === 'summary'" :vm="vm" />
             <JobProtocolTraceTab v-else-if="vm.activeTab === 'traces'" :vm="vm" />
-
-            <div v-if="vm.activeTab === 'tokens'" class="tokens-tab-view">
-                <section class="section-card">
-                    <div class="section-card-header">
-                        <h3 class="section-title">Token Usage by Tier</h3>
-                    </div>
-                    <div class="section-inner">
-                        <p class="section-description">
-                            Breakdown of token consumption across administrative, memory, and review tiers.
-                        </p>
-                        <TokenBreakdownTable
-                            v-if="vm.protocolTokenBreakdown.length > 0 || vm.jobDetail"
-                            :breakdown="vm.protocolTokenBreakdown"
-                            :breakdown-consistent="vm.protocolBreakdownConsistent"
-                        />
-                        <p v-else class="empty-state">No detailed token breakdown available for this job.</p>
-                    </div>
-                </section>
-            </div>
+            <JobProtocolTokensTab v-else-if="vm.activeTab === 'tokens'" :vm="vm" />
 
             <JobProtocolEventModal :vm="vm" />
             <JobProtocolSummaryModal :vm="vm" />
@@ -69,10 +51,10 @@
 <script setup lang="ts">
 import { RouterLink } from 'vue-router'
 import { AppTopBar } from '@/components'
-import TokenBreakdownTable from '@/components/TokenBreakdownTable.vue'
 import JobProtocolEventModal from '@/features/job-protocol/components/JobProtocolEventModal.vue'
 import JobProtocolSummaryModal from '@/features/job-protocol/components/JobProtocolSummaryModal.vue'
 import JobProtocolSummaryTab from '@/features/job-protocol/components/JobProtocolSummaryTab.vue'
+import JobProtocolTokensTab from '@/features/job-protocol/components/JobProtocolTokensTab.vue'
 import JobProtocolTraceTab from '@/features/job-protocol/components/JobProtocolTraceTab.vue'
 import { useJobProtocolViewModel } from '@/features/job-protocol/composables/useJobProtocolViewModel'
 
@@ -103,7 +85,7 @@ const vm = useJobProtocolViewModel()
     padding: 1.5rem;
     background: var(--color-surface);
     border: 1px solid var(--color-border);
-    border-radius: 12px;
+    border-radius: var(--radius-lg);
 }
 
 .stat-pill {
@@ -133,22 +115,6 @@ const vm = useJobProtocolViewModel()
     text-overflow: ellipsis;
 }
 
-.tokens-tab-view {
-    padding: 2rem;
-    max-width: 60rem;
-    margin: 0 auto;
-}
-
-.section-inner {
-    padding: 1.5rem;
-}
-
-.section-description {
-    color: var(--color-text-muted);
-    font-size: 0.9rem;
-    margin-bottom: 1.5rem;
-}
-
 .compact-stats {
     margin-bottom: 1.5rem !important;
 }
@@ -158,7 +124,7 @@ const vm = useJobProtocolViewModel()
     bottom: 1.5rem;
     right: 1.5rem;
     padding: 0.75rem 1.25rem;
-    border-radius: 8px;
+    border-radius: var(--radius-md);
     background: var(--color-surface);
     border: 1px solid var(--color-border);
     color: var(--color-text);

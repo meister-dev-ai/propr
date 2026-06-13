@@ -63,6 +63,35 @@ internal sealed class ProviderPullRequestFetcher(
             workspace);
     }
 
+    public async Task<ChangedFile?> FetchFileDiffAsync(
+        string organizationUrl,
+        string projectId,
+        string repositoryId,
+        int pullRequestId,
+        int iterationId,
+        string filePath,
+        int? compareToIterationId = null,
+        Guid? clientId = null,
+        CancellationToken cancellationToken = default)
+    {
+        var provider = await this.ResolveProviderAsync(organizationUrl, clientId, cancellationToken);
+        if (!this._providerFetchersByProvider.TryGetValue(provider, out var fetcher))
+        {
+            throw new InvalidOperationException($"No pull-request fetcher is registered for provider {provider}.");
+        }
+
+        return await fetcher.FetchFileDiffAsync(
+            organizationUrl,
+            projectId,
+            repositoryId,
+            pullRequestId,
+            iterationId,
+            filePath,
+            compareToIterationId,
+            clientId,
+            cancellationToken);
+    }
+
     private async Task<ScmProvider> ResolveProviderAsync(string organizationUrl, Guid? clientId, CancellationToken ct)
     {
         return await ProviderResolutionUtilities.ResolveProviderAsync(

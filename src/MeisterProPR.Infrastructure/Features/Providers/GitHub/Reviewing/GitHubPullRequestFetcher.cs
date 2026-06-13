@@ -101,6 +101,61 @@ internal sealed class GitHubPullRequestFetcher(
             AuthorizedIdentityName: context.AuthenticatedActorLogin);
     }
 
+    public async Task<ChangedFile?> FetchFileDiffAsync(
+        string organizationUrl,
+        string projectId,
+        string repositoryId,
+        int pullRequestId,
+        int iterationId,
+        string filePath,
+        int? compareToIterationId = null,
+        Guid? clientId = null,
+        CancellationToken cancellationToken = default)
+    {
+        if (!clientId.HasValue)
+        {
+            throw new InvalidOperationException("GitHub pull-request fetches require a client identifier.");
+        }
+
+        var host = new ProviderHostRef(ScmProvider.GitHub, organizationUrl);
+        var context = await connectionVerifier.VerifyAsync(clientId.Value, host, cancellationToken);
+        var repositoryPath = await this.ResolveRepositoryPathAsync(context, host, repositoryId, cancellationToken);
+        var pullRequest = await this.GetPullRequestAsync(
+            context,
+            host,
+            repositoryPath,
+            pullRequestId,
+            cancellationToken);
+
+        var headSha = pullRequest.Head?.Sha ?? string.Empty;
+        var baseSha = pullRequest.Base?.Sha ?? string.Empty;
+        var path = NormalizePath(filePath) ?? filePath;
+        var isBinary = BinaryFileDetector.IsBinary(path);
+
+        if (isBinary)
+        {
+            return new ChangedFile(path, ChangeType.Edit, string.Empty, string.Empty, true);
+        }
+
+        var headContent = await this.TryReadFileAsync(context, host, repositoryPath, path, headSha, cancellationToken);
+        var baseContent = await this.TryReadFileAsync(context, host, repositoryPath, path, baseSha, cancellationToken);
+
+        if (headContent is null && baseContent is null)
+        {
+            return null;
+        }
+
+        var changeType = baseContent is null
+            ? ChangeType.Add
+            : headContent is null
+                ? ChangeType.Delete
+                : ChangeType.Edit;
+
+        var diff = UnifiedDiffBuilder.Build(baseContent ?? string.Empty, headContent ?? string.Empty);
+
+        return new ChangedFile(path, changeType, headContent ?? string.Empty, diff, false);
+    }
+
     private async Task<IReadOnlyList<GitHubPullRequestFileResponse>?> TryGetDeltaFilesAsync(
         GitHubConnectionVerifier.GitHubConnectionContext context,
         ProviderHostRef host,

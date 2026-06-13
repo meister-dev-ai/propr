@@ -96,6 +96,59 @@ internal sealed class GitLabPullRequestFetcher(
             AuthorizedIdentityName: context.AuthenticatedUsername);
     }
 
+    public async Task<ChangedFile?> FetchFileDiffAsync(
+        string organizationUrl,
+        string projectId,
+        string repositoryId,
+        int pullRequestId,
+        int iterationId,
+        string filePath,
+        int? compareToIterationId = null,
+        Guid? clientId = null,
+        CancellationToken cancellationToken = default)
+    {
+        if (!clientId.HasValue)
+        {
+            throw new InvalidOperationException("GitLab pull-request fetches require a client identifier.");
+        }
+
+        var host = new ProviderHostRef(ScmProvider.GitLab, organizationUrl);
+        var context = await connectionVerifier.VerifyAsync(clientId.Value, host, cancellationToken);
+        var mergeRequest = await this.GetMergeRequestAsync(
+            context,
+            host,
+            repositoryId,
+            pullRequestId,
+            cancellationToken);
+
+        var revision = BuildRevision(mergeRequest);
+        var path = NormalizePath(filePath) ?? filePath;
+        var isBinary = BinaryFileDetector.IsBinary(path);
+
+        if (isBinary)
+        {
+            return new ChangedFile(path, ChangeType.Edit, string.Empty, string.Empty, true);
+        }
+
+        var headContent = await this.TryReadFileAsync(context, host, repositoryId, path, revision.HeadSha, cancellationToken);
+        var baseContent = await this.TryReadFileAsync(context, host, repositoryId, path, revision.BaseSha, cancellationToken);
+
+        if (headContent is null && baseContent is null)
+        {
+            return null;
+        }
+
+        var changeType = baseContent is null
+            ? ChangeType.Add
+            : headContent is null
+                ? ChangeType.Delete
+                : ChangeType.Edit;
+
+        var diff = UnifiedDiffBuilder.Build(baseContent ?? string.Empty, headContent ?? string.Empty);
+
+        return new ChangedFile(path, changeType, headContent ?? string.Empty, diff, false);
+    }
+
     private async Task<IReadOnlyList<GitLabMergeRequestChangeResponse>?> TryGetDeltaChangesAsync(
         GitLabConnectionVerifier.GitLabConnectionContext context,
         ProviderHostRef host,

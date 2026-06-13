@@ -6,6 +6,7 @@ using MeisterProPR.Api.Extensions;
 using MeisterProPR.Api.Features.Reviewing.Contracts;
 using MeisterProPR.Application.DTOs;
 using MeisterProPR.Application.Features.Reviewing.Diagnostics.Ports;
+using MeisterProPR.Application.Features.Reviewing.Diagnostics.Queries.GetFileDiff;
 using MeisterProPR.Application.Features.Reviewing.Diagnostics.Queries.GetReviewJobProtocol;
 using MeisterProPR.Application.Interfaces;
 using MeisterProPR.Domain.Enums;
@@ -19,7 +20,8 @@ namespace MeisterProPR.Api.Controllers;
 public sealed class JobsController(
     IJobRepository jobRepository,
     IThreadMemoryRepository memoryRepository,
-    GetReviewJobProtocolHandler getReviewJobProtocolHandler) : ControllerBase
+    GetReviewJobProtocolHandler getReviewJobProtocolHandler,
+    GetFileDiffHandler getFileDiffHandler) : ControllerBase
 {
     /// <summary>
     ///     Returns all review jobs across all clients, newest first.
@@ -318,6 +320,59 @@ public sealed class JobsController(
 
         var protocolPass = await diagnosticsReader.GetJobProtocolPassAsync(id, protocolId, cancellationToken);
         return protocolPass is null ? this.NotFound() : this.Ok(protocolPass);
+    }
+
+    /// <summary>
+    ///     Returns the unified diff that was reviewed for a single file result on a review job.
+    ///     The diff is re-fetched on demand from the source control provider using the job's stored coordinates.
+    /// </summary>
+    /// <param name="jobId">The review job identifier.</param>
+    /// <param name="fileResultId">The file result identifier whose diff should be returned.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>
+    ///     A <see cref="FileDiffDto" /> describing the diff and its availability, or a 404 if the job
+    ///     or file result cannot be located.
+    /// </returns>
+    /// <response code="200">File diff (or availability) returned.</response>
+    /// <response code="401">Missing or invalid credentials.</response>
+    /// <response code="404">Job or file result not found.</response>
+    [HttpGet("/reviewing/jobs/{jobId:guid}/files/{fileResultId:guid}/diff")]
+    [HttpGet("/jobs/{jobId:guid}/files/{fileResultId:guid}/diff")]
+    [ProducesResponseType(typeof(FileDiffDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> GetFileDiff(
+        Guid jobId,
+        Guid fileResultId,
+        CancellationToken cancellationToken = default)
+    {
+        var auth = AuthHelpers.RequireAuthenticated(this.HttpContext);
+        if (auth is not null)
+        {
+            return auth;
+        }
+
+        var job = jobRepository.GetById(jobId);
+        if (job is null)
+        {
+            return this.NotFound();
+        }
+
+        var roleCheck = AuthHelpers.RequireClientRole(this.HttpContext, job.ClientId, ClientRole.ClientUser);
+        if (roleCheck is not null)
+        {
+            return roleCheck;
+        }
+
+        var result = await getFileDiffHandler.HandleAsync(new GetFileDiffQuery(jobId, fileResultId), cancellationToken);
+
+        if (string.Equals(result.Availability, FileDiffAvailability.NotFound, StringComparison.Ordinal)
+            && string.IsNullOrEmpty(result.FilePath))
+        {
+            return this.NotFound();
+        }
+
+        return this.Ok(result);
     }
 
     /// <summary>
