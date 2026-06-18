@@ -30,6 +30,12 @@ public sealed partial class PrCrawlService
     private static partial void LogSkippedNoReviewChanges(ILogger logger, int prId, int iterationId);
 
     [LoggerMessage(
+        Level = LogLevel.Information,
+        Message =
+            "Skipping automatic re-review of PR #{PrId} iteration {IterationId} because a prior review failed at this revision and the pull request has not been updated. A manual restart is required.")]
+    private static partial void LogSkippedFailedAwaitingRestart(ILogger logger, int prId, int iterationId);
+
+    [LoggerMessage(
         Level = LogLevel.Debug,
         Message =
             "Re-evaluating PR #{PrId} iteration {IterationId} because reviewer-thread activity changed without a new code iteration")]

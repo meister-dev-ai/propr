@@ -209,9 +209,10 @@ public sealed class PrCrawlServiceTests
     }
 
     [Fact]
-    public async Task CrawlAsync_AssignedPrWithFailedJob_AddsNewJob()
+    public async Task CrawlAsync_AssignedPrWithFailedJobSameRevision_DoesNotAddJob()
     {
-        // Arrange: FindActiveJob returns null for Failed jobs (idempotency rule)
+        // Arrange: a prior review for this exact revision already failed. Auto-review must be suppressed
+        // (no looping on a deterministic failure) until new commits arrive or the user restarts manually.
         this._crawlConfigs.GetAllActiveAsync().ReturnsForAnyArgs([DefaultConfig]);
         var pr = MakePr(77);
         this._prFetcher.ListAssignedOpenReviewsAsync(DefaultConfig).ReturnsForAnyArgs([pr]);
@@ -221,13 +222,31 @@ public sealed class PrCrawlServiceTests
                 Arg.Any<string>(),
                 Arg.Any<int>(),
                 Arg.Any<int>())
-            .Returns((ReviewJob?)null); // null = no active job (Failed is excluded by repo)
+            .Returns((ReviewJob?)null);
+        this._jobs.FindFailedJob(
+                Arg.Any<string>(),
+                Arg.Any<string>(),
+                Arg.Any<string>(),
+                Arg.Any<int>(),
+                Arg.Any<int>())
+            .Returns(
+                new ReviewJob(
+                    Guid.NewGuid(),
+                    DefaultConfig.ClientId,
+                    DefaultConfig.ProviderScopePath,
+                    DefaultConfig.ProviderProjectKey,
+                    pr.Repository.ExternalRepositoryId,
+                    pr.CodeReview.Number,
+                    pr.RevisionId)
+                {
+                    Status = JobStatus.Failed,
+                });
 
         // Act
         await this._sut.CrawlAsync();
 
-        // Assert: a new job is created
-        await this._jobs.Received(1).AddAsync(Arg.Any<ReviewJob>());
+        // Assert: no new job is queued for the already-failed revision.
+        await this._jobs.DidNotReceive().AddAsync(Arg.Any<ReviewJob>());
     }
 
     [Fact]

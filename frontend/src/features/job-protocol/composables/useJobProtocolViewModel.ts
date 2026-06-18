@@ -5,6 +5,7 @@ import { computed, nextTick, onMounted, onUnmounted, reactive, ref, shallowRef, 
 import { useRoute } from 'vue-router'
 import { createAdminClient } from '@/services/api'
 import { createDismissal } from '@/services/findingDismissalsService'
+import { restartJob } from '@/services/jobsService'
 import { useFileDiff } from './useFileDiff'
 import { useTokenTotals } from './useTokenTotals'
 import { useTraceSearch } from './useTraceSearch'
@@ -111,6 +112,8 @@ export function useJobProtocolViewModel() {
     const modalPhaseGroupsPending = ref(false)
     const reviewStatus = ref<ReviewJobResultDto | null>(null)
     const jobDetail = ref<JobDetail | null>(null)
+    const jobStatus = ref<string | null>(null)
+    const restarting = ref(false)
     const collapsedFolders = ref<Set<string>>(new Set())
     const collapsedEventParents = ref<Set<string>>(new Set())
     const selectedCommentPath = ref<string | null>(null)
@@ -212,6 +215,30 @@ export function useJobProtocolViewModel() {
             const next = new Set(dismissingIds.value)
             next.delete(key)
             dismissingIds.value = next
+            setTimeout(() => {
+                dismissToast.value = null
+            }, 3000)
+        }
+    }
+
+    const canRestart = computed(() => jobStatus.value === 'failed')
+
+    async function restart() {
+        const jobId = route.params.id as string
+        if (!jobId || restarting.value || !canRestart.value) {
+            return
+        }
+
+        restarting.value = true
+        try {
+            await restartJob(jobId)
+            dismissToast.value = { message: 'Review restarted.', isError: false }
+            await loadProtocol(true)
+        } catch (err) {
+            const message = err instanceof Error ? err.message : 'Failed to restart review.'
+            dismissToast.value = { message, isError: true }
+        } finally {
+            restarting.value = false
             setTimeout(() => {
                 dismissToast.value = null
             }, 3000)
@@ -1189,6 +1216,7 @@ export function useJobProtocolViewModel() {
                 }
                 if (detailRes.data) {
                     const detail = detailRes.data
+                    jobStatus.value = detail.status ?? null
                     jobDetail.value = {
                         aiModel: detail.aiModel ?? null,
                         reviewTemperature: detail.reviewTemperature ?? null,
@@ -1440,6 +1468,10 @@ export function useJobProtocolViewModel() {
         modalPhaseGroupsPending,
         reviewStatus,
         jobDetail,
+        jobStatus,
+        canRestart,
+        restarting,
+        restart,
         collapsedFolders,
         collapsedEventParents,
         selectedCommentPath,

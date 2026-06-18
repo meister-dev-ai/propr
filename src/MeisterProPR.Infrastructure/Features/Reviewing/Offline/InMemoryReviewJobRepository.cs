@@ -110,6 +110,25 @@ public sealed class InMemoryReviewJobRepository : IJobRepository
             .FirstOrDefault();
     }
 
+    public ReviewJob? FindFailedJob(
+        string organizationUrl,
+        string projectId,
+        string repositoryId,
+        int pullRequestId,
+        int iterationId)
+    {
+        return this._jobs.Values
+            .Where(job =>
+                string.Equals(job.OrganizationUrl, organizationUrl, StringComparison.Ordinal)
+                && string.Equals(job.ProjectId, projectId, StringComparison.Ordinal)
+                && RepositoryMatches(job, repositoryId, projectId)
+                && job.PullRequestId == pullRequestId
+                && job.IterationId == iterationId
+                && job.Status == JobStatus.Failed)
+            .OrderByDescending(job => job.CompletedAt)
+            .FirstOrDefault();
+    }
+
     public IReadOnlyList<ReviewJob> GetAllForClient(Guid clientId)
     {
         return this._jobs.Values

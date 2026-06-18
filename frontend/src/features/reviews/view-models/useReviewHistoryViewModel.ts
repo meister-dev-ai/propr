@@ -3,7 +3,7 @@
 
 import { computed, onMounted, onUnmounted, ref, type ComputedRef, type Ref } from 'vue'
 import { useSession } from '@/composables/useSession'
-import { getJobProtocol, listJobs } from '@/services/jobsService'
+import { getJobProtocol, listJobs, restartJob } from '@/services/jobsService'
 import type { components } from '@/types'
 
 type JobListItem = components['schemas']['JobListItem']
@@ -30,6 +30,7 @@ export interface PrGroup {
 export interface ReviewHistoryService {
   listJobs: (clientId?: string) => Promise<{ items: JobListItem[] }>
   getJobProtocol: (jobId: string) => Promise<ReviewJobProtocolDto[]>
+  restartJob: (jobId: string) => Promise<void>
 }
 
 export interface ReviewHistoryViewModel {
@@ -53,6 +54,9 @@ export interface ReviewHistoryViewModel {
   refresh: () => Promise<void>
   visibleItems: (group: PrGroup) => JobListItem[]
   canInspectClient: (clientId: string | null | undefined) => boolean
+  restartingJobs: Ref<Set<string>>
+  restartError: Ref<string>
+  restartJob: (item: JobListItem) => Promise<void>
 }
 
 export interface UseReviewHistoryViewModelOptions {
@@ -79,11 +83,16 @@ async function defaultGetJobProtocol(jobId: string): Promise<ReviewJobProtocolDt
   return (await getJobProtocol(jobId)) as ReviewJobProtocolDto[]
 }
 
+async function defaultRestartJob(jobId: string): Promise<void> {
+  await restartJob(jobId)
+}
+
 export function useReviewHistoryViewModel(options: UseReviewHistoryViewModelOptions = {}): ReviewHistoryViewModel {
   const { hasClientRole } = useSession()
   const clientId = options.clientId
   const listJobsFn = options.reviewHistoryService?.listJobs ?? defaultListJobs
   const getJobProtocolFn = options.reviewHistoryService?.getJobProtocol ?? defaultGetJobProtocol
+  const restartJobFn = options.reviewHistoryService?.restartJob ?? defaultRestartJob
   const autoLoad = options.autoLoad ?? true
 
   const loading = ref(false)
@@ -94,6 +103,8 @@ export function useReviewHistoryViewModel(options: UseReviewHistoryViewModelOpti
   const isSummaryModalOpen = ref(false)
   const selectedSummary = ref('')
   const processingProtocols = ref<Record<string, ReviewJobProtocolDto[]>>({})
+  const restartingJobs = ref<Set<string>>(new Set())
+  const restartError = ref('')
 
   const totalPages = computed(() => Math.ceil(groups.value.length / ITEMS_PER_PAGE))
   const paginatedGroups = computed(() => {
@@ -192,6 +203,25 @@ export function useReviewHistoryViewModel(options: UseReviewHistoryViewModelOpti
     await loadJobs(true)
   }
 
+  async function restartJobAction(item: JobListItem) {
+    if (!item.id || item.status !== 'failed' || restartingJobs.value.has(item.id)) {
+      return
+    }
+
+    restartError.value = ''
+    restartingJobs.value = new Set(restartingJobs.value).add(item.id)
+    try {
+      await restartJobFn(item.id)
+      await loadJobs(false)
+    } catch (error) {
+      restartError.value = error instanceof Error ? error.message : 'Failed to restart review.'
+    } finally {
+      const next = new Set(restartingJobs.value)
+      next.delete(item.id)
+      restartingJobs.value = next
+    }
+  }
+
   function visibleItems(group: PrGroup): JobListItem[] {
     return expandedGroups.value.has(group.key)
       ? group.items
@@ -235,6 +265,9 @@ export function useReviewHistoryViewModel(options: UseReviewHistoryViewModelOpti
     refresh,
     visibleItems,
     canInspectClient,
+    restartingJobs,
+    restartError,
+    restartJob: restartJobAction,
   }
 }
 

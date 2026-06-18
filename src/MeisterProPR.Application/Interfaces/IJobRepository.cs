@@ -40,6 +40,18 @@ public interface IJobRepository
         int pullRequestId,
         int iterationId);
 
+    /// <summary>
+    ///     Returns the most-recent Failed job for the given PR iteration, or null.
+    ///     Used to suppress automatic re-enqueue of a review that already failed at the same revision,
+    ///     so that deterministic failures do not loop and require a manual restart instead.
+    /// </summary>
+    ReviewJob? FindFailedJob(
+        string organizationUrl,
+        string projectId,
+        string repositoryId,
+        int pullRequestId,
+        int iterationId);
+
     /// <summary>All jobs for a client, newest first.</summary>
     /// <param name="clientId">The client identifier to filter jobs by.</param>
     IReadOnlyList<ReviewJob> GetAllForClient(Guid clientId);

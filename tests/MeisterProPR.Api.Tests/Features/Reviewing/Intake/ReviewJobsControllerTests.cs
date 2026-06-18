@@ -3,10 +3,12 @@
 
 using MeisterProPR.Api.Features.Reviewing.Contracts;
 using MeisterProPR.Api.Features.Reviewing.Intake.Controllers;
+using MeisterProPR.Application.Features.Reviewing.Intake.Commands.RestartReviewJob;
 using MeisterProPR.Application.Features.Reviewing.Intake.Commands.SubmitReviewJob;
 using MeisterProPR.Application.Features.Reviewing.Intake.Dtos;
 using MeisterProPR.Application.Features.Reviewing.Intake.Ports;
 using MeisterProPR.Application.Features.Reviewing.Intake.Queries.GetReviewJobStatus;
+using MeisterProPR.Application.Interfaces;
 using MeisterProPR.Domain.Entities;
 using MeisterProPR.Domain.Enums;
 using MeisterProPR.Domain.ValueObjects;
@@ -314,19 +316,109 @@ public sealed class ReviewJobsControllerTests
         Assert.Equal("42", payload.CodeReview!.ExternalReviewId);
     }
 
+    [Fact]
+    public async Task RestartReview_WithoutAuthenticatedCaller_ReturnsUnauthorized()
+    {
+        var controller = CreateController(Substitute.For<IReviewJobIntakeStore>(), null, null);
+
+        var result = await controller.RestartReview(Guid.NewGuid(), CancellationToken.None);
+
+        var objectResult = Assert.IsType<ObjectResult>(result);
+        Assert.Equal(StatusCodes.Status401Unauthorized, objectResult.StatusCode);
+    }
+
+    [Fact]
+    public async Task RestartReview_WithoutClientRole_ReturnsForbidden()
+    {
+        var jobId = Guid.NewGuid();
+        var clientId = Guid.NewGuid();
+        var store = Substitute.For<IReviewJobIntakeStore>();
+        store.GetByIdAsync(jobId, Arg.Any<CancellationToken>())
+            .Returns(new ReviewJob(jobId, clientId, "https://dev.azure.com/org", "proj", "repo", 42, 1));
+        var controller = CreateController(store, null, null);
+        controller.HttpContext.Items["UserId"] = Guid.NewGuid().ToString();
+
+        var result = await controller.RestartReview(jobId, CancellationToken.None);
+
+        var objectResult = Assert.IsType<ObjectResult>(result);
+        Assert.Equal(StatusCodes.Status403Forbidden, objectResult.StatusCode);
+    }
+
+    [Fact]
+    public async Task RestartReview_NotFailedJob_ReturnsConflict()
+    {
+        var jobId = Guid.NewGuid();
+        var clientId = Guid.NewGuid();
+        var store = Substitute.For<IReviewJobIntakeStore>();
+        store.GetByIdAsync(jobId, Arg.Any<CancellationToken>())
+            .Returns(new ReviewJob(jobId, clientId, "https://dev.azure.com/org", "proj", "repo", 42, 1));
+
+        var jobRepository = Substitute.For<IJobRepository>();
+        jobRepository.GetById(jobId)
+            .Returns(
+                new ReviewJob(jobId, clientId, "https://dev.azure.com/org", "proj", "repo", 42, 1)
+                {
+                    Status = JobStatus.Completed,
+                });
+
+        // ClientUser is sufficient — administrator rights are not required.
+        var controller = CreateController(store, clientId, ClientRole.ClientUser, jobRepository: jobRepository);
+
+        var result = await controller.RestartReview(jobId, CancellationToken.None);
+
+        Assert.IsType<ConflictObjectResult>(result);
+    }
+
+    [Fact]
+    public async Task RestartReview_FailedJob_AsClientUser_ReturnsAccepted()
+    {
+        var jobId = Guid.NewGuid();
+        var clientId = Guid.NewGuid();
+        var store = Substitute.For<IReviewJobIntakeStore>();
+        store.GetByIdAsync(jobId, Arg.Any<CancellationToken>())
+            .Returns(new ReviewJob(jobId, clientId, "https://dev.azure.com/org", "proj", "repo", 42, 1));
+
+        var jobRepository = Substitute.For<IJobRepository>();
+        jobRepository.GetById(jobId)
+            .Returns(
+                new ReviewJob(jobId, clientId, "https://dev.azure.com/org", "proj", "repo", 42, 1)
+                {
+                    Status = JobStatus.Failed,
+                });
+        jobRepository.TryAddIfNoActiveDuplicateAsync(Arg.Any<ReviewJob>(), Arg.Any<CancellationToken>())
+            .Returns(new TryAddReviewJobResult(true, null, 0));
+
+        var queue = Substitute.For<IReviewExecutionQueue>();
+        var controller = CreateController(store, clientId, ClientRole.ClientUser, queue, jobRepository);
+
+        var result = await controller.RestartReview(jobId, CancellationToken.None);
+
+        var accepted = Assert.IsType<AcceptedResult>(result);
+        var payload = Assert.IsType<ReviewJobRestartResponse>(accepted.Value);
+        Assert.Equal(jobId, payload.SourceJobId);
+        Assert.NotEqual(Guid.Empty, payload.JobId);
+        await queue.Received(1).EnqueueAsync(payload.JobId, Arg.Any<CancellationToken>());
+    }
+
     private static ReviewJobsController CreateController(
         IReviewJobIntakeStore store,
         Guid? clientId,
         ClientRole? role,
-        IReviewExecutionQueue? queue = null)
+        IReviewExecutionQueue? queue = null,
+        IJobRepository? jobRepository = null)
     {
         var submitHandler = new SubmitReviewJobHandler(
             store,
             queue ?? Substitute.For<IReviewExecutionQueue>(),
             NullLogger<SubmitReviewJobHandler>.Instance);
         var queryHandler = new GetReviewJobStatusHandler(store);
+        var restartHandler = new RestartReviewJobHandler(
+            jobRepository ?? Substitute.For<IJobRepository>(),
+            queue ?? Substitute.For<IReviewExecutionQueue>(),
+            NullLogger<RestartReviewJobHandler>.Instance);
         var controller = new ReviewJobsController(
             submitHandler,
+            restartHandler,
             queryHandler,
             NullLogger<ReviewJobsController>.Instance)
         {

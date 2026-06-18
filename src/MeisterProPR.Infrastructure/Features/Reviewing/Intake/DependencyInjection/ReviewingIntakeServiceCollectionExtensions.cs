@@ -1,6 +1,7 @@
 // Copyright (c) Andreas Rain.
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
+using MeisterProPR.Application.Features.Reviewing.Intake.Commands.RestartReviewJob;
 using MeisterProPR.Application.Features.Reviewing.Intake.Commands.SubmitReviewJob;
 using MeisterProPR.Application.Features.Reviewing.Intake.Ports;
 using MeisterProPR.Application.Features.Reviewing.Intake.Queries.GetReviewJobStatus;
@@ -29,6 +30,7 @@ public static class ReviewingIntakeServiceCollectionExtensions
 
         services.AddScoped<IReviewExecutionQueue, ReviewExecutionQueue>();
         services.AddScoped<SubmitReviewJobHandler>();
+        services.AddScoped<RestartReviewJobHandler>();
         services.AddScoped<GetReviewJobStatusHandler>();
 
         return services;

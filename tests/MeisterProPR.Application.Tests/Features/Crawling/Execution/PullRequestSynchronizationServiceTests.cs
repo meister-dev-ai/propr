@@ -241,6 +241,119 @@ public sealed class PullRequestSynchronizationServiceTests
             .HandleThreadReopenedAsync(Arg.Any<ThreadReopenedDomainEvent>(), Arg.Any<CancellationToken>());
     }
 
+    [Theory]
+    [InlineData(PullRequestActivationSource.Crawl, "crawl discovery")]
+    [InlineData(PullRequestActivationSource.Webhook, "pull request updated")]
+    public async Task SynchronizeAsync_PriorReviewFailedAtSameRevision_BlocksAutoReview_EvenWithNewThreadReplies(
+        PullRequestActivationSource activationSource,
+        string summaryLabel)
+    {
+        var jobs = Substitute.For<IJobRepository>();
+        var iterationResolver = Substitute.For<IPullRequestIterationResolver>();
+        var threadStatusFetcher = Substitute.For<IReviewerThreadStatusFetcher>();
+        var threadMemoryService = Substitute.For<IThreadMemoryService>();
+        var scanRepository = Substitute.For<IReviewPrScanRepository>();
+
+        jobs.FindActiveJob("https://dev.azure.com/org", "project", "repo-1", 42, 7)
+            .Returns((ReviewJob?)null);
+        jobs.FindCompletedJob("https://dev.azure.com/org", "project", "repo-1", 42, 7)
+            .Returns((ReviewJob?)null);
+
+        // A prior review for this exact revision already failed.
+        var failedJob = new ReviewJob(Guid.NewGuid(), ClientId, "https://dev.azure.com/org", "project", "repo-1", 42, 7)
+        {
+            Status = JobStatus.Failed,
+        };
+        jobs.FindFailedJob("https://dev.azure.com/org", "project", "repo-1", 42, 7)
+            .Returns(failedJob);
+
+        // A scan with a fresh reviewer reply exists — under the old rules this would re-trigger a review.
+        var scan = new ReviewPrScan(Guid.NewGuid(), ClientId, "repo-1", 42, "7");
+        scan.Threads.Add(
+            new ReviewPrScanThread
+            {
+                ReviewPrScanId = scan.Id,
+                ThreadId = 17,
+                LastSeenReplyCount = 0,
+                LastSeenStatus = "Active",
+            });
+        scanRepository.GetAsync(ClientId, "repo-1", 42, Arg.Any<CancellationToken>())
+            .Returns(scan);
+        threadStatusFetcher.GetReviewerThreadStatusesAsync(
+                "https://dev.azure.com/org",
+                "project",
+                "repo-1",
+                42,
+                ReviewerId,
+                ClientId,
+                Arg.Any<CancellationToken>())
+            .Returns(
+            [
+                new PrThreadStatusEntry(17, "Active", "/src/file.ts", "Bot: comment\nUser: new reply", 1),
+            ]);
+
+        var sut = new PullRequestSynchronizationService(
+            jobs,
+            NullLogger<PullRequestSynchronizationService>.Instance,
+            iterationResolver,
+            threadStatusFetcher,
+            threadMemoryService,
+            scanRepository);
+
+        var outcome = await sut.SynchronizeAsync(
+            CreateRequest(activationSource, summaryLabel) with
+            {
+                CandidateIterationId = 7,
+                RequestedReviewerIdentity = CreateRequestedReviewerIdentity(),
+            });
+
+        Assert.Equal(PullRequestSynchronizationReviewDecision.FailedAwaitingRestart, outcome.ReviewDecision);
+        Assert.Equal(PullRequestSynchronizationLifecycleDecision.None, outcome.LifecycleDecision);
+        Assert.Contains(
+            outcome.ActionSummaries,
+            summary => summary.Contains("manual restart is required", StringComparison.OrdinalIgnoreCase));
+        await jobs.DidNotReceive().AddAsync(Arg.Any<ReviewJob>(), Arg.Any<CancellationToken>());
+        await jobs.DidNotReceive().TryAddIfNoActiveDuplicateAsync(Arg.Any<ReviewJob>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task SynchronizeAsync_NewIterationAfterPriorFailure_QueuesReviewAgain()
+    {
+        var jobs = Substitute.For<IJobRepository>();
+
+        // The prior failure was at iteration 7; the PR now advanced to iteration 8 (new commits).
+        jobs.FindActiveJob("https://dev.azure.com/org", "project", "repo-1", 42, 8)
+            .Returns((ReviewJob?)null);
+        jobs.FindCompletedJob("https://dev.azure.com/org", "project", "repo-1", 42, 8)
+            .Returns((ReviewJob?)null);
+        jobs.FindFailedJob("https://dev.azure.com/org", "project", "repo-1", 42, 8)
+            .Returns((ReviewJob?)null);
+        jobs.FindFailedJob("https://dev.azure.com/org", "project", "repo-1", 42, 7)
+            .Returns(
+                new ReviewJob(Guid.NewGuid(), ClientId, "https://dev.azure.com/org", "project", "repo-1", 42, 7)
+                {
+                    Status = JobStatus.Failed,
+                });
+        jobs.TryAddIfNoActiveDuplicateAsync(Arg.Any<ReviewJob>(), Arg.Any<CancellationToken>())
+            .Returns(new TryAddReviewJobResult(true, null, 0));
+
+        var sut = new PullRequestSynchronizationService(
+            jobs,
+            NullLogger<PullRequestSynchronizationService>.Instance);
+
+        var outcome = await sut.SynchronizeAsync(
+            CreateRequest(PullRequestActivationSource.Crawl, "crawl discovery") with
+            {
+                CandidateIterationId = 8,
+            });
+
+        Assert.Equal(PullRequestSynchronizationReviewDecision.Submitted, outcome.ReviewDecision);
+        await jobs.Received(1)
+            .TryAddIfNoActiveDuplicateAsync(
+                Arg.Is<ReviewJob>(job => job.IterationId == 8),
+                Arg.Any<CancellationToken>());
+    }
+
     [Fact]
     public async Task SynchronizeAsync_SelectedSourceScope_WithNullCollections_TreatsThemAsEmpty()
     {

@@ -205,6 +205,41 @@ async function getJobProtocolInternal(
   }
 }
 
+export interface RestartJobResponse {
+  jobId: string
+  sourceJobId: string
+  status: string
+}
+
+/** Restarts a failed review job, queuing a fresh pending job for the same PR revision. */
+export async function restartJob(id: string): Promise<RestartJobResponse> {
+  return resolveJobsService().restartJob(id)
+}
+
+async function restartJobInternal(id: string): Promise<RestartJobResponse> {
+  try {
+    const res = await fetch(`${getJobsBaseUrl()}/reviewing/jobs/${id}/restart`, {
+      method: 'POST',
+      headers: await authHeaders(),
+    })
+    if (!res.ok) {
+      let message = `POST /reviewing/jobs/${id}/restart: ${res.status}`
+      try {
+        const body = (await res.json()) as { error?: string }
+        if (body?.error) {
+          message = body.error
+        }
+      } catch {
+        // Response had no JSON body; keep the status-based message.
+      }
+      throw new Error(message)
+    }
+    return res.json() as Promise<RestartJobResponse>
+  } catch (error) {
+    throw new Error(sanitizeErrorMessage(error, `Failed to restart job ${id}.`))
+  }
+}
+
 export interface GetPrViewParams {
   providerScopePath: string
   providerProjectKey: string
@@ -255,6 +290,7 @@ export interface JobsService {
     options?: GetJobProtocolOptions,
   ) => Promise<components['schemas']['ReviewJobProtocolDto'][]>
   getPrView: (clientId: string, params: GetPrViewParams) => Promise<PrReviewViewDto>
+  restartJob: (id: string) => Promise<RestartJobResponse>
 }
 
 function createJobsService(runtimeMode: RuntimeMode): JobsService {
@@ -264,6 +300,7 @@ function createJobsService(runtimeMode: RuntimeMode): JobsService {
     getJobDetail: getJobDetailInternal,
     getJobProtocol: getJobProtocolInternal,
     getPrView: getPrViewInternal,
+    restartJob: restartJobInternal,
   }
 }
 

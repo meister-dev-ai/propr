@@ -3,6 +3,7 @@
 
 <template>
     <div class="review-history-section">
+        <p v-if="restartError" class="error restart-error">{{ restartError }}</p>
         <p v-if="loading" class="loading">Loading…</p>
         <p v-else-if="error" class="error">{{ error }}</p>
         <p v-else-if="groups.length === 0" class="empty-state">No reviews yet.</p>
@@ -111,6 +112,15 @@
                         </div>
 
                         <div class="list-action-col">
+                            <button
+                                v-if="item.status === 'failed' && item.id && canInspectClient(props.clientId || item.clientId)"
+                                class="btn-ghost restart-btn"
+                                :disabled="restartingJobs.has(item.id)"
+                                title="Restart this failed review"
+                                @click="restartJob(item)"
+                            >
+                                {{ restartingJobs.has(item.id) ? 'Restarting…' : 'Restart ↻' }}
+                            </button>
                             <RouterLink
                                 v-if="canInspectClient(props.clientId || item.clientId)"
                                 :to="{ name: 'job-protocol', params: { id: item.id }, query: { clientId: props.clientId || item.clientId } }"
@@ -204,6 +214,9 @@ const {
     refresh,
     visibleItems,
     canInspectClient,
+    restartingJobs,
+    restartError,
+    restartJob,
 } = vm
 
 defineExpose({
@@ -477,6 +490,31 @@ function prReviewLink(group: PrGroup): object {
 .list-action-col {
     flex: 0 0 auto;
     margin-left: auto; /* Keep it on the right */
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.restart-btn {
+    font-size: 0.78rem;
+    padding: 0.25rem 0.6rem;
+    color: var(--color-warning, #f59e0b);
+    border: 1px solid rgba(245, 158, 11, 0.3);
+    white-space: nowrap;
+}
+
+.restart-btn:hover:not(:disabled) {
+    background: rgba(245, 158, 11, 0.1);
+    border-color: rgba(245, 158, 11, 0.55);
+}
+
+.restart-btn:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+}
+
+.restart-error {
+    margin-bottom: 1rem;
 }
 
 /* Status badge */

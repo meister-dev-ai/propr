@@ -5,6 +5,7 @@ using MeisterProPR.Api.Extensions;
 using MeisterProPR.Api.Features.Licensing;
 using MeisterProPR.Api.Features.Reviewing.Contracts;
 using MeisterProPR.Application.Exceptions;
+using MeisterProPR.Application.Features.Reviewing.Intake.Commands.RestartReviewJob;
 using MeisterProPR.Application.Features.Reviewing.Intake.Commands.SubmitReviewJob;
 using MeisterProPR.Application.Features.Reviewing.Intake.Dtos;
 using MeisterProPR.Application.Features.Reviewing.Intake.Queries.GetReviewJobStatus;
@@ -18,6 +19,7 @@ namespace MeisterProPR.Api.Features.Reviewing.Intake.Controllers;
 [ApiController]
 public sealed partial class ReviewJobsController(
     SubmitReviewJobHandler submitReviewJobHandler,
+    RestartReviewJobHandler restartReviewJobHandler,
     GetReviewJobStatusHandler getReviewJobStatusHandler,
     ILogger<ReviewJobsController> logger) : ControllerBase
 {
@@ -112,6 +114,68 @@ public sealed partial class ReviewJobsController(
 
         LogReviewJobCreated(logger, result.JobId, intakeRequest.CodeReview?.Number ?? intakeRequest.PullRequestId);
         return this.Accepted(response);
+    }
+
+    /// <summary>Manually restart a failed review job.</summary>
+    /// <remarks>
+    ///     Failed reviews are not auto-continued (to avoid looping on deterministic failures), so a restart must be
+    ///     triggered explicitly. Any user with at least <see cref="ClientRole.ClientUser" /> for the job's owning client
+    ///     may restart it — administrator rights are not required.
+    /// </remarks>
+    /// <param name="jobId">The identifier of the failed review job to restart.</param>
+    /// <param name="ct">Cancellation token.</param>
+    /// <response code="202">Restart accepted; a new pending review job was queued.</response>
+    /// <response code="401">Missing or invalid credentials.</response>
+    /// <response code="403">Caller lacks access to the job's owning client.</response>
+    /// <response code="404">Job not found.</response>
+    /// <response code="409">Job is not in a failed state, or an active job already exists for this PR revision.</response>
+    [HttpPost("/reviewing/jobs/{jobId:guid}/restart")]
+    [HttpPost("/jobs/{jobId:guid}/restart")]
+    [ProducesResponseType(typeof(ReviewJobRestartResponse), StatusCodes.Status202Accepted)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status409Conflict)]
+    public async Task<IActionResult> RestartReview(Guid jobId, CancellationToken ct)
+    {
+        var auth = AuthHelpers.RequireAuthenticated(this.HttpContext);
+        if (auth is not null)
+        {
+            return auth;
+        }
+
+        // Resolve the owning client first so the role check happens before any mutation.
+        var status = await getReviewJobStatusHandler.HandleAsync(new GetReviewJobStatusQuery(jobId), ct);
+        if (status is null)
+        {
+            return this.NotFound();
+        }
+
+        var roleCheck = AuthHelpers.RequireClientRole(this.HttpContext, status.ClientId, ClientRole.ClientUser);
+        if (roleCheck is not null)
+        {
+            return roleCheck;
+        }
+
+        var result = await restartReviewJobHandler.HandleAsync(new RestartReviewJobCommand(jobId), ct);
+
+        switch (result.Outcome)
+        {
+            case RestartReviewJobOutcome.NotFound:
+                return this.NotFound();
+            case RestartReviewJobOutcome.NotFailed:
+                return this.Conflict(new { error = "Only failed review jobs can be restarted." });
+            case RestartReviewJobOutcome.DuplicateActiveJob:
+                return this.Conflict(new { error = "An active review job already exists for this pull request revision." });
+            case RestartReviewJobOutcome.Restarted:
+            default:
+                LogReviewJobRestarted(logger, jobId, result.NewJobId ?? Guid.Empty);
+                return this.Accepted(
+                    new ReviewJobRestartResponse(
+                        result.NewJobId ?? Guid.Empty,
+                        jobId,
+                        JobStatus.Pending.ToString().ToLowerInvariant()));
+        }
     }
 
     private static ReviewStatusResponse MapStatusResponse(ReviewJobStatusDto status)
@@ -371,4 +435,7 @@ public sealed partial class ReviewJobsController(
 
     [LoggerMessage(Level = LogLevel.Information, Message = "Review job {JobId} created for PR#{PrId}")]
     private static partial void LogReviewJobCreated(ILogger logger, Guid jobId, int prId);
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "Failed review job {SourceJobId} restarted as new job {NewJobId}")]
+    private static partial void LogReviewJobRestarted(ILogger logger, Guid sourceJobId, Guid newJobId);
 }

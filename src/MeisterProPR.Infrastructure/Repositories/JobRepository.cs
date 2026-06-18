@@ -107,6 +107,26 @@ public sealed class JobRepository(
     }
 
     /// <inheritdoc />
+    public ReviewJob? FindFailedJob(
+        string organizationUrl,
+        string projectId,
+        string repositoryId,
+        int pullRequestId,
+        int iterationId)
+    {
+        return dbContext.ReviewJobs
+            .AsEnumerable()
+            .Where(j => string.Equals(j.OrganizationUrl, organizationUrl, StringComparison.Ordinal)
+                        && string.Equals(j.ProjectId, projectId, StringComparison.Ordinal)
+                        && RepositoryMatches(j, repositoryId, projectId)
+                        && j.PullRequestId == pullRequestId
+                        && j.IterationId == iterationId
+                        && j.Status == JobStatus.Failed)
+            .OrderByDescending(j => j.CompletedAt)
+            .FirstOrDefault();
+    }
+
+    /// <inheritdoc />
     public ReviewJob? GetById(Guid id)
     {
         var job = dbContext.ReviewJobs.Find(id);

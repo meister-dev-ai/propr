@@ -328,6 +328,24 @@ public sealed class PullRequestSynchronizationService(
             request.PullRequestId,
             iterationId) is not null;
 
+        // A prior review for this exact revision already failed and was never completed. Suppress ALL automatic
+        // re-review (including same-revision thread replies) so a deterministic failure cannot loop and burn cost.
+        // Only genuinely new commits (a new iteration) or a manual restart will queue another review.
+        if (!completedSameIterationAlreadyReviewed
+            && jobs.FindFailedJob(
+                request.ProviderScopePath,
+                request.ProviderProjectKey,
+                request.RepositoryId,
+                request.PullRequestId,
+                iterationId) is not null)
+        {
+            logger.LogInformation(
+                "Skipping automatic re-review of PR {PullRequestId} at iteration {IterationId}: a prior review failed at this revision and the pull request has not been updated. A manual restart is required.",
+                request.PullRequestId,
+                iterationId);
+            return CreateFailedAwaitingRestartOutcome(request, iterationId);
+        }
+
         if (prScanRepository is null || threadStatusFetcher is null)
         {
             return completedSameIterationAlreadyReviewed
@@ -725,6 +743,18 @@ public sealed class PullRequestSynchronizationService(
             PullRequestSynchronizationLifecycleDecision.None,
             [
                 $"Skipped review intake for PR #{request.PullRequestId} at iteration {iterationId} because no new changes were detected via {request.SummaryLabel}.",
+            ]);
+    }
+
+    private static PullRequestSynchronizationOutcome CreateFailedAwaitingRestartOutcome(
+        PullRequestSynchronizationRequest request,
+        int iterationId)
+    {
+        return new PullRequestSynchronizationOutcome(
+            PullRequestSynchronizationReviewDecision.FailedAwaitingRestart,
+            PullRequestSynchronizationLifecycleDecision.None,
+            [
+                $"Skipped automatic re-review for PR #{request.PullRequestId} at iteration {iterationId} because a prior review failed at this revision and the pull request has not been updated; a manual restart is required (via {request.SummaryLabel}).",
             ]);
     }
 

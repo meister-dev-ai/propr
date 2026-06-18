@@ -1802,7 +1802,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Exchange a valid refresh token for a new JWT access token. */
+        /** Exchange the refresh-token cookie (or body, for legacy callers) for a new JWT access token. */
         post: {
             parameters: {
                 query?: never;
@@ -1817,6 +1817,40 @@ export interface paths {
                     "application/*+json": components["schemas"]["RefreshRequest"];
                 };
             };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/auth/logout": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Revokes the caller's refresh tokens and clears the session cookie. */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
             responses: {
                 /** @description OK */
                 200: {
@@ -5144,7 +5178,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Returns the unified diff that was reviewed for a single file result on a review job. The diff is re-fetched on demand from the source control provider using the job's stored coordinates. */
+        /**
+         * Returns the unified diff that was reviewed for a single file result on a review job.
+         *     The diff is re-fetched on demand from the source control provider using the job's stored coordinates.
+         */
         get: {
             parameters: {
                 query?: never;
@@ -5209,7 +5246,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Returns the unified diff that was reviewed for a single file result on a review job. The diff is re-fetched on demand from the source control provider using the job's stored coordinates. */
+        /**
+         * Returns the unified diff that was reviewed for a single file result on a review job.
+         *     The diff is re-fetched on demand from the source control provider using the job's stored coordinates.
+         */
         get: {
             parameters: {
                 query?: never;
@@ -7715,6 +7755,186 @@ export interface paths {
                     };
                 };
                 /** @description Active review job already exists for this PR iteration. */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/reviewing/jobs/{jobId}/restart": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Manually restart a failed review job.
+         * @description Failed reviews are not auto-continued (to avoid looping on deterministic failures), so a restart must be
+         *     triggered explicitly. Any user with at least MeisterProPR.Domain.Enums.ClientRole.ClientUser for the job's owning client
+         *     may restart it — administrator rights are not required.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    /** @description The identifier of the failed review job to restart. */
+                    jobId: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Restart accepted; a new pending review job was queued. */
+                202: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ReviewJobRestartResponse"];
+                        "application/json": components["schemas"]["ReviewJobRestartResponse"];
+                        "text/json": components["schemas"]["ReviewJobRestartResponse"];
+                    };
+                };
+                /** @description Missing or invalid credentials. */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Caller lacks access to the job's owning client. */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Job not found. */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Job is not in a failed state, or an active job already exists for this PR revision. */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/jobs/{jobId}/restart": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Manually restart a failed review job.
+         * @description Failed reviews are not auto-continued (to avoid looping on deterministic failures), so a restart must be
+         *     triggered explicitly. Any user with at least MeisterProPR.Domain.Enums.ClientRole.ClientUser for the job's owning client
+         *     may restart it — administrator rights are not required.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    /** @description The identifier of the failed review job to restart. */
+                    jobId: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Restart accepted; a new pending review job was queued. */
+                202: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ReviewJobRestartResponse"];
+                        "application/json": components["schemas"]["ReviewJobRestartResponse"];
+                        "text/json": components["schemas"]["ReviewJobRestartResponse"];
+                    };
+                };
+                /** @description Missing or invalid credentials. */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Caller lacks access to the job's owning client. */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Job not found. */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Job is not in a failed state, or an active job already exists for this PR revision. */
                 409: {
                     headers: {
                         [name: string]: unknown;
@@ -10338,6 +10558,26 @@ export interface components {
             /** @description Optional human-readable label for the dismissal. */
             label?: string | null;
         };
+        /**
+         * @description Carries the unified diff for a single file that was reviewed in a review job.
+         *     The diff is re-fetched on demand from the source control provider.
+         */
+        FileDiffDto: {
+            /** @description Repository-relative path of the file. */
+            filePath?: string | null;
+            /** @description Unified diff content (empty when the file is binary or unavailable). */
+            unifiedDiff?: string | null;
+            /** @description Type of change: Added, Modified, Deleted, Renamed, Copied, or Unknown. */
+            changeType?: string | null;
+            /** @description True when the file is binary and the diff cannot be rendered. */
+            isBinary?: boolean;
+            /** @description Previous path if the file was renamed; null otherwise. */
+            originalPath?: string | null;
+            /** @description Indicates whether the diff is renderable and why. */
+            availability?: string | null;
+            /** @description Human-readable explanation when the diff is not available. */
+            availabilityMessage?: string | null;
+        };
         /** @description Resolved ADO identity. */
         IdentityResponse: {
             /**
@@ -11292,6 +11532,16 @@ export interface components {
             action?: string | null;
             refreshable?: boolean;
         };
+        /** @description Local workspace preparation and fallback visibility metadata for one protocol pass. */
+        ProtocolWorkspaceDto: {
+            attempted?: boolean;
+            prepared?: boolean;
+            fallbackApplied?: boolean;
+            workspaceKey?: string | null;
+            failureStage?: string | null;
+            failureCode?: string | null;
+            failureMessage?: string | null;
+        };
         /** @description Global provider-family activation status for installation-wide administration. */
         ProviderActivationStatusDto: {
             providerFamily?: components["schemas"]["ScmProvider"];
@@ -11445,23 +11695,6 @@ export interface components {
              */
             comparisonGroupId?: string | null;
         };
-        /** @description Carries the unified diff for a single file that was reviewed in a review job. The diff is re-fetched on demand from the source control provider. */
-        FileDiffDto: {
-            /** @description Repository-relative path of the file. */
-            filePath?: string | null;
-            /** @description The unified diff content (empty when the file is binary or unavailable). */
-            unifiedDiff?: string | null;
-            /** @description Type of change: Added, Modified, Deleted, Renamed, Copied, or Unknown. */
-            changeType?: string | null;
-            /** @description True when the file is binary and the diff cannot be rendered. */
-            isBinary?: boolean;
-            /** @description Previous path if the file was renamed; null otherwise. */
-            originalPath?: string | null;
-            /** @description Indicates whether the diff is renderable: Available, Binary, NotFound, or ProviderUnavailable. */
-            availability?: string | null;
-            /** @description Human-readable explanation when the diff is not available. */
-            availabilityMessage?: string | null;
-        };
         /** @description Carries protocol data for a single review job execution attempt. */
         ReviewJobProtocolDto: {
             /**
@@ -11551,6 +11784,7 @@ export interface components {
             repeatedJudgment?: components["schemas"]["ProtocolRepeatedJudgmentDto"];
             proRvPrefilter?: components["schemas"]["ProtocolProRvPrefilterDto"];
             agentSession?: components["schemas"]["ProtocolAgentSessionDto"];
+            workspace?: components["schemas"]["ProtocolWorkspaceDto"];
             /**
              * Format: int64
              * @description Sum of cached input tokens across AI calls where the provider reported cached usage.
@@ -11560,6 +11794,21 @@ export interface components {
             /** @description True when this pass was inherited from a prior same-revision retry source job. */
             isInherited?: boolean;
             inheritance?: components["schemas"]["ProtocolInheritanceDto"];
+        };
+        /** @description Response returned when a failed review job is restarted. */
+        ReviewJobRestartResponse: {
+            /**
+             * Format: uuid
+             * @description Identifier of the newly-created pending review job.
+             */
+            jobId?: string;
+            /**
+             * Format: uuid
+             * @description Identifier of the failed job that was restarted.
+             */
+            sourceJobId?: string;
+            /** @description Lower-cased status of the new job (e.g. `pending`). */
+            status?: string | null;
         };
         /** @description Response for the job result endpoint, combining status metadata with the review result. */
         ReviewJobResultDto: {
@@ -11676,6 +11925,7 @@ export interface components {
              * @description Comparison group identifier when this job participates in one.
              */
             comparisonGroupId?: string | null;
+            workspace?: components["schemas"]["ReviewWorkspaceStatusDto"];
         };
         /**
          * @description Selectable strategy used to generate review findings for a job.
@@ -11687,6 +11937,16 @@ export interface components {
          * @enum {string}
          */
         ReviewStrategySelectionSource: "fallbackDefault" | "clientDefault" | "jobOverride" | "fallback";
+        /** @description DTO representing local review workspace adoption and fallback visibility. */
+        ReviewWorkspaceStatusDto: {
+            attempted?: boolean;
+            prepared?: boolean;
+            fallbackApplied?: boolean;
+            workspaceKey?: string | null;
+            failureStage?: string | null;
+            failureCode?: string | null;
+            failureMessage?: string | null;
+        };
         /**
          * @description Credential models supported by SCM provider connections.
          * @enum {string}

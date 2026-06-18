@@ -7,6 +7,15 @@
             <div class="header-nav-links">
                 <RouterLink class="back-link" :to="vm.backToReviewsLink">← Back to reviews</RouterLink>
                 <RouterLink v-if="vm.prReviewLink" :to="vm.prReviewLink" class="back-link pr-view-link">PR Review ↗</RouterLink>
+                <button
+                    v-if="vm.canRestart"
+                    class="restart-review-btn"
+                    :disabled="vm.restarting"
+                    title="Restart this failed review"
+                    @click="vm.restart()"
+                >
+                    {{ vm.restarting ? 'Restarting…' : 'Restart review ↻' }}
+                </button>
             </div>
             <h2>Job Protocol</h2>
         </AppTopBar>
@@ -75,6 +84,28 @@ const vm = useJobProtocolViewModel()
 
 .pr-view-link {
     color: var(--color-accent) !important;
+}
+
+.restart-review-btn {
+    margin-left: auto;
+    font-size: 0.85rem;
+    padding: 0.3rem 0.75rem;
+    border-radius: var(--radius-md);
+    color: var(--color-warning, #f59e0b);
+    background: transparent;
+    border: 1px solid rgba(245, 158, 11, 0.35);
+    cursor: pointer;
+    white-space: nowrap;
+}
+
+.restart-review-btn:hover:not(:disabled) {
+    background: rgba(245, 158, 11, 0.1);
+    border-color: rgba(245, 158, 11, 0.6);
+}
+
+.restart-review-btn:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
 }
 
 .job-stat-strip {

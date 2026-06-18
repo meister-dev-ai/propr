@@ -23,6 +23,12 @@ public enum PullRequestSynchronizationReviewDecision
 
     /// <summary>The configured ProCursor source scope was empty.</summary>
     EmptySourceScope = 5,
+
+    /// <summary>
+    ///     A prior review job for the same revision already failed and the pull request has not been updated.
+    ///     Automatic re-review is suppressed to avoid looping on a deterministic failure; the user must restart it manually.
+    /// </summary>
+    FailedAwaitingRestart = 6,
 }
 
 /// <summary>High-level lifecycle decision produced by shared pull-request synchronization.</summary>

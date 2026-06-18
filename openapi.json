@@ -2449,7 +2449,7 @@
         "tags": [
           "Auth"
         ],
-        "summary": "Exchange a valid refresh token for a new JWT access token.",
+        "summary": "Exchange the refresh-token cookie (or body, for legacy callers) for a new JWT access token.",
         "requestBody": {
           "content": {
             "application/json": {
@@ -2469,6 +2469,19 @@
             }
           }
         },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/auth/logout": {
+      "post": {
+        "tags": [
+          "Auth"
+        ],
+        "summary": "Revokes the caller's refresh tokens and clears the session cookie.",
         "responses": {
           "200": {
             "description": "OK"
@@ -7596,7 +7609,7 @@
         "tags": [
           "Jobs"
         ],
-        "summary": "Returns the unified diff that was reviewed for a single file result on a review job. The diff is re-fetched on demand from the source control provider using the job's stored coordinates.",
+        "summary": "Returns the unified diff that was reviewed for a single file result on a review job.\nThe diff is re-fetched on demand from the source control provider using the job's stored coordinates.",
         "parameters": [
           {
             "name": "jobId",
@@ -7688,7 +7701,7 @@
         "tags": [
           "Jobs"
         ],
-        "summary": "Returns the unified diff that was reviewed for a single file result on a review job. The diff is re-fetched on demand from the source control provider using the job's stored coordinates.",
+        "summary": "Returns the unified diff that was reviewed for a single file result on a review job.\nThe diff is re-fetched on demand from the source control provider using the job's stored coordinates.",
         "parameters": [
           {
             "name": "jobId",
@@ -11358,6 +11371,252 @@
           },
           "403": {
             "description": "Caller lacks the required role for this client.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/reviewing/jobs/{jobId}/restart": {
+      "post": {
+        "tags": [
+          "ReviewJobs"
+        ],
+        "summary": "Manually restart a failed review job.",
+        "description": "Failed reviews are not auto-continued (to avoid looping on deterministic failures), so a restart must be\ntriggered explicitly. Any user with at least MeisterProPR.Domain.Enums.ClientRole.ClientUser for the job's owning client\nmay restart it — administrator rights are not required.",
+        "parameters": [
+          {
+            "name": "jobId",
+            "in": "path",
+            "description": "The identifier of the failed review job to restart.",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "202": {
+            "description": "Restart accepted; a new pending review job was queued.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReviewJobRestartResponse"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReviewJobRestartResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReviewJobRestartResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid credentials.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Caller lacks access to the job's owning client.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Job not found.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Job is not in a failed state, or an active job already exists for this PR revision.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/jobs/{jobId}/restart": {
+      "post": {
+        "tags": [
+          "ReviewJobs"
+        ],
+        "summary": "Manually restart a failed review job.",
+        "description": "Failed reviews are not auto-continued (to avoid looping on deterministic failures), so a restart must be\ntriggered explicitly. Any user with at least MeisterProPR.Domain.Enums.ClientRole.ClientUser for the job's owning client\nmay restart it — administrator rights are not required.",
+        "parameters": [
+          {
+            "name": "jobId",
+            "in": "path",
+            "description": "The identifier of the failed review job to restart.",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "202": {
+            "description": "Restart accepted; a new pending review job was queued.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReviewJobRestartResponse"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReviewJobRestartResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReviewJobRestartResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid credentials.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Caller lacks access to the job's owning client.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Job not found.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Job is not in a failed state, or an active job already exists for this PR revision.",
             "content": {
               "text/plain": {
                 "schema": {
@@ -16045,6 +16304,47 @@
         "additionalProperties": false,
         "description": "Request to dismiss a finding and store it as an admin-dismissed memory record."
       },
+      "FileDiffDto": {
+        "type": "object",
+        "properties": {
+          "filePath": {
+            "type": "string",
+            "description": "Repository-relative path of the file.",
+            "nullable": true
+          },
+          "unifiedDiff": {
+            "type": "string",
+            "description": "Unified diff content (empty when the file is binary or unavailable).",
+            "nullable": true
+          },
+          "changeType": {
+            "type": "string",
+            "description": "Type of change: Added, Modified, Deleted, Renamed, Copied, or Unknown.",
+            "nullable": true
+          },
+          "isBinary": {
+            "type": "boolean",
+            "description": "True when the file is binary and the diff cannot be rendered."
+          },
+          "originalPath": {
+            "type": "string",
+            "description": "Previous path if the file was renamed; null otherwise.",
+            "nullable": true
+          },
+          "availability": {
+            "type": "string",
+            "description": "Indicates whether the diff is renderable and why.",
+            "nullable": true
+          },
+          "availabilityMessage": {
+            "type": "string",
+            "description": "Human-readable explanation when the diff is not available.",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false,
+        "description": "Carries the unified diff for a single file that was reviewed in a review job.\nThe diff is re-fetched on demand from the source control provider."
+      },
       "IdentityResponse": {
         "type": "object",
         "properties": {
@@ -18394,6 +18694,38 @@
         "additionalProperties": false,
         "description": "Visibility for one tool-result evidence bounding or refresh action."
       },
+      "ProtocolWorkspaceDto": {
+        "type": "object",
+        "properties": {
+          "attempted": {
+            "type": "boolean"
+          },
+          "prepared": {
+            "type": "boolean"
+          },
+          "fallbackApplied": {
+            "type": "boolean"
+          },
+          "workspaceKey": {
+            "type": "string",
+            "nullable": true
+          },
+          "failureStage": {
+            "type": "string",
+            "nullable": true
+          },
+          "failureCode": {
+            "type": "string",
+            "nullable": true
+          },
+          "failureMessage": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false,
+        "description": "Local workspace preparation and fallback visibility metadata for one protocol pass."
+      },
       "ProviderActivationStatusDto": {
         "type": "object",
         "properties": {
@@ -18818,47 +19150,6 @@
         "additionalProperties": false,
         "description": "Response returned when a review job is accepted or a duplicate is found."
       },
-      "FileDiffDto": {
-        "type": "object",
-        "properties": {
-          "filePath": {
-            "type": "string",
-            "description": "Repository-relative path of the file.",
-            "nullable": true
-          },
-          "unifiedDiff": {
-            "type": "string",
-            "description": "The unified diff content (empty when the file is binary or unavailable).",
-            "nullable": true
-          },
-          "changeType": {
-            "type": "string",
-            "description": "Type of change: Added, Modified, Deleted, Renamed, Copied, or Unknown.",
-            "nullable": true
-          },
-          "isBinary": {
-            "type": "boolean",
-            "description": "True when the file is binary and the diff cannot be rendered."
-          },
-          "originalPath": {
-            "type": "string",
-            "description": "Previous path if the file was renamed; null otherwise.",
-            "nullable": true
-          },
-          "availability": {
-            "type": "string",
-            "description": "Indicates whether the diff is renderable: Available, Binary, NotFound, or ProviderUnavailable.",
-            "nullable": true
-          },
-          "availabilityMessage": {
-            "type": "string",
-            "description": "Human-readable explanation when the diff is not available.",
-            "nullable": true
-          }
-        },
-        "additionalProperties": false,
-        "description": "Carries the unified diff for a single file that was reviewed in a review job. The diff is re-fetched on demand from the source control provider."
-      },
       "ReviewJobProtocolDto": {
         "type": "object",
         "properties": {
@@ -19007,6 +19298,9 @@
           "agentSession": {
             "$ref": "#/components/schemas/ProtocolAgentSessionDto"
           },
+          "workspace": {
+            "$ref": "#/components/schemas/ProtocolWorkspaceDto"
+          },
           "totalCachedInputTokens": {
             "type": "integer",
             "description": "Sum of cached input tokens across AI calls where the provider reported cached usage.",
@@ -19026,6 +19320,28 @@
         },
         "additionalProperties": false,
         "description": "Carries protocol data for a single review job execution attempt."
+      },
+      "ReviewJobRestartResponse": {
+        "type": "object",
+        "properties": {
+          "jobId": {
+            "type": "string",
+            "description": "Identifier of the newly-created pending review job.",
+            "format": "uuid"
+          },
+          "sourceJobId": {
+            "type": "string",
+            "description": "Identifier of the failed job that was restarted.",
+            "format": "uuid"
+          },
+          "status": {
+            "type": "string",
+            "description": "Lower-cased status of the new job (e.g. `pending`).",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false,
+        "description": "Response returned when a failed review job is restarted."
       },
       "ReviewJobResultDto": {
         "type": "object",
@@ -19332,6 +19648,9 @@
             "description": "Comparison group identifier when this job participates in one.",
             "format": "uuid",
             "nullable": true
+          },
+          "workspace": {
+            "$ref": "#/components/schemas/ReviewWorkspaceStatusDto"
           }
         },
         "additionalProperties": false,
@@ -19355,6 +19674,38 @@
         ],
         "type": "string",
         "description": "Explains why a review job selected its final review strategy."
+      },
+      "ReviewWorkspaceStatusDto": {
+        "type": "object",
+        "properties": {
+          "attempted": {
+            "type": "boolean"
+          },
+          "prepared": {
+            "type": "boolean"
+          },
+          "fallbackApplied": {
+            "type": "boolean"
+          },
+          "workspaceKey": {
+            "type": "string",
+            "nullable": true
+          },
+          "failureStage": {
+            "type": "string",
+            "nullable": true
+          },
+          "failureCode": {
+            "type": "string",
+            "nullable": true
+          },
+          "failureMessage": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false,
+        "description": "DTO representing local review workspace adoption and fallback visibility."
       },
       "ScmAuthenticationKind": {
         "enum": [

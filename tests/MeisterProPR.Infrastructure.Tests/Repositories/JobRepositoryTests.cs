@@ -184,6 +184,38 @@ public sealed class JobRepositoryTests(PostgresContainerFixture fixture) : IAsyn
     }
 
     [Fact]
+    public async Task FindFailedJob_ReturnsFailedJob_AndIgnoresCompletedOrActiveJobs()
+    {
+        // Active job for a different iteration must be ignored.
+        var activeJob = MakeJob(prId: 510, iterationId: 1);
+        await this._repo.AddAsync(activeJob);
+
+        // Completed job for the target iteration must not be returned by FindFailedJob.
+        var completedJob = MakeJob(activeJob.ClientId, activeJob.OrganizationUrl, activeJob.ProjectId, activeJob.RepositoryId, 510, 3);
+        await this._repo.AddAsync(completedJob);
+        await this._repo.TryTransitionAsync(completedJob.Id, JobStatus.Pending, JobStatus.Processing);
+        await this._repo.SetResultAsync(completedJob.Id, new ReviewResult("done", []));
+
+        // Failed job for the target iteration is the expected match.
+        var failedJob = MakeJob(activeJob.ClientId, activeJob.OrganizationUrl, activeJob.ProjectId, activeJob.RepositoryId, 510, 3);
+        await this._repo.AddAsync(failedJob);
+        await this._repo.SetFailedAsync(failedJob.Id, "boom");
+
+        var found = this._repo.FindFailedJob(
+            activeJob.OrganizationUrl,
+            activeJob.ProjectId,
+            activeJob.RepositoryId,
+            510,
+            3);
+
+        Assert.NotNull(found);
+        Assert.Equal(failedJob.Id, found.Id);
+
+        // No failed job for a different iteration.
+        Assert.Null(this._repo.FindFailedJob(activeJob.OrganizationUrl, activeJob.ProjectId, activeJob.RepositoryId, 510, 99));
+    }
+
+    [Fact]
     public async Task GetCompletedJobWithFileResultsByStoredRevisionAsync_ReturnsMatchingCompletedJob()
     {
         var job = MakeJob(prId: 700, iterationId: 5);

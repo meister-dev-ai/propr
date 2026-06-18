@@ -260,6 +260,21 @@ public sealed partial class PrCrawlService(
             pr.RevisionId);
         var completedSameIterationAlreadyReviewed = completedJob is not null;
 
+        // A prior review for this exact revision already failed and was never completed. Suppress ALL automatic
+        // re-review (including same-revision thread replies) so a deterministic failure cannot loop and burn cost.
+        // Only genuinely new commits (a new iteration) or a manual restart will queue another review.
+        if (!completedSameIterationAlreadyReviewed
+            && jobs.FindFailedJob(
+                config.ProviderScopePath,
+                config.ProviderProjectKey,
+                pr.Repository.ExternalRepositoryId,
+                pr.CodeReview.Number,
+                pr.RevisionId) is not null)
+        {
+            LogSkippedFailedAwaitingRestart(logger, pr.CodeReview.Number, pr.RevisionId);
+            return false;
+        }
+
         if (prScanRepository is null || threadStatusFetcher is null)
         {
             if (completedSameIterationAlreadyReviewed)

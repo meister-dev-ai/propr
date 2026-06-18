@@ -69,6 +69,15 @@ public sealed record ReviewJobAcceptedResponse(
     public Guid? ComparisonGroupId { get; init; }
 }
 
+/// <summary>Response returned when a failed review job is restarted.</summary>
+/// <param name="JobId">Identifier of the newly-created pending review job.</param>
+/// <param name="SourceJobId">Identifier of the failed job that was restarted.</param>
+/// <param name="Status">Lower-cased status of the new job (e.g. <c>pending</c>).</param>
+public sealed record ReviewJobRestartResponse(
+    Guid JobId,
+    Guid SourceJobId,
+    string Status);
+
 /// <summary>Detailed status response for a review job.</summary>
 public sealed record ReviewStatusResponse(
     Guid JobId,

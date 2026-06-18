@@ -99,6 +99,16 @@ public sealed class ReviewingDiagnosticsServiceCollectionExtensionsTests
             return null;
         }
 
+        public ReviewJob? FindFailedJob(
+            string organizationUrl,
+            string projectId,
+            string repositoryId,
+            int pullRequestId,
+            int iterationId)
+        {
+            return null;
+        }
+
         public IReadOnlyList<ReviewJob> GetAllForClient(Guid clientId)
         {
             return [];
