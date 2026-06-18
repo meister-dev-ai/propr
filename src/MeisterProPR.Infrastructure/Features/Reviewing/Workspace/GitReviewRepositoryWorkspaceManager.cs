@@ -125,6 +125,13 @@ internal sealed class GitReviewRepositoryWorkspaceManager(
         var headWorkspacePath = Path.Combine(workspaceRoot, "source");
         var baseWorkspacePath = Path.Combine(workspaceRoot, "target");
 
+        // The workspace key is deterministic (repo:base:head), so the same path can have been
+        // registered by an earlier run whose worktree directory has since vanished — a partial
+        // cleanup or ephemeral container storage dropping the dir while the persistent mirror keeps
+        // the registration. Git then rejects 'worktree add' with "missing but already registered".
+        // Prune the mirror's stale registrations before (re)creating the worktrees here.
+        await this.PruneWorktreesAsync(mirrorPath, ct);
+
         await this.CreateWorktreeAsync(mirrorPath, headWorkspacePath, request.ReviewRevision.HeadSha, ct);
         await this.CreateWorktreeAsync(mirrorPath, baseWorkspacePath, request.ReviewRevision.BaseSha, ct);
 
@@ -147,10 +154,20 @@ internal sealed class GitReviewRepositoryWorkspaceManager(
     {
         var result = await gitCommandRunner.RunAsync(
             mirrorPath,
-            ["worktree", "add", "--detach", worktreePath, commitSha],
+            ["worktree", "add", "--detach", "--force", worktreePath, commitSha],
             null,
             ct);
-        result.EnsureSuccess("create worktree", "git worktree add --detach <path> <sha>");
+        result.EnsureSuccess("create worktree", "git worktree add --detach --force <path> <sha>");
+    }
+
+    private async Task PruneWorktreesAsync(string mirrorPath, CancellationToken ct)
+    {
+        var result = await gitCommandRunner.RunAsync(
+            mirrorPath,
+            ["worktree", "prune"],
+            null,
+            ct);
+        result.EnsureSuccess("prune worktrees", "git worktree prune");
     }
 
     private async Task EnsureCommitPresentAsync(string mirrorPath, string commitSha, CancellationToken ct)
@@ -181,8 +198,14 @@ internal sealed class GitReviewRepositoryWorkspaceManager(
 
     private static string ComputeStableKey(string value)
     {
+        // Use a short, fixed-length prefix of the hash. The key only needs to be collision-free
+        // across the (small, ephemeral) set of active workspaces/mirrors, so 64 bits is ample.
+        // A short component also keeps the full checkout path well within the lower path-length
+        // limits of constrained container storage (e.g. Azure Container Instances), where a full
+        // 64-char SHA-256 component pushes deep repo paths past the effective limit and surfaces
+        // as ENAMETOOLONG/PathTooLongException on open.
         var hash = SHA256.HashData(Encoding.UTF8.GetBytes(value));
-        return Convert.ToHexString(hash).ToLowerInvariant();
+        return Convert.ToHexString(hash.AsSpan(0, 8)).ToLowerInvariant();
     }
 
     private static IReadOnlyDictionary<string, string?>? BuildAuthEnvironment(string? authorizationHeader)

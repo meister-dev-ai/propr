@@ -77,9 +77,24 @@ internal sealed class GitReviewRepositoryWorkspace(
             return null;
         }
 
-        await using var stream = File.OpenRead(candidatePath);
-        using var reader = new StreamReader(stream, Encoding.UTF8, true);
-        return await reader.ReadToEndAsync(ct);
+        try
+        {
+            await using var stream = File.OpenRead(candidatePath);
+            using var reader = new StreamReader(stream, Encoding.UTF8, true);
+            return await reader.ReadToEndAsync(ct);
+        }
+        catch (IOException ex)
+        {
+            // A single unreadable file (e.g. ENAMETOOLONG on a filename-encrypted or network-backed
+            // workspace volume) must not abort the whole review. Treat it as content-unavailable; the
+            // git-backed unified diff is still produced separately.
+            logger.LogWarning(
+                ex,
+                "Failed to read file content from workspace at {CandidatePath} (branch side {BranchSide}); treating as unavailable.",
+                candidatePath,
+                branchSide);
+            return null;
+        }
     }
 
     public async Task<string?> GetUnifiedDiffAsync(string path, CancellationToken ct)
