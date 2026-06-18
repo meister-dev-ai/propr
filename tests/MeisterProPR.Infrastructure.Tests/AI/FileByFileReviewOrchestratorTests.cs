@@ -2429,4 +2429,53 @@ public class FileByFileReviewOrchestratorTests
                        && message.Text is not null
                        && message.Text.Contains("Variant synthesis tail", StringComparison.Ordinal));
     }
+
+    [Fact]
+    public async Task ReviewAsync_PrWithDuplicateChangedFilePaths_DoesNotThrowAndReviewsFileOnce()
+    {
+        var aiCore = Substitute.For<IAiReviewCore>();
+        aiCore.ReviewAsync(Arg.Any<PullRequest>(), Arg.Any<ReviewSystemContext>(), Arg.Any<CancellationToken>())
+            .Returns(CreateResult());
+
+        var job = CreateJob();
+        var pr = CreatePr(CreateFile("src/Dup.cs"), CreateFile("src/Dup.cs"), CreateFile("src/Other.cs"));
+
+        var repo = CreateJobRepo();
+        repo.GetByIdWithFileResultsAsync(job.Id, Arg.Any<CancellationToken>())
+            .Returns(job);
+
+        var chatClient = Substitute.For<IChatClient>();
+        chatClient.GetResponseAsync(
+                Arg.Any<IList<ChatMessage>>(),
+                Arg.Any<ChatOptions?>(),
+                Arg.Any<CancellationToken>())
+            .Returns(new ChatResponse(new ChatMessage(ChatRole.Assistant, "synthesis")));
+
+        var sut = CreateOrchestrator(aiCore, CreateProtocolRecorder(), repo, chatClient);
+
+        // Without the dedup fix the planner throws ArgumentException("An item with the same key
+        // has already been added") on the duplicate src/Dup.cs path. The orchestrator propagates
+        // it as an unhandled error, so a clean completion here proves the dedup is in place.
+        var result = await sut.ReviewAsync(job, pr, CreateContext(), CancellationToken.None);
+
+        // Each unique path must dispatch exactly once: the duplicate src/Dup.cs entry must
+        // collapse to a single AI review, and the total review count must reflect the deduped
+        // manifest (2 files, not 3).
+        await aiCore.Received(1)
+            .ReviewAsync(
+                Arg.Is<PullRequest>(request =>
+                    request.ChangedFiles.Count == 1 && request.ChangedFiles[0].Path == "src/Dup.cs"),
+                Arg.Any<ReviewSystemContext>(),
+                Arg.Any<CancellationToken>());
+        await aiCore.Received(1)
+            .ReviewAsync(
+                Arg.Is<PullRequest>(request =>
+                    request.ChangedFiles.Count == 1 && request.ChangedFiles[0].Path == "src/Other.cs"),
+                Arg.Any<ReviewSystemContext>(),
+                Arg.Any<CancellationToken>());
+        await aiCore.Received(2)
+            .ReviewAsync(Arg.Any<PullRequest>(), Arg.Any<ReviewSystemContext>(), Arg.Any<CancellationToken>());
+
+        Assert.NotNull(result);
+    }
 }

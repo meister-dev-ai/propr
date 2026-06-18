@@ -32,7 +32,16 @@ internal sealed class AgenticFileReviewDispatchPlanner(
         var jobWithResults = await jobRepository.GetByIdWithFileResultsAsync(job.Id, ct) ?? job;
 
         var existingResults = jobWithResults.FileReviewResults.ToDictionary(r => r.FilePath);
-        var selection = ReviewFileSelectionService.SelectFilesForReview(pr.ChangedFiles, existingResults, executionContext.ExclusionRules);
+
+        // Some SCM providers (notably Azure DevOps) can return the same path more than once for a
+        // single iteration when a file was touched in multiple commits within the iteration, after
+        // a force-push that creates a new iteration over the same set of files, or for renamed
+        // files that share both old and new paths. Treat the changed-files manifest as a set so the
+        // file-index dictionary and downstream lookups do not throw on duplicate keys (which would
+        // make the review retry loop unrecoverable).
+        var allChangedFiles = DedupeChangedFiles(pr.ChangedFiles, job.Id, logger);
+
+        var selection = ReviewFileSelectionService.SelectFilesForReview(allChangedFiles, existingResults, executionContext.ExclusionRules);
         var filesToReview = selection.FilesToReview.ToList();
 
         foreach (var excludedFile in selection.ExcludedFiles)
@@ -57,7 +66,6 @@ internal sealed class AgenticFileReviewDispatchPlanner(
         }
 
         var semaphore = new SemaphoreSlim(options.MaxFileReviewConcurrency);
-        var allChangedFiles = pr.ChangedFiles.ToList();
         var fileIndexByPath = allChangedFiles
             .Select((f, i) => (f.Path, Index: i + 1))
             .ToDictionary(x => x.Path, x => x.Index);
@@ -227,6 +235,42 @@ internal sealed class AgenticFileReviewDispatchPlanner(
         {
             await protocolRecorder.SetCompletedAsync(protocolId.Value, "Excluded", 0, 0, 0, 0, null, ct);
         }
+    }
+
+    private static IReadOnlyList<ChangedFile> DedupeChangedFiles(
+        IReadOnlyList<ChangedFile> changedFiles,
+        Guid jobId,
+        ILogger logger)
+    {
+        if (changedFiles.Count < 2)
+        {
+            return changedFiles;
+        }
+
+        var seenPaths = new HashSet<string>(StringComparer.Ordinal);
+        var duplicates = 0;
+        var deduped = new List<ChangedFile>(changedFiles.Count);
+        foreach (var file in changedFiles)
+        {
+            if (seenPaths.Add(file.Path))
+            {
+                deduped.Add(file);
+            }
+            else
+            {
+                duplicates++;
+            }
+        }
+
+        if (duplicates > 0)
+        {
+            logger.LogWarning(
+                "Dropped {DuplicateCount} duplicate changed-file path(s) from PR manifest for job {JobId}; review will continue with the first occurrence of each path",
+                duplicates,
+                jobId);
+        }
+
+        return deduped;
     }
 
     internal sealed record FileReviewDispatchResult(

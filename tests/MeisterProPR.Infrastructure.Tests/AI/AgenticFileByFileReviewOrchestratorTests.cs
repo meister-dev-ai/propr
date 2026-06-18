@@ -603,6 +603,97 @@ public sealed class AgenticFileByFileReviewOrchestratorTests
     }
 
     [Fact]
+    public async Task ReviewAsync_PrWithDuplicateChangedFilePaths_DoesNotThrowAndReviewsFileOnce()
+    {
+        var protocolRecorder = Substitute.For<IProtocolRecorder>();
+        protocolRecorder.BeginAsync(
+                Arg.Any<Guid>(), Arg.Any<int>(), Arg.Any<string?>(), Arg.Any<Guid?>(), Arg.Any<AiConnectionModelCategory?>(), Arg.Any<string?>(),
+                Arg.Any<CancellationToken>())
+            .Returns(Guid.NewGuid());
+        protocolRecorder.SetCompletedAsync(
+                Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<long>(), Arg.Any<long>(), Arg.Any<int>(), Arg.Any<int>(), Arg.Any<int?>(),
+                Arg.Any<CancellationToken>())
+            .Returns(Task.CompletedTask);
+        protocolRecorder.RecordAiCallAsync(
+                Arg.Any<Guid>(), Arg.Any<int>(), Arg.Any<long?>(), Arg.Any<long?>(), Arg.Any<string?>(), Arg.Any<string?>(), Arg.Any<string?>(),
+                Arg.Any<CancellationToken>(), Arg.Any<string?>(), Arg.Any<string?>())
+            .Returns(Task.CompletedTask);
+        protocolRecorder.RecordReviewStrategyEventAsync(
+                Arg.Any<Guid>(),
+                Arg.Any<string>(),
+                Arg.Any<string?>(),
+                Arg.Any<string?>(),
+                Arg.Any<string?>(),
+                Arg.Any<CancellationToken>())
+            .Returns(Task.CompletedTask);
+
+        var repository = Substitute.For<IJobRepository>();
+        var storedResults = new List<ReviewFileResult>();
+        var job = CreateJob();
+        repository.GetByIdWithFileResultsAsync(job.Id, Arg.Any<CancellationToken>())
+            .Returns(_ => Task.FromResult<ReviewJob?>(BuildJobWithResults(job, storedResults)));
+        repository.AddFileResultAsync(Arg.Any<ReviewFileResult>(), Arg.Any<CancellationToken>())
+            .Returns(callInfo =>
+            {
+                storedResults.Add(callInfo.Arg<ReviewFileResult>());
+                return Task.CompletedTask;
+            });
+        repository.UpdateFileResultAsync(Arg.Any<ReviewFileResult>(), Arg.Any<CancellationToken>())
+            .Returns(Task.CompletedTask);
+
+        var aiCore = Substitute.For<IAiReviewCore>();
+        aiCore.ReviewAsync(Arg.Any<PullRequest>(), Arg.Any<ReviewSystemContext>(), Arg.Any<CancellationToken>())
+            .Returns(
+                new ReviewResult("dup summary", [new ReviewComment("src/Dup.cs", 1, CommentSeverity.Warning, "Dup issue")]),
+                new ReviewResult("other summary", [new ReviewComment("src/Other.cs", 1, CommentSeverity.Warning, "Other issue")]));
+
+        var chatClient = Substitute.For<IChatClient>();
+        chatClient.GetResponseAsync(Arg.Any<IList<ChatMessage>>(), Arg.Any<ChatOptions?>(), Arg.Any<CancellationToken>())
+            .Returns(
+                new ChatResponse(new ChatMessage(ChatRole.Assistant, CreateNoInvestigationPlan("src/Dup.cs"))),
+                new ChatResponse(new ChatMessage(ChatRole.Assistant, CreateNoInvestigationPlan("src/Other.cs"))),
+                new ChatResponse(new ChatMessage(ChatRole.Assistant, "synthesis summary")));
+
+        var sut = new AgenticFileByFileReviewOrchestrator(
+            aiCore,
+            protocolRecorder,
+            repository,
+            chatClient,
+            Microsoft.Extensions.Options.Options.Create(new AiReviewOptions { MaxFileReviewConcurrency = 1, ModelId = "test-model" }),
+            Substitute.For<ILogger<AgenticFileByFileReviewOrchestrator>>());
+
+        var pr = CreatePr(
+            new ChangedFile("src/Dup.cs", ChangeType.Edit, "dup content", "+dup change"),
+            new ChangedFile("src/Dup.cs", ChangeType.Edit, "dup content (duplicate entry)", "+dup change"),
+            new ChangedFile("src/Other.cs", ChangeType.Edit, "other content", "+other change"));
+
+        var result = await sut.ReviewAsync(
+            job,
+            pr,
+            new ReviewSystemContext(null, [], null),
+            CancellationToken.None,
+            chatClient);
+
+        await aiCore.Received(1)
+            .ReviewAsync(
+                Arg.Is<PullRequest>(request =>
+                    request.ChangedFiles.Count == 1 && request.ChangedFiles[0].Path == "src/Dup.cs"),
+                Arg.Any<ReviewSystemContext>(),
+                Arg.Any<CancellationToken>());
+        await aiCore.Received(1)
+            .ReviewAsync(
+                Arg.Is<PullRequest>(request =>
+                    request.ChangedFiles.Count == 1 && request.ChangedFiles[0].Path == "src/Other.cs"),
+                Arg.Any<ReviewSystemContext>(),
+                Arg.Any<CancellationToken>());
+        await aiCore.Received(2)
+            .ReviewAsync(Arg.Any<PullRequest>(), Arg.Any<ReviewSystemContext>(), Arg.Any<CancellationToken>());
+
+        Assert.Contains(result.Comments, c => c.FilePath == "src/Dup.cs" && c.Message == "Dup issue");
+        Assert.Contains(result.Comments, c => c.FilePath == "src/Other.cs" && c.Message == "Other issue");
+    }
+
+    [Fact]
     public async Task ReviewAsync_WithLateAugmentationMode_RunsSecondProRvAugmentationPass()
     {
         var protocolRecorder = Substitute.For<IProtocolRecorder>();
