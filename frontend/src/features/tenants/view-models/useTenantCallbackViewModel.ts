@@ -49,13 +49,11 @@ export function useTenantCallbackViewModel(
     const fragmentSource = rawHash.startsWith('#') ? rawHash.slice(1) : rawHash
     const fragment = new URLSearchParams(fragmentSource)
     const accessToken = fragment.get('accessToken')
-    const refreshToken = fragment.get('refreshToken')
-
-    if (accessToken && refreshToken) {
+    // The refresh token is no longer in the fragment — it is set as an httpOnly cookie by the callback.
+    if (accessToken) {
       try {
         await establishSession({
           accessToken,
-          refreshToken,
           expiresIn: toOptionalNumber(fragment.get('expiresIn')),
           tokenType: fragment.get('tokenType') ?? undefined,
         })

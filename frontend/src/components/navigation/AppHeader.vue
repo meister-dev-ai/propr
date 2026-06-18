@@ -50,7 +50,7 @@ import { useSession } from '@/composables/useSession'
 import icon from '@/assets/logo_standalone.png'
 
 const router = useRouter()
-const { clearTokens, isAdmin, clientRoles, tenantRoles, edition } = useSession()
+const { logout: endSession, isAdmin, clientRoles, tenantRoles, edition } = useSession()
 
 /** True for global admins or users with any visible client role. */
 const canViewClients = computed(
@@ -75,8 +75,8 @@ const defaultTenantAdminRoute = computed(() => {
 
 const adminDropdownOpen = ref(false)
 
-function logout() {
-  clearTokens()
+async function logout() {
+  await endSession()
   router.push({ name: 'login' })
 }
 </script>
@@ -190,7 +190,7 @@ function logout() {
   align-items: center;
   margin-top: 0.4rem;
   padding: 0.2rem 0.55rem;
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   font-size: 0.72rem;
   font-weight: 700;
   letter-spacing: 0.04em;

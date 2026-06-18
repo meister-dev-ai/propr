@@ -6,7 +6,7 @@ import { mount } from '@vue/test-utils'
 
 describe('ProCursorUsageRecentEventsTable', () => {
   it('renders safe recent-event fields and estimated badges', async () => {
-    const { default: ProCursorUsageRecentEventsTable } = await import('@/components/ProCursorUsageRecentEventsTable.vue')
+    const { default: ProCursorUsageRecentEventsTable } = await import('@/components/usage/ProCursorUsageRecentEventsTable.vue')
     const wrapper = mount(ProCursorUsageRecentEventsTable, {
       props: {
         items: [
@@ -36,7 +36,7 @@ describe('ProCursorUsageRecentEventsTable', () => {
   })
 
   it('renders the empty state when there are no events', async () => {
-    const { default: ProCursorUsageRecentEventsTable } = await import('@/components/ProCursorUsageRecentEventsTable.vue')
+    const { default: ProCursorUsageRecentEventsTable } = await import('@/components/usage/ProCursorUsageRecentEventsTable.vue')
     const wrapper = mount(ProCursorUsageRecentEventsTable, {
       props: {
         items: [],

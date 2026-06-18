@@ -2,6 +2,7 @@
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
 import { describe, it, expect, vi, beforeEach } from 'vitest'
+import type { TenantDto } from '@/services/tenantAdminService'
 import { mount, flushPromises } from '@vue/test-utils'
 
 const mockPost = vi.fn()
@@ -15,7 +16,7 @@ vi.mock('@/services/api', () => ({
 const tenants = [
   { id: 'tenant-1', displayName: 'Acme Corp' },
   { id: 'tenant-2', displayName: 'Globex Corp' },
-]
+] as TenantDto[]
 
 async function mountClientForm(props?: Record<string, unknown>) {
   const mod = await import('@/components/ClientForm.vue')

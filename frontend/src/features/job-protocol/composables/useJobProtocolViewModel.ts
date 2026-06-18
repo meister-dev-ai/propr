@@ -5,12 +5,15 @@ import { computed, nextTick, onMounted, onUnmounted, reactive, ref, shallowRef, 
 import { useRoute } from 'vue-router'
 import { createAdminClient } from '@/services/api'
 import { createDismissal } from '@/services/findingDismissalsService'
-import { useSession } from '@/composables/useSession'
-import { getActiveRuntime } from '@/app/runtime/runtimeContext'
+import { useFileDiff } from './useFileDiff'
+import { useTokenTotals } from './useTokenTotals'
+import { useTraceSearch } from './useTraceSearch'
 import type {
     AgenticInvestigationOutputRecord,
     CommentRelevanceEventDetails,
     CommentRelevanceOutputRecord,
+    CommentSidebarItem,
+    CommentTreeNode,
     EventDisplayRow,
     EventTimingPresentation,
     FinalGateDecisionRecord,
@@ -24,14 +27,15 @@ import type {
     ProtocolFollowUp,
     ProtocolInheritance,
     ProtocolRepeatedJudgment,
+    ProtocolReviewComment,
+    ProtocolSidebarItem,
+    ProtocolTreeNode,
     ReviewCommentRecord,
     ReviewJobProtocolPassResponse,
     ReviewJobResultDto,
     ReviewProtocolPass,
     TimingInsight,
-    TokenBreakdownEntry,
     ToolPhaseGroup,
-    TraceSearchableRow,
     VerificationEvidenceOutputRecord,
     VerificationRecord,
 } from '../types'
@@ -112,20 +116,41 @@ export function useJobProtocolViewModel() {
     const selectedCommentPath = ref<string | null>(null)
     const isSummaryModalOpen = ref(false)
     const focusedEventId = ref<string | null>(null)
-    const isTraceSearchCollapsed = ref(true)
-    const traceFindingsOnly = ref(false)
-    const traceFilters = ref({
-        queryText: '',
-        filePath: '',
-        modelId: '',
-    })
     const detailTab = ref<'events' | 'diff'>('events')
-    const fileDiff = shallowRef<FileDiffDto | null>(null)
-    const diffLoading = ref(false)
-    const diffError = ref<string | null>(null)
-    const diffCache = new Map<string, FileDiffDto>()
 
-    type TraceFilterKey = keyof typeof traceFilters.value
+    const {
+        fileDiff,
+        diffLoading,
+        diffError,
+        loadFileDiff,
+        resetDiff,
+    } = useFileDiff()
+
+    const {
+        isTraceSearchCollapsed,
+        traceFindingsOnly,
+        traceFilters,
+        normalizedTraceFilters,
+        hasActiveTraceFilters,
+        traceSearchToggleLabel,
+        traceSearchToggleIcon,
+        traceSuggestions,
+        traceAutocompleteValue,
+        setTraceFilterValue,
+        buildTraceSearchableRow,
+        matchesTraceFilters,
+        protocolHasVisibleTraceRows,
+        clearTraceFilters,
+    } = useTraceSearch(protocols)
+
+    const {
+        totalInputTokens,
+        totalOutputTokens,
+        totalCachedInputTokens,
+        totalEffectiveInputTokens,
+        protocolTokenBreakdown,
+        protocolBreakdownConsistent,
+    } = useTokenTotals(protocols, jobDetail)
 
     const routeClientId = computed(() =>
         (route.query?.clientId as string | undefined) ?? reviewStatus.value?.clientId ?? undefined,
@@ -162,11 +187,11 @@ export function useJobProtocolViewModel() {
     const dismissingIds = ref<Set<string>>(new Set())
     const dismissToast = ref<{ message: string; isError: boolean } | null>(null)
 
-    function commentKey(comment: any): string {
-        return `${comment.filePath ?? (comment as any).file_path ?? ''}:${comment.lineNumber ?? (comment as any).line_number ?? 0}:${String(comment.message ?? '').slice(0, 80)}`
+    function commentKey(comment: ProtocolReviewComment): string {
+        return `${comment.filePath ?? comment.file_path ?? ''}:${comment.lineNumber ?? comment.line_number ?? 0}:${String(comment.message ?? '').slice(0, 80)}`
     }
 
-    async function dismissComment(comment: any) {
+    async function dismissComment(comment: ProtocolReviewComment) {
         const clientId = routeClientId.value
         if (!clientId) {
             dismissToast.value = { message: 'Cannot dismiss: client context not available.', isError: true }
@@ -216,20 +241,20 @@ export function useJobProtocolViewModel() {
         localSeverities.value = new Set(localSeverities.value)
     }
 
-    const filteredCommentsForTree = computed(() => {
-        const allComments = reviewStatus.value?.result?.comments || []
+    const filteredCommentsForTree = computed<ProtocolReviewComment[]>(() => {
+        const allComments = (reviewStatus.value?.result?.comments ?? []) as ProtocolReviewComment[]
         const qLabel = globalSearchQuery.value.trim().toLowerCase()
 
         if (!qLabel) return allComments
 
         return allComments.filter(comment => {
-            const filePath = ((comment.filePath ?? (comment as any).file_path) ?? '').toLowerCase()
+            const filePath = ((comment.filePath ?? comment.file_path) ?? '').toLowerCase()
             return filePath.includes(qLabel)
         })
     })
 
-    const filteredCommentsForDetail = computed(() => {
-        const allComments = reviewStatus.value?.result?.comments || []
+    const filteredCommentsForDetail = computed<ProtocolReviewComment[]>(() => {
+        const allComments = (reviewStatus.value?.result?.comments ?? []) as ProtocolReviewComment[]
         const query = localSearchQuery.value.trim().toLowerCase()
         const severities = localSeverities.value
 
@@ -239,7 +264,7 @@ export function useJobProtocolViewModel() {
             if (!query) return true
 
             const message = (comment.message ?? '').toLowerCase()
-            const filePath = ((comment.filePath ?? (comment as any).file_path) ?? '').toLowerCase()
+            const filePath = ((comment.filePath ?? comment.file_path) ?? '').toLowerCase()
             return message.includes(query) || filePath.includes(query)
         })
     })
@@ -272,187 +297,12 @@ export function useJobProtocolViewModel() {
         return { filename, directory }
     }
 
-    const normalizedTraceFilters = computed(() => ({
-        queryText: traceFilters.value.queryText.trim().toLowerCase(),
-        filePath: traceFilters.value.filePath.trim().toLowerCase(),
-        modelId: traceFilters.value.modelId.trim().toLowerCase(),
-    }))
-
-    const hasActiveTraceFilters = computed(() =>
-        Object.values(normalizedTraceFilters.value).some(value => value.length > 0),
-    )
-
-    const traceSearchToggleLabel = computed(() => (isTraceSearchCollapsed.value ? 'Show filters' : 'Hide filters'))
-    const traceSearchToggleIcon = computed(() => (isTraceSearchCollapsed.value ? 'mdi-chevron-down' : 'mdi-chevron-up'))
-
-    function normalizeTraceFilterValue(value: unknown): string {
-        if (typeof value === 'string') {
-            return value
-        }
-
-        if (typeof value === 'number') {
-            return String(value)
-        }
-
-        if (Array.isArray(value)) {
-            return normalizeTraceFilterValue(value[0])
-        }
-
-        return ''
-    }
-
-    function traceAutocompleteValue(value: string): string | null {
-        return value.trim().length > 0 ? value : null
-    }
-
-    function setTraceFilterValue(key: TraceFilterKey, value: unknown): void {
-        traceFilters.value[key] = normalizeTraceFilterValue(value)
-    }
-
     function protocolHasFinalFindings(protocol: ReviewProtocolPass): boolean {
         return (protocol.finalComments?.length ?? 0) > 0
     }
 
-    function normalizeTraceCategory(kind: string | null | undefined, name: string | null | undefined, eventCategory?: string | null): string {
-        const normalizedCategory = (eventCategory ?? '').trim().toLowerCase()
-        if (normalizedCategory) return normalizedCategory
-
-        const normalizedKind = (kind ?? '').trim().toLowerCase()
-        const normalizedName = (name ?? '').trim().toLowerCase()
-
-        if (normalizedKind === 'memoryoperation') return 'memory'
-        if (normalizedName.startsWith('dedup_')) return 'duplicate-suppression'
-        if (normalizedName.includes('comment_relevance')) return 'comment-relevance'
-        if (normalizedName.includes('verification')) return 'verification'
-        if (normalizedName.includes('review_finding_gate') || normalizedName.includes('summary_reconciliation') || normalizedName.includes('repeated_judgment')) return 'review-finding-gate'
-        if (normalizedName.includes('prorv')) return 'prorv-prefilter'
-        if (normalizedName.includes('pr_wide')) return 'pr-wide-review'
-        if (normalizedName.includes('review_strategy') || normalizedName.includes('agentic_file') || normalizedName.includes('review_agent_session') || normalizedName.includes('prompt_stage_evidence') || normalizedName.includes('review_step_skipped')) return 'review-strategy'
-        if (normalizedKind === 'aicall') return 'ai-call'
-        if (normalizedKind === 'toolcall') return 'tool-call'
-        return 'operational'
-    }
-
-    function buildTraceSnippet(value: string | null | undefined, queryText: string): string | null {
-        const normalized = value?.trim()
-        if (!normalized) {
-            return null
-        }
-
-        const maxLength = 220
-        if (!queryText) {
-            return normalized.length <= maxLength ? normalized : `${normalized.slice(0, maxLength).trim()}...`
-        }
-
-        const index = normalized.toLowerCase().indexOf(queryText)
-        if (index < 0) {
-            return null
-        }
-
-        const start = Math.max(0, index - 80)
-        const end = Math.min(normalized.length, start + maxLength)
-        let snippet = normalized.slice(start, end).trim()
-        if (start > 0) snippet = `...${snippet}`
-        if (end < normalized.length) snippet = `${snippet}...`
-        return snippet
-    }
-
-    function firstTraceValue(...values: Array<string | null | undefined>): string | null {
-        return values.find(value => !!value && value.trim().length > 0)?.trim() ?? null
-    }
-
-    function detectTraceRedaction(...values: Array<string | null | undefined>): boolean {
-        const markers = ['[REDACTED]', '***REDACTED***', '<redacted>']
-        return values.some(value => !!value && markers.some(marker => value.includes(marker)))
-    }
-
-    function buildTraceSearchableRow(protocol: ReviewProtocolPass, event: ProtocolEventDto): TraceSearchableRow {
-        const filters = normalizedTraceFilters.value
-        const candidates: Array<{ field: string; value: string | null | undefined }> = [
-            { field: 'eventName', value: event.name },
-            { field: 'inputTextSample', value: event.inputTextSample },
-            { field: 'systemPrompt', value: event.systemPrompt },
-            { field: 'outputSummary', value: event.outputSummary },
-            { field: 'error', value: event.error },
-        ]
-
-        const firstVisibleField = candidates.find(candidate => !!candidate.value && candidate.value.trim().length > 0) ?? null
-        const matchingField = filters.queryText
-            ? candidates.find(candidate => candidate.value?.toLowerCase().includes(filters.queryText)) ?? null
-            : firstVisibleField
-
-        const matchedField = matchingField?.field ?? null
-        const matchSnippet = buildTraceSnippet(matchingField?.value, filters.queryText)
-        const contextSource = matchedField === 'inputTextSample'
-            ? firstTraceValue(event.outputSummary, event.systemPrompt, event.error)
-            : matchedField === 'systemPrompt'
-                ? firstTraceValue(event.inputTextSample, event.outputSummary, event.error)
-                : matchedField === 'outputSummary'
-                    ? firstTraceValue(event.inputTextSample, event.systemPrompt, event.error)
-                    : matchedField === 'error'
-                        ? firstTraceValue(event.outputSummary, event.inputTextSample, event.systemPrompt)
-                        : firstTraceValue(event.outputSummary, event.inputTextSample, event.systemPrompt, event.error)
-
-        return {
-            filePath: protocol.fileOutcome?.filePath ?? protocol.label ?? null,
-            protocolLabel: protocol.label ?? null,
-            eventKind: String(event.kind ?? 'unknown'),
-            eventCategory: normalizeTraceCategory(String(event.kind ?? ''), event.name, event.eventCategory ?? null),
-            eventName: event.name ?? 'Unknown',
-            modelId: protocol.modelId ?? null,
-            matchedField,
-            matchSnippet,
-            contextSnippet: buildTraceSnippet(contextSource, ''),
-            hasLimitedMetadata: !protocol.label || !protocol.modelId,
-            isRedacted: detectTraceRedaction(matchSnippet, contextSource, event.inputTextSample, event.systemPrompt, event.outputSummary, event.error),
-        }
-    }
-
-    function matchesTraceFilters(protocol: ReviewProtocolPass, event: ProtocolEventDto): boolean {
-        const filters = normalizedTraceFilters.value
-        const row = buildTraceSearchableRow(protocol, event)
-
-        if (filters.queryText && !row.matchSnippet) return false
-        if (filters.filePath && !(row.filePath ?? '').toLowerCase().includes(filters.filePath)) return false
-        if (filters.modelId && !(row.modelId ?? '').toLowerCase().includes(filters.modelId)) return false
-        return true
-    }
-
-    const traceSuggestions = computed(() => {
-        const matchingRows = protocols.value.flatMap(protocol =>
-            (protocol.events ?? [])
-                .filter(event => matchesTraceFilters(protocol, event))
-                .map(event => buildTraceSearchableRow(protocol, event)),
-        )
-
-        const collect = (values: Array<string | null | undefined>) => Array.from(new Set(values.filter((value): value is string => !!value && value.trim().length > 0))).sort((left, right) => left.localeCompare(right))
-
-        return {
-            filePaths: collect(matchingRows.map(row => row.filePath)),
-            modelIds: collect(matchingRows.map(row => row.modelId)),
-        }
-    })
-
-    function protocolHasVisibleTraceRows(protocolId: string | null | undefined): boolean {
-        if (!protocolId) {
-            return false
-        }
-
-        return protocols.value.some(protocol =>
-            protocol.id === protocolId && (protocol.events ?? []).some(event => matchesTraceFilters(protocol, event)),
-        )
-    }
-
-    function clearTraceFilters() {
-        traceFilters.value = {
-            queryText: '',
-            filePath: '',
-            modelId: '',
-        }
-    }
-
-    const sidebarItems = computed(() => {
-        const root: any = { children: {} }
+    const sidebarItems = computed<ProtocolSidebarItem[]>(() => {
+        const root: ProtocolTreeNode = { name: '', path: '', children: {}, protocols: [] }
 
         const visibleProtocols = protocols.value.filter(protocol => {
             if (traceFindingsOnly.value && !protocolHasFinalFindings(protocol)) {
@@ -492,8 +342,8 @@ export function useJobProtocolViewModel() {
             current.protocols.push(protocol)
         })
 
-        const items: any[] = []
-        const flatten = (node: any, depth: number) => {
+        const items: ProtocolSidebarItem[] = []
+        const flatten = (node: ProtocolTreeNode, depth: number) => {
             const sortedFolderKeys = Object.keys(node.children ?? {}).sort((left, right) => {
                 if (left === './') return -1
                 if (right === './') return 1
@@ -545,16 +395,16 @@ export function useJobProtocolViewModel() {
 
     const treeVisiblePasses = computed<ReviewProtocolPass[]>(() =>
         sidebarItems.value
-            .filter((item): item is { type: 'pass'; protocol: ReviewProtocolPass } => item.type === 'pass')
+            .filter((item): item is Extract<ProtocolSidebarItem, { type: 'pass' }> => item.type === 'pass')
             .map(item => item.protocol),
     )
 
-    const commentSidebarItems = computed(() => {
+    const commentSidebarItems = computed<CommentSidebarItem[]>(() => {
         const comments = filteredCommentsForTree.value
-        const root: any = { children: {}, files: {} }
+        const root: CommentTreeNode = { name: '', path: '', children: {}, files: {} }
 
         comments.forEach(comment => {
-            const path = comment.filePath || (comment as any).file_path || ''
+            const path = comment.filePath || comment.file_path || ''
             const { filename, directory } = parseFilePath(path)
 
             let parts: string[]
@@ -583,8 +433,8 @@ export function useJobProtocolViewModel() {
             current.files[filename].commentCount += 1
         })
 
-        const items: any[] = []
-        const flatten = (node: any, depth: number) => {
+        const items: CommentSidebarItem[] = []
+        const flatten = (node: CommentTreeNode, depth: number) => {
             const sortedFolderKeys = Object.keys(node.children ?? {}).sort((left, right) => {
                 if (left === './') return -1
                 if (right === './') return 1
@@ -635,15 +485,15 @@ export function useJobProtocolViewModel() {
 
         if (selectedCommentPath.value) {
             comments = comments.filter(comment => {
-                const path = comment.filePath || (comment as any).file_path || ''
+                const path = comment.filePath || comment.file_path || ''
                 return path === selectedCommentPath.value || path.startsWith(`${selectedCommentPath.value}/`)
             })
         }
 
-        const groups: Record<string, any[]> = {}
+        const groups: Record<string, ProtocolReviewComment[]> = {}
 
         comments.forEach(comment => {
-            const path = comment.filePath || (comment as any).file_path || ''
+            const path = comment.filePath || comment.file_path || ''
             const { directory } = parseFilePath(path)
             const dirKey = directory || 'Root'
             if (!groups[dirKey]) groups[dirKey] = []
@@ -659,10 +509,10 @@ export function useJobProtocolViewModel() {
         return sortedDirKeys.map(dir => ({
             directory: dir,
             comments: [...groups[dir]].sort((left, right) => {
-                const pathA = left.filePath || (left as any).file_path || ''
-                const pathB = right.filePath || (right as any).file_path || ''
+                const pathA = left.filePath || left.file_path || ''
+                const pathB = right.filePath || right.file_path || ''
                 if (pathA !== pathB) return pathA.localeCompare(pathB)
-                return (left.lineNumber || (left as any).line_number || 0) - (right.lineNumber || (right as any).line_number || 0)
+                return (left.lineNumber || left.line_number || 0) - (right.lineNumber || right.line_number || 0)
             }),
         }))
     })
@@ -683,9 +533,7 @@ export function useJobProtocolViewModel() {
     }, { flush: 'post' })
 
     watch(activePassId, () => {
-        detailTab.value = 'events'
-        fileDiff.value = null
-        diffError.value = null
+        clearDiff()
     })
 
     watch([treeVisiblePasses, activeTab, traceFindingsOnly], ([visiblePasses, tab, findingsOnly]) => {
@@ -1044,19 +892,6 @@ export function useJobProtocolViewModel() {
             }))
     })
 
-    const totalInputTokens = computed(() =>
-        protocols.value.reduce((sum, protocol) => sum + (protocol.totalInputTokens ?? 0), 0),
-    )
-    const totalOutputTokens = computed(() =>
-        protocols.value.reduce((sum, protocol) => sum + (protocol.totalOutputTokens ?? 0), 0),
-    )
-    const totalCachedInputTokens = computed(() =>
-        protocols.value.reduce((sum, protocol) => sum + (protocol.totalCachedInputTokens ?? 0), 0),
-    )
-    const totalEffectiveInputTokens = computed(() =>
-        Math.max(0, totalInputTokens.value - totalCachedInputTokens.value),
-    )
-
     const overallDuration = computed(() => {
         const start = jobDetail.value?.processingStartedAt ?? jobDetail.value?.submittedAt
         if (!start) return '—'
@@ -1086,58 +921,6 @@ export function useJobProtocolViewModel() {
     const inheritedProtocolCount = computed(() => protocols.value.filter(protocol => protocol.isInherited).length)
     const activePassInheritance = computed<ProtocolInheritance | null>(() => activePass.value?.inheritance ?? null)
 
-    const protocolTokenBreakdown = computed<TokenBreakdownEntry[]>(() => {
-        const grouped = new Map<string, TokenBreakdownEntry>()
-
-        protocols.value.forEach(protocol => {
-            const input = protocol.totalInputTokens ?? 0
-            const output = protocol.totalOutputTokens ?? 0
-            const cached = protocol.totalCachedInputTokens ?? 0
-            if (input === 0 && output === 0) {
-                return
-            }
-
-            const connectionCategory = protocol.aiConnectionCategory ?? null
-            const modelId = protocol.modelId ?? null
-            const key = `${String(connectionCategory ?? 'unknown')}|${modelId ?? '(default)'}`
-            const existing = grouped.get(key)
-            if (existing) {
-                existing.totalInputTokens += input
-                existing.totalOutputTokens += output
-                existing.totalCachedInputTokens = (existing.totalCachedInputTokens ?? 0) + cached
-                return
-            }
-
-            grouped.set(key, {
-                connectionCategory,
-                modelId,
-                totalInputTokens: input,
-                totalOutputTokens: output,
-                totalCachedInputTokens: cached,
-            })
-        })
-
-        return Array.from(grouped.values()).sort((left, right) => {
-            const leftTotal = left.totalInputTokens + left.totalOutputTokens
-            const rightTotal = right.totalInputTokens + right.totalOutputTokens
-            if (leftTotal !== rightTotal) {
-                return rightTotal - leftTotal
-            }
-
-            return `${left.connectionCategory ?? ''}|${left.modelId ?? ''}`.localeCompare(`${right.connectionCategory ?? ''}|${right.modelId ?? ''}`)
-        })
-    })
-
-    const protocolBreakdownConsistent = computed(() => {
-        if (protocolTokenBreakdown.value.length === 0) {
-            return jobDetail.value?.breakdownConsistent ?? null
-        }
-
-        const breakdownInput = protocolTokenBreakdown.value.reduce((sum, entry) => sum + entry.totalInputTokens, 0)
-        const breakdownOutput = protocolTokenBreakdown.value.reduce((sum, entry) => sum + entry.totalOutputTokens, 0)
-        return breakdownInput === totalInputTokens.value && breakdownOutput === totalOutputTokens.value
-    })
-
     const parsedInputResult = computed(() => {
         if (!selectedMergedEvent.value?.callDetails.inputTextSample) return null
         try {
@@ -1159,19 +942,20 @@ export function useJobProtocolViewModel() {
             if (parsed && typeof parsed === 'object' && parsed.confidence_evaluations) {
                 const evaluations = parsed.confidence_evaluations
                 if (Array.isArray(evaluations)) {
-                    parsed.confidence_evaluations = evaluations.map((evaluation: any) => {
+                    parsed.confidence_evaluations = evaluations.map((evaluation: unknown) => {
                         if (typeof evaluation === 'object' && evaluation !== null) {
+                            const record = evaluation as Record<string, unknown>
                             return {
-                                concern: evaluation.concern || evaluation.category || evaluation.metric || evaluation.type || evaluation.name || 'Unknown',
-                                confidence: evaluation.confidence || evaluation.level || evaluation.score || 'N/A',
+                                concern: record.concern || record.category || record.metric || record.type || record.name || 'Unknown',
+                                confidence: record.confidence || record.level || record.score || 'N/A',
                             }
                         }
                         return { concern: 'Unknown', confidence: String(evaluation) }
                     })
                 } else if (typeof evaluations === 'object') {
-                    parsed.confidence_evaluations = Object.entries(evaluations).map(([key, value]: [string, any]) => ({
+                    parsed.confidence_evaluations = Object.entries(evaluations as Record<string, unknown>).map(([key, value]) => ({
                         concern: key,
-                        confidence: typeof value === 'object' && value !== null ? (value.confidence || value.level || value.score || 'N/A') : value,
+                        confidence: typeof value === 'object' && value !== null ? ((value as Record<string, unknown>).confidence || (value as Record<string, unknown>).level || (value as Record<string, unknown>).score || 'N/A') : value,
                     }))
                 }
             }
@@ -1240,7 +1024,7 @@ export function useJobProtocolViewModel() {
                 return event
             }
 
-            if (event.kind === 'AiCall') {
+            if (event.kind === 'aiCall') {
                 break
             }
         }
@@ -1391,7 +1175,7 @@ export function useJobProtocolViewModel() {
                 createAdminClient().GET('/jobs/{id}', { params: { path: { id: jobId } } }),
             ])
 
-            const data = protocolRes.data as any
+            const data = protocolRes.data as ReviewProtocolPass[] | undefined
             const fetchError = protocolRes.error
 
             if (fetchError) {
@@ -1404,7 +1188,7 @@ export function useJobProtocolViewModel() {
                     reviewStatus.value = resultRes.data
                 }
                 if (detailRes.data) {
-                    const detail = detailRes.data as any
+                    const detail = detailRes.data
                     jobDetail.value = {
                         aiModel: detail.aiModel ?? null,
                         reviewTemperature: detail.reviewTemperature ?? null,
@@ -1482,10 +1266,13 @@ export function useJobProtocolViewModel() {
             }
 
             const nextProtocols = [...protocols.value]
+            // Overlay the detailed (generated, nullable-typed) pass onto the existing
+            // strict ReviewProtocolPass; the detailed response supplies the same fields
+            // at runtime, so assert back to the element type.
             nextProtocols[index] = {
                 ...nextProtocols[index],
                 ...detailedPass,
-            }
+            } as ReviewProtocolPass
             protocols.value = nextProtocols
 
             const nextLoaded = new Set(loadedProtocolIds.value)
@@ -1634,62 +1421,9 @@ export function useJobProtocolViewModel() {
     }
 
 
-    function buildDiffCacheKey(jobId: string, fileResultId: string): string {
-        return `${jobId}::${fileResultId}`
-    }
-
-    async function loadFileDiff(jobId: string, fileResultId: string): Promise<void> {
-        if (!jobId || !fileResultId) {
-            fileDiff.value = null
-            diffError.value = null
-            return
-        }
-
-        const cacheKey = buildDiffCacheKey(jobId, fileResultId)
-        const cached = diffCache.get(cacheKey)
-        if (cached) {
-            fileDiff.value = cached
-            diffError.value = null
-            diffLoading.value = false
-            return
-        }
-
-        diffLoading.value = true
-        diffError.value = null
-        try {
-            const { getAccessToken } = useSession()
-            const token = getAccessToken()
-            const headers: Record<string, string> = { Accept: 'application/json' }
-            if (token) {
-                headers.Authorization = `Bearer ${token}`
-            }
-
-            const res = await fetch(
-                `${getActiveRuntime().apiBaseUrl}/reviewing/jobs/${jobId}/files/${fileResultId}/diff`,
-                { headers },
-            )
-            if (!res.ok) {
-                fileDiff.value = null
-                diffError.value = `Diff unavailable (HTTP ${res.status})`
-                return
-            }
-
-            const payload = (await res.json()) as FileDiffDto
-            diffCache.set(cacheKey, payload)
-            fileDiff.value = payload
-            diffError.value = null
-        } catch (error) {
-            fileDiff.value = null
-            diffError.value = `Diff unavailable: ${error instanceof Error ? error.message : 'unknown error'}`
-        } finally {
-            diffLoading.value = false
-        }
-    }
-
     function clearDiff(): void {
         detailTab.value = 'events'
-        fileDiff.value = null
-        diffError.value = null
+        resetDiff()
     }
 
     return reactive({

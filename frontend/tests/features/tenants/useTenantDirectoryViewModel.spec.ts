@@ -5,7 +5,7 @@ const routerPushMock = vi.fn()
 const notifyMock = vi.fn()
 const isAdmin = ref(true)
 const edition = ref('commercial')
-const hasTenantRoleMock = vi.fn(() => false)
+const hasTenantRoleMock = vi.fn((_tenantId: string, _role: number) => false)
 
 vi.mock('vue-router', () => ({
   useRouter: () => ({ push: routerPushMock }),

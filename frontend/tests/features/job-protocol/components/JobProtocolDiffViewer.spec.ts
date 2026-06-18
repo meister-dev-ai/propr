@@ -34,7 +34,8 @@ let lastCallOptions: unknown = null
 let lastContainer: HTMLElement | null = null
 
 vi.mock('diff2html/lib/ui/js/diff2html-ui-base.js', () => ({
-    Diff2HtmlUI: vi.fn().mockImplementation((container: HTMLElement, _diff: string, options: unknown) => {
+    // vitest 4: `new Diff2HtmlUI()` requires the impl to be a function/class, not an arrow.
+    Diff2HtmlUI: vi.fn().mockImplementation(function (container: HTMLElement, _diff: string, options: unknown) {
         lastUi = createUiDouble()
         lastCallOptions = options
         lastContainer = container

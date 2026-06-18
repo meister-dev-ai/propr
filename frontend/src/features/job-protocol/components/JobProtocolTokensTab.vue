@@ -23,7 +23,7 @@
 </template>
 
 <script setup lang="ts">
-import TokenBreakdownTable from '@/components/TokenBreakdownTable.vue'
+import TokenBreakdownTable from '@/components/usage/TokenBreakdownTable.vue'
 import type { JobProtocolViewModel } from '@/features/job-protocol/composables/useJobProtocolViewModel'
 
 defineProps<{ vm: JobProtocolViewModel }>()

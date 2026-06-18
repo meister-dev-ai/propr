@@ -1,0 +1,516 @@
+// Copyright (c) Andreas Rain.
+// Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
+
+import { computed, onMounted, reactive, ref } from 'vue'
+import {
+  activateAiConnection,
+  createAiConnection,
+  deactivateAiConnection,
+  deleteAiConnection,
+  discoverAiModels,
+  listAiConnections,
+  updateAiConnection,
+  verifyAiConnection,
+} from '@/services/aiConnectionsService'
+import type {
+  AiAuthMode,
+  AiConfiguredModelRequest,
+  AiConnectionDto,
+  AiDiscoveryMode,
+  AiProviderKind,
+  AiPurpose,
+  CreateAiConnectionRequest,
+  DiscoverModelsRequest,
+  UpdateAiConnectionRequest,
+} from '@/services/aiConnectionsService'
+import type { EditableBinding, EditableModel } from './aiConnectionsForm.types'
+import {
+  makeBindingDefaults,
+  parseMapText,
+  purposeLabel,
+  serializeMap,
+  verificationLabel,
+} from './aiConnectionsFormatters'
+
+/**
+ * State and orchestration for the AI-connections client tab: profile list,
+ * the create/edit editor, model discovery, validation, save, and lifecycle
+ * actions. Extracted from ClientAiConnectionsTab.vue; pure option tables and
+ * label/parse helpers live in ./aiConnectionsFormatters.
+ */
+export function useClientAiConnectionsTab(props: { clientId: string }) {
+  const profiles = ref<AiConnectionDto[]>([])
+  const loading = ref(false)
+  const discovering = ref(false)
+  const saving = ref(false)
+  const loadError = ref('')
+  const saveError = ref('')
+  const discoveryMessage = ref('')
+  const busyConnectionId = ref<string | null>(null)
+  const deleteTarget = ref<AiConnectionDto | null>(null)
+  const viewMode = ref<'list' | 'detail'>('list')
+  const advancedSettingsOpen = ref(false)
+  const editingModelId = ref<string | null>(null)
+
+  const editor = reactive({
+    mode: 'create' as 'create' | 'edit',
+    profileId: '',
+    displayName: '',
+    providerKind: 'azureOpenAi' as AiProviderKind,
+    baseUrl: '',
+    authMode: 'apiKey' as AiAuthMode,
+    apiKey: '',
+    discoveryMode: 'providerCatalog' as AiDiscoveryMode,
+    defaultHeadersText: '',
+    defaultQueryParamsText: '',
+    models: [] as EditableModel[],
+    bindings: [] as EditableBinding[],
+  })
+
+  const showListView = computed(() => profiles.value.length > 0 && viewMode.value === 'list')
+  const selectedProfile = computed(() => profiles.value.find((profile) => profile.id === editor.profileId) ?? null)
+
+  const modelsForPurpose = (purpose: AiPurpose) => {
+    return editor.models.filter((model) => (purpose === 'embeddingDefault' ? model.kind === 'embedding' : model.kind === 'chat'))
+  }
+
+  const refreshProfiles = async () => {
+    loading.value = true
+    loadError.value = ''
+    try {
+      const loadedProfiles = await listAiConnections(props.clientId)
+      profiles.value = loadedProfiles
+
+      if (loadedProfiles.length === 0)
+      {
+        viewMode.value = 'detail'
+      }
+      else if (viewMode.value !== 'detail')
+      {
+        viewMode.value = 'list'
+      }
+    } catch (error) {
+      loadError.value = error instanceof Error ? error.message : 'Failed to load AI providers.'
+    } finally {
+      loading.value = false
+    }
+  }
+
+  const resetEditor = () => {
+    editor.mode = 'create'
+    editor.profileId = ''
+    editor.displayName = ''
+    editor.providerKind = 'azureOpenAi'
+    editor.baseUrl = ''
+    editor.authMode = 'apiKey'
+    editor.apiKey = ''
+    editor.discoveryMode = 'providerCatalog'
+    editor.defaultHeadersText = ''
+    editor.defaultQueryParamsText = ''
+    editor.models = []
+    editor.bindings = makeBindingDefaults()
+    saveError.value = ''
+    discoveryMessage.value = ''
+    advancedSettingsOpen.value = false
+    editingModelId.value = null
+  }
+
+  const openCreateEditor = () => {
+    resetEditor()
+    viewMode.value = 'detail'
+  }
+
+  const openEditEditor = (profile: AiConnectionDto) => {
+    viewMode.value = 'detail'
+    editor.mode = 'edit'
+    editor.profileId = profile.id ?? ''
+    editor.displayName = profile.displayName ?? ''
+    editor.providerKind = profile.providerKind ?? 'azureOpenAi'
+    editor.baseUrl = profile.baseUrl ?? ''
+    editor.authMode = profile.authMode ?? 'apiKey'
+    editor.apiKey = ''
+    editor.discoveryMode = profile.discoveryMode ?? 'providerCatalog'
+    editor.defaultHeadersText = serializeMap(profile.defaultHeaders)
+    editor.defaultQueryParamsText = serializeMap(profile.defaultQueryParams)
+    advancedSettingsOpen.value = Boolean(editor.defaultHeadersText || editor.defaultQueryParamsText)
+    editor.models = (profile.configuredModels ?? []).map((model) => ({
+      localId: model.id ?? crypto.randomUUID(),
+      existingId: model.id ?? null,
+      remoteModelId: model.remoteModelId ?? '',
+      displayName: model.displayName ?? '',
+      kind: model.supportsEmbedding ? 'embedding' : 'chat',
+      tokenizerName: model.tokenizerName ?? '',
+      maxInputTokens: model.maxInputTokens == null ? '' : String(model.maxInputTokens),
+      embeddingDimensions: model.embeddingDimensions == null ? '' : String(model.embeddingDimensions),
+      supportsStructuredOutput: Boolean(model.supportsStructuredOutput),
+      supportsToolUse: Boolean(model.supportsToolUse),
+    }))
+    const modelLookup = new Map<string, string>()
+    for (const model of editor.models) {
+      if (model.existingId) {
+        modelLookup.set(model.existingId, model.localId)
+      }
+
+      if (model.remoteModelId) {
+        modelLookup.set(model.remoteModelId, model.localId)
+      }
+    }
+
+    editor.bindings = makeBindingDefaults().map((binding) => {
+      const existing = (profile.purposeBindings ?? []).find((candidate) => candidate.purpose === binding.purpose)
+      return existing
+        ? {
+            id: existing.id ?? null,
+            purpose: existing.purpose ?? binding.purpose,
+            configuredModelId: (existing.configuredModelId ? modelLookup.get(existing.configuredModelId) : undefined)
+              ?? (existing.remoteModelId ? modelLookup.get(existing.remoteModelId) : undefined)
+              ?? '',
+            protocolMode: existing.protocolMode ?? binding.protocolMode,
+            isEnabled: existing.isEnabled ?? true,
+          }
+        : binding
+    })
+    saveError.value = ''
+    discoveryMessage.value = ''
+  }
+
+  const goBackToList = () => {
+    if (profiles.value.length === 0) {
+      return
+    }
+
+    viewMode.value = 'list'
+    saveError.value = ''
+    discoveryMessage.value = ''
+    advancedSettingsOpen.value = false
+  }
+
+  const handleProviderKindChange = () => {
+    if (editor.providerKind !== 'azureOpenAi' && editor.authMode === 'azureIdentity') {
+      editor.authMode = 'apiKey'
+    }
+  }
+
+  const addModel = () => {
+    const newModelId = crypto.randomUUID()
+    editor.models.push({
+      localId: newModelId,
+      existingId: null,
+      remoteModelId: '',
+      displayName: '',
+      kind: 'chat',
+      tokenizerName: '',
+      maxInputTokens: '',
+      embeddingDimensions: '',
+      supportsStructuredOutput: true,
+      supportsToolUse: true,
+    })
+    editingModelId.value = newModelId
+  }
+
+  const removeModel = (localId: string) => {
+    editor.models = editor.models.filter((model) => model.localId !== localId)
+    editor.bindings = editor.bindings.map((binding) =>
+      binding.configuredModelId === localId ? { ...binding, configuredModelId: '' } : binding,
+    )
+  }
+
+  const buildDiscoverRequest = (): DiscoverModelsRequest => ({
+    providerKind: editor.providerKind,
+    baseUrl: editor.baseUrl,
+    auth: {
+      mode: editor.authMode,
+      apiKey: editor.authMode === 'apiKey' ? editor.apiKey : undefined,
+    },
+    defaultHeaders: parseMapText(editor.defaultHeadersText),
+    defaultQueryParams: parseMapText(editor.defaultQueryParamsText),
+  })
+
+  const handleDiscoverModels = async () => {
+    discovering.value = true
+    discoveryMessage.value = ''
+    saveError.value = ''
+    try {
+      const response = await discoverAiModels(props.clientId, buildDiscoverRequest())
+      const discoveredModels = response.models ?? []
+      const existingByRemoteId = new Map(editor.models.map((model) => [model.remoteModelId.toLowerCase(), model]))
+
+      for (const discovered of discoveredModels) {
+        const key = (discovered.remoteModelId ?? '').toLowerCase()
+        if (!key) {
+          continue
+        }
+
+        const existing = existingByRemoteId.get(key)
+        if (existing) {
+          existing.displayName = discovered.displayName ?? existing.displayName
+          existing.kind = discovered.supportsEmbedding ? 'embedding' : 'chat'
+          existing.tokenizerName = discovered.tokenizerName ?? existing.tokenizerName
+          existing.maxInputTokens = discovered.maxInputTokens == null ? existing.maxInputTokens : String(discovered.maxInputTokens)
+          existing.embeddingDimensions = discovered.embeddingDimensions == null ? existing.embeddingDimensions : String(discovered.embeddingDimensions)
+          existing.supportsStructuredOutput = Boolean(discovered.supportsStructuredOutput)
+          existing.supportsToolUse = Boolean(discovered.supportsToolUse)
+          continue
+        }
+
+        editor.models.push({
+          localId: discovered.id ?? crypto.randomUUID(),
+          existingId: discovered.id ?? null,
+          remoteModelId: discovered.remoteModelId ?? '',
+          displayName: discovered.displayName ?? discovered.remoteModelId ?? '',
+          kind: discovered.supportsEmbedding ? 'embedding' : 'chat',
+          tokenizerName: discovered.tokenizerName ?? '',
+          maxInputTokens: discovered.maxInputTokens == null ? '' : String(discovered.maxInputTokens),
+          embeddingDimensions: discovered.embeddingDimensions == null ? '' : String(discovered.embeddingDimensions),
+          supportsStructuredOutput: Boolean(discovered.supportsStructuredOutput),
+          supportsToolUse: Boolean(discovered.supportsToolUse),
+        })
+      }
+
+      discoveryMessage.value = response.discoveryStatus === 'failed'
+        ? (response.warnings ?? [])[0] ?? 'Model discovery returned no results.'
+        : `Discovered ${discoveredModels.length} model${discoveredModels.length === 1 ? '' : 's'}.`
+    } catch (error) {
+      saveError.value = error instanceof Error ? error.message : 'Failed to discover provider models.'
+    } finally {
+      discovering.value = false
+    }
+  }
+
+  const normalizeConfiguredModels = (): AiConfiguredModelRequest[] => {
+    return editor.models.map((model) => ({
+      id: model.existingId || undefined,
+      remoteModelId: model.remoteModelId.trim(),
+      displayName: model.displayName.trim() || model.remoteModelId.trim(),
+      operationKinds: [model.kind === 'embedding' ? 'embedding' : 'chat'],
+      supportedProtocolModes: model.kind === 'embedding'
+        ? ['auto', 'embeddings']
+        : ['auto', 'responses', 'chatCompletions'],
+      tokenizerName: model.kind === 'embedding' ? model.tokenizerName.trim() : undefined,
+      maxInputTokens: model.kind === 'embedding' && model.maxInputTokens ? Number(model.maxInputTokens) : undefined,
+      embeddingDimensions: model.kind === 'embedding' && model.embeddingDimensions ? Number(model.embeddingDimensions) : undefined,
+      supportsStructuredOutput: model.kind === 'chat' ? model.supportsStructuredOutput : false,
+      supportsToolUse: model.kind === 'chat' ? model.supportsToolUse : false,
+      source: 'manual',
+    }))
+  }
+
+  const normalizePurposeBindings = () => {
+    const modelLookup = new Map(editor.models.map((model) => [model.localId, model]))
+    return editor.bindings.map((binding) => ({
+      id: binding.id || undefined,
+      purpose: binding.purpose,
+      configuredModelId: modelLookup.get(binding.configuredModelId)?.existingId || undefined,
+      remoteModelId: modelLookup.get(binding.configuredModelId)?.remoteModelId || undefined,
+      protocolMode: binding.protocolMode,
+      isEnabled: binding.isEnabled,
+    }))
+  }
+
+  const validateEditor = () => {
+    if (!editor.displayName.trim()) {
+      return 'Display name is required.'
+    }
+
+    if (!editor.baseUrl.trim()) {
+      return 'Base URL is required.'
+    }
+
+    if (editor.authMode === 'apiKey' && !editor.apiKey.trim() && editor.mode === 'create') {
+      return 'An API key is required for this provider.'
+    }
+
+    if (editor.models.length === 0) {
+      return 'Add at least one configured model.'
+    }
+
+    for (const model of editor.models) {
+      if (!model.remoteModelId.trim()) {
+        return 'Every configured model needs a remote model ID.'
+      }
+
+      if (model.kind === 'embedding' && (!model.tokenizerName.trim() || !model.maxInputTokens || !model.embeddingDimensions)) {
+        return `Embedding model '${model.remoteModelId || model.displayName || 'unnamed'}' requires tokenizer, max input tokens, and dimensions.`
+      }
+    }
+
+    for (const binding of editor.bindings) {
+      if (binding.isEnabled && !binding.configuredModelId) {
+        return `${purposeLabel(binding.purpose)} requires a selected model.`
+      }
+    }
+
+    return ''
+  }
+
+  const saveProfile = async () => {
+    saveError.value = ''
+    const validationError = validateEditor()
+    if (validationError) {
+      saveError.value = validationError
+      return
+    }
+
+    const request: CreateAiConnectionRequest | UpdateAiConnectionRequest = {
+      displayName: editor.displayName.trim(),
+      providerKind: editor.providerKind,
+      baseUrl: editor.baseUrl.trim(),
+      auth: {
+        mode: editor.authMode,
+        apiKey: editor.authMode === 'apiKey' && editor.apiKey.trim() ? editor.apiKey.trim() : undefined,
+      },
+      discoveryMode: editor.discoveryMode,
+      defaultHeaders: parseMapText(editor.defaultHeadersText),
+      defaultQueryParams: parseMapText(editor.defaultQueryParamsText),
+      configuredModels: normalizeConfiguredModels(),
+      purposeBindings: normalizePurposeBindings(),
+    }
+
+    saving.value = true
+    try {
+      let savedProfile: AiConnectionDto
+      if (editor.mode === 'edit' && editor.profileId) {
+        savedProfile = await updateAiConnection(props.clientId, editor.profileId, request)
+      } else {
+        savedProfile = await createAiConnection(props.clientId, request as CreateAiConnectionRequest)
+      }
+
+      await refreshProfiles()
+
+      const refreshedProfile = profiles.value.find((profile) => profile.id === savedProfile.id)
+      if (refreshedProfile) {
+        openEditEditor(refreshedProfile)
+      } else if (profiles.value.length > 0) {
+        viewMode.value = 'list'
+      } else {
+        openCreateEditor()
+      }
+    } catch (error) {
+      saveError.value = error instanceof Error ? error.message : 'Failed to save AI provider.'
+    } finally {
+      saving.value = false
+    }
+  }
+
+  const handleVerify = async (profile: AiConnectionDto) => {
+    if (!profile.id) {
+      return
+    }
+
+    busyConnectionId.value = profile.id
+    saveError.value = ''
+    try {
+      const result = await verifyAiConnection(props.clientId, profile.id)
+      discoveryMessage.value = result.summary ?? verificationLabel(result.status)
+      await refreshProfiles()
+    } catch (error) {
+      saveError.value = error instanceof Error ? error.message : 'Failed to verify AI provider.'
+    } finally {
+      busyConnectionId.value = null
+    }
+  }
+
+  const handleActivate = async (profile: AiConnectionDto) => {
+    if (!profile.id) {
+      return
+    }
+
+    busyConnectionId.value = profile.id
+    saveError.value = ''
+    try {
+      await activateAiConnection(props.clientId, profile.id)
+      await refreshProfiles()
+    } catch (error) {
+      saveError.value = error instanceof Error ? error.message : 'Failed to activate AI provider.'
+    } finally {
+      busyConnectionId.value = null
+    }
+  }
+
+  const handleDeactivate = async (profile: AiConnectionDto) => {
+    if (!profile.id) {
+      return
+    }
+
+    busyConnectionId.value = profile.id
+    saveError.value = ''
+    try {
+      await deactivateAiConnection(props.clientId, profile.id)
+      await refreshProfiles()
+    } catch (error) {
+      saveError.value = error instanceof Error ? error.message : 'Failed to deactivate AI provider.'
+    } finally {
+      busyConnectionId.value = null
+    }
+  }
+
+  const confirmDelete = (profile: AiConnectionDto) => {
+    deleteTarget.value = profile
+  }
+
+  const handleDelete = async (profile: AiConnectionDto) => {
+    if (!profile.id) {
+      return
+    }
+
+    busyConnectionId.value = profile.id
+    deleteTarget.value = null
+    saveError.value = ''
+    try {
+      await deleteAiConnection(props.clientId, profile.id)
+      await refreshProfiles()
+
+      if (profiles.value.length === 0) {
+        openCreateEditor()
+      } else if (editor.profileId === profile.id) {
+        goBackToList()
+      }
+    } catch (error) {
+      saveError.value = error instanceof Error ? error.message : 'Failed to delete AI provider.'
+    } finally {
+      busyConnectionId.value = null
+    }
+  }
+
+  onMounted(async () => {
+    resetEditor()
+    await refreshProfiles()
+  })
+
+  return {
+    // state
+    profiles,
+    loading,
+    discovering,
+    saving,
+    loadError,
+    saveError,
+    discoveryMessage,
+    busyConnectionId,
+    deleteTarget,
+    viewMode,
+    advancedSettingsOpen,
+    editingModelId,
+    editor,
+    // derived
+    showListView,
+    selectedProfile,
+    modelsForPurpose,
+    // actions
+    refreshProfiles,
+    resetEditor,
+    openCreateEditor,
+    openEditEditor,
+    goBackToList,
+    handleProviderKindChange,
+    addModel,
+    removeModel,
+    handleDiscoverModels,
+    saveProfile,
+    handleVerify,
+    handleActivate,
+    handleDeactivate,
+    confirmDelete,
+    handleDelete,
+  }
+}

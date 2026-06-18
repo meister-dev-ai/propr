@@ -15,7 +15,7 @@
 <script setup lang="ts">
 import { RouterView } from 'vue-router'
 import AppHeader from '@/components/navigation/AppHeader.vue'
-import AppNotification from '@/components/AppNotification.vue'
+import AppNotification from '@/components/feedback/AppNotification.vue'
 import { useSession } from '@/composables/useSession'
 
 const { isAuthenticated } = useSession()

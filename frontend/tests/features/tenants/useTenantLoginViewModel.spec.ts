@@ -2,6 +2,7 @@
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import type { AuthOptions } from '@/services/authOptionsService'
 
 vi.mock('vue-router', () => ({
   useRoute: () => ({ params: { tenantSlug: 'acme' } }),
@@ -34,13 +35,16 @@ vi.mock('@/services/authOptionsService', () => ({
 
 import { useTenantLoginViewModel } from '@/features/tenants/view-models/useTenantLoginViewModel'
 
-const fakeAuthOptions = (capabilityMessage: string | null) => ({
+// Test double: only key/message are read by the VM, so the capability shape is
+// intentionally reduced and cast to the full AuthOptions type.
+const fakeAuthOptions = (capabilityMessage: string | null): AuthOptions => ({
   edition: 'commercial' as const,
   availableSignInMethods: ['sso'],
   capabilities: capabilityMessage === null
     ? []
     : [{ key: 'sso-authentication', message: capabilityMessage }],
-})
+  publicBaseUrl: null,
+} as AuthOptions)
 
 describe('useTenantLoginViewModel (FR-007, FR-008, FR-012)', () => {
   beforeEach(() => {
@@ -69,6 +73,7 @@ describe('useTenantLoginViewModel (FR-007, FR-008, FR-012)', () => {
   it('loads login options and surfaces ssoCapabilityMessage from auth options', async () => {
     const tenantLoginOptions = {
       tenantSlug: 'acme',
+      localLoginEnabled: false,
       providers: [{ providerId: 'p1', providerKind: 'EntraId', displayName: 'Microsoft', providerLabel: 'EntraID' }],
     }
     const tenantLoginOptionsService = vi.fn(async () => tenantLoginOptions)
@@ -89,7 +94,7 @@ describe('useTenantLoginViewModel (FR-007, FR-008, FR-012)', () => {
   })
 
   it('clears ssoCapabilityMessage when authOptions fails but still attempts tenant load', async () => {
-    const tenantLoginOptions = { tenantSlug: 'acme', providers: [] }
+    const tenantLoginOptions = { tenantSlug: 'acme', localLoginEnabled: false, providers: [] }
     const tenantLoginOptionsService = vi.fn(async () => tenantLoginOptions)
     const authOptionsService = vi.fn(async () => { throw new Error('auth boom') })
 

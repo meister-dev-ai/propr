@@ -19,7 +19,7 @@ vi.mock('vue-router', () => ({
   RouterLink: { template: '<a><slot /></a>' },
 }))
 
-vi.mock('@/components/ModalDialog.vue', () => ({
+vi.mock('@/components/dialogs/ModalDialog.vue', () => ({
   default: {
     name: 'ModalDialog',
     props: ['isOpen', 'title'],
@@ -36,9 +36,12 @@ vi.mock('@/components/ProgressOrb.vue', () => ({
 
 vi.mock('markdown-it', () => {
   return {
-    default: vi.fn().mockImplementation(() => ({
-      render: (s: string) => `<p>${s}</p>`,
-    })),
+    // vitest 4: a mock used with `new` must be a class/function, not an arrow factory.
+    default: class {
+      render(s: string) {
+        return `<p>${s}</p>`
+      }
+    },
   }
 })
 
@@ -2006,7 +2009,7 @@ describe('JobProtocolView — comment search and filter (T042)', () => {
     expect(filePathField.classes()).toContain('v-autocomplete')
 
     const queryInput = wrapper.get('[data-testid="trace-filter-query"] input')
-    expect(queryInput.exists()).toBe(true)
+    expect(wrapper.find('[data-testid="trace-filter-query"] input').exists()).toBe(true)
     await queryInput.setValue('suspicious')
     await flushPromises()
 
@@ -2050,7 +2053,7 @@ describe('JobProtocolView — comment search and filter (T042)', () => {
     await openTraceSearchPanel(wrapper)
 
     const queryInput = wrapper.get('[data-testid="trace-filter-query"] input')
-    expect(queryInput.exists()).toBe(true)
+    expect(wrapper.find('[data-testid="trace-filter-query"] input').exists()).toBe(true)
     await queryInput.setValue('no-such-trace')
     await flushPromises()
 
@@ -2211,7 +2214,7 @@ describe('JobProtocolView — comment search and filter (T042)', () => {
     await filePathInput.setValue('src/bar.ts')
     await flushPromises()
 
-    expect(filePathInput.element.value).toBe('src/bar.ts')
+    expect((filePathInput.element as HTMLInputElement).value).toBe('src/bar.ts')
     expect(wrapper.text()).toContain('bar trace output')
     expect(wrapper.text()).not.toContain('Found suspicious evidence in auth flow [REDACTED]')
 
@@ -2221,7 +2224,7 @@ describe('JobProtocolView — comment search and filter (T042)', () => {
     await flushPromises()
 
     expect(wrapper.get('[data-testid="trace-search-toggle"]').text()).toContain('Hide filters')
-    expect(filePathInput.element.value).toBe('')
+    expect((filePathInput.element as HTMLInputElement).value).toBe('')
   })
 
   it('ignores unrelated execution-trace query keys when no matching pass or event exists', async () => {

@@ -26,7 +26,7 @@ export interface ProviderOption {
 const providerOrder: readonly ScmProviderFamily[] = ['azureDevOps', 'github', 'gitLab', 'forgejo']
 
 function getClient() {
-  return createAdminClient() as any
+  return createAdminClient()
 }
 
 export async function listProviderActivationStatuses(): Promise<ProviderActivationStatusDto[]> {

@@ -40,7 +40,7 @@ describe('proCursorService', () => {
   })
 
   it('creates a ProCursor source with the guided-selection payload', async () => {
-    const request: ProCursorKnowledgeSourceRequest = {
+    const request = {
       displayName: 'Platform Docs',
       sourceKind: 'repository',
       organizationUrl: 'https://dev.azure.com/example',
@@ -90,7 +90,7 @@ describe('proCursorService', () => {
       response: { ok: true },
     })
 
-    const result = await createProCursorSource('client-1', request)
+    const result = await createProCursorSource('client-1', request as Parameters<typeof createProCursorSource>[1])
 
     expect(postMock).toHaveBeenCalledWith('/admin/clients/{clientId}/procursor/sources', {
       params: { path: { clientId: 'client-1' } },
@@ -160,7 +160,7 @@ describe('proCursorService', () => {
   })
 
   it('queues a ProCursor refresh with the default refresh payload', async () => {
-    const refreshResponse: ProCursorRefreshResponse = {
+    const refreshResponse = {
       jobId: 'job-1',
       sourceId: 'source-1',
       trackedBranchId: 'branch-1',

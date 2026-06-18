@@ -4,6 +4,7 @@
 using System.Security.Cryptography;
 using System.Text;
 using MeisterProPR.Api.Extensions;
+using MeisterProPR.Api.Features.IdentityAndAccess;
 using MeisterProPR.Application.Features.Licensing.Dtos;
 using MeisterProPR.Application.Features.Licensing.Models;
 using MeisterProPR.Application.Features.Licensing.Ports;
@@ -54,26 +55,30 @@ public sealed class AuthController(
 
         await refreshTokenRepository.AddAsync(refreshToken, ct);
 
+        // Deliver the refresh token only as an httpOnly cookie (never to JS) so the session
+        // survives across tabs and reloads without XSS exposure. The access token stays in the body.
+        RefreshTokenCookie.Set(this.Response, rawRefreshToken, refreshToken.ExpiresAt, this.Request.IsHttps);
+
         return this.Ok(
             new
             {
                 accessToken,
-                refreshToken = rawRefreshToken,
                 expiresIn = 900,
                 tokenType = "Bearer",
             });
     }
 
-    /// <summary>Exchange a valid refresh token for a new JWT access token.</summary>
+    /// <summary>Exchange the refresh-token cookie (or body, for legacy callers) for a new JWT access token.</summary>
     [HttpPost("/auth/refresh")]
-    public async Task<IActionResult> Refresh([FromBody] RefreshRequest request, CancellationToken ct)
+    public async Task<IActionResult> Refresh([FromBody] RefreshRequest? request = null, CancellationToken ct = default)
     {
-        if (string.IsNullOrWhiteSpace(request.RefreshToken))
+        var rawRefreshToken = RefreshTokenCookie.Read(this.Request) ?? request?.RefreshToken;
+        if (string.IsNullOrWhiteSpace(rawRefreshToken))
         {
-            return this.BadRequest(new { error = "refreshToken is required." });
+            return this.Unauthorized(new { error = "No refresh token present." });
         }
 
-        var tokenHash = ComputeSha256(request.RefreshToken);
+        var tokenHash = ComputeSha256(rawRefreshToken);
         var token = await refreshTokenRepository.GetActiveByHashAsync(tokenHash, ct);
 
         if (token is null)
@@ -95,6 +100,24 @@ public sealed class AuthController(
                 expiresIn = 900,
                 tokenType = "Bearer",
             });
+    }
+
+    /// <summary>Revokes the caller's refresh tokens and clears the session cookie.</summary>
+    [HttpPost("/auth/logout")]
+    public async Task<IActionResult> Logout(CancellationToken ct = default)
+    {
+        var rawRefreshToken = RefreshTokenCookie.Read(this.Request);
+        if (!string.IsNullOrWhiteSpace(rawRefreshToken))
+        {
+            var token = await refreshTokenRepository.GetActiveByHashAsync(ComputeSha256(rawRefreshToken), ct);
+            if (token is not null)
+            {
+                await refreshTokenRepository.RevokeAllForUserAsync(token.UserId, ct);
+            }
+        }
+
+        RefreshTokenCookie.Clear(this.Response, this.Request.IsHttps);
+        return this.NoContent();
     }
 
     /// <summary>Returns the current user's global role and per-client roles. Requires authentication.</summary>

@@ -19,7 +19,7 @@
                         type="button"
                         class="btn-ghost btn-sm trace-filter-toggle"
                         :class="{ 'trace-filter-toggle--active': vm.traceFindingsOnly }"
-                        :aria-pressed="String(vm.traceFindingsOnly)"
+                        :aria-pressed="vm.traceFindingsOnly"
                         data-testid="trace-findings-only-toggle"
                         @click="vm.traceFindingsOnly = !vm.traceFindingsOnly"
                     >
@@ -28,7 +28,7 @@
                     <button
                         type="button"
                         class="btn-ghost btn-sm trace-filter-collapse"
-                        :aria-expanded="String(!vm.isTraceSearchCollapsed)"
+                        :aria-expanded="!vm.isTraceSearchCollapsed"
                         data-testid="trace-search-toggle"
                         @click="vm.isTraceSearchCollapsed = !vm.isTraceSearchCollapsed"
                     >
@@ -100,7 +100,7 @@
                         <button
                             type="button"
                             role="tab"
-                            :aria-selected="String(vm.detailTab === 'events')"
+                            :aria-selected="vm.detailTab === 'events'"
                             class="pass-detail-tab"
                             :class="{ 'is-active': vm.detailTab === 'events' }"
                             data-testid="trace-tab-events"
@@ -113,7 +113,7 @@
                         <button
                             type="button"
                             role="tab"
-                            :aria-selected="String(vm.detailTab === 'diff')"
+                            :aria-selected="vm.detailTab === 'diff'"
                             class="pass-detail-tab"
                             :class="{ 'is-active': vm.detailTab === 'diff' }"
                             data-testid="trace-tab-diff"
@@ -435,7 +435,7 @@ function retryFileDiff() {
     gap: 0.9rem;
     padding: 1rem 1.1rem;
     border: 1px solid var(--color-border);
-    border-radius: 14px;
+    border-radius: var(--radius-xl);
     background: linear-gradient(180deg, rgba(255, 255, 255, 0.03), rgba(255, 255, 255, 0.015));
 }
 
@@ -612,7 +612,7 @@ function retryFileDiff() {
     align-items: center;
     gap: 0.4rem;
     padding: 0.45rem 0.85rem;
-    border-radius: 8px 8px 0 0;
+    border-radius: var(--radius-md) var(--radius-md) 0 0;
     font: inherit;
     font-size: 0.78rem;
     font-weight: 600;
@@ -685,7 +685,7 @@ function retryFileDiff() {
 
 .chip-inherited {
     background: rgba(59, 130, 246, 0.14);
-    color: #93c5fd;
+    color: var(--color-info);
     border: 1px solid rgba(59, 130, 246, 0.28);
 }
 
@@ -743,12 +743,12 @@ function retryFileDiff() {
 }
 
 .inheritance-link {
-    color: #93c5fd;
+    color: var(--color-info);
     text-decoration: none;
 }
 
 .inheritance-link:hover {
-    color: #bfdbfe;
+    color: var(--color-info);
     text-decoration: underline;
 }
 
@@ -799,7 +799,7 @@ function retryFileDiff() {
     gap: 0.75rem;
     align-items: center;
     padding: 0.7rem 0.85rem;
-    border-radius: 10px;
+    border-radius: var(--radius-lg);
     border: 1px solid var(--color-border);
     background: rgba(255, 255, 255, 0.02);
     color: var(--color-text);
@@ -873,7 +873,7 @@ function retryFileDiff() {
     gap: 0.8rem;
     padding: 1rem 1.1rem;
     border: 1px solid var(--color-border);
-    border-radius: 14px;
+    border-radius: var(--radius-xl);
     background: linear-gradient(180deg, rgba(255, 255, 255, 0.028), rgba(255, 255, 255, 0.018));
     box-shadow: 0 10px 30px rgba(0, 0, 0, 0.12);
 }
@@ -1126,17 +1126,17 @@ function retryFileDiff() {
 
 .status-completed {
     background: rgba(34, 197, 94, 0.15);
-    color: #86efac;
+    color: var(--color-success);
 }
 
 .status-failed {
     background: rgba(239, 68, 68, 0.16);
-    color: #fca5a5;
+    color: var(--color-danger);
 }
 
 .status-pending {
     background: rgba(148, 163, 184, 0.16);
-    color: #cbd5f5;
+    color: var(--color-text-muted);
 }
 
 @keyframes flash {
@@ -1155,14 +1155,14 @@ function retryFileDiff() {
     letter-spacing: 0.04em;
 }
 
-.badge-purple { background: rgba(168, 85, 247, 0.15); color: #c084fc; }
-.badge-cyan { background: rgba(34, 211, 238, 0.15); color: #22d3ee; }
-.badge-green { background: rgba(52, 211, 153, 0.15); color: #34d399; }
-.badge-gray { background: rgba(255, 255, 255, 0.1); color: var(--color-text-muted); }
+.kind-badge--suggestion { background: rgba(168, 85, 247, 0.15); color: var(--color-suggestion); }
+.kind-badge--accent { background: rgba(34, 211, 238, 0.15); color: var(--color-accent); }
+.kind-badge--success { background: rgba(52, 211, 153, 0.15); color: var(--color-success); }
+.kind-badge--muted { background: rgba(255, 255, 255, 0.1); color: var(--color-text-muted); }
 
 .tool-name { font-weight: 600; font-family: monospace; }
-.ai-name { font-style: italic; color: #d7d0f5; }
-.memory-name { color: #34d399; }
+.ai-name { font-style: italic; color: var(--color-suggestion); }
+.memory-name { color: var(--color-success); }
 .operational-name { color: var(--color-text-muted); }
 
 .kind-parent-pill {
@@ -1171,7 +1171,7 @@ function retryFileDiff() {
     padding: 0.12rem 0.48rem;
     border-radius: var(--radius-pill);
     background: rgba(168, 85, 247, 0.14);
-    color: #e9d5ff;
+    color: var(--color-suggestion);
     font-size: 0.68rem;
     font-weight: 700;
     line-height: 1.1;
@@ -1184,7 +1184,7 @@ function retryFileDiff() {
     gap: 0.45rem;
     border: 1px solid rgba(168, 85, 247, 0.18);
     background: rgba(168, 85, 247, 0.14);
-    color: #d8b4fe;
+    color: var(--color-suggestion);
     border-radius: var(--radius-pill);
     padding: 0.14rem 0.48rem 0.14rem 0.22rem;
     cursor: pointer;

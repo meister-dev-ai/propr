@@ -50,8 +50,13 @@ public sealed class IdentityAndAccessModuleIntegrationTests(IdentityAndAccessMod
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         var body = JsonDocument.Parse(await response.Content.ReadAsStringAsync()).RootElement;
         Assert.False(string.IsNullOrWhiteSpace(body.GetProperty("accessToken").GetString()));
-        Assert.False(string.IsNullOrWhiteSpace(body.GetProperty("refreshToken").GetString()));
         Assert.Equal("Bearer", body.GetProperty("tokenType").GetString());
+        // Refresh token is delivered only as an httpOnly cookie, never in the JSON body.
+        Assert.False(body.TryGetProperty("refreshToken", out _));
+        Assert.Contains(
+            response.Headers.GetValues("Set-Cookie"),
+            cookie => cookie.StartsWith("meisterpropr_refresh=", StringComparison.Ordinal)
+                      && cookie.Contains("httponly", StringComparison.OrdinalIgnoreCase));
 
         using var scope = factory.Services.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<MeisterProPRDbContext>();

@@ -192,7 +192,7 @@ jobs:
         uses: docker/build-push-action@v7.0.0
         with:
           context: .
-          file: Dockerfile.procursor
+          file: procursor.dockerfile
           push: true
           pull: true
           tags: ${{ steps.tags.outputs.procursor }}

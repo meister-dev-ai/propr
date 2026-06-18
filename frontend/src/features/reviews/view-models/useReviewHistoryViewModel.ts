@@ -71,7 +71,7 @@ async function defaultListJobs(clientId?: string): Promise<{ items: JobListItem[
   })
 
   return {
-    items: response.items as JobListItem[],
+    items: response.items as unknown as JobListItem[],
   }
 }
 

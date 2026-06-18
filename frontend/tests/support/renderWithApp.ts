@@ -50,7 +50,7 @@ export async function renderWithApp<TComponent extends Component>(
       plugins: [router, vuetify, ...(options.plugins ?? [])],
       stubs: options.stubs,
     },
-  }) as RenderResult<TComponent>['wrapper']
+  } as Parameters<typeof mount>[1]) as unknown as RenderResult<TComponent>['wrapper']
 
   return { wrapper, router }
 }

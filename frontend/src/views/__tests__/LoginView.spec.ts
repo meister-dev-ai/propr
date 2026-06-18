@@ -59,7 +59,7 @@ describe('LoginView', () => {
     await flushPromises()
 
     expect(wrapper.find('#username').exists()).toBe(true)
-    expect(wrapper.get('[data-testid="tenant-login-start"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="tenant-login-start"]').exists()).toBe(true)
 
     await wrapper.get('[data-testid="tenant-login-start"]').trigger('click')
     await wrapper.get('[data-testid="tenant-login-slug"]').setValue('acme')

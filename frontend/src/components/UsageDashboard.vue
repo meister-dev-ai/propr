@@ -227,420 +227,63 @@
 </template>
 
 <script setup lang="ts">
-      import { computed, onMounted, ref } from 'vue'
-      import { Line } from 'vue-chartjs'
-      import {
-        Chart as ChartJS,
-        CategoryScale,
-        Filler,
-        Legend,
-        LineElement,
-        LinearScale,
-        PointElement,
-        Title,
-        Tooltip,
-      } from 'chart.js'
-      import ProgressOrb from '@/components/ProgressOrb.vue'
-      import { useSession } from '@/composables/useSession'
-      import { getClientTokenUsage } from '@/services/clientTokenUsageService'
-      import {
-        exportProCursorTokenUsageCsv,
-        getProCursorClientTokenUsage,
-        getProCursorTopSources,
-      } from '@/services/proCursorService'
-      import type { ClientTokenUsageResponse, ClientTokenUsageSample } from '@/types/clientTokenUsage'
-      import type {
-        ProCursorTokenUsageBreakdownItemDto,
-        ProCursorTokenUsageGroupBy,
-        ProCursorTokenUsageGranularity,
-        ProCursorTokenUsageResponse,
-        ProCursorTopSourceUsageDto,
-        ProCursorTopSourcesPeriod,
-        ProCursorTopSourcesResponse,
-      } from '@/types/proCursorTokenUsage'
+import { Line } from 'vue-chartjs'
+import {
+  Chart as ChartJS,
+  CategoryScale,
+  Filler,
+  Legend,
+  LineElement,
+  LinearScale,
+  PointElement,
+  Title,
+  Tooltip,
+} from 'chart.js'
+import ProgressOrb from '@/components/ProgressOrb.vue'
+import { formatNumber, formatUsd } from '@/components/usageDashboardFormatters'
+import { useUsageDashboard } from '@/components/useUsageDashboard'
 
-      ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Title, Tooltip, Legend, Filler)
+ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Title, Tooltip, Legend, Filler)
 
-      const REVIEW_PALETTE = ['#4e91f3', '#f97316', '#22c55e', '#a855f7', '#ef4444', '#14b8a6', '#f59e0b', '#ec4899']
-      const PROCURSOR_PALETTE = ['#e85d3f', '#3276f5', '#20a39e', '#f2a541', '#3b7a57', '#8f5bd7']
-      const CATEGORY_LABELS: Record<number, string> = {
-        0: 'Low Effort',
-        1: 'Medium Effort',
-        2: 'High Effort',
-        3: 'Embedding',
-        4: 'Memory Reconsideration',
-        5: 'Default',
-      }
-      const PERIOD_PRESETS: Array<{ label: string; value: ProCursorTopSourcesPeriod }> = [
-        { label: '30d', value: '30d' },
-        { label: '90d', value: '90d' },
-        { label: '365d', value: '365d' },
-      ]
-      const integerFormatter = new Intl.NumberFormat('en-US')
-      const currencyFormatter = new Intl.NumberFormat('en-US', {
-        style: 'currency',
-        currency: 'USD',
-        minimumFractionDigits: 2,
-        maximumFractionDigits: 2,
-      })
+const props = defineProps<{
+  clientId: string
+}>()
 
-      const props = defineProps<{
-        clientId: string
-      }>()
-
-      const { getAccessToken } = useSession()
-
-      const fromDate = ref(daysAgoStr(29))
-      const toDate = ref(todayStr())
-
-      const loadingReview = ref(false)
-      const reviewError = ref('')
-      const reviewUsage = ref<ClientTokenUsageResponse | null>(null)
-
-      const loadingProCursor = ref(false)
-      const exportingProCursor = ref(false)
-      const proCursorError = ref('')
-      const proCursorUsage = ref<ProCursorTokenUsageResponse | null>(null)
-      const proCursorTopSources = ref<ProCursorTopSourcesResponse | null>(null)
-      const proCursorGranularity = ref<ProCursorTokenUsageGranularity>('daily')
-      const proCursorGroupBy = ref<ProCursorTokenUsageGroupBy>('source')
-      const selectedProCursorPreset = ref<ProCursorTopSourcesPeriod | 'custom'>('30d')
-
-      const periodPresets = PERIOD_PRESETS
-      const totalInputTokens = computed(() => reviewUsage.value?.totalInputTokens ?? 0)
-      const totalOutputTokens = computed(() => reviewUsage.value?.totalOutputTokens ?? 0)
-      const hasReviewSamples = computed(() => (reviewUsage.value?.samples.length ?? 0) > 0)
-      const proCursorTotals = computed(() => proCursorUsage.value?.totals)
-      const proCursorTotalTokens = computed(() => proCursorTotals.value?.totalTokens ?? 0)
-      const proCursorEstimatedCost = computed(() => proCursorTotals.value?.estimatedCostUsd ?? null)
-      const proCursorEstimatedEvents = computed(() => proCursorTotals.value?.estimatedEventCount ?? 0)
-      const resolvedTopSources = computed<ProCursorTopSourceUsageDto[]>(() => {
-        return proCursorTopSources.value?.items ?? proCursorUsage.value?.topSources ?? []
-      })
-      const hasProCursorData = computed(() => {
-        return proCursorTotalTokens.value > 0 || (proCursorUsage.value?.series?.length ?? 0) > 0 || resolvedTopSources.value.length > 0
-      })
-      const showEstimatedBanner = computed(() => Boolean(proCursorUsage.value?.includesEstimatedUsage) && proCursorEstimatedEvents.value > 0)
-      const showGapFillBanner = computed(() => Boolean(proCursorUsage.value?.includesGapFilledEvents))
-      const inclusiveDayCount = computed(() => getInclusiveDayCount(fromDate.value, toDate.value))
-      const currentPeriodLabel = computed(() => {
-        return selectedProCursorPreset.value === 'custom' ? `${inclusiveDayCount.value}d` : selectedProCursorPreset.value
-      })
-      const lastRollupCompletedLabel = computed(() => formatDateTime(proCursorUsage.value?.lastRollupCompletedAtUtc))
-
-      const reviewChartData = computed(() => {
-        if (!reviewUsage.value || !hasReviewSamples.value) {
-          return { labels: [], datasets: [] }
-        }
-
-        const datesSet = new Set<string>()
-        const seriesSet = new Map<string, string>()
-        const lookup = new Map<string, Map<string, ClientTokenUsageSample>>()
-
-        for (const sample of reviewUsage.value.samples) {
-          datesSet.add(sample.date)
-          const key = getReviewSeriesKey(sample)
-
-          if (!seriesSet.has(key)) {
-            seriesSet.set(key, getReviewSeriesLabel(sample))
-          }
-
-          if (!lookup.has(key)) {
-            lookup.set(key, new Map())
-          }
-
-          lookup.get(key)?.set(sample.date, sample)
-        }
-
-        const labels = Array.from(datesSet).sort()
-        const datasets = Array.from(seriesSet.entries()).map(([key, label], index) => {
-          const color = REVIEW_PALETTE[index % REVIEW_PALETTE.length]
-          const samplesByDate = lookup.get(key)
-          return {
-            label,
-            data: labels.map((date) => {
-              const sample = samplesByDate?.get(date)
-              return (sample?.inputTokens ?? 0) + (sample?.outputTokens ?? 0)
-            }),
-            borderColor: color,
-            backgroundColor: `${color}22`,
-            tension: 0.35,
-            fill: true,
-            pointRadius: 0,
-            pointHoverRadius: 5,
-          }
-        })
-
-        return { labels, datasets }
-      })
-
-      const reviewChartOptions = {
-        responsive: true,
-        maintainAspectRatio: false,
-        plugins: {
-          legend: { position: 'top' as const },
-          title: { display: false },
-        },
-        scales: {
-          y: {
-            beginAtZero: true,
-            grid: { color: 'rgba(148, 163, 184, 0.14)' },
-            title: { display: true, text: 'Total Tokens' },
-          },
-          x: {
-            grid: { display: false },
-          },
-        },
-        interaction: {
-          intersect: false,
-          mode: 'index' as const,
-        },
-      }
-
-      const proCursorChartData = computed(() => {
-        const series = proCursorUsage.value?.series ?? []
-        if (series.length === 0) {
-          return { labels: [], datasets: [] }
-        }
-
-        const labels = series.map((point) => formatBucketLabel(point.bucketStart))
-        const datasetsMap = new Map<string, { label: string; data: number[]; total: number }>()
-
-        series.forEach((point, index) => {
-          const bucketValues = new Map<string, number>()
-          const breakdown = point.breakdown ?? []
-
-          if (breakdown.length === 0) {
-            bucketValues.set('Total tokens', point.totalTokens ?? 0)
-          } else {
-            breakdown.forEach((item) => {
-              const key = getProCursorBreakdownKey(item, proCursorGroupBy.value)
-              bucketValues.set(key, (bucketValues.get(key) ?? 0) + (item.totalTokens ?? 0))
-            })
-          }
-
-          bucketValues.forEach((value, key) => {
-            if (!datasetsMap.has(key)) {
-              datasetsMap.set(key, {
-                label: key,
-                data: Array.from({ length: series.length }, () => 0),
-                total: 0,
-              })
-            }
-
-            const dataset = datasetsMap.get(key)
-            if (!dataset) {
-              return
-            }
-
-            dataset.data[index] = value
-            dataset.total += value
-          })
-        })
-
-        const datasets = Array.from(datasetsMap.values())
-          .sort((left, right) => right.total - left.total)
-          .map((dataset, index) => {
-            const color = PROCURSOR_PALETTE[index % PROCURSOR_PALETTE.length]
-            return {
-              label: dataset.label,
-              data: dataset.data,
-              borderColor: color,
-              backgroundColor: `${color}24`,
-              tension: 0.28,
-              fill: true,
-              pointRadius: 0,
-              pointHoverRadius: 5,
-            }
-          })
-
-        return { labels, datasets }
-      })
-
-      const proCursorChartOptions = computed(() => ({
-        responsive: true,
-        maintainAspectRatio: false,
-        plugins: {
-          legend: { position: 'top' as const },
-          title: { display: false },
-        },
-        scales: {
-          y: {
-            beginAtZero: true,
-            grid: { color: 'rgba(148, 163, 184, 0.14)' },
-            title: { display: true, text: 'Total Tokens' },
-          },
-          x: {
-            grid: { display: false },
-          },
-        },
-        interaction: {
-          intersect: false,
-          mode: 'index' as const,
-        },
-      }))
-
-      function todayStr(): string {
-        return new Date().toISOString().slice(0, 10)
-      }
-
-      function daysAgoStr(days: number): string {
-        const date = new Date()
-        date.setDate(date.getDate() - days)
-        return date.toISOString().slice(0, 10)
-      }
-
-      function formatNumber(value: number | null | undefined): string {
-        return integerFormatter.format(value ?? 0)
-      }
-
-      function formatUsd(value: number | null | undefined): string {
-        return value == null ? '—' : currencyFormatter.format(value)
-      }
-
-      function formatDateTime(value: string | null | undefined): string {
-        if (!value) {
-          return ''
-        }
-
-        const date = new Date(value)
-        return Number.isNaN(date.valueOf()) ? '' : date.toLocaleString()
-      }
-
-      function formatBucketLabel(value: string | null | undefined): string {
-        if (!value) {
-          return ''
-        }
-
-        return value.slice(5)
-      }
-
-      function getInclusiveDayCount(from: string, to: string): number {
-        const fromDateValue = new Date(`${from}T00:00:00Z`)
-        const toDateValue = new Date(`${to}T00:00:00Z`)
-
-        if (Number.isNaN(fromDateValue.valueOf()) || Number.isNaN(toDateValue.valueOf())) {
-          return 30
-        }
-
-        const diff = Math.round((toDateValue.valueOf() - fromDateValue.valueOf()) / 86_400_000) + 1
-        return Math.max(1, diff)
-      }
-
-      function getReviewSeriesKey(sample: ClientTokenUsageSample): string {
-        return `${sample.connectionCategory ?? 5}_${sample.modelId}`
-      }
-
-      function getReviewSeriesLabel(sample: ClientTokenUsageSample): string {
-        const categoryName = CATEGORY_LABELS[sample.connectionCategory ?? 5] ?? 'Unknown'
-        return `${categoryName} (${sample.modelId})`
-      }
-
-      function getProCursorBreakdownKey(
-        item: ProCursorTokenUsageBreakdownItemDto,
-        groupBy: ProCursorTokenUsageGroupBy,
-      ): string {
-        if (groupBy === 'model') {
-          return item.modelName || 'Unknown model'
-        }
-
-        return item.sourceDisplayName || 'Unattributed source'
-      }
-
-      function markCustomRange(): void {
-        selectedProCursorPreset.value = 'custom'
-      }
-
-      function applyProCursorPeriod(period: ProCursorTopSourcesPeriod): void {
-        selectedProCursorPreset.value = period
-        const days = Number.parseInt(period, 10)
-        fromDate.value = daysAgoStr(Math.max(days - 1, 0))
-        toDate.value = todayStr()
-        void handleRefresh()
-      }
-
-      async function loadReviewUsage(): Promise<void> {
-        loadingReview.value = true
-        reviewError.value = ''
-
-        try {
-          const token = getAccessToken()
-          if (!token) {
-            reviewUsage.value = null
-            reviewError.value = 'Not authenticated.'
-            return
-          }
-
-          reviewUsage.value = await getClientTokenUsage(props.clientId, fromDate.value, toDate.value, token)
-        } catch (error) {
-          reviewUsage.value = null
-          reviewError.value = error instanceof Error ? error.message : 'Failed to load usage data.'
-        } finally {
-          loadingReview.value = false
-        }
-      }
-
-      async function loadProCursorUsage(): Promise<void> {
-        loadingProCursor.value = true
-        proCursorError.value = ''
-
-        try {
-          const [usage, topSources] = await Promise.all([
-            getProCursorClientTokenUsage(props.clientId, {
-              from: fromDate.value,
-              to: toDate.value,
-              granularity: proCursorGranularity.value,
-              groupBy: proCursorGroupBy.value,
-            }),
-            getProCursorTopSources(props.clientId, currentPeriodLabel.value, 5),
-          ])
-
-          proCursorUsage.value = usage
-          proCursorTopSources.value = topSources
-        } catch (error) {
-          proCursorUsage.value = null
-          proCursorTopSources.value = null
-          proCursorError.value = error instanceof Error ? error.message : 'Failed to load ProCursor usage.'
-        } finally {
-          loadingProCursor.value = false
-        }
-      }
-
-      async function handleRefresh(): Promise<void> {
-        await Promise.all([loadReviewUsage(), loadProCursorUsage()])
-      }
-
-      async function handleExportProCursor(): Promise<void> {
-        if (exportingProCursor.value || !hasProCursorData.value) {
-          return
-        }
-
-        exportingProCursor.value = true
-
-        try {
-          const csv = await exportProCursorTokenUsageCsv(props.clientId, {
-            from: fromDate.value,
-            to: toDate.value,
-          })
-
-          const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' })
-          const url = URL.createObjectURL(blob)
-          const link = document.createElement('a')
-          link.href = url
-          link.download = `procursor-usage-${props.clientId}-${fromDate.value}-to-${toDate.value}.csv`
-          link.click()
-          URL.revokeObjectURL(url)
-        } catch (error) {
-          proCursorError.value = error instanceof Error ? error.message : 'Failed to export ProCursor usage CSV.'
-        } finally {
-          exportingProCursor.value = false
-        }
-      }
-
-
-      onMounted(() => {
-        void handleRefresh()
-      })
+const {
+  fromDate,
+  toDate,
+  loadingReview,
+  reviewError,
+  loadingProCursor,
+  exportingProCursor,
+  proCursorError,
+  proCursorGranularity,
+  proCursorGroupBy,
+  selectedProCursorPreset,
+  periodPresets,
+  totalInputTokens,
+  totalOutputTokens,
+  hasReviewSamples,
+  proCursorTotalTokens,
+  proCursorEstimatedCost,
+  proCursorEstimatedEvents,
+  resolvedTopSources,
+  hasProCursorData,
+  showEstimatedBanner,
+  showGapFillBanner,
+  currentPeriodLabel,
+  lastRollupCompletedLabel,
+  reviewChartData,
+  reviewChartOptions,
+  proCursorChartData,
+  proCursorChartOptions,
+  markCustomRange,
+  applyProCursorPeriod,
+  loadReviewUsage,
+  loadProCursorUsage,
+  handleRefresh,
+  handleExportProCursor,
+} = useUsageDashboard(props)
 </script>
 
 <style scoped>
@@ -655,7 +298,7 @@
         flex-direction: column;
         gap: 1.25rem;
         padding: 1.35rem;
-        border-radius: 18px;
+        border-radius: var(--radius-xl);
         border: 1px solid var(--color-border);
         background:
           linear-gradient(180deg, rgba(255, 255, 255, 0.02), transparent 30%),
@@ -759,7 +402,7 @@
         display: inline-flex;
         gap: 0.35rem;
         padding: 0.25rem;
-        border-radius: 999px;
+        border-radius: var(--radius-pill);
         border: 1px solid var(--color-border);
         background: rgba(15, 23, 42, 0.25);
       }
@@ -771,7 +414,7 @@
         font: inherit;
         font-weight: 700;
         padding: 0.45rem 0.8rem;
-        border-radius: 999px;
+        border-radius: var(--radius-pill);
         cursor: pointer;
       }
 
@@ -792,7 +435,7 @@
         flex-direction: column;
         gap: 0.4rem;
         padding: 1.15rem 1.25rem;
-        border-radius: 16px;
+        border-radius: var(--radius-xl);
         border: 1px solid rgba(148, 163, 184, 0.16);
         background: rgba(15, 23, 42, 0.24);
         overflow: hidden;
@@ -805,11 +448,11 @@
         height: 4px;
       }
 
-      .usage-input::before { background: #3276f5; }
-      .usage-output::before { background: #20a39e; }
-      .usage-total::before { background: #e85d3f; }
-      .usage-cost::before { background: #f2a541; }
-      .usage-estimated::before { background: #8f5bd7; }
+      .usage-input::before { background: var(--chart-1); }
+      .usage-output::before { background: var(--chart-3); }
+      .usage-total::before { background: var(--chart-2); }
+      .usage-cost::before { background: var(--color-warning); }
+      .usage-estimated::before { background: var(--color-suggestion); }
 
       .summary-label {
         color: var(--color-text-muted);
@@ -839,7 +482,7 @@
         align-items: flex-start;
         gap: 0.75rem;
         padding: 0.95rem 1rem;
-        border-radius: 14px;
+        border-radius: var(--radius-lg);
         border: 1px solid rgba(242, 165, 65, 0.28);
         background: rgba(242, 165, 65, 0.08);
       }
@@ -847,7 +490,7 @@
       .usage-callout i {
         font-size: 1rem;
         margin-top: 0.1rem;
-        color: #f2a541;
+        color: var(--color-warning);
       }
 
       .panel-caption {
@@ -857,7 +500,7 @@
       .chart-card,
       .top-sources-card {
         border: 1px solid rgba(148, 163, 184, 0.16);
-        border-radius: 16px;
+        border-radius: var(--radius-xl);
         background: rgba(15, 23, 42, 0.24);
       }
 
@@ -908,7 +551,7 @@
         align-items: center;
         gap: 1rem;
         padding: 0.85rem 0.95rem;
-        border-radius: 14px;
+        border-radius: var(--radius-lg);
         background: rgba(255, 255, 255, 0.02);
       }
 
@@ -923,9 +566,9 @@
         place-items: center;
         width: 2rem;
         height: 2rem;
-        border-radius: 999px;
+        border-radius: var(--radius-pill);
         background: rgba(232, 93, 63, 0.16);
-        color: #ffc2b7;
+        color: var(--color-danger);
         font-size: 0.85rem;
         font-weight: 700;
       }
@@ -957,7 +600,7 @@
 
       .empty-state--procursor {
         border: 1px dashed rgba(148, 163, 184, 0.24);
-        border-radius: 16px;
+        border-radius: var(--radius-xl);
       }
 
       .empty-icon,

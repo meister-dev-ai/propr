@@ -5,9 +5,9 @@ import { computed, ref } from 'vue'
 import { getActiveRuntime } from '@/app/runtime/runtimeContext'
 import type { components } from '@/types'
 
-const ACCESS_TOKEN_KEY = 'meisterpropr_access_token'
-const REFRESH_TOKEN_KEY = 'meisterpropr_refresh_token'
 const CLIENT_ROLES_KEY = 'meisterpropr_client_roles'
+/** Cross-tab logout signal: writing it fires a `storage` event in other tabs (see main.ts). */
+export const LOGOUT_BROADCAST_KEY = 'meisterpropr_logout_signal'
 const EDITION_KEY = 'meisterpropr_installation_edition'
 const CAPABILITIES_KEY = 'meisterpropr_capabilities'
 const TENANT_ROLES_KEY = 'meisterpropr_tenant_roles'
@@ -91,9 +91,11 @@ function readStoredJsonArray(key: string): PremiumCapabilityDto[] {
   }
 }
 
-// Initialize shared reactive state FROM storage
-const accessToken = ref<string | null>(sessionStorage.getItem(ACCESS_TOKEN_KEY))
-const refreshToken = ref<string | null>(localStorage.getItem(REFRESH_TOKEN_KEY))
+// Access token lives in memory only (per tab). The refresh token is never exposed to JS —
+// it is an httpOnly cookie set by the backend, so the session is shared across tabs and
+// restored on load via /auth/refresh (see bootstrapSession / api.ts). Roles are cached in
+// sessionStorage but re-primed from /auth/me on every bootstrap.
+const accessToken = ref<string | null>(null)
 
 /** clientRoles: clientId → 0 (ClientUser) | 1 (ClientAdministrator) */
 const clientRoles = ref<Record<string, number>>(readStoredJsonObject(CLIENT_ROLES_KEY))
@@ -111,34 +113,17 @@ export function useSession() {
     return getActiveRuntime().apiBaseUrl
   }
 
-  function setTokens(at: string, rt: string): void {
-    setClientRoles({})
-    setTenantRoles({})
-    setLicensingState('community', [])
-    sessionStorage.setItem(ACCESS_TOKEN_KEY, at)
-    localStorage.setItem(REFRESH_TOKEN_KEY, rt)
-    accessToken.value = at
-    refreshToken.value = rt
-  }
-
   function getAccessToken(): string | null {
     return accessToken.value
   }
 
-  function getRefreshToken(): string | null {
-    return refreshToken.value
-  }
-
   function clearTokens(): void {
-    sessionStorage.removeItem(ACCESS_TOKEN_KEY)
-    localStorage.removeItem(REFRESH_TOKEN_KEY)
     sessionStorage.removeItem(CLIENT_ROLES_KEY)
     sessionStorage.removeItem(EDITION_KEY)
     sessionStorage.removeItem(CAPABILITIES_KEY)
     sessionStorage.removeItem(TENANT_ROLES_KEY)
     sessionStorage.removeItem(LOCAL_PASSWORD_KEY)
     accessToken.value = null
-    refreshToken.value = null
     clientRoles.value = {}
     tenantRoles.value = {}
     hasLocalPassword.value = false
@@ -147,13 +132,34 @@ export function useSession() {
   }
 
   function setAccessToken(token: string): void {
-    sessionStorage.setItem(ACCESS_TOKEN_KEY, token)
     accessToken.value = token
   }
 
-  async function establishSession(session: { accessToken: string; refreshToken: string }): Promise<void> {
-    setTokens(session.accessToken, session.refreshToken)
+  // The refresh token is handled by the httpOnly cookie; only the access token is passed in.
+  async function establishSession(session: { accessToken: string; expiresIn?: number; tokenType?: string }): Promise<void> {
+    setClientRoles({})
+    setTenantRoles({})
+    setLicensingState('community', [])
+    accessToken.value = session.accessToken
     await loadClientRoles()
+  }
+
+  /**
+   * Ends the session everywhere: revokes the refresh cookie server-side, clears local state,
+   * and signals other tabs to log out too. Callers handle the redirect to /login.
+   */
+  async function logout(): Promise<void> {
+    try {
+      await fetch(getSessionApiBaseUrl() + '/auth/logout', { method: 'POST', credentials: 'include' })
+    } catch {
+      // Best-effort: even if the network call fails, clear local state below.
+    }
+    clearTokens()
+    try {
+      localStorage.setItem(LOGOUT_BROADCAST_KEY, String(Date.now()))
+    } catch {
+      // localStorage may be unavailable; cross-tab sync is best-effort.
+    }
   }
 
   /** Returns true when an access token is present in this session. */
@@ -294,12 +300,11 @@ export function useSession() {
   }
 
   return {
-    setTokens,
     getAccessToken,
-    getRefreshToken,
     clearTokens,
     setAccessToken,
     establishSession,
+    logout,
     accessTokenExpiresIn,
     isAuthenticated,
     isAdmin,

@@ -38,7 +38,7 @@ export interface UpdateLicensingRequest {
 }
 
 function getClient() {
-  return createAdminClient() as any
+  return createAdminClient()
 }
 
 function normalizeLicensingSummary(summary: LicensingSummaryDto | null | undefined): LicensingSummary {

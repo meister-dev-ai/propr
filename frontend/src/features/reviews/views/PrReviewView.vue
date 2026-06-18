@@ -175,7 +175,7 @@
 <script lang="ts" setup>
 import { computed, ref, onMounted } from 'vue'
 import { useRoute } from 'vue-router'
-import TokenBreakdownTable from '@/components/TokenBreakdownTable.vue'
+import TokenBreakdownTable from '@/components/usage/TokenBreakdownTable.vue'
 import { getPrView, type PrReviewViewDto } from '@/services/jobsService'
 
 const route = useRoute()
@@ -262,7 +262,7 @@ function statusBadgeClass(status: number): string {
 .back-link {
     display: inline-block;
     margin-bottom: 0.5rem;
-    color: var(--color-text-muted, #888);
+    color: var(--color-text-muted);
     text-decoration: none;
     font-size: 0.875rem;
 }
@@ -272,8 +272,8 @@ function statusBadgeClass(status: number): string {
 }
 
 .pr-header-card {
-    background: var(--color-surface, #1e1e2e);
-    border: 1px solid var(--color-border, #2e2e3e);
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
     border-radius: 0.5rem;
     padding: 1rem 1.25rem;
     margin-bottom: 1.25rem;
@@ -288,8 +288,8 @@ function statusBadgeClass(status: number): string {
 }
 
 .pr-id-badge {
-    background: var(--color-primary-muted, #3b3b6d);
-    color: var(--color-primary, #7c7cff);
+    background: var(--color-info-soft);
+    color: var(--color-info);
     border-radius: 0.375rem;
     padding: 0.2rem 0.6rem;
     font-weight: 600;
@@ -299,12 +299,12 @@ function statusBadgeClass(status: number): string {
 .pr-repo {
     font-family: monospace;
     font-size: 0.875rem;
-    color: var(--color-text-muted, #aaa);
+    color: var(--color-text-muted);
 }
 
 .pr-project {
     font-size: 0.8rem;
-    color: var(--color-text-muted, #888);
+    color: var(--color-text-muted);
 }
 
 .pr-stat-strip {
@@ -317,14 +317,14 @@ function statusBadgeClass(status: number): string {
     display: flex;
     align-items: center;
     gap: 0.4rem;
-    background: var(--color-surface-raised, #252535);
+    background: var(--color-surface-raised);
     border-radius: 0.375rem;
     padding: 0.35rem 0.75rem;
     font-size: 0.85rem;
 }
 
 .stat-label {
-    color: var(--color-text-muted, #888);
+    color: var(--color-text-muted);
     font-size: 0.8rem;
 }
 
@@ -341,8 +341,8 @@ function statusBadgeClass(status: number): string {
 }
 
 .section-card {
-    background: var(--color-surface, #1e1e2e);
-    border: 1px solid var(--color-border, #2e2e3e);
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
     border-radius: 0.5rem;
     padding: 1.25rem;
     margin-bottom: 1.25rem;
@@ -357,7 +357,7 @@ function statusBadgeClass(status: number): string {
 .empty-state,
 .empty-state-small,
 .loading {
-    color: var(--color-text-muted, #999);
+    color: var(--color-text-muted);
 }
 
 .jobs-list {
@@ -367,7 +367,7 @@ function statusBadgeClass(status: number): string {
 }
 
 .job-detail-item {
-    border: 1px solid var(--color-border, #2e2e3e);
+    border: 1px solid var(--color-border);
     border-radius: 0.5rem;
     overflow: hidden;
 }
@@ -405,7 +405,7 @@ function statusBadgeClass(status: number): string {
 }
 
 .tab-btn {
-    border: 1px solid var(--color-border, #2e2e3e);
+    border: 1px solid var(--color-border);
     background: transparent;
     color: inherit;
     padding: 0.5rem 0.75rem;
@@ -425,7 +425,7 @@ function statusBadgeClass(status: number): string {
 .memory-table th,
 .memory-table td {
     padding: 0.65rem 0.5rem;
-    border-bottom: 1px solid var(--color-border, #2e2e3e);
+    border-bottom: 1px solid var(--color-border);
     text-align: left;
     vertical-align: top;
 }
@@ -438,21 +438,21 @@ function statusBadgeClass(status: number): string {
     display: inline-flex;
     align-items: center;
     padding: 0.2rem 0.5rem;
-    border-radius: 999px;
+    border-radius: var(--radius-pill);
     font-size: 0.8rem;
 }
 
 .source-dismissed {
-    background: rgba(251, 191, 36, 0.15);
-    color: #fbbf24;
+    background: var(--color-warning-soft);
+    color: var(--color-warning);
 }
 
 .source-resolved {
     background: rgba(34, 197, 94, 0.15);
-    color: #22c55e;
+    color: var(--color-success);
 }
 
 .error {
-    color: var(--color-danger, #ef4444);
+    color: var(--color-danger, var(--color-danger));
 }
 </style>

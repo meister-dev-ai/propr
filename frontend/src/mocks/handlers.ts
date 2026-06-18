@@ -156,6 +156,20 @@ function createMockJwt(payload: { global_role: string; unique_name: string }): s
 
 const mockAdminAccessToken = createMockJwt({ global_role: 'Admin', unique_name: 'mock.admin' })
 const mockTenantAccessToken = createMockJwt({ global_role: 'User', unique_name: 'tenant.user' })
+
+// Mock session cookie helpers — a real (non-httpOnly) document.cookie so the mock can demonstrate
+// cross-tab session sharing the way the real httpOnly backend cookie does.
+const MOCK_SESSION_COOKIE = 'meisterpropr_refresh'
+function setMockSessionCookie(value: 'admin' | 'tenant' | 'sso'): void {
+  document.cookie = `${MOCK_SESSION_COOKIE}=${value}; path=/; samesite=lax`
+}
+function clearMockSessionCookie(): void {
+  document.cookie = `${MOCK_SESSION_COOKIE}=; path=/; max-age=0`
+}
+function readMockSessionCookie(): string | null {
+  const match = document.cookie.match(new RegExp(`(?:^|;\\s*)${MOCK_SESSION_COOKIE}=([^;]*)`))
+  return match ? match[1] : null
+}
 const mockTenantSsoAccessToken = createMockJwt({ global_role: 'User', unique_name: 'tenant.sso.user' })
 
 function parseJwtPayload(authorizationHeader: string | null) {
@@ -1514,15 +1528,29 @@ export const handlers = [
 
   http.post(`${base}/auth/login`, async () => {
     await delay(500)
-    // The dummy token contains a base64url payload with both role and username claims.
-    return HttpResponse.json({
-      accessToken: mockAdminAccessToken,
-      refreshToken: 'mock-refresh'
-    })
+    // The real backend sets an httpOnly cookie. MSW's Set-Cookie isn't a real browser cookie
+    // (per-page store, not shared across tabs), so the mock writes a real document.cookie instead
+    // — this is what makes cross-tab session sharing demonstrable in the mock UI.
+    setMockSessionCookie('admin')
+    return HttpResponse.json({ accessToken: mockAdminAccessToken, expiresIn: 900, tokenType: 'Bearer' })
   }),
 
   http.post(`${base}/auth/refresh`, async () => {
-    return HttpResponse.json({ accessToken: mockAdminAccessToken })
+    const session = readMockSessionCookie()
+    if (!session) {
+      return new HttpResponse(null, { status: 401 })
+    }
+    const accessToken = session === 'tenant'
+      ? mockTenantAccessToken
+      : session === 'sso'
+        ? mockTenantSsoAccessToken
+        : mockAdminAccessToken
+    return HttpResponse.json({ accessToken, expiresIn: 900, tokenType: 'Bearer' })
+  }),
+
+  http.post(`${base}/auth/logout`, async () => {
+    clearMockSessionCookie()
+    return new HttpResponse(null, { status: 204 })
   }),
 
   http.get(`${base}/auth/me`, async ({ request }) => {
@@ -1573,12 +1601,8 @@ export const handlers = [
       return HttpResponse.json({ error: 'Local sign-in is disabled for this tenant.' }, { status: 401 })
     }
 
-    return HttpResponse.json({
-      accessToken: mockTenantAccessToken,
-      refreshToken: 'tenant-refresh-token',
-      expiresIn: 900,
-      tokenType: 'Bearer',
-    })
+    setMockSessionCookie('tenant')
+    return HttpResponse.json({ accessToken: mockTenantAccessToken, expiresIn: 900, tokenType: 'Bearer' })
   }),
 
   http.get(`${base}/auth/external/challenge/:tenantSlug/:providerId`, async ({ params, request }) => {
@@ -1599,7 +1623,9 @@ export const handlers = [
 
     const returnUrl = new URL(request.url).searchParams.get('returnUrl')
     if (returnUrl) {
-      return HttpResponse.redirect(`${returnUrl}#accessToken=${mockTenantSsoAccessToken}&refreshToken=tenant-sso-refresh-token&expiresIn=900&tokenType=Bearer`)
+      // Refresh token goes into the cookie, never the fragment; only the access token is in the hash.
+      setMockSessionCookie('sso')
+      return HttpResponse.redirect(`${returnUrl}#accessToken=${mockTenantSsoAccessToken}&expiresIn=900&tokenType=Bearer`)
     }
 
     return HttpResponse.redirect(`${base}/auth/external/callback/${tenant.slug}`)
@@ -1620,15 +1646,11 @@ export const handlers = [
       return HttpResponse.json({ error: 'Provider not found.' }, { status: 404 })
     }
 
-    return HttpResponse.json({
-      accessToken: mockTenantSsoAccessToken,
-      refreshToken: 'tenant-sso-refresh-token',
-      expiresIn: 900,
-      tokenType: 'Bearer',
-    })
+    setMockSessionCookie('sso')
+    return HttpResponse.json({ accessToken: mockTenantSsoAccessToken, expiresIn: 900, tokenType: 'Bearer' })
   }),
 
-  http.get(`${base}/api/admin/tenants/:tenantId`, async ({ params }) => {
+  http.get(`${base}/admin/tenants/:tenantId`, async ({ params }) => {
     await delay(180)
     const tenantId = String(params.tenantId)
     const tenant = getMockTenantById(tenantId)
@@ -1638,7 +1660,7 @@ export const handlers = [
       : new HttpResponse(null, { status: 404 })
   }),
 
-  http.patch(`${base}/api/admin/tenants/:tenantId`, async ({ params, request }) => {
+  http.patch(`${base}/admin/tenants/:tenantId`, async ({ params, request }) => {
     await delay(220)
     const tenantId = String(params.tenantId)
     const tenant = getMockTenantById(tenantId)
@@ -1659,12 +1681,12 @@ export const handlers = [
     return HttpResponse.json(updatedTenant)
   }),
 
-  http.get(`${base}/api/admin/tenants`, async () => {
+  http.get(`${base}/admin/tenants`, async () => {
     await delay(180)
     return HttpResponse.json(mockTenants)
   }),
 
-  http.post(`${base}/api/admin/tenants`, async ({ request }) => {
+  http.post(`${base}/admin/tenants`, async ({ request }) => {
     await delay(220)
     const body = await request.json() as any
     const created = {
@@ -1682,7 +1704,7 @@ export const handlers = [
     return HttpResponse.json(created, { status: 201 })
   }),
 
-  http.get(`${base}/api/admin/tenants/:tenantId/sso-providers`, async ({ params }) => {
+  http.get(`${base}/admin/tenants/:tenantId/sso-providers`, async ({ params }) => {
     await delay(180)
     const tenantId = String(params.tenantId)
     const tenant = getMockTenantById(tenantId)
@@ -1697,7 +1719,7 @@ export const handlers = [
     return HttpResponse.json(mockTenantSsoProviders[tenantId] ?? [])
   }),
 
-  http.post(`${base}/api/admin/tenants/:tenantId/sso-providers`, async ({ params, request }) => {
+  http.post(`${base}/admin/tenants/:tenantId/sso-providers`, async ({ params, request }) => {
     await delay(240)
     const tenantId = String(params.tenantId)
     const tenant = getMockTenantById(tenantId)
@@ -1731,7 +1753,7 @@ export const handlers = [
     return HttpResponse.json(created, { status: 201 })
   }),
 
-  http.delete(`${base}/api/admin/tenants/:tenantId/sso-providers/:providerId`, async ({ params }) => {
+  http.delete(`${base}/admin/tenants/:tenantId/sso-providers/:providerId`, async ({ params }) => {
     await delay(200)
     const tenantId = String(params.tenantId)
     const providerId = String(params.providerId)
@@ -1745,6 +1767,32 @@ export const handlers = [
     }
 
     mockTenantSsoProviders[tenantId] = (mockTenantSsoProviders[tenantId] ?? []).filter((provider) => provider.id !== providerId)
+    return new HttpResponse(null, { status: 204 })
+  }),
+
+  http.get(`${base}/admin/tenants/:tenantId/memberships`, async ({ params }) => {
+    await delay(200)
+    const tenantId = String(params.tenantId)
+    if (!getMockTenantById(tenantId)) {
+      return new HttpResponse(null, { status: 404 })
+    }
+
+    return HttpResponse.json([
+      { id: 'mem-1', tenantId, userId: 'user-admin', username: 'admin', email: 'admin@acme.test', userIsActive: true, role: 'tenantAdministrator', assignedAt: '2026-06-01T10:00:00Z', updatedAt: '2026-06-01T10:00:00Z' },
+      { id: 'mem-2', tenantId, userId: 'user-jsmith', username: 'jsmith', email: 'jsmith@acme.test', userIsActive: true, role: 'tenantUser', assignedAt: '2026-06-05T14:30:00Z', updatedAt: '2026-06-10T09:15:00Z' },
+    ])
+  }),
+
+  http.patch(`${base}/admin/tenants/:tenantId/memberships/:membershipId`, async ({ params, request }) => {
+    await delay(200)
+    const tenantId = String(params.tenantId)
+    const membershipId = String(params.membershipId)
+    const body = await request.json() as { role?: string }
+    return HttpResponse.json({ id: membershipId, tenantId, userId: 'user-jsmith', username: 'jsmith', email: 'jsmith@acme.test', userIsActive: true, role: body.role ?? 'tenantUser', assignedAt: '2026-06-05T14:30:00Z', updatedAt: '2026-06-14T12:00:00Z' })
+  }),
+
+  http.delete(`${base}/admin/tenants/:tenantId/memberships/:membershipId`, async () => {
+    await delay(200)
     return new HttpResponse(null, { status: 204 })
   }),
 

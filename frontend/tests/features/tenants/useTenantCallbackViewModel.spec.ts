@@ -32,14 +32,14 @@ describe('useTenantCallbackViewModel (FR-007, FR-008, FR-012)', () => {
 
   it('establishes session and replaces to home on a complete fragment', async () => {
     const vm = useTenantCallbackViewModel({
-      getLocationHash: () => '#accessToken=at-1&refreshToken=rt-1&expiresIn=3600&tokenType=Bearer',
+      getLocationHash: () => '#accessToken=at-1&expiresIn=3600&tokenType=Bearer',
       autoComplete: false,
     })
 
     await vm.completeTenantSignIn()
+    // Refresh token comes from the httpOnly cookie, not the fragment.
     expect(establishSessionMock).toHaveBeenCalledWith({
       accessToken: 'at-1',
-      refreshToken: 'rt-1',
       expiresIn: 3600,
       tokenType: 'Bearer',
     })
@@ -49,14 +49,13 @@ describe('useTenantCallbackViewModel (FR-007, FR-008, FR-012)', () => {
 
   it('handles hash without leading # the same as with', async () => {
     const vm = useTenantCallbackViewModel({
-      getLocationHash: () => 'accessToken=at-1&refreshToken=rt-1',
+      getLocationHash: () => 'accessToken=at-1',
       autoComplete: false,
     })
 
     await vm.completeTenantSignIn()
     expect(establishSessionMock).toHaveBeenCalledWith(expect.objectContaining({
       accessToken: 'at-1',
-      refreshToken: 'rt-1',
       expiresIn: undefined,
       tokenType: undefined,
     }))

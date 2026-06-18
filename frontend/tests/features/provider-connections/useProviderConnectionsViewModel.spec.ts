@@ -4,7 +4,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises } from '@vue/test-utils'
 import { createApp, defineComponent } from 'vue'
-import { useProviderConnectionsViewModel } from '@/features/provider-connections/view-models/useProviderConnectionsViewModel'
+import { useProviderConnectionsViewModel, type ProviderConnectionsViewModel } from '@/features/provider-connections/view-models/useProviderConnectionsViewModel'
+import type { ClientScmConnectionDto } from '@/services/providerConnectionsService'
 
 const notifyMock = vi.fn()
 
@@ -29,7 +30,7 @@ describe('useProviderConnectionsViewModel', () => {
 
   it('loads provider options and connections on mount', async () => {
     let detailOpen = false
-    let vm: ReturnType<typeof useProviderConnectionsViewModel> | null = null
+    let vm!: ProviderConnectionsViewModel
 
     const app = createApp(defineComponent({
       setup() {
@@ -85,8 +86,8 @@ describe('useProviderConnectionsViewModel', () => {
   })
 
   it('requires and submits userName for Azure DevOps Server windows auth', async () => {
-    let vm: ReturnType<typeof useProviderConnectionsViewModel> | null = null
-    const createProviderConnection = vi.fn(async () => ({
+    let vm!: ProviderConnectionsViewModel
+    const createProviderConnection = vi.fn(async (): Promise<ClientScmConnectionDto> => ({
       id: 'connection-2',
       clientId: 'client-1',
       providerFamily: 'azureDevOps',
@@ -99,7 +100,7 @@ describe('useProviderConnectionsViewModel', () => {
       readinessLevel: 'configured',
       createdAt: '2026-05-01T00:00:00Z',
       updatedAt: '2026-05-01T00:00:00Z',
-    }))
+    } as ClientScmConnectionDto))
 
     const app = createApp(defineComponent({
       setup() {

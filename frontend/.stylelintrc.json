@@ -1,0 +1,25 @@
+{
+  "overrides": [
+    { "files": ["**/*.vue"], "customSyntax": "postcss-html" }
+  ],
+  "rules": {
+    "color-no-hex": [
+      true,
+      { "severity": "error", "message": "Use a colour token from tokens.css instead of a raw hex value." }
+    ],
+    "declaration-property-value-disallowed-list": [
+      { "border-radius": ["/[0-9]+px/"] },
+      { "severity": "error", "message": "Use a --radius-* token instead of a raw px border-radius." }
+    ],
+    "selector-disallowed-list": [
+      ["/\\.pill-/", "/\\.badge-(purple|green|gray|cyan)/"],
+      { "severity": "error", "message": "Use the unified .chip tone classes instead of bespoke pill/badge classes." }
+    ]
+  },
+  "ignoreFiles": [
+    "src/assets/styles/tokens.css",
+    "src/assets/styles/vendor/**",
+    "dist/**",
+    "node_modules/**"
+  ]
+}

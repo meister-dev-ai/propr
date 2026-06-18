@@ -51,13 +51,15 @@ export function getApiErrorMessage(error: unknown, fallback: string): string {
   return fallback
 }
 
-/** Attempt a silent token refresh. Returns the new access token or null on failure. */
-async function tryRefreshToken(refreshToken: string, baseUrl: string): Promise<string | null> {
+/**
+ * Attempt a silent token refresh using the httpOnly refresh cookie (sent via
+ * credentials: 'include'); no token is held in JS. Returns the new access token or null.
+ */
+export async function refreshAccessToken(baseUrl?: string): Promise<string | null> {
   try {
-    const res = await fetch(baseUrl + '/auth/refresh', {
+    const res = await fetch((baseUrl ?? resolveAdminClientBaseUrl()) + '/auth/refresh', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ refreshToken }),
+      credentials: 'include',
     })
     if (!res.ok) return null
     const data = (await res.json()) as { accessToken: string }
@@ -65,6 +67,15 @@ async function tryRefreshToken(refreshToken: string, baseUrl: string): Promise<s
   } catch {
     return null
   }
+}
+
+/**
+ * Registered by the app shell to react to a definitively-ended session (refresh failed):
+ * clear state and route to login. Kept as a callback to avoid a router import cycle here.
+ */
+let onSessionExpired: (() => void) | null = null
+export function setOnSessionExpired(handler: (() => void) | null): void {
+  onSessionExpired = handler
 }
 
 export interface CreateAdminClientOptions {
@@ -85,13 +96,18 @@ function resolveAdminClientBaseUrl(explicitBaseUrl?: string): string {
 }
 
 export function createAdminClient(opts?: CreateAdminClientOptions) {
-  const { getAccessToken, getRefreshToken, setAccessToken, clearTokens, accessTokenExpiresIn, loadClientRoles } =
-    useSession()
+  const { getAccessToken, setAccessToken, clearTokens, accessTokenExpiresIn, loadClientRoles } = useSession()
   const baseUrl = resolveAdminClientBaseUrl(opts?.baseUrl)
 
   const client = createClient<paths>({
     baseUrl,
   })
+
+  // Refresh fails terminally → the session is over: clear state and let the app route to login.
+  function endSession() {
+    clearTokens()
+    onSessionExpired?.()
+  }
 
   // Request middleware: inject Authorization header (Admin JWT) if present
   // Note: `opts.overrideKey` is accepted for backward compatibility but ignored —
@@ -100,16 +116,13 @@ export function createAdminClient(opts?: CreateAdminClientOptions) {
     async onRequest({ request }) {
       let token = getAccessToken()
 
-      // Proactively refresh if within 60 s of expiry
+      // Proactively refresh (via the httpOnly cookie) if within 60 s of expiry.
       if (token && accessTokenExpiresIn() < 60) {
-        const refreshToken = getRefreshToken()
-        if (refreshToken) {
-          const newToken = await tryRefreshToken(refreshToken, baseUrl)
-          if (newToken) {
-            setAccessToken(newToken)
-            await loadClientRoles()
-            token = newToken
-          }
+        const newToken = await refreshAccessToken(baseUrl)
+        if (newToken) {
+          setAccessToken(newToken)
+          await loadClientRoles()
+          token = newToken
         }
       }
 
@@ -120,22 +133,16 @@ export function createAdminClient(opts?: CreateAdminClientOptions) {
     },
     async onResponse({ request, response, options }) {
       if (response.status === 401) {
-        // Try one silent refresh before giving up
-        const refreshToken = getRefreshToken()
-        if (refreshToken) {
-          const newToken = await tryRefreshToken(refreshToken, baseUrl)
-          if (newToken) {
-            setAccessToken(newToken)
-            await loadClientRoles()
-            const retryRequest = new Request(request)
-            retryRequest.headers.set('Authorization', `Bearer ${newToken}`)
-            return options.fetch(retryRequest)
-          } else {
-            clearTokens()
-          }
-        } else {
-          clearTokens()
+        // Try one silent cookie refresh before giving up.
+        const newToken = await refreshAccessToken(baseUrl)
+        if (newToken) {
+          setAccessToken(newToken)
+          await loadClientRoles()
+          const retryRequest = new Request(request)
+          retryRequest.headers.set('Authorization', `Bearer ${newToken}`)
+          return options.fetch(retryRequest)
         }
+        endSession()
         throw new UnauthorizedError()
       }
       return response

@@ -2,6 +2,7 @@
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import type { TenantDto } from '@/services/tenantAdminService'
 import { computed, ref } from 'vue'
 
 const routerPushMock = vi.fn()
@@ -63,7 +64,7 @@ const sampleTenants = [
     createdAt: '2026-04-25T10:00:00Z',
     updatedAt: '2026-04-25T10:00:00Z',
   },
-]
+] as TenantDto[]
 
 describe('useClientsViewModel (FR-007, FR-008, FR-012)', () => {
   beforeEach(() => {

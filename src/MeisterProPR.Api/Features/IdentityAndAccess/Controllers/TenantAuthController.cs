@@ -4,6 +4,7 @@
 
 using System.Globalization;
 using MeisterProPR.Api.Extensions;
+using MeisterProPR.Api.Features.IdentityAndAccess;
 using MeisterProPR.Api.Features.Licensing;
 using MeisterProPR.Application.DTOs;
 using MeisterProPR.Application.Features.Licensing.Models;
@@ -86,6 +87,7 @@ public sealed class TenantAuthController(
         }
 
         var session = await sessionFactory.CreateAsync(user!, ct);
+        RefreshTokenCookie.Set(this.Response, session.RefreshToken, DateTimeOffset.UtcNow.AddDays(7), this.Request.IsHttps);
         return this.Ok(AuthHelpers.ToTenantAuthSessionDto(session));
     }
 
@@ -184,12 +186,14 @@ public sealed class TenantAuthController(
 
         var session = await sessionFactory.CreateAsync(completion.User, ct);
         var sessionDto = AuthHelpers.ToTenantAuthSessionDto(session);
+        // Refresh token goes only into the httpOnly cookie (set on this redirect response),
+        // never the URL fragment, which would leak it via history/referrer.
+        RefreshTokenCookie.Set(this.Response, session.RefreshToken, DateTimeOffset.UtcNow.AddDays(7), this.Request.IsHttps);
         var successfulRedirectUri = this.TryBuildFrontendCallbackRedirectUri(
             completion.FrontendReturnUrl,
             new Dictionary<string, string?>
             {
                 ["accessToken"] = sessionDto.AccessToken,
-                ["refreshToken"] = sessionDto.RefreshToken,
                 ["expiresIn"] = sessionDto.ExpiresIn.ToString(CultureInfo.InvariantCulture),
                 ["tokenType"] = sessionDto.TokenType,
             });

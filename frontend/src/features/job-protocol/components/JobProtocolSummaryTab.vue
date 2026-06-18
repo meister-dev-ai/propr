@@ -104,11 +104,11 @@
                                 v-for="(count, sev) in vm.severityCounts"
                                 :key="sev"
                                 class="sev-summary-pill"
-                                :class="`pill-${sev}`"
+                                :class="`sev-summary-pill--${sev}`"
                                 v-show="count > 0"
                             >
-                                <span class="pill-count">{{ count }}</span>
-                                <span class="pill-label">{{ sev }}</span>
+                                <span class="sev-summary-count">{{ count }}</span>
+                                <span class="sev-summary-label">{{ sev }}</span>
                             </div>
                         </div>
                     </div>
@@ -355,9 +355,9 @@ const severities = ['error', 'warning', 'info', 'suggestion']
 .comment-count-pill {
     font-size: 0.7rem;
     background: rgba(255, 255, 255, 0.15);
-    color: #fff;
+    color: var(--color-text);
     padding: 0.13rem 0.45rem;
-    border-radius: 10px;
+    border-radius: var(--radius-lg);
     font-weight: 700;
 }
 
@@ -438,7 +438,7 @@ const severities = ['error', 'warning', 'info', 'suggestion']
 
 .summary-preview-card {
     background: rgba(255, 255, 255, 0.03);
-    border-radius: 16px;
+    border-radius: var(--radius-xl);
     padding: 2rem;
     border: 1px solid var(--color-border);
 }
@@ -527,15 +527,15 @@ const severities = ['error', 'warning', 'info', 'suggestion']
     border: 1px solid var(--color-border);
 }
 
-.pill-count {
+.sev-summary-count {
     font-size: 1rem;
     font-family: monospace;
 }
 
-.pill-error { background: rgba(239, 68, 68, 0.1); border-color: rgba(239, 68, 68, 0.3); color: #ef4444; }
-.pill-warning { background: rgba(234, 179, 8, 0.1); border-color: rgba(234, 179, 8, 0.3); color: #eab308; }
-.pill-info { background: rgba(59, 130, 246, 0.1); border-color: rgba(59, 130, 246, 0.3); color: #3b82f6; }
-.pill-suggestion { background: rgba(168, 85, 247, 0.1); border-color: rgba(168, 85, 247, 0.3); color: #a855f7; }
+.sev-summary-pill--error { background: rgba(239, 68, 68, 0.1); border-color: rgba(239, 68, 68, 0.3); color: var(--color-danger); }
+.sev-summary-pill--warning { background: rgba(234, 179, 8, 0.1); border-color: rgba(234, 179, 8, 0.3); color: var(--color-warning); }
+.sev-summary-pill--info { background: rgba(59, 130, 246, 0.1); border-color: rgba(59, 130, 246, 0.3); color: var(--color-info); }
+.sev-summary-pill--suggestion { background: rgba(168, 85, 247, 0.1); border-color: rgba(168, 85, 247, 0.3); color: var(--color-suggestion); }
 
 .events-section,
 .comments-section {
@@ -613,10 +613,10 @@ const severities = ['error', 'warning', 'info', 'suggestion']
     border-color: rgba(255, 255, 255, 0.2);
 }
 
-.severity-pill--error.severity-pill--active { background: rgba(239, 68, 68, 0.15); border-color: rgba(239, 68, 68, 0.4); color: #ef4444; }
-.severity-pill--warning.severity-pill--active { background: rgba(234, 179, 8, 0.15); border-color: rgba(234, 179, 8, 0.4); color: #eab308; }
-.severity-pill--info.severity-pill--active { background: rgba(59, 130, 246, 0.15); border-color: rgba(59, 130, 246, 0.4); color: #3b82f6; }
-.severity-pill--suggestion.severity-pill--active { background: rgba(168, 85, 247, 0.15); border-color: rgba(168, 85, 247, 0.4); color: #a855f7; }
+.severity-pill--error.severity-pill--active { background: rgba(239, 68, 68, 0.15); border-color: rgba(239, 68, 68, 0.4); color: var(--color-danger); }
+.severity-pill--warning.severity-pill--active { background: rgba(234, 179, 8, 0.15); border-color: rgba(234, 179, 8, 0.4); color: var(--color-warning); }
+.severity-pill--info.severity-pill--active { background: rgba(59, 130, 246, 0.15); border-color: rgba(59, 130, 246, 0.4); color: var(--color-info); }
+.severity-pill--suggestion.severity-pill--active { background: rgba(168, 85, 247, 0.15); border-color: rgba(168, 85, 247, 0.4); color: var(--color-suggestion); }
 
 .synthesis-waiting-state {
     padding: 4rem 2rem;

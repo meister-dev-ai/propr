@@ -1,5 +1,5 @@
 # Build stage
-FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build
+FROM mcr.microsoft.com/dotnet/sdk:10.0@sha256:548d93f8a18a1acbe6cc127bc4f47281430d34a9e35c18afa80a8d6741c2adc3 AS build
 WORKDIR /source
 
 COPY MeisterProPR.slnx .
@@ -14,7 +14,7 @@ RUN dotnet publish src/MeisterProPR.Api/MeisterProPR.Api.csproj \
 RUN mkdir -p /app/.data-protection-keys
 
 # Minimal Kerberos runtime slice for Azure DevOps client auth support.
-FROM ubuntu:24.04 AS kerberos
+FROM ubuntu:24.04@sha256:786a8b558f7be160c6c8c4a54f9a57274f3b4fb1491cf65146521ae77ff1dc54 AS kerberos
 RUN apt-get update \
     && apt-get install -y --no-install-recommends libgssapi-krb5-2 \
     && rm -rf /var/lib/apt/lists/*
@@ -30,18 +30,47 @@ RUN mkdir -p /kerberos-root/usr/lib/x86_64-linux-gnu \
     && cp -a /lib/x86_64-linux-gnu/libkeyutils.so.1* /kerberos-root/lib/x86_64-linux-gnu/ \
     && cp -a /etc/gss /kerberos-root/etc/
 
-# Runtime stage
-FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS runtime
-WORKDIR /app
-
+# Minimal git runtime slice. The reviewer fetches PR repositories with the git
+# CLI (bare mirror + worktrees) instead of SCM REST APIs, which the chiseled
+# runtime image does not ship. Rather than fall back to the full Debian aspnet
+# image (which carries ~170 OS CVEs), stage just the git binary, its git-core
+# helpers, and their shared-library closure into the chiseled runtime — the same
+# approach used for Kerberos above. Ubuntu 24.04 (Noble) matches the chiseled
+# base's glibc, so the copied libraries are ABI-compatible. perl is intentionally
+# excluded: the fetch/worktree/rev-parse plumbing never invokes perl subcommands.
+FROM ubuntu:24.04@sha256:786a8b558f7be160c6c8c4a54f9a57274f3b4fb1491cf65146521ae77ff1dc54 AS gittools
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends git \
+    && apt-get install -y --no-install-recommends git ca-certificates \
     && rm -rf /var/lib/apt/lists/*
+
+RUN set -eux; \
+    mkdir -p /git-root/usr/bin /git-root/bin /git-root/usr/lib/git-core /git-root/etc/ssl/certs; \
+    cp -a /usr/bin/git /git-root/usr/bin/git; \
+    # `true` for GIT_ASKPASS=/bin/true (chiseled ships no coreutils).
+    cp -a /usr/bin/true /git-root/usr/bin/true; \
+    cp -a /usr/bin/true /git-root/bin/true; \
+    cp -a /usr/lib/git-core/. /git-root/usr/lib/git-core/; \
+    cp -aL /etc/ssl/certs/ca-certificates.crt /git-root/etc/ssl/certs/ca-certificates.crt; \
+    # Copy the shared-library closure of git + its git-core ELF helpers, excluding
+    # the glibc/libgcc/libstdc++ runtime already provided by the chiseled base
+    # (overwriting those could break the bundled .NET runtime).
+    for bin in /usr/bin/git $(find /usr/lib/git-core -maxdepth 1 -type f -perm -u+x); do \
+        ldd "$bin" 2>/dev/null | awk '/=>/ {print $3}'; \
+    done | sort -u | grep -E '^/' \
+       | grep -Ev 'ld-linux|/libc\.so|/libc-|/libm\.so|/libm-|/libdl\.so|/libpthread\.so|/librt\.so|/libresolv|/libstdc\+\+\.so|/libgcc_s\.so|/libnss_' \
+       | while read -r lib; do cp -aL --parents "$lib" /git-root/; done
+
+# Runtime stage
+FROM mcr.microsoft.com/dotnet/aspnet:10.0-noble-chiseled-extra@sha256:de3e2d510c3b30dd10a3ababad927725839aacd0bbd6a3e8aef9a5a4408ccc12 AS runtime
+WORKDIR /app
 
 COPY --from=kerberos /kerberos-root/usr/lib/x86_64-linux-gnu/ /usr/lib/x86_64-linux-gnu/
 COPY --from=kerberos /kerberos-root/lib/x86_64-linux-gnu/ /lib/x86_64-linux-gnu/
 COPY --from=kerberos /kerberos-root/etc/gss/ /etc/gss/
+COPY --from=gittools /git-root/ /
 COPY --from=build --chown=1654:1654 /app /app
+
+ENV GIT_EXEC_PATH=/usr/lib/git-core
 
 USER app
 

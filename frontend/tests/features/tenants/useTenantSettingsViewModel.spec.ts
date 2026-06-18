@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import type { TenantSettingsService } from '@/features/tenants/view-models/useTenantSettingsViewModel'
 import { ref } from 'vue'
 
 const routerPushMock = vi.fn()
@@ -88,7 +89,7 @@ describe('useTenantSettingsViewModel (FR-007, FR-008, FR-012)', () => {
       getAuthOptions: vi.fn(async () => ({ publicBaseUrl: 'https://propr.example.test/api' })),
       listTenantSsoProviders: vi.fn(async () => [sampleProvider]),
     }
-    const vm = useTenantSettingsViewModel({ tenantSettingsService: service, autoLoad: false })
+    const vm = useTenantSettingsViewModel({ tenantSettingsService: service as unknown as Partial<TenantSettingsService>, autoLoad: false })
 
     await vm.loadSettings()
 
@@ -107,7 +108,7 @@ describe('useTenantSettingsViewModel (FR-007, FR-008, FR-012)', () => {
       getAuthOptions: vi.fn(async () => null),
       listTenantSsoProviders: vi.fn(async () => [sampleProvider]),
     }
-    const vm = useTenantSettingsViewModel({ tenantSettingsService: service, autoLoad: false })
+    const vm = useTenantSettingsViewModel({ tenantSettingsService: service as unknown as Partial<TenantSettingsService>, autoLoad: false })
 
     await vm.loadSettings()
 
@@ -122,7 +123,7 @@ describe('useTenantSettingsViewModel (FR-007, FR-008, FR-012)', () => {
       getAuthOptions: vi.fn(async () => null),
       listTenantSsoProviders: vi.fn(async () => []),
     }
-    const vm = useTenantSettingsViewModel({ tenantSettingsService: service, autoLoad: false })
+    const vm = useTenantSettingsViewModel({ tenantSettingsService: service as unknown as Partial<TenantSettingsService>, autoLoad: false })
 
     await vm.loadSettings()
 
@@ -159,7 +160,7 @@ describe('useTenantSettingsViewModel (FR-007, FR-008, FR-012)', () => {
         getTenant: vi.fn(async () => sampleTenant),
         getAuthOptions: vi.fn(async () => null),
         listTenantSsoProviders: vi.fn(async () => { throw new TenantPremiumFeatureUnavailableErrorStub('Premium required.') }),
-      },
+      } as unknown as Partial<TenantSettingsService>,
       autoLoad: false,
     })
 

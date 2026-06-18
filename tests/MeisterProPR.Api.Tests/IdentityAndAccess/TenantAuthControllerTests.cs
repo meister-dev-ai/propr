@@ -318,8 +318,13 @@ public sealed class TenantAuthControllerTests(TenantAdministrationApiFactory fac
 
         var fragment = QueryHelpers.ParseQuery("?" + location.Fragment.TrimStart('#'));
         Assert.False(string.IsNullOrWhiteSpace(GetSingleQueryValue(fragment, "accessToken")));
-        Assert.False(string.IsNullOrWhiteSpace(GetSingleQueryValue(fragment, "refreshToken")));
         Assert.Equal("Bearer", GetSingleQueryValue(fragment, "tokenType"));
+        // Refresh token must not leak into the URL fragment; it is set as an httpOnly cookie instead.
+        Assert.False(fragment.ContainsKey("refreshToken"));
+        Assert.Contains(
+            callbackResponse.Headers.GetValues("Set-Cookie"),
+            cookie => cookie.StartsWith("meisterpropr_refresh=", StringComparison.Ordinal)
+                      && cookie.Contains("httponly", StringComparison.OrdinalIgnoreCase));
     }
 
     [Fact]

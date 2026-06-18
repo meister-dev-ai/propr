@@ -108,7 +108,7 @@
               </option>
               <option
                 v-for="project in projects"
-                :key="project.projectId"
+                :key="project.projectId ?? ''"
                 :value="project.projectId ?? ''"
               >
                 {{ formatProjectLabel(project) }}
@@ -243,7 +243,7 @@
                 <div v-if="getBranchSuggestions(filter).length" class="branch-suggestions">
                   <button
                     v-for="suggestion in getBranchSuggestions(filter)"
-                    :key="suggestion.branchName"
+                    :key="suggestion.branchName ?? ''"
                     type="button"
                     class="suggestion-chip"
                     :class="{ active: hasBranchPattern(filter, suggestion.branchName ?? '') }"
@@ -423,8 +423,8 @@
             <tbody>
               <tr v-for="o in filteredOverrides" :key="o.id">
                 <td class="font-semibold small-text">{{ o.promptKey }}</td>
-                <td class="dismissal-pattern-cell" @click="openOverrideViewer(o.overrideText)">
-                  <div class="pattern-text-wrapper small-text cursor-pointer hover-accent" :title="o.overrideText">
+                <td class="dismissal-pattern-cell" @click="openOverrideViewer(o.overrideText ?? '')">
+                  <div class="pattern-text-wrapper small-text cursor-pointer hover-accent" :title="o.overrideText ?? ''">
                     {{ o.overrideText }}
                   </div>
                 </td>
@@ -460,42 +460,18 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref, watch } from 'vue'
-import { listAdoCrawlFilters, listAdoOrganizationScopes, listAdoProjects } from '@/services/adoDiscoveryService'
-import type {
-  AdoBranchOptionDto,
-  AdoCrawlFilterOptionDto,
-  AdoProjectOptionDto,
-  CanonicalSourceReferenceDto,
-  ClientAdoOrganizationScopeDto,
-} from '@/services/adoDiscoveryService'
-import { createAdminClient, getApiErrorMessage } from '@/services/api'
-import TextViewerModal from '@/components/TextViewerModal.vue'
-import { createOverride, deleteOverride, listOverrides } from '@/services/promptOverridesService'
-import { listProCursorSources } from '@/services/proCursorService'
-import type { ProCursorKnowledgeSourceDto } from '@/services/proCursorService'
-import type { components } from '@/types'
-
-type ScmProvider = components['schemas']['ScmProvider']
-type CrawlConfigResponse = components['schemas']['CrawlConfigResponse'] & { provider?: ScmProvider }
-type CrawlRepoFilterResponse = components['schemas']['CrawlRepoFilterResponse']
-type CrawlRepoFilterRequest = components['schemas']['CrawlRepoFilterRequest']
-type CreateAdminCrawlConfigRequest = components['schemas']['CreateAdminCrawlConfigRequest'] & { provider?: ScmProvider }
-type PromptOverrideDto = components['schemas']['PromptOverrideDto']
-type ProCursorSourceScopeMode = components['schemas']['ProCursorSourceScopeMode']
-
-interface FilterRow {
-  id: string
-  selectedFilterKey: string
-  repositoryName: string
-  displayName: string
-  canonicalSourceRef: CanonicalSourceReferenceDto | null
-  targetBranchPatterns: string[]
-  isLegacy: boolean
-}
-
-const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
-let filterRowSequence = 0
+import TextViewerModal from '@/components/text/TextViewerModal.vue'
+import type { CrawlConfigResponse } from './crawlConfigForm.types'
+import {
+  formatBranchSuggestion,
+  formatOrganizationScopeLabel,
+  formatProCursorScopeRepairMessage,
+  formatProCursorSourceLabel,
+  formatProCursorSourcePath,
+  formatProjectLabel,
+  sourceOptionKey,
+} from './crawlConfigFormatters'
+import { useCrawlConfigForm } from './useCrawlConfigForm'
 
 const props = defineProps<{
   config?: CrawlConfigResponse
@@ -507,780 +483,81 @@ const emit = defineEmits<{
   cancel: []
 }>()
 
-const editMode = computed(() => !!props.config)
-const clientId = ref(props.clientId ?? props.config?.clientId ?? '')
-const provider = computed<ScmProvider>(() => normalizeProvider(props.config?.provider))
-const organizationScopeId = ref(props.config?.organizationScopeId ?? '')
-const projectId = ref(props.config?.providerProjectKey ?? '')
-const crawlIntervalSeconds = ref<number>(props.config?.crawlIntervalSeconds ?? 60)
-const reviewTemperatureInput = ref(props.config?.reviewTemperature?.toString() ?? '')
-const isActive = ref(props.config?.isActive ?? true)
-const repairRequiredProCursorSourceIds = ref<string[]>(normalizeStringList(props.config?.invalidProCursorSourceIds))
-const proCursorSourceScopeMode = ref<ProCursorSourceScopeMode>(props.config?.proCursorSourceScopeMode ?? 'allClientSources')
-const proCursorSourceIds = ref<string[]>(
-  normalizeStringList(props.config?.proCursorSourceIds).filter(
-    (sourceId) => !repairRequiredProCursorSourceIds.value.includes(sourceId),
-  ),
-)
-
-const organizationScopes = ref<ClientAdoOrganizationScopeDto[]>([])
-const projects = ref<AdoProjectOptionDto[]>([])
-const crawlFilterOptions = ref<AdoCrawlFilterOptionDto[]>([])
-const proCursorSources = ref<ProCursorKnowledgeSourceDto[]>([])
-const repoFilters = ref<FilterRow[]>(createInitialFilterRows(props.config?.repoFilters))
-
-const organizationScopesLoading = ref(false)
-const projectsLoading = ref(false)
-const crawlFilterOptionsLoading = ref(false)
-const proCursorSourcesLoading = ref(false)
-
-const organizationScopesError = ref('')
-const projectsError = ref('')
-const crawlFilterOptionsError = ref('')
-const proCursorSourcesError = ref('')
-
-const overrides = ref<PromptOverrideDto[]>([])
-const overridesLoading = ref(false)
-const showOverrideForm = ref(false)
-const newOverride = reactive({ promptKey: '', overrideText: '' })
-
-const isOverrideViewerOpen = ref(false)
-const overrideViewerTitle = ref('')
-const overrideViewerContent = ref('')
-
-const clientIdError = ref('')
-const organizationScopeIdError = ref('')
-const projectIdError = ref('')
-const intervalError = ref('')
-const reviewTemperatureError = ref('')
-const repoFiltersError = ref('')
-const proCursorSourceScopeError = ref('')
-const formError = ref('')
-const loading = ref(false)
-
-const effectiveClientId = computed(() => (props.clientId ?? props.config?.clientId ?? clientId.value).trim())
-const canLoadOrganizationScopes = computed(() => isValidUuid(effectiveClientId.value))
-const isAzureDevOpsProvider = computed(() => provider.value === 'azureDevOps')
-const legacyModeWithoutScope = computed(() => editMode.value && !organizationScopeId.value)
-const canEditOrganizationSelection = computed(() => isAzureDevOpsProvider.value && !editMode.value && canLoadOrganizationScopes.value)
-const canEditProjectSelection = computed(() => isAzureDevOpsProvider.value && !editMode.value && !!organizationScopeId.value)
-const canEditRepoFilters = computed(() => isAzureDevOpsProvider.value && !!organizationScopeId.value && !!projectId.value && !legacyModeWithoutScope.value)
-const selectedOrganizationScope = computed(() =>
-  organizationScopes.value.find((scope) => scope.id === organizationScopeId.value),
-)
-const organizationScopeMissing = computed(() => !!organizationScopeId.value && !selectedOrganizationScope.value)
-const currentProjectOption = computed(() =>
-  projects.value.find((project) => normalizeText(project.projectId) === projectId.value),
-)
-const projectMissing = computed(() => !!projectId.value && !currentProjectOption.value && !legacyModeWithoutScope.value)
-const usesSelectedProCursorSources = computed(() => proCursorSourceScopeMode.value === 'selectedSources')
-const selectableProCursorSources = computed(() =>
-  proCursorSources.value.filter((source) => normalizeText(source.sourceId).length > 0 && source.isEnabled !== false),
-)
-const selectedProCursorSourceCount = computed(() => serializeProCursorSourceIds().length)
-const filteredOverrides = computed(() =>
-  overrides.value.filter((override) => override.scope === 'crawlConfigScope' && override.crawlConfigId === props.config?.id),
-)
-const providerLabel = computed(() => formatProvider(provider.value))
-
-watch(
-  () => effectiveClientId.value,
-  async (nextClientId, previousClientId) => {
-    if (editMode.value || props.clientId || nextClientId === previousClientId) {
-      return
-    }
-
-    resetDiscoveryState()
-    resetProCursorSourceState()
-
-    if (isValidUuid(nextClientId)) {
-      await Promise.all([loadOrganizationScopes(false), loadProCursorSources()])
-    }
-  },
-)
-
-onMounted(async () => {
-  if (editMode.value) {
-    loadOverrides()
-  }
-
-  if (!canLoadOrganizationScopes.value) {
-    return
-  }
-
-  await Promise.all([loadOrganizationScopes(true), loadProCursorSources()])
-
-  if (legacyModeWithoutScope.value || !organizationScopeId.value) {
-    return
-  }
-
-  await loadProjects(true)
-
-  if (projectId.value) {
-    await loadCrawlFilterOptions(true)
-  }
-})
-
-function normalizeText(value: string | null | undefined): string {
-  return value?.trim() ?? ''
-}
-
-function normalizeProvider(value: string | null | undefined): ScmProvider {
-  switch (value) {
-    case 'github':
-    case 'gitLab':
-    case 'forgejo':
-      return value
-    default:
-      return 'azureDevOps'
-  }
-}
-
-function formatProvider(value: ScmProvider): string {
-  switch (value) {
-    case 'gitLab':
-      return 'GitLab'
-    case 'forgejo':
-      return 'Forgejo'
-    case 'github':
-      return 'GitHub'
-    default:
-      return 'Azure DevOps'
-  }
-}
-
-function normalizeStringList(values: ReadonlyArray<string | null | undefined> | null | undefined): string[] {
-  const normalizedValues: string[] = []
-  const seen = new Set<string>()
-
-  for (const value of values ?? []) {
-    const normalizedValue = normalizeText(value)
-    if (!normalizedValue || seen.has(normalizedValue)) {
-      continue
-    }
-
-    seen.add(normalizedValue)
-    normalizedValues.push(normalizedValue)
-  }
-
-  return normalizedValues
-}
-
-function isValidUuid(value: string): boolean {
-  return uuidPattern.test(value)
-}
-
-function nextFilterRowId(): string {
-  filterRowSequence += 1
-  return `crawl-filter-${filterRowSequence}`
-}
-
-function cloneCanonicalSourceRef(canonicalSourceRef: CanonicalSourceReferenceDto | null | undefined): CanonicalSourceReferenceDto | null {
-  const provider = normalizeText(canonicalSourceRef?.provider)
-  const value = normalizeText(canonicalSourceRef?.value)
-  if (!provider || !value) {
-    return null
-  }
-
-  return { provider, value }
-}
-
-function sourceOptionKey(canonicalSourceRef: CanonicalSourceReferenceDto | null | undefined): string {
-  const canonical = cloneCanonicalSourceRef(canonicalSourceRef)
-  if (!canonical) {
-    return ''
-  }
-
-  return `${canonical.provider}::${canonical.value}`
-}
-
-function createFilterRow(filter?: CrawlRepoFilterResponse): FilterRow {
-  const canonicalSourceRef = cloneCanonicalSourceRef(filter?.canonicalSourceRef)
-  const repositoryName = normalizeText(filter?.repositoryName)
-  const displayName = normalizeText(filter?.displayName) || repositoryName
-
-  return {
-    id: nextFilterRowId(),
-    selectedFilterKey: sourceOptionKey(canonicalSourceRef),
-    repositoryName: repositoryName || displayName,
-    displayName,
-    canonicalSourceRef,
-    targetBranchPatterns: (filter?.targetBranchPatterns ?? [])
-      .map((pattern) => normalizeText(pattern))
-      .filter((pattern) => pattern.length > 0),
-    isLegacy: !canonicalSourceRef && !!(repositoryName || displayName),
-  }
-}
-
-function createInitialFilterRows(filters: CrawlRepoFilterResponse[] | null | undefined): FilterRow[] {
-  return (filters ?? []).map((filter) => createFilterRow(filter))
-}
-
-function resetProCursorSourceState(): void {
-  proCursorSourceScopeMode.value = 'allClientSources'
-  proCursorSourceIds.value = []
-  repairRequiredProCursorSourceIds.value = []
-  proCursorSources.value = []
-  proCursorSourcesError.value = ''
-  proCursorSourcesLoading.value = false
-}
-
-function resetFilterSelection(): void {
-  crawlFilterOptions.value = []
-  crawlFilterOptionsError.value = ''
-  repoFilters.value = []
-}
-
-function resetProjectSelection(): void {
-  projects.value = []
-  projectsError.value = ''
-  projectId.value = ''
-  resetFilterSelection()
-}
-
-function resetDiscoveryState(): void {
-  organizationScopes.value = []
-  organizationScopesError.value = ''
-  organizationScopeId.value = ''
-  resetProjectSelection()
-}
-
-function formatOrganizationScopeLabel(scope: ClientAdoOrganizationScopeDto): string {
-  const label = normalizeText(scope.displayName) || normalizeText(scope.organizationUrl) || 'Unnamed organization'
-  return scope.isEnabled === false ? `${label} (disabled)` : label
-}
-
-function formatProjectLabel(project: AdoProjectOptionDto): string {
-  return normalizeText(project.projectName) || normalizeText(project.projectId) || 'Unnamed project'
-}
-
-function sortOrganizationScopes(scopes: ClientAdoOrganizationScopeDto[]): ClientAdoOrganizationScopeDto[] {
-  return [...scopes].sort((left, right) => formatOrganizationScopeLabel(left).localeCompare(formatOrganizationScopeLabel(right)))
-}
-
-function sortProjects(discoveredProjects: AdoProjectOptionDto[]): AdoProjectOptionDto[] {
-  return [...discoveredProjects].sort((left, right) => formatProjectLabel(left).localeCompare(formatProjectLabel(right)))
-}
-
-function sortCrawlFilterOptions(options: AdoCrawlFilterOptionDto[]): AdoCrawlFilterOptionDto[] {
-  return [...options].sort((left, right) => {
-    const leftLabel = normalizeText(left.displayName) || sourceOptionKey(left.canonicalSourceRef)
-    const rightLabel = normalizeText(right.displayName) || sourceOptionKey(right.canonicalSourceRef)
-    return leftLabel.localeCompare(rightLabel)
-  })
-}
-
-function formatProCursorSourceLabel(source: ProCursorKnowledgeSourceDto): string {
-  return normalizeText(source.displayName) || normalizeText(source.sourceDisplayName) || normalizeText(source.repositoryId) || 'Unnamed source'
-}
-
-function formatProCursorSourcePath(source: ProCursorKnowledgeSourceDto): string {
-  const providerScopePath = normalizeText(source.providerScopePath) || 'No organization'
-  const sourceDisplayName = normalizeText(source.sourceDisplayName) || normalizeText(source.repositoryId) || 'No selected source'
-  return `${providerScopePath} / ${normalizeText(source.providerProjectKey) || 'No project'} / ${sourceDisplayName}`
-}
-
-function sortProCursorSources(sources: ProCursorKnowledgeSourceDto[]): ProCursorKnowledgeSourceDto[] {
-  return [...sources].sort((left, right) => formatProCursorSourceLabel(left).localeCompare(formatProCursorSourceLabel(right)))
-}
-
-function sortBranchSuggestions(branchSuggestions: AdoBranchOptionDto[] | null | undefined): AdoBranchOptionDto[] {
-  return [...(branchSuggestions ?? [])].sort((left, right) => {
-    if (!!left.isDefault !== !!right.isDefault) {
-      return left.isDefault ? -1 : 1
-    }
-
-    return normalizeText(left.branchName).localeCompare(normalizeText(right.branchName))
-  })
-}
-
-async function loadOrganizationScopes(preserveSelection: boolean): Promise<void> {
-  if (!canLoadOrganizationScopes.value) {
-    return
-  }
-
-  organizationScopesLoading.value = true
-  organizationScopesError.value = ''
-
-  try {
-    organizationScopes.value = sortOrganizationScopes(await listAdoOrganizationScopes(effectiveClientId.value))
-
-    if (!preserveSelection && !organizationScopes.value.some((scope) => scope.id === organizationScopeId.value)) {
-      organizationScopeId.value = ''
-      resetProjectSelection()
-    }
-  } catch (error) {
-    organizationScopes.value = []
-    organizationScopesError.value = error instanceof Error ? error.message : 'Failed to load organization scopes.'
-    if (!preserveSelection) {
-      organizationScopeId.value = ''
-      resetProjectSelection()
-    }
-  } finally {
-    organizationScopesLoading.value = false
-  }
-}
-
-async function loadProjects(preserveProject: boolean): Promise<void> {
-  if (!canLoadOrganizationScopes.value || !organizationScopeId.value) {
-    return
-  }
-
-  projectsLoading.value = true
-  projectsError.value = ''
-
-  try {
-    projects.value = sortProjects(await listAdoProjects(effectiveClientId.value, organizationScopeId.value, 'crawl'))
-
-    if (!preserveProject && !projects.value.some((project) => normalizeText(project.projectId) === projectId.value)) {
-      projectId.value = ''
-      resetFilterSelection()
-    }
-  } catch (error) {
-    projects.value = []
-    projectsError.value = error instanceof Error ? error.message : 'Failed to load Azure DevOps projects.'
-    if (!preserveProject) {
-      projectId.value = ''
-      resetFilterSelection()
-    }
-  } finally {
-    projectsLoading.value = false
-  }
-}
-
-async function loadCrawlFilterOptions(preserveRows: boolean): Promise<void> {
-  if (!canLoadOrganizationScopes.value || !organizationScopeId.value || !projectId.value) {
-    return
-  }
-
-  crawlFilterOptionsLoading.value = true
-  crawlFilterOptionsError.value = ''
-
-  try {
-    crawlFilterOptions.value = sortCrawlFilterOptions(
-      await listAdoCrawlFilters(effectiveClientId.value, organizationScopeId.value, projectId.value, 'crawl'),
-    )
-
-    if (!preserveRows) {
-      repoFilters.value = []
-    }
-  } catch (error) {
-    crawlFilterOptions.value = []
-    crawlFilterOptionsError.value = error instanceof Error ? error.message : 'Failed to load repository filters.'
-    if (!preserveRows) {
-      repoFilters.value = []
-    }
-  } finally {
-    crawlFilterOptionsLoading.value = false
-  }
-}
-
-async function loadProCursorSources(): Promise<void> {
-  if (!canLoadOrganizationScopes.value) {
-    return
-  }
-
-  proCursorSourcesLoading.value = true
-  proCursorSourcesError.value = ''
-
-  try {
-    proCursorSources.value = sortProCursorSources(await listProCursorSources(effectiveClientId.value))
-    reconcileSelectedProCursorSources()
-  } catch (error) {
-    proCursorSources.value = []
-    proCursorSourcesError.value = error instanceof Error ? error.message : 'Failed to load ProCursor sources.'
-  } finally {
-    proCursorSourcesLoading.value = false
-  }
-}
-
-function reconcileSelectedProCursorSources(): void {
-  const availableSourceIds = new Set(
-    proCursorSources.value
-      .filter((source) => source.isEnabled !== false)
-      .map((source) => normalizeText(source.sourceId))
-      .filter((sourceId) => sourceId.length > 0),
-  )
-
-  const removedSourceIds = proCursorSourceIds.value.filter((sourceId) => !availableSourceIds.has(sourceId))
-  if (removedSourceIds.length === 0) {
-    return
-  }
-
-  repairRequiredProCursorSourceIds.value = normalizeStringList([
-    ...repairRequiredProCursorSourceIds.value,
-    ...removedSourceIds,
-  ])
-  proCursorSourceIds.value = proCursorSourceIds.value.filter((sourceId) => availableSourceIds.has(sourceId))
-}
-
-async function handleOrganizationScopeChange(): Promise<void> {
-  resetProjectSelection()
-
-  if (organizationScopeId.value) {
-    await loadProjects(false)
-  }
-}
-
-async function handleProjectChange(): Promise<void> {
-  resetFilterSelection()
-
-  if (projectId.value) {
-    await loadCrawlFilterOptions(false)
-  }
-}
-
-function getAvailableFilterOptions(rowId: string): AdoCrawlFilterOptionDto[] {
-  const selectedKeys = new Set(
-    repoFilters.value
-      .filter((row) => row.id !== rowId)
-      .map((row) => row.selectedFilterKey)
-      .filter((rowKey) => rowKey.length > 0),
-  )
-
-  return crawlFilterOptions.value.filter((option) => !selectedKeys.has(sourceOptionKey(option.canonicalSourceRef)))
-}
-
-function findFilterOptionByKey(selectedFilterKey: string): AdoCrawlFilterOptionDto | undefined {
-  return crawlFilterOptions.value.find((option) => sourceOptionKey(option.canonicalSourceRef) === selectedFilterKey)
-}
-
-function isUnavailableCanonicalFilter(filter: FilterRow): boolean {
-  return !!filter.selectedFilterKey && !findFilterOptionByKey(filter.selectedFilterKey)
-}
-
-function handleFilterSelectionChange(filter: FilterRow): void {
-  const option = findFilterOptionByKey(filter.selectedFilterKey)
-
-  if (!option) {
-    if (!filter.isLegacy) {
-      filter.canonicalSourceRef = null
-      filter.repositoryName = ''
-      filter.displayName = ''
-    }
-
-    return
-  }
-
-  filter.canonicalSourceRef = cloneCanonicalSourceRef(option.canonicalSourceRef)
-  filter.repositoryName = normalizeText(option.displayName) || normalizeText(option.canonicalSourceRef?.value)
-  filter.displayName = normalizeText(option.displayName) || filter.repositoryName
-  filter.isLegacy = false
-}
-
-function getBranchSuggestions(filter: FilterRow): AdoBranchOptionDto[] {
-  return sortBranchSuggestions(findFilterOptionByKey(filter.selectedFilterKey)?.branchSuggestions)
-}
-
-function formatBranchSuggestion(branchSuggestion: AdoBranchOptionDto): string {
-  const branchName = normalizeText(branchSuggestion.branchName)
-  return branchSuggestion.isDefault ? `${branchName} (default)` : branchName
-}
-
-function serializeProCursorSourceIds(): string[] {
-  return normalizeStringList(proCursorSourceIds.value)
-}
-
-function formatProCursorScopeRepairMessage(repairCount: number): string {
-  return repairCount === 1
-    ? '1 saved ProCursor source is no longer eligible for this client. That selection was removed locally; save to persist the repaired scope.'
-    : `${repairCount} saved ProCursor sources are no longer eligible for this client. Those selections were removed locally; save to persist the repaired scope.`
-}
-
-function hasBranchPattern(filter: FilterRow, branchPattern: string): boolean {
-  return filter.targetBranchPatterns.some((pattern) => pattern === branchPattern)
-}
-
-function addFilter(): void {
-  repoFilters.value.push({
-    id: nextFilterRowId(),
-    selectedFilterKey: '',
-    repositoryName: '',
-    displayName: '',
-    canonicalSourceRef: null,
-    targetBranchPatterns: [],
-    isLegacy: false,
-  })
-}
-
-function removeFilter(index: number): void {
-  if (!canEditRepoFilters.value) {
-    return
-  }
-
-  repoFilters.value.splice(index, 1)
-}
-
-function addPattern(filter: FilterRow): void {
-  filter.targetBranchPatterns.push('')
-}
-
-function removePattern(filter: FilterRow, patternIndex: number): void {
-  filter.targetBranchPatterns.splice(patternIndex, 1)
-}
-
-function toggleBranchPattern(filter: FilterRow, branchPattern: string): void {
-  if (!branchPattern) {
-    return
-  }
-
-  const existingIndex = filter.targetBranchPatterns.findIndex((pattern) => pattern === branchPattern)
-  if (existingIndex >= 0) {
-    filter.targetBranchPatterns.splice(existingIndex, 1)
-    return
-  }
-
-  filter.targetBranchPatterns.push(branchPattern)
-}
-
-function serializeRepoFilters(): CrawlRepoFilterRequest[] {
-  return repoFilters.value.map((filter) => ({
-    repositoryName: normalizeText(filter.repositoryName) || normalizeText(filter.displayName) || undefined,
-    displayName: normalizeText(filter.displayName) || undefined,
-    canonicalSourceRef: cloneCanonicalSourceRef(filter.canonicalSourceRef) ?? undefined,
-    targetBranchPatterns: filter.targetBranchPatterns
-      .map((pattern) => normalizeText(pattern))
-      .filter((pattern) => pattern.length > 0),
-  }))
-}
-
-function parseReviewTemperature(): number | undefined {
-  const rawValue = reviewTemperatureInput.value
-  if (rawValue === null || rawValue === undefined || rawValue === '') {
-    return undefined
-  }
-
-  const parsed = typeof rawValue === 'number'
-    ? rawValue
-    : Number.parseFloat(rawValue)
-
-  if (!Number.isFinite(parsed)) {
-    return Number.NaN
-  }
-
-  return parsed
-}
-
-async function loadOverrides(): Promise<void> {
-  if (!props.config?.clientId) {
-    return
-  }
-
-  overridesLoading.value = true
-  try {
-    overrides.value = await listOverrides(props.config.clientId)
-  } catch {
-    console.error('Failed to load overrides')
-  } finally {
-    overridesLoading.value = false
-  }
-}
-
-async function handleCreateOverride(): Promise<void> {
-  if (!props.config?.clientId || !props.config?.id) {
-    return
-  }
-
-  overridesLoading.value = true
-  try {
-    const createdOverride = await createOverride(props.config.clientId, {
-      scope: 'crawlConfigScope',
-      crawlConfigId: props.config.id,
-      promptKey: newOverride.promptKey,
-      overrideText: newOverride.overrideText,
-    })
-    overrides.value.push(createdOverride)
-    newOverride.promptKey = ''
-    newOverride.overrideText = ''
-    showOverrideForm.value = false
-  } catch {
-    alert('Failed to save override. Duplicate key?')
-  } finally {
-    overridesLoading.value = false
-  }
-}
-
-function openOverrideViewer(text: string): void {
-  overrideViewerTitle.value = 'Prompt Override'
-  overrideViewerContent.value = text
-  isOverrideViewerOpen.value = true
-}
-
-async function handleDeleteOverride(id: string): Promise<void> {
-  if (!props.config?.clientId) {
-    return
-  }
-
-  try {
-    await deleteOverride(props.config.clientId, id)
-    overrides.value = overrides.value.filter((override) => override.id !== id)
-  } catch {
-    alert('Failed to delete override.')
-  }
-}
-
-function validate(): boolean {
-  clientIdError.value = ''
-  organizationScopeIdError.value = ''
-  projectIdError.value = ''
-  intervalError.value = ''
-  reviewTemperatureError.value = ''
-  repoFiltersError.value = ''
-  proCursorSourceScopeError.value = ''
-  formError.value = ''
-
-  let valid = true
-
-  if (!editMode.value && !props.clientId) {
-    if (!clientId.value.trim()) {
-      clientIdError.value = 'Client ID is required.'
-      valid = false
-    } else if (!isValidUuid(clientId.value.trim())) {
-      clientIdError.value = 'Client ID must be a valid UUID.'
-      valid = false
-    }
-  }
-
-  if (!legacyModeWithoutScope.value && !organizationScopeId.value) {
-    organizationScopeIdError.value = 'Select an allowed Azure DevOps organization.'
-    valid = false
-  }
-
-  if (!projectId.value.trim()) {
-    projectIdError.value = 'Project selection is required.'
-    valid = false
-  }
-
-  if (!Number.isInteger(crawlIntervalSeconds.value) || crawlIntervalSeconds.value < 10) {
-    intervalError.value = 'Interval must be an integer of at least 10 seconds.'
-    valid = false
-  }
-
-  const reviewTemperature = parseReviewTemperature()
-  if (reviewTemperature !== undefined) {
-    if (!Number.isFinite(reviewTemperature)) {
-      reviewTemperatureError.value = 'Review temperature must be a number between 0.0 and 2.0.'
-      valid = false
-    } else if (reviewTemperature < 0 || reviewTemperature > 2) {
-      reviewTemperatureError.value = 'Review temperature must be between 0.0 and 2.0.'
-      valid = false
-    }
-  }
-
-  if (canEditRepoFilters.value) {
-    const hasEmptyRepositoryRow = repoFilters.value.some((filter) => !filter.isLegacy && !filter.selectedFilterKey)
-    if (hasEmptyRepositoryRow) {
-      repoFiltersError.value = 'Select a repository or remove the empty filter row.'
-      valid = false
-    }
-
-    const hasBlankBranchPattern = repoFilters.value.some((filter) =>
-      filter.targetBranchPatterns.some((pattern) => normalizeText(pattern).length === 0),
-    )
-    if (hasBlankBranchPattern) {
-      repoFiltersError.value = 'Branch patterns cannot be blank.'
-      valid = false
-    }
-  }
-
-  if (usesSelectedProCursorSources.value && serializeProCursorSourceIds().length === 0) {
-    proCursorSourceScopeError.value = 'Select at least one enabled ProCursor source or switch to all client sources.'
-    valid = false
-  }
-
-  return valid
-}
-
-async function handleSubmit(): Promise<void> {
-  if (!validate()) {
-    return
-  }
-
-  loading.value = true
-
-  try {
-    if (editMode.value && props.config?.id) {
-      const reviewTemperature = parseReviewTemperature()
-      const { data, error, response } = await createAdminClient().PATCH('/admin/crawl-configurations/{configId}', {
-        params: { path: { configId: props.config.id } },
-        body: {
-          crawlIntervalSeconds: crawlIntervalSeconds.value,
-          isActive: isActive.value,
-          repoFilters: canEditRepoFilters.value ? serializeRepoFilters() : undefined,
-          proCursorSourceScopeMode: proCursorSourceScopeMode.value,
-          proCursorSourceIds: serializeProCursorSourceIds(),
-          reviewTemperature,
-        },
-      })
-
-      if (response.status === 404) {
-        formError.value = 'Configuration no longer exists.'
-        return
-      }
-
-      if (response.status === 403) {
-        formError.value = 'You do not have permission to edit this configuration.'
-        return
-      }
-
-      if (response.status === 409) {
-        formError.value = getApiErrorMessage(error, 'One or more guided selections are no longer available in Azure DevOps.')
-        return
-      }
-
-      if (!response.ok) {
-        formError.value = getApiErrorMessage(error, 'Failed to update configuration.')
-        return
-      }
-
-      emit('config-saved', data as CrawlConfigResponse)
-      return
-    }
-
-    const reviewTemperature = parseReviewTemperature()
-    const body: CreateAdminCrawlConfigRequest = {
-      clientId: effectiveClientId.value,
-      provider: provider.value,
-      organizationScopeId: organizationScopeId.value || undefined,
-      providerProjectKey: projectId.value.trim(),
-      crawlIntervalSeconds: crawlIntervalSeconds.value,
-      repoFilters: serializeRepoFilters(),
-      proCursorSourceScopeMode: proCursorSourceScopeMode.value,
-      proCursorSourceIds: serializeProCursorSourceIds(),
-      reviewTemperature,
-    }
-
-    const { data, error, response } = await createAdminClient().POST('/admin/crawl-configurations', {
-      body,
-    })
-
-    if (response.status === 403) {
-      formError.value = 'You do not have permission to create a configuration for this client.'
-      return
-    }
-
-    if (response.status === 404) {
-      formError.value = 'Client not found.'
-      return
-    }
-
-    if (response.status === 409) {
-      formError.value = getApiErrorMessage(error, 'A configuration for this organisation and project already exists for this client.')
-      return
-    }
-
-    if (!response.ok) {
-      formError.value = getApiErrorMessage(error, 'Failed to create configuration.')
-      return
-    }
-
-    emit('config-saved', data as CrawlConfigResponse)
-  } catch (error) {
-    formError.value = error instanceof Error ? error.message : 'Connection error. Please try again.'
-  } finally {
-    loading.value = false
-  }
-}
+const {
+  editMode,
+  provider,
+  providerLabel,
+  clientId,
+  organizationScopeId,
+  projectId,
+  crawlIntervalSeconds,
+  reviewTemperatureInput,
+  isActive,
+  repairRequiredProCursorSourceIds,
+  proCursorSourceScopeMode,
+  proCursorSourceIds,
+  organizationScopes,
+  projects,
+  crawlFilterOptions,
+  proCursorSources,
+  repoFilters,
+  organizationScopesLoading,
+  projectsLoading,
+  crawlFilterOptionsLoading,
+  proCursorSourcesLoading,
+  organizationScopesError,
+  projectsError,
+  crawlFilterOptionsError,
+  proCursorSourcesError,
+  overrides,
+  overridesLoading,
+  showOverrideForm,
+  newOverride,
+  isOverrideViewerOpen,
+  overrideViewerTitle,
+  overrideViewerContent,
+  clientIdError,
+  organizationScopeIdError,
+  projectIdError,
+  intervalError,
+  reviewTemperatureError,
+  repoFiltersError,
+  proCursorSourceScopeError,
+  formError,
+  loading,
+  effectiveClientId,
+  canLoadOrganizationScopes,
+  isAzureDevOpsProvider,
+  legacyModeWithoutScope,
+  canEditOrganizationSelection,
+  canEditProjectSelection,
+  canEditRepoFilters,
+  selectedOrganizationScope,
+  organizationScopeMissing,
+  currentProjectOption,
+  projectMissing,
+  usesSelectedProCursorSources,
+  selectableProCursorSources,
+  selectedProCursorSourceCount,
+  filteredOverrides,
+  serializeProCursorSourceIds,
+  handleOrganizationScopeChange,
+  handleProjectChange,
+  getAvailableFilterOptions,
+  isUnavailableCanonicalFilter,
+  handleFilterSelectionChange,
+  getBranchSuggestions,
+  hasBranchPattern,
+  addFilter,
+  removeFilter,
+  addPattern,
+  removePattern,
+  toggleBranchPattern,
+  openOverrideViewer,
+  handleCreateOverride,
+  handleDeleteOverride,
+  handleSubmit,
+} = useCrawlConfigForm(props, emit)
 </script>
 
 <style scoped>
@@ -1379,15 +656,15 @@ async function handleSubmit(): Promise<void> {
 }
 
 .legacy-note {
-  color: #fbbf24;
+  color: var(--color-warning);
 }
 
 .form-error-banner {
   background: rgba(239, 68, 68, 0.1);
   border: 1px solid rgba(239, 68, 68, 0.2);
-  color: #f87171;
+  color: var(--color-danger);
   padding: 0.75rem 1rem;
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   display: flex;
   align-items: center;
   gap: 0.75rem;
@@ -1402,7 +679,7 @@ async function handleSubmit(): Promise<void> {
   padding: 0 1rem;
   height: 48px;
   background: rgba(255, 255, 255, 0.03);
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   border: 1px solid var(--color-border);
   transition: all 0.2s;
   box-sizing: border-box;
@@ -1454,7 +731,7 @@ async function handleSubmit(): Promise<void> {
   padding: 0.85rem;
   background: rgba(255, 255, 255, 0.03);
   border: 1px solid var(--color-border);
-  border-radius: 10px;
+  border-radius: var(--radius-lg);
 }
 
 .filter-select-group,
@@ -1471,7 +748,7 @@ async function handleSubmit(): Promise<void> {
 .suggestion-chip {
   background: rgba(255, 255, 255, 0.06);
   border: 1px solid var(--color-border);
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   padding: 0.35rem 0.8rem;
   font-size: 0.8rem;
   color: var(--color-text);
@@ -1494,7 +771,7 @@ async function handleSubmit(): Promise<void> {
   align-items: center;
   background: rgba(255, 255, 255, 0.06);
   border: 1px solid var(--color-border);
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   padding: 0 0.3rem;
   gap: 0.2rem;
 }
@@ -1533,7 +810,7 @@ async function handleSubmit(): Promise<void> {
 .btn-add-pattern {
   background: rgba(255, 255, 255, 0.06);
   border: 1px solid var(--color-border);
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   padding: 0.4rem 0.8rem;
   font-size: 0.8rem;
   color: var(--color-text);
@@ -1583,8 +860,8 @@ async function handleSubmit(): Promise<void> {
   gap: 0.35rem;
   background: rgba(59, 130, 246, 0.15);
   border: 1px solid rgba(59, 130, 246, 0.3);
-  color: #bfdbfe;
-  border-radius: 999px;
+  color: var(--color-info);
+  border-radius: var(--radius-pill);
   padding: 0.35rem 0.8rem;
   font-size: 0.78rem;
   font-weight: 600;
@@ -1602,7 +879,7 @@ async function handleSubmit(): Promise<void> {
   gap: 0.85rem;
   padding: 1rem;
   border: 1px solid var(--color-border);
-  border-radius: 10px;
+  border-radius: var(--radius-lg);
   background: rgba(255, 255, 255, 0.03);
   cursor: pointer;
   transition: border-color 0.2s, background 0.2s, transform 0.2s;
@@ -1668,7 +945,7 @@ async function handleSubmit(): Promise<void> {
   gap: 0.75rem;
   padding: 0.85rem 0.95rem;
   border: 1px solid var(--color-border);
-  border-radius: 10px;
+  border-radius: var(--radius-lg);
   background: rgba(255, 255, 255, 0.03);
   cursor: pointer;
   transition: border-color 0.2s, background 0.2s;
@@ -1721,7 +998,7 @@ async function handleSubmit(): Promise<void> {
 .override-create-form {
   background: rgba(255, 255, 255, 0.03);
   border: 1px solid var(--color-border);
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   padding: 1rem;
   margin-bottom: 1rem;
 }
@@ -1803,7 +1080,7 @@ async function handleSubmit(): Promise<void> {
   color: var(--color-text-muted);
   cursor: pointer;
   padding: 0.4rem;
-  border-radius: 4px;
+  border-radius: var(--radius-xs);
 }
 
 .btn-remove-row-simple:hover {
@@ -1823,7 +1100,7 @@ async function handleSubmit(): Promise<void> {
 .btn-primary,
 .btn-secondary {
   padding: 0.75rem 1.5rem;
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   font-weight: 600;
   font-size: 0.95rem;
   cursor: pointer;
@@ -1832,12 +1109,12 @@ async function handleSubmit(): Promise<void> {
 
 .btn-primary {
   background: var(--color-accent);
-  color: #0f172a;
+  color: var(--color-bg);
   border: none;
 }
 
 .btn-primary:hover:not(:disabled) {
-  background: #2563eb;
+  background: var(--color-info);
   transform: translateY(-1px);
 }
 
@@ -1857,7 +1134,7 @@ async function handleSubmit(): Promise<void> {
   height: 1rem;
   border: 2px solid rgba(255, 255, 255, 0.3);
   border-radius: 50%;
-  border-top-color: #fff;
+  border-top-color: var(--color-text);
   animation: spin 1s linear infinite;
   margin-right: 0.5rem;
 }

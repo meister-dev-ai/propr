@@ -339,6 +339,56 @@ describe('CrawlConfigForm', () => {
     )
   })
 
+  it('excludes disabled ProCursor sources from the selectable list', async () => {
+    listProCursorSourcesMock.mockResolvedValue([
+      {
+        sourceId: SOURCE_ID_1,
+        displayName: 'Platform Docs',
+        sourceKind: 'repository',
+        providerScopePath: 'https://dev.azure.com/example',
+        providerProjectKey: 'project-1',
+        repositoryId: 'repo-source-1',
+        defaultBranch: 'main',
+        rootPath: null,
+        isEnabled: true,
+        symbolMode: 'auto',
+        status: 'enabled',
+        latestSnapshot: null,
+        sourceDisplayName: 'Platform Docs Repo',
+      },
+      {
+        sourceId: SOURCE_ID_2,
+        displayName: 'Retired Wiki',
+        sourceKind: 'adoWiki',
+        providerScopePath: 'https://dev.azure.com/example',
+        providerProjectKey: 'project-1',
+        repositoryId: 'wiki-source-2',
+        defaultBranch: 'wikiMain',
+        rootPath: null,
+        isEnabled: false,
+        symbolMode: 'auto',
+        status: 'disabled',
+        latestSnapshot: null,
+        sourceDisplayName: 'Retired Wiki',
+      },
+    ])
+
+    const wrapper = await mountForm()
+    await flushPromises()
+
+    await wrapper.get('#crawlOrganizationScope').setValue(SCOPE_ID)
+    await flushPromises()
+    await wrapper.get('#crawlProjectId').setValue('project-1')
+    await flushPromises()
+    await wrapper.get('#crawlSourceScopeSelected').setValue(true)
+    await flushPromises()
+
+    const checkboxes = wrapper.findAll('[data-testid^="crawl-procursor-source-checkbox-"]')
+    expect(checkboxes).toHaveLength(1)
+    expect(wrapper.text()).toContain('Platform Docs')
+    expect(wrapper.text()).not.toContain('Retired Wiki')
+  })
+
   it('clears selected repository filters when the project changes', async () => {
     const wrapper = await mountForm()
     await flushPromises()

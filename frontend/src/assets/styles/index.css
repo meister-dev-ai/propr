@@ -1,0 +1,9 @@
+/* Design-system entry point. Import order defines the cascade:
+ * tokens → base elements → reusable primitives → layout → utilities → vendor.
+ * main.ts imports only this file. See ./README.md for the conventions. */
+@import './tokens.css';
+@import './base.css';
+@import './primitives.css';
+@import './layout.css';
+@import './utilities.css';
+@import './vendor/diff2html.css';

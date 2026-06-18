@@ -24,7 +24,7 @@ vi.mock('@/services/aiConnectionsService', () => ({
   discoverAiModels: mockDiscoverAiModels,
 }))
 
-vi.mock('@/components/ConfirmDialog.vue', () => ({
+vi.mock('@/components/dialogs/ConfirmDialog.vue', () => ({
   default: {
     name: 'ConfirmDialog',
     props: ['open', 'message'],
@@ -136,12 +136,12 @@ describe('ClientAiConnectionsTab', () => {
     await details.trigger('toggle')
     await flushPromises()
 
-    expect(wrapper.vm.advancedSettingsOpen).toBe(true)
+    expect((wrapper.vm as unknown as { advancedSettingsOpen: boolean }).advancedSettingsOpen).toBe(true)
   })
 
   it('creates a provider-neutral AI profile with chat and embedding purpose bindings', async () => {
     const randomIds = ['chat-local', 'embed-local']
-    vi.spyOn(globalThis.crypto, 'randomUUID').mockImplementation(() => randomIds.shift() ?? 'fallback-local')
+    vi.spyOn(globalThis.crypto, 'randomUUID').mockImplementation(() => (randomIds.shift() ?? 'fallback-local') as `${string}-${string}-${string}-${string}-${string}`)
     mockListAiConnections.mockResolvedValue([])
 
     const { default: ClientAiConnectionsTab } = await import('@/features/clients/components/ClientAiConnectionsTab.vue')

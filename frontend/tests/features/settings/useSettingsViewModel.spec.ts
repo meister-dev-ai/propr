@@ -7,7 +7,7 @@ import { ref } from 'vue'
 const usernameSource = ref<string | null>('admin@example.com')
 const hasLocalPasswordSource = ref(true)
 const routerPushMock = vi.fn()
-const changePasswordServiceMock = vi.fn(async (_payload: { currentPassword: string; newPassword: string }) => {})
+const changePasswordServiceMock = vi.fn(async (_payload: { currentPassword?: string | null; newPassword?: string | null }) => {})
 
 vi.mock('@/composables/useSession', () => ({
   useSession: () => ({

@@ -422,7 +422,7 @@ describe('ClientProviderConnectionsTab', () => {
       select.findAll('option').some((option) => option.element.getAttribute('value') === 'windowsUserAccount'),
     )
     expect(authenticationSelect).toBeTruthy()
-    await authenticationSelect.setValue('windowsUserAccount')
+    await authenticationSelect!.setValue('windowsUserAccount')
     const userNameInput = wrapper.findAll('input').find((input) => input.attributes('placeholder')?.includes('ado-user'))
     expect(userNameInput).toBeTruthy()
     await userNameInput!.setValue('CONTOSO\\ado-user')

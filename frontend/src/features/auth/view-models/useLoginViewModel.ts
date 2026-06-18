@@ -7,7 +7,7 @@ import { getActiveRuntime } from '@/app/runtime/runtimeContext'
 import { getAuthOptions, supportsTenantSignIn, type AuthOptions } from '@/services/authOptionsService'
 import { useSession } from '@/composables/useSession'
 
-type LoginEndpoint = (payload: { username: string; password: string }) => Promise<{ accessToken: string; refreshToken: string }>
+type LoginEndpoint = (payload: { username: string; password: string }) => Promise<{ accessToken: string }>
 
 class LoginInvalidCredentialsError extends Error {
   constructor() { super('Invalid username or password') }
@@ -21,10 +21,11 @@ const defaultLogin: LoginEndpoint = async (payload) => {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload),
+    credentials: 'include', // store the httpOnly refresh cookie set by the backend
   })
   if (res.status === 401) throw new LoginInvalidCredentialsError()
   if (!res.ok) throw new LoginRequestError('Login failed. Please try again.')
-  return (await res.json()) as { accessToken: string; refreshToken: string }
+  return (await res.json()) as { accessToken: string }
 }
 
 export interface LoginViewModel {
@@ -55,8 +56,9 @@ export interface LoginViewModel {
 export interface UseLoginViewModelOptions {
   /** Override the login service call. Used by tests. */
   loginService?: LoginEndpoint
-  /** Override the auth-options fetcher. Used by tests. */
-  authOptionsService?: typeof getAuthOptions
+  /** Override the auth-options fetcher. Used by tests. The view-model tolerates a
+   *  null result (authOptions stays null), so the seam allows it explicitly. */
+  authOptionsService?: () => Promise<AuthOptions | null>
   /** Skip the onMounted auth-options load; tests can call loadAuthOptions() explicitly. */
   autoLoadAuthOptions?: boolean
 }

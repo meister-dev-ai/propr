@@ -1,7 +1,7 @@
 // Copyright (c) Andreas Rain.
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
-import { computed, onMounted, ref, watch, type ComputedRef, type Ref } from 'vue'
+import { computed, onMounted, ref, watch, type ComputedRef, type InjectionKey, type Ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { createAdminClient } from '@/services/api'
 import { useSession } from '@/composables/useSession'
@@ -83,6 +83,10 @@ export interface ClientDetailViewModel {
   handleDelete: () => Promise<void>
   handleOverviewNavigate: (tab: string) => void
 }
+
+/** Injection key so sub-tab components (e.g. ClientSystemTab) share the parent
+ * view's single view-model instance instead of re-instantiating it. */
+export const ClientDetailVmKey: InjectionKey<ClientDetailViewModel> = Symbol('clientDetailVm')
 
 export interface ClientDetailService {
   getClient: (clientId: string) => Promise<{ data: ClientDetailDto | null; response?: Response | { status?: number; ok?: boolean } }>
@@ -245,11 +249,11 @@ export function useClientDetailViewModel(options: UseClientDetailViewModelOption
       ])
 
       reviewProfiles.value = catalogResult.status === 'fulfilled'
-        ? catalogResult.value.data?.profiles ?? []
+        ? (catalogResult.value.data?.profiles ?? []) as ReviewProfileCatalogItemDto[]
         : []
 
       if (profileResult.status === 'fulfilled' && profileResult.value.data) {
-        applyClientReviewProfile(profileResult.value.data)
+        applyClientReviewProfile(profileResult.value.data as ClientReviewProfileDto)
       }
     } catch {
       notFound.value = true

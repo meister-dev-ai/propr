@@ -1,0 +1,53 @@
+# Keeps the digest-pinned base images (and CI actions) current. Without this,
+# pinning would freeze the images on a digest that goes stale/vulnerable.
+# Docker updates rewrite the @sha256 pins in Dockerfile / procursor.dockerfile /
+# frontend/Dockerfile; grouped so a base-image bump is one PR, not many.
+version: 2
+updates:
+  - package-ecosystem: docker
+    directory: "/"            # Dockerfile + procursor.dockerfile
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    groups:
+      docker-base-images:
+        patterns: ["*"]
+
+  - package-ecosystem: docker
+    directory: "/frontend"    # frontend/Dockerfile
+    schedule:
+      interval: weekly
+    groups:
+      docker-base-images:
+        patterns: ["*"]
+
+  - package-ecosystem: github-actions
+    directory: "/"            # .github/workflows/*
+    schedule:
+      interval: weekly
+    groups:
+      github-actions:
+        patterns: ["*"]
+
+  # Frontend JS deps (would have flagged the vite/esbuild advisory).
+  - package-ecosystem: npm
+    directory: "/frontend"
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 10
+    groups:
+      npm:
+        patterns: ["*"]
+
+  # .NET deps. Point straight at each project dir (every csproj is one level deep
+  # under src/ and tests/) so discovery doesn't depend on .slnx solution parsing.
+  - package-ecosystem: nuget
+    directories:
+      - "/src/*"
+      - "/tests/*"
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 10
+    groups:
+      nuget:
+        patterns: ["*"]

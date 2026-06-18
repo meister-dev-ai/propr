@@ -123,7 +123,7 @@ function providerIcon(providerKind: string): string {
   align-items: center;
   gap: 1rem;
   padding: 0.9rem 1rem;
-  border-radius: 16px;
+  border-radius: var(--radius-xl);
   border: 1px solid rgba(255, 255, 255, 0.12);
   text-decoration: none;
   color: var(--color-text);
@@ -145,17 +145,17 @@ function providerIcon(providerKind: string): string {
 
 .tenant-provider-brand-microsoft {
   background: rgba(0, 120, 212, 0.18);
-  color: #8ac8ff;
+  color: var(--color-info);
 }
 
 .tenant-provider-brand-github {
   background: rgba(255, 255, 255, 0.08);
-  color: #f5f5f5;
+  color: var(--color-text);
 }
 
 .tenant-provider-brand-google {
   background: rgba(66, 133, 244, 0.18);
-  color: #9cc3ff;
+  color: var(--color-info);
 }
 
 .tenant-provider-brand-generic {

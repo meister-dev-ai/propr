@@ -287,7 +287,7 @@
 </template>
 
 <script setup lang="ts">
-import ModalDialog from '@/components/ModalDialog.vue'
+import ModalDialog from '@/components/dialogs/ModalDialog.vue'
 import type { JobProtocolViewModel } from '@/features/job-protocol/composables/useJobProtocolViewModel'
 
 defineProps<{ vm: JobProtocolViewModel }>()
@@ -399,9 +399,9 @@ defineProps<{ vm: JobProtocolViewModel }>()
 }
 
 .json-comment-item.severity-error { border-left: 2px solid var(--color-danger); padding-left: 0.5rem; list-style-type: none; margin-left: -1.25rem; }
-.json-comment-item.severity-warning { border-left: 2px solid #eab308; padding-left: 0.5rem; list-style-type: none; margin-left: -1.25rem; }
+.json-comment-item.severity-warning { border-left: 2px solid var(--color-warning); padding-left: 0.5rem; list-style-type: none; margin-left: -1.25rem; }
 .json-comment-item.severity-suggestion { border-left: 2px solid var(--color-accent); padding-left: 0.5rem; list-style-type: none; margin-left: -1.25rem; }
-.json-comment-item.severity-info, .json-comment-item.severity-note { border-left: 2px solid #3b82f6; padding-left: 0.5rem; list-style-type: none; margin-left: -1.25rem; }
+.json-comment-item.severity-info, .json-comment-item.severity-note { border-left: 2px solid var(--color-info); padding-left: 0.5rem; list-style-type: none; margin-left: -1.25rem; }
 
 .monospace-value {
     font-family: var(--font-mono, monospace);
@@ -474,10 +474,10 @@ defineProps<{ vm: JobProtocolViewModel }>()
     flex-shrink: 0;
 }
 
-.memory-sev-chip--error { background: rgba(239, 68, 68, 0.15); color: #f87171; }
-.memory-sev-chip--warning { background: rgba(234, 179, 8, 0.15); color: #fbbf24; }
-.memory-sev-chip--info { background: rgba(34, 211, 238, 0.12); color: #22d3ee; }
-.memory-sev-chip--suggestion { background: rgba(168, 85, 247, 0.12); color: #c084fc; }
+.memory-sev-chip--error { background: rgba(239, 68, 68, 0.15); color: var(--color-danger); }
+.memory-sev-chip--warning { background: rgba(234, 179, 8, 0.15); color: var(--color-warning); }
+.memory-sev-chip--info { background: rgba(34, 211, 238, 0.12); color: var(--color-accent); }
+.memory-sev-chip--suggestion { background: rgba(168, 85, 247, 0.12); color: var(--color-suggestion); }
 .memory-sev-chip--note { background: rgba(255, 255, 255, 0.08); color: var(--color-text-muted); }
 
 .memory-no-output {
@@ -516,7 +516,7 @@ defineProps<{ vm: JobProtocolViewModel }>()
 }
 
 .provider-managed-note i {
-    color: #60a5fa;
+    color: var(--color-info);
     margin-top: 0.1rem;
     flex-shrink: 0;
 }
@@ -608,7 +608,7 @@ defineProps<{ vm: JobProtocolViewModel }>()
 
 .tool-phase-item {
     padding: 0.85rem 1rem;
-    border-radius: 10px;
+    border-radius: var(--radius-lg);
     background: rgba(255, 255, 255, 0.03);
     border: 1px solid rgba(255, 255, 255, 0.04);
 }

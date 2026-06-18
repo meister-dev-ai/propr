@@ -4,7 +4,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { PatItem, PatsService } from '@/features/pats/view-models/usePatsViewModel'
 
-const getAccessTokenMock = vi.fn<[], string | null>(() => 'token-abc')
+const getAccessTokenMock = vi.fn<() => string | null>(() => 'token-abc')
 
 vi.mock('@/composables/useSession', () => ({
   useSession: () => ({ getAccessToken: getAccessTokenMock }),

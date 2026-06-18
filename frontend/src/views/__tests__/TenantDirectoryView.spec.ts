@@ -8,7 +8,7 @@ const notifyMock = vi.fn()
 const pushMock = vi.fn()
 const isAdmin = ref(true)
 const edition = ref('commercial')
-const hasTenantRoleMock = vi.fn(() => false)
+const hasTenantRoleMock = vi.fn((_tenantId: string, _minRole: number) => false)
 
 vi.mock('vue-router', async () => {
   const actual = await vi.importActual<typeof import('vue-router')>('vue-router')

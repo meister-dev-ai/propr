@@ -1,0 +1,330 @@
+/* Reusable, class-based UI primitives: buttons, the unified chip system, cards,
+ * state placeholders, and form helpers. Prefer these over re-styling in
+ * component <style scoped> blocks. */
+
+/* ── Buttons ─────────────────────────────────────────────────────────────── */
+.btn-primary,
+.btn-secondary,
+.btn-danger {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  padding: 0.625rem 1.25rem;
+  border: none;
+  border-radius: var(--radius-pill);
+  font-size: 0.875rem;
+  font-weight: 600;
+  cursor: pointer;
+  text-decoration: none;
+  transition: all 0.2s ease-in-out;
+}
+
+.btn-primary {
+  background: var(--color-primary);
+  color: var(--color-primary-text) !important;
+}
+
+.btn-primary:hover {
+  background: var(--color-primary-hover);
+}
+
+.btn-primary:disabled,
+.btn-secondary:disabled,
+.btn-danger:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.btn-secondary {
+  background: var(--color-surface);
+  color: var(--color-text) !important;
+  border: 1px solid var(--color-border);
+}
+
+.btn-secondary:hover {
+  background: var(--color-border);
+  border-color: var(--color-border-hover);
+}
+
+.btn-danger {
+  background: var(--color-danger);
+  color: var(--color-text) !important;
+}
+
+.btn-danger:hover {
+  background: var(--color-danger-hover);
+}
+
+.btn-ghost {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.4rem 0.8rem;
+  border-radius: var(--radius-sm);
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--color-text-muted);
+  background: transparent;
+  border: 1px solid transparent;
+  transition: all 0.2s;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.btn-ghost:hover {
+  color: var(--color-text);
+  background: var(--color-surface);
+  border-color: var(--color-border);
+  text-decoration: none;
+}
+
+/* ── Chips (unified pill/badge system) ───────────────────────────────────────
+ * Base + size + tone. Tones map onto the semantic palette tints in tokens.css.
+ * Add new variants HERE rather than re-defining chips in component styles. */
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0.2rem 0.65rem;
+  border-radius: var(--radius-pill);
+  font-size: 0.75rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.chip .fi {
+  font-size: 0.7rem;
+}
+
+/* Size modifier */
+.chip-sm {
+  padding: 0.1rem 0.5rem;
+  font-size: 0.7rem;
+}
+
+/* Tone modifiers */
+.chip-success {
+  background: var(--color-success-soft);
+  color: var(--color-success);
+}
+
+.chip-warning {
+  background: var(--color-warning-soft);
+  color: var(--color-warning);
+}
+
+.chip-danger {
+  background: var(--color-danger-soft);
+  color: var(--color-danger);
+}
+
+.chip-info {
+  background: var(--color-info-soft);
+  color: var(--color-info);
+}
+
+.chip-accent {
+  background: var(--color-accent-soft);
+  color: var(--color-accent);
+}
+
+.chip-suggestion {
+  background: var(--color-suggestion-soft);
+  color: var(--color-suggestion);
+}
+
+.chip-muted {
+  background: var(--color-muted-soft);
+  color: var(--color-text-muted);
+}
+
+/* ── Text badges & token counts ──────────────────────────────────────────── */
+.badge-active,
+.badge-configured {
+  color: var(--color-success);
+  font-weight: 600;
+}
+
+.badge-inactive,
+.badge-none {
+  color: var(--color-text-muted);
+}
+
+.fat-tokens {
+  font-weight: 700;
+  font-family: monospace;
+  color: var(--color-text);
+}
+
+/* ── Status tags (monospace, tinted) ─────────────────────────────────────── */
+.status-tag {
+  font-family: monospace;
+  font-weight: 700;
+  padding: 0.1rem 0.4rem;
+  border-radius: var(--radius-xs);
+}
+
+.status-resolved {
+  color: var(--color-success);
+  background: rgba(34, 197, 94, 0.1);
+}
+
+.status-active {
+  color: var(--color-accent);
+  background: rgba(34, 211, 238, 0.1);
+}
+
+.status-failed {
+  color: var(--color-danger);
+  background: rgba(239, 68, 68, 0.1);
+}
+
+/* Monospace code pill (e.g. reviewer external id) */
+.reviewer-id-pill {
+  display: inline-flex;
+  align-items: center;
+  background: var(--color-muted-soft);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  padding: 0.15rem 0.5rem;
+  font-family: monospace;
+  font-size: 0.78rem;
+  color: var(--color-text-muted);
+  letter-spacing: 0.02em;
+  max-width: 22rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ── Cards ───────────────────────────────────────────────────────────────── */
+.section-card,
+.section-card-primitive {
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  margin-bottom: 1.5rem;
+  background: var(--color-bg);
+}
+
+.section-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 1rem 1.5rem;
+  background: var(--surface-subtle);
+  border-bottom: 1px solid var(--color-border);
+}
+
+.section-card-header h3 {
+  margin: 0;
+  font-size: 0.95rem;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+.section-card-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-shrink: 0;
+}
+
+.section-card-header-left {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex: 1;
+  min-width: 0;
+}
+
+.section-card-body {
+  padding: 1.5rem;
+}
+
+.section-card-body .form-field:last-of-type {
+  margin-bottom: 0;
+}
+
+.state-card {
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  padding: 1rem 1.25rem;
+  background: var(--color-surface);
+}
+
+/* Danger Zone card */
+.danger-zone-card {
+  border: 1px solid rgba(239, 68, 68, 0.3);
+  border-radius: var(--radius-lg);
+  padding: 1.25rem 1.5rem;
+  background: rgba(239, 68, 68, 0.04);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1.5rem;
+  margin-top: 2rem;
+}
+
+.danger-zone-info {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.75rem;
+}
+
+.danger-zone-info>.fi {
+  color: var(--color-danger);
+  font-size: 1.1rem;
+  margin-top: 0.15rem;
+  flex-shrink: 0;
+}
+
+.danger-zone-info h3 {
+  margin: 0 0 0.2rem;
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--color-danger);
+}
+
+.danger-zone-info p {
+  margin: 0;
+  font-size: 0.8rem;
+  color: var(--color-text-muted);
+}
+
+/* ── State placeholders ──────────────────────────────────────────────────── */
+.loading-state,
+.empty-state {
+  color: var(--color-text-muted);
+}
+
+.error {
+  color: var(--color-danger);
+  font-size: 0.875rem;
+  margin: 0.5rem 0;
+}
+
+.field-error {
+  color: var(--color-danger);
+  font-size: 0.75rem;
+  margin-top: 0.25rem;
+  display: block;
+}
+
+.loading {
+  color: var(--color-text-muted);
+}
+
+/* ── Form helpers ────────────────────────────────────────────────────────── */
+.form-field {
+  margin-bottom: 1.5rem;
+}
+
+.form-actions {
+  display: flex;
+  gap: 0.75rem;
+  margin-top: 2rem;
+}

@@ -22,7 +22,7 @@ export async function dismissFinding(
 ): Promise<unknown> {
   const { data } = await createAdminClient().POST('/clients/{clientId}/dismiss-finding', {
     params: { path: { clientId } },
-    body: request as any,
+    body: request,
   })
   return data
 }

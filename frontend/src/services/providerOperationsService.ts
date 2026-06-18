@@ -9,6 +9,10 @@ import {
   type ScmProviderFamily,
 } from '@/services/providerConnectionsService'
 
+// Re-exported so consumers (e.g. ProviderConnectionStatusList) can source the
+// readiness-level type alongside the operational-status DTOs from one module.
+export type { ProviderConnectionReadinessLevel } from '@/services/providerConnectionsService'
+
 export type ProviderOperationalHealth = 'healthy' | 'degraded' | 'failing' | 'inactive'
 export type ProviderFailureCategory = 'authentication' | 'webhookTrust' | 'discovery' | 'reviewRetrieval' | 'publication' | 'configuration' | 'unknown'
 export type ProviderAuditStatus = 'info' | 'success' | 'warning' | 'error'
@@ -84,7 +88,7 @@ export interface ProviderConnectionAuditEntry {
 }
 
 export async function listProviderOperationalStatus(clientId: string): Promise<ProviderConnectionStatusItem[]> {
-  const client = createAdminClient() as any
+  const client = createAdminClient()
   const { data, error, response } = await client.GET('/clients/{clientId}/provider-operations/status', {
     params: { path: { clientId } },
   })
@@ -93,7 +97,7 @@ export async function listProviderOperationalStatus(clientId: string): Promise<P
     throw new Error(getApiErrorMessage(error, 'Failed to load provider operational status.'))
   }
 
-  const payload = (data as ProviderOperationalStatusResponseDto | null) ?? null
+  const payload = (data as unknown as ProviderOperationalStatusResponseDto | null) ?? null
 
   return (payload?.connections ?? [])
     .map(connection => ({
@@ -107,7 +111,7 @@ export async function listProviderOperationalStatus(clientId: string): Promise<P
 }
 
 export async function getProviderFamilyOperationalStatus(clientId: string): Promise<ProviderFamilyStatusItem[]> {
-  const client = createAdminClient() as any
+  const client = createAdminClient()
   const { data, error, response } = await client.GET('/clients/{clientId}/provider-operations/status', {
     params: { path: { clientId } },
   })
@@ -116,7 +120,7 @@ export async function getProviderFamilyOperationalStatus(clientId: string): Prom
     throw new Error(getApiErrorMessage(error, 'Failed to load provider operational status.'))
   }
 
-  const payload = (data as ProviderOperationalStatusResponseDto | null) ?? null
+  const payload = (data as unknown as ProviderOperationalStatusResponseDto | null) ?? null
   return payload?.providerFamilies ?? []
 }
 
@@ -143,7 +147,8 @@ function mapAuditEntry(entry: ProviderConnectionAuditEntryDto): ProviderConnecti
 }
 
 function normalizeAuditEventType(eventType: string): ProviderAuditEventType {
-  switch (eventType.trim()) {
+  const value = eventType.trim()
+  switch (value) {
     case 'connectionCreated':
     case 'connectionUpdated':
     case 'connectionRotated':
@@ -153,26 +158,28 @@ function normalizeAuditEventType(eventType: string): ProviderAuditEventType {
     case 'connectionVerified':
     case 'connectionVerificationFailed':
     case 'connectionVerificationStale':
-      return eventType
+      return value
     default:
       return 'connectionUpdated'
   }
 }
 
 function normalizeAuditStatus(status: string): ProviderAuditStatus {
-  switch (status.trim()) {
+  const value = status.trim()
+  switch (value) {
     case 'success':
     case 'warning':
     case 'error':
     case 'info':
-      return status
+      return value
     default:
       return 'info'
   }
 }
 
 function normalizeFailureCategory(category?: string | null): ProviderFailureCategory | null {
-  switch (category?.trim()) {
+  const value = category?.trim()
+  switch (value) {
     case 'authentication':
     case 'webhookTrust':
     case 'discovery':
@@ -180,7 +187,7 @@ function normalizeFailureCategory(category?: string | null): ProviderFailureCate
     case 'publication':
     case 'configuration':
     case 'unknown':
-      return category
+      return value
     default:
       return null
   }

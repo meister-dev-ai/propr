@@ -107,7 +107,7 @@ const vm = usePatsViewModel()
 .token-reveal {
   background: var(--color-bg);
   border: 1px solid var(--color-success);
-  border-radius: 12px;
+  border-radius: var(--radius-lg);
   padding: 1.25rem;
   margin-bottom: 1rem;
 }
@@ -120,7 +120,7 @@ const vm = usePatsViewModel()
   background: var(--color-surface);
   color: var(--color-accent);
   padding: 0.875rem 1rem;
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   margin: 0.75rem 0;
 }
 

@@ -100,8 +100,8 @@ describe('useSessionViewModel (FR-007, FR-008)', () => {
 
   it('forwards establishSession to the underlying composable', async () => {
     const vm = useSessionViewModel()
-    await vm.establishSession({ accessToken: 'a', refreshToken: 'r' })
-    expect(establishSessionMock).toHaveBeenCalledWith({ accessToken: 'a', refreshToken: 'r' })
+    await vm.establishSession({ accessToken: 'a' })
+    expect(establishSessionMock).toHaveBeenCalledWith({ accessToken: 'a' })
   })
 
   it('forwards clearTokens and loadClientRoles to the underlying composable', async () => {

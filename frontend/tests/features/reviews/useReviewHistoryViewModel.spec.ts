@@ -2,6 +2,7 @@
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import type { ReviewHistoryService } from '@/features/reviews/view-models/useReviewHistoryViewModel'
 import { flushPromises } from '@vue/test-utils'
 import { createApp, defineComponent } from 'vue'
 import { useReviewHistoryViewModel } from '@/features/reviews/view-models/useReviewHistoryViewModel'
@@ -62,7 +63,7 @@ describe('useReviewHistoryViewModel', () => {
 
     const vm = await mountViewModel(() => useReviewHistoryViewModel({
       clientId: 'client-1',
-      reviewHistoryService: { listJobs, getJobProtocol },
+      reviewHistoryService: { listJobs, getJobProtocol } as unknown as Partial<ReviewHistoryService>,
     }))
 
     expect(listJobs).toHaveBeenCalledWith('client-1')

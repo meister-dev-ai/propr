@@ -128,10 +128,11 @@ describe('UsageDashboard', () => {
       lastRollupCompletedAtUtc: '2026-03-30T12:00:00Z',
     })
     exportProCursorTokenUsageCsvMock.mockResolvedValue('date,sourceId,sourceDisplayName\n2026-03-01,source-1,Platform Wiki')
-    vi.stubGlobal('URL', {
+    // Keep URL a real constructor (vite 8/jsdom uses `new URL` during render); only stub the static blob helpers.
+    vi.stubGlobal('URL', Object.assign(globalThis.URL, {
       createObjectURL: vi.fn(() => 'blob:test'),
       revokeObjectURL: vi.fn(),
-    })
+    }))
   })
 
   afterEach(() => {

@@ -46,7 +46,7 @@
                         type="button"
                         class="pass-selector-option"
                         :class="{ 'is-selected': protocol.id === modelValue }"
-                        @click="selectProtocol(protocol.id)"
+                        @click="selectProtocol(protocol.id ?? null)"
                     >
                         <span class="pass-selector-option-path">{{ protocol.label }}</span>
                         <span class="pass-selector-option-stats">
@@ -70,7 +70,7 @@
 
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref } from 'vue'
-import type { ReviewProtocolPass } from '@/types'
+import type { ReviewProtocolPass } from '../types'
 
 interface SidebarItem {
     type: 'folder' | 'pass'
@@ -264,7 +264,7 @@ onUnmounted(() => {
 .pass-selector-dropdown {
     position: absolute;
     z-index: 100;
-    background: #1a1d24;
+    background: var(--color-surface);
     border: 1px solid var(--color-border);
     border-radius: var(--radius-md);
     box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
@@ -349,7 +349,7 @@ onUnmounted(() => {
     gap: 0.25rem;
     font-size: 0.75rem;
     font-weight: 600;
-    color: #f87171;
+    color: var(--color-danger);
     background: rgba(239, 68, 68, 0.12);
     padding: 0.15rem 0.4rem;
     border-radius: var(--radius-xs);

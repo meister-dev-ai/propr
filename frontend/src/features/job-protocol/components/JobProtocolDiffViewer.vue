@@ -96,7 +96,7 @@
                         <button
                             type="button"
                             role="tab"
-                            :aria-selected="String(outputFormat === 'side-by-side')"
+                            :aria-selected="outputFormat === 'side-by-side'"
                             class="diff-viewer-mode-btn"
                             :class="{ 'is-active': outputFormat === 'side-by-side' }"
                             data-testid="diff-mode-side-by-side"
@@ -107,7 +107,7 @@
                         <button
                             type="button"
                             role="tab"
-                            :aria-selected="String(outputFormat === 'line-by-line')"
+                            :aria-selected="outputFormat === 'line-by-line'"
                             class="diff-viewer-mode-btn"
                             :class="{ 'is-active': outputFormat === 'line-by-line' }"
                             data-testid="diff-mode-line-by-line"
@@ -236,7 +236,7 @@ onBeforeUnmount(clearContainer)
     gap: 0.5rem;
     padding: 0.65rem 0.9rem;
     border: 1px solid var(--color-border);
-    border-radius: 10px;
+    border-radius: var(--radius-lg);
     background: rgba(255, 255, 255, 0.03);
     font-family: 'JetBrains Mono', 'Fira Code', monospace;
     font-size: 0.85rem;
@@ -275,7 +275,7 @@ onBeforeUnmount(clearContainer)
 
 .diff-original-path {
     background: rgba(168, 85, 247, 0.14);
-    color: #c084fc;
+    color: var(--color-suggestion);
     text-transform: none;
     letter-spacing: 0;
     font-weight: 500;
@@ -396,7 +396,7 @@ onBeforeUnmount(clearContainer)
 .diff-viewer {
     border: 1px solid var(--color-border);
     border-radius: var(--radius-lg);
-    background: #0f1116;
+    background: var(--color-bg);
     overflow: auto;
     height: 70vh;
     width: 100%;
@@ -431,7 +431,7 @@ onBeforeUnmount(clearContainer)
 }
 
 /*
- * The app's global `td { padding: 1rem; border-bottom: … }` (globals.css) bleeds
+ * The app's global `td { padding: 1rem; border-bottom: … }` (base.css) bleeds
  * into every diff cell, inflating each code row to ~50px and crushing the diff to
  * a handful of visible lines. Neutralise it so diff2html's own compact layout wins.
  */

@@ -81,7 +81,7 @@
             <option value="">
               {{ projectsLoading ? 'Loading projects...' : organizationScopeId ? 'Select a project' : 'Select an organization first' }}
             </option>
-            <option v-for="project in projects" :key="project.projectId" :value="project.projectId ?? ''">
+            <option v-for="project in projects" :key="project.projectId ?? ''" :value="project.projectId ?? ''">
               {{ project.projectName || project.projectId }}
             </option>
           </select>
@@ -249,33 +249,9 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
-import { listAdoCrawlFilters, listAdoOrganizationScopes, listAdoProjects } from '@/services/adoDiscoveryService'
-import type { AdoCrawlFilterOptionDto, AdoProjectOptionDto, CanonicalSourceReferenceDto, ClientAdoOrganizationScopeDto } from '@/services/adoDiscoveryService'
-import {
-  formatProviderFamily,
-  getEnabledProviderOptions,
-  listProviderActivationStatuses,
-  type ProviderActivationStatusDto,
-} from '@/services/providerActivationService'
-import {
-  createWebhookConfiguration,
-  updateWebhookConfiguration,
-  type WebhookConfigurationResponse,
-  type WebhookEventType,
-  type WebhookProviderType,
-  type WebhookRepoFilterRequest,
-  type WebhookRepoFilterResponse,
-} from '@/services/webhookConfigurationService'
-
-interface FilterRow {
-  id: string
-  selectedFilterKey: string
-  repositoryName: string
-  displayName: string
-  canonicalSourceRef: CanonicalSourceReferenceDto | null
-  targetBranchPatterns: string[]
-}
+import type { WebhookConfigurationResponse } from '@/services/webhookConfigurationService'
+import { eventOptions, sourceOptionKey } from './webhookConfigFormatters'
+import { useWebhookConfigForm } from './useWebhookConfigForm'
 
 const props = defineProps<{
   config?: WebhookConfigurationResponse
@@ -287,459 +263,52 @@ const emit = defineEmits<{
   cancel: []
 }>()
 
-const eventOptions: Array<{ value: WebhookEventType; label: string; description: string }> = [
-  {
-    value: 'pullRequestCreated',
-    label: 'PR Created',
-    description: 'Accept deliveries when a pull request is first opened.',
-  },
-  {
-    value: 'pullRequestUpdated',
-    label: 'PR Updated',
-    description: 'Handle pushes, reviewer changes, and close or abandon updates.',
-  },
-  {
-    value: 'pullRequestCommented',
-    label: 'PR Commented',
-    description: 'Accept comment events that should refresh the review pipeline.',
-  },
-]
-
-const editMode = computed(() => !!props.config)
-const effectiveClientId = computed(() => props.clientId ?? props.config?.clientId ?? '')
-
-const provider = ref<WebhookProviderType>(props.config?.provider ?? 'azureDevOps')
-const providerStatuses = ref<ProviderActivationStatusDto[]>([])
-const organizationScopeId = ref(props.config?.organizationScopeId ?? '')
-const manualOrganizationUrl = ref(props.config?.providerScopePath ?? defaultManualOrganizationUrl(props.config?.provider))
-const projectId = ref(props.config?.providerProjectKey ?? '')
-const reviewTemperatureInput = ref(props.config?.reviewTemperature?.toString() ?? '')
-const isActive = ref(props.config?.isActive ?? true)
-const enabledEvents = ref<WebhookEventType[]>(props.config?.enabledEvents ? [...props.config.enabledEvents] : [])
-const repoFilters = ref<FilterRow[]>(createInitialFilterRows(props.config?.repoFilters))
-
-const organizationScopes = ref<ClientAdoOrganizationScopeDto[]>([])
-const projects = ref<AdoProjectOptionDto[]>([])
-const crawlFilterOptions = ref<AdoCrawlFilterOptionDto[]>([])
-
-const organizationScopesLoading = ref(false)
-const projectsLoading = ref(false)
-const crawlFilterOptionsLoading = ref(false)
-const providerOptionsLoading = ref(false)
-const loading = ref(false)
-
-const organizationScopeIdError = ref('')
-const projectIdError = ref('')
-const enabledEventsError = ref('')
-const repoFiltersError = ref('')
-const reviewTemperatureError = ref('')
-const crawlFilterOptionsError = ref('')
-const providerOptionsError = ref('')
-const formError = ref('')
-
-const providerOptions = computed(() => {
-  const enabledOptions = getEnabledProviderOptions(providerStatuses.value)
-    .map((option) => ({ value: option.value as WebhookProviderType, label: option.label }))
-
-  if (editMode.value && !enabledOptions.some((option) => option.value === provider.value)) {
-    return [{ value: provider.value, label: formatProviderFamily(provider.value) }, ...enabledOptions]
-  }
-
-  return enabledOptions
-})
-const selectedOrganizationScope = computed(() =>
-  organizationScopes.value.find((scope) => scope.id === organizationScopeId.value),
-)
-const isAzureDevOpsProvider = computed(() => provider.value === 'azureDevOps')
-const manualProviderName = computed(() => formatManualProviderName(provider.value))
-const manualHostPlaceholder = computed(() => defaultManualOrganizationUrl(provider.value))
-const manualProjectLabel = computed(() => provider.value === 'github' ? 'GitHub Owner or Namespace' : 'Group, User, or Namespace')
-
-onMounted(async () => {
-  await loadProviderOptions()
-
-  if (!editMode.value && !providerOptions.value.length) {
-    return
-  }
-
-  if (!isAzureDevOpsProvider.value) {
-    return
-  }
-
-  await loadOrganizationScopes()
-
-  if (organizationScopeId.value) {
-    await loadProjects(false)
-  }
-
-  if (organizationScopeId.value && projectId.value) {
-    await loadFilterOptions(false)
-  }
-})
-
-async function loadProviderOptions() {
-  providerOptionsLoading.value = true
-  providerOptionsError.value = ''
-
-  try {
-    providerStatuses.value = await listProviderActivationStatuses()
-
-    if (!editMode.value && !providerOptions.value.some((option) => option.value === provider.value)) {
-      const nextProvider = providerOptions.value[0]?.value
-      if (nextProvider) {
-        const providerChanged = nextProvider !== provider.value
-        provider.value = nextProvider
-        if (providerChanged) {
-          await handleProviderChange()
-        }
-      }
-    }
-  } catch (error) {
-    providerOptionsError.value = error instanceof Error ? error.message : 'Failed to load enabled provider families.'
-    providerStatuses.value = []
-  } finally {
-    providerOptionsLoading.value = false
-  }
-}
-
-function createInitialFilterRows(filters?: WebhookRepoFilterResponse[]): FilterRow[] {
-  return (filters ?? []).map((filter, index) => ({
-    id: filter.id || `filter-${index}`,
-    selectedFilterKey: sourceOptionKey(filter.canonicalSourceRef),
-    repositoryName: filter.repositoryName,
-    displayName: filter.displayName ?? filter.repositoryName,
-    canonicalSourceRef: filter.canonicalSourceRef ?? null,
-    targetBranchPatterns: [...(filter.targetBranchPatterns ?? [])],
-  }))
-}
-
-function defaultManualOrganizationUrl(providerType?: WebhookProviderType): string {
-  switch (providerType) {
-    case 'gitLab':
-      return 'https://gitlab.example.com'
-    case 'forgejo':
-      return 'https://codeberg.org'
-    case 'github':
-    default:
-      return 'https://github.com'
-  }
-}
-
-function formatManualProviderName(providerType: WebhookProviderType): string {
-  return providerType === 'azureDevOps' ? 'Provider' : formatProviderFamily(providerType)
-}
-
-function sourceOptionKey(canonicalSourceRef?: CanonicalSourceReferenceDto | null): string {
-  if (!canonicalSourceRef?.provider || !canonicalSourceRef.value) {
-    return ''
-  }
-
-  return `${canonicalSourceRef.provider}::${canonicalSourceRef.value}`
-}
-
-function matchesFilterOption(filter: FilterRow, option: AdoCrawlFilterOptionDto): boolean {
-  const optionKey = sourceOptionKey(option.canonicalSourceRef)
-  if (optionKey && optionKey === filter.selectedFilterKey) {
-    return true
-  }
-
-  const candidateNames = [
-    filter.repositoryName,
-    filter.displayName,
-    filter.canonicalSourceRef?.value ?? '',
-  ]
-    .map((value) => value.trim())
-    .filter((value) => value.length > 0)
-
-  const optionNames = [
-    option.displayName ?? '',
-    option.canonicalSourceRef?.value ?? '',
-  ]
-    .map((value) => value.trim())
-    .filter((value) => value.length > 0)
-
-  return candidateNames.some((candidate) =>
-    optionNames.some((optionName) => optionName.localeCompare(candidate, undefined, { sensitivity: 'accent' }) === 0),
-  )
-}
-
-function hydrateExistingFilterSelections() {
-  if (crawlFilterOptions.value.length === 0 || repoFilters.value.length === 0) {
-    return
-  }
-
-  for (const filter of repoFilters.value) {
-    const matchedOption = crawlFilterOptions.value.find((option) => matchesFilterOption(filter, option))
-    if (!matchedOption) {
-      continue
-    }
-
-    filter.selectedFilterKey = sourceOptionKey(matchedOption.canonicalSourceRef)
-    filter.repositoryName = matchedOption.displayName || matchedOption.canonicalSourceRef?.value || filter.repositoryName
-    filter.displayName = matchedOption.displayName || filter.displayName || filter.repositoryName
-    filter.canonicalSourceRef = matchedOption.canonicalSourceRef ?? filter.canonicalSourceRef
-  }
-}
-
-function addFilter() {
-  repoFilters.value.push({
-    id: `filter-${Date.now()}-${repoFilters.value.length}`,
-    selectedFilterKey: '',
-    repositoryName: '',
-    displayName: '',
-    canonicalSourceRef: null,
-    targetBranchPatterns: [],
-  })
-}
-
-function removeFilter(index: number) {
-  repoFilters.value.splice(index, 1)
-}
-
-function addPattern(filter: FilterRow) {
-  filter.targetBranchPatterns.push('')
-}
-
-function handleManualRepositoryChange(filter: FilterRow) {
-  filter.selectedFilterKey = ''
-  filter.canonicalSourceRef = null
-  filter.displayName = filter.repositoryName.trim()
-}
-
-function removePattern(filter: FilterRow, index: number) {
-  filter.targetBranchPatterns.splice(index, 1)
-}
-
-function getAvailableFilterOptions(filterId: string) {
-  const selectedKeys = new Set(
-    repoFilters.value
-      .filter((filter) => filter.id !== filterId)
-      .map((filter) => filter.selectedFilterKey)
-      .filter((value) => value.length > 0),
-  )
-
-  return crawlFilterOptions.value.filter((option) => !selectedKeys.has(sourceOptionKey(option.canonicalSourceRef)))
-}
-
-function handleFilterSelectionChange(filter: FilterRow) {
-  const selected = crawlFilterOptions.value.find((option) => sourceOptionKey(option.canonicalSourceRef) === filter.selectedFilterKey)
-  if (!selected) {
-    return
-  }
-
-  filter.repositoryName = selected.displayName || selected.canonicalSourceRef?.value || ''
-  filter.displayName = selected.displayName || filter.repositoryName
-  filter.canonicalSourceRef = selected.canonicalSourceRef ?? null
-  if (filter.targetBranchPatterns.length === 0) {
-    const suggestedBranch = selected.branchSuggestions?.find((branch) => branch.isDefault)?.branchName
-      ?? selected.branchSuggestions?.[0]?.branchName
-    if (suggestedBranch) {
-      filter.targetBranchPatterns = [suggestedBranch]
-    }
-  }
-}
-
-async function loadOrganizationScopes() {
-  if (!effectiveClientId.value || !isAzureDevOpsProvider.value) {
-    organizationScopes.value = []
-    return
-  }
-
-  organizationScopesLoading.value = true
-  try {
-    organizationScopes.value = await listAdoOrganizationScopes(effectiveClientId.value)
-  } finally {
-    organizationScopesLoading.value = false
-  }
-}
-
-async function loadProjects(reset = true) {
-  if (!effectiveClientId.value || !organizationScopeId.value || !isAzureDevOpsProvider.value) {
-    projects.value = []
-    return
-  }
-
-  projectsLoading.value = true
-  try {
-    projects.value = await listAdoProjects(effectiveClientId.value, organizationScopeId.value, 'webhook')
-    if (reset) {
-      projectId.value = ''
-      repoFilters.value = []
-      crawlFilterOptions.value = []
-    }
-  } finally {
-    projectsLoading.value = false
-  }
-}
-
-async function loadFilterOptions(reset = true) {
-  if (!effectiveClientId.value || !organizationScopeId.value || !projectId.value || !isAzureDevOpsProvider.value) {
-    crawlFilterOptions.value = []
-    return
-  }
-
-  crawlFilterOptionsLoading.value = true
-  crawlFilterOptionsError.value = ''
-  try {
-    crawlFilterOptions.value = await listAdoCrawlFilters(effectiveClientId.value, organizationScopeId.value, projectId.value, 'webhook')
-    if (reset) {
-      repoFilters.value = []
-    } else {
-      hydrateExistingFilterSelections()
-    }
-  } catch (error) {
-    crawlFilterOptionsError.value = error instanceof Error ? error.message : 'Failed to load webhook repository filters.'
-  } finally {
-    crawlFilterOptionsLoading.value = false
-  }
-}
-
-async function handleOrganizationScopeChange() {
-  await loadProjects()
-}
-
-async function handleProviderChange() {
-  organizationScopeIdError.value = ''
-  projectIdError.value = ''
-  repoFiltersError.value = ''
-  crawlFilterOptionsError.value = ''
-  repoFilters.value = []
-  crawlFilterOptions.value = []
-
-  if (!isAzureDevOpsProvider.value) {
-    organizationScopeId.value = ''
-    organizationScopes.value = []
-    projects.value = []
-    projectId.value = ''
-    manualOrganizationUrl.value = manualOrganizationUrl.value.trim() || defaultManualOrganizationUrl(provider.value)
-    return
-  }
-
-  await loadOrganizationScopes()
-  projects.value = []
-  projectId.value = ''
-}
-
-async function handleProjectChange() {
-  await loadFilterOptions()
-}
-
-function buildEnabledEvents(): WebhookEventType[] {
-  return eventOptions
-    .map((option) => option.value)
-    .filter((value) => enabledEvents.value.includes(value))
-}
-
-function buildRepoFilters(): WebhookRepoFilterRequest[] {
-  return repoFilters.value
-    .filter((filter) => filter.repositoryName || filter.displayName || filter.canonicalSourceRef)
-    .map((filter) => ({
-      repositoryName: filter.repositoryName.trim() || undefined,
-      displayName: filter.displayName.trim() || filter.repositoryName.trim() || undefined,
-      canonicalSourceRef: isAzureDevOpsProvider.value ? filter.canonicalSourceRef : null,
-      targetBranchPatterns: filter.targetBranchPatterns.map((pattern) => pattern.trim()).filter((pattern) => pattern.length > 0),
-    }))
-}
-
-function parseReviewTemperature(): number | undefined {
-  const rawValue = reviewTemperatureInput.value
-  if (rawValue === null || rawValue === undefined || rawValue === '') {
-    return undefined
-  }
-
-  const parsed = typeof rawValue === 'number'
-    ? rawValue
-    : Number.parseFloat(rawValue)
-
-  if (!Number.isFinite(parsed)) {
-    return Number.NaN
-  }
-
-  return parsed
-}
-
-function validateForm(): boolean {
-  organizationScopeIdError.value = ''
-  projectIdError.value = ''
-  enabledEventsError.value = ''
-  repoFiltersError.value = ''
-  reviewTemperatureError.value = ''
-  formError.value = ''
-
-  if (isAzureDevOpsProvider.value && !organizationScopeId.value) {
-    organizationScopeIdError.value = 'Select an organization scope.'
-  }
-
-  if (!isAzureDevOpsProvider.value && !manualOrganizationUrl.value.trim()) {
-    organizationScopeIdError.value = 'Enter a host URL for the selected provider.'
-  }
-
-  if (!projectId.value) {
-    projectIdError.value = isAzureDevOpsProvider.value ? 'Select a project.' : 'Enter an owner, group, or namespace.'
-  }
-
-  if (buildEnabledEvents().length === 0) {
-    enabledEventsError.value = 'Select at least one enabled event.'
-  }
-
-  if (repoFilters.value.some((filter) => !filter.repositoryName.trim() && !filter.displayName.trim() && !filter.canonicalSourceRef)) {
-    repoFiltersError.value = isAzureDevOpsProvider.value
-      ? 'Each repository filter must resolve to a discovered repository.'
-      : 'Each repository filter must include a repository name.'
-  }
-
-  const reviewTemperature = parseReviewTemperature()
-  if (reviewTemperature !== undefined) {
-    if (!Number.isFinite(reviewTemperature)) {
-      reviewTemperatureError.value = 'Review temperature must be a number between 0.0 and 2.0.'
-    } else if (reviewTemperature < 0 || reviewTemperature > 2) {
-      reviewTemperatureError.value = 'Review temperature must be between 0.0 and 2.0.'
-    }
-  }
-
-  return !organizationScopeIdError.value
-    && !projectIdError.value
-    && !enabledEventsError.value
-    && !repoFiltersError.value
-    && !reviewTemperatureError.value
-}
-
-async function handleSubmit() {
-  if (!effectiveClientId.value || !validateForm()) {
-    return
-  }
-
-  const body = {
-    clientId: effectiveClientId.value,
-    provider: provider.value,
-    ...(isAzureDevOpsProvider.value
-      ? { organizationScopeId: organizationScopeId.value }
-      : { providerScopePath: manualOrganizationUrl.value.trim() }),
-    providerProjectKey: projectId.value.trim(),
-    enabledEvents: buildEnabledEvents(),
-    repoFilters: buildRepoFilters(),
-    reviewTemperature: parseReviewTemperature(),
-  }
-
-  loading.value = true
-  formError.value = ''
-  try {
-    const saved = editMode.value && props.config?.id
-        ? await updateWebhookConfiguration(props.config.id, {
-          isActive: isActive.value,
-          enabledEvents: body.enabledEvents,
-          repoFilters: body.repoFilters,
-          reviewTemperature: body.reviewTemperature,
-        })
-      : await createWebhookConfiguration(effectiveClientId.value, body)
-
-    emit('config-saved', saved)
-  } catch (error) {
-    formError.value = error instanceof Error ? error.message : 'Failed to save webhook configuration.'
-  } finally {
-    loading.value = false
-  }
-}
+const {
+  editMode,
+  effectiveClientId,
+  provider,
+  providerStatuses,
+  organizationScopeId,
+  manualOrganizationUrl,
+  projectId,
+  reviewTemperatureInput,
+  isActive,
+  enabledEvents,
+  repoFilters,
+  organizationScopes,
+  projects,
+  crawlFilterOptions,
+  organizationScopesLoading,
+  projectsLoading,
+  crawlFilterOptionsLoading,
+  providerOptionsLoading,
+  loading,
+  organizationScopeIdError,
+  projectIdError,
+  enabledEventsError,
+  repoFiltersError,
+  reviewTemperatureError,
+  crawlFilterOptionsError,
+  providerOptionsError,
+  formError,
+  providerOptions,
+  selectedOrganizationScope,
+  isAzureDevOpsProvider,
+  manualProviderName,
+  manualHostPlaceholder,
+  manualProjectLabel,
+  addFilter,
+  removeFilter,
+  addPattern,
+  removePattern,
+  handleManualRepositoryChange,
+  getAvailableFilterOptions,
+  handleFilterSelectionChange,
+  handleOrganizationScopeChange,
+  handleProviderChange,
+  handleProjectChange,
+  handleSubmit,
+} = useWebhookConfigForm(props, emit)
 </script>
 
 <style scoped>
@@ -754,7 +323,7 @@ async function handleSubmit() {
   align-items: center;
   gap: 0.75rem;
   padding: 0.8rem 1rem;
-  border-radius: 12px;
+  border-radius: var(--radius-lg);
   background: rgba(239, 68, 68, 0.12);
   color: var(--color-danger);
 }
@@ -778,7 +347,7 @@ async function handleSubmit() {
   gap: 0.75rem;
   padding: 0.6rem 0.75rem;
   border: 1px solid var(--color-border);
-  border-radius: 12px;
+  border-radius: var(--radius-lg);
   cursor: pointer;
   background: rgba(255, 255, 255, 0.03);
 }
@@ -813,7 +382,7 @@ async function handleSubmit() {
   display: flex;
   gap: 0.75rem;
   padding: 0.85rem;
-  border-radius: 14px;
+  border-radius: var(--radius-xl);
   border: 1px solid var(--color-border);
   background: rgba(255, 255, 255, 0.03);
 }
@@ -862,7 +431,7 @@ async function handleSubmit() {
   align-items: center;
   justify-content: center;
   cursor: pointer;
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   transition: all 0.2s;
 }
 
@@ -875,7 +444,7 @@ async function handleSubmit() {
   background: transparent;
   color: var(--color-accent);
   border: 1px dashed var(--color-border);
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   padding: 0.4rem 0.8rem;
   font-size: 0.8rem;
   font-weight: 500;
@@ -898,7 +467,7 @@ async function handleSubmit() {
   color: var(--color-text-muted);
   width: 38px;
   height: 38px;
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   display: flex;
   align-items: center;
   justify-content: center;

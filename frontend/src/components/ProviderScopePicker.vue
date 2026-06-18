@@ -102,7 +102,7 @@ const displayNamePlaceholder = computed(() => isAzureDevOps.value ? 'My Azure De
 <style scoped>
 .provider-detail-panel {
   border: 1px solid var(--color-border);
-  border-radius: 16px;
+  border-radius: var(--radius-xl);
   padding: 1rem;
   background: var(--color-surface);
 }
@@ -156,7 +156,7 @@ const displayNamePlaceholder = computed(() => isAzureDevOps.value ? 'My Azure De
 
 .provider-detail-item {
   padding: 0.8rem 0.9rem;
-  border-radius: 14px;
+  border-radius: var(--radius-xl);
   background: var(--color-bg);
   border: 1px solid var(--color-border);
 }

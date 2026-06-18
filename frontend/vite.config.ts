@@ -1,11 +1,12 @@
 // Copyright (c) Andreas Rain.
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
-import { defineConfig, loadEnv } from 'vite'
+import { loadEnv } from 'vite'
 import vue from '@vitejs/plugin-vue'
 import vuetify from 'vite-plugin-vuetify'
 import path from 'path'
-import { configDefaults } from 'vitest/config'
+// defineConfig from vitest/config augments Vite's UserConfig with the `test` key.
+import { defineConfig, configDefaults } from 'vitest/config'
 
 function parseAllowedHosts(value?: string): string[] {
   return (value ?? '')
@@ -49,8 +50,11 @@ export default defineConfig(({ mode }) => {
       target: 'esnext',
       rollupOptions: {
         output: {
-          manualChunks: {
-            'vue-core': ['vue', 'vue-router'],
+          // Rolldown (Vite 8) requires manualChunks as a function; object form was removed.
+          manualChunks: (id) => {
+            if (/[\\/]node_modules[\\/](vue|vue-router)[\\/]/.test(id)) {
+              return 'vue-core'
+            }
           },
         },
       },

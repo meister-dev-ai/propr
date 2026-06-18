@@ -2,6 +2,7 @@
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import type { AuthOptions } from '@/services/authOptionsService'
 
 const routerPushMock = vi.fn()
 const establishSessionMock = vi.fn(async () => {})
@@ -97,7 +98,8 @@ describe('useLoginViewModel (FR-007, FR-008, FR-012)', () => {
       edition: 'commercial' as const,
       availableSignInMethods: ['password', 'sso'],
       capabilities: [{ key: 'sso-authentication', message: 'SSO is enabled.' }],
-    }
+      publicBaseUrl: null,
+    } as AuthOptions
     const authOptionsService = vi.fn(async () => authOptions)
     const loginService = vi.fn()
     const vm = useLoginViewModel({ loginService, authOptionsService, autoLoadAuthOptions: false })

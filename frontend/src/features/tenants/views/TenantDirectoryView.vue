@@ -81,7 +81,7 @@ const vm = useTenantDirectoryViewModel()
   gap: 1rem;
   padding: 1rem;
   border: 1px solid var(--color-border);
-  border-radius: 12px;
+  border-radius: var(--radius-lg);
 }
 
 .tenant-directory-item h3,

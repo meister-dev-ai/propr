@@ -28,7 +28,7 @@ import { RouterLink } from 'vue-router'
   margin: 0;
 }
 .access-denied-view p {
-  color: var(--color-text-mute, #6b7280);
+  color: var(--color-text-muted);
   margin: 0;
 }
 </style>

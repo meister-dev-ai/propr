@@ -46,31 +46,27 @@ describe('useSession', () => {
     sessionStorage.clear()
   })
 
-  it('setTokens stores access and refresh tokens', async () => {
+  it('keeps the access token in memory only — never in web storage (refresh is an httpOnly cookie)', async () => {
     const useSession = await loadUseSession()
-    const { setTokens, getAccessToken, getRefreshToken } = useSession()
+    const { setAccessToken, getAccessToken } = useSession()
 
-    setTokens('access-token', 'refresh-token')
+    setAccessToken('access-token')
 
-    expect(sessionStorage.setItem).toHaveBeenCalledWith(ACCESS_TOKEN_KEY, 'access-token')
-    expect(localStorage.setItem).toHaveBeenCalledWith(REFRESH_TOKEN_KEY, 'refresh-token')
     expect(getAccessToken()).toBe('access-token')
-    expect(getRefreshToken()).toBe('refresh-token')
+    expect(sessionStorage.setItem).not.toHaveBeenCalledWith(ACCESS_TOKEN_KEY, 'access-token')
+    expect(localStorage.setItem).not.toHaveBeenCalledWith(REFRESH_TOKEN_KEY, expect.anything())
   })
 
-  it('clearTokens removes tokens and client roles', async () => {
+  it('clearTokens clears the access token and client roles', async () => {
     const useSession = await loadUseSession()
-    const { setTokens, setClientRoles, clearTokens, getAccessToken, getRefreshToken, clientRoles } = useSession()
+    const { setAccessToken, setClientRoles, clearTokens, getAccessToken, clientRoles } = useSession()
 
-    setTokens('access-token', 'refresh-token')
+    setAccessToken('access-token')
     setClientRoles({ 'client-1': 1 })
     clearTokens()
 
-    expect(sessionStorage.removeItem).toHaveBeenCalledWith(ACCESS_TOKEN_KEY)
-    expect(localStorage.removeItem).toHaveBeenCalledWith(REFRESH_TOKEN_KEY)
     expect(sessionStorage.removeItem).toHaveBeenCalledWith(CLIENT_ROLES_KEY)
     expect(getAccessToken()).toBeNull()
-    expect(getRefreshToken()).toBeNull()
     expect(clientRoles.value).toEqual({})
   })
 

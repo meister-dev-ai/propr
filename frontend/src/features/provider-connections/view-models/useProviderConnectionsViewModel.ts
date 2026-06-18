@@ -7,7 +7,6 @@ import { useSession } from '@/composables/useSession'
 import {
   getEnabledProviderOptions,
   getProviderDefaultHostBaseUrl,
-  getSupportedAuthenticationKinds,
   requiresUserName,
   listProviderActivationStatuses,
   type ProviderActivationStatusDto,
@@ -39,6 +38,16 @@ import {
   type ScmProviderFamily,
   type SetClientReviewerIdentityRequest,
 } from '@/services/providerConnectionsService'
+import {
+  formatProvider,
+  formatReadiness,
+  formatVerification,
+  getPreferredAuthenticationKind,
+  normalizeAuthenticationKind,
+  parseOptionalPositiveNumber,
+  readinessChipClass,
+  verificationChipClass,
+} from '../utils/formatters'
 
 export interface ProviderConnectionsService {
   listProviderActivationStatuses: () => Promise<ProviderActivationStatusDto[]>
@@ -334,19 +343,6 @@ export function useProviderConnectionsViewModel(
     }
   }
 
-  function normalizeAuthenticationKind(
-    providerFamily: ScmProviderFamily,
-    hostBaseUrl: string,
-    authenticationKind: ScmAuthenticationKind,
-  ): ScmAuthenticationKind {
-    const supportedKinds = getSupportedAuthenticationKinds(providerFamily, hostBaseUrl)
-    return supportedKinds.includes(authenticationKind) ? authenticationKind : supportedKinds[0]
-  }
-
-  function getPreferredAuthenticationKind(providerFamily: ScmProviderFamily, hostBaseUrl: string): ScmAuthenticationKind {
-    return getSupportedAuthenticationKinds(providerFamily, hostBaseUrl)[0]
-  }
-
   function clearOAuthFields(form: typeof createForm | typeof editForm) {
     form.oAuthTenantId = ''
     form.oAuthClientId = ''
@@ -359,16 +355,6 @@ export function useProviderConnectionsViewModel(
 
   function clearUserNameField(form: typeof createForm | typeof editForm) {
     form.userName = ''
-  }
-
-  function parseOptionalPositiveNumber(value: string | number): number | null {
-    const trimmed = String(value).trim()
-    if (!trimmed) {
-      return null
-    }
-
-    const parsed = Number(trimmed)
-    return Number.isInteger(parsed) && parsed > 0 ? parsed : null
   }
 
   watch(() => createForm.providerFamily, (providerFamily) => {
@@ -863,66 +849,6 @@ export function useProviderConnectionsViewModel(
 
   function replaceConnection(updated: ClientScmConnectionDto) {
     connections.value = connections.value.map((connection) => connection.id === updated.id ? updated : connection)
-  }
-
-  function formatProvider(providerFamily: ScmProviderFamily): string {
-    switch (providerFamily) {
-      case 'gitLab':
-        return 'GitLab'
-      case 'forgejo':
-        return 'Forgejo'
-      case 'azureDevOps':
-        return 'Azure DevOps'
-      default:
-        return 'GitHub'
-    }
-  }
-
-  function formatVerification(verificationStatus: string): string {
-    if (!verificationStatus) {
-      return 'Unknown'
-    }
-
-    return verificationStatus.charAt(0).toUpperCase() + verificationStatus.slice(1)
-  }
-
-  function formatReadiness(readinessLevel: ProviderConnectionReadinessLevel): string {
-    switch (readinessLevel) {
-      case 'configured':
-        return 'Configured'
-      case 'degraded':
-        return 'Degraded'
-      case 'onboardingReady':
-        return 'Onboarding Ready'
-      case 'workflowComplete':
-        return 'Workflow Complete'
-      default:
-        return 'Unknown'
-    }
-  }
-
-  function verificationChipClass(verificationStatus: string): string {
-    switch (verificationStatus) {
-      case 'verified':
-        return 'chip-success'
-      case 'failed':
-        return 'chip-danger'
-      default:
-        return 'chip-muted'
-    }
-  }
-
-  function readinessChipClass(readinessLevel: ProviderConnectionReadinessLevel): string {
-    switch (readinessLevel) {
-      case 'workflowComplete':
-        return 'chip-success'
-      case 'degraded':
-        return 'chip-danger'
-      case 'onboardingReady':
-        return 'chip-warning'
-      default:
-        return 'chip-muted'
-    }
   }
 
   return {

@@ -5,7 +5,7 @@ const pushMock = vi.fn()
 const replaceMock = vi.fn()
 const getClientMock = vi.fn()
 const patchClientMock = vi.fn()
-const hasClientRoleMock = vi.fn(() => false)
+const hasClientRoleMock = vi.fn((_clientId: string, _minRole: number) => false)
 const getCapabilityMock = vi.fn((key: string) => {
   if (key === 'procursor') {
     return { key, isAvailable: true, message: null }

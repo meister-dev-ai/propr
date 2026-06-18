@@ -250,11 +250,11 @@ export function statusBadgeClass(status: string | undefined | null): string {
 }
 
 export function kindBadgeClass(kind: string | null | undefined): string {
-    if (kind === 'aiCall') return 'badge-purple'
-    if (kind === 'toolCall') return 'badge-cyan'
-    if (kind === 'memoryOperation') return 'badge-green'
-    if (kind === 'operational') return 'badge-gray'
-    return 'badge-gray'
+    if (kind === 'aiCall') return 'kind-badge--suggestion'
+    if (kind === 'toolCall') return 'kind-badge--accent'
+    if (kind === 'memoryOperation') return 'kind-badge--success'
+    if (kind === 'operational') return 'kind-badge--muted'
+    return 'kind-badge--muted'
 }
 
 export function severityVariant(severity: string | null | undefined): string {

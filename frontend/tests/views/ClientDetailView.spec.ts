@@ -40,7 +40,7 @@ vi.mock('@/composables/useSession', () => ({
   }),
 }))
 
-vi.mock('@/components/ConfirmDialog.vue', () => ({
+vi.mock('@/components/dialogs/ConfirmDialog.vue', () => ({
   default: {
     name: 'ConfirmDialog',
     props: ['open', 'message'],
@@ -121,7 +121,7 @@ vi.mock('@/features/reviews/components/ReviewHistorySection.vue', () => ({
   },
 }))
 
-vi.mock('@/components/TextViewerModal.vue', () => ({
+vi.mock('@/components/text/TextViewerModal.vue', () => ({
   default: {
     name: 'TextViewerModal',
     props: ['isOpen', 'title', 'text', 'plainText'],

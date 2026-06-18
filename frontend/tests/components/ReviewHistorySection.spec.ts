@@ -21,9 +21,12 @@ vi.mock('@/composables/useSession', () => ({
 }))
 
 vi.mock('markdown-it', () => ({
-  default: vi.fn().mockImplementation(() => ({
-    render: (value: string) => `<p>${value}</p>`,
-  })),
+  // vitest 4: a mock used with `new` must be a class/function, not an arrow factory.
+  default: class {
+    render(value: string) {
+      return `<p>${value}</p>`
+    }
+  },
 }))
 
 vi.mock('dompurify', () => ({

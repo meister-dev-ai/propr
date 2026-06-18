@@ -9,6 +9,18 @@ export type ProtocolEventPhaseTimingDto = components['schemas']['ProtocolEventPh
 export type ReviewJobResultDto = components['schemas']['ReviewJobResultDto']
 export type ReviewStrategy = components['schemas']['ReviewStrategy']
 export type ReviewJobProtocolPassResponse = components['schemas']['ReviewJobProtocolDto']
+export type FileDiffDto = components['schemas']['FileDiffDto']
+export type ReviewCommentDto = components['schemas']['ReviewCommentDto']
+
+/**
+ * A review comment as consumed by the protocol view. Extends the generated DTO
+ * with the snake_case aliases some serializers historically emitted, kept for
+ * defensive reads of older payloads.
+ */
+export type ProtocolReviewComment = ReviewCommentDto & {
+    file_path?: string | null
+    line_number?: number | null
+}
 
 export interface ProtocolFileOutcome {
     filePath: string
@@ -55,7 +67,7 @@ export interface TokenBreakdownEntry {
 export interface JobDetail {
     aiModel: string | null
     reviewTemperature: number | null
-    tokenBreakdown: TokenBreakdownEntry[]
+    tokenBreakdown: components['schemas']['TokenBreakdownEntry'][]
     breakdownConsistent: boolean | null
     submittedAt?: string | null
     processingStartedAt?: string | null
@@ -316,3 +328,36 @@ export type TraceSearchableRow = {
     hasLimitedMetadata: boolean
     isRedacted: boolean
 }
+
+/** Recursive folder node used to build the pass sidebar tree. The synthetic root uses empty name/path. */
+export interface ProtocolTreeNode {
+    name: string
+    path: string
+    children: Record<string, ProtocolTreeNode>
+    protocols: ReviewProtocolPass[]
+}
+
+/** Flattened sidebar entry: a directory row or a pass (file) row. */
+export type ProtocolSidebarItem =
+    | { type: 'folder'; name: string; path: string; depth: number; isCollapsed: boolean; isLast: boolean }
+    | { type: 'pass'; name: string; depth: number; protocol: ReviewProtocolPass; slowestToolLabel: string | null; isLast: boolean }
+
+/** Leaf file entry within the comment sidebar tree. */
+export interface CommentTreeFile {
+    name: string
+    path: string
+    commentCount: number
+}
+
+/** Recursive folder node used to build the comment sidebar tree. The synthetic root uses empty name/path. */
+export interface CommentTreeNode {
+    name: string
+    path: string
+    children: Record<string, CommentTreeNode>
+    files: Record<string, CommentTreeFile>
+}
+
+/** Flattened comment-sidebar entry: a directory row or a file row. */
+export type CommentSidebarItem =
+    | { type: 'folder'; name: string; path: string; depth: number; isCollapsed: boolean; isLast: boolean }
+    | { type: 'file'; name: string; path: string; depth: number; commentCount: number; isLast: boolean }

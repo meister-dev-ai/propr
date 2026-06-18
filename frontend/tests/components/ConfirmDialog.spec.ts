@@ -5,7 +5,7 @@ import { describe, it, expect, vi } from 'vitest'
 import { mount } from '@vue/test-utils'
 
 async function importConfirmDialog() {
-  const mod = await import('@/components/ConfirmDialog.vue')
+  const mod = await import('@/components/dialogs/ConfirmDialog.vue')
   return mod.default
 }
 

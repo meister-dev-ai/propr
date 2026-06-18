@@ -135,7 +135,7 @@ export interface SetClientReviewerIdentityRequest {
 }
 
 function getClient() {
-  return createAdminClient({ baseUrl: getActiveRuntime().apiBaseUrl }) as any
+  return createAdminClient({ baseUrl: getActiveRuntime().apiBaseUrl })
 }
 
 async function listProviderConnectionsInternal(clientId: string): Promise<ClientScmConnectionDto[]> {

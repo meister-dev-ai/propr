@@ -46,7 +46,6 @@ describe('TenantExternalCallbackView', () => {
 
     expect(establishSessionMock).toHaveBeenCalledWith({
       accessToken: 'tenant-access',
-      refreshToken: 'tenant-refresh',
       expiresIn: 900,
       tokenType: 'Bearer',
     })
@@ -71,7 +70,6 @@ describe('TenantExternalCallbackView', () => {
 
     expect(establishSessionMock).toHaveBeenCalledWith({
       accessToken: 'tenant-access',
-      refreshToken: 'tenant-refresh',
       expiresIn: 900,
       tokenType: 'Bearer',
     })
@@ -88,7 +86,6 @@ describe('TenantExternalCallbackView', () => {
 
     expect(establishSessionMock).toHaveBeenCalledWith({
       accessToken: 'tenant-access',
-      refreshToken: 'tenant-refresh',
       expiresIn: 900,
       tokenType: 'Bearer',
     })

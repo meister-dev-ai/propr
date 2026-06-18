@@ -16,7 +16,7 @@ export interface SessionViewModelState {
 }
 
 export interface SessionViewModelActions {
-  establishSession: (session: { accessToken: string; refreshToken: string }) => Promise<void>
+  establishSession: (session: { accessToken: string; expiresIn?: number; tokenType?: string }) => Promise<void>
   clearTokens: () => void
   loadClientRoles: () => Promise<void>
   hasClientRole: (clientId: string, minRole: 0 | 1) => boolean

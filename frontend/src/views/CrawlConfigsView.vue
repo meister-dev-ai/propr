@@ -116,8 +116,8 @@
 <script setup lang="ts">
 import { computed, ref, onMounted } from 'vue'
 import CrawlConfigForm from '@/components/CrawlConfigForm.vue'
-import ConfirmDialog from '@/components/ConfirmDialog.vue'
-import ModalDialog from '@/components/ModalDialog.vue'
+import ConfirmDialog from '@/components/dialogs/ConfirmDialog.vue'
+import ModalDialog from '@/components/dialogs/ModalDialog.vue'
 import ProgressOrb from '@/components/ProgressOrb.vue'
 import { useSession } from '@/composables/useSession'
 import { createAdminClient, getApiErrorMessage } from '@/services/api'
@@ -175,7 +175,7 @@ function formatInterval(seconds: number): string {
   return `${Math.floor(seconds / 3600)}h`
 }
 
-function describeFilters(filters: CrawlRepoFilterResponse[] | undefined): string {
+function describeFilters(filters: CrawlRepoFilterResponse[] | null | undefined): string {
   if (!filters?.length) {
     return 'All repositories'
   }
@@ -296,7 +296,7 @@ async function confirmDelete() {
   gap: 0.5rem;
   background: rgba(255, 255, 255, 0.05);
   padding: 0.35rem 0.75rem;
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   font-size: 0.85rem;
   font-weight: 500;
 }
@@ -307,7 +307,7 @@ async function confirmDelete() {
   gap: 0.5rem;
   background: rgba(255, 255, 255, 0.05);
   padding: 0.35rem 0.75rem;
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   font-size: 0.85rem;
   font-weight: 500;
 }
@@ -322,7 +322,7 @@ async function confirmDelete() {
 .scope-pill-warning {
   background: rgba(251, 191, 36, 0.14);
   border: 1px solid rgba(251, 191, 36, 0.25);
-  color: #fde68a;
+  color: var(--color-warning);
 }
 
 .actions-cell {
@@ -341,7 +341,7 @@ async function confirmDelete() {
   color: var(--color-text-muted);
   width: 32px;
   height: 32px;
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   display: flex;
   align-items: center;
   justify-content: center;

@@ -119,7 +119,7 @@ defineProps<{
 }
 
 .json-comment-item.severity-warning {
-    border-left: 2px solid #eab308;
+    border-left: 2px solid var(--color-warning);
     padding-left: 0.5rem;
     list-style-type: none;
     margin-left: -1.25rem;
@@ -134,7 +134,7 @@ defineProps<{
 
 .json-comment-item.severity-info,
 .json-comment-item.severity-note {
-    border-left: 2px solid #3b82f6;
+    border-left: 2px solid var(--color-info);
     padding-left: 0.5rem;
     list-style-type: none;
     margin-left: -1.25rem;

@@ -4,8 +4,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 
 // We test the middleware behaviour by inspecting what fetch receives
-const ACCESS_TOKEN_KEY = 'meisterpropr_access_token'
-
 function mockFetch(status: number, body: unknown = {}) {
   const response = new Response(JSON.stringify(body), {
     status,
@@ -33,16 +31,18 @@ describe('createAdminClient', () => {
     UnauthorizedError = api.UnauthorizedError
   })
 
-  it('injects Authorization header from sessionStorage in requests', async () => {
+  it('injects the Authorization header from the in-memory access token', async () => {
     const session = await import('@/composables/useSession')
-    session.useSession().setAccessToken('stored-token')
+    // Future-dated JWT so the proactive (<60 s to expiry) refresh does not fire.
+    const jwt = createJwt(Math.floor(Date.now() / 1000) + 3600)
+    session.useSession().setAccessToken(jwt)
     mockFetch(200, [])
     const client = createAdminClient()
     await client.GET('/clients', {})
     // openapi-fetch calls fetch(request) — headers are on the Request object (first arg)
     const [requestArg] = vi.mocked(global.fetch).mock.calls[0]
     const headers = (requestArg as Request).headers
-    expect(headers.get('authorization')).toBe('Bearer stored-token')
+    expect(headers.get('authorization')).toBe(`Bearer ${jwt}`)
   })
 
   it('uses the active runtime base URL for admin and refresh requests', async () => {
@@ -50,9 +50,8 @@ describe('createAdminClient', () => {
     runtimeContext.setActiveRuntime({ mode: 'mock', isMock: true, apiBaseUrl: '/runtime-api' })
 
     const session = await import('@/composables/useSession')
-    const sessionApi = session.useSession()
-    sessionApi.setAccessToken('stored-token')
-    vi.spyOn(sessionApi, 'accessTokenExpiresIn').mockReturnValue(3600)
+    // Future-dated JWT so the proactive refresh does not fire (no extra fetch).
+    session.useSession().setAccessToken(createJwt(Math.floor(Date.now() / 1000) + 3600))
 
     const requestResponse = new Response(JSON.stringify([]), {
       status: 200,
@@ -80,18 +79,20 @@ describe('createAdminClient', () => {
 
   it('throws UnauthorizedError when the request is unauthorized', async () => {
     const session = await import('@/composables/useSession')
-    session.useSession().setAccessToken('stored-token')
-    mockFetch(401, { error: 'Unauthorized' })
+    session.useSession().setAccessToken(createJwt(Math.floor(Date.now() / 1000) + 3600))
+    mockFetch(401, { error: 'Unauthorized' }) // GET → 401
+    mockFetch(401, { error: 'Unauthorized' }) // cookie refresh also fails
     const client = createAdminClient()
 
     await expect(client.GET('/clients', {})).rejects.toBeInstanceOf(UnauthorizedError)
-    expect(sessionStorage.removeItem).toHaveBeenCalledWith(ACCESS_TOKEN_KEY)
+    // Failed refresh ends the session: the in-memory access token is cleared.
+    expect(session.useSession().getAccessToken()).toBeNull()
   })
 
   it('refreshes the access token without surfacing UnauthorizedError on the same response', async () => {
     const session = await import('@/composables/useSession')
     const sessionApi = session.useSession()
-    sessionApi.setTokens(createJwt(Math.floor(Date.now() / 1000) + 3600), 'refresh-token')
+    sessionApi.setAccessToken(createJwt(Math.floor(Date.now() / 1000) + 3600))
 
     vi.mocked(global.fetch)
       .mockResolvedValueOnce(new Response(JSON.stringify({ error: 'Unauthorized' }), {

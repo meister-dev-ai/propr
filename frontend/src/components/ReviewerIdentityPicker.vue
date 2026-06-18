@@ -98,7 +98,7 @@ const selectedReviewerCandidate = computed(() =>
 <style scoped>
 .provider-detail-panel {
   border: 1px solid var(--color-border);
-  border-radius: 16px;
+  border-radius: var(--radius-xl);
   padding: 1rem;
   background: var(--color-surface);
 }
@@ -152,7 +152,7 @@ const selectedReviewerCandidate = computed(() =>
 
 .provider-candidate-item {
   padding: 0.8rem 0.9rem;
-  border-radius: 14px;
+  border-radius: var(--radius-xl);
   background: var(--color-bg);
   border: 1px solid var(--color-border);
   cursor: pointer;
@@ -165,7 +165,7 @@ const selectedReviewerCandidate = computed(() =>
 
 .provider-reviewer-current {
   padding: 0.8rem 0.9rem;
-  border-radius: 14px;
+  border-radius: var(--radius-xl);
   background: rgba(34, 197, 94, 0.08);
   border: 1px solid var(--color-success);
   margin-bottom: 0.9rem;
