@@ -44,21 +44,29 @@ RUN apt-get update \
     && rm -rf /var/lib/apt/lists/*
 
 RUN set -eux; \
-    mkdir -p /git-root/usr/bin /git-root/bin /git-root/usr/lib/git-core /git-root/etc/ssl/certs; \
+    mkdir -p /git-root/usr/bin /git-root/usr/lib/git-core /git-root/etc/ssl/certs; \
     cp -a /usr/bin/git /git-root/usr/bin/git; \
-    # `true` for GIT_ASKPASS=/bin/true (chiseled ships no coreutils).
+    # `true` for GIT_ASKPASS=/bin/true (chiseled ships no coreutils). Only stage
+    # /usr/bin/true: the chiseled base is merged-/usr, so /bin is a symlink to
+    # /usr/bin and /bin/true resolves there. Staging a real /git-root/bin
+    # directory would instead collide with that symlink on COPY.
     cp -a /usr/bin/true /git-root/usr/bin/true; \
-    cp -a /usr/bin/true /git-root/bin/true; \
     cp -a /usr/lib/git-core/. /git-root/usr/lib/git-core/; \
     cp -aL /etc/ssl/certs/ca-certificates.crt /git-root/etc/ssl/certs/ca-certificates.crt; \
     # Copy the shared-library closure of git + its git-core ELF helpers, excluding
     # the glibc/libgcc/libstdc++ runtime already provided by the chiseled base
-    # (overwriting those could break the bundled .NET runtime).
+    # (overwriting those could break the bundled .NET runtime). Canonicalize each
+    # lib's *directory* to its real /usr/lib path (Ubuntu is merged-/usr, so ldd
+    # often reports /lib/... aliases) while keeping the SONAME basename, so the
+    # staged tree has no top-level /lib that would collide with the chiseled
+    # base's /lib -> usr/lib symlink during COPY.
     for bin in /usr/bin/git $(find /usr/lib/git-core -maxdepth 1 -type f -perm -u+x); do \
         ldd "$bin" 2>/dev/null | awk '/=>/ {print $3}'; \
     done | sort -u | grep -E '^/' \
        | grep -Ev 'ld-linux|/libc\.so|/libc-|/libm\.so|/libm-|/libdl\.so|/libpthread\.so|/librt\.so|/libresolv|/libstdc\+\+\.so|/libgcc_s\.so|/libnss_' \
-       | while read -r lib; do cp -aL --parents "$lib" /git-root/; done
+       | while read -r lib; do \
+            cp -aL --parents "$(readlink -f "$(dirname "$lib")")/$(basename "$lib")" /git-root/; \
+         done
 
 # Runtime stage
 FROM mcr.microsoft.com/dotnet/aspnet:10.0-noble-chiseled-extra@sha256:de3e2d510c3b30dd10a3ababad927725839aacd0bbd6a3e8aef9a5a4408ccc12 AS runtime
