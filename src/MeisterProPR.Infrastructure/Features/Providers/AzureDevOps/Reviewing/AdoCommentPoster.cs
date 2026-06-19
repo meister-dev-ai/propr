@@ -449,8 +449,7 @@ public sealed class AdoCommentPoster(
     ///     map is collapsed to one entry per path. A change that still has content in the iteration
     ///     (not a pure delete) is preferred so inline comments anchor to the correct side of the diff.
     /// </summary>
-    internal static IReadOnlyDictionary<string, int> BuildChangeTrackingIds(
-        IEnumerable<GitPullRequestChange> changes)
+    internal static IReadOnlyDictionary<string, int> BuildChangeTrackingIds(IEnumerable<GitPullRequestChange> changes)
     {
         return changes
             .Where(c => c.Item?.Path is not null)
