@@ -81,11 +81,7 @@ public sealed class AdoCommentPoster(
                 cancellationToken: ct),
             cancellationToken);
 
-        var changeTrackingIds = changes
-            .Where(c => c.Item?.Path is not null)
-            .ToDictionary(
-                c => NormalizePath(c.Item!.Path!),
-                c => c.ChangeTrackingId);
+        var changeTrackingIds = BuildChangeTrackingIds(changes);
 
         // Post summary as PR-level thread, skipping if a bot summary already exists.
         if (!HasBotSummary(existingThreads, botId, publicationIdentity))
@@ -444,6 +440,28 @@ public sealed class AdoCommentPoster(
     {
         var normalized = path.Replace('\\', '/').Trim();
         return normalized.StartsWith('/') ? normalized : "/" + normalized;
+    }
+
+    /// <summary>
+    ///     Builds a map of normalized file path → changeTrackingId for inline comment anchoring.
+    ///     ADO can return multiple change entries for the same path within a single iteration
+    ///     (e.g. force-pushed commits, rename + edit combinations, or overlapping pages), so the
+    ///     map is collapsed to one entry per path. A change that still has content in the iteration
+    ///     (not a pure delete) is preferred so inline comments anchor to the correct side of the diff.
+    /// </summary>
+    internal static IReadOnlyDictionary<string, int> BuildChangeTrackingIds(
+        IEnumerable<GitPullRequestChange> changes)
+    {
+        return changes
+            .Where(c => c.Item?.Path is not null)
+            .GroupBy(c => NormalizePath(c.Item!.Path!), StringComparer.Ordinal)
+            .ToDictionary(
+                group => group.Key,
+                group => group
+                    .OrderBy(c => c.ChangeType.HasFlag(VersionControlChangeType.Delete) ? 1 : 0)
+                    .First()
+                    .ChangeTrackingId,
+                StringComparer.Ordinal);
     }
 
     private static (CommentThreadContext? ThreadContext, GitPullRequestCommentThreadContext? PrThreadContext)

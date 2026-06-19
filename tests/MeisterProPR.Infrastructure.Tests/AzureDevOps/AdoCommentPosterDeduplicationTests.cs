@@ -3,6 +3,8 @@
 
 using MeisterProPR.Domain.Enums;
 using MeisterProPR.Domain.ValueObjects;
+using MeisterProPR.Infrastructure.Features.Providers.AzureDevOps.Reviewing;
+using Microsoft.TeamFoundation.SourceControl.WebApi;
 
 namespace MeisterProPR.Infrastructure.Tests.AzureDevOps;
 
@@ -374,5 +376,73 @@ public class AdoCommentPosterDeduplicationTests
     public void IsBotAuthor_BothNull_ReturnsFalse()
     {
         Assert.False(AdoCommentPoster.IsBotAuthor(null, null));
+    }
+
+
+    [Fact]
+    public void BuildChangeTrackingIds_DuplicatePathAcrossChanges_DoesNotThrowAndCollapses()
+    {
+        var changes = new List<GitPullRequestChange>
+        {
+            Change("/src/Foo.cs", 11, VersionControlChangeType.Edit),
+            Change("/src/Foo.cs", 22, VersionControlChangeType.Edit),
+        };
+
+        var map = AdoCommentPoster.BuildChangeTrackingIds(changes);
+
+        Assert.Single(map);
+        Assert.Equal(11, map["/src/Foo.cs"]);
+    }
+
+    [Fact]
+    public void BuildChangeTrackingIds_DuplicatePathWithDelete_PrefersNonDeleteChange()
+    {
+        var changes = new List<GitPullRequestChange>
+        {
+            Change("/src/Foo.cs", 5, VersionControlChangeType.Delete),
+            Change("/src/Foo.cs", 6, VersionControlChangeType.Edit),
+        };
+
+        var map = AdoCommentPoster.BuildChangeTrackingIds(changes);
+
+        Assert.Equal(6, map["/src/Foo.cs"]);
+    }
+
+    [Fact]
+    public void BuildChangeTrackingIds_NormalizesBackslashesAndLeadingSlash()
+    {
+        var changes = new List<GitPullRequestChange>
+        {
+            Change("src\\Foo.cs", 7, VersionControlChangeType.Edit),
+        };
+
+        var map = AdoCommentPoster.BuildChangeTrackingIds(changes);
+
+        Assert.Equal(7, map["/src/Foo.cs"]);
+    }
+
+    [Fact]
+    public void BuildChangeTrackingIds_SkipsChangesWithoutItemPath()
+    {
+        var changes = new List<GitPullRequestChange>
+        {
+            new() { ChangeTrackingId = 1, ChangeType = VersionControlChangeType.Edit, Item = null },
+            Change("/src/Bar.cs", 9, VersionControlChangeType.Edit),
+        };
+
+        var map = AdoCommentPoster.BuildChangeTrackingIds(changes);
+
+        Assert.Single(map);
+        Assert.Equal(9, map["/src/Bar.cs"]);
+    }
+
+    private static GitPullRequestChange Change(string path, int trackingId, VersionControlChangeType changeType)
+    {
+        return new GitPullRequestChange
+        {
+            ChangeTrackingId = trackingId,
+            ChangeType = changeType,
+            Item = new GitItem { Path = path },
+        };
     }
 }
