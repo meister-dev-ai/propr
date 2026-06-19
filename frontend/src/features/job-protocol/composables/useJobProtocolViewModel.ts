@@ -636,11 +636,25 @@ export function useJobProtocolViewModel() {
         return `${summaries.length} distinct summaries recorded`
     }
 
+    function phaseGroupKey(phase: ProtocolEventPhaseTimingDto): string {
+        return (phase.name ?? phase.displayName ?? 'unnamed-phase').trim().toLowerCase() || 'unnamed-phase'
+    }
+
+    // Number of distinct phase groups without materializing groups or their
+    // (expensive) shared-value summaries. Used by hot callers that only need the count.
+    function countToolPhaseGroups(phases: ProtocolEventPhaseTimingDto[]): number {
+        const keys = new Set<string>()
+        for (const phase of phases) {
+            keys.add(phaseGroupKey(phase))
+        }
+        return keys.size
+    }
+
     function buildToolPhaseGroups(phases: ProtocolEventPhaseTimingDto[]): ToolPhaseGroup[] {
         const groups = new Map<string, ToolPhaseGroup>()
 
         for (const phase of phases) {
-            const key = (phase.name ?? phase.displayName ?? 'unnamed-phase').trim().toLowerCase() || 'unnamed-phase'
+            const key = phaseGroupKey(phase)
             const existing = groups.get(key)
 
             if (existing) {
@@ -659,9 +673,6 @@ export function useJobProtocolViewModel() {
                     existing.completedAt = phase.completedAt ?? existing.completedAt
                 }
 
-                existing.availability = summarizeSharedValue(existing.phases.map(entry => entry.availability))
-                existing.outcome = summarizeSharedValue(existing.phases.map(entry => entry.outcome))
-                existing.summary = summarizePhaseGroupSummary(existing.phases)
                 continue
             }
 
@@ -678,6 +689,19 @@ export function useJobProtocolViewModel() {
                 summary: phase.summary?.trim() ?? null,
                 phases: [phase],
             })
+        }
+
+        // Compute the shared-value summaries once per group after all phases are
+        // collected. Doing this inside the loop above is O(n²) per group and was
+        // the dominant cost when rendering large traces.
+        for (const group of groups.values()) {
+            if (group.count === 1) {
+                continue
+            }
+
+            group.availability = summarizeSharedValue(group.phases.map(entry => entry.availability))
+            group.outcome = summarizeSharedValue(group.phases.map(entry => entry.outcome))
+            group.summary = summarizePhaseGroupSummary(group.phases)
         }
 
         return [...groups.values()]
@@ -699,7 +723,7 @@ export function useJobProtocolViewModel() {
         }
 
         const phaseTimings = getPhaseTimings(event)
-        const phaseGroupCount = phaseTimings.length > 0 ? buildToolPhaseGroups(phaseTimings).length : 0
+        const phaseGroupCount = phaseTimings.length > 0 ? countToolPhaseGroups(phaseTimings) : 0
 
         let summary: string | null
         if (event.durationMs != null) {
