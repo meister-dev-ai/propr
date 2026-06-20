@@ -36,8 +36,10 @@
             <_TreeSitterNativeFiles Include="$(PublishDir)runtimes\linux-arm64\native\*.so" />
             <_TreeSitterKeepFiles Include="$(PublishDir)runtimes\linux-x64\native\libtree-sitter.so" />
             <_TreeSitterKeepFiles Include="$(PublishDir)runtimes\linux-arm64\native\libtree-sitter.so" />
-            <_TreeSitterKeepFiles Include="$(PublishDir)runtimes\linux-x64\native\libtree-sitter-%(_TreeSitterKeptGrammars.Identity).so" />
-            <_TreeSitterKeepFiles Include="$(PublishDir)runtimes\linux-arm64\native\libtree-sitter-%(_TreeSitterKeptGrammars.Identity).so" />
+            <_TreeSitterKeepFiles
+                Include="$(PublishDir)runtimes\linux-x64\native\libtree-sitter-%(_TreeSitterKeptGrammars.Identity).so" />
+            <_TreeSitterKeepFiles
+                Include="$(PublishDir)runtimes\linux-arm64\native\libtree-sitter-%(_TreeSitterKeptGrammars.Identity).so" />
         </ItemGroup>
 
         <ItemGroup>
