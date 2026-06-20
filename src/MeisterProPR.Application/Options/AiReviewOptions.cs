@@ -2,6 +2,7 @@
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
 using System.ComponentModel.DataAnnotations;
+using MeisterProPR.CodeAnalysis;
 
 namespace MeisterProPR.Application.Options;
 
@@ -183,4 +184,65 @@ public sealed class AiReviewOptions
     /// </summary>
     [Range(64, 4096, ErrorMessage = "MemoryEmbeddingDimensions must be between 64 and 4096.")]
     public int MemoryEmbeddingDimensions { get; set; } = 1536;
+
+    /// <summary>
+    ///     Kill-switch for the internal Tree-sitter structural boundary resolver (feature 070).
+    ///     When <c>false</c>, the prefetch stage uses the existing heuristic everywhere and
+    ///     the analyzer is not consulted. Bound to <c>AI_ENABLE_STRUCTURAL_BOUNDARY_RESOLUTION</c>.
+    /// </summary>
+    public bool EnableStructuralBoundaryResolution { get; set; } = true;
+
+    /// <summary>
+    ///     Per-parse wall-clock timeout for the structural analyzer (R8 step 2), in milliseconds.
+    ///     On overshoot the analyzer returns empty with <see cref="FallbackReason.ParseTimeout" /> and
+    ///     the prefetch falls back to the heuristic. Bound to <c>AI_STRUCTURAL_PARSE_TIMEOUT_MS</c>.
+    /// </summary>
+    [Range(10, 5000, ErrorMessage = "StructuralParseTimeoutMs must be between 10 and 5000.")]
+    public int StructuralParseTimeoutMs { get; set; } = 200;
+
+    /// <summary>
+    ///     Maximum source size, in bytes, the structural analyzer will accept (R8 step 1).
+    ///     Files larger than this skip parsing with <see cref="FallbackReason.FileTooLarge" />.
+    ///     Bound to <c>AI_MAX_STRUCTURAL_PARSE_BYTES</c>.
+    /// </summary>
+    [Range(1024, 5_242_880, ErrorMessage = "MaxStructuralParseBytes must be between 1024 and 5242880.")]
+    public int MaxStructuralParseBytes { get; set; } = 524_288;
+
+    /// <summary>
+    ///     Kill-switch for the cross-file structural reference surface: the
+    ///     <c>find_references</c>/<c>get_definition</c> tools, the <c>related_symbol</c> structural
+    ///     confirmation, and the deterministic caller-evidence feed. When <c>false</c>, the tools are
+    ///     not registered, <c>related_symbol</c> keeps today's substring behavior, and no caller
+    ///     evidence is injected. Bound to <c>AI_ENABLE_STRUCTURAL_REFERENCE_TOOLS</c>.
+    /// </summary>
+    public bool EnableStructuralReferenceTools { get; set; } = true;
+
+    /// <summary>
+    ///     Maximum number of candidate files scanned per reference/definition lookup before the
+    ///     result is marked truncated. Bound to <c>AI_MAX_REFERENCE_CANDIDATE_FILES</c>.
+    /// </summary>
+    [Range(1, 2000, ErrorMessage = "MaxReferenceCandidateFiles must be between 1 and 2000.")]
+    public int MaxReferenceCandidateFiles { get; set; } = 200;
+
+    /// <summary>
+    ///     Maximum number of confirmed reference/definition sites returned per lookup before the
+    ///     result is marked truncated. Bound to <c>AI_MAX_REFERENCE_RESULTS</c>.
+    /// </summary>
+    [Range(1, 1000, ErrorMessage = "MaxReferenceResults must be between 1 and 1000.")]
+    public int MaxReferenceResults { get; set; } = 50;
+
+    /// <summary>
+    ///     Maximum total character budget for a serialized reference/definition tool result before the
+    ///     result is marked truncated. Bound to <c>AI_MAX_REFERENCE_RESULT_CHARS</c>.
+    /// </summary>
+    [Range(256, 64000, ErrorMessage = "MaxReferenceResultChars must be between 256 and 64000.")]
+    public int MaxReferenceResultChars { get; set; } = 8000;
+
+    /// <summary>
+    ///     Per-operation wall-clock budget for a reference/definition lookup (across all candidate
+    ///     files), in milliseconds. On overshoot the lookup returns what it has, marked truncated.
+    ///     Bound to <c>AI_REFERENCE_RESOLUTION_TIMEOUT_MS</c>.
+    /// </summary>
+    [Range(50, 30000, ErrorMessage = "ReferenceResolutionTimeoutMs must be between 50 and 30000.")]
+    public int ReferenceResolutionTimeoutMs { get; set; } = 4000;
 }

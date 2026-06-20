@@ -190,6 +190,52 @@ public static class InfrastructureServiceExtensions
                 {
                     opts.MemoryEmbeddingDimensions = memDims;
                 }
+
+                // Structural boundary resolution (feature 070).
+                if (bool.TryParse(
+                        configuration["AI_ENABLE_STRUCTURAL_BOUNDARY_RESOLUTION"],
+                        out var enableStructural))
+                {
+                    opts.EnableStructuralBoundaryResolution = enableStructural;
+                }
+
+                if (int.TryParse(configuration["AI_STRUCTURAL_PARSE_TIMEOUT_MS"], out var structuralTimeout))
+                {
+                    opts.StructuralParseTimeoutMs = structuralTimeout;
+                }
+
+                if (int.TryParse(configuration["AI_MAX_STRUCTURAL_PARSE_BYTES"], out var maxStructuralBytes))
+                {
+                    opts.MaxStructuralParseBytes = maxStructuralBytes;
+                }
+
+                // Cross-file structural reference surface.
+                if (bool.TryParse(
+                        configuration["AI_ENABLE_STRUCTURAL_REFERENCE_TOOLS"],
+                        out var enableReferenceTools))
+                {
+                    opts.EnableStructuralReferenceTools = enableReferenceTools;
+                }
+
+                if (int.TryParse(configuration["AI_MAX_REFERENCE_CANDIDATE_FILES"], out var maxReferenceCandidateFiles))
+                {
+                    opts.MaxReferenceCandidateFiles = maxReferenceCandidateFiles;
+                }
+
+                if (int.TryParse(configuration["AI_MAX_REFERENCE_RESULTS"], out var maxReferenceResults))
+                {
+                    opts.MaxReferenceResults = maxReferenceResults;
+                }
+
+                if (int.TryParse(configuration["AI_MAX_REFERENCE_RESULT_CHARS"], out var maxReferenceResultChars))
+                {
+                    opts.MaxReferenceResultChars = maxReferenceResultChars;
+                }
+
+                if (int.TryParse(configuration["AI_REFERENCE_RESOLUTION_TIMEOUT_MS"], out var referenceResolutionTimeoutMs))
+                {
+                    opts.ReferenceResolutionTimeoutMs = referenceResolutionTimeoutMs;
+                }
             });
 
         // Some singleton review executors consume a snapshot of the configured values directly

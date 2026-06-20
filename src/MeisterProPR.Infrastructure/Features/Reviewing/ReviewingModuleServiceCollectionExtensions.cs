@@ -7,6 +7,9 @@ using MeisterProPR.Application.Features.Reviewing.Execution.Strategies.Ports;
 using MeisterProPR.Application.Interfaces;
 using MeisterProPR.Application.Options;
 using MeisterProPR.Application.Services;
+using MeisterProPR.CodeAnalysis;
+using MeisterProPR.CodeAnalysis.Roslyn.DependencyInjection;
+using MeisterProPR.CodeAnalysis.TreeSitter.DependencyInjection;
 using MeisterProPR.Infrastructure.AI;
 using MeisterProPR.Infrastructure.DependencyInjection;
 using MeisterProPR.Infrastructure.Features.Providers.AzureDevOps.DependencyInjection;
@@ -75,6 +78,19 @@ public static class ReviewingModuleServiceCollectionExtensions
         }
 
         services.AddReviewingExecution(selectedCommentRelevanceFilterId);
+
+        // Unified code-analysis abstraction: register both backends as concrete
+        // singletons, then expose the composite router as the single IStructuralCodeAnalyzer every
+        // consumer (prefetch, tools, related_symbol) depends on. C# routes to Roslyn-syntax; the
+        // seven Tree-sitter languages route to the Tree-sitter backend.
+        services.AddCodeAnalysisTreeSitter();
+        services.AddCodeAnalysisRoslyn();
+        services.TryAddSingleton<IStructuralCodeAnalyzer>(sp => new CompositeStructuralCodeAnalyzer(
+            new[]
+            {
+                sp.GetRequiredKeyedService<IStructuralCodeAnalyzer>(CodeAnalysisServiceCollectionExtensions.BackendKey),
+                sp.GetRequiredKeyedService<IStructuralCodeAnalyzer>(CodeAnalysisRoslynServiceCollectionExtensions.BackendKey),
+            }));
         services.AddReviewingDiagnostics();
         services.AddReviewingThreadMemory();
         services.TryAddScoped<IRepositoryInstructionFetcher, ProviderRepositoryInstructionFetcher>();

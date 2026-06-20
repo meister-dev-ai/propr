@@ -498,7 +498,7 @@ function prReviewLink(group: PrGroup): object {
 .restart-btn {
     font-size: 0.78rem;
     padding: 0.25rem 0.6rem;
-    color: var(--color-warning, #f59e0b);
+    color: var(--color-warning);
     border: 1px solid rgba(245, 158, 11, 0.3);
     white-space: nowrap;
 }

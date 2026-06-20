@@ -5,6 +5,7 @@ using MeisterProPR.Application.Features.Reviewing.Execution.Models;
 using MeisterProPR.Application.Features.Reviewing.Execution.Ports;
 using MeisterProPR.Application.Interfaces;
 using MeisterProPR.Application.Options;
+using MeisterProPR.CodeAnalysis;
 using MeisterProPR.Domain.ValueObjects;
 using MeisterProPR.Infrastructure.Features.Providers.Common;
 using Microsoft.Extensions.Logging;
@@ -17,7 +18,8 @@ internal sealed class LocalGitReviewContextTools(
     IProCursorGateway proCursorGateway,
     IOptions<AiReviewOptions> options,
     ReviewContextToolsRequest request,
-    ILogger logger)
+    ILogger logger,
+    IStructuralCodeAnalyzer? structuralAnalyzer = null)
     : ProviderReviewContextToolsBase(
         proCursorGateway,
         options,
@@ -29,7 +31,8 @@ internal sealed class LocalGitReviewContextTools(
         logger,
         request.ProviderScopePath,
         request.TargetBranch,
-        request.ChangedPathSnapshots), IAsyncDisposable
+        request.ChangedPathSnapshots,
+        structuralAnalyzer), IAsyncDisposable
 {
     private readonly string _normalizedSourceBranch = NormalizeBranchName(request.SourceBranch);
 

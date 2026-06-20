@@ -11,6 +11,27 @@ RUN dotnet restore
 RUN dotnet publish src/MeisterProPR.Api/MeisterProPR.Api.csproj \
     -c Release -o /app --no-restore
 
+# Tree-sitter native prune (feature 070, research.md R5). The TreeSitter.DotNet
+# package ships ~28 grammar natives across 8 RIDs (~51 MB). The Api publish is
+# framework-dependent, so the project's build/TreeSitterPrune.targets does not run
+# here (it only fires on a self-contained publish of the library project). Prune at
+# the image layer instead: keep the core library plus the 6 supported-language
+# grammars on the two worker RIDs (linux-x64, linux-arm64) and drop every other RID.
+RUN set -eux; \
+    cd /app/runtimes 2>/dev/null || exit 0; \
+    for rid in *; do \
+        case "$rid" in linux-x64|linux-arm64) ;; *) rm -rf "$rid"; continue ;; esac; \
+        find "$rid/native" -maxdepth 1 -name 'libtree-sitter-*.so' \
+            ! -name 'libtree-sitter-typescript.so' \
+            ! -name 'libtree-sitter-tsx.so' \
+            ! -name 'libtree-sitter-javascript.so' \
+            ! -name 'libtree-sitter-python.so' \
+            ! -name 'libtree-sitter-go.so' \
+            ! -name 'libtree-sitter-java.so' \
+            ! -name 'libtree-sitter-ruby.so' \
+            -delete 2>/dev/null || true; \
+    done
+
 RUN mkdir -p /app/.data-protection-keys
 
 # Minimal Kerberos runtime slice for Azure DevOps client auth support.

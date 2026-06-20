@@ -379,6 +379,67 @@ public class ToolAwareAiReviewCoreTests
         Assert.DoesNotContain("get_procursor_symbol_info", toolNames);
     }
 
+    // The structural tools register for all languages and COEXIST with the ProCursor knowledge tools
+    // (the code-analysis re-route must not unregister the knowledge surface).
+    [Fact]
+    public async Task ReviewAsync_StructuralReferenceToolsEnabled_RegistersToolsAndKeepsProCursorTools()
+    {
+        var toolNames = await CaptureToolNamesAsync(true, true);
+
+        Assert.Contains("find_references", toolNames);
+        Assert.Contains("get_definition", toolNames);
+        // ProCursor knowledge tools remain registered alongside the new structural tools.
+        Assert.Contains("ask_procursor_knowledge", toolNames);
+        Assert.Contains("get_procursor_symbol_info", toolNames);
+    }
+
+    [Fact]
+    public async Task ReviewAsync_StructuralReferenceToolsDisabled_OmitsStructuralTools()
+    {
+        var toolNames = await CaptureToolNamesAsync(false, true);
+
+        Assert.DoesNotContain("find_references", toolNames);
+        Assert.DoesNotContain("get_definition", toolNames);
+        // Kill-switch only gates the structural tools; ProCursor tools are unaffected.
+        Assert.Contains("ask_procursor_knowledge", toolNames);
+    }
+
+    private static async Task<List<string>> CaptureToolNamesAsync(bool structuralReferenceToolsEnabled, bool supportsProCursor)
+    {
+        List<string> toolNames = [];
+        var mockClient = Substitute.For<IChatClient>();
+        mockClient
+            .GetResponseAsync(Arg.Any<IEnumerable<ChatMessage>>(), Arg.Any<ChatOptions?>(), Arg.Any<CancellationToken>())
+            .Returns(callInfo =>
+            {
+                var tools = callInfo.Arg<ChatOptions?>()?.Tools;
+                toolNames = tools is null
+                    ? []
+                    : tools.OfType<AIFunction>().Select(t => t.Name).Where(n => !string.IsNullOrWhiteSpace(n)).ToList();
+                return CreateFinalReviewResponse("Done.");
+            });
+
+        var options = Microsoft.Extensions.Options.Options.Create(
+            new AiReviewOptions
+            {
+                MaxIterations = 5,
+                ConfidenceThreshold = 70,
+                ModelId = string.Empty,
+                EnableStructuralReferenceTools = structuralReferenceToolsEnabled,
+            });
+
+        var tools = Substitute.For<IReviewContextTools, IProCursorAvailabilityAware>();
+        ((IProCursorAvailabilityAware)tools).SupportsProCursorTools.Returns(supportsProCursor);
+
+        var sut = new ToolAwareAiReviewCore(
+            mockClient,
+            options,
+            Substitute.For<ILogger<ToolAwareAiReviewCore>>());
+
+        await sut.ReviewAsync(CreatePullRequest(), CreateContext(tools));
+        return toolNames;
+    }
+
     [Fact]
     public async Task ReviewAsync_MixedTextAndToolCall_PreservesLatestTextWithoutForcedFinalCall()
     {
@@ -2537,6 +2598,16 @@ public class ToolAwareAiReviewCoreTests
             CancellationToken ct)
         {
             throw new NotSupportedException();
+        }
+
+        public Task<ReferenceLookupResult> FindReferencesAsync(SymbolReferenceQuery query, CancellationToken ct)
+        {
+            return Task.FromResult(ReferenceLookupResult.UnavailableResult);
+        }
+
+        public Task<DefinitionLookupResult> GetDefinitionAsync(SymbolReferenceQuery query, CancellationToken ct)
+        {
+            return Task.FromResult(DefinitionLookupResult.UnavailableResult);
         }
     }
 }

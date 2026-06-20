@@ -4,6 +4,7 @@
 using MeisterProPR.Application.Features.Reviewing.Execution.Models;
 using MeisterProPR.Application.Interfaces;
 using MeisterProPR.Application.Options;
+using MeisterProPR.CodeAnalysis;
 using MeisterProPR.Domain.Enums;
 using MeisterProPR.Infrastructure.Features.Providers.Common;
 using MeisterProPR.Infrastructure.Features.Reviewing.Execution;
@@ -15,7 +16,8 @@ namespace MeisterProPR.Infrastructure.Features.Providers.AzureDevOps.Reviewing;
 public sealed class AdoReviewContextToolsFactory(
     IProCursorGateway proCursorGateway,
     IOptions<AiReviewOptions> options,
-    ILoggerFactory loggerFactory) : IReviewContextToolsFactory, IProviderReviewContextToolsFactory
+    ILoggerFactory loggerFactory,
+    IStructuralCodeAnalyzer? structuralAnalyzer = null) : IReviewContextToolsFactory, IProviderReviewContextToolsFactory
 {
     public ScmProvider Provider => ScmProvider.AzureDevOps;
 
@@ -32,6 +34,7 @@ public sealed class AdoReviewContextToolsFactory(
             proCursorGateway,
             options,
             request,
-            loggerFactory.CreateLogger<LocalGitReviewContextTools>());
+            loggerFactory.CreateLogger<LocalGitReviewContextTools>(),
+            structuralAnalyzer);
     }
 }

@@ -4,6 +4,7 @@
 using System.Text;
 using System.Text.RegularExpressions;
 using MeisterProPR.Application.Features.Reviewing.Execution.Models;
+using MeisterProPR.CodeAnalysis;
 using MeisterProPR.Domain.ValueObjects;
 
 namespace MeisterProPR.Infrastructure.Features.Reviewing.Execution;
@@ -22,7 +23,9 @@ internal static class RepositoryCodeSearchExecutor
         Func<string, string> normalizeBranch,
         Func<string, string> normalizePath,
         int maxFileSizeBytes,
-        CancellationToken ct)
+        CancellationToken ct,
+        IStructuralCodeAnalyzer? structuralAnalyzer = null,
+        bool confirmRelatedSymbolStructurally = false)
     {
         ArgumentNullException.ThrowIfNull(request);
         ArgumentNullException.ThrowIfNull(loadFileTreeAsync);
@@ -145,6 +148,33 @@ internal static class RepositoryCodeSearchExecutor
 
             var language = RepositoryDiscoveryHelpers.InferLanguage(candidatePath);
             var lines = content.Split('\n');
+
+            // For related_symbol, post-filter substring matches through the structural backend so
+            // comment/string occurrences are dropped. Kill-switch off (or an unsupported language /
+            // unavailable backend) → today's substring behavior (no regression).
+            HashSet<int>? confirmedLines = null;
+            if (confirmRelatedSymbolStructurally
+                && structuralAnalyzer is not null
+                && string.Equals(searchMode, CodeSearchModes.RelatedSymbol, StringComparison.Ordinal)
+                && structuralAnalyzer.CanAnalyze(candidatePath)
+                && LanguagePaths.TryResolve(candidatePath) is { } structuralLanguage)
+            {
+                try
+                {
+                    var request2 = new StructuralParseRequest(candidatePath, structuralLanguage, content, []);
+                    var confirmed = await structuralAnalyzer.ConfirmReferenceLinesAsync(request2, queryText, ct);
+                    confirmedLines = confirmed.Count == 0 ? new HashSet<int>() : [.. confirmed];
+                }
+                catch (OperationCanceledException)
+                {
+                    throw;
+                }
+                catch
+                {
+                    confirmedLines = null; // fail-soft to substring behavior
+                }
+            }
+
             var searchTerminated = ToolTimingCollectorContext.Record(
                 ProtocolEventToolPhaseNames.RepositorySearch,
                 "Repository search",
@@ -154,6 +184,13 @@ internal static class RepositoryCodeSearchExecutor
                     {
                         var line = lines[i].TrimEnd('\r');
                         if (!LineMatches(line, queryText, searchMode, regex))
+                        {
+                            continue;
+                        }
+
+                        // Structural confirmation: drop matches the backend did not confirm
+                        // as a real identifier/reference line (comment/string occurrences).
+                        if (confirmedLines is not null && !confirmedLines.Contains(i + 1))
                         {
                             continue;
                         }

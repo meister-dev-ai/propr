@@ -8,6 +8,9 @@
         <Project Path="src/MeisterProPR.ProCursor/MeisterProPR.ProCursor.csproj" />
         <Project Path="src/MeisterProPR.ProCursor.Service/MeisterProPR.ProCursor.Service.csproj" />
         <Project Path="src/MeisterProPR.ProRV/MeisterProPR.ProRV.csproj" />
+        <Project Path="src/MeisterProPR.CodeAnalysis.TreeSitter/MeisterProPR.CodeAnalysis.TreeSitter.csproj" />
+        <Project Path="src/MeisterProPR.CodeAnalysis/MeisterProPR.CodeAnalysis.csproj" />
+        <Project Path="src/MeisterProPR.CodeAnalysis.Roslyn/MeisterProPR.CodeAnalysis.Roslyn.csproj" />
     </Folder>
     <Folder Name="/tests/">
         <Project Path="tests/MeisterProPR.Api.Tests/MeisterProPR.Api.Tests.csproj" />
@@ -15,5 +18,8 @@
         <Project Path="tests/MeisterProPR.Domain.Tests/MeisterProPR.Domain.Tests.csproj" />
         <Project Path="tests/MeisterProPR.Infrastructure.Tests/MeisterProPR.Infrastructure.Tests.csproj" />
         <Project Path="tests/MeisterProPR.ProCursor.Service.Tests/MeisterProPR.ProCursor.Service.Tests.csproj" />
+        <Project Path="tests/MeisterProPR.CodeAnalysis.TreeSitter.Tests/MeisterProPR.CodeAnalysis.TreeSitter.Tests.csproj" />
+        <Project Path="tests/MeisterProPR.CodeAnalysis.Tests/MeisterProPR.CodeAnalysis.Tests.csproj" />
+        <Project Path="tests/MeisterProPR.CodeAnalysis.Roslyn.Tests/MeisterProPR.CodeAnalysis.Roslyn.Tests.csproj" />
     </Folder>
 </Solution>

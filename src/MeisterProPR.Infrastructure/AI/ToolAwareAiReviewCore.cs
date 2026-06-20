@@ -112,7 +112,7 @@ internal sealed partial class ToolAwareAiReviewCore(
                 cancellationToken);
         }
 
-        var rawTools = BuildTools(systemContext.ReviewTools, cancellationToken);
+        var rawTools = BuildTools(systemContext.ReviewTools, options.Value.EnableStructuralReferenceTools, cancellationToken);
         var effectiveModelId = systemContext.ModelId ?? opts.ModelId;
         var usesManagedSessionTransport = ShouldUseAgentFrameworkManagedSession(systemContext);
         var transportTools = usesManagedSessionTransport
@@ -999,7 +999,10 @@ internal sealed partial class ToolAwareAiReviewCore(
             cancellationToken);
     }
 
-    private static List<AIFunction> BuildTools(IReviewContextTools? reviewTools, CancellationToken cancellationToken)
+    private static List<AIFunction> BuildTools(
+        IReviewContextTools? reviewTools,
+        bool enableStructuralReferenceTools,
+        CancellationToken cancellationToken)
     {
         if (reviewTools is null)
         {
@@ -1167,6 +1170,38 @@ internal sealed partial class ToolAwareAiReviewCore(
                         Name = "get_procursor_symbol_info",
                         Description =
                             "Ask ProCursor for symbol-aware insight using the current review repository context. Returns definitions plus related references, calls, inheritance, or containment when available.",
+                    }));
+        }
+
+        // Cross-file structural reference tools, available for ALL languages (registered OUTSIDE the
+        // ProCursor gate so they coexist with the C#-only ProCursor symbol tool). Gated on the
+        // EnableStructuralReferenceTools kill-switch.
+        if (enableStructuralReferenceTools)
+        {
+            tools.Add(
+                AIFunctionFactory.Create(
+                    (string symbol, string? branchSide) =>
+                        reviewTools.FindReferencesAsync(
+                            new SymbolReferenceQuery(symbol, null, string.IsNullOrWhiteSpace(branchSide) ? "source" : branchSide!),
+                            cancellationToken),
+                    new AIFunctionFactoryOptions
+                    {
+                        Name = "find_references",
+                        Description =
+                            "Find confirmed cross-file usage sites of a symbol across the review workspace, for any language. Returns real call/reference sites (file + line) with comment and string matches excluded; bounded with a truncation flag. Prefer this over text search for 'where is this symbol used?'.",
+                    }));
+
+            tools.Add(
+                AIFunctionFactory.Create(
+                    (string symbol, string? branchSide) =>
+                        reviewTools.GetDefinitionAsync(
+                            new SymbolReferenceQuery(symbol, null, string.IsNullOrWhiteSpace(branchSide) ? "source" : branchSide!),
+                            cancellationToken),
+                    new AIFunctionFactoryOptions
+                    {
+                        Name = "get_definition",
+                        Description =
+                            "Find the definition site(s) of a symbol across the review workspace, for any language. Returns kind, name, file, and 1-based line range for each candidate definition (name-based); bounded with a truncation flag.",
                     }));
         }
 

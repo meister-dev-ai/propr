@@ -1,7 +1,7 @@
 Repository-wide contract-change check:
 If the current diff changes any shared code contract such as a function or method signature, required parameter list, removed overload, renamed exported symbol, or changed return shape used by callers, you must perform one repository-wide caller lookup before concluding there is no defect.
 
-Use `search_code` with `branch_side="source"`, `path_scope="repository"`, and `search_mode="related_symbol"` to find source-branch call sites for the changed symbol or old call pattern. If unchanged callers still use the old contract, report that as a concrete defect.
+Prefer `find_references` for this lookup: call it with `symbol` set to the changed function/method/exported name (and `branch_side="source"`). It resolves confirmed cross-file call/reference sites structurally for every language and excludes matches inside comments and strings, so it is more precise than text search. Use `get_definition` when you need a referenced symbol's defining site and shape. Fall back to `search_code` with `search_mode="related_symbol"` only when the structural tools are unavailable, return nothing, or the thing you are tracing is not a single symbol name (for example an old call pattern or a string literal). If unchanged callers still use the old contract, report that as a concrete defect.
 
 Do not mark the review complete until you have either: (1) confirmed the rollout across repository callers, or (2) reported the stale-caller breakage.
 

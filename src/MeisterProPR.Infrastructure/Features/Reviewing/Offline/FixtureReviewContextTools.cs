@@ -8,6 +8,7 @@ using MeisterProPR.Application.Exceptions;
 using MeisterProPR.Application.Features.Reviewing.Execution.Models;
 using MeisterProPR.Application.Interfaces;
 using MeisterProPR.Application.Options;
+using MeisterProPR.CodeAnalysis;
 using MeisterProPR.Domain.ValueObjects;
 using MeisterProPR.Infrastructure.Features.ProCursor.Remote;
 using MeisterProPR.Infrastructure.Features.Providers.Common;
@@ -24,7 +25,8 @@ public sealed class FixtureReviewContextTools(
     IOptions<AiReviewOptions> options,
     IProCursorGateway proCursorGateway,
     Guid? clientId,
-    IReadOnlyList<Guid>? knowledgeSourceIds) : IReviewContextTools, IProCursorAvailabilityAware
+    IReadOnlyList<Guid>? knowledgeSourceIds,
+    IStructuralCodeAnalyzer? structuralAnalyzer = null) : IReviewContextTools, IProCursorAvailabilityAware
 {
     private readonly ConcurrentDictionary<string, string> _fileCache = new(StringComparer.Ordinal);
     private readonly ConcurrentDictionary<string, FileNeighborhood> _fileNeighborhoodCache = new(StringComparer.Ordinal);
@@ -278,6 +280,115 @@ public sealed class FixtureReviewContextTools(
         {
             return new ProCursorSymbolInsightDto("unavailable", null, false, false, null, []);
         }
+    }
+
+    /// <inheritdoc />
+    public async Task<ReferenceLookupResult> FindReferencesAsync(SymbolReferenceQuery query, CancellationToken ct)
+    {
+        if (query is null || string.IsNullOrWhiteSpace(query.Symbol))
+        {
+            return ReferenceLookupResult.Empty;
+        }
+
+        if (structuralAnalyzer is null || !this._options.EnableStructuralReferenceTools)
+        {
+            return ReferenceLookupResult.UnavailableResult;
+        }
+
+        var sites = new List<ReferenceSite>();
+        var scanned = 0;
+        var truncated = false;
+        var usedChars = 0;
+
+        foreach (var file in this.ResolveFilesForBranch(this.ResolveBranchName(query.BranchSide)))
+        {
+            if (scanned >= this._options.MaxReferenceCandidateFiles)
+            {
+                truncated = true;
+                break;
+            }
+
+            if (!structuralAnalyzer.CanAnalyze(file.Path) || LanguagePaths.TryResolve(file.Path) is not { } language
+                                                          || string.IsNullOrEmpty(file.Content))
+            {
+                continue;
+            }
+
+            scanned++;
+            var request = new StructuralParseRequest(file.Path, language, file.Content, []);
+            var lines = await structuralAnalyzer.ConfirmReferenceLinesAsync(request, query.Symbol, ct);
+
+            foreach (var line in lines)
+            {
+                if (sites.Count >= this._options.MaxReferenceResults || usedChars > this._options.MaxReferenceResultChars)
+                {
+                    return new ReferenceLookupResult(sites, scanned, true, false);
+                }
+
+                sites.Add(new ReferenceSite(file.Path, line, null, null, OccurrenceKind.Reference, ResolutionMode.NameBased));
+                usedChars += file.Path.Length + 16;
+            }
+        }
+
+        return new ReferenceLookupResult(sites, scanned, truncated, false);
+    }
+
+    /// <inheritdoc />
+    public async Task<DefinitionLookupResult> GetDefinitionAsync(SymbolReferenceQuery query, CancellationToken ct)
+    {
+        if (query is null || string.IsNullOrWhiteSpace(query.Symbol))
+        {
+            return DefinitionLookupResult.Empty;
+        }
+
+        if (structuralAnalyzer is null || !this._options.EnableStructuralReferenceTools)
+        {
+            return DefinitionLookupResult.UnavailableResult;
+        }
+
+        var definitions = new List<DefinitionLookupSite>();
+        var scanned = 0;
+        var truncated = false;
+
+        foreach (var file in this.ResolveFilesForBranch(this.ResolveBranchName(query.BranchSide)))
+        {
+            if (scanned >= this._options.MaxReferenceCandidateFiles)
+            {
+                truncated = true;
+                break;
+            }
+
+            if (!structuralAnalyzer.CanAnalyze(file.Path) || LanguagePaths.TryResolve(file.Path) is not { } language
+                                                          || string.IsNullOrEmpty(file.Content))
+            {
+                continue;
+            }
+
+            scanned++;
+            var request = new StructuralParseRequest(file.Path, language, file.Content, []);
+            var defs = await structuralAnalyzer.GetDefinitionsAsync(request, ct);
+
+            foreach (var def in defs.Where(d => string.Equals(d.Name, query.Symbol, StringComparison.Ordinal)))
+            {
+                if (definitions.Count >= this._options.MaxReferenceResults)
+                {
+                    return new DefinitionLookupResult(definitions, scanned, true, false);
+                }
+
+                definitions.Add(new DefinitionLookupSite(file.Path, def.Kind, def.Name, def.StartLine, def.EndLine, ResolutionMode.NameBased));
+            }
+        }
+
+        return new DefinitionLookupResult(definitions, scanned, truncated, false);
+    }
+
+    private string ResolveBranchName(string branchSide)
+    {
+        // Map the logical side token (source/target) to the fixture's actual branch name so
+        // ResolveFilesForBranch selects the right in-memory file set.
+        return string.Equals(branchSide, RepositorySearchBranchSides.Target, StringComparison.OrdinalIgnoreCase)
+            ? fixture.RepositorySnapshot.TargetBranch
+            : fixture.RepositorySnapshot.SourceBranch;
     }
 
     private Task<RepositorySearchResult> SearchAsync(RepositorySearchRequest request, CancellationToken ct)

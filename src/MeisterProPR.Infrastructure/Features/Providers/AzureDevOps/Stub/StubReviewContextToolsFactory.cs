@@ -177,4 +177,16 @@ internal sealed class NullReviewContextTools : IReviewContextTools, IProCursorAv
                 null,
                 []));
     }
+
+    /// <inheritdoc />
+    public Task<ReferenceLookupResult> FindReferencesAsync(SymbolReferenceQuery query, CancellationToken ct)
+    {
+        return Task.FromResult(ReferenceLookupResult.UnavailableResult);
+    }
+
+    /// <inheritdoc />
+    public Task<DefinitionLookupResult> GetDefinitionAsync(SymbolReferenceQuery query, CancellationToken ct)
+    {
+        return Task.FromResult(DefinitionLookupResult.UnavailableResult);
+    }
 }

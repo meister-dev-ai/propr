@@ -8,6 +8,7 @@ using MeisterProPR.Application.Exceptions;
 using MeisterProPR.Application.Features.Reviewing.Execution.Models;
 using MeisterProPR.Application.Interfaces;
 using MeisterProPR.Application.Options;
+using MeisterProPR.CodeAnalysis;
 using MeisterProPR.Domain.Enums;
 using MeisterProPR.Domain.ValueObjects;
 using MeisterProPR.Infrastructure.Features.ProCursor.Remote;
@@ -28,7 +29,8 @@ internal abstract class ProviderReviewContextToolsBase(
     ILogger logger,
     string? providerScopePath = null,
     string? targetBranch = null,
-    IReadOnlyList<ChangedPathSnapshot>? changedPathSnapshots = null) : IReviewContextTools, IProCursorAvailabilityAware
+    IReadOnlyList<ChangedPathSnapshot>? changedPathSnapshots = null,
+    IStructuralCodeAnalyzer? structuralAnalyzer = null) : IReviewContextTools, IProCursorAvailabilityAware
 {
     private readonly IReadOnlyList<ChangedPathSnapshot> _changedPathSnapshots = changedPathSnapshots ?? [];
     private readonly Guid? _clientId = clientId;
@@ -53,6 +55,7 @@ internal abstract class ProviderReviewContextToolsBase(
     private readonly RepositoryRef _repository = review.Repository;
     private readonly ConcurrentDictionary<string, RepositoryOverview> _repositoryOverviewCache = new(StringComparer.Ordinal);
     private readonly string _sourceBranch = sourceBranch;
+    private readonly IStructuralCodeAnalyzer? _structuralAnalyzer = structuralAnalyzer;
     private readonly string? _targetBranch = targetBranch;
 
     public bool SupportsProCursorTools => this._proCursorGateway is not DisabledProCursorGateway;
@@ -191,7 +194,9 @@ internal abstract class ProviderReviewContextToolsBase(
             this.NormalizeBranch,
             this.NormalizePath,
             this._options.MaxFileSizeBytes,
-            ct);
+            ct,
+            this._structuralAnalyzer,
+            this._options.EnableStructuralReferenceTools);
     }
 
     public Task<PathSearchResult> SearchPathsAsync(PathSearchRequest request, CancellationToken ct)
@@ -320,6 +325,180 @@ internal abstract class ProviderReviewContextToolsBase(
         return this.ExecuteSymbolQueryAsync(symbol, queryMode, maxRelations, ct);
     }
 
+    /// <inheritdoc />
+    public async Task<ReferenceLookupResult> FindReferencesAsync(SymbolReferenceQuery query, CancellationToken ct)
+    {
+        if (query is null || string.IsNullOrWhiteSpace(query.Symbol))
+        {
+            return ReferenceLookupResult.Empty;
+        }
+
+        if (this._structuralAnalyzer is null || !this._options.EnableStructuralReferenceTools)
+        {
+            return ReferenceLookupResult.UnavailableResult;
+        }
+
+        var branchSide = NormalizeBranchSide(query.BranchSide);
+        var branchName = branchSide == RepositorySearchBranchSides.Target && this._targetBranch is not null
+            ? this._targetBranch
+            : this._sourceBranch;
+
+        var sites = new List<ReferenceSite>();
+        var scanned = 0;
+        var truncated = false;
+        var usedChars = 0;
+
+        using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        timeoutCts.CancelAfter(Math.Max(50, this._options.ReferenceResolutionTimeoutMs));
+        var token = timeoutCts.Token;
+
+        try
+        {
+            var candidateFiles = await this.ResolveCandidateFilesAsync(query.Symbol, branchSide, token);
+            truncated |= candidateFiles.Truncated;
+
+            foreach (var file in candidateFiles.Paths)
+            {
+                if (scanned >= this._options.MaxReferenceCandidateFiles)
+                {
+                    truncated = true;
+                    break;
+                }
+
+                if (!this._structuralAnalyzer.CanAnalyze(file) || LanguagePaths.TryResolve(file) is not { } language)
+                {
+                    continue;
+                }
+
+                scanned++;
+                var content = await this.TryFetchAsync(file, branchName, token);
+                if (string.IsNullOrEmpty(content))
+                {
+                    continue;
+                }
+
+                var request = new StructuralParseRequest(file, language, content, []);
+                var lines = await this._structuralAnalyzer.ConfirmReferenceLinesAsync(request, query.Symbol, token);
+
+                foreach (var line in lines)
+                {
+                    if (sites.Count >= this._options.MaxReferenceResults || usedChars > this._options.MaxReferenceResultChars)
+                    {
+                        truncated = true;
+                        return new ReferenceLookupResult(sites, scanned, truncated, false);
+                    }
+
+                    sites.Add(new ReferenceSite(file, line, null, null, OccurrenceKind.Reference, ResolutionMode.NameBased));
+                    usedChars += file.Length + 16;
+                }
+            }
+        }
+        catch (OperationCanceledException) when (!ct.IsCancellationRequested)
+        {
+            // Per-operation time budget exceeded: return what we have, flagged truncated.
+            return new ReferenceLookupResult(sites, scanned, true, false);
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            this._logger.LogWarning(ex, "find_references failed for symbol {Symbol}; returning unavailable (fail-soft).", query.Symbol);
+            return ReferenceLookupResult.UnavailableResult;
+        }
+
+        return new ReferenceLookupResult(sites, scanned, truncated, false);
+    }
+
+    /// <inheritdoc />
+    public async Task<DefinitionLookupResult> GetDefinitionAsync(SymbolReferenceQuery query, CancellationToken ct)
+    {
+        if (query is null || string.IsNullOrWhiteSpace(query.Symbol))
+        {
+            return DefinitionLookupResult.Empty;
+        }
+
+        if (this._structuralAnalyzer is null || !this._options.EnableStructuralReferenceTools)
+        {
+            return DefinitionLookupResult.UnavailableResult;
+        }
+
+        var branchSide = NormalizeBranchSide(query.BranchSide);
+        var branchName = branchSide == RepositorySearchBranchSides.Target && this._targetBranch is not null
+            ? this._targetBranch
+            : this._sourceBranch;
+
+        var definitions = new List<DefinitionLookupSite>();
+        var scanned = 0;
+        var truncated = false;
+
+        using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        timeoutCts.CancelAfter(Math.Max(50, this._options.ReferenceResolutionTimeoutMs));
+        var token = timeoutCts.Token;
+
+        try
+        {
+            var candidateFiles = await this.ResolveCandidateFilesAsync(query.Symbol, branchSide, token);
+            truncated |= candidateFiles.Truncated;
+
+            foreach (var file in candidateFiles.Paths)
+            {
+                if (scanned >= this._options.MaxReferenceCandidateFiles)
+                {
+                    truncated = true;
+                    break;
+                }
+
+                if (!this._structuralAnalyzer.CanAnalyze(file) || LanguagePaths.TryResolve(file) is not { } language)
+                {
+                    continue;
+                }
+
+                scanned++;
+                var content = await this.TryFetchAsync(file, branchName, token);
+                if (string.IsNullOrEmpty(content))
+                {
+                    continue;
+                }
+
+                var request = new StructuralParseRequest(file, language, content, []);
+                var defs = await this._structuralAnalyzer.GetDefinitionsAsync(request, token);
+
+                foreach (var def in defs)
+                {
+                    if (!string.Equals(def.Name, query.Symbol, StringComparison.Ordinal))
+                    {
+                        continue;
+                    }
+
+                    if (definitions.Count >= this._options.MaxReferenceResults)
+                    {
+                        truncated = true;
+                        return new DefinitionLookupResult(definitions, scanned, truncated, false);
+                    }
+
+                    definitions.Add(new DefinitionLookupSite(file, def.Kind, def.Name, def.StartLine, def.EndLine, ResolutionMode.NameBased));
+                }
+            }
+        }
+        catch (OperationCanceledException) when (!ct.IsCancellationRequested)
+        {
+            return new DefinitionLookupResult(definitions, scanned, true, false);
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            this._logger.LogWarning(ex, "get_definition failed for symbol {Symbol}; returning unavailable (fail-soft).", query.Symbol);
+            return DefinitionLookupResult.UnavailableResult;
+        }
+
+        return new DefinitionLookupResult(definitions, scanned, truncated, false);
+    }
+
     private async Task<ProCursorKnowledgeAnswerDto> ExecuteKnowledgeQueryAsync(string question, CancellationToken ct)
     {
         try
@@ -402,6 +581,44 @@ internal abstract class ProviderReviewContextToolsBase(
             this.NormalizePath,
             this._options.MaxFileSizeBytes,
             ct);
+    }
+
+    /// <summary>
+    ///     Scans the workspace for candidate files containing <paramref name="symbol" /> as an exact
+    ///     identifier (the cheap, in-process pre-filter the structural confirmation then narrows).
+    /// </summary>
+    private async Task<(IReadOnlyList<string> Paths, bool Truncated)> ResolveCandidateFilesAsync(
+        string symbol,
+        string branchSide,
+        CancellationToken ct)
+    {
+        var search = await this.SearchCodeAsync(
+            new CodeSearchRequest(symbol, CodeSearchModes.ExactIdentifier, branchSide, RepositorySearchPathScopes.Repository),
+            ct);
+
+        var paths = search.Matches
+            .Select(static m => m.FilePath)
+            .Where(static p => !string.IsNullOrEmpty(p))
+            .Distinct(StringComparer.Ordinal)
+            .ToList();
+
+        return (paths, search.Truncated);
+    }
+
+    private async Task<string?> TryFetchAsync(string file, string branchName, CancellationToken ct)
+    {
+        try
+        {
+            return await this.FetchRawFileContentAsync(this.NormalizePath(file), this.NormalizeBranch(branchName), ct);
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch
+        {
+            return null;
+        }
     }
 
     protected virtual string NormalizeBranch(string branch)

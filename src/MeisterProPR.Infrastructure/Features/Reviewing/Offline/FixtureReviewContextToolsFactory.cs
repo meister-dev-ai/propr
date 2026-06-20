@@ -5,6 +5,7 @@ using MeisterProPR.Application.Features.Reviewing.Execution.Models;
 using MeisterProPR.Application.Features.Reviewing.Execution.Ports;
 using MeisterProPR.Application.Interfaces;
 using MeisterProPR.Application.Options;
+using MeisterProPR.CodeAnalysis;
 using Microsoft.Extensions.Options;
 
 namespace MeisterProPR.Infrastructure.Features.Reviewing.Offline;
@@ -15,11 +16,18 @@ namespace MeisterProPR.Infrastructure.Features.Reviewing.Offline;
 public sealed class FixtureReviewContextToolsFactory(
     IReviewEvaluationFixtureAccessor fixtureAccessor,
     IOptions<AiReviewOptions> options,
-    IProCursorGateway proCursorGateway) : IReviewContextToolsFactory
+    IProCursorGateway proCursorGateway,
+    IStructuralCodeAnalyzer? structuralAnalyzer = null) : IReviewContextToolsFactory
 {
     public IReviewContextTools Create(ReviewContextToolsRequest request)
     {
         var fixture = fixtureAccessor.Fixture ?? throw new InvalidOperationException("No review evaluation fixture is active for this scope.");
-        return new FixtureReviewContextTools(fixture, options, proCursorGateway, request.ClientId, request.KnowledgeSourceIds);
+        return new FixtureReviewContextTools(
+            fixture,
+            options,
+            proCursorGateway,
+            request.ClientId,
+            request.KnowledgeSourceIds,
+            structuralAnalyzer);
     }
 }

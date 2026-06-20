@@ -91,7 +91,7 @@ const vm = useJobProtocolViewModel()
     font-size: 0.85rem;
     padding: 0.3rem 0.75rem;
     border-radius: var(--radius-md);
-    color: var(--color-warning, #f59e0b);
+    color: var(--color-warning);
     background: transparent;
     border: 1px solid rgba(245, 158, 11, 0.35);
     cursor: pointer;

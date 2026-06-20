@@ -197,6 +197,21 @@ public sealed class BoundedReviewContextTools : IReviewContextTools
             () => this._inner.GetProCursorSymbolInfoAsync(symbol, queryMode, maxRelations, ct));
     }
 
+    /// <inheritdoc />
+    public Task<ReferenceLookupResult> FindReferencesAsync(SymbolReferenceQuery query, CancellationToken ct)
+    {
+        // Delegated directly to the inner tools. These lookups are internally bounded
+        // (candidate-file cap, result/char caps, per-operation time budget) and fail-soft, so they do
+        // not need the PR-wide tool-call budget gate the SCM/ProCursor tools carry.
+        return this._inner.FindReferencesAsync(query, ct);
+    }
+
+    /// <inheritdoc />
+    public Task<DefinitionLookupResult> GetDefinitionAsync(SymbolReferenceQuery query, CancellationToken ct)
+    {
+        return this._inner.GetDefinitionAsync(query, ct);
+    }
+
     private bool TryEnterCall(string toolName, string? target, out object? blockedResult)
     {
         if (!this._allowedTools.Contains(toolName))

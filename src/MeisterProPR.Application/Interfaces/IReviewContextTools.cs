@@ -113,4 +113,21 @@ public interface IReviewContextTools
         string? queryMode,
         int? maxRelations,
         CancellationToken ct);
+
+    /// <summary>
+    ///     Resolves confirmed cross-file reference sites for a symbol across the local review
+    ///     workspace, for every supported language. Comment/string matches
+    ///     are excluded by the language backend. Never throws to the review.
+    /// </summary>
+    /// <param name="query">The name-based symbol query.</param>
+    /// <param name="ct">Cancellation token.</param>
+    Task<ReferenceLookupResult> FindReferencesAsync(SymbolReferenceQuery query, CancellationToken ct);
+
+    /// <summary>
+    ///     Resolves definition site(s) for a symbol across the local review workspace, for every
+    ///     supported language. Never throws to the review.
+    /// </summary>
+    /// <param name="query">The name-based symbol query.</param>
+    /// <param name="ct">Cancellation token.</param>
+    Task<DefinitionLookupResult> GetDefinitionAsync(SymbolReferenceQuery query, CancellationToken ct);
 }

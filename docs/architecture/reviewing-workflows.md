@@ -338,7 +338,11 @@ neighborhood files produce explicit not-found limitations.
 
 For the file-based strategies, the common per-file post-processing shape is explicit through Reviewing-owned pipeline profiles and a shared pipeline runner. The `FileByFile` catalog now uses ordered stage composition to express `Calm`, `Balanced`, and `Assertive` behavior without introducing a new top-level orchestrator. `Balanced` keeps the confidence floor and info stripping, while `Assertive` keeps only info stripping plus importance ranking. Ahead of those per-file stages, the shared dispatch path always runs bounded context prefetch and deterministic risk-marker scanning. Risk-marked files then get a specialist augmentation pass, and files that remain silent after baseline plus specialist review can receive one bounded high-risk escalation pass before synthesis finalizes the review.
 
-**Windowed prefetch (R-1, 2026-06-10):** For files larger than `MaxPrefetchRegionChars`, the context-prefetch stage no longer injects the head of the file. Instead it computes new-file line ranges from each diff hunk (via `ReviewDiffProcessor.ExtractChangedNewLineRanges`), expands each range by `PrefetchWindowLinesBefore` (default 40) and `PrefetchWindowLinesAfter` (default 15), snaps the window start upward to the nearest structural boundary line (column-0 non-whitespace or line following a blank — a language-agnostic heuristic; a Tree-sitter resolver is planned for R-6), merges overlapping windows, and renders only those windows with `[lines {start}-{end} of {total}]` markers. The budget cap `MaxPrefetchRegionChars` is enforced across the merged set. The `context_prefetch_applied` trace event now carries `windowCount`, `firstWindowStartLine`, and `windowedInjection` to distinguish the windowed path from whole-file injection.
+**Windowed prefetch (R-1, 2026-06-10):** For files larger than `MaxPrefetchRegionChars`, the context-prefetch stage no longer injects the head of the file. Instead it computes new-file line ranges from each diff hunk (via `ReviewDiffProcessor.ExtractChangedNewLineRanges`), expands each range by `PrefetchWindowLinesBefore` (default 40) and `PrefetchWindowLinesAfter` (default 15), snaps the window start upward to the nearest structural boundary line (column-0 non-whitespace or line following a blank — a language-agnostic heuristic), merges overlapping windows, and renders only those windows with `[lines {start}-{end} of {total}]` markers. The budget cap `MaxPrefetchRegionChars` is enforced across the merged set. The `context_prefetch_applied` trace event now carries `windowCount`, `firstWindowStartLine`, and `windowedInjection` to distinguish the windowed path from whole-file injection.
+
+**Structural boundary resolution (feature 070, R-6, 2026-06-19):** For supported non-C# languages (TypeScript, TSX, JavaScript, Python, Go, Java, Ruby), the heuristic boundary snap above is replaced by an exact structural window. When the file exceeds `MaxPrefetchRegionChars` and the structural feature is enabled, the prefetch stage parses the file via the internal `MeisterProPR.CodeAnalysis.TreeSitter` analyzer (an `IStructuralCodeAnalyzer` adapter over the pinned `TreeSitter.DotNet` grammars), resolves the **enclosing definition** for each changed line range (ancestor walk over per-language `tags.scm` definition captures, innermost-scope filtered, overlapping windows merged), and renders those definition spans with the same `[lines {start}-{end} of {total}]` markers and `MaxPrefetchRegionChars` budget. The analyzer never throws to the stage: a pre-parse size guard (`MaxStructuralParseBytes`), a per-parse wall-clock timeout (`StructuralParseTimeoutMs`), an unsupported language/extension, a parse fault, a startup native-probe failure, or no enclosing definition each return empty so the stage falls back to the heuristic window. The kill-switch `EnableStructuralBoundaryResolution` (default true) forces the heuristic everywhere when off.
+
+The `context_prefetch_applied` trace event is extended (additive, no schema migration) with `boundaryResolver` (`"tree-sitter"` | `"heuristic"`), `enclosingSymbol`, `enclosingKind`, and `fallbackReason` (`analyzer_disabled` | `native_unavailable` | `unsupported_language` | `parse_fault` | `parse_timeout` | `file_too_large` | `no_enclosing_definition`), so an administrator opening a review's execution-protocol trace can read per file whether the injected context was boundary-resolved (and which symbol) or fell back to the heuristic (and why). The same outcome is exported as the `reviewing.prefetch.boundary_outcomes` counter (tagged by `outcome` and `language`).
 
 **LLM self-reflection re-ranking (R-2, 2026-06-10):** `Balanced` and `Assertive` profiles replace `FileByFileImportanceRankingStage` with `FileByFileSelfReflectionRankingStage` (`file-by-file.self-reflection-ranking`). The new stage sends all candidate comments to a compact LLM call with their severity, deterministic score (0–10), and hedging flag, then filters by `ImportanceRankingMinScore` and retains the top `ImportanceRankingKeepTopN`. Any LLM or parse failure falls back to the existing deterministic scorer. The `importance_ranking_applied` trace event records `{candidateCount, keptCount, usedLlm}` for each file.
 
@@ -524,3 +528,46 @@ Protocol diagnostics persist the full captured AI prompt, AI response, and tool 
 event. Recorder sanitization strips embedded null bytes so PostgreSQL can safely store the
 content, but the persisted samples are no longer truncated before they reach the diagnostics API or
 admin UI.
+
+## Unified Code Analysis And Cross-file References
+
+Review-time code analysis is served by a single abstraction in the `MeisterProPR.CodeAnalysis` project:
+the `IStructuralCodeAnalyzer` port, the generic value types (parse request, definition, enclosing
+definition, reference site, language, fallback reason), and a `CompositeStructuralCodeAnalyzer` router.
+The composite dispatches each call to the first backend whose `CanAnalyze(path)` is true:
+
+- **Tree-sitter backend** (`MeisterProPR.CodeAnalysis.TreeSitter`) — TS/TSX/JS/Py/Go/Java/Ruby, syntactic.
+- **Roslyn-syntax backend** (`MeisterProPR.CodeAnalysis.Roslyn`) — C#, via `CSharpSyntaxTree.ParseText`
+  (per-file, no compilation, no ProCursor index). Name-based floor; semantic resolution is deferred.
+
+Every review-time consumer resolves the composite as `IStructuralCodeAnalyzer`: the file-by-file
+within-file context prefetch, the new AI-callable tools, and the `search_code` `related_symbol` path.
+Results carry a `ResolutionMode` (`NameBased` / `Semantic`) label.
+
+### Cross-file reference tools
+
+Two AI-callable tools are registered for **all** languages (outside the ProCursor gate, so they coexist
+with the C#-only `get_procursor_symbol_info`), gated by the `EnableStructuralReferenceTools` kill-switch:
+
+- `find_references(symbol, branchSide?)` — confirmed cross-file usage sites (file + line), with comment
+  and string occurrences excluded by the language backend.
+- `get_definition(symbol, branchSide?)` — definition site(s) (kind, name, file, line range).
+
+Both scan candidate files in-process via `RepositoryCodeSearchExecutor`, confirm each through
+the backend's `ConfirmReferenceLinesAsync` / `GetDefinitionsAsync`, and return bounded results
+(`MaxReferenceCandidateFiles`, `MaxReferenceResults`, `MaxReferenceResultChars`,
+`ReferenceResolutionTimeoutMs`) with a truncation flag. They never throw to the review (fail-soft to an
+unavailable/empty result). The `search_code` `related_symbol` mode post-filters its substring matches
+through the same confirmation so it stops returning comment/string noise; with the kill-switch off it keeps
+its prior substring behavior.
+
+### Deterministic caller-evidence feed
+
+Independent of whether the model calls a tool, the file-by-file prefetch stage derives the **changed
+definitions** in a changed file (the composite's `ResolveEnclosingDefinitionsAsync` over the diff's changed
+ranges) and injects a bounded set of confirmed cross-file caller sites (`supported_caller_site` evidence,
+capped by `MaxPrefetchCallerSites`) for those symbols. This re-enables the contract-change check across all
+languages without depending on tool adoption. New tool invocations and their bounded results are recorded as
+protocol events and surface in the existing diagnostics trace tab.
+
+All options are environment-bound via `AI_*` variables, mirroring the feature-070 binding pattern.

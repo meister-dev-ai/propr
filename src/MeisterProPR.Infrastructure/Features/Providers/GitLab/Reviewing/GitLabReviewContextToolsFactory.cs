@@ -4,6 +4,7 @@
 using MeisterProPR.Application.Features.Reviewing.Execution.Models;
 using MeisterProPR.Application.Interfaces;
 using MeisterProPR.Application.Options;
+using MeisterProPR.CodeAnalysis;
 using MeisterProPR.Domain.Enums;
 using MeisterProPR.Infrastructure.Features.Providers.Common;
 using MeisterProPR.Infrastructure.Features.Reviewing.Execution;
@@ -15,7 +16,8 @@ namespace MeisterProPR.Infrastructure.Features.Providers.GitLab.Reviewing;
 internal sealed class GitLabReviewContextToolsFactory(
     IProCursorGateway proCursorGateway,
     IOptions<AiReviewOptions> options,
-    ILoggerFactory loggerFactory) : IProviderReviewContextToolsFactory
+    ILoggerFactory loggerFactory,
+    IStructuralCodeAnalyzer? structuralAnalyzer = null) : IProviderReviewContextToolsFactory
 {
     public ScmProvider Provider => ScmProvider.GitLab;
 
@@ -31,6 +33,7 @@ internal sealed class GitLabReviewContextToolsFactory(
             proCursorGateway,
             options,
             request,
-            loggerFactory.CreateLogger<LocalGitReviewContextTools>());
+            loggerFactory.CreateLogger<LocalGitReviewContextTools>(),
+            structuralAnalyzer);
     }
 }
