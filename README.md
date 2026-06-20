@@ -1,319 +1,66 @@
 <p align="center">
   <img src="resources/images/logo.png" alt="ProPR" width="180">
   <br>
-  <em>AI-powered code review across Azure DevOps, GitHub, GitLab, and Forgejo-family providers</em>
+  <em>AI code review for Azure DevOps, GitHub, GitLab, and Forgejo</em>
 </p>
 
 <p align="center">
   <a href="https://github.com/meister-dev-ai/propr/actions/workflows/ci.yml"><img src="https://github.com/meister-dev-ai/propr/actions/workflows/ci.yml/badge.svg?branch=main" alt="CI"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-ELv2-blue.svg" alt="License: ELv2"></a>
   <img src="https://img.shields.io/badge/.NET-10-512BD4?logo=dotnet" alt=".NET 10">
-</p>
-
-<p align="center">
-  <a href="https://techcommunity.microsoft.com/blog/azure-events/announcing-the-ai-dev-days-hackathon-winners/4513528">
-    <img src="https://img.shields.io/badge/🏆%20AI%20Dev%20Days%20Hackathon-Best%20Enterprise%20Solution-gold?style=for-the-badge" alt="AI Dev Days Hackathon — Best Enterprise Solution">
-  </a>
+  <a href="https://techcommunity.microsoft.com/blog/azure-events/announcing-the-ai-dev-days-hackathon-winners/4513528"><img src="https://img.shields.io/badge/🏆%20AI%20Dev%20Days-Best%20Enterprise%20Solution-gold" alt="AI Dev Days Hackathon — Best Enterprise Solution"></a>
 </p>
 
 ---
 
-> **🏆 [Best Enterprise Solution — Microsoft AI Dev Days Hackathon](https://techcommunity.microsoft.com/blog/azure-events/announcing-the-ai-dev-days-hackathon-winners/4513528)**
-> Recognised among global teams for helping engineering teams catch security and compliance issues earlier - right inside the PR flow.
+ProPR reviews your pull and merge requests with AI, right where your code already lives. It reads
+the changed files, comments on specific lines, and posts a summary — either automatically as PRs
+come in, or on demand from CI.
 
----
+## What we care about
 
-Meister DEV's ProPR automates your pull and merge request reviews, ensuring high code quality and security standards without slowing down your team.
+- **Your code stays where it is.** Reviews run against Azure DevOps, GitHub, GitLab, and
+  Forgejo-family hosts. No mirroring your repos somewhere else.
+- **Your AI, your keys.** Bring your own model (currently Microsoft Foundry-hosted models). ProPR
+  doesn't ship a model or route your code through ours.
+- **Self-hostable and sovereign.** Run the whole stack yourself. Provider and AI credentials are
+  scoped per client and protected at rest.
+- **Every decision is on the record.** Reviews, AI calls, tool calls, filter decisions, and timing
+  are all stored and inspectable from the management UI — no log spelunking.
+- **Built to stay out of the way.** Token-aware reviews, per-file passes, and relevance filtering
+  keep the signal high and the cost down.
 
----
+## Get started
 
-## Features
-
-### Core Capabilities
-
-- **AI code reviews across supported SCM providers** - The reviewer can inspect changed files in Azure DevOps, GitHub, GitLab, and Forgejo-family reviews, comment on specific lines, and provide an overall summary of the findings
-- **Per-file agentic review** — each changed file gets its own AI pass with tool-calling for cross-file investigation
-- **Automatic crawling** — background worker polls for PRs assigned to a configured reviewer
-- **Beautiful UI** - The UI is tailored towards efficient triage of review comments, with a summary dashboard, file tree sidebar, and token consumption aggregates
-- **Mixed-provider operations** — provider connections expose authoritative readiness separate from onboarding verification, plus connection-scoped status, verification history, webhook delivery logs, and categorized failures in the frontend
-- **GitHub App installation support** - GitHub provider connections can authenticate with either PATs or installed GitHub Apps, with private keys protected at rest and installation tokens minted on demand
-
-### BYOAI
-
-- Supported AI-Connections:
-    - **Microsoft Foundry Models** — connect to Foundry-hosted models with your own API key; supports all Foundry-hosted models that support the responses API.
-    - More AI connection types coming soon — feel free to contribute or contact us if you want to see a specific provider supported!
-
-### Review Optimizations
-
-- **Token-optimized reviews** — diff-only input (full file available on demand via tool call), cache-friendly stable-prefix ordering, cached/effective input diagnostics, bounded tool-result replay, tier-sized output budgets, and explicit finalization-attempt reporting
-- **Local git-backed review workspaces** — repository-content inspection now hydrates a commit-pinned local workspace per review job across Azure DevOps, GitHub, GitLab, and Forgejo-family providers, reducing repeated provider content reads while keeping provider APIs for metadata and publication
-- **ProRV-focused review guidance** — an optional per-file ProRV prefilter ranks relevant review checks from the changed diff and feeds focused guidance into baseline and agentic file review before verification and publication
-- **Per-automation temperature control** - crawl configurations and webhook configurations can override the review temperature with a value between `0.0` and `2.0`
-- **Comment relevance filtering** — optional code-selected `heuristic-v1` and `hybrid-v1` per-file filters run after the existing hard guards and before thread memory, persistence, synthesis, and publication; each pass records the same comparison-friendly output shape plus filter AI token usage when hybrid adjudication runs
-- **Verification-backed publication control** — structured claim extraction, local contradiction checks, PR-level evidence attempt recording, bounded AI micro-verification, and deterministic final gating reduce false positives without replacing the existing staged review flow; support hints and fetched files do not publish broad findings without explicit supported claim outcomes
-- **Selectable file-by-file review profiles** — clients can persist a default file-by-file aggressiveness profile, with `Balanced` as the system baseline and `Calm`/`Assertive` available through the reviewing profile catalog
-- **Risk-aware follow-up passes** — deterministic security and concurrency markers trigger a specialist second look, and silent high-risk files get one bounded escalation pass before the review accepts zero findings
-- **Fixed-evidence repeated judgment for uncertain follow-up findings** — selected unresolved deeper-follow-up findings can get one extra bounded judgment over the same evidence set; disagreement stays non-publishable and is visible in diagnostics
-- **Intelligent review summary** - The reviewer generates a concise summary of the review findings, which is posted as a comment and displayed in the frontend
-- **Per-client and per Crawl Config prompt overrides** - Override predefined prompts to improve the AI output towards specific use cases
-
-### Privacy
-
-- **Per-user authentication** — username/password login with 15-minute JWT + 7-day refresh tokens; no shared secrets
-- **Tenant-scoped sign-in** — each tenant exposes only its own enabled local-login policy and external identity providers, with least-privilege auto-provisioning for first-time external users
-- **Personal access tokens** — users can issue scoped PATs for CI pipelines (`mpr_…` prefix) to submit reviews without crawling
-- **Per-client dismissals** - Dismiss specific findings for a client, preventing them from appearing in future reviews
-
-### Data sovereignty
-
-- **Per-client provider credentials** — each client can isolate Azure DevOps Services OAuth credentials, Azure DevOps Server PAT or Windows-account credentials, plus protected GitHub, GitLab, or Forgejo-family connection secrets at the connection level; GitHub App private keys stay encrypted at rest and installation tokens are not persisted
-- **Job persistence + recovery mechanism** — review jobs survive restarts; stuck processing jobs auto-recovered
-
-### Traceability
-
-- **File exclusion rules** — generated files (EF Core migrations etc.) are skipped automatically; per-repo custom patterns via `.meister-propr/exclude` on the target branch using gitignore-style globs; excluded files are recorded in the audit trail with zero token cost
-- **Review history** - all reviews, protocols, comments, calls to AI, tools and more are store and can be checked from the management interface
-- **Filter decision diagnostics** — job protocol inspection shows per-file comment-relevance events, discarded-comment reasons, degraded fallback markers, implementation identity, and any hybrid evaluator token cost without reading raw logs
-- **Verification diagnostics** — job protocol inspection also shows ProRV prefilter execution, focused-guidance application, claim extraction, local verification, evidence-source attempts, ProCursor result status, degraded verification states, final-gate decisions, and summary reconciliation for each review run
-- **Strategy and file-outcome diagnostics** — review history and job protocol views expose the resolved review strategy, strategy-selection source, and per-file terminal outcomes, including degraded `Agentic File-by-File` investigations
-- **Profile and risk-pass diagnostics** — job protocol inspection records `review_profile_selected`, `security_specialist_pass_ran`, `high_risk_escalation_ran`, and `zero_candidate_high_risk` so operators can see which aggressiveness profile ran and when risk-driven follow-up passes executed
-- **Follow-up and repeated-judgment diagnostics** — job protocol views expose trigger family, follow-up completion/dependency, and repeated-judgment agreement or disagreement details so rollout reviews can distinguish diagnostics from actionable output
-- **Token optimization diagnostics** — job protocol views expose cache observability, per-call raw/cached/effective input, bounded tool-evidence replay, and forced-final or repair attempt reasons so operators can separate provider cache behavior from prompt/replay reductions
-- **Execution-trace timing diagnostics** — job protocol views expose per-tool start/end time, total duration, optional wait-versus-active split, repository-search phase timing, and slowest-call comparison cues across visible passes without requiring raw logs
-- **Workspace adoption diagnostics** — review status and Job Protocol views expose whether a local review workspace was prepared, whether the run fell back to remote provider inspection, and any structured workspace failure stage/code/message details
-- **Token usage dashboard** — per-client AI token consumption tracked by model and date
-
-### Knowledge
-
-- **Contextual tool calls** — the reviewer can call tools to retrieve additional context about the PR, such as fetching the full file content, listing changed files, other PR data and ProCursor
-- **ProCursor** - Knowledge indexing with source freshness, safe event logs, and symbol-aware retrieval for deep context beyond the diff; ProCursor is used by the AI reviewer to make better assessments and suggestions, and is also available as a standalone API for your own custom tools and agents
-
----
-
-## Limitations
-
-- **Provider coverage is intentionally narrow** — Azure DevOps, GitHub, GitLab, and Forgejo-family hosts are supported; Bitbucket and other SCM providers are not yet
-- **No auto-fixes** - the reviewer can suggest code changes but cannot apply them directly as PR commits or suggestions; all fixes must be manually applied by the developer (yet)
-
----
-
-## Quick Start
+The fastest path is the example Docker Compose stack:
 
 ```bash
-# 1. Create a minimal .env file (see docs/getting-started.md for setup guidance)
-cat > .env <<'EOF'
-MEISTER_JWT_SECRET=<random-32+-char-string>
-PROCURSOR_SHARED_KEY=<random-32+-char-string>
-MEISTER_BOOTSTRAP_ADMIN_USER=admin
-MEISTER_BOOTSTRAP_ADMIN_PASSWORD=<strong-password>
-MEISTER_PUBLIC_BASE_URL=https://localhost:5443/api
-EOF
-
-# 2. Start the full local stack (examples)
-
-# From repository root: specify compose file and env file explicitly
-docker compose --env-file .env -f example/docker-compose/docker-compose.yml up --build
-
-# Or run from the example directory (compose will read that directory's .env automatically)
 cd example/docker-compose
 docker compose up --build
-
-# 3. Verify the public API
-curl -k https://localhost:5443/api/healthz
 ```
 
-Open `https://localhost:5443/` for the frontend.
+Then open `https://localhost:5443/`.
 
-The default compose topology now runs three application processes: `meisterpropr` (public control plane),
-`procursor` (internal execution service), and `frontend`. ProPR talks to ProCursor over the internal
-compose network with the shared `PROCURSOR_SHARED_KEY` carried in `X-ProCursor-Key`.
-
-Release artifacts follow the same split. Published runtime images are:
-
-- `ghcr.io/meister-dev-ai/propr:<tag>` for the ProPR API/control plane
-- `ghcr.io/meister-dev-ai/propr/procursor:<tag>` for the extracted internal ProCursor host
-- `ghcr.io/meister-dev-ai/propr/frontend:<tag>` for the frontend
-
-Stable releases publish both `<tag>` and `latest` for all three images. Pre-releases publish only the
-versioned tag.
-
-The `curl -k` examples in this repository are intended for local development against the
-self-signed `https://localhost:5443` endpoint only.
-
-For targeted ProCursor build and test validation, use the ProCursor service project and its dedicated
-test project directly:
-
-- `dotnet build src/MeisterProPR.ProCursor.Service/MeisterProPR.ProCursor.Service.csproj`
-- `dotnet test tests/MeisterProPR.ProCursor.Service.Tests/MeisterProPR.ProCursor.Service.Tests.csproj`
-
-The default compose stack mounts a shared named volume for the ASP.NET Core Data Protection key ring
-at `/app/.data-protection-keys` on both `meisterpropr` and `procursor`. That shared mount is a
-deployment convenience for the example topology, not a corrected-architecture requirement. ProPR and
-ProCursor may use independent key-ring stores as long as each service can still decrypt the secrets it
-owns.
-
-Azure DevOps integrations are configured through provider connections: add the provider connection,
-choose the supported auth mode for the host variant, add the organization scope, and confirm the
-reviewer identity on that connection before enabling crawl or webhook automation. Hosted Azure
-DevOps Services uses OAuth client credentials. Self-hosted Azure DevOps Server uses either a PAT or
-an explicit Windows user account plus password. The reviewer identity is only an optional
-trigger/filter for automatic PR processing. Posting uses the authenticated provider connection
-identity.
-
-For on-premises Azure DevOps Server onboarding:
-
-1. Expose the server over `https://`.
-2. Confirm the HTTPS endpoint is reachable from the runtime that hosts ProPR.
-3. Trust the Azure DevOps Server certificate chain inside that runtime as well as on the browser or host OS.
-4. Create one `azureDevOps` provider connection with the server root URL, for example `https://ado-server.example.com/tfs`.
-5. Choose either `personalAccessToken` or `windowsUserAccount`.
-6. Add one enabled `organization` scope that points to the actual collection URL, for example `https://ado-server.example.com/tfs/DefaultCollection`.
-7. Run verification, then resolve and save the reviewer identity on that connection.
-
-PAT and explicit Windows-account Azure DevOps Server auth both run through the Azure DevOps .NET/VSS
-client basic-auth path, which requires TLS. If ProPR runs in Linux, WSL, or containers, trusting the
-certificate only in the Windows browser or host OS is not sufficient. The runtime that executes ProPR
-must trust the certificate too. For Azure DevOps Server `windowsUserAccount`, use the server-recognized
-Windows login format such as `CONTOSO\ado-user`. ProPR enables managed NTLM for Linux and WSL runtimes,
-so extra packages such as `gss-ntlmssp` are only a fallback if Windows-auth verification still fails.
-See `docs/provider-connections.md` for the full on-prem onboarding flow.
-
-For source-based development without Docker, `./scripts/run-local.sh` now generates one per-run shared
-ProCursor key, starts `MeisterProPR.Api`, waits for its health endpoint, starts
-`MeisterProPR.ProCursor.Service`, waits for its health endpoint, and then starts the frontend. The
-script defaults `PROCURSOR_DB_CONNECTION_STRING` to `DB_CONNECTION_STRING` for the extracted host so
-the local topology can reuse one physical PostgreSQL database while still keeping the control-plane and
-ProCursor operational ownership boundaries separate.
-
-When `OTLP_ENDPOINT` is configured, both hosts emit OTLP traces for ASP.NET Core and `HttpClient`
-activity with distinct service names, `MeisterProPR.Api` and `MeisterProPR.ProCursor.Service`, and
-continue exposing Prometheus metrics locally.
-
-See [docs/getting-started.md](docs/getting-started.md) for frontend setup and
-[docs/api.md](docs/api.md) for API examples.
-
----
-
-## Admin Authentication
-
-Access to the admin API and frontend requires a per-user account. On first startup the server
-seeds an admin account from the bootstrap env vars:
-
-```bash
-MEISTER_BOOTSTRAP_ADMIN_USER=admin
-MEISTER_BOOTSTRAP_ADMIN_PASSWORD=<strong-password>
-MEISTER_JWT_SECRET=<random-32+-char-string>
-```
-
-Log in via `POST /api/auth/login` to receive a 15-minute JWT access token and a 7-day refresh token
-when you are calling the default nginx front door on `https://localhost:5443/`. The frontend handles
-token refresh automatically.
-
-## Tenant-Scoped SSO And Recovery
-
-Tenant users sign in through the tenant login route and the related tenant auth endpoints. Each tenant controls:
-
-- whether local username/password sign-in is available,
-- which external providers are enabled, and
-- which email domains are allowed for first-time external provisioning.
-
-Tenant administrators manage those settings and memberships under `/admin/tenants/{tenantId}/...`. Platform administrators stay outside tenant-local policy and always retain the recovery sign-in path at `/auth/login`.
-
----
-
-## Licensing And Editions
-
-ProPR uses one ELv2-licensed source tree.
-
-- Some files in the source tree implement commercial-only functionality.
-- Those files may be present in the public source tree and may ship in community or self-hosted artifacts.
-- Their presence does not grant the right to activate or use commercial-only features.
-- Self-hosting does not grant the right to use commercial-only features without a commercial license.
-
-Every installation starts in `Community` edition by default. Community mode is intended to be safe for
-fresh deployments and small self-hosted setups:
-
-- Username/password sign-in remains available.
-- Only one active PR review job may be pending or processing at a time.
-- Only one active SCM provider connection may be configured at a time.
-
-Commercial edition keeps all Community behavior and unlocks the current premium capability set, but using those
-commercial-only capabilities requires a commercial license even for self-hosted deployments:
-
-- Single sign-on (`sso-authentication`)
-- Parallel review execution (`parallel-review-execution`)
-- Multiple SCM providers (`multiple-scm-providers`)
-- Crawl configurations (`crawl-configs`)
-
-The admin API and frontend expose the installation's configured product edition through `Settings -> Licensing`,
-`GET /api/admin/licensing`, and `PATCH /api/admin/licensing`.
-
-That product setting is not, by itself, a commercial license grant. The authoritative licensing guidance is
-defined in `LICENSE`, `LICENSING.md`, and `COMMERCIAL.md`.
-
-Before sign-in, the login screen calls `GET /api/auth/options` for generic auth bootstrap data.
-Today that means edition plus password sign-in availability; future sign-in methods such as SSO can
-extend the same contract without replacing the route.
-
-For the internal processing flow and the implementation checklist for new licensed features, see
-[docs/architecture/licensing-and-feature-flags.md](docs/architecture/licensing-and-feature-flags.md).
-
----
-
-## Key Environment Variables
-
-| Variable                           | Required      | Description                                                                     |
-|------------------------------------|---------------|---------------------------------------------------------------------------------|
-| `DB_CONNECTION_STRING`             | Yes           | PostgreSQL connection string; required for all persistent state                 |
-| `MEISTER_DATA_PROTECTION_KEYS_PATH`| Docker default| File-system path used for the ASP.NET Core Data Protection key ring             |
-| `MEISTER_PUBLIC_BASE_URL`          | Optional      | Public external API base URL used for webhook listener URLs and tenant SSO callback redirects behind proxies |
-| `MEISTER_JWT_SECRET`               | Yes           | HS256 signing secret — minimum 32 characters                                    |
-| `MEISTER_BOOTSTRAP_ADMIN_USER`     | Yes           | Username for the initial admin account seeded on first startup                  |
-| `MEISTER_BOOTSTRAP_ADMIN_PASSWORD` | Yes           | Password for the initial admin account                                          |
-| `PROCURSOR_REMOTE_MODE`            | Optional      | ProPR-side ProCursor mode. Use `proprManagedRemote` for the extracted service or `disabled` to omit ProCursor from review tools |
-| `PROCURSOR_SERVICE_BASE_URL`       | Remote mode   | Internal ProPR -> ProCursor base URL                                            |
-| `PROCURSOR_PROPR_BASE_URL`         | ProCursor host| Internal ProCursor -> ProPR broker base URL                                     |
-| `PROCURSOR_DB_CONNECTION_STRING`   | ProCursor host| ProCursor-owned operational-state connection string; required by the extracted ProCursor host only; may target the same PostgreSQL server/database as ProPR or a separate one |
-| `PROCURSOR_SHARED_KEY`             | Remote mode   | Shared symmetric key used in the `X-ProCursor-Key` header in both directions    |
-
-See [docs/getting-started.md](docs/getting-started.md) for the bootstrap setup values.
-
----
+That's the short version — the [getting-started guide](docs/getting-started.md) covers the required
+environment variables, first-login bootstrap, and connecting your first provider and AI model.
 
 ## Documentation
 
-| Document | Description |
+| Document | What's in it |
 |---|---|
-| [docs/getting-started.md](docs/getting-started.md) | Frontend setup guide: deploy, bootstrap, and configure clients |
-| [docs/provider-connections.md](docs/provider-connections.md) | Provider connection guide: auth modes, required fields, provider scopes, and where to get each value |
-| [docs/api.md](docs/api.md) | Technical API reference and curl examples |
-| [docs/architecture.md](docs/architecture.md) | Architecture overview and links to focused subsystem docs |
-| [docs/architecture/licensing-and-feature-flags.md](docs/architecture/licensing-and-feature-flags.md) | Licensing resolution flow, feature flag integration, and the checklist for new licensed features |
+| [Getting started](docs/getting-started.md) | Deploy, bootstrap, and configure your first client |
+| [Provider connections](docs/provider-connections.md) | Auth modes and onboarding per SCM provider, including on-prem Azure DevOps Server |
+| [API reference](docs/api.md) | Endpoints and `curl` examples for automation |
+| [Architecture](docs/architecture.md) | System shape and subsystem deep-dives |
+| [Licensing & feature flags](docs/architecture/licensing-and-feature-flags.md) | How editions and licensed features resolve |
 
----
+## License
 
-## Running Tests
+ProPR is distributed under the Elastic License 2.0. Some features in the tree are commercial-only and
+require a license to use, even when self-hosted.
 
-```bash
-dotnet test
-```
-
-Infrastructure integration tests that require PostgreSQL are in the `PostgresIntegration` collection.
-They can run against either:
-
-- `DB_CONNECTION_STRING` pointing at a PostgreSQL 17 instance with `pgvector` available
-- a local Docker-compatible runtime that Testcontainers can reach
-
-On Linux, the infrastructure test fixture now auto-detects the common rootless Podman socket
-at `/run/user/1000/podman/podman.sock` when `DOCKER_HOST` is unset. If your local container
-runtime uses a different socket, set `DOCKER_HOST` explicitly before running `dotnet test`.
-
----
-
-## License · Security · Contributing
-
-- [Elastic License 2.0 and commercial capability notice](LICENSE) — repository-wide source license and commercial capability notice
-- [Licensing Map](LICENSING.md) — path-by-path capability classification and activation/use guidance
-- [Commercial Terms](COMMERCIAL.md) — when a commercial license is required, including self-hosted commercial-only use
-- [Security Policy](SECURITY.md) — report vulnerabilities privately
+- [LICENSE](LICENSE) — repository-wide source license
+- [LICENSING.md](LICENSING.md) — path-by-path capability classification
+- [COMMERCIAL.md](COMMERCIAL.md) — when a commercial license is required
+- [SECURITY.md](SECURITY.md) — reporting vulnerabilities
+- [CONTRIBUTING.md](CONTRIBUTING.md) — how to contribute
