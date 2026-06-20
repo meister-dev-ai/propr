@@ -75,6 +75,11 @@ coverage/
 playwright-report/
 test-results/
 frontend/node_modules/
+
+# Exception: the `build/` rule above targets frontend output, but this is a hand-authored
+# MSBuild targets file the TreeSitter project <Import>s and must be committed (CI needs it).
+!src/MeisterProPR.CodeAnalysis.TreeSitter/build/
+!src/MeisterProPR.CodeAnalysis.TreeSitter/build/*.targets
 frontend/dist/
 frontend/build/
 frontend/coverage/

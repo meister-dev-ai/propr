@@ -1,0 +1,64 @@
+<Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+
+    <!--
+        Publish-time native prune for the TreeSitter.DotNet package (research.md R5).
+
+        Upstream ships ~28+ grammar native libraries per RID across 8 RIDs (~51 MB total).
+        This feature only uses the core tree-sitter library plus 6 grammars
+        (typescript, tsx, javascript, python, go, java, ruby) on the two worker RIDs
+        (linux-x64, linux-arm64). This target drops unused native assets from the
+        publish output after the SDK has laid them down, so the worker image stays
+        bounded. No native build matrix, no fork.
+
+        Runs only at publish time (when _NativePruneEnabled is true). Build-time
+        behavior (dotnet build) is unchanged so dev/test loops keep every grammar
+        available, which is useful for local cross-language tests.
+
+        Native file naming on Linux follows the dlopen convention with a `lib` prefix:
+            libtree-sitter.so            (core)
+            libtree-sitter-javascript.so (per-language)
+        Windows builds use no `lib` prefix but the worker is Linux-only (FR-004), so
+        only the Linux patterns are enumerated below.
+    -->
+
+    <PropertyGroup>
+        <_TreeSitterKeptGrammars Condition="'$(_TreeSitterKeptGrammars)' == ''">typescript;tsx;javascript;python;go;java;ruby</_TreeSitterKeptGrammars>
+        <_TreeSitterKeptRids Condition="'$(_TreeSitterKeptRids)' == ''">linux-x64;linux-arm64</_TreeSitterKeptRids>
+        <_NativePruneEnabled Condition="'$(PublishDir)' != '' AND '$(SelfContained)' != 'false'">true</_NativePruneEnabled>
+        <_NativePruneEnabled Condition="'$(_NativePruneEnabled)' == ''">false</_NativePruneEnabled>
+    </PropertyGroup>
+
+    <Target Name="PruneUnusedTreeSitterNativeAssets"
+            AfterTargets="PublishFiles"
+            Condition="'$(_NativePruneEnabled)' == 'true'">
+        <ItemGroup>
+            <_TreeSitterNativeFiles Include="$(PublishDir)runtimes\linux-x64\native\*.so" />
+            <_TreeSitterNativeFiles Include="$(PublishDir)runtimes\linux-arm64\native\*.so" />
+            <_TreeSitterKeepFiles Include="$(PublishDir)runtimes\linux-x64\native\libtree-sitter.so" />
+            <_TreeSitterKeepFiles Include="$(PublishDir)runtimes\linux-arm64\native\libtree-sitter.so" />
+            <_TreeSitterKeepFiles Include="$(PublishDir)runtimes\linux-x64\native\libtree-sitter-%(_TreeSitterKeptGrammars.Identity).so" />
+            <_TreeSitterKeepFiles Include="$(PublishDir)runtimes\linux-arm64\native\libtree-sitter-%(_TreeSitterKeptGrammars.Identity).so" />
+        </ItemGroup>
+
+        <ItemGroup>
+            <_TreeSitterPruneFiles Include="@(_TreeSitterNativeFiles)" Exclude="@(_TreeSitterKeepFiles)" />
+        </ItemGroup>
+
+        <Delete Files="@(_TreeSitterPruneFiles)"
+                ContinueOnError="true" />
+
+        <ItemGroup>
+            <_TreeSitterUnusedRidDirs Include="$(PublishDir)runtimes\win-x64\" />
+            <_TreeSitterUnusedRidDirs Include="$(PublishDir)runtimes\win-x86\" />
+            <_TreeSitterUnusedRidDirs Include="$(PublishDir)runtimes\win-arm64\" />
+            <_TreeSitterUnusedRidDirs Include="$(PublishDir)runtimes\linux-x86\" />
+            <_TreeSitterUnusedRidDirs Include="$(PublishDir)runtimes\linux-arm\" />
+            <_TreeSitterUnusedRidDirs Include="$(PublishDir)runtimes\osx-x64\" />
+            <_TreeSitterUnusedRidDirs Include="$(PublishDir)runtimes\osx-arm64\" />
+        </ItemGroup>
+
+        <RemoveDir Directories="@(_TreeSitterUnusedRidDirs)"
+                   ContinueOnError="true" />
+    </Target>
+
+</Project>
