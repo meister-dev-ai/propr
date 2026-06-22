@@ -1,4 +1,4 @@
-# AI assistant instruction files (kept locally, managed via speckit)
+# AI assistant instruction files
 CLAUDE.md
 GEMINI.md
 
@@ -51,6 +51,10 @@ packages/
 # Speckit / feature specs
 .specify/
 specs
+
+# Bmad
+_bmad/
+_bmad-output/
 
 # Claude / Copilot / Gemini
 .claude
