@@ -11,6 +11,7 @@ using MeisterProPR.Infrastructure.Repositories;
 using MeisterProPR.Infrastructure.Services;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -47,6 +48,9 @@ public sealed class AiConnectionRepositoryTests
     {
         var options = new DbContextOptionsBuilder<MeisterProPRDbContext>()
             .UseInMemoryDatabase(Guid.NewGuid().ToString())
+            // ActivateAsync wraps its writes in a transaction; the InMemory provider ignores
+            // transactions and otherwise throws TransactionIgnoredWarning.
+            .ConfigureWarnings(w => w.Ignore(InMemoryEventId.TransactionIgnoredWarning))
             .Options;
         return new MeisterProPRDbContext(options);
     }

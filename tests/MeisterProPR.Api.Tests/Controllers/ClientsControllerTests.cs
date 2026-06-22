@@ -19,6 +19,7 @@ using MeisterProPR.Infrastructure.Repositories;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.EntityFrameworkCore.Storage;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
@@ -863,7 +864,10 @@ public sealed class ClientsControllerTests(ClientsControllerTests.ClientsApiFact
                 // Provide an in-memory EF Core DB backing IClientAdminService.
                 // The explicit InMemoryDatabaseRoot guarantees all context instances share the same store.
                 services.AddDbContext<MeisterProPRDbContext>(opts =>
-                    opts.UseInMemoryDatabase(dbName, dbRoot));
+                    opts.UseInMemoryDatabase(dbName, dbRoot)
+                        // ActivateAsync wraps writes in a transaction; the InMemory provider
+                        // ignores transactions and otherwise throws TransactionIgnoredWarning.
+                        .ConfigureWarnings(w => w.Ignore(InMemoryEventId.TransactionIgnoredWarning)));
                 services.AddScoped<IClientAdminService, ClientAdminService>();
                 services.AddScoped<IClientAdoOrganizationScopeRepository, ClientAdoOrganizationScopeRepository>();
                 services.AddScoped<IAiConnectionRepository, AiConnectionRepository>();
@@ -1095,7 +1099,10 @@ public sealed class ClientsControllerJwtTests(ClientsControllerJwtTests.ClientsJ
                 services.AddSingleton(Substitute.For<IAssignedReviewDiscoveryService>());
 
                 services.AddDbContext<MeisterProPRDbContext>(opts =>
-                    opts.UseInMemoryDatabase(dbName, dbRoot));
+                    opts.UseInMemoryDatabase(dbName, dbRoot)
+                        // ActivateAsync wraps writes in a transaction; the InMemory provider
+                        // ignores transactions and otherwise throws TransactionIgnoredWarning.
+                        .ConfigureWarnings(w => w.Ignore(InMemoryEventId.TransactionIgnoredWarning)));
                 services.AddScoped<IClientAdminService, ClientAdminService>();
                 services.AddScoped<IClientAdoOrganizationScopeRepository, ClientAdoOrganizationScopeRepository>();
 

@@ -204,16 +204,33 @@ public sealed class AiConnectionRepository(
             .Where(profile => profile.ClientId == target.ClientId && profile.IsActive && profile.Id != connectionId)
             .ToListAsync(ct);
 
-        foreach (var other in others)
+        // Only one profile per client may be active: the database enforces this with a partial unique index
+        // on client_id (filtered to is_active = true). PostgreSQL checks that index after every single
+        // statement and the check cannot be deferred to the end of the transaction. If we deactivated the old
+        // profile and activated the new one in the same SaveChanges, EF Core might send the "activate" UPDATE
+        // before the "deactivate" one (it orders same-table writes by key value), leaving two rows active for
+        // the client for an instant -- which the index rejects as a duplicate (PostgreSQL unique_violation,
+        // error 23505). So deactivate the old profile and save that first, then activate the target and save,
+        // wrapping both in one transaction so the switch is still all-or-nothing.
+        var now = DateTimeOffset.UtcNow;
+        await using var transaction = await dbContext.Database.BeginTransactionAsync(ct);
+
+        if (others.Count > 0)
         {
-            other.IsActive = false;
-            other.UpdatedAt = DateTimeOffset.UtcNow;
+            foreach (var other in others)
+            {
+                other.IsActive = false;
+                other.UpdatedAt = now;
+            }
+
+            await dbContext.SaveChangesAsync(ct);
         }
 
         target.IsActive = true;
-        target.UpdatedAt = DateTimeOffset.UtcNow;
-
+        target.UpdatedAt = now;
         await dbContext.SaveChangesAsync(ct);
+
+        await transaction.CommitAsync(ct);
         return true;
     }
 
