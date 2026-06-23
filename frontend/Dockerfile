@@ -16,7 +16,7 @@ RUN npx openapi-typescript ./openapi.json -o src/services/generated/openapi.ts
 RUN npm run build
 
 # Stage 2: Serve
-FROM docker.io/library/nginx:alpine@sha256:d565d19ef132a5834f5897f602831ad2e40a36c26c625f2f94f9b3fdf0ed292d
+FROM docker.io/library/nginx:alpine@sha256:1a8724a52d432501548a8d8681bb1554c2d09778f8b9ed0882fc3442549980b7
 COPY frontend/nginx.conf /etc/nginx/conf.d/default.conf
 COPY --from=builder /app/dist /usr/share/nginx/html
 EXPOSE 80
