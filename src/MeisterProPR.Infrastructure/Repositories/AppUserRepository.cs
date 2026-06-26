@@ -72,6 +72,11 @@ public sealed class AppUserRepository(MeisterProPRDbContext db) : IUserRepositor
         await db.SaveChangesAsync(ct);
     }
 
+    public Task<int> CountActiveAdminsAsync(CancellationToken ct = default)
+    {
+        return db.AppUsers.CountAsync(u => u.GlobalRole == AppUserRole.Admin && u.IsActive, ct);
+    }
+
     public async Task UpdatePasswordHashAsync(Guid id, string passwordHash, CancellationToken ct = default)
     {
         var record = await db.AppUsers.FindAsync([id], ct);
