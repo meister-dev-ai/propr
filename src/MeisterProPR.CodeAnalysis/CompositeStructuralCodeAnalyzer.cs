@@ -65,6 +65,17 @@ public sealed class CompositeStructuralCodeAnalyzer : IStructuralCodeAnalyzer
             : backend.ConfirmReferenceLinesAsync(request, symbol, ct);
     }
 
+    /// <inheritdoc />
+    public Task<string> ExtractCodeTextAsync(
+        StructuralParseRequest request,
+        CancellationToken ct)
+    {
+        var backend = this.Select(request.Path);
+        return backend is null
+            ? Task.FromResult(string.Empty)
+            : backend.ExtractCodeTextAsync(request, ct);
+    }
+
     private IStructuralCodeAnalyzer? Select(string path)
     {
         foreach (var backend in this._backends)

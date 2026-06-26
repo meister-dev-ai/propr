@@ -137,4 +137,27 @@ public sealed record CandidateFindingProvenance
     ///     Gets the merged provenance classification for the current candidate instance.
     /// </summary>
     public FindingProvenanceKind FindingProvenanceKind { get; }
+
+    /// <summary>
+    ///     Resolves the single producing review pass for a published finding as a <see cref="ReviewPassKind" />
+    ///     name, or <see langword="null" /> when no single pass owns it. Uses <see cref="FindingProvenanceKind" />
+    ///     (the reliable classification) rather than the raw <see cref="ReviewPassKind" />, whose enum default
+    ///     (<see cref="ReviewPassKind.Baseline" />) would otherwise mislabel synthesized cross-cutting findings
+    ///     and merged (both-pass) findings as baseline. Returns null for synthesized cross-cutting findings and
+    ///     for findings produced by both passes.
+    /// </summary>
+    public string? ResolveOriginPassKindName()
+    {
+        if (string.Equals(this.OriginKind, SynthesizedCrossCuttingOrigin, StringComparison.Ordinal))
+        {
+            return null;
+        }
+
+        return this.FindingProvenanceKind switch
+        {
+            FindingProvenanceKind.BaselineOnly => ReviewPassKind.Baseline.ToString(),
+            FindingProvenanceKind.ProRVOnly => ReviewPassKind.ProRVAugmentation.ToString(),
+            _ => null,
+        };
+    }
 }

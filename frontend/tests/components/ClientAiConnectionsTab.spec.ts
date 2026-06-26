@@ -196,18 +196,20 @@ describe('ClientAiConnectionsTab', () => {
     await flushPromises()
 
     const bindingRows = wrapper.findAll('.ai-binding-row')
-    expect(bindingRows).toHaveLength(7)
-    
+    expect(bindingRows).toHaveLength(8)
+
     // Checkboxes inside custom component wrappers or raw HTML inputs can sometimes be flaky to toggle in mount,
-    // so let's directly edit the data model or ensure the correct input is bound if needed. 
+    // so let's directly edit the data model or ensure the correct input is bound if needed.
     // Since we just need to verify the model binding works, we'll select models for chat and embed.
+    // Indices 1 (proRvPrefilter) and 5 (reviewTriage) default to disabled, so leave them unset; the
+    // embedding binding is the last row.
     for (const [index, row] of bindingRows.entries()) {
       const selects = row.findAll('select')
-      if (index === 1) {
+      if (index === 1 || index === 5) {
         continue
       }
 
-      await selects[0].setValue(index === 6 ? 'embed-local' : 'chat-local')
+      await selects[0].setValue(index === 7 ? 'embed-local' : 'chat-local')
     }
 
     const saveButton = wrapper.findAll('button').find((button) => button.text().includes('Create Profile'))
@@ -260,6 +262,7 @@ describe('ClientAiConnectionsTab', () => {
         { id: undefined, purpose: 'reviewLowEffort', configuredModelId: undefined, remoteModelId: 'gpt-4.1-mini', protocolMode: 'auto', isEnabled: true },
         { id: undefined, purpose: 'reviewMediumEffort', configuredModelId: undefined, remoteModelId: 'gpt-4.1-mini', protocolMode: 'auto', isEnabled: true },
         { id: undefined, purpose: 'reviewHighEffort', configuredModelId: undefined, remoteModelId: 'gpt-4.1-mini', protocolMode: 'auto', isEnabled: true },
+        { id: undefined, purpose: 'reviewTriage', configuredModelId: undefined, remoteModelId: undefined, protocolMode: 'auto', isEnabled: false },
         { id: undefined, purpose: 'memoryReconsideration', configuredModelId: undefined, remoteModelId: 'gpt-4.1-mini', protocolMode: 'auto', isEnabled: true },
         { id: undefined, purpose: 'embeddingDefault', configuredModelId: undefined, remoteModelId: 'text-embedding-3-large', protocolMode: 'embeddings', isEnabled: true },
       ],

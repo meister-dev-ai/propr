@@ -11,6 +11,7 @@ using MeisterProPR.Infrastructure.Features.IdentityAndAccess;
 using MeisterProPR.Infrastructure.Repositories;
 using MeisterProPR.Infrastructure.Tests.Fixtures;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging.Abstractions;
 using FactAttribute = Xunit.SkippableFactAttribute;
 
 namespace MeisterProPR.Infrastructure.Tests.Repositories;
@@ -45,7 +46,7 @@ public sealed class JobRepositoryTests(PostgresContainerFixture fixture) : IAsyn
         // Wipe job rows between tests so count-based assertions stay deterministic.
         await this._dbContext.ReviewJobs.ExecuteDeleteAsync();
         var contextFactory = new TestDbContextFactory(options);
-        this._repo = new JobRepository(this._dbContext, contextFactory);
+        this._repo = new JobRepository(this._dbContext, contextFactory, NullLogger<JobRepository>.Instance);
     }
 
     private static ReviewJob MakeJob(
@@ -64,6 +65,28 @@ public sealed class JobRepositoryTests(PostgresContainerFixture fixture) : IAsyn
         var result = new ReviewFileResult(jobId, path);
         result.MarkCompleted($"summary for {path}", []);
         return result;
+    }
+
+    private static DateTimeOffset TruncateToMicroseconds(DateTimeOffset value)
+    {
+        const long TicksPerMicrosecond = TimeSpan.TicksPerMillisecond / 1000;
+        return new DateTimeOffset(value.Ticks - value.Ticks % TicksPerMicrosecond, value.Offset);
+    }
+
+    private static ReviewJobProtocol MakeProtocol(
+        Guid jobId,
+        DateTimeOffset? completedAt = null,
+        string? outcome = null)
+    {
+        return new ReviewJobProtocol
+        {
+            Id = Guid.NewGuid(),
+            JobId = jobId,
+            AttemptNumber = 1,
+            StartedAt = DateTimeOffset.UtcNow,
+            CompletedAt = completedAt,
+            Outcome = outcome,
+        };
     }
 
 
@@ -578,5 +601,101 @@ public sealed class JobRepositoryTests(PostgresContainerFixture fixture) : IAsyn
 
         var fetched = this._repo.GetById(job.Id);
         Assert.Equal(JobStatus.Pending, fetched!.Status);
+    }
+
+    [Fact]
+    public async Task TryTransition_ProcessingToPending_ClosesOnlyOpenProtocolsAsAbandoned()
+    {
+        var job = MakeJob();
+        await this._repo.AddAsync(job);
+        await this._repo.TryTransitionAsync(job.Id, JobStatus.Pending, JobStatus.Processing);
+
+        // Truncate to microsecond precision: PostgreSQL timestamptz stores microseconds, so a raw
+        // DateTimeOffset (100 ns ticks) would not round-trip exactly and the "unchanged" assertion
+        // below would fail on the lost sub-microsecond tick rather than on any real modification.
+        var stampedAt = TruncateToMicroseconds(DateTimeOffset.UtcNow.AddMinutes(-5));
+        var open1 = MakeProtocol(job.Id);
+        var open2 = MakeProtocol(job.Id);
+        var open3 = MakeProtocol(job.Id);
+        var done1 = MakeProtocol(job.Id, stampedAt, "Completed");
+        var done2 = MakeProtocol(job.Id, stampedAt, "Completed");
+        this._dbContext.ReviewJobProtocols.AddRange(open1, open2, open3, done1, done2);
+        await this._dbContext.SaveChangesAsync();
+        // Detach so the bulk ExecuteUpdateAsync effect is observed via a fresh query, not the tracker.
+        this._dbContext.ChangeTracker.Clear();
+
+        var transitioned = await this._repo.TryTransitionAsync(job.Id, JobStatus.Processing, JobStatus.Pending);
+        Assert.True(transitioned);
+
+        var protocols = await this._dbContext.ReviewJobProtocols
+            .AsNoTracking()
+            .Where(p => p.JobId == job.Id)
+            .ToListAsync();
+
+        var openIds = new[] { open1.Id, open2.Id, open3.Id };
+        foreach (var closed in protocols.Where(p => openIds.Contains(p.Id)))
+        {
+            Assert.NotNull(closed.CompletedAt);
+            Assert.Equal("Abandoned", closed.Outcome);
+        }
+
+        var doneIds = new[] { done1.Id, done2.Id };
+        foreach (var untouched in protocols.Where(p => doneIds.Contains(p.Id)))
+        {
+            Assert.Equal(stampedAt, untouched.CompletedAt);
+            Assert.Equal("Completed", untouched.Outcome);
+        }
+    }
+
+    [Fact]
+    public async Task SetResult_ClosesOpenProtocolsAsAbandoned_AndCompletesJob()
+    {
+        var job = MakeJob();
+        await this._repo.AddAsync(job);
+        await this._repo.TryTransitionAsync(job.Id, JobStatus.Pending, JobStatus.Processing);
+
+        var open1 = MakeProtocol(job.Id);
+        var open2 = MakeProtocol(job.Id);
+        this._dbContext.ReviewJobProtocols.AddRange(open1, open2);
+        await this._dbContext.SaveChangesAsync();
+        this._dbContext.ChangeTracker.Clear();
+
+        await this._repo.SetResultAsync(job.Id, new ReviewResult("done", []));
+
+        var protocols = await this._dbContext.ReviewJobProtocols
+            .AsNoTracking()
+            .Where(p => p.JobId == job.Id)
+            .ToListAsync();
+        Assert.Equal(2, protocols.Count);
+        Assert.All(
+            protocols, p =>
+            {
+                Assert.NotNull(p.CompletedAt);
+                Assert.Equal("Abandoned", p.Outcome);
+            });
+
+        var fetched = this._repo.GetById(job.Id);
+        Assert.Equal(JobStatus.Completed, fetched!.Status);
+    }
+
+    [Fact]
+    public async Task TryTransition_PendingToProcessing_DoesNotCloseProtocols()
+    {
+        var job = MakeJob();
+        await this._repo.AddAsync(job);
+
+        var open1 = MakeProtocol(job.Id);
+        this._dbContext.ReviewJobProtocols.Add(open1);
+        await this._dbContext.SaveChangesAsync();
+        this._dbContext.ChangeTracker.Clear();
+
+        var transitioned = await this._repo.TryTransitionAsync(job.Id, JobStatus.Pending, JobStatus.Processing);
+        Assert.True(transitioned);
+
+        var protocol = await this._dbContext.ReviewJobProtocols
+            .AsNoTracking()
+            .SingleAsync(p => p.Id == open1.Id);
+        Assert.Null(protocol.CompletedAt);
+        Assert.Null(protocol.Outcome);
     }
 }

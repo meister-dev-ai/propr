@@ -3,6 +3,7 @@
 
 using System.Text;
 using MeisterProPR.Application.Features.Reviewing.Execution.Models;
+using MeisterProPR.Application.Features.Reviewing.Execution.Services;
 using MeisterProPR.Application.ValueObjects;
 using MeisterProPR.Domain.ValueObjects;
 
@@ -46,7 +47,7 @@ internal static partial class ReviewPrompts
                 totalFiles,
                 totalFiles > 1,
                 BuildFocusedReviewGuidanceSection(context?.PerFileHint?.FocusedReviewGuidance),
-                BuildSecurityChecklistSection(context?.PerFileHint?.RiskMarkers),
+                BuildSecurityChecklistSection(context?.PerFileHint?.RiskMarkers, context?.PerFileHint?.FilePath),
                 BuildAgenticPlanSection(context?.PerFileHint),
                 context?.PerFileHint?.PrefetchedContextEvidence.Count > 0,
                 context?.PerFileHint?.PrefetchedContextEvidence.Select(item => new PromptTemplateModels.PromptPrefetchedContextEvidenceModel(
@@ -188,30 +189,29 @@ internal static partial class ReviewPrompts
         return sb.ToString().TrimEnd();
     }
 
-    private static string? BuildSecurityChecklistSection(FileRiskMarkers? riskMarkers)
+    private static string? BuildSecurityChecklistSection(FileRiskMarkers? riskMarkers, string? filePath)
     {
-        if (riskMarkers is null || !riskMarkers.HasAnyMarkers)
+        var markers = riskMarkers ?? FileRiskMarkers.None;
+        if (!SecurityFloor.IsFlagged(filePath, markers, false))
         {
             return null;
         }
 
         var sb = new StringBuilder();
-        sb.AppendLine("## Security And Concurrency Specialist Checklist");
-        sb.AppendLine("This file triggered deterministic high-risk markers. Perform an explicit specialist check in addition to the general review.");
-        sb.AppendLine("Matched markers: " + string.Join(", ", riskMarkers.MatchedMarkers));
-
-        if (riskMarkers.HasSecurityMarkers)
+        sb.AppendLine("## Security Specialist Checklist");
+        sb.AppendLine("This file is security-relevant. Perform an explicit specialist check in addition to the general review.");
+        if (markers.MatchedMarkers.Count > 0)
         {
-            sb.AppendLine(
-                "- Check authentication, token, redirect, iframe/frame, origin/referer, and allow/deny-list logic for concrete exploitable breakage.");
+            sb.AppendLine("Matched markers: " + string.Join(", ", markers.MatchedMarkers));
         }
 
-        if (riskMarkers.HasConcurrencyMarkers)
+        if (SecurityFloor.IsSecuritySensitivePath(filePath))
         {
-            sb.AppendLine(
-                "- Check async control flow, locking, shared mutable state, counters, cache-key construction, and fan-out for races or lost updates.");
+            sb.AppendLine("This file is in a security-sensitive path.");
         }
 
+        sb.AppendLine(
+            "- Check authentication, authorization, token/secret handling, redirect, iframe/frame, origin/referer, input validation, and allow/deny-list logic for concrete exploitable breakage.");
         sb.AppendLine("Report only concrete correctness or security failures grounded in the supplied diff and gathered evidence.");
         return sb.ToString().TrimEnd();
     }

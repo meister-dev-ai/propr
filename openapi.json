@@ -15063,7 +15063,8 @@
           "reviewMediumEffort",
           "reviewHighEffort",
           "memoryReconsideration",
-          "embeddingDefault"
+          "embeddingDefault",
+          "reviewTriage"
         ],
         "type": "string",
         "description": "Product-owned AI purposes that resolve to configured models."
@@ -18663,6 +18664,11 @@
             "type": "string",
             "description": "Final comment text.",
             "nullable": true
+          },
+          "originPassKind": {
+            "type": "string",
+            "description": "The `ReviewPassKind` name of the pass that produced this finding, when known.",
+            "nullable": true
           }
         },
         "additionalProperties": false,
@@ -19086,6 +19092,10 @@
           "message": {
             "type": "string",
             "nullable": true
+          },
+          "originPassKind": {
+            "type": "string",
+            "nullable": true
           }
         },
         "additionalProperties": false,
@@ -19316,6 +19326,16 @@
           },
           "inheritance": {
             "$ref": "#/components/schemas/ProtocolInheritanceDto"
+          },
+          "passKind": {
+            "type": "string",
+            "description": "The kind of review pass — the `ReviewPassKind` name (e.g. `\"Baseline\"`,\n`\"ProRVAugmentation\"`). null for legacy rows and passes with no\nmeaningful kind (e.g. synthesis, which the UI derives from MeisterProPR.Application.DTOs.ReviewJobProtocolDto.Label).",
+            "nullable": true
+          },
+          "reason": {
+            "type": "string",
+            "description": "Human-readable reason this pass ran (e.g. an augmentation re-review). null for baseline/legacy.",
+            "nullable": true
           }
         },
         "additionalProperties": false,

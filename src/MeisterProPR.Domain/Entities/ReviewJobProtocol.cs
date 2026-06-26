@@ -84,6 +84,19 @@ public sealed class ReviewJobProtocol
     /// </summary>
     public string? ModelId { get; set; }
 
+    /// <summary>
+    ///     The kind of review pass this protocol represents — the <c>ReviewPassKind</c> name
+    ///     (e.g. <c>"Baseline"</c>, <c>"ProRVAugmentation"</c>). <see langword="null" /> for legacy
+    ///     records and passes with no meaningful kind (e.g. synthesis, which the UI derives from <see cref="Label" />).
+    /// </summary>
+    public string? PassKind { get; set; }
+
+    /// <summary>
+    ///     Human-readable reason this pass ran (e.g. "high-risk file — re-reviewed in depth").
+    ///     <see langword="null" /> for the baseline pass and legacy records.
+    /// </summary>
+    public string? Reason { get; set; }
+
     /// <summary>Chronological list of individual steps recorded during the review loop.</summary>
     public ICollection<ProtocolEvent> Events { get; } = [];
 }

@@ -116,7 +116,7 @@ public sealed class AgenticFileByFileReviewOrchestratorRepeatedJudgmentTests
         var protocolRecorder = Substitute.For<IProtocolRecorder>();
         protocolRecorder.BeginAsync(
                 Arg.Any<Guid>(), Arg.Any<int>(), Arg.Any<string?>(), Arg.Any<Guid?>(), Arg.Any<AiConnectionModelCategory?>(), Arg.Any<string?>(),
-                Arg.Any<CancellationToken>())
+                Arg.Any<CancellationToken>(), Arg.Any<ReviewPassKind?>(), Arg.Any<string?>())
             .Returns(Guid.NewGuid());
         protocolRecorder.SetCompletedAsync(
                 Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<long>(), Arg.Any<long>(), Arg.Any<int>(), Arg.Any<int>(), Arg.Any<int?>(),

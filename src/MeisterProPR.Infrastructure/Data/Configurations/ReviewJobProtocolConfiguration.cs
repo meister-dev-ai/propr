@@ -44,6 +44,16 @@ internal sealed class ReviewJobProtocolConfiguration : IEntityTypeConfiguration<
             .HasMaxLength(256)
             .IsRequired(false);
 
+        builder.Property(p => p.PassKind)
+            .HasColumnName("pass_kind")
+            .HasMaxLength(64)
+            .IsRequired(false);
+
+        builder.Property(p => p.Reason)
+            .HasColumnName("reason")
+            .HasMaxLength(512)
+            .IsRequired(false);
+
         builder.HasMany(p => p.Events)
             .WithOne()
             .HasForeignKey(e => e.ProtocolId)

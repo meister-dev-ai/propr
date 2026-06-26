@@ -140,4 +140,4 @@ public sealed record ReviewWorkspaceStatusDto(
 public sealed record ReviewResultDto(string Summary, ReviewCommentDto[] Comments);
 
 /// <summary>DTO for a single review comment.</summary>
-public sealed record ReviewCommentDto(string? FilePath, int? LineNumber, CommentSeverity Severity, string Message);
+public sealed record ReviewCommentDto(string? FilePath, int? LineNumber, CommentSeverity Severity, string Message, string? OriginPassKind = null);

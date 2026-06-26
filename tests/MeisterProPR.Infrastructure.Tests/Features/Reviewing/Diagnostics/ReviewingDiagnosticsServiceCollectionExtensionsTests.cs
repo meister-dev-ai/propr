@@ -195,6 +195,11 @@ public sealed class ReviewingDiagnosticsServiceCollectionExtensionsTests
             return Task.FromResult<ReviewJob?>(null);
         }
 
+        public Task<ReviewJob?> GetByIdWithProtocolsForOverviewAsync(Guid id, CancellationToken ct = default)
+        {
+            return Task.FromResult<ReviewJob?>(null);
+        }
+
         public Task<ReviewJob?> GetByIdWithProtocolAsync(Guid id, CancellationToken ct = default)
         {
             return Task.FromResult<ReviewJob?>(null);

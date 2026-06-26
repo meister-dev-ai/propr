@@ -112,8 +112,30 @@ export function useTraceSearch(protocols: Ref<ReviewProtocolPass[]>) {
         return values.some(value => !!value && markers.some(marker => value.includes(marker)))
     }
 
+    // Memoize per event so the trace-tab computeds (which walk every event of every
+    // pass and call this multiple times per row) don't re-derive identical rows on each
+    // reactive tick. Keyed by the event OBJECT, not its id: the same event id exists as
+    // two distinct objects — the stripped `includeEvents=false` overview row and the full
+    // detail row — and a re-fetched in-progress pass yields fresh objects. Object identity
+    // distinguishes those (an id key would serve the stale stripped row after detail loads)
+    // and lets entries GC when protocols are replaced. The row depends only on the event,
+    // stable pass metadata, and the query text; file/model filtering lives in
+    // matchesTraceFilters, so dropping the cache on a query change is sufficient.
+    let traceRowCache = new WeakMap<ProtocolEventDto, TraceSearchableRow>()
+    let traceRowCacheQuery: string | null = null
+
     function buildTraceSearchableRow(protocol: ReviewProtocolPass, event: ProtocolEventDto): TraceSearchableRow {
         const filters = normalizedTraceFilters.value
+        if (filters.queryText !== traceRowCacheQuery) {
+            traceRowCache = new WeakMap()
+            traceRowCacheQuery = filters.queryText
+        }
+
+        const cached = traceRowCache.get(event)
+        if (cached) {
+            return cached
+        }
+
         const candidates: Array<{ field: string; value: string | null | undefined }> = [
             { field: 'eventName', value: event.name },
             { field: 'inputTextSample', value: event.inputTextSample },
@@ -139,7 +161,7 @@ export function useTraceSearch(protocols: Ref<ReviewProtocolPass[]>) {
                         ? firstTraceValue(event.outputSummary, event.inputTextSample, event.systemPrompt)
                         : firstTraceValue(event.outputSummary, event.inputTextSample, event.systemPrompt, event.error)
 
-        return {
+        const row: TraceSearchableRow = {
             filePath: protocol.fileOutcome?.filePath ?? protocol.label ?? null,
             protocolLabel: protocol.label ?? null,
             eventKind: String(event.kind ?? 'unknown'),
@@ -152,6 +174,10 @@ export function useTraceSearch(protocols: Ref<ReviewProtocolPass[]>) {
             hasLimitedMetadata: !protocol.label || !protocol.modelId,
             isRedacted: detectTraceRedaction(matchSnippet, contextSource, event.inputTextSample, event.systemPrompt, event.outputSummary, event.error),
         }
+
+        traceRowCache.set(event, row)
+
+        return row
     }
 
     function matchesTraceFilters(protocol: ReviewProtocolPass, event: ProtocolEventDto): boolean {
@@ -164,18 +190,15 @@ export function useTraceSearch(protocols: Ref<ReviewProtocolPass[]>) {
         return true
     }
 
+    // Autocomplete options come from pass-level metadata, not loaded event bodies, so the
+    // file/model filters populate immediately without forcing every pass's full trace to be
+    // fetched (the trace tab loads pass detail lazily/in the background).
     const traceSuggestions = computed(() => {
-        const matchingRows = protocols.value.flatMap(protocol =>
-            (protocol.events ?? [])
-                .filter(event => matchesTraceFilters(protocol, event))
-                .map(event => buildTraceSearchableRow(protocol, event)),
-        )
-
         const collect = (values: Array<string | null | undefined>) => Array.from(new Set(values.filter((value): value is string => !!value && value.trim().length > 0))).sort((left, right) => left.localeCompare(right))
 
         return {
-            filePaths: collect(matchingRows.map(row => row.filePath)),
-            modelIds: collect(matchingRows.map(row => row.modelId)),
+            filePaths: collect(protocols.value.map(protocol => protocol.fileOutcome?.filePath ?? protocol.label ?? null)),
+            modelIds: collect(protocols.value.map(protocol => protocol.modelId ?? null)),
         }
     })
 

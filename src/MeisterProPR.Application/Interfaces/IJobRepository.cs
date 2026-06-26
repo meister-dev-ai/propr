@@ -117,6 +117,17 @@ public interface IJobRepository
     Task<ReviewJob?> GetByIdWithProtocolsAsync(Guid id, CancellationToken ct = default);
 
     /// <summary>
+    ///     Returns the <see cref="ReviewJob" /> equivalent to <see cref="GetByIdWithProtocolsAsync" /> for the
+    ///     read-only protocol overview, except each <see cref="ProtocolEvent" /> is loaded WITHOUT its
+    ///     <see cref="ProtocolEvent.PhaseTimings" /> jsonb column. The overview neither serializes nor reads phase
+    ///     timings server-side, and on heavy traces that column dominates the load; excluding it keeps the polled
+    ///     overview responsive. The text columns (<c>InputTextSample</c>/<c>SystemPrompt</c>/<c>OutputSummary</c>)
+    ///     remain so the reader's pass-badge resolvers keep working. Returns <see langword="null" /> if no job with
+    ///     the given id exists.
+    /// </summary>
+    Task<ReviewJob?> GetByIdWithProtocolsForOverviewAsync(Guid id, CancellationToken ct = default);
+
+    /// <summary>
     ///     Returns the <see cref="ReviewJob" /> with <c>Protocol</c> and <c>Protocol.Events</c>
     ///     eagerly loaded, or <see langword="null" /> if no job with the given id exists.
     ///     This is the only sanctioned path for reading protocol data (ReviewJob is the aggregate root).

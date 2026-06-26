@@ -1,6 +1,7 @@
 // Copyright (c) Andreas Rain.
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
+using System.Collections.Concurrent;
 using System.Text.Json;
 using MeisterProPR.Application.Features.Reviewing.Execution.Models;
 using MeisterProPR.Application.Features.Reviewing.Execution.Ports;
@@ -34,8 +35,39 @@ internal sealed partial class FileReviewer(
     CommentRelevanceFilterExecutor? commentRelevanceFilterExecutor,
     IEnumerable<IReviewInvariantFactProvider>? reviewInvariantFactProviders,
     LocalReviewVerificationExecutor? localReviewVerificationExecutor,
-    IReviewPipelineProfileProvider? pipelineProfileProvider)
+    IReviewPipelineProfileProvider? pipelineProfileProvider,
+    IReviewComplexityClassifier? complexityClassifier = null)
 {
+    private readonly ConcurrentDictionary<string, TriageVerdict> _triageCache = new(StringComparer.Ordinal);
+
+    /// <summary>
+    ///     Per-file complexity tier, model-judged via the injected classifier and cached so the baseline and
+    ///     augmentation passes reuse one decision per file. Falls back to the size heuristic when no
+    ///     classifier is configured (the classifier itself also falls back when the model is unavailable).
+    /// </summary>
+    private async Task<TriageVerdict> ClassifyTierAsync(ReviewJob job, ChangedFile file, ReviewSystemContext context, CancellationToken ct)
+    {
+        if (this._triageCache.TryGetValue(file.Path, out var cached))
+        {
+            return cached;
+        }
+
+        TriageVerdict verdict;
+        if (complexityClassifier is null)
+        {
+            verdict = new TriageVerdict(ReviewDiffProcessor.ClassifyTier(file), false, "size-heuristic (no classifier configured)");
+        }
+        else
+        {
+            var fanOut = context.PerFileHint?.FanOut ?? FanOutSignal.Unavailable;
+            var paths = context.PerFileHint?.AllChangedFileSummaries.Select(s => s.Path).ToList() ?? (IReadOnlyList<string>)[];
+            verdict = await complexityClassifier.ClassifyAsync(job.ClientId, file, fanOut, paths, ct).ConfigureAwait(false);
+        }
+
+        this._triageCache[file.Path] = verdict;
+        return verdict;
+    }
+
     public async Task ReviewAsync(
         ReviewJob job,
         PullRequest pr,
@@ -52,7 +84,8 @@ internal sealed partial class FileReviewer(
         var fileResult = await this.InitializeFileResultAsync(job, file, existingResult, ct);
 
         // Classify file complexity early so we can record tier in the protocol.
-        var tier = ReviewDiffProcessor.ClassifyTier(file);
+        var triageVerdict = await this.ClassifyTierAsync(job, file, baseContext, ct);
+        var tier = triageVerdict.Tier;
 
         var tierCategory = tier switch
         {
@@ -116,6 +149,7 @@ internal sealed partial class FileReviewer(
                 ct);
 
             await RecordFocusedGuidanceUsageAsync(protocolRecorder, protocolId, file.Path, fileContext, "per_file_review", ct);
+            await this.RecordTriageDecisionEventAsync(fileContext, protocolId, file.Path, triageVerdict, ct);
 
             var result = await this.ReviewFileCoreAsync(
                 filePr,
@@ -183,7 +217,9 @@ internal sealed partial class FileReviewer(
     {
         var enableProRvForCurrentPass = baseContext.AugmentationMode switch
         {
-            _ when baseContext.PassKind == ReviewPassKind.ProRVAugmentation => true,
+            // ProRVAugmentation passes still honor the client's ProRV opt-out: when EnableProRV is false the
+            // high-risk second look runs WITHOUT the ProRV prefilter (the manual focused guidance still applies).
+            _ when baseContext.PassKind == ReviewPassKind.ProRVAugmentation => baseContext.EnableProRV,
             ReviewAugmentationMode.LateAugmentation => false,
             ReviewAugmentationMode.Disabled => false,
             _ => baseContext.EnableProRV,
@@ -248,9 +284,24 @@ internal sealed partial class FileReviewer(
         int totalFiles,
         ReviewSystemContext baseContext,
         IChatClient effectiveClient,
-        CancellationToken ct)
+        CancellationToken ct,
+        string? reason = null,
+        ReviewPassKind displayPassKind = ReviewPassKind.ProRVAugmentation,
+        FanOutSignal? fanOut = null)
     {
-        var tier = ReviewDiffProcessor.ClassifyTier(file);
+        var verdict = await this.ClassifyTierAsync(job, file, baseContext, ct);
+
+        // Deeper-pass tier = Max(model-judged tier, blast-radius floor, security floor). Floors are
+        // escalate-only (Truncated fan-out and any security leg floor at Medium); for the ordinary ProRV
+        // augmentation path fanOut is Unavailable and the security set is typically empty, so they are no-ops.
+        var securityFlagged = SecurityFloor.IsFlagged(
+            file.Path,
+            baseContext.PerFileHint?.RiskMarkers ?? FileRiskMarkers.None,
+            verdict.SecurityEscalate);
+        var tier = TierJoin.Max(
+            verdict.Tier,
+            TierJoin.FloorFromFanOut(fanOut ?? FanOutSignal.Unavailable),
+            securityFlagged ? FileComplexityTier.Medium : FileComplexityTier.Low);
         var tierCategory = tier switch
         {
             FileComplexityTier.Low => AiConnectionModelCategory.LowEffort,
@@ -279,83 +330,63 @@ internal sealed partial class FileReviewer(
 
         var augmentationContext = CreateAugmentationContext(baseContext);
         var transientFileResult = new ReviewFileResult(job.Id, file.Path);
-        var fileContext = this.CreateFileContext(
-            job,
-            pr,
-            file,
-            fileIndex,
-            totalFiles,
-            augmentationContext,
-            null,
-            tier,
-            tierModelId,
-            tierClient,
-            tierCapabilities,
-            effectiveClient,
-            augmentationContext.PerFileHint?.FocusedReviewGuidance ?? []);
 
-        var pipelineProfile = ResolvePipelineProfile(job, pipelineProfileProvider);
-        fileContext = await this.RunDispatchPipelineAsync(
-            job,
-            file,
-            transientFileResult,
-            fileContext,
-            null,
-            pipelineProfile,
-            ct);
+        // Open a dedicated protocol pass for the augmentation/second-look so its AI calls, tokens,
+        // tool calls, and findings are recorded. Previously this pass ran with protocolId=null and was
+        // entirely unprotocolled (its tokens never reached the job aggregate). fileResultId is null —
+        // the pass is identified by the file path.
+        var protocolId = await this.BeginAugmentationProtocolAsync(job, file, tierCategory, tierModelId, reason, displayPassKind, ct);
 
-        var result = await this.ReviewFileCoreAsync(filePr, fileContext, ct);
-        var pipelineState = new ReviewResultPipelineState(
-            job,
-            file,
-            filePr,
-            transientFileResult,
-            fileContext,
-            null,
-            reviewInvariantFactProviders?.SelectMany(provider => provider.GetFacts()).ToList() ?? []);
-
-        return await this.RunReviewResultPipelineAsync(pipelineState, result, pipelineProfile, ct);
-    }
-
-    public async Task<ReviewResult> ReviewHighRiskEscalationAsync(
-        ReviewJob job,
-        PullRequest pr,
-        ChangedFile file,
-        int fileIndex,
-        int totalFiles,
-        ReviewSystemContext baseContext,
-        FileRiskMarkers riskMarkers,
-        IChatClient effectiveClient,
-        CancellationToken ct)
-    {
-        var escalationContext = CreateAugmentationContext(baseContext);
-        var perFileHint = escalationContext.PerFileHint
-                          ?? new PerFileReviewHint(file.Path, fileIndex, totalFiles, pr.AllPrFileSummaries);
-        var existingGuidance = perFileHint.FocusedReviewGuidance;
-        escalationContext.PerFileHint = perFileHint with
+        ReviewSystemContext? fileContext = null;
+        try
         {
-            FocusedReviewGuidance =
-            [
-                .. existingGuidance,
-                new FocusedReviewGuidanceItem(
-                    "high-risk.zero-finding-second-look",
-                    "High-risk zero-finding second look",
-                    "This high-risk file produced no findings in earlier passes.",
-                    "Perform one focused second look using the already gathered evidence. Prioritize the top 1-3 most likely concrete correctness or security failures that would explain a risky silent outcome. Report only defects you can ground in the diff and supplied evidence.",
-                    $"Risk markers matched: {string.Join(", ", riskMarkers.MatchedMarkers)}. Earlier passes returned zero findings.",
-                    100),
-            ],
-        };
+            fileContext = this.CreateFileContext(
+                job,
+                pr,
+                file,
+                fileIndex,
+                totalFiles,
+                augmentationContext,
+                protocolId,
+                tier,
+                tierModelId,
+                tierClient,
+                tierCapabilities,
+                effectiveClient,
+                augmentationContext.PerFileHint?.FocusedReviewGuidance ?? []);
 
-        return await this.ReviewAugmentationAsync(
-            job,
-            pr,
-            file,
-            fileIndex,
-            totalFiles,
-            escalationContext,
-            effectiveClient,
-            ct);
+            var pipelineProfile = ResolvePipelineProfile(job, pipelineProfileProvider);
+            fileContext = await this.RunDispatchPipelineAsync(
+                job,
+                file,
+                transientFileResult,
+                fileContext,
+                protocolId,
+                pipelineProfile,
+                ct);
+
+            var result = await this.ReviewFileCoreAsync(filePr, fileContext, ct);
+            var pipelineState = new ReviewResultPipelineState(
+                job,
+                file,
+                filePr,
+                transientFileResult,
+                fileContext,
+                protocolId,
+                reviewInvariantFactProviders?.SelectMany(provider => provider.GetFacts()).ToList() ?? []);
+
+            result = await this.RunReviewResultPipelineAsync(pipelineState, result, pipelineProfile, ct);
+
+            await this.CompleteAugmentationProtocolAsync(protocolId, fileContext, "Completed", ct);
+            return result;
+        }
+        catch when (protocolId.HasValue)
+        {
+            // Never leave the augmentation pass open on failure: close it so any partial loop-metric tokens
+            // still reach the job aggregate. CancellationToken.None so cancellation still records completion.
+            await this.CompleteAugmentationProtocolAsync(protocolId, fileContext, "Failed", CancellationToken.None);
+            throw;
+        }
     }
 
     private static ReviewSystemContext CreateAugmentationContext(ReviewSystemContext baseContext)
@@ -374,7 +405,7 @@ internal sealed partial class FileReviewer(
             DefaultReviewModelId = baseContext.DefaultReviewModelId,
             RuntimeCapabilities = baseContext.RuntimeCapabilities,
             Temperature = baseContext.Temperature,
-            EnableProRV = true,
+            EnableProRV = baseContext.EnableProRV,
             AugmentationMode = baseContext.AugmentationMode,
             PassKind = ReviewPassKind.ProRVAugmentation,
             PerFileHint = baseContext.PerFileHint,
@@ -786,6 +817,63 @@ internal sealed partial class FileReviewer(
             ct);
     }
 
+    private async Task<Guid?> BeginAugmentationProtocolAsync(
+        ReviewJob job,
+        ChangedFile file,
+        AiConnectionModelCategory tierCategory,
+        string? tierModelId,
+        string? reason,
+        ReviewPassKind displayPassKind,
+        CancellationToken ct)
+    {
+        try
+        {
+            return await protocolRecorder.BeginAsync(
+                job.Id,
+                job.RetryCount + 1,
+                file.Path,
+                null,
+                tierCategory,
+                tierModelId,
+                ct,
+                displayPassKind,
+                reason);
+        }
+        catch (Exception ex)
+        {
+            LogProtocolBeginFailed(logger, file.Path, job.Id, ex);
+            return null;
+        }
+    }
+
+    private async Task CompleteAugmentationProtocolAsync(
+        Guid? protocolId,
+        ReviewSystemContext? fileContext,
+        string outcome,
+        CancellationToken ct)
+    {
+        if (!protocolId.HasValue)
+        {
+            return;
+        }
+
+        // Complete even when loop metrics are absent (e.g. the AI call threw before stamping them) so the
+        // pass is never left open; missing metrics record as zeros.
+        var m = fileContext?.LoopMetrics;
+        var cached = m?.TotalCachedInputTokens ?? 0;
+        await protocolRecorder.SetCompletedAsync(
+            protocolId.Value,
+            outcome,
+            m?.TotalInputTokens ?? 0,
+            m?.TotalOutputTokens ?? 0,
+            m?.Iterations ?? 0,
+            m?.ToolCallCount ?? 0,
+            m?.FinalConfidence,
+            ct,
+            cached,
+            cached > 0 ? CacheObservabilityStatus.Observable : CacheObservabilityStatus.Unobservable);
+    }
+
     private async Task<Guid?> BeginNewProtocolAsync(
         ReviewJob job,
         ChangedFile file,
@@ -803,13 +891,52 @@ internal sealed partial class FileReviewer(
                 fileResult.Id,
                 tierCategory,
                 tierModelId,
-                ct);
+                ct,
+                ReviewPassKind.Baseline);
         }
         catch (Exception ex)
         {
             LogProtocolBeginFailed(logger, file.Path, job.Id, ex);
             return null;
         }
+    }
+
+    private async Task RecordTriageDecisionEventAsync(
+        ReviewSystemContext fileContext,
+        Guid? protocolId,
+        string filePath,
+        TriageVerdict verdict,
+        CancellationToken ct)
+    {
+        if (!protocolId.HasValue)
+        {
+            return;
+        }
+
+        // Persist the per-file triage decision as a structured protocol event (exposed via the
+        // job-protocol API for trace display + audit). Absence is explicit: fanOutKind distinguishes
+        // Unavailable from a measured count, and fanOutCount is null when there is no measurement.
+        var fanOut = fileContext.PerFileHint?.FanOut ?? FanOutSignal.Unavailable;
+        var riskMarkers = fileContext.PerFileHint?.RiskMarkers ?? FileRiskMarkers.None;
+        var securityFlagged = SecurityFloor.IsFlagged(filePath, riskMarkers, verdict.SecurityEscalate);
+
+        await protocolRecorder.RecordReviewStrategyEventAsync(
+            protocolId.Value,
+            ReviewProtocolEventNames.TriageDecision,
+            JsonSerializer.Serialize(
+                new
+                {
+                    filePath,
+                    tier = verdict.Tier.ToString(),
+                    why = verdict.Why,
+                    securityEscalate = verdict.SecurityEscalate,
+                    securityFlagged,
+                    fanOutKind = fanOut.Kind.ToString(),
+                    fanOutCount = fanOut.HasData ? fanOut.Count : (int?)null,
+                }),
+            null,
+            null,
+            ct);
     }
 
     private static AiPurpose GetTierPurpose(FileComplexityTier tier)

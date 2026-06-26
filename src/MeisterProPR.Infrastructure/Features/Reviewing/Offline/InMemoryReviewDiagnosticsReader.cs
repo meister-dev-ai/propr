@@ -166,6 +166,8 @@ public sealed class InMemoryReviewDiagnosticsReader(InMemoryReviewJobRepository 
             CacheObservability = protocol.CacheObservability,
             IsInherited = inheritance is not null,
             Inheritance = inheritance,
+            PassKind = protocol.PassKind,
+            Reason = protocol.Reason,
         };
     }
 
@@ -385,7 +387,7 @@ public sealed class InMemoryReviewDiagnosticsReader(InMemoryReviewJobRepository 
 
     private static ProtocolReviewCommentDto ToProtocolReviewCommentDto(ReviewComment comment)
     {
-        return new ProtocolReviewCommentDto(comment.FilePath, comment.LineNumber, comment.Severity, comment.Message);
+        return new ProtocolReviewCommentDto(comment.FilePath, comment.LineNumber, comment.Severity, comment.Message, comment.OriginPassKind);
     }
 
     private static string ResolveProviderProjectKey(ReviewJob job)

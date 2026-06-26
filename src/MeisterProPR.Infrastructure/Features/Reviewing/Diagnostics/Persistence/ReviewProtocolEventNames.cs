@@ -14,6 +14,7 @@ public static class ReviewProtocolEventNames
     public const string LateSteeringMergeCompleted = "late_steering_merge_completed";
     public const string ReviewPipelineProfileApplied = "review_pipeline_profile_applied";
     public const string ReviewStrategySelected = "review_strategy_selected";
+    public const string TriageDecision = "triage_decision";
     public const string AgenticFilePlanCreated = "agentic_file_plan_created";
     public const string AgenticFileInvestigationLaunched = "agentic_file_investigation_launched";
     public const string AgenticFileInvestigationResult = "agentic_file_investigation_result";
@@ -45,8 +46,6 @@ public static class ReviewProtocolEventNames
     public const string ContextPrefetchApplied = "context_prefetch_applied";
     public const string ReviewProfileSelected = "review_profile_selected";
     public const string SecuritySpecialistPassRan = "security_specialist_pass_ran";
-    public const string HighRiskEscalationRan = "high_risk_escalation_ran";
-    public const string ZeroCandidateHighRisk = "zero_candidate_high_risk";
     public const string ReviewFindingGateSummary = "review_finding_gate_summary";
     public const string ReviewFindingGateDecision = "review_finding_gate_decision";
     public const string ReviewAgentSessionBinding = "review_agent_session_binding";

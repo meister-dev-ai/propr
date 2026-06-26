@@ -83,18 +83,42 @@
 
         <div class="protocol-content">
             <PassSelector
-                :items="vm.sidebarItems"
-                :model-value="vm.activePassId"
-                @update:model-value="vm.activePassId = $event"
+                :file-groups="vm.fileGroups"
+                :active-file-path="vm.activeFile?.path ?? ''"
+                :pass-tabs="vm.activeFilePassTabs"
+                :active-pass-id="vm.activePassId"
+                :can-go-previous="!!vm.previousPassId"
+                :can-go-next="!!vm.nextPassId"
+                empty-placeholder="No recorded traces for this job."
+                @select-file="vm.selectFile($event)"
+                @select-pass="vm.activePassId = $event"
+                @go-previous="vm.goToPass(vm.previousPassId)"
+                @go-next="vm.goToPass(vm.nextPassId)"
             />
-            <div v-if="vm.activePass" class="pass-main">
-                    <div class="pass-detail-header">
-                        <div class="pass-detail-filepath">
-                            <span v-if="vm.parseFilePath(vm.activePass.label).directory" class="pass-detail-dir">{{ vm.parseFilePath(vm.activePass.label).directory }}/</span>
-                            <span class="pass-detail-filename">{{ vm.parseFilePath(vm.activePass.label).filename }}</span>
-                        </div>
+            <p
+                v-if="vm.protocols.length === 0 || (vm.fileGroups.length === 0 && !vm.hasActiveTraceFilters && !vm.traceFindingsOnly)"
+                class="empty-state trace-empty-state"
+            >
+                No recorded traces for this job.
+            </p>
+            <div
+                v-else-if="vm.activePass"
+                class="pass-main"
+                :role="vm.activeFilePassTabs.length > 1 ? 'tabpanel' : undefined"
+                :aria-labelledby="vm.activeFilePassTabs.length > 1 && vm.activePassId ? `pass-tab-${vm.activePassId}` : undefined"
+            >
+                    <!-- The file path already lives in the selector dropdown above; the pass name only needs a
+                         heading when there's no pass switcher (a single pass), otherwise the active pill names it. -->
+                    <div v-if="vm.activeFilePassTabs.length <= 1 || vm.activePass.isInherited" class="pass-detail-header">
+                        <h4 v-if="vm.activeFilePassTabs.length <= 1" class="pass-detail-title">{{ vm.activePassLabel }}</h4>
                         <span v-if="vm.activePass.isInherited" class="chip chip-inherited">Inherited trace</span>
                     </div>
+
+                    <p v-if="vm.activePassReason" class="reason-line" data-testid="pass-reason">↳ {{ vm.activePassReason }}</p>
+
+                    <p v-if="vm.activePassFailed" class="pass-failed-note" data-testid="pass-failed-note">
+                        This pass ended early: {{ vm.activePassReason ?? 'no reason recorded' }}. Partial events below.
+                    </p>
 
                     <div class="pass-detail-tabs" role="tablist" aria-label="Reviewed file detail">
                         <button
@@ -134,31 +158,16 @@
                         <div><dt>In Tokens</dt><dd class="fat-tokens">{{ vm.formatTokens(vm.activePass.totalInputTokens) }}</dd></div>
                         <div><dt>Out Tokens</dt><dd class="fat-tokens">{{ vm.formatTokens(vm.activePass.totalOutputTokens) }}</dd></div>
                         <div><dt>Strategy</dt><dd>{{ vm.activePassReviewStrategyDisplay }}</dd></div>
+                        <!-- File outcome folded into the attribute grid; the path is omitted because it's the file already
+                             named by the selector above. -->
+                        <div v-if="vm.activePassFileOutcome"><dt>Outcome</dt><dd>{{ vm.formatFileOutcomeStatus(vm.activePassFileOutcome) }}</dd></div>
+                        <div v-if="vm.activePassFileOutcome?.exclusionReason"><dt>Exclusion</dt><dd>{{ vm.activePassFileOutcome.exclusionReason }}</dd></div>
+                        <div v-if="vm.activePassFileOutcome?.errorMessage"><dt>Error</dt><dd>{{ vm.activePassFileOutcome.errorMessage }}</dd></div>
                     </dl>
 
-                    <section v-if="vm.detailTab === 'events' && vm.traceTimingInsights.length" class="pass-file-outcome-section">
-                        <div class="pass-final-result-header">
-                            <h4>Timing Insights</h4>
-                            <span class="chip chip-muted">Current pass</span>
-                        </div>
-                        <ol class="timing-insights-list" aria-label="Slowest visible tool calls">
-                            <li v-for="insight in vm.traceTimingInsights" :key="insight.eventId">
-                                <button type="button" class="timing-insight-row" @click="vm.openTimingInsight(insight)">
-                                    <span class="timing-insight-rank">#{{ insight.rank }}</span>
-                                    <span class="timing-insight-tool">{{ insight.toolName }}</span>
-                                    <span class="timing-insight-context">{{ insight.passLabel }}</span>
-                                    <span class="timing-insight-duration">{{ vm.formatDurationWithMs(insight.durationMs) }}</span>
-                                    <span class="timing-insight-meta">
-                                        <template v-if="insight.waitDurationMs != null || insight.activeDurationMs != null">
-                                            <span v-if="insight.waitDurationMs != null">Wait {{ vm.formatDurationWithMs(insight.waitDurationMs) }}</span>
-                                            <span v-if="insight.activeDurationMs != null">Active {{ vm.formatDurationWithMs(insight.activeDurationMs) }}</span>
-                                        </template>
-                                        <span v-else-if="insight.hasPhaseDetail">Phase detail available</span>
-                                    </span>
-                                </button>
-                            </li>
-                        </ol>
-                    </section>
+                    <p v-if="vm.detailTab === 'events' && vm.activePassFileOutcome?.isDegraded" class="pass-file-outcome-note">
+                        Agentic file investigation recorded a degraded intermediate outcome for this pass. It remained non-validated unless later verification and final gate kept it.
+                    </p>
 
                     <section v-if="vm.detailTab === 'events' && vm.activePassInheritance" class="pass-file-outcome-section">
                         <div class="pass-final-result-header">
@@ -173,22 +182,6 @@
                         </dl>
                         <p class="pass-file-outcome-note">
                             This file pass was inherited from a previously completed same-revision run and is included here so protocol totals and trace review reflect reused work.
-                        </p>
-                    </section>
-
-                    <section v-if="vm.detailTab === 'events' && vm.activePassFileOutcome" class="pass-file-outcome-section">
-                        <div class="pass-final-result-header">
-                            <h4>File Outcome</h4>
-                            <span class="chip chip-muted">{{ vm.formatFileOutcomeStatus(vm.activePassFileOutcome) }}</span>
-                        </div>
-                        <dl class="summary-grid pass-summary pass-file-outcome-grid">
-                            <div><dt>Path</dt><dd>{{ vm.activePassFileOutcome.filePath }}</dd></div>
-                            <div><dt>Status</dt><dd>{{ vm.formatFileOutcomeStatus(vm.activePassFileOutcome) }}</dd></div>
-                            <div v-if="vm.activePassFileOutcome.exclusionReason"><dt>Exclusion</dt><dd>{{ vm.activePassFileOutcome.exclusionReason }}</dd></div>
-                            <div v-if="vm.activePassFileOutcome.errorMessage"><dt>Error</dt><dd>{{ vm.activePassFileOutcome.errorMessage }}</dd></div>
-                        </dl>
-                        <p v-if="vm.activePassFileOutcome.isDegraded" class="pass-file-outcome-note">
-                            Agentic file investigation recorded a degraded intermediate outcome for this pass. It remained non-validated unless later verification and final gate kept it.
                         </p>
                     </section>
 
@@ -257,7 +250,7 @@
                         />
                     </section>
 
-                    <section v-if="vm.detailTab === 'events'" class="events-section">
+                    <section v-if="vm.detailTab === 'events'" class="events-section" role="tabpanel" :aria-label="`${vm.activePassLabel} trace`">
                         <div class="events-section-header">
                             <h4>Events ({{ vm.activePassEventRows.length }})</h4>
                             <p v-if="vm.hasActiveTraceFilters" class="events-section-context">Global trace search is active for this review.</p>
@@ -287,84 +280,98 @@
                                     <span class="event-child-rail"></span>
                                 </div>
                                 <div class="event-card-main">
-                                    <div class="event-card-header">
-                                        <div class="event-card-meta-row">
-                                            <div class="event-card-kind-group" :class="{ 'kind-cell--child': row.isToolChild }">
-                                                <span class="kind-badge" :class="vm.kindBadgeClass(row.merged.callDetails.kind)">{{ row.merged.callDetails.kind ?? 'unknown' }}</span>
-                                                <span v-if="row.isToolChild && row.parentName" class="kind-parent-pill">{{ vm.parentIterationLabel(row.parentName) }}</span>
-                                                <span v-if="vm.isMergedEventProcessing(row.merged)" class="status-badge status-processing">Executing...</span>
-                                            </div>
-                                            <span class="date-cell">{{ vm.formatDate(row.merged.time) }}</span>
-                                        </div>
+                                    <!-- Everything that fits rides on a single wrapping line so a simple event is one row;
+                                         it collapses to more lines only when the viewport can't hold it. -->
+                                    <div class="event-card-line">
+                                        <button
+                                            v-if="row.childCount > 0"
+                                            class="event-toggle"
+                                            :aria-label="row.isExpanded ? 'Collapse child tool calls' : 'Expand child tool calls'"
+                                            @click.stop="vm.toggleEventParent(row.id)"
+                                        >
+                                            <span class="event-toggle-icon" aria-hidden="true">
+                                                <i class="fi fi-rr-angle-small-down event-toggle-chevron" :class="{ 'event-toggle-chevron--collapsed': !row.isExpanded }"></i>
+                                            </span>
+                                            <span class="event-toggle-count">{{ row.childCount }}</span>
+                                        </button>
 
-                                        <div class="event-card-title-row" :class="{ 'event-card-title-row--child': row.depth > 0 }">
-                                            <button
-                                                v-if="row.childCount > 0"
-                                                class="event-toggle"
-                                                :aria-label="row.isExpanded ? 'Collapse child tool calls' : 'Expand child tool calls'"
-                                                @click.stop="vm.toggleEventParent(row.id)"
-                                            >
-                                                <span class="event-toggle-icon" aria-hidden="true">
-                                                    <i class="fi fi-rr-angle-small-down event-toggle-chevron" :class="{ 'event-toggle-chevron--collapsed': !row.isExpanded }"></i>
-                                                </span>
-                                                <span class="event-toggle-count">{{ row.childCount }}</span>
-                                            </button>
+                                        <span class="kind-badge" :class="vm.kindBadgeClass(row.merged.callDetails.kind)">{{ row.merged.callDetails.kind ?? 'unknown' }}</span>
+                                        <span v-if="row.isToolChild && row.parentName" class="kind-parent-pill">{{ vm.parentIterationLabel(row.parentName) }}</span>
 
-                                            <div class="event-title-stack" :class="{ 'tool-name': row.merged.callDetails.kind === 'toolCall', 'ai-name': row.merged.callDetails.kind === 'aiCall', 'memory-name': row.merged.callDetails.kind === 'memoryOperation', 'operational-name': row.merged.callDetails.kind === 'operational' }">
-                                                <span class="event-name-label">{{ row.merged.name }}</span>
-                                                <div v-if="vm.hasToolTiming(row.merged.callDetails)" class="timing-inline-group">
-                                                    <span class="timing-duration">{{ row.timingSummary }}</span>
-                                                    <span v-if="row.timingDetail" class="timing-detail">{{ row.timingDetail }}</span>
-                                                </div>
-                                            </div>
-                                        </div>
+                                        <span class="event-name-label" :class="{ 'tool-name': row.merged.callDetails.kind === 'toolCall', 'ai-name': row.merged.callDetails.kind === 'aiCall', 'memory-name': row.merged.callDetails.kind === 'memoryOperation', 'operational-name': row.merged.callDetails.kind === 'operational' }">{{ row.merged.name }}</span>
 
-                                        <div class="event-meta-line">
-                                            <span v-if="row.traceFilePath" class="event-meta-pill event-meta-pill--path" :title="row.traceFilePath">{{ row.traceFilePath }}</span>
-                                            <span class="event-meta-pill">{{ row.traceEventCategory }}</span>
+                                        <span v-if="vm.isMergedEventProcessing(row.merged)" class="status-badge status-processing">Executing...</span>
+
+                                        <!-- Duration, outcome and evidence ride inline as compact badges. The duration already
+                                             carries the "it ran" signal, so availability only shows when it isn't "captured", and
+                                             evidence/finalization are neutral status pills, not errors. -->
+                                        <span v-if="vm.hasToolTiming(row.merged.callDetails)" class="timing-inline-group">
+                                            <span class="timing-duration">{{ row.timingSummary }}</span>
+                                            <span v-if="row.timingDetail" class="timing-detail">{{ row.timingDetail }}</span>
+                                        </span>
+                                        <span v-if="row.merged.callDetails.timingAvailability && row.merged.callDetails.timingAvailability.toLowerCase() !== 'captured'" class="status-badge" :class="vm.statusBadgeClass(row.merged.callDetails.timingAvailability)">{{ vm.formatTimingAvailability(row.merged.callDetails.timingAvailability) }}</span>
+                                        <span v-if="row.merged.callDetails.toolOutcome" class="status-badge" :class="vm.statusBadgeClass(row.merged.callDetails.toolOutcome)">{{ vm.formatToolOutcome(row.merged.callDetails.toolOutcome) }}</span>
+                                        <span v-if="row.merged.callDetails.finalizationAttemptKind" class="status-badge status-pending">{{ row.merged.callDetails.finalizationAttemptKind }}: {{ row.merged.callDetails.finalizationOutcome ?? row.merged.callDetails.finalizationReason }}</span>
+                                        <span v-if="row.merged.callDetails.toolEvidence" class="status-badge status-pending">Evidence {{ row.merged.callDetails.toolEvidence.action }}</span>
+
+                                        <span v-if="vm.hasEventTokens(row.merged.callDetails)" class="event-line-tokens">
+                                            <strong>{{ vm.formatTokens(row.merged.callDetails.inputTokens) }}</strong> in <span class="tokens-sep">·</span> <strong>{{ vm.formatTokens(row.merged.callDetails.outputTokens) }}</strong> out<small v-if="row.merged.callDetails.kind === 'aiCall'" class="cache-token-detail"> · Cached {{ vm.formatTokens(row.merged.callDetails.cachedInputTokens) }} · {{ vm.formatCacheStatus(row.merged.callDetails.cacheStatus) }}</small>
+                                        </span>
+
+                                        <!-- Model + flags + timestamp cluster to the right and wrap together when the line is full. -->
+                                        <span class="event-line-trailing">
                                             <span v-if="row.traceModelId" class="event-meta-pill event-meta-pill--model" :title="row.traceModelId">{{ row.traceModelId }}</span>
                                             <span v-if="row.traceIsRedacted" class="event-meta-pill event-meta-pill--flag">Redacted</span>
                                             <span v-if="row.traceHasLimitedMetadata" class="event-meta-pill event-meta-pill--flag">Limited metadata</span>
+                                            <span class="date-cell">{{ vm.formatDate(row.merged.time) }}</span>
+                                        </span>
+                                    </div>
+
+                                    <!-- File/category pills and search snippets are trace-search affordances: within a single
+                                         pass the file and category are constant and the snippet just echoes the event name, so
+                                         they only earn their space when a cross-pass search is active. -->
+                                    <template v-if="vm.hasActiveTraceFilters">
+                                        <div v-if="row.traceFilePath || row.traceEventCategory" class="event-meta-line">
+                                            <span v-if="row.traceFilePath" class="event-meta-pill event-meta-pill--path" :title="row.traceFilePath">{{ row.traceFilePath }}</span>
+                                            <span class="event-meta-pill">{{ row.traceEventCategory }}</span>
                                         </div>
                                         <div v-if="row.traceMatchSnippet" class="event-match-snippet"><strong>{{ row.traceMatchedField }}:</strong> {{ row.traceMatchSnippet }}</div>
                                         <div v-if="row.traceContextSnippet" class="event-context-snippet">{{ row.traceContextSnippet }}</div>
                                         <div v-else-if="row.traceHasLimitedMetadata" class="event-context-limitation">Supporting metadata or nearby trace context was not captured for this row.</div>
+                                    </template>
 
-                                        <div v-if="vm.hasToolTiming(row.merged.callDetails)" class="timing-badges">
-                                            <span v-if="row.merged.callDetails.timingAvailability" class="status-badge" :class="vm.statusBadgeClass(row.merged.callDetails.timingAvailability)">{{ vm.formatTimingAvailability(row.merged.callDetails.timingAvailability) }}</span>
-                                            <span v-if="row.merged.callDetails.toolOutcome" class="status-badge" :class="vm.statusBadgeClass(row.merged.callDetails.toolOutcome)">{{ vm.formatToolOutcome(row.merged.callDetails.toolOutcome) }}</span>
-                                        </div>
-                                        <span v-else class="timing-empty">No timing captured</span>
-                                    </div>
-
-                                    <div v-if="vm.hasEventTokens(row.merged.callDetails) || vm.hasEventError(row.merged.callDetails)" class="event-card-secondary">
-                                        <div v-if="vm.hasEventTokens(row.merged.callDetails)" class="event-metric-card event-metric-card--tokens">
-                                            <span class="event-card-label">Input Tokens</span>
-                                            <div class="tokens-cell fat-tokens">
-                                                <div>{{ vm.formatTokens(row.merged.callDetails.inputTokens) }}</div>
-                                                <small v-if="row.merged.callDetails.kind === 'aiCall'" class="cache-token-detail">
-                                                    Cached {{ vm.formatTokens(row.merged.callDetails.cachedInputTokens) }} · {{ vm.formatCacheStatus(row.merged.callDetails.cacheStatus) }}
-                                                </small>
-                                            </div>
-                                        </div>
-
-                                        <div v-if="vm.hasEventTokens(row.merged.callDetails)" class="event-metric-card event-metric-card--tokens">
-                                            <span class="event-card-label">Output Tokens</span>
-                                            <div class="tokens-cell fat-tokens">{{ vm.formatTokens(row.merged.callDetails.outputTokens) }}</div>
-                                        </div>
-
-                                        <div v-if="vm.hasEventError(row.merged.callDetails)" class="event-metric-card event-metric-card--error">
-                                            <span class="event-card-label">Error</span>
-                                            <div class="error-cell">
-                                                <span v-if="row.merged.callDetails.error">{{ row.merged.callDetails.error }}</span>
-                                                <span v-if="row.merged.callDetails.finalizationAttemptKind" class="status-badge status-processing">{{ row.merged.callDetails.finalizationAttemptKind }}: {{ row.merged.callDetails.finalizationOutcome ?? row.merged.callDetails.finalizationReason }}</span>
-                                                <span v-if="row.merged.callDetails.toolEvidence" class="status-badge status-processing">Evidence {{ row.merged.callDetails.toolEvidence.action }}</span>
-                                            </div>
-                                        </div>
-                                    </div>
+                                    <!-- A real error message gets its own attention-drawing block; evidence/finalization metadata
+                                         already rides inline above as neutral pills. -->
+                                    <div v-if="row.merged.callDetails.error" class="event-card-error">{{ row.merged.callDetails.error }}</div>
                                 </div>
                             </article>
                         </TransitionGroup>
+                    </section>
+
+                    <!-- Timing insights are secondary diagnostics, so they sit below the event list rather than
+                         competing for attention above it. -->
+                    <section v-if="vm.detailTab === 'events' && vm.traceTimingInsights.length" class="pass-file-outcome-section">
+                        <div class="pass-final-result-header">
+                            <h4>Timing Insights</h4>
+                            <span class="chip chip-muted">Current pass</span>
+                        </div>
+                        <ol class="timing-insights-list" aria-label="Slowest visible tool calls">
+                            <li v-for="insight in vm.traceTimingInsights" :key="insight.eventId">
+                                <button type="button" class="timing-insight-row" @click="vm.openTimingInsight(insight)">
+                                    <span class="timing-insight-rank">#{{ insight.rank }}</span>
+                                    <span class="timing-insight-tool">{{ insight.toolName }}</span>
+                                    <span class="timing-insight-context">{{ insight.passLabel }}</span>
+                                    <span class="timing-insight-duration">{{ vm.formatDurationWithMs(insight.durationMs) }}</span>
+                                    <span class="timing-insight-meta">
+                                        <template v-if="insight.waitDurationMs != null || insight.activeDurationMs != null">
+                                            <span v-if="insight.waitDurationMs != null">Wait {{ vm.formatDurationWithMs(insight.waitDurationMs) }}</span>
+                                            <span v-if="insight.activeDurationMs != null">Active {{ vm.formatDurationWithMs(insight.activeDurationMs) }}</span>
+                                        </template>
+                                        <span v-else-if="insight.hasPhaseDetail">Phase detail available</span>
+                                    </span>
+                                </button>
+                            </li>
+                        </ol>
                     </section>
 
                     <section v-if="vm.detailTab === 'diff'" class="diff-section" data-testid="trace-diff-section">
@@ -574,9 +581,17 @@ function retryFileDiff() {
     border-radius: var(--radius-lg);
     padding: 0;
     border: 1px solid var(--color-border);
-    overflow: hidden;
+    /* NOTE: must stay `visible` (was `hidden`) — an `overflow` other than visible traps the sticky
+       pass selector inside this box and it stops sticking to the viewport. */
+    overflow: visible;
     display: flex;
     flex-direction: column;
+}
+
+/* Restore the rounded top to match the card now that the container no longer clips. */
+.protocol-content > .pass-selector {
+    border-top-left-radius: var(--radius-lg);
+    border-top-right-radius: var(--radius-lg);
 }
 
 .pass-main {
@@ -584,13 +599,39 @@ function retryFileDiff() {
     min-width: 0;
 }
 
+.reason-line {
+    margin: 0;
+    padding: 0.6rem 1.5rem 0;
+    color: var(--color-text-muted);
+    font-size: 0.78rem;
+    line-height: 1.45;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+}
+
+.pass-failed-note {
+    margin: 0;
+    padding: 0.75rem 1.5rem 0;
+    color: var(--color-warning);
+    font-size: 0.85rem;
+}
+
 .pass-detail-header {
     display: flex;
     align-items: center;
     gap: 0.75rem;
-    padding: 1rem 1.5rem;
-    background: rgba(255, 255, 255, 0.02);
-    border-bottom: 1px solid var(--color-border);
+    flex-wrap: wrap;
+    padding: 0.85rem 1.5rem 0;
+    min-width: 0;
+}
+
+.pass-detail-title {
+    margin: 0;
+    font-size: 0.95rem;
+    font-weight: 600;
+    color: var(--color-text);
     min-width: 0;
 }
 
@@ -645,25 +686,6 @@ function retryFileDiff() {
     padding: 1.25rem 1.5rem 1.5rem;
     overflow: hidden;
     min-width: 0;
-}
-
-.pass-detail-filepath {
-    flex: 1;
-    min-width: 0;
-    font-family: 'JetBrains Mono', 'Fira Code', monospace;
-    font-size: 0.9rem;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-}
-
-.pass-detail-dir {
-    color: var(--color-text-muted);
-}
-
-.pass-detail-filename {
-    color: var(--color-text);
-    font-weight: 600;
 }
 
 .chip {
@@ -842,12 +864,12 @@ function retryFileDiff() {
     }
 }
 
+/* Match the horizontal rhythm of the other pass sections (summary grid, timing insights) instead of the
+   old centered max-width column. */
 .events-section {
-    padding: 1.5rem;
+    padding: 0 1.5rem 1.5rem;
     flex: 1;
     overflow-y: auto;
-    max-width: 1000px;
-    margin: 0 auto;
     width: 100%;
 }
 
@@ -857,25 +879,26 @@ function retryFileDiff() {
     justify-content: space-between;
     gap: 0.75rem;
     flex-wrap: wrap;
+    padding-top: 1.35rem;
     margin-bottom: 0.75rem;
 }
 
 .events-list {
     display: flex;
     flex-direction: column;
-    gap: 0.9rem;
+    gap: 0.5rem;
 }
 
 .event-card {
     position: relative;
     display: flex;
     align-items: stretch;
-    gap: 0.8rem;
-    padding: 1rem 1.1rem;
+    gap: 0.65rem;
+    padding: 0.55rem 0.8rem;
     border: 1px solid var(--color-border);
-    border-radius: var(--radius-xl);
+    border-radius: var(--radius-lg);
     background: linear-gradient(180deg, rgba(255, 255, 255, 0.028), rgba(255, 255, 255, 0.018));
-    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.12);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
 }
 
 .event-card-main {
@@ -883,71 +906,52 @@ function retryFileDiff() {
     width: 100%;
     display: flex;
     flex-direction: column;
-    gap: 0.85rem;
+    gap: 0.4rem;
     min-width: 0;
 }
 
-.event-card-header,
-.event-card-secondary {
-    min-width: 0;
-}
-
-.event-card-header {
-    display: flex;
-    flex-direction: column;
-    gap: 0.65rem;
-}
-
-.event-card-secondary {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-    display: grid;
-    gap: 0.75rem;
-    padding-top: 0.85rem;
-    border-top: 1px solid rgba(255, 255, 255, 0.05);
-}
-
-@media (max-width: 1200px) {
-    .event-card-secondary {
-        grid-template-columns: repeat(2, minmax(0, 1fr));
-    }
-}
-
-@media (max-width: 900px) {
-    .event-card-secondary {
-        grid-template-columns: minmax(0, 1fr);
-    }
-
-    .event-title-stack {
-        flex-direction: column;
-        align-items: flex-start;
-    }
-}
-
-.event-metric-card {
-    display: flex;
-    flex-direction: column;
-    gap: 0.35rem;
-    padding: 0.75rem 0.85rem;
-    border-radius: var(--radius-lg);
-    background: rgba(255, 255, 255, 0.025);
-    border: 1px solid rgba(255, 255, 255, 0.04);
-    min-width: 0;
-}
-
-.event-card-meta-row {
+/* The whole event collapses onto one wrapping line; trailing metadata clusters right and wraps as a unit. */
+.event-card-line {
     display: flex;
     align-items: center;
-    justify-content: space-between;
-    gap: 0.75rem;
     flex-wrap: wrap;
+    gap: 0.35rem 0.5rem;
+    min-width: 0;
+    width: 100%;
 }
 
-.event-card-label {
-    font-size: 0.72rem;
-    font-weight: 600;
+.event-card-line .event-name-label {
+    flex: 0 1 auto;
+    min-width: 0;
+}
+
+.event-line-trailing {
+    margin-left: auto;
+    display: inline-flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 0.35rem 0.5rem;
+    min-width: 0;
+}
+
+.event-line-tokens {
+    font-family: monospace;
+    font-size: 0.82rem;
     color: var(--color-text-muted);
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
+    white-space: nowrap;
+}
+
+.event-line-tokens strong {
+    color: var(--color-text);
+    font-weight: 700;
+}
+
+.event-card-error {
+    color: var(--color-danger);
+    font-size: 0.85rem;
+    line-height: 1.45;
+    overflow-wrap: anywhere;
+    word-break: break-word;
 }
 
 .row-error {
@@ -979,55 +983,21 @@ function retryFileDiff() {
     background: rgba(34, 211, 238, 0.05);
 }
 
-.event-card-kind-group {
-    display: flex;
-    align-items: center;
-    gap: 0.45rem;
-    flex-wrap: wrap;
-    min-width: 0;
-}
-
-.kind-cell--child {
-    padding-left: 0;
-}
-
 .row-child .date-cell,
-.row-child .tokens-cell,
-.row-child .error-cell {
+.row-child .event-line-tokens {
     color: var(--color-text-muted);
-}
-
-.event-card-title-row {
-    display: flex;
-    align-items: flex-start;
-    gap: 0.7rem;
-    min-width: 0;
-}
-
-.event-card-title-row--child {
-    padding-left: 0;
-}
-
-.event-title-stack {
-    display: flex;
-    flex-direction: column;
-    align-items: stretch;
-    justify-content: flex-start;
-    gap: 0.45rem;
-    min-width: 0;
-    width: 100%;
 }
 
 .date-cell {
-    font-size: 0.83rem;
+    font-size: 0.8rem;
     color: var(--color-text-muted);
+    white-space: nowrap;
     min-width: 0;
 }
 
-.tokens-cell {
-    font-family: monospace;
-    color: var(--color-text);
-    min-width: 0;
+.tokens-sep {
+    color: var(--color-text-muted);
+    margin: 0 0.1rem;
 }
 
 .timing-inline-group {
@@ -1097,16 +1067,9 @@ function retryFileDiff() {
     color: var(--color-text);
 }
 
-.timing-detail,
-.timing-empty {
+.timing-detail {
     font-size: 0.82rem;
     color: var(--color-text-muted);
-}
-
-.timing-badges {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 0.25rem;
 }
 
 .status-badge {

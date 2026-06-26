@@ -10118,7 +10118,7 @@ export interface components {
          * @description Product-owned AI purposes that resolve to configured models.
          * @enum {string}
          */
-        AiPurpose: "reviewDefault" | "proRvPrefilter" | "reviewLowEffort" | "reviewMediumEffort" | "reviewHighEffort" | "memoryReconsideration" | "embeddingDefault";
+        AiPurpose: "reviewDefault" | "proRvPrefilter" | "reviewLowEffort" | "reviewMediumEffort" | "reviewHighEffort" | "memoryReconsideration" | "embeddingDefault" | "reviewTriage";
         /** @description One configured AI purpose binding for an AI connection profile. */
         AiPurposeBindingDto: {
             /** Format: uuid */
@@ -11521,6 +11521,8 @@ export interface components {
             severity?: components["schemas"]["CommentSeverity"];
             /** @description Final comment text. */
             message?: string | null;
+            /** @description The `ReviewPassKind` name of the pass that produced this finding, when known. */
+            originPassKind?: string | null;
         };
         /** @description Visibility for one tool-result evidence bounding or refresh action. */
         ProtocolToolEvidenceDto: {
@@ -11669,6 +11671,7 @@ export interface components {
             lineNumber?: number | null;
             severity?: components["schemas"]["CommentSeverity"];
             message?: string | null;
+            originPassKind?: string | null;
         };
         /**
          * @description Controls whether one or more review strategies execute against a PR snapshot.
@@ -11794,6 +11797,14 @@ export interface components {
             /** @description True when this pass was inherited from a prior same-revision retry source job. */
             isInherited?: boolean;
             inheritance?: components["schemas"]["ProtocolInheritanceDto"];
+            /**
+             * @description The kind of review pass — the `ReviewPassKind` name (e.g. `"Baseline"`,
+             *     `"ProRVAugmentation"`). null for legacy rows and passes with no
+             *     meaningful kind (e.g. synthesis, which the UI derives from MeisterProPR.Application.DTOs.ReviewJobProtocolDto.Label).
+             */
+            passKind?: string | null;
+            /** @description Human-readable reason this pass ran (e.g. an augmentation re-review). null for baseline/legacy. */
+            reason?: string | null;
         };
         /** @description Response returned when a failed review job is restarted. */
         ReviewJobRestartResponse: {

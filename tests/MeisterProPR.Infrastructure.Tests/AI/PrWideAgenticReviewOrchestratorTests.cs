@@ -2,6 +2,7 @@
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
 using MeisterProPR.Application.DTOs.ProCursor;
+using MeisterProPR.Application.Features.Reviewing.Execution.Models;
 using MeisterProPR.Application.Interfaces;
 using MeisterProPR.Application.Options;
 using MeisterProPR.Application.ValueObjects;
@@ -218,7 +219,7 @@ public sealed class PrWideAgenticReviewOrchestratorTests
                 Arg.Any<Guid?>(),
                 Arg.Any<AiConnectionModelCategory?>(),
                 Arg.Any<string?>(),
-                Arg.Any<CancellationToken>())
+                Arg.Any<CancellationToken>(), Arg.Any<ReviewPassKind?>(), Arg.Any<string?>())
             .Returns(prWideProtocolId);
         protocolRecorder.RecordPrWideStageEventAsync(
                 Arg.Any<Guid>(),
@@ -382,7 +383,7 @@ public sealed class PrWideAgenticReviewOrchestratorTests
                 Arg.Any<Guid?>(),
                 Arg.Any<AiConnectionModelCategory?>(),
                 Arg.Any<string?>(),
-                Arg.Any<CancellationToken>())
+                Arg.Any<CancellationToken>(), Arg.Any<ReviewPassKind?>(), Arg.Any<string?>())
             .Returns(prWideProtocolId);
         protocolRecorder.RecordPrWideStageEventAsync(
                 Arg.Any<Guid>(),
@@ -551,7 +552,7 @@ public sealed class PrWideAgenticReviewOrchestratorTests
                 Arg.Any<Guid?>(),
                 Arg.Any<AiConnectionModelCategory?>(),
                 Arg.Any<string?>(),
-                Arg.Any<CancellationToken>())
+                Arg.Any<CancellationToken>(), Arg.Any<ReviewPassKind?>(), Arg.Any<string?>())
             .Returns(prWideProtocolId);
         protocolRecorder.RecordPrWideStageEventAsync(
                 Arg.Any<Guid>(),

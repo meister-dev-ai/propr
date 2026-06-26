@@ -325,15 +325,14 @@ public class ReviewPromptsTests
         {
             PerFileHint = new PerFileReviewHint("src/Foo.cs", 1, 1, [new ChangedFileSummary("src/Foo.cs", ChangeType.Edit)])
             {
-                RiskMarkers = new FileRiskMarkers(true, true, ["security.auth-token", "concurrency.async-loop"]),
+                RiskMarkers = new FileRiskMarkers(true, ["security.auth-token"]),
             },
         };
 
         var prompt = ReviewPrompts.BuildPerFileContextPrompt(context, "src/Foo.cs", 1, 1);
 
-        Assert.Contains("Security And Concurrency Specialist Checklist", prompt, StringComparison.Ordinal);
+        Assert.Contains("Security Specialist Checklist", prompt, StringComparison.Ordinal);
         Assert.Contains("security.auth-token", prompt, StringComparison.Ordinal);
-        Assert.Contains("concurrency.async-loop", prompt, StringComparison.Ordinal);
     }
 
     [Fact]

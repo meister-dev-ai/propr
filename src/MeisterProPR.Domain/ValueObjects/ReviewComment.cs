@@ -37,4 +37,12 @@ public sealed record ReviewComment
 
     /// <summary>Comment message text.</summary>
     public string Message { get; }
+
+    /// <summary>
+    ///     The <c>ReviewPassKind</c> name of the review pass that produced this finding (e.g.
+    ///     <c>"Baseline"</c>, <c>"ProRVAugmentation"</c>), when known. Provenance metadata only:
+    ///     it does not participate in deduplication (which keys on message text) and is
+    ///     <see langword="null" /> for legacy comments and comments with no recorded origin.
+    /// </summary>
+    public string? OriginPassKind { get; init; }
 }

@@ -112,8 +112,11 @@ internal sealed class ReviewSynthesisExecutor(
         {
             var combinedComments = synthesisOutcome.SynthesizedFindings.Count > 0
                 ? CandidateFindingFactory.AssignSynthesisFindingIds(synthesisOutcome.SynthesizedFindings)
-                    .Select(finding => FileByFileReviewOrchestrator.CreateReviewComment(
-                        finding.FilePath, finding.LineNumber, finding.Severity, finding.Message))
+                    .Select(finding => FileByFileReviewOrchestrator.CreateReviewComment(finding.FilePath, finding.LineNumber, finding.Severity, finding.Message)
+                        with
+                        {
+                            OriginPassKind = finding.Provenance.ResolveOriginPassKindName(),
+                        })
                     .Concat(deduped)
                     .ToList()
                 : (IReadOnlyList<ReviewComment>)deduped;
@@ -587,7 +590,11 @@ internal sealed class ReviewSynthesisExecutor(
         return candidateFindings
             .Where(finding => decisionsById.TryGetValue(finding.FindingId, out var decision)
                               && string.Equals(decision.Disposition, FinalGateDecision.PublishDisposition, StringComparison.Ordinal))
-            .Select(finding => FileByFileReviewOrchestrator.CreateReviewComment(finding.FilePath, finding.LineNumber, finding.Severity, finding.Message))
+            .Select(finding => FileByFileReviewOrchestrator.CreateReviewComment(finding.FilePath, finding.LineNumber, finding.Severity, finding.Message)
+                with
+                {
+                    OriginPassKind = finding.Provenance.ResolveOriginPassKindName(),
+                })
             .ToList();
     }
 

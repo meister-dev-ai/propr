@@ -2,25 +2,31 @@
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
 import { computed, nextTick, onMounted, onUnmounted, reactive, ref, shallowRef, watch } from 'vue'
-import { useRoute } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
+import type { LocationQueryRaw } from 'vue-router'
 import { createAdminClient } from '@/services/api'
 import { createDismissal } from '@/services/findingDismissalsService'
 import { restartJob } from '@/services/jobsService'
+import { formatTriageDecision } from './formatTriageDecision'
+import { originLabel, passKindLabel } from './passLabels'
 import { useFileDiff } from './useFileDiff'
 import { useTokenTotals } from './useTokenTotals'
 import { useTraceSearch } from './useTraceSearch'
 import type {
     AgenticInvestigationOutputRecord,
+    CommentGroupComment,
     CommentRelevanceEventDetails,
     CommentRelevanceOutputRecord,
     CommentSidebarItem,
     CommentTreeNode,
     EventDisplayRow,
     EventTimingPresentation,
+    FileGroup,
     FinalGateDecisionRecord,
     FinalGateSummaryRecord,
     JobDetail,
     MergedEvent,
+    PassTab,
     PendingToolRow,
     ProtocolEventDto,
     ProtocolEventPhaseTimingDto,
@@ -37,6 +43,8 @@ import type {
     ReviewProtocolPass,
     TimingInsight,
     ToolPhaseGroup,
+    TriageDecisionEventDetails,
+    TriageDecisionPresentation,
     VerificationEvidenceOutputRecord,
     VerificationRecord,
 } from '../types'
@@ -98,6 +106,7 @@ import {
 
 export function useJobProtocolViewModel() {
     const route = useRoute()
+    const router = useRouter()
 
     const loading = ref(false)
     const error = ref('')
@@ -105,6 +114,8 @@ export function useJobProtocolViewModel() {
     const protocols = shallowRef<ReviewProtocolPass[]>([])
     const loadedProtocolIds = ref<Set<string>>(new Set())
     const loadingProtocolIds = ref<Set<string>>(new Set())
+    // Bumped to cancel an in-flight Traces-tab background backfill (tab leave, unmount, job change).
+    let traceBackfillToken = 0
     const activePassId = ref<string | null>(null)
     const selectedMergedEvent = ref<MergedEvent | null>(null)
     const expandedPhaseGroups = ref<Set<string>>(new Set())
@@ -115,7 +126,7 @@ export function useJobProtocolViewModel() {
     const jobStatus = ref<string | null>(null)
     const restarting = ref(false)
     const collapsedFolders = ref<Set<string>>(new Set())
-    const collapsedEventParents = ref<Set<string>>(new Set())
+    const expandedEventParents = ref<Set<string>>(new Set())
     const selectedCommentPath = ref<string | null>(null)
     const isSummaryModalOpen = ref(false)
     const focusedEventId = ref<string | null>(null)
@@ -190,11 +201,11 @@ export function useJobProtocolViewModel() {
     const dismissingIds = ref<Set<string>>(new Set())
     const dismissToast = ref<{ message: string; isError: boolean } | null>(null)
 
-    function commentKey(comment: ProtocolReviewComment): string {
+    function commentKey(comment: CommentGroupComment): string {
         return `${comment.filePath ?? comment.file_path ?? ''}:${comment.lineNumber ?? comment.line_number ?? 0}:${String(comment.message ?? '').slice(0, 80)}`
     }
 
-    async function dismissComment(comment: ProtocolReviewComment) {
+    async function dismissComment(comment: CommentGroupComment) {
         const clientId = routeClientId.value
         if (!clientId) {
             dismissToast.value = { message: 'Cannot dismiss: client context not available.', isError: true }
@@ -305,14 +316,14 @@ export function useJobProtocolViewModel() {
     }
 
     function toggleEventParent(eventId: string) {
-        const next = new Set(collapsedEventParents.value)
+        const next = new Set(expandedEventParents.value)
         if (next.has(eventId)) {
             next.delete(eventId)
         } else {
             next.add(eventId)
         }
 
-        collapsedEventParents.value = next
+        expandedEventParents.value = next
     }
 
     function parseFilePath(label: string | null | undefined) {
@@ -326,6 +337,60 @@ export function useJobProtocolViewModel() {
 
     function protocolHasFinalFindings(protocol: ReviewProtocolPass): boolean {
         return (protocol.finalComments?.length ?? 0) > 0
+    }
+
+    function passTokenTotal(protocol: ReviewProtocolPass): number {
+        return (protocol.totalInputTokens ?? 0) + (protocol.totalOutputTokens ?? 0)
+    }
+
+    // PR-level passes belong to no single changed file (synthesis, the PR-wide
+    // review, the posting/finalization bookkeeping pass). They group under the
+    // synthetic "PR-level" file rather than a file path.
+    const PR_LEVEL_LABELS = new Set(['synthesis', 'pr-wide-review', 'finalization', 'posting'])
+
+    function isPrLevelPass(protocol: ReviewProtocolPass): boolean {
+        if (protocol.fileResultId) return false
+        const label = (protocol.label ?? '').trim().toLowerCase()
+        return PR_LEVEL_LABELS.has(label)
+    }
+
+    // Bookkeeping passes carry no AI cost and no findings (e.g. "posting").
+    // They are hidden from the selectable file/pass tree per the spec, but are
+    // left untouched in the underlying protocols/trace-row pipelines. A PR-level
+    // pass that has trace events or a failed outcome is NOT bookkeeping noise
+    // (e.g. a synthesis pass that errored before any AI call) and stays visible.
+    function isHiddenBookkeepingPass(protocol: ReviewProtocolPass): boolean {
+        if (!isPrLevelPass(protocol)) return false
+        const hasTokens = passTokenTotal(protocol) > 0
+        const hasFindings = protocolHasFinalFindings(protocol)
+        const hasEvents = (protocol.events?.length ?? 0) > 0
+        const failed = (protocol.outcome ?? '').toLowerCase() === 'failed'
+        return !hasTokens && !hasFindings && !hasEvents && !failed
+    }
+
+    function fileKeyForPass(protocol: ReviewProtocolPass): string {
+        return isPrLevelPass(protocol) ? '' : (protocol.label ?? '')
+    }
+
+    function buildPassTab(protocol: ReviewProtocolPass): PassTab {
+        const reason = (protocol.reason ?? '').trim()
+        return {
+            id: protocol.id ?? '',
+            label: passKindLabel(protocol.passKind, protocol.label),
+            reason: reason.length > 0 ? reason : null,
+            tokens: passTokenTotal(protocol),
+            findingCount: protocol.finalComments?.length ?? 0,
+            failed: (protocol.outcome ?? '').toLowerCase() === 'failed',
+        }
+    }
+
+    function passChronologicalCompare(left: ReviewProtocolPass, right: ReviewProtocolPass): number {
+        const leftStarted = left.startedAt ? new Date(left.startedAt).getTime() : 0
+        const rightStarted = right.startedAt ? new Date(right.startedAt).getTime() : 0
+        if (leftStarted !== rightStarted) return leftStarted - rightStarted
+        // Baseline before augmentation when timestamps tie.
+        const order = (kind: string | null | undefined) => (kind === 'Baseline' ? 0 : 1)
+        return order(left.passKind) - order(right.passKind)
     }
 
     const sidebarItems = computed<ProtocolSidebarItem[]>(() => {
@@ -425,6 +490,94 @@ export function useJobProtocolViewModel() {
             .filter((item): item is Extract<ProtocolSidebarItem, { type: 'pass' }> => item.type === 'pass')
             .map(item => item.protocol),
     )
+
+    // File → passes selector model. Groups the visible passes by file PATH (not
+    // fileResultId — augmentation passes have a null fileResultId but share the
+    // file-path label with their base pass). Job-wide passes collect under the
+    // synthetic "PR-level" group. Empty / 0-token bookkeeping passes are hidden.
+    const fileGroups = computed<FileGroup[]>(() => {
+        const order: string[] = []
+        const byKey = new Map<string, ReviewProtocolPass[]>()
+
+        for (const protocol of treeVisiblePasses.value) {
+            if (isHiddenBookkeepingPass(protocol)) {
+                continue
+            }
+
+            const key = fileKeyForPass(protocol)
+            if (!byKey.has(key)) {
+                byKey.set(key, [])
+                order.push(key)
+            }
+            byKey.get(key)!.push(protocol)
+        }
+
+        // PR-level last; files alphabetical by path.
+        order.sort((left, right) => {
+            if (left === '') return 1
+            if (right === '') return -1
+            return left.localeCompare(right)
+        })
+
+        return order.map(key => {
+            const passes = [...(byKey.get(key) ?? [])].sort(passChronologicalCompare)
+            const isPrLevel = key === ''
+            const { filename, directory } = parseFilePath(key)
+            const totalTokens = passes.reduce((sum, pass) => sum + passTokenTotal(pass), 0)
+            const totalFindings = passes.reduce((sum, pass) => sum + (pass.finalComments?.length ?? 0), 0)
+
+            return {
+                path: key,
+                label: isPrLevel ? 'PR-level' : key,
+                isPrLevel,
+                directory,
+                filename: isPrLevel ? 'PR-level' : filename,
+                passes,
+                tabs: passes.map(buildPassTab),
+                totalTokens,
+                totalFindings,
+            }
+        })
+    })
+
+    const activeFile = computed<FileGroup | null>(() => {
+        const groups = fileGroups.value
+        if (groups.length === 0) return null
+        const fromActive = groups.find(group => group.passes.some(pass => pass.id === activePassId.value))
+        return fromActive ?? groups[0]
+    })
+
+    const passesForActiveFile = computed<ReviewProtocolPass[]>(() => activeFile.value?.passes ?? [])
+
+    const activeFilePassTabs = computed<PassTab[]>(() => activeFile.value?.tabs ?? [])
+
+    function selectFile(filePath: string): void {
+        const group = fileGroups.value.find(candidate => candidate.path === filePath)
+        if (!group || group.passes.length === 0) return
+        const nextId = group.passes[0]?.id ?? null
+        if (nextId && activePassId.value !== nextId) {
+            activePassId.value = nextId
+        }
+    }
+
+    // Flat traversal order across every file group's passes — drives the prev/next pass stepper. Setting
+    // activePassId is enough; activeFile is derived from it, so stepping into another file switches the selector.
+    const orderedPassIds = computed<string[]>(() => fileGroups.value.flatMap(group => group.tabs.map(tab => tab.id)))
+    const activePassFlatIndex = computed<number>(() => orderedPassIds.value.indexOf(activePassId.value ?? ''))
+    const previousPassId = computed<string | null>(() => {
+        const index = activePassFlatIndex.value
+        return index > 0 ? orderedPassIds.value[index - 1] ?? null : null
+    })
+    const nextPassId = computed<string | null>(() => {
+        const index = activePassFlatIndex.value
+        return index >= 0 && index < orderedPassIds.value.length - 1 ? orderedPassIds.value[index + 1] ?? null : null
+    })
+
+    function goToPass(passId: string | null): void {
+        if (passId && activePassId.value !== passId) {
+            activePassId.value = passId
+        }
+    }
 
     const commentSidebarItems = computed<CommentSidebarItem[]>(() => {
         const comments = filteredCommentsForTree.value
@@ -544,12 +697,95 @@ export function useJobProtocolViewModel() {
         }))
     })
 
+    // Aggregate findings view, grouped by FILE path (mirrors the selector) with
+    // each finding's coarse origin label resolved for the origin badge. Findings
+    // with an unknown origin carry a null label so the UI renders no badge.
+    const aggregateFindingsByFile = computed<Array<{ directory: string; comments: ProtocolReviewComment[] }>>(() => {
+        const comments = filteredCommentsForDetail.value
+        const groups: Record<string, ProtocolReviewComment[]> = {}
+
+        comments.forEach(comment => {
+            const path = comment.filePath || comment.file_path || 'PR-level'
+            if (!groups[path]) groups[path] = []
+            groups[path].push(comment)
+        })
+
+        const sortedKeys = Object.keys(groups).sort((left, right) => {
+            if (left === 'PR-level') return 1
+            if (right === 'PR-level') return -1
+            return left.localeCompare(right)
+        })
+
+        const severityRank: Record<string, number> = { error: 0, warning: 1, info: 2, suggestion: 3 }
+        return sortedKeys.map(path => ({
+            directory: path,
+            comments: [...groups[path]].sort((left, right) => {
+                const sevA = severityRank[(left.severity ?? '').toLowerCase()] ?? 9
+                const sevB = severityRank[(right.severity ?? '').toLowerCase()] ?? 9
+                if (sevA !== sevB) return sevA - sevB
+                return (left.lineNumber || left.line_number || 0) - (right.lineNumber || right.line_number || 0)
+            }),
+        }))
+    })
+
+    function commentOriginLabel(comment: { originPassKind?: string | null }): string | null {
+        return originLabel(comment.originPassKind)
+    }
+
+    // Deep-link from an aggregate-view origin badge to the (file, pass) trace
+    // that produced the finding. Finding provenance is COARSE — only "Baseline"
+    // or "ProRVAugmentation". Match on the passKind FAMILY, not the rendered
+    // label: a "Baseline" origin lands on the baseline pass; a "ProRVAugmentation"
+    // origin lands on the augmentation pass in the file.
+    function selectFindingOrigin(comment: CommentGroupComment): void {
+        const filePath = comment.filePath || comment.file_path || ''
+        const targetGroup = fileGroups.value.find(group => group.path === filePath)
+            ?? fileGroups.value.find(group => group.isPrLevel)
+        if (!targetGroup || targetGroup.passes.length === 0) return
+
+        const origin = comment.originPassKind
+        const isAugmentationKind = (kind: string | null | undefined) =>
+            kind === 'ProRVAugmentation'
+
+        let matchByFamily: ReviewProtocolPass | undefined
+        if (origin === 'Baseline') {
+            matchByFamily = targetGroup.passes.find(pass => pass.passKind === 'Baseline')
+        } else if (isAugmentationKind(origin)) {
+            matchByFamily = targetGroup.passes.find(pass => isAugmentationKind(pass.passKind))
+        }
+
+        const target = matchByFamily ?? targetGroup.passes[0]
+
+        if (target?.id) {
+            activePassId.value = target.id
+        }
+        activeTab.value = 'traces'
+    }
+
     const activePass = computed<ReviewProtocolPass | null>(() => {
         if (!protocols.value.length || activeTab.value === 'summary') return null
         return protocols.value.find(protocol => protocol.id === activePassId.value) ?? protocols.value[0]
     })
 
     const activePassFinalComments = computed<ReviewCommentRecord[]>(() => activePass.value?.finalComments ?? [])
+
+    // "You are here" metadata for the breadcrumb + reason line.
+    const activePassLabel = computed<string>(() =>
+        activePass.value ? passKindLabel(activePass.value.passKind, activePass.value.label) : '',
+    )
+
+    const activeFileDisplayPath = computed<string>(() => {
+        const group = activeFile.value
+        if (!group) return ''
+        return group.isPrLevel ? 'PR-level' : group.path
+    })
+
+    const activePassReason = computed<string | null>(() => {
+        const reason = (activePass.value?.reason ?? '').trim()
+        return reason.length > 0 ? reason : null
+    })
+
+    const activePassFailed = computed<boolean>(() => (activePass.value?.outcome ?? '').toLowerCase() === 'failed')
 
     watch(activePassId, protocolId => {
         if (!protocolId) {
@@ -764,10 +1000,10 @@ export function useJobProtocolViewModel() {
 
     function buildEventRows(protocol: ReviewProtocolPass | null | undefined): EventDisplayRow[] {
         if (protocol) {
-            const collapsed = collapsedEventParents.value
+            const expanded = expandedEventParents.value
             const filterKey = JSON.stringify(normalizedTraceFilters.value)
             const cached = eventRowsCache.get(protocol)
-            if (cached && cached.collapseKey === collapsed && cached.filterKey === filterKey) {
+            if (cached && cached.collapseKey === expanded && cached.filterKey === filterKey) {
                 return cached.rows
             }
         }
@@ -877,7 +1113,10 @@ export function useJobProtocolViewModel() {
         for (const merged of filteredMergedEvents) {
             if (isPrimaryAiTurnEvent(merged)) {
                 const children = childEventsByParentId.get(merged.id) ?? []
-                const isExpanded = !collapsedEventParents.value.has(merged.id)
+                // AI-turn parents collapse their tool-call children by default; the set tracks the ones the user
+                // has explicitly expanded. While a trace search is active everything expands so a matching child
+                // is never hidden inside a collapsed parent.
+                const isExpanded = hasActiveTraceFilters.value || expandedEventParents.value.has(merged.id)
                 rows.push(createDisplayRow(merged, 0, null, null, false, children.length, isExpanded))
 
                 if (isExpanded) {
@@ -895,7 +1134,7 @@ export function useJobProtocolViewModel() {
 
         if (protocol) {
             eventRowsCache.set(protocol, {
-                collapseKey: collapsedEventParents.value,
+                collapseKey: expandedEventParents.value,
                 filterKey: JSON.stringify(normalizedTraceFilters.value),
                 rows,
             })
@@ -983,6 +1222,13 @@ export function useJobProtocolViewModel() {
         } catch {
             return null
         }
+    })
+
+    const selectedTriageDecision = computed<TriageDecisionPresentation | null>(() => {
+        if (selectedMergedEvent.value?.callDetails.name !== 'triage_decision') return null
+        return isPlainObject(parsedInputResult.value)
+            ? formatTriageDecision(parsedInputResult.value as TriageDecisionEventDetails)
+            : null
     })
 
     const parsedOutputResult = computed(() => {
@@ -1198,12 +1444,18 @@ export function useJobProtocolViewModel() {
 
 
     let pollInterval: ReturnType<typeof setInterval> | null = null
+    // Guards against overlapping loads: on a heavy review the protocol fetch can take longer than the
+    // 3 s poll cadence, so without this a new tick would stack a second request on top of the unfinished
+    // one (they pile up on the browser's per-host connection pool). A tick that fires while a previous
+    // load is still running is skipped. Always reset in the finally below so it can never wedge.
+    let loadInFlight = false
 
     function resetProtocolState() {
         error.value = ''
         protocols.value = []
         loadedProtocolIds.value = new Set()
         loadingProtocolIds.value = new Set()
+        traceBackfillToken++
         reviewStatus.value = null
         jobDetail.value = null
         activePassId.value = null
@@ -1217,6 +1469,12 @@ export function useJobProtocolViewModel() {
     }
 
     async function loadProtocol(showLoading = false) {
+        // Skip a background POLL tick if a load is already running (on a heavy review the fetch can take
+        // longer than the 3 s cadence, so unguarded ticks stack). Explicit loads (showLoading=true: mount,
+        // route change, restart) always proceed so navigating to another job is never dropped. The flag is
+        // reset in the finally below, so it can never wedge.
+        if (loadInFlight && !showLoading) return
+        loadInFlight = true
         if (showLoading) loading.value = true
         try {
             const jobId = route.params.id as string
@@ -1232,9 +1490,37 @@ export function useJobProtocolViewModel() {
             if (fetchError) {
                 if (showLoading) error.value = 'Protocol not found for this job.'
             } else if (Array.isArray(data)) {
-                const normalizedProtocols = [...data].sort(compareProtocols)
+                const sortedOverview = [...data].sort(compareProtocols)
+                // Incremental refresh: a completed pass's events are immutable, so keep the
+                // already-loaded body (reusing the same object so eventRowsCache stays warm)
+                // instead of dropping it and re-downloading the full pass on every poll.
+                // Passes that are still processing are dropped from the loaded set so the
+                // active one keeps re-fetching and shows newly recorded events.
+                const existingById = new Map(
+                    protocols.value
+                        .filter((pass): pass is ReviewProtocolPass & { id: string } => !!pass.id)
+                        .map(pass => [pass.id, pass] as const),
+                )
+                const nextLoaded = new Set<string>()
+                const normalizedProtocols = sortedOverview.map(overview => {
+                    const existing = overview.id ? existingById.get(overview.id) : undefined
+                    const wasLoaded = !!overview.id && loadedProtocolIds.value.has(overview.id)
+                    // Preserve the loaded body only while BOTH the cached copy and the fresh
+                    // overview agree the pass is complete (a restart can re-open a completed id).
+                    if (existing && wasLoaded && existing.completedAt && overview.completedAt) {
+                        nextLoaded.add(overview.id as string)
+                        // Refresh pass-level scalars (outcome, token totals, finalComments, …)
+                        // from the overview while keeping the immutable loaded event bodies, and
+                        // keep the same object instance so eventRowsCache stays warm.
+                        const loadedEvents = existing.events
+                        Object.assign(existing, overview)
+                        existing.events = loadedEvents
+                        return existing
+                    }
+                    return overview
+                })
                 protocols.value = normalizedProtocols
-                loadedProtocolIds.value = new Set()
+                loadedProtocolIds.value = nextLoaded
                 if (resultRes.data) {
                     reviewStatus.value = resultRes.data
                 }
@@ -1255,12 +1541,32 @@ export function useJobProtocolViewModel() {
                     activePassId.value = normalizedProtocols[0].id
                 }
 
+                // Restore the active view (Findings / Execution trace / Tokens)
+                // from the URL before resolving the pass selection.
+                const routeView = typeof route.query.view === 'string' ? route.query.view : null
+                if (routeView === 'summary' || routeView === 'traces' || routeView === 'tokens') {
+                    activeTab.value = routeView
+                }
+
+                // Resolve the active pass from the URL. `pass` (the new param)
+                // wins, then the legacy `protocolId`, then `file` (first pass of
+                // the named file), then the current/first pass. Invalid ids fall
+                // back without crashing.
+                const routePassId = typeof route.query.pass === 'string' ? route.query.pass : null
                 const routeProtocolId = typeof route.query.protocolId === 'string' ? route.query.protocolId : null
-                const protocolIdToLoad = routeProtocolId && normalizedProtocols.some(protocol => protocol.id === routeProtocolId)
-                    ? routeProtocolId
-                    : activePassId.value && normalizedProtocols.some(protocol => protocol.id === activePassId.value)
-                        ? activePassId.value
-                        : normalizedProtocols[0]?.id
+                const routeFile = typeof route.query.file === 'string' ? route.query.file : null
+                const passFromFile = routeFile
+                    ? normalizedProtocols.find(protocol => fileKeyForPass(protocol) === routeFile)?.id ?? null
+                    : null
+                const protocolIdToLoad = routePassId && normalizedProtocols.some(protocol => protocol.id === routePassId)
+                    ? routePassId
+                    : routeProtocolId && normalizedProtocols.some(protocol => protocol.id === routeProtocolId)
+                        ? routeProtocolId
+                        : passFromFile
+                            ? passFromFile
+                            : activePassId.value && normalizedProtocols.some(protocol => protocol.id === activePassId.value)
+                                ? activePassId.value
+                                : normalizedProtocols[0]?.id
 
                 if (protocolIdToLoad) {
                     if (activePassId.value !== protocolIdToLoad) {
@@ -1270,12 +1576,25 @@ export function useJobProtocolViewModel() {
                     await ensureProtocolPassLoaded(protocolIdToLoad)
                     await focusRouteEventIfRequested()
                 }
-                const isProcessing = normalizedProtocols.some(protocol => !protocol.completedAt) || resultRes.data?.status === 'processing'
+                // Drive the poll off the JOB's lifecycle status, not per-protocol completedAt.
+                // A 'pending' state must keep polling because startup recovery flips
+                // Processing→Pending→Processing, and once reconcile stamps orphaned protocols the old
+                // `.some(!completedAt)` heuristic would wrongly stop an active job (or run forever on a
+                // completed job that still carries a dangling protocol). The job status is authoritative.
+                // Arm while non-terminal; tear down ONLY on a CONFIRMED terminal status — an
+                // undefined/error status (e.g. a transient job-detail fetch miss on a poll tick, since
+                // the client returns { data: undefined } rather than throwing) must NOT stop an active
+                // poll, or one network blip would permanently freeze the live view.
+                const jobLifecycleStatus = detailRes.data?.status
+                const isProcessing = jobLifecycleStatus === 'processing' || jobLifecycleStatus === 'pending'
+                const isTerminal = jobLifecycleStatus === 'completed'
+                    || jobLifecycleStatus === 'failed'
+                    || jobLifecycleStatus === 'cancelled'
                 if (isProcessing && !pollInterval) {
                     pollInterval = setInterval(() => {
                         void loadProtocol(false)
                     }, 3000)
-                } else if (!isProcessing && pollInterval) {
+                } else if (isTerminal && pollInterval) {
                     clearInterval(pollInterval)
                     pollInterval = null
                 }
@@ -1284,6 +1603,7 @@ export function useJobProtocolViewModel() {
             if (showLoading) error.value = 'Failed to load protocol.'
         } finally {
             if (showLoading) loading.value = false
+            loadInFlight = false
         }
     }
 
@@ -1357,6 +1677,87 @@ export function useJobProtocolViewModel() {
         void loadProtocol(true)
     })
 
+    // Mirror the file / pass / view selection into the URL so a trace is a
+    // shareable deep link. The view-model owns selection; the URL only mirrors
+    // it (never blocks render). Existing protocolId / eventId / clientId query
+    // params are preserved untouched.
+    watch(
+        [activeFileDisplayPath, activePassId, activeTab],
+        ([filePath, passId, view]) => {
+            if (!router || typeof router.replace !== 'function') {
+                return
+            }
+            if (protocols.value.length === 0) {
+                return
+            }
+
+            const nextQuery: LocationQueryRaw = { ...route.query }
+
+            if (filePath) {
+                nextQuery.file = filePath === 'PR-level' ? '' : filePath
+            } else {
+                delete nextQuery.file
+            }
+
+            if (passId) {
+                nextQuery.pass = passId
+            } else {
+                delete nextQuery.pass
+            }
+
+            nextQuery.view = view
+
+            const sameFile = String(nextQuery.file ?? '') === String(route.query.file ?? '')
+            const samePass = String(nextQuery.pass ?? '') === String(route.query.pass ?? '')
+            const sameView = String(nextQuery.view ?? '') === String(route.query.view ?? '')
+            if (sameFile && samePass && sameView) {
+                return
+            }
+
+            void router.replace({ query: nextQuery }).catch(() => {
+                // Redundant navigation (NavigationDuplicated) is harmless here.
+            })
+        },
+        { flush: 'post' },
+    )
+
+    // Reconcile state FROM the URL so browser back/forward (which only mutates
+    // the address bar) drives the UI. Guarded by compare-before-set so it does
+    // not fight the state→URL write watcher above: it only acts when the URL's
+    // file/pass/view actually diverge from current state, and only for ids that
+    // exist. This watcher does NOT touch protocolId/eventId/clientId — those
+    // keep their reload behavior in the separate watcher below.
+    watch(
+        () => [
+            typeof route.query.view === 'string' ? route.query.view : null,
+            typeof route.query.pass === 'string' ? route.query.pass : null,
+            typeof route.query.file === 'string' ? route.query.file : null,
+        ] as const,
+        ([routeView, routePass, routeFile]) => {
+            if (protocols.value.length === 0) {
+                return
+            }
+
+            if ((routeView === 'summary' || routeView === 'traces' || routeView === 'tokens')
+                && routeView !== activeTab.value) {
+                activeTab.value = routeView
+            }
+
+            // Resolve the desired pass: an explicit `pass` wins, else the first
+            // pass of the named `file`. Ignore ids/files that don't exist.
+            let desiredPassId: string | null = null
+            if (routePass && protocols.value.some(protocol => protocol.id === routePass)) {
+                desiredPassId = routePass
+            } else if (routeFile !== null) {
+                desiredPassId = protocols.value.find(protocol => fileKeyForPass(protocol) === routeFile)?.id ?? null
+            }
+
+            if (desiredPassId && desiredPassId !== activePassId.value) {
+                activePassId.value = desiredPassId
+            }
+        },
+    )
+
     watch(
         () => `${String(route.params.id ?? '')}|${String(route.query.clientId ?? '')}|${String(route.query.protocolId ?? '')}|${String(route.query.eventId ?? '')}`,
         (nextKey, previousKey) => {
@@ -1369,15 +1770,47 @@ export function useJobProtocolViewModel() {
         },
     )
 
-    watch(activeTab, async tab => {
-        if (tab !== 'traces') {
+    async function backfillTracePasses(): Promise<void> {
+        const token = ++traceBackfillToken
+        // The viewed pass must be present immediately; the rest stream in behind it.
+        if (activePassId.value) {
+            await ensureProtocolPassLoaded(activePassId.value)
+        }
+        if (token !== traceBackfillToken) {
             return
         }
 
-        await Promise.all(protocols.value
+        const pending = protocols.value
             .map(protocol => protocol.id)
-            .filter((protocolId): protocolId is string => !!protocolId)
-            .map(protocolId => ensureProtocolPassLoaded(protocolId)))
+            .filter((protocolId): protocolId is string => !!protocolId && protocolId !== activePassId.value)
+
+        // Bounded, abortable queue — never the old N-way parallel burst that fetched every
+        // pass's full event body at once (multi-GB on large reviews).
+        const TRACE_BACKFILL_CONCURRENCY = 2
+        let cursor = 0
+        const worker = async (): Promise<void> => {
+            while (cursor < pending.length) {
+                if (token !== traceBackfillToken) {
+                    return
+                }
+                const protocolId = pending[cursor++]
+                if (loadedProtocolIds.value.has(protocolId) || loadingProtocolIds.value.has(protocolId)) {
+                    continue
+                }
+                await ensureProtocolPassLoaded(protocolId)
+            }
+        }
+
+        await Promise.all(Array.from({ length: TRACE_BACKFILL_CONCURRENCY }, () => worker()))
+    }
+
+    watch(activeTab, tab => {
+        if (tab !== 'traces') {
+            traceBackfillToken++
+            return
+        }
+
+        void backfillTracePasses()
     })
 
     watch(reviewTraceRows, rows => {
@@ -1397,6 +1830,7 @@ export function useJobProtocolViewModel() {
 
     onUnmounted(() => {
         if (pollInterval) clearInterval(pollInterval)
+        traceBackfillToken++
     })
 
     function compareProtocols(left: ReviewProtocolPass, right: ReviewProtocolPass): number {
@@ -1497,7 +1931,7 @@ export function useJobProtocolViewModel() {
         restarting,
         restart,
         collapsedFolders,
-        collapsedEventParents,
+        expandedEventParents,
         selectedCommentPath,
         isSummaryModalOpen,
         focusedEventId,
@@ -1529,6 +1963,21 @@ export function useJobProtocolViewModel() {
         sidebarItems,
         commentSidebarItems,
         groupedReviewComments,
+        aggregateFindingsByFile,
+        fileGroups,
+        activeFile,
+        activeFileDisplayPath,
+        passesForActiveFile,
+        activeFilePassTabs,
+        activePassLabel,
+        activePassReason,
+        activePassFailed,
+        previousPassId,
+        nextPassId,
+        goToPass,
+        selectFile,
+        selectFindingOrigin,
+        commentOriginLabel,
         activePassFinalComments,
         activePass,
         reviewTraceRows,
@@ -1553,6 +2002,7 @@ export function useJobProtocolViewModel() {
         protocolTokenBreakdown,
         protocolBreakdownConsistent,
         parsedInputResult,
+        selectedTriageDecision,
         parsedOutputResult,
         selectedToolPhaseTimings,
         selectedAiCallSessionTurn,

@@ -7,6 +7,7 @@ using MeisterProPR.Infrastructure.Data;
 using MeisterProPR.Infrastructure.Repositories;
 using MeisterProPR.Infrastructure.Tests.Fixtures;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging.Abstractions;
 using FactAttribute = Xunit.SkippableFactAttribute;
 
 namespace MeisterProPR.Infrastructure.Tests.Repositories;
@@ -39,7 +40,7 @@ public sealed class ReviewFileResultRepositoryTests(PostgresContainerFixture fix
         this._dbContext = new MeisterProPRDbContext(options);
         await this._dbContext.ReviewJobs.ExecuteDeleteAsync();
         var contextFactory = new TestDbContextFactory(options);
-        this._repo = new JobRepository(this._dbContext, contextFactory);
+        this._repo = new JobRepository(this._dbContext, contextFactory, NullLogger<JobRepository>.Instance);
     }
 
     private static ReviewJob MakeJob()

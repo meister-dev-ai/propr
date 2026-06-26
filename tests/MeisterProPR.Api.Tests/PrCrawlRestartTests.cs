@@ -15,6 +15,7 @@ using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 using NSubstitute;
 
 namespace MeisterProPR.Api.Tests;
@@ -70,7 +71,7 @@ public sealed class PrCrawlRestartTests(PostgresContainerFixture fixture) : IAsy
         await using (var db = new MeisterProPRDbContext(dbOptions))
         {
             // Migrations already applied by PostgresContainerFixture.InitializeAsync().
-            var repo = new JobRepository(db, new TestDbContextFactory(dbOptions));
+            var repo = new JobRepository(db, new TestDbContextFactory(dbOptions), NullLogger<JobRepository>.Instance);
             var job = new ReviewJob(
                 Guid.NewGuid(),
                 Guid.NewGuid(),

@@ -558,18 +558,31 @@ public sealed class AiConnectionRepository(
         var binding = record.PurposeBindings.FirstOrDefault(candidate =>
             string.Equals(candidate.Purpose, purpose.ToString(), StringComparison.Ordinal) && candidate.IsEnabled);
 
-        if (binding is not null || !UsesReviewDefaultFallback(purpose))
+        if (binding is not null)
         {
             return binding;
         }
 
-        return record.PurposeBindings.FirstOrDefault(candidate =>
-            string.Equals(candidate.Purpose, AiPurpose.ReviewDefault.ToString(), StringComparison.Ordinal) && candidate.IsEnabled);
+        // Walk the fallback chain so an unbound purpose resolves to its cheaper relative rather than nothing.
+        return FallbackPurpose(purpose) is { } fallbackPurpose
+            ? FindActiveBindingRecord(record, fallbackPurpose)
+            : null;
     }
 
-    private static bool UsesReviewDefaultFallback(AiPurpose purpose)
+    private static AiPurpose? FallbackPurpose(AiPurpose purpose)
     {
-        return purpose is AiPurpose.ProRVPrefilter or AiPurpose.ReviewLowEffort or AiPurpose.ReviewMediumEffort or AiPurpose.ReviewHighEffort;
+        return purpose switch
+        {
+            // Cheap per-file triage falls back to the low-effort review model (which itself falls back to
+            // ReviewDefault below), so the model still judges complexity on a cheap model when no dedicated
+            // triage binding is configured — instead of silently dropping to the size heuristic.
+            AiPurpose.ReviewTriage => AiPurpose.ReviewLowEffort,
+            AiPurpose.ProRVPrefilter
+                or AiPurpose.ReviewLowEffort
+                or AiPurpose.ReviewMediumEffort
+                or AiPurpose.ReviewHighEffort => AiPurpose.ReviewDefault,
+            _ => null,
+        };
     }
 
     private static bool IsBindingValid(AiPurpose purpose, AiConfiguredModelRecord model, AiPurposeBindingRecord binding)

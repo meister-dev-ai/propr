@@ -695,4 +695,54 @@ public sealed class FileByFileContextPrefetchStageUs4Tests
         var evidence = context.FileReviewContext.PerFileHint!.PrefetchedContextEvidence ?? [];
         Assert.DoesNotContain(evidence, e => string.Equals(e.Kind, "supported_caller_site", StringComparison.Ordinal));
     }
+
+    [Fact]
+    public async Task ChangedDefinitionWithCrossFileCaller_RecordsMeasuredFanOut()
+    {
+        var files = new Dictionary<string, string>(StringComparer.Ordinal)
+        {
+            ["Calc.cs"] = CalcSource,
+            ["User.cs"] = UserSource,
+        };
+
+        var (stage, context) = BuildScenario(files);
+        await stage.ExecuteAsync(context, CancellationToken.None);
+
+        // The deterministic fan-out signal is extracted from the same reference resolution.
+        var fanOut = context.FileReviewContext.PerFileHint!.FanOut;
+        Assert.Equal(FanOutKind.Measured, fanOut.Kind);
+        Assert.True(fanOut.HasData);
+        Assert.True(fanOut.Count >= 1); // CalcTotal is referenced by User.cs
+    }
+
+    [Fact]
+    public async Task NonAnalyzableChangedFile_RecordsUnavailableFanOut()
+    {
+        var reviewTools = StructuralReferenceToolTestHarness.CreateTools(new Dictionary<string, string>(StringComparer.Ordinal));
+        var opts = new AiReviewOptions
+        {
+            MaxPrefetchCallerSites = 5,
+            EnableStructuralReferenceTools = true,
+            MaxReferenceCandidateFiles = 200,
+            MaxReferenceResults = 50,
+            MaxReferenceResultChars = 8000,
+            ReferenceResolutionTimeoutMs = 4000,
+        };
+        var stage = new FileByFileContextPrefetchStage(opts, null, FileByFileContextPrefetchStageTests.CreateRoslynAnalyzer());
+
+        var changedFile = new ChangedFile("notes.md", ChangeType.Edit, "# token heading\n", "@@ -0,0 +1,1 @@\n+# token heading\n");
+        var fileReviewContext = new ReviewSystemContext(null, [], reviewTools)
+        {
+            PerFileHint = new PerFileReviewHint("notes.md", 1, 1, Array.Empty<ChangedFileSummary>()),
+        };
+        var job = new ReviewJob(Guid.NewGuid(), Guid.NewGuid(), "https://org", "proj", "repo", 1, 1);
+        var context = new PerFileReviewContext(job, changedFile, null, fileReviewContext, null, null, null);
+
+        await stage.ExecuteAsync(context, CancellationToken.None);
+
+        // absence != zero: a non-parseable file yields no fan-out signal, never a measured zero.
+        var fanOut = context.FileReviewContext.PerFileHint!.FanOut;
+        Assert.Equal(FanOutKind.Unavailable, fanOut.Kind);
+        Assert.False(fanOut.HasData);
+    }
 }

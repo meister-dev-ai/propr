@@ -13,8 +13,9 @@ vi.mock('@/services/api', () => ({
   UnauthorizedError: class UnauthorizedError extends Error {},
 }))
 
+const mockReplace = vi.fn().mockResolvedValue(undefined)
 vi.mock('vue-router', () => ({
-  useRouter: () => ({ push: vi.fn() }),
+  useRouter: () => ({ push: vi.fn(), replace: mockReplace }),
   useRoute: () => mockRoute,
   RouterLink: { template: '<a><slot /></a>' },
 }))
@@ -386,6 +387,11 @@ describe('JobProtocolView — comment search and filter (T042)', () => {
 
     expect(wrapper.text()).toContain('Cached — · not captured')
     expect(wrapper.text()).toContain('ForcedFinal: ProducedFinalText')
+
+    // The tool-call evidence lives on a child row that collapses by default; expand to reveal it.
+    await wrapper.find('button.event-toggle').trigger('click')
+    await flushPromises()
+    await new Promise((resolve) => setTimeout(resolve, 600))
     expect(wrapper.text()).toContain('Evidence Bounded')
   })
 
@@ -791,40 +797,95 @@ describe('JobProtocolView — comment search and filter (T042)', () => {
     expect(mockGet).toHaveBeenCalledWith('/jobs/{id}', expect.objectContaining({ params: { path: { id: 'job-def' } } }))
   })
 
+  it('renders the file-grouped aggregate findings list with origin badges on the landing', async () => {
+    mockGet.mockImplementation((path: string) => {
+      if (path.includes('/protocol')) return Promise.resolve({ data: sampleProtocols, response: { ok: true } })
+      if (path === '/jobs/{id}') return Promise.resolve({ data: sampleJobDetail, response: { ok: true } })
+      return Promise.resolve({
+        data: {
+          ...sampleJobResult,
+          result: {
+            summary: 'All good',
+            comments: [
+              { severity: 'error', message: 'auth issue', filePath: 'src/auth.ts', lineNumber: 10, originPassKind: 'Baseline' },
+              { severity: 'warning', message: 'high-risk finding', filePath: 'src/auth.ts', lineNumber: 20, originPassKind: 'ProRVAugmentation' },
+              { severity: 'info', message: 'no provenance', filePath: 'src/utils.ts', lineNumber: 5, originPassKind: null },
+            ],
+          },
+        },
+        response: { ok: true },
+      })
+    })
+
+    const wrapper = await mountView()
+
+    // Landing (no file selected) shows the aggregate findings section ...
+    const section = wrapper.find('[data-testid="aggregate-findings"]')
+    expect(section.exists()).toBe(true)
+    // ... grouped by file (file paths appear as group headers) ...
+    expect(section.text()).toContain('src/auth.ts')
+    expect(section.text()).toContain('src/utils.ts')
+    // ... with origin badges for findings that carry provenance ...
+    const badges = section.findAll('[data-testid="origin-badge"]')
+    expect(badges.length).toBe(2)
+    const badgeText = badges.map((b) => b.text()).join(' | ')
+    expect(badgeText).toContain('Initial review')
+    expect(badgeText).toContain('ProRV verification')
+  })
+
+  it('shows the clean empty-state on the landing when the review has no findings', async () => {
+    mockGet.mockImplementation((path: string) => {
+      if (path.includes('/protocol')) return Promise.resolve({ data: sampleProtocols, response: { ok: true } })
+      if (path === '/jobs/{id}') return Promise.resolve({ data: sampleJobDetail, response: { ok: true } })
+      return Promise.resolve({
+        data: { status: 'completed', result: { summary: 'Clean', comments: [] } },
+        response: { ok: true },
+      })
+    })
+
+    const wrapper = await mountView()
+    expect(wrapper.find('[data-testid="aggregate-clean-state"]').text()).toContain('No findings — the review completed clean.')
+    expect(wrapper.find('[data-testid="aggregate-findings"]').exists()).toBe(false)
+  })
+
+  // These exercise the Summary & Findings MODAL's findings list (search +
+  // severity controls live there). Scope item counts to the modal container so
+  // they don't also count the landing's aggregate findings list, which renders
+  // the same JobProtocolCommentGroups markup.
   it('shows all comments when no search and no severity filter', async () => {
     const wrapper = await mountView()
     // All 4 comments should be rendered
-    const items = wrapper.findAll('.json-comment-item.synthesis-comment')
+    const items = wrapper.findAll('.modal-stub .json-comment-item.synthesis-comment')
     expect(items.length).toBe(4)
   })
 
   it('filters comments by message text (case-insensitive)', async () => {
     const wrapper = await mountView()
-    const searchInput = wrapper.find('input.comment-search-input')
+    const searchInput = wrapper.find('.modal-stub input.comment-search-input')
     expect(searchInput.exists()).toBe(true)
     await searchInput.setValue('null pointer')
     await flushPromises()
-    const items = wrapper.findAll('.json-comment-item.synthesis-comment')
+    const items = wrapper.findAll('.modal-stub .json-comment-item.synthesis-comment')
     expect(items.length).toBe(1)
     expect(items[0].text()).toContain('null pointer in auth')
   })
 
   it('filters comments by file path (case-insensitive)', async () => {
     const wrapper = await mountView()
-    const searchInput = wrapper.find('input.comment-search-input')
+    const searchInput = wrapper.find('.modal-stub input.comment-search-input')
     await searchInput.setValue('utils.ts')
     await flushPromises()
-    const items = wrapper.findAll('.json-comment-item.synthesis-comment')
+    const items = wrapper.findAll('.modal-stub .json-comment-item.synthesis-comment')
     expect(items.length).toBe(2)
   })
 
   it('filters comments by severity toggle', async () => {
     const wrapper = await mountView()
-    const errorPill = wrapper.find('button.severity-pill[data-severity="error"]')
+    const errorPill = wrapper.find('.modal-stub button.severity-pill[data-severity="error"]')
     expect(errorPill.exists()).toBe(true)
     await errorPill.trigger('click')
     await flushPromises()
-    const items = wrapper.findAll('.json-comment-item.synthesis-comment')
+    const items = wrapper.findAll('.modal-stub .json-comment-item.synthesis-comment')
     expect(items.length).toBe(1)
     expect(items[0].text()).toContain('null pointer in auth')
   })
@@ -832,45 +893,45 @@ describe('JobProtocolView — comment search and filter (T042)', () => {
   it('applies combined search + severity filter', async () => {
     const wrapper = await mountView()
     // Activate warning filter
-    const warningPill = wrapper.find('button.severity-pill[data-severity="warning"]')
+    const warningPill = wrapper.find('.modal-stub button.severity-pill[data-severity="warning"]')
     await warningPill.trigger('click')
     // Also search for 'auth' — only 'unused import' in auth.ts with severity=warning should match
-    const searchInput = wrapper.find('input.comment-search-input')
+    const searchInput = wrapper.find('.modal-stub input.comment-search-input')
     await searchInput.setValue('auth')
     await flushPromises()
-    const items = wrapper.findAll('.json-comment-item.synthesis-comment')
+    const items = wrapper.findAll('.modal-stub .json-comment-item.synthesis-comment')
     expect(items.length).toBe(1)
     expect(items[0].text()).toContain('unused import')
   })
 
   it('clicking active severity pill deactivates it (toggle off)', async () => {
     const wrapper = await mountView()
-    const infoBtn = wrapper.find('button.severity-pill[data-severity="info"]')
+    const infoBtn = wrapper.find('.modal-stub button.severity-pill[data-severity="info"]')
     await infoBtn.trigger('click')
     await flushPromises()
-    let items = wrapper.findAll('.json-comment-item.synthesis-comment')
+    let items = wrapper.findAll('.modal-stub .json-comment-item.synthesis-comment')
     expect(items.length).toBe(1) // only info comments
 
     // Toggle off
     await infoBtn.trigger('click')
     await flushPromises()
-    items = wrapper.findAll('.json-comment-item.synthesis-comment')
+    items = wrapper.findAll('.modal-stub .json-comment-item.synthesis-comment')
     expect(items.length).toBe(4) // all comments back
   })
 
   it('shows empty state message when filter matches nothing', async () => {
     const wrapper = await mountView()
-    const searchInput = wrapper.find('input.comment-search-input')
+    const searchInput = wrapper.find('.modal-stub input.comment-search-input')
     await searchInput.setValue('zzznomatch')
     await flushPromises()
-    const items = wrapper.findAll('.json-comment-item.synthesis-comment')
+    const items = wrapper.findAll('.modal-stub .json-comment-item.synthesis-comment')
     expect(items.length).toBe(0)
-    expect(wrapper.find('.comments-empty-state').exists()).toBe(true)
+    expect(wrapper.find('.modal-stub .comments-empty-state').exists()).toBe(true)
   })
 
   it('polling update (reviewStatus ref change) does not reset searchQuery', async () => {
     const wrapper = await mountView()
-    const searchInput = wrapper.find('input.comment-search-input')
+    const searchInput = wrapper.find('.modal-stub input.comment-search-input')
     await searchInput.setValue('null pointer')
     await flushPromises()
 
@@ -887,24 +948,24 @@ describe('JobProtocolView — comment search and filter (T042)', () => {
     await flushPromises()
 
     // searchQuery should not be reset
-    const inputEl = wrapper.find('input.comment-search-input')
+    const inputEl = wrapper.find('.modal-stub input.comment-search-input')
     expect((inputEl.element as HTMLInputElement).value).toBe('null pointer')
 
     // Filter still applied
-    const items = wrapper.findAll('.json-comment-item.synthesis-comment')
+    const items = wrapper.findAll('.modal-stub .json-comment-item.synthesis-comment')
     expect(items.length).toBe(1)
   })
 
   it('polling update does not reset activeSeverities', async () => {
     const wrapper = await mountView()
-    const errorPill = wrapper.find('button.severity-pill[data-severity="error"]')
+    const errorPill = wrapper.find('.modal-stub button.severity-pill[data-severity="error"]')
     await errorPill.trigger('click')
     await flushPromises()
 
     // Simulate polling
     await flushPromises()
 
-    const items = wrapper.findAll('.json-comment-item.synthesis-comment')
+    const items = wrapper.findAll('.modal-stub .json-comment-item.synthesis-comment')
     expect(items.length).toBe(1) // error filter still active
   })
 
@@ -1463,6 +1524,11 @@ describe('JobProtocolView — comment search and filter (T042)', () => {
     await tracesTab!.trigger('click')
     await flushPromises()
 
+    // AI-turn children collapse by default; expand to inspect the nested tool rows.
+    await wrapper.find('button.event-toggle').trigger('click')
+    await flushPromises()
+    await new Promise((resolve) => setTimeout(resolve, 600))
+
     const rows = wrapper.findAll('article.event-card.row-clickable')
     expect(rows).toHaveLength(4)
 
@@ -1539,6 +1605,11 @@ describe('JobProtocolView — comment search and filter (T042)', () => {
     await tracesTab!.trigger('click')
     await flushPromises()
 
+    // AI-turn children collapse by default; expand to inspect the nested tool rows.
+    await wrapper.find('button.event-toggle').trigger('click')
+    await flushPromises()
+    await new Promise((resolve) => setTimeout(resolve, 600))
+
     const rows = wrapper.findAll('article.event-card.row-clickable')
     expect(rows).toHaveLength(4)
     expect(rows[1].text()).toContain('AI 1')
@@ -1595,6 +1666,11 @@ describe('JobProtocolView — comment search and filter (T042)', () => {
     await tracesTab!.trigger('click')
     await flushPromises()
 
+    // AI-turn children collapse by default; expand to inspect the nested tool rows.
+    await wrapper.find('button.event-toggle').trigger('click')
+    await flushPromises()
+    await new Promise((resolve) => setTimeout(resolve, 600))
+
     const rows = wrapper.findAll('article.event-card.row-clickable')
     expect(rows).toHaveLength(4)
     expect(rows[0].attributes('data-event-name')).toBe('ai_call_iter_1')
@@ -1632,7 +1708,10 @@ describe('JobProtocolView — comment search and filter (T042)', () => {
     await tracesTab!.trigger('click')
     await flushPromises()
 
-    expect(wrapper.findAll('article.event-card.row-clickable')).toHaveLength(3)
+    // AI-turn children collapse by default: only the parent row shows initially.
+    const initialRows = wrapper.findAll('article.event-card.row-clickable')
+    expect(initialRows).toHaveLength(1)
+    expect(initialRows[0].attributes('data-event-name')).toBe('ai_call_iter_1')
 
     const toggle = wrapper.find('button.event-toggle')
     expect(toggle.exists()).toBe(true)
@@ -1640,15 +1719,17 @@ describe('JobProtocolView — comment search and filter (T042)', () => {
     await flushPromises()
     await new Promise((resolve) => setTimeout(resolve, 600))
 
-    const collapsedRows = wrapper.findAll('article.event-card.row-clickable')
-    expect(collapsedRows).toHaveLength(1)
-    expect(collapsedRows[0].attributes('data-event-name')).toBe('ai_call_iter_1')
+    // Expanding reveals the two child tool rows.
+    expect(wrapper.findAll('article.event-card.row-clickable')).toHaveLength(3)
 
     await wrapper.find('button.event-toggle').trigger('click')
     await flushPromises()
     await new Promise((resolve) => setTimeout(resolve, 600))
 
-    expect(wrapper.findAll('article.event-card.row-clickable')).toHaveLength(3)
+    // Collapsing hides them again.
+    const collapsedRows = wrapper.findAll('article.event-card.row-clickable')
+    expect(collapsedRows).toHaveLength(1)
+    expect(collapsedRows[0].attributes('data-event-name')).toBe('ai_call_iter_1')
   })
 
   it('shows final file summary and final comments in the selected file view', async () => {
@@ -1740,7 +1821,8 @@ describe('JobProtocolView — comment search and filter (T042)', () => {
     await tracesTab!.trigger('click')
     await flushPromises()
 
-    expect(wrapper.text()).toContain('File Outcome')
+    // File outcome is now folded into the pass attribute grid as an "Outcome" cell rather than its own section.
+    expect(wrapper.text()).toContain('Outcome')
     expect(wrapper.text()).toContain('Degraded')
     expect(wrapper.text()).toContain('Agentic file investigation recorded a degraded intermediate outcome for this pass.')
   })
@@ -1998,8 +2080,10 @@ describe('JobProtocolView — comment search and filter (T042)', () => {
     expect(wrapper.get('[data-testid="trace-search-toggle"]').text()).toContain('Show filters')
     expect(wrapper.find('[data-testid="trace-search-panel"]').isVisible()).toBe(false)
 
-    expect(wrapper.text()).toContain('posting')
-    expect(wrapper.text()).toContain('4 visible rows across this review.')
+    // The pass is now named with its human label ("Posting") in the pass header rather than the raw protocol label.
+    expect(wrapper.text()).toContain('Posting')
+    // One AI-turn child is collapsed by default with no active filter, so the review-wide visible count is 3 (not 4).
+    expect(wrapper.text()).toContain('3 visible rows across this review.')
     expect(wrapper.findAll('article.event-card.row-clickable')).toHaveLength(1)
 
     await openTraceSearchPanel(wrapper)
@@ -2091,6 +2175,14 @@ describe('JobProtocolView — comment search and filter (T042)', () => {
     const wrapper = await mountView()
     const tracesTab = wrapper.findAll('button.tab-btn').find((btn) => btn.text() === 'Execution Traces')
     await tracesTab!.trigger('click')
+    await flushPromises()
+
+    // The "Limited metadata" flag is always shown, but the verbose limitation message — like the
+    // file/category pills and match/context snippets — is a trace-search affordance: it explains why
+    // a *matched* row has no surrounding context, so it only renders while a search is active.
+    await openTraceSearchPanel(wrapper)
+    const queryInput = wrapper.get('[data-testid="trace-filter-query"] input')
+    await queryInput.setValue('summary_reconciliation')
     await flushPromises()
 
     expect(wrapper.text()).toContain('Limited metadata')

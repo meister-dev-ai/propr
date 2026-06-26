@@ -107,7 +107,7 @@ public sealed class FileByFileReviewOrchestratorPrVerificationTests
                 Arg.Any<Guid?>(),
                 Arg.Any<AiConnectionModelCategory?>(),
                 Arg.Any<string?>(),
-                Arg.Any<CancellationToken>())
+                Arg.Any<CancellationToken>(), Arg.Any<ReviewPassKind?>(), Arg.Any<string?>())
             .Returns(Guid.NewGuid());
         protocolRecorder.SetCompletedAsync(
                 Arg.Any<Guid>(),
@@ -288,7 +288,7 @@ public sealed class FileByFileReviewOrchestratorPrVerificationTests
                 Arg.Any<Guid?>(),
                 Arg.Any<AiConnectionModelCategory?>(),
                 Arg.Any<string?>(),
-                Arg.Any<CancellationToken>())
+                Arg.Any<CancellationToken>(), Arg.Any<ReviewPassKind?>(), Arg.Any<string?>())
             .Returns(Guid.NewGuid());
         protocolRecorder.SetCompletedAsync(
                 Arg.Any<Guid>(),
@@ -446,7 +446,7 @@ public sealed class FileByFileReviewOrchestratorPrVerificationTests
                 Arg.Any<Guid?>(),
                 Arg.Any<AiConnectionModelCategory?>(),
                 Arg.Any<string?>(),
-                Arg.Any<CancellationToken>())
+                Arg.Any<CancellationToken>(), Arg.Any<ReviewPassKind?>(), Arg.Any<string?>())
             .Returns(Guid.NewGuid());
         protocolRecorder.SetCompletedAsync(
                 Arg.Any<Guid>(),
@@ -574,7 +574,7 @@ public sealed class FileByFileReviewOrchestratorPrVerificationTests
                 Arg.Any<Guid?>(),
                 Arg.Any<AiConnectionModelCategory?>(),
                 Arg.Any<string?>(),
-                Arg.Any<CancellationToken>())
+                Arg.Any<CancellationToken>(), Arg.Any<ReviewPassKind?>(), Arg.Any<string?>())
             .Returns(Guid.NewGuid());
         protocolRecorder.SetCompletedAsync(
                 Arg.Any<Guid>(),

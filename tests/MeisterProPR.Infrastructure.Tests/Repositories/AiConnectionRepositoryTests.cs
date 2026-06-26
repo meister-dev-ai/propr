@@ -522,6 +522,79 @@ public sealed class AiConnectionRepositoryTests
     }
 
     [Fact]
+    public async Task GetActiveBindingForPurposeAsync_MissingTriageBinding_FallsBackToReviewLowEffort()
+    {
+        await using var db = CreateContext();
+        var clientId = Guid.NewGuid();
+        var activeProfile = MakeProfile(
+            clientId,
+            true,
+            true,
+            "Test Connection",
+            AiPurpose.ReviewDefault,
+            AiPurpose.ReviewLowEffort,
+            AiPurpose.MemoryReconsideration,
+            AiPurpose.EmbeddingDefault);
+        db.AiConnectionProfiles.Add(activeProfile);
+        await db.SaveChangesAsync();
+
+        var repo = CreateRepository(db);
+        var result = await repo.GetActiveBindingForPurposeAsync(clientId, AiPurpose.ReviewTriage);
+
+        // Triage has no dedicated binding -> resolves to the cheap low-effort model, not the size heuristic.
+        Assert.NotNull(result);
+        Assert.Equal(AiPurpose.ReviewLowEffort, result.Binding.Purpose);
+    }
+
+    [Fact]
+    public async Task GetActiveBindingForPurposeAsync_MissingTriageAndLowEffortBinding_FallsBackToReviewDefault()
+    {
+        await using var db = CreateContext();
+        var clientId = Guid.NewGuid();
+        var activeProfile = MakeProfile(
+            clientId,
+            true,
+            true,
+            "Test Connection",
+            AiPurpose.ReviewDefault,
+            AiPurpose.MemoryReconsideration,
+            AiPurpose.EmbeddingDefault);
+        db.AiConnectionProfiles.Add(activeProfile);
+        await db.SaveChangesAsync();
+
+        var repo = CreateRepository(db);
+        var result = await repo.GetActiveBindingForPurposeAsync(clientId, AiPurpose.ReviewTriage);
+
+        // ReviewTriage -> ReviewLowEffort (missing) -> ReviewDefault.
+        Assert.NotNull(result);
+        Assert.Equal(AiPurpose.ReviewDefault, result.Binding.Purpose);
+    }
+
+    [Fact]
+    public async Task GetActiveBindingForPurposeAsync_DedicatedTriageBinding_UsesDedicatedBinding()
+    {
+        await using var db = CreateContext();
+        var clientId = Guid.NewGuid();
+        var activeProfile = MakeProfile(
+            clientId,
+            true,
+            true,
+            "Test Connection",
+            AiPurpose.ReviewDefault,
+            AiPurpose.ReviewLowEffort,
+            AiPurpose.ReviewTriage);
+        db.AiConnectionProfiles.Add(activeProfile);
+        await db.SaveChangesAsync();
+
+        var repo = CreateRepository(db);
+        var result = await repo.GetActiveBindingForPurposeAsync(clientId, AiPurpose.ReviewTriage);
+
+        // An explicit triage binding wins over the fallback chain.
+        Assert.NotNull(result);
+        Assert.Equal(AiPurpose.ReviewTriage, result.Binding.Purpose);
+    }
+
+    [Fact]
     public async Task UpdateAsync_ConnectivityChange_ResetsVerificationAndBlocksActivationUntilReverified()
     {
         await using var db = CreateContext();

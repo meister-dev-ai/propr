@@ -9,13 +9,15 @@ using MeisterProPR.Domain.ValueObjects;
 using MeisterProPR.Infrastructure.Data;
 using MeisterProPR.Infrastructure.Data.Models;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 
 namespace MeisterProPR.Infrastructure.Repositories;
 
 /// <summary>Implementation of <see cref="IJobRepository" /> using EF Core.</summary>
-public sealed class JobRepository(
+public sealed partial class JobRepository(
     MeisterProPRDbContext dbContext,
-    IDbContextFactory<MeisterProPRDbContext> contextFactory) : IJobRepository
+    IDbContextFactory<MeisterProPRDbContext> contextFactory,
+    ILogger<JobRepository> logger) : IJobRepository
 {
     /// <inheritdoc />
     public async Task<bool> TryTransitionAsync(Guid id, JobStatus from, JobStatus to, CancellationToken ct = default)
@@ -34,12 +36,19 @@ public sealed class JobRepository(
 
         try
         {
-            await dbContext.SaveChangesAsync(ct);
+            await dbContext.SaveChangesAsync(ct).ConfigureAwait(false);
+            if (from == JobStatus.Processing && to == JobStatus.Pending)
+            {
+                // Recovery reset: the job is leaving Processing, so any still-open protocol
+                // rows are abandoned in-flight passes that will never be finalized.
+                await this.CloseOpenProtocolsAsync(id).ConfigureAwait(false);
+            }
+
             return true;
         }
         catch (DbUpdateConcurrencyException)
         {
-            await dbContext.Entry(job).ReloadAsync(ct);
+            await dbContext.Entry(job).ReloadAsync(ct).ConfigureAwait(false);
             return false;
         }
     }
@@ -294,7 +303,8 @@ public sealed class JobRepository(
         job.ErrorMessage = errorMessage;
         job.Status = JobStatus.Failed;
         job.CompletedAt = DateTimeOffset.UtcNow;
-        await dbContext.SaveChangesAsync(ct);
+        await dbContext.SaveChangesAsync(ct).ConfigureAwait(false);
+        await this.CloseOpenProtocolsAsync(id).ConfigureAwait(false);
     }
 
     /// <inheritdoc />
@@ -322,7 +332,8 @@ public sealed class JobRepository(
         job.Result = result;
         job.Status = JobStatus.Completed;
         job.CompletedAt = DateTimeOffset.UtcNow;
-        await dbContext.SaveChangesAsync(ct);
+        await dbContext.SaveChangesAsync(ct).ConfigureAwait(false);
+        await this.CloseOpenProtocolsAsync(id).ConfigureAwait(false);
     }
 
     /// <inheritdoc />
@@ -383,6 +394,84 @@ public sealed class JobRepository(
     }
 
     /// <inheritdoc />
+    public async Task<ReviewJob?> GetByIdWithProtocolsForOverviewAsync(Guid id, CancellationToken ct = default)
+    {
+        // Query 1: job + protocols (ordered) + file results, WITHOUT events. Loading events here would
+        // pull every column including the heavy phase_timings jsonb; events are attached separately below
+        // via a projection that excludes that column.
+        var job = await dbContext.ReviewJobs
+            .AsNoTracking()
+            .AsSplitQuery()
+            .Include(j => j.Protocols.OrderByDescending(p => p.AttemptNumber))
+            .Include(j => j.FileReviewResults)
+            .FirstOrDefaultAsync(j => j.Id == id, ct);
+
+        if (job is null)
+        {
+            return null;
+        }
+
+        // Query 2: load every event column EXCEPT phase_timings. The text columns (InputTextSample,
+        // SystemPrompt, OutputSummary) are kept because the overview's Resolve* pass-badge helpers parse them.
+        var protocolIds = job.Protocols.Select(p => p.Id).ToList();
+        var events = await dbContext.ProtocolEvents
+            .AsNoTracking()
+            .Where(e => protocolIds.Contains(e.ProtocolId))
+            .OrderBy(e => e.OccurredAt)
+            .Select(e => new ProtocolEvent
+            {
+                Id = e.Id,
+                ProtocolId = e.ProtocolId,
+                Kind = e.Kind,
+                Name = e.Name,
+                OccurredAt = e.OccurredAt,
+                InputTokens = e.InputTokens,
+                OutputTokens = e.OutputTokens,
+                CachedInputTokens = e.CachedInputTokens,
+                CacheStatus = e.CacheStatus,
+                CacheMissCategory = e.CacheMissCategory,
+                PrefixEligibility = e.PrefixEligibility,
+                ToolEvidenceAction = e.ToolEvidenceAction,
+                ToolEvidenceSourceToolName = e.ToolEvidenceSourceToolName,
+                ToolEvidenceOriginalPayloadTokens = e.ToolEvidenceOriginalPayloadTokens,
+                ToolEvidenceBoundedPayloadTokens = e.ToolEvidenceBoundedPayloadTokens,
+                ToolEvidenceRefreshable = e.ToolEvidenceRefreshable,
+                FinalizationAttemptKind = e.FinalizationAttemptKind,
+                FinalizationReason = e.FinalizationReason,
+                FinalizationOutcome = e.FinalizationOutcome,
+                InputTextSample = e.InputTextSample,
+                StartedAt = e.StartedAt,
+                CompletedAt = e.CompletedAt,
+                DurationMs = e.DurationMs,
+                WaitDurationMs = e.WaitDurationMs,
+                ActiveDurationMs = e.ActiveDurationMs,
+                TimingAvailability = e.TimingAvailability,
+                ToolOutcome = e.ToolOutcome,
+                SystemPrompt = e.SystemPrompt,
+                OutputSummary = e.OutputSummary,
+                EventCategory = e.EventCategory,
+                Error = e.Error,
+
+                // PhaseTimings intentionally NOT selected: it is neither serialized nor read on the overview
+                // path and dominates the load on heavy traces.
+            })
+            .ToListAsync(ct);
+
+        var eventsByProtocol = events.GroupBy(e => e.ProtocolId).ToDictionary(g => g.Key, g => g.ToList());
+        foreach (var protocol in job.Protocols.Where(protocol => eventsByProtocol.ContainsKey(protocol.Id)))
+        {
+            foreach (var evt in eventsByProtocol[protocol.Id])
+            {
+                protocol.Events.Add(evt);
+            }
+        }
+
+        await this.HydrateSourceScopeAsync(job, ct);
+
+        return job;
+    }
+
+    /// <inheritdoc />
     public async Task<IReadOnlyList<ReviewJob>> GetStuckProcessingJobsAsync(
         TimeSpan threshold,
         CancellationToken ct = default)
@@ -414,7 +503,8 @@ public sealed class JobRepository(
 
         job.Status = JobStatus.Cancelled;
         job.CompletedAt = DateTimeOffset.UtcNow;
-        await dbContext.SaveChangesAsync(ct);
+        await dbContext.SaveChangesAsync(ct).ConfigureAwait(false);
+        await this.CloseOpenProtocolsAsync(id).ConfigureAwait(false);
     }
 
     /// <inheritdoc />
@@ -755,4 +845,50 @@ public sealed class JobRepository(
                 groupedSourceIds.TryGetValue(job.Id, out var sourceIds) ? sourceIds : []);
         }
     }
+
+    /// <summary>
+    ///     Closes any still-open <see cref="ReviewJobProtocol" /> rows for the job (a maintenance/reconcile
+    ///     operation), stamping <c>CompletedAt</c> and marking them <c>"Abandoned"</c>. Invoked whenever a job
+    ///     leaves <see cref="JobStatus.Processing" /> — to <see cref="JobStatus.Pending" /> on recovery reset,
+    ///     or to a terminal state — so abandoned in-flight passes never dangle. Queries
+    ///     <see cref="MeisterProPRDbContext.ReviewJobProtocols" /> directly (rather than through the
+    ///     <c>ReviewJob</c> aggregate) because this is a bulk set-based update over the aggregate child that must
+    ///     bypass the change tracker to close rows committed by the factory-based recorder context.
+    /// </summary>
+    private async Task CloseOpenProtocolsAsync(Guid jobId)
+    {
+        // Best-effort cleanup: invoked after the job's own state change has already committed, from
+        // cancel/shutdown and recovery paths. It must (a) run to completion even when the ambient
+        // token is already cancelled — hence CancellationToken.None — and (b) never throw, so a
+        // reconcile failure cannot abort the state transition or the startup-recovery loop. Any rows
+        // missed here are closed by the next terminal or reset pass.
+        try
+        {
+            var closed = await dbContext.ReviewJobProtocols
+                .Where(p => p.JobId == jobId && p.CompletedAt == null)
+                .ExecuteUpdateAsync(
+                    s => s
+                        .SetProperty(p => p.CompletedAt, DateTimeOffset.UtcNow)
+                        .SetProperty(p => p.Outcome, "Abandoned"),
+                    CancellationToken.None)
+                .ConfigureAwait(false);
+
+            if (closed > 0)
+            {
+                this.LogClosedOrphanedProtocols(closed, jobId);
+            }
+        }
+        catch (Exception exception)
+        {
+            this.LogCloseOrphanedProtocolsFailed(exception, jobId);
+        }
+    }
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "Closed {Count} orphaned protocol(s) for job {JobId}.")]
+    private partial void LogClosedOrphanedProtocols(int count, Guid jobId);
+
+    [LoggerMessage(
+        Level = LogLevel.Warning,
+        Message = "Failed to close orphaned protocols for job {JobId}; the next terminal or reset pass will retry.")]
+    private partial void LogCloseOrphanedProtocolsFailed(Exception exception, Guid jobId);
 }

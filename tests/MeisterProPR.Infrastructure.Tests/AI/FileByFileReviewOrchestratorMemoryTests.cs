@@ -54,7 +54,7 @@ public sealed class FileByFileReviewOrchestratorMemoryTests
                 Arg.Any<Guid?>(),
                 Arg.Any<AiConnectionModelCategory?>(),
                 Arg.Any<string?>(),
-                Arg.Any<CancellationToken>())
+                Arg.Any<CancellationToken>(), Arg.Any<ReviewPassKind?>(), Arg.Any<string?>())
             .Returns(Guid.NewGuid());
 
         memoryService.RetrieveAndReconsiderAsync(
@@ -137,7 +137,7 @@ public sealed class FileByFileReviewOrchestratorMemoryTests
                 Arg.Any<Guid?>(),
                 Arg.Any<AiConnectionModelCategory?>(),
                 Arg.Any<string?>(),
-                Arg.Any<CancellationToken>())
+                Arg.Any<CancellationToken>(), Arg.Any<ReviewPassKind?>(), Arg.Any<string?>())
             .Returns(Guid.NewGuid());
         protocolRecorder.RecordReviewStrategyEventAsync(
                 Arg.Any<Guid>(),
@@ -209,7 +209,7 @@ public sealed class FileByFileReviewOrchestratorMemoryTests
                 Arg.Any<Guid?>(),
                 Arg.Any<AiConnectionModelCategory?>(),
                 Arg.Any<string?>(),
-                Arg.Any<CancellationToken>())
+                Arg.Any<CancellationToken>(), Arg.Any<ReviewPassKind?>(), Arg.Any<string?>())
             .Returns(Guid.NewGuid());
         chatClient.GetResponseAsync(
                 Arg.Any<IList<ChatMessage>>(),
@@ -261,7 +261,7 @@ public sealed class FileByFileReviewOrchestratorMemoryTests
                 Arg.Any<Guid?>(),
                 Arg.Any<AiConnectionModelCategory?>(),
                 Arg.Any<string?>(),
-                Arg.Any<CancellationToken>())
+                Arg.Any<CancellationToken>(), Arg.Any<ReviewPassKind?>(), Arg.Any<string?>())
             .Returns(Guid.NewGuid());
         chatClient.GetResponseAsync(
                 Arg.Any<IList<ChatMessage>>(),
@@ -371,7 +371,7 @@ public sealed class FileByFileReviewOrchestratorMemoryTests
                 Arg.Any<Guid?>(),
                 Arg.Any<AiConnectionModelCategory?>(),
                 Arg.Any<string?>(),
-                Arg.Any<CancellationToken>())
+                Arg.Any<CancellationToken>(), Arg.Any<ReviewPassKind?>(), Arg.Any<string?>())
             .Returns(Guid.NewGuid());
 
         var jobRepository = Substitute.For<IJobRepository>();

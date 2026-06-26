@@ -244,7 +244,7 @@ public sealed class JobsControllerProtocolTests(JobsControllerProtocolTests.Prot
     }
 
     [Fact]
-    public async Task GetJobProtocol_ReturnsFullProtocolEventTextWithoutApiTruncation()
+    public async Task GetJobProtocol_BoundsLargeFreeTextEventBodies()
     {
         using var scope = factory.Services.CreateScope();
         var jobRepo = scope.ServiceProvider.GetRequiredService<IJobRepository>();
@@ -291,10 +291,20 @@ public sealed class JobsControllerProtocolTests(JobsControllerProtocolTests.Prot
             .EnumerateArray()
             .Single();
 
-        Assert.Equal(inputText, ev.GetProperty("inputTextSample").GetString());
-        Assert.Equal(outputText, ev.GetProperty("outputSummary").GetString());
-        Assert.EndsWith("-input-tail", ev.GetProperty("inputTextSample").GetString());
-        Assert.EndsWith("-output-tail", ev.GetProperty("outputSummary").GetString());
+        // The per-pass endpoint now bounds large FREE-TEXT event bodies so a heavy protocol
+        // no longer ships hundreds of MB (full-text trace search is server-side, not the
+        // browser's job, so the wire copy no longer needs the whole body). Structured JSON
+        // bodies are left whole — covered by EfReviewDiagnosticsReaderTests.
+        var input = ev.GetProperty("inputTextSample").GetString();
+        var output = ev.GetProperty("outputSummary").GetString();
+        Assert.NotNull(input);
+        Assert.NotNull(output);
+        Assert.True(input!.Length < inputText.Length);
+        Assert.True(output!.Length < outputText.Length);
+        Assert.Contains("truncated", input);
+        Assert.Contains("truncated", output);
+        Assert.DoesNotContain("-input-tail", input);
+        Assert.DoesNotContain("-output-tail", output);
     }
 
     [Fact]

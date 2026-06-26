@@ -3,6 +3,7 @@
 
 using MeisterProPR.Application.Features.Reviewing.Execution.Models;
 using MeisterProPR.Domain.Enums;
+using MeisterProPR.Domain.ValueObjects;
 using MeisterProPR.Infrastructure.Features.Reviewing.Execution;
 
 namespace MeisterProPR.Infrastructure.Tests.Features.Reviewing.Execution;
@@ -110,6 +111,56 @@ public sealed class RepositorySearchExecutorTests
 
         Assert.Equal(RepositorySearchStatuses.InvalidRequest, result.Status);
         Assert.Contains(result.Limitations, limitation => limitation.Reason == RepositorySearchLimitationReasons.InvalidRegex);
+    }
+
+    [Fact]
+    public async Task SearchCodeAsync_RecordsExactlyOneAggregateRepositorySearchPhase_PerScan()
+    {
+        var harness = new SearchHarness();
+        harness.SetTree("src/Foo.cs", "src/Bar.cs", "src/Baz.cs", "src/Qux.cs");
+        harness.SetFile("src/Foo.cs", "needle here\nno match");
+        harness.SetFile("src/Bar.cs", "another needle");
+        harness.SetFile("src/Baz.cs", "no match at all");
+        harness.SetFile("src/Qux.cs", "needle once more");
+
+        var request = new CodeSearchRequest(
+            "needle",
+            CodeSearchModes.ExactPhrase,
+            RepositorySearchBranchSides.Source,
+            RepositorySearchPathScopes.Repository);
+
+        // Baseline (no collection active): capture the matches the executor produces.
+        var baseline = await harness.SearchCodeAsync(request);
+
+        CodeSearchResult collected;
+        IReadOnlyList<ProtocolEventPhaseTiming>? phases;
+        using (ToolTimingCollectorContext.BeginCollection())
+        {
+            collected = await harness.SearchCodeAsync(request);
+            phases = ToolTimingCollectorContext.CaptureSnapshot();
+        }
+
+        Assert.NotNull(phases);
+
+        // Exactly ONE repository_search phase per scan (aggregate), not 2xN per-candidate phases.
+        var repositorySearchPhases = phases!.Where(p => p.Name == ProtocolEventToolPhaseNames.RepositorySearch).ToList();
+        Assert.Single(repositorySearchPhases);
+
+        // No per-file content-fetch phases remain (those were the other half of the 2xN bloat).
+        Assert.DoesNotContain(phases!, p => p.Name == ProtocolEventToolPhaseNames.ScmFileContentFetch);
+
+        // The aggregate phase carries a files_scanned summary.
+        var aggregate = repositorySearchPhases[0];
+        Assert.NotNull(aggregate.Summary);
+        Assert.Contains("files_scanned=", aggregate.Summary!, StringComparison.Ordinal);
+
+        // Behavior-preserving: matches identical to the baseline (same paths, lines, ranks, ordering).
+        Assert.Equal(
+            baseline.Matches.Select(m => (m.FilePath, m.LineNumber, m.Rank)),
+            collected.Matches.Select(m => (m.FilePath, m.LineNumber, m.Rank)));
+        Assert.Equal(baseline.Status, collected.Status);
+        Assert.Equal(baseline.Truncated, collected.Truncated);
+        Assert.Equal(baseline.Limitations.Count, collected.Limitations.Count);
     }
 
     private sealed class SearchHarness(IReadOnlyList<ChangedPathSnapshot>? changedPathSnapshots = null)

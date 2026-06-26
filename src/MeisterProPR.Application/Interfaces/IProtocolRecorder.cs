@@ -27,6 +27,8 @@ public interface IProtocolRecorder
     /// <param name="fileResultId">The file result this protocol pass belongs to, or null.</param>
     /// <param name="connectionCategory">The AI connection category (effort tier) used for this pass. Null for legacy callers.</param>
     /// <param name="modelId">The effective AI model deployment name used for this pass. Null for legacy callers.</param>
+    /// <param name="passKind">The kind of review pass (baseline vs augmentation). Null when not meaningful (e.g. synthesis).</param>
+    /// <param name="reason">Human-readable reason this pass ran. Null for the baseline pass.</param>
     /// <param name="ct">Cancellation token.</param>
     /// <returns>The new protocol record's <see cref="Guid" />.</returns>
     Task<Guid> BeginAsync(
@@ -36,7 +38,9 @@ public interface IProtocolRecorder
         Guid? fileResultId = null,
         AiConnectionModelCategory? connectionCategory = null,
         string? modelId = null,
-        CancellationToken ct = default);
+        CancellationToken ct = default,
+        ReviewPassKind? passKind = null,
+        string? reason = null);
 
     /// <summary>
     ///     Records a single AI call event. Never throws.

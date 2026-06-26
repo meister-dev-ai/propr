@@ -11,6 +11,7 @@ using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging.Abstractions;
 using NSubstitute;
 
 namespace MeisterProPR.Api.Tests;
@@ -65,7 +66,7 @@ public sealed class StartupRecoveryTests(PostgresContainerFixture fixture) : IAs
         Guid stalJobId;
         await using (var db = new MeisterProPRDbContext(options))
         {
-            var repo = new JobRepository(db, new TestDbContextFactory(options));
+            var repo = new JobRepository(db, new TestDbContextFactory(options), NullLogger<JobRepository>.Instance);
             var job = new ReviewJob(
                 Guid.NewGuid(),
                 Guid.NewGuid(),

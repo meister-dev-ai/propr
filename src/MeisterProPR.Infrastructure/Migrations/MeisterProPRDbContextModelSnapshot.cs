@@ -521,6 +521,11 @@ namespace MeisterProPR.Infrastructure.Migrations
                         .HasColumnType("text")
                         .HasColumnName("error");
 
+                    b.Property<string>("EventCategory")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("event_category");
+
                     b.Property<string>("FinalizationAttemptKind")
                         .HasMaxLength(64)
                         .HasColumnType("character varying(64)")
@@ -535,11 +540,6 @@ namespace MeisterProPR.Infrastructure.Migrations
                         .HasMaxLength(256)
                         .HasColumnType("character varying(256)")
                         .HasColumnName("finalization_reason");
-
-                    b.Property<string>("EventCategory")
-                        .HasMaxLength(64)
-                        .HasColumnType("character varying(64)")
-                        .HasColumnName("event_category");
 
                     b.Property<string>("InputTextSample")
                         .HasColumnType("text")
@@ -1001,6 +1001,16 @@ namespace MeisterProPR.Infrastructure.Migrations
                         .HasMaxLength(32)
                         .HasColumnType("character varying(32)")
                         .HasColumnName("outcome");
+
+                    b.Property<string>("PassKind")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("pass_kind");
+
+                    b.Property<string>("Reason")
+                        .HasMaxLength(512)
+                        .HasColumnType("character varying(512)")
+                        .HasColumnName("reason");
 
                     b.Property<DateTimeOffset>("StartedAt")
                         .HasColumnType("timestamp with time zone")

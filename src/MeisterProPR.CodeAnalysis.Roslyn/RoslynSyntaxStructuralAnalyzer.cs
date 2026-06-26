@@ -6,6 +6,7 @@ using MeisterProPR.Application.Options;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
+using Microsoft.CodeAnalysis.Text;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
@@ -193,6 +194,77 @@ public sealed class RoslynSyntaxStructuralAnalyzer : IStructuralCodeAnalyzer
         {
             this.LogFault(request.Path, ex);
             return Task.FromResult<IReadOnlyList<int>>([]);
+        }
+    }
+
+    /// <inheritdoc />
+    public Task<string> ExtractCodeTextAsync(StructuralParseRequest request, CancellationToken ct)
+    {
+        if (string.IsNullOrEmpty(request.SourceText))
+        {
+            return Task.FromResult(string.Empty);
+        }
+
+        var root = this.TryParse(request.SourceText, request.Path, ct);
+        if (root is null)
+        {
+            return Task.FromResult(string.Empty);
+        }
+
+        try
+        {
+            var chars = request.SourceText.ToCharArray();
+
+            // Blank string/char/raw/utf8/interpolated-text literal tokens. Interpolation holes (`{x}`) are
+            // separate tokens and stay as code. Newlines are preserved so line numbers are unchanged.
+            var literalTokens = root.DescendantTokens().Where(token =>
+                token.IsKind(SyntaxKind.StringLiteralToken)
+                || token.IsKind(SyntaxKind.CharacterLiteralToken)
+                || token.IsKind(SyntaxKind.InterpolatedStringTextToken)
+                || token.IsKind(SyntaxKind.SingleLineRawStringLiteralToken)
+                || token.IsKind(SyntaxKind.MultiLineRawStringLiteralToken)
+                || token.IsKind(SyntaxKind.Utf8StringLiteralToken)
+                || token.IsKind(SyntaxKind.Utf8SingleLineRawStringLiteralToken)
+                || token.IsKind(SyntaxKind.Utf8MultiLineRawStringLiteralToken));
+            foreach (var token in literalTokens)
+            {
+                BlankSpan(chars, token.Span);
+            }
+
+            // Comments are trivia, not tokens.
+            var commentTrivia = root.DescendantTrivia().Where(trivia =>
+                trivia.IsKind(SyntaxKind.SingleLineCommentTrivia)
+                || trivia.IsKind(SyntaxKind.MultiLineCommentTrivia)
+                || trivia.IsKind(SyntaxKind.SingleLineDocumentationCommentTrivia)
+                || trivia.IsKind(SyntaxKind.MultiLineDocumentationCommentTrivia));
+            foreach (var trivia in commentTrivia)
+            {
+                BlankSpan(chars, trivia.Span);
+            }
+
+            return Task.FromResult(new string(chars));
+        }
+        catch (ArgumentException ex)
+        {
+            this.LogFault(request.Path, ex);
+            return Task.FromResult(string.Empty);
+        }
+        catch (InvalidOperationException ex)
+        {
+            this.LogFault(request.Path, ex);
+            return Task.FromResult(string.Empty);
+        }
+    }
+
+    private static void BlankSpan(char[] chars, TextSpan span)
+    {
+        var end = Math.Min(chars.Length, span.End);
+        for (var i = Math.Max(0, span.Start); i < end; i++)
+        {
+            if (chars[i] != '\n')
+            {
+                chars[i] = ' ';
+            }
         }
     }
 

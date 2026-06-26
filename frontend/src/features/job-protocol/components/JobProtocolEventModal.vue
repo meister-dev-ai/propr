@@ -4,6 +4,15 @@
 <template>
     <ModalDialog v-model:isOpen="vm.isEventModalOpen" :title="vm.selectedMergedEvent?.name ?? 'Event Protocol'">
         <div v-if="vm.selectedMergedEvent" class="merged-modal-layout">
+            <section v-if="vm.selectedTriageDecision" class="drawer-section">
+                <h4>Triage decision</h4>
+                <div class="parsed-json-block">
+                    <div class="json-field"><span class="json-key">Tier:</span><pre class="json-content">{{ vm.selectedTriageDecision.tier }}</pre></div>
+                    <div class="json-field"><span class="json-key">Security:</span><pre class="json-content">{{ vm.selectedTriageDecision.security }}</pre></div>
+                    <div class="json-field"><span class="json-key">Blast radius:</span><pre class="json-content">{{ vm.selectedTriageDecision.blastRadius }}</pre></div>
+                    <div class="json-field"><span class="json-key">Why:</span><pre class="json-content">{{ vm.selectedTriageDecision.why }}</pre></div>
+                </div>
+            </section>
             <section class="drawer-section">
                 <h4>Input</h4>
                 <template v-if="vm.parsedInputResult">

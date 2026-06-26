@@ -31,4 +31,7 @@ public enum AiPurpose
 
     /// <summary>Default embedding generation.</summary>
     EmbeddingDefault = 6,
+
+    /// <summary>Cheap per-file complexity-triage classification (replaces the size-based heuristic).</summary>
+    ReviewTriage = 7,
 }

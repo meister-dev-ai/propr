@@ -101,6 +101,16 @@ public partial record ReviewJobProtocolDto
 
     /// <summary>Metadata describing the source job/file pass when this pass was inherited.</summary>
     public ProtocolInheritanceDto? Inheritance { get; init; }
+
+    /// <summary>
+    ///     The kind of review pass — the <c>ReviewPassKind</c> name (e.g. <c>"Baseline"</c>,
+    ///     <c>"ProRVAugmentation"</c>). <see langword="null" /> for legacy rows and passes with no
+    ///     meaningful kind (e.g. synthesis, which the UI derives from <see cref="Label" />).
+    /// </summary>
+    public string? PassKind { get; init; }
+
+    /// <summary>Human-readable reason this pass ran (e.g. an augmentation re-review). <see langword="null" /> for baseline/legacy.</summary>
+    public string? Reason { get; init; }
 }
 
 /// <summary>
@@ -237,11 +247,13 @@ public sealed record ProtocolWorkspaceDto(
 /// <param name="LineNumber">One-based line number, when available.</param>
 /// <param name="Severity">Normalized comment severity.</param>
 /// <param name="Message">Final comment text.</param>
+/// <param name="OriginPassKind">The <c>ReviewPassKind</c> name of the pass that produced this finding, when known.</param>
 public sealed record ProtocolReviewCommentDto(
     string? FilePath,
     int? LineNumber,
     CommentSeverity Severity,
-    string Message);
+    string Message,
+    string? OriginPassKind = null);
 
 /// <summary>
 ///     Terminal outcome metadata for one file-linked protocol pass.

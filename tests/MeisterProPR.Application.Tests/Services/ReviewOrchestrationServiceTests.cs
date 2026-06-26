@@ -939,7 +939,7 @@ public class ReviewOrchestrationServiceTests
                 Arg.Any<Guid?>(),
                 Arg.Any<AiConnectionModelCategory?>(),
                 Arg.Any<string?>(),
-                Arg.Any<CancellationToken>())
+                Arg.Any<CancellationToken>(), Arg.Any<ReviewPassKind?>(), Arg.Any<string?>())
             .Returns(protocolId);
 
         var job = CreateJob();
@@ -1022,7 +1022,7 @@ public class ReviewOrchestrationServiceTests
                 Arg.Any<Guid?>(),
                 Arg.Any<AiConnectionModelCategory?>(),
                 Arg.Any<string?>(),
-                Arg.Any<CancellationToken>())
+                Arg.Any<CancellationToken>(), Arg.Any<ReviewPassKind?>(), Arg.Any<string?>())
             .Returns(Guid.NewGuid());
 
         var job = CreateJob();
@@ -1450,7 +1450,7 @@ public class ReviewOrchestrationServiceTests
                 Arg.Any<Guid?>(),
                 Arg.Any<AiConnectionModelCategory?>(),
                 Arg.Any<string?>(),
-                Arg.Any<CancellationToken>())
+                Arg.Any<CancellationToken>(), Arg.Any<ReviewPassKind?>(), Arg.Any<string?>())
             .Returns(Guid.NewGuid());
 
         var job = CreateJob();

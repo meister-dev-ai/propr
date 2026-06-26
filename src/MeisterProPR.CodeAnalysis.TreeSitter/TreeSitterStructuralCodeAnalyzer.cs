@@ -237,6 +237,111 @@ internal sealed class TreeSitterStructuralCodeAnalyzer : IStructuralCodeAnalyzer
         }
     }
 
+    public async Task<string> ExtractCodeTextAsync(StructuralParseRequest request, CancellationToken ct)
+    {
+        if (!this.IsAvailable)
+        {
+            return string.Empty;
+        }
+
+        var language = this.ResolveLanguage(request);
+        if (language is null || string.IsNullOrEmpty(request.SourceText))
+        {
+            return string.Empty;
+        }
+
+        PooledParseResult parseResult;
+        try
+        {
+            parseResult = await this._pool.ParseAsync(language.Value, request.SourceText, ct).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException)
+        {
+            return string.Empty;
+        }
+        catch (ArgumentException ex)
+        {
+            this.LogParseFault(language.Value, request.Path, ex);
+            return string.Empty;
+        }
+        catch (InvalidOperationException ex)
+        {
+            this.LogParseFault(language.Value, request.Path, ex);
+            return string.Empty;
+        }
+
+        if (parseResult.Tree is null)
+        {
+            return string.Empty;
+        }
+
+        using var tree = parseResult.Tree;
+        try
+        {
+            return BlankCommentsAndStrings(tree, request.SourceText);
+        }
+        catch (ArgumentException ex)
+        {
+            this.LogParseFault(language.Value, request.Path, ex);
+            return string.Empty;
+        }
+        catch (InvalidOperationException ex)
+        {
+            this.LogParseFault(language.Value, request.Path, ex);
+            return string.Empty;
+        }
+    }
+
+    private static string BlankCommentsAndStrings(TS.Tree tree, string source)
+    {
+        // Blank comment and string/char literal node spans by overwriting their characters with spaces while
+        // preserving newlines — line numbers and line count stay intact. StartIndex/EndIndex are character
+        // indices into the source (the binding converts from byte offsets). The outermost matching node is
+        // blanked whole (children skipped), which also removes interpolation holes; fine for marker matching.
+        var chars = source.ToCharArray();
+        var stack = new Stack<TS.Node>();
+        stack.Push(tree.RootNode);
+
+        while (stack.Count > 0)
+        {
+            var node = stack.Pop();
+
+            if (node.IsNamed && IsCommentOrStringKind(node.Type))
+            {
+                var start = Math.Clamp(node.StartIndex, 0, chars.Length);
+                var end = Math.Clamp(node.EndIndex, start, chars.Length);
+                for (var i = start; i < end; i++)
+                {
+                    if (chars[i] != '\n')
+                    {
+                        chars[i] = ' ';
+                    }
+                }
+
+                continue;
+            }
+
+            foreach (var child in node.Children)
+            {
+                stack.Push(child);
+            }
+        }
+
+        return new string(chars);
+    }
+
+    private static bool IsCommentOrStringKind(string nodeType)
+    {
+        // `comment` plus string/char/rune/heredoc literal node kinds across the seven kept grammars
+        // (string, string_literal, template_string, raw_string_literal, interpreted_string_literal,
+        // char_literal, character_literal, rune_literal, heredocs). Identifier nodes never match.
+        return string.Equals(nodeType, "comment", StringComparison.Ordinal)
+               || nodeType.Contains("string", StringComparison.Ordinal)
+               || nodeType.Contains("char", StringComparison.Ordinal)
+               || nodeType.Contains("rune", StringComparison.Ordinal)
+               || nodeType.Contains("heredoc", StringComparison.Ordinal);
+    }
+
     private static IReadOnlyList<int> ConfirmReferenceLines(TS.Tree tree, string symbol)
     {
         // Walk the parse tree and record the 1-based line of every identifier node whose text

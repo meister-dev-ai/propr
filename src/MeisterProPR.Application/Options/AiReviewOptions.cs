@@ -161,9 +161,6 @@ public sealed class AiReviewOptions
     [Range(0, 500, ErrorMessage = "PrefetchWindowLinesAfter must be between 0 and 500.")]
     public int PrefetchWindowLinesAfter { get; set; } = 15;
 
-    /// <summary>Controls whether a high-risk file with zero surviving findings gets one focused second look.</summary>
-    public bool EnableHighRiskEscalation { get; set; } = true;
-
     /// <summary>
     ///     Maximum number of past resolutions to retrieve per file review query.
     ///     Bound to <c>AI_MEMORY_TOP_N</c>. Range: 1–20.

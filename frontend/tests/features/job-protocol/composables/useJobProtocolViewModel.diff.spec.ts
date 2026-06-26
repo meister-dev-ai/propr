@@ -11,6 +11,7 @@ type FileDiffDto = components['schemas']['FileDiffDto']
 
 vi.mock('vue-router', () => ({
     useRoute: () => ({ params: {}, query: {}, name: 'job-protocol' }),
+    useRouter: () => ({ replace: vi.fn().mockResolvedValue(undefined), push: vi.fn() }),
 }))
 
 vi.mock('@/services/api', () => ({

@@ -1,7 +1,6 @@
 // Copyright (c) Andreas Rain.
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
-using MeisterProPR.Application.Features.Reviewing.Execution.Models;
 using MeisterProPR.CodeAnalysis.TreeSitter.Startup;
 using Microsoft.Extensions.Logging.Abstractions;
 using NSubstitute;
@@ -15,6 +14,27 @@ namespace MeisterProPR.CodeAnalysis.TreeSitter.Tests;
 /// </summary>
 public sealed class TreeSitterStructuralCodeAnalyzerTests
 {
+    [Fact]
+    public async Task ExtractCodeTextAsync_blanks_comments_and_strings_keeps_code()
+    {
+        var analyzer = AnalyzerTestFactory.CreateAnalyzer();
+        if (!analyzer.IsAvailable)
+        {
+            return; // native parser unavailable on this platform
+        }
+
+        const string source = "x = token_var\n# token in comment\ny = \"token in string\"\n";
+        var request = new StructuralParseRequest("src/a.py", SupportedLanguage.Python, source, []);
+
+        var code = await analyzer.ExtractCodeTextAsync(request, CancellationToken.None);
+        var lines = code.Replace("\r\n", "\n", StringComparison.Ordinal).Split('\n');
+
+        Assert.True(lines.Length >= 3);
+        Assert.Contains("token_var", lines[0], StringComparison.Ordinal); // real identifier kept
+        Assert.DoesNotContain("token", lines[1], StringComparison.Ordinal); // comment blanked
+        Assert.DoesNotContain("token", lines[2], StringComparison.Ordinal); // string literal blanked
+    }
+
     // C1 - inside-function: a changed range inside the deep function resolves to that function.
     [Theory]
     [InlineData(SupportedLanguage.TypeScript)]

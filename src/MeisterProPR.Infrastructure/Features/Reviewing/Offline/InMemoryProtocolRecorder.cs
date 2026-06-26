@@ -23,7 +23,9 @@ public sealed class InMemoryProtocolRecorder(InMemoryReviewJobRepository jobs) :
         Guid? fileResultId = null,
         AiConnectionModelCategory? connectionCategory = null,
         string? modelId = null,
-        CancellationToken ct = default)
+        CancellationToken ct = default,
+        ReviewPassKind? passKind = null,
+        string? reason = null)
     {
         var job = jobs.GetById(jobId) ?? throw new InvalidOperationException($"Review job {jobId} was not found.");
         var protocol = new ReviewJobProtocol
@@ -36,6 +38,8 @@ public sealed class InMemoryProtocolRecorder(InMemoryReviewJobRepository jobs) :
             StartedAt = DateTimeOffset.UtcNow,
             AiConnectionCategory = connectionCategory,
             ModelId = modelId,
+            PassKind = passKind?.ToString(),
+            Reason = reason,
         };
 
         job.Protocols.Add(protocol);

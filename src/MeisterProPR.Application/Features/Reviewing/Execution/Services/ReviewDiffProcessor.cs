@@ -1,6 +1,7 @@
 // Copyright (c) Andreas Rain.
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
+using System.Text;
 using MeisterProPR.Domain.Enums;
 using MeisterProPR.Domain.ValueObjects;
 
@@ -61,6 +62,36 @@ public static class ReviewDiffProcessor
     }
 
     /// <summary>
+    ///     Extracts only the added payload of a unified diff: the text of lines beginning with a single
+    ///     <c>+</c> (excluding the <c>+++</c> file header), with the leading <c>+</c> removed. Matching against
+    ///     this — rather than the raw diff — ensures file headers, hunk headers, context lines, and removed
+    ///     lines can never produce a spurious content match.
+    /// </summary>
+    public static string ExtractAddedContent(string? diff)
+    {
+        if (string.IsNullOrEmpty(diff))
+        {
+            return string.Empty;
+        }
+
+        var builder = new StringBuilder();
+        foreach (var line in diff.Replace("\r\n", "\n", StringComparison.Ordinal).Split('\n'))
+        {
+            if (line.StartsWith("+++", StringComparison.Ordinal))
+            {
+                continue;
+            }
+
+            if (line.Length > 0 && line[0] == '+')
+            {
+                builder.Append(line, 1, line.Length - 1).Append('\n');
+            }
+        }
+
+        return builder.ToString();
+    }
+
+    /// <summary>
     ///     Builds a lookup of inserted line numbers keyed by normalized review path for providers that only anchor to inserted lines.
     /// </summary>
     public static IReadOnlyDictionary<string, HashSet<int>> BuildInsertedLineLookup(IReadOnlyList<ChangedFile> changedFiles)
@@ -73,7 +104,7 @@ public static class ReviewDiffProcessor
                 continue;
             }
 
-            lookup[NormalizeReviewPath(changedFile.Path)] = ExtractInsertedNewLines(changedFile);
+            lookup[NormalizeReviewPath(changedFile.Path)] = GetInsertedNewLineNumbers(changedFile.UnifiedDiff);
         }
 
         return lookup;
@@ -87,10 +118,19 @@ public static class ReviewDiffProcessor
         return path.TrimStart('/');
     }
 
-    private static HashSet<int> ExtractInsertedNewLines(ChangedFile changedFile)
+    /// <summary>
+    ///     Returns the 1-based new-file line numbers of inserted (<c>+</c>) lines in a unified diff,
+    ///     excluding the <c>+++</c> file header. Empty when the diff is null, empty, or unparseable.
+    /// </summary>
+    public static HashSet<int> GetInsertedNewLineNumbers(string? unifiedDiff)
     {
         var insertedLines = new HashSet<int>();
-        var diffLines = changedFile.UnifiedDiff.Replace("\r\n", "\n", StringComparison.Ordinal).Split('\n');
+        if (string.IsNullOrEmpty(unifiedDiff))
+        {
+            return insertedLines;
+        }
+
+        var diffLines = unifiedDiff.Replace("\r\n", "\n", StringComparison.Ordinal).Split('\n');
         var hasHunkHeader = false;
         var currentNewLine = 0;
 

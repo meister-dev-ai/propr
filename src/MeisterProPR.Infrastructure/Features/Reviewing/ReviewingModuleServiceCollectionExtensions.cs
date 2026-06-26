@@ -109,6 +109,7 @@ public static class ReviewingModuleServiceCollectionExtensions
             sp.GetRequiredService<ILogger<ToolAwareAiReviewCore>>(),
             sp.GetService<IManagedReviewSessionTransportFactory>()));
         services.TryAddSingleton<IManagedReviewSessionTransportFactory, ManagedReviewSessionTransportFactory>();
+        services.AddScoped<IReviewComplexityClassifier, ReviewTriageClassifier>();
         services.AddScoped<FileReviewer>(sp => new FileReviewer(
             sp.GetRequiredService<ApplicationIAiReviewCore>(),
             sp.GetRequiredService<IProtocolRecorder>(),
@@ -123,7 +124,8 @@ public static class ReviewingModuleServiceCollectionExtensions
             sp.GetService<CommentRelevanceFilterExecutor>(),
             sp.GetServices<IReviewInvariantFactProvider>(),
             sp.GetService<LocalReviewVerificationExecutor>(),
-            sp.GetService<IReviewPipelineProfileProvider>()));
+            sp.GetService<IReviewPipelineProfileProvider>(),
+            sp.GetService<IReviewComplexityClassifier>()));
         services.AddScoped<AgenticFileReviewer>(sp => new AgenticFileReviewer(
             sp.GetRequiredService<ApplicationIAiReviewCore>(),
             sp.GetRequiredService<IProtocolRecorder>(),

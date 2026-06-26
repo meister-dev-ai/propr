@@ -287,6 +287,13 @@ public sealed class InMemoryReviewJobRepository : IJobRepository
         return Task.FromResult(this.GetById(id));
     }
 
+    public Task<ReviewJob?> GetByIdWithProtocolsForOverviewAsync(Guid id, CancellationToken ct = default)
+    {
+        // Offline store holds the full in-memory graph (no DB, no phase_timings load cost), so the
+        // projected-overview optimization is a no-op here: return the same job (correctness over perf).
+        return this.GetByIdWithProtocolsAsync(id, ct);
+    }
+
     [Obsolete("Use GetByIdWithProtocolsAsync instead.")]
     public Task<ReviewJob?> GetByIdWithProtocolAsync(Guid id, CancellationToken ct = default)
     {

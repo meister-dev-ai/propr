@@ -90,4 +90,36 @@ public sealed class InMemoryProtocolRecorderTests
         Assert.Contains("provider_session_continue_failed", fallbackEvent.InputTextSample, StringComparison.Ordinal);
         Assert.Null(fallbackEvent.OutputSummary);
     }
+
+    [Fact]
+    public async Task BeginAsync_WithPassKindAndReason_PersistsThemOnTheProtocol()
+    {
+        var jobs = new InMemoryReviewJobRepository();
+        var job = new ReviewJob(Guid.NewGuid(), Guid.NewGuid(), "https://dev.azure.com/org", "proj", "repo", 42, 7);
+        await jobs.AddAsync(job, CancellationToken.None);
+
+        var sut = new InMemoryProtocolRecorder(jobs);
+        await sut.BeginAsync(
+            job.Id, 1, "Program.cs", null, AiConnectionModelCategory.MediumEffort, "gpt-5.4-mini", CancellationToken.None,
+            ReviewPassKind.ProRVAugmentation, "high-risk file — re-reviewed in depth");
+
+        var protocol = Assert.Single(job.Protocols);
+        Assert.Equal(ReviewPassKind.ProRVAugmentation.ToString(), protocol.PassKind);
+        Assert.Equal("high-risk file — re-reviewed in depth", protocol.Reason);
+    }
+
+    [Fact]
+    public async Task BeginAsync_WithoutPassKind_LeavesPassIdentityNull()
+    {
+        var jobs = new InMemoryReviewJobRepository();
+        var job = new ReviewJob(Guid.NewGuid(), Guid.NewGuid(), "https://dev.azure.com/org", "proj", "repo", 1, 1);
+        await jobs.AddAsync(job, CancellationToken.None);
+
+        var sut = new InMemoryProtocolRecorder(jobs);
+        await sut.BeginAsync(job.Id, 1, "synthesis", null, AiConnectionModelCategory.HighEffort, "gpt-5.4", CancellationToken.None);
+
+        var protocol = Assert.Single(job.Protocols);
+        Assert.Null(protocol.PassKind);
+        Assert.Null(protocol.Reason);
+    }
 }

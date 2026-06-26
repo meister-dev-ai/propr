@@ -28,12 +28,22 @@ public sealed class EfReviewDiagnosticsReader(
     private const string EventTextOmittedMessage =
         "Event payload omitted from the overview to keep large protocol traces responsive. Select this pass to load the full captured body.";
 
+    // Upper bound on each free-text event body shipped in the per-pass DTO. The recorder
+    // stores these bodies unbounded (full prompts/inputs/outputs), so a heavy pass can
+    // serialize to hundreds of MB; bounding the wire copy keeps the trace viewer responsive.
+    // Bounds ONLY the DTO — the reader's Resolve*/TryGet* helpers parse the full entity values.
+    private const int MaxEventBodyChars = 4000;
+
     public async Task<GetReviewJobProtocolResult?> GetJobProtocolAsync(
         Guid jobId,
         bool includeEvents = true,
         CancellationToken ct = default)
     {
-        var job = await jobRepository.GetByIdWithProtocolsAsync(jobId, ct);
+        // The overview (includeEvents=false) never serializes or reads phase_timings, so route it to the
+        // projected load that omits that column; the full per-pass path keeps the complete load.
+        var job = includeEvents
+            ? await jobRepository.GetByIdWithProtocolsAsync(jobId, ct)
+            : await jobRepository.GetByIdWithProtocolsForOverviewAsync(jobId, ct);
 
         if (job is null)
         {
@@ -315,7 +325,6 @@ public sealed class EfReviewDiagnosticsReader(
                             evt.ActiveDurationMs,
                             evt.TimingAvailability,
                             evt.ToolOutcome,
-                            evt.PhaseTimings,
                             evt.EventCategory,
                             evt.Error,
                             evt.OutputSummary,
@@ -357,12 +366,14 @@ public sealed class EfReviewDiagnosticsReader(
                         ActiveDurationMs = evtProj.ActiveDurationMs,
                         TimingAvailability = evtProj.TimingAvailability,
                         ToolOutcome = evtProj.ToolOutcome,
-                        PhaseTimings = evtProj.PhaseTimings,
                         EventCategory = evtProj.EventCategory,
                         Error = evtProj.Error,
                         OutputSummary = evtProj.OutputSummary,
                         InputTextSample = null,
                         SystemPrompt = null,
+
+                        // PhaseTimings intentionally NOT carried: the inherited overview, like the primary
+                        // overview, neither serializes nor reads phase timings.
                     };
                     protocol.Events.Add(evt);
                 }
@@ -464,6 +475,8 @@ public sealed class EfReviewDiagnosticsReader(
             CacheObservability = protocol.CacheObservability,
             IsInherited = inheritance is not null,
             Inheritance = inheritance,
+            PassKind = protocol.PassKind,
+            Reason = protocol.Reason,
         };
     }
 
@@ -519,7 +532,7 @@ public sealed class EfReviewDiagnosticsReader(
         if (!includeEvents)
         {
             return protocol.Events
-                .Select(e => CreateEventDto(e, null, null, BuildOverviewOutputSummary(e, isInherited)))
+                .Select(e => CreateEventDto(e, null, null, BuildOverviewOutputSummary(e, isInherited), false))
                 .ToList()
                 .AsReadOnly();
         }
@@ -534,11 +547,40 @@ public sealed class EfReviewDiagnosticsReader(
             .AsReadOnly();
     }
 
+    private static string? TruncateBody(string? text)
+    {
+        if (text is null || text.Length <= MaxEventBodyChars)
+        {
+            return text;
+        }
+
+        // Leave structured bodies whole: these fields double as free-text display AND as JSON
+        // the trace UI parses for its structured panels (triage decision, gate, prefilter, …).
+        // Truncating JSON would blank those panels, so bound only free-text bodies — which are
+        // the large prompt/output payloads anyway.
+        var trimmed = text.AsSpan().TrimStart();
+        if (trimmed.Length > 0 && trimmed[0] is '{' or '[' or '"')
+        {
+            return text;
+        }
+
+        // Never end the slice on a lone high surrogate — that would corrupt the boundary char.
+        var cut = MaxEventBodyChars;
+        if (char.IsHighSurrogate(text[cut - 1]))
+        {
+            cut--;
+        }
+
+        var omitted = text.Length - cut;
+        return $"{text[..cut]}... [truncated, {omitted} chars omitted]";
+    }
+
     private static ProtocolEventDto CreateEventDto(
         ProtocolEvent e,
         string? inputTextSample,
         string? systemPrompt,
-        string? outputSummary)
+        string? outputSummary,
+        bool includePhaseTimings = true)
     {
         return new ProtocolEventDto(
             e.Id,
@@ -547,9 +589,9 @@ public sealed class EfReviewDiagnosticsReader(
             e.OccurredAt,
             e.InputTokens,
             e.OutputTokens,
-            inputTextSample,
-            systemPrompt,
-            outputSummary,
+            TruncateBody(inputTextSample),
+            TruncateBody(systemPrompt),
+            TruncateBody(outputSummary),
             TraceSearchSupport.NormalizeEventCategory(e.EventCategory)
             ?? TraceSearchSupport.DeriveEventCategory(e.Kind, e.Name),
             e.Error)
@@ -569,7 +611,9 @@ public sealed class EfReviewDiagnosticsReader(
             ActiveDurationMs = e.ActiveDurationMs,
             TimingAvailability = e.TimingAvailability,
             ToolOutcome = e.ToolOutcome,
-            PhaseTimings = CreatePhaseTimingDtos(e.PhaseTimings),
+            // Phase timings are heavy per-event detail (a single high-fan-out search tool can
+            // emit thousands) — omit them on the overview/poll path so the list stays small.
+            PhaseTimings = includePhaseTimings ? CreatePhaseTimingDtos(e.PhaseTimings) : null,
         };
     }
 
@@ -662,19 +706,22 @@ public sealed class EfReviewDiagnosticsReader(
     {
         if (protocol.FileResultId.HasValue)
         {
+            // A file-result's comments were all produced by the pass that owns this protocol row,
+            // so fall back to its PassKind when the comment carries no explicit origin.
             return (fileResultOverride is not null
                     ? fileResultOverride
                     : job.FileReviewResults.FirstOrDefault(result => result.Id == protocol.FileResultId.Value))?
                 .Comments?
-                .Select(ToProtocolReviewCommentDto)
+                .Select(comment => ToProtocolReviewCommentDto(comment, protocol.PassKind))
                 .ToList()
                 .AsReadOnly();
         }
 
         if (string.Equals(protocol.Label, "synthesis", StringComparison.OrdinalIgnoreCase))
         {
+            // The published/synthesis comments carry per-finding origin stamped at synthesis time.
             return job.Result?.Comments
-                .Select(ToProtocolReviewCommentDto)
+                .Select(comment => ToProtocolReviewCommentDto(comment))
                 .ToList()
                 .AsReadOnly();
         }
@@ -682,9 +729,14 @@ public sealed class EfReviewDiagnosticsReader(
         return null;
     }
 
-    private static ProtocolReviewCommentDto ToProtocolReviewCommentDto(ReviewComment comment)
+    private static ProtocolReviewCommentDto ToProtocolReviewCommentDto(ReviewComment comment, string? fallbackOriginPassKind = null)
     {
-        return new ProtocolReviewCommentDto(comment.FilePath, comment.LineNumber, comment.Severity, comment.Message);
+        return new ProtocolReviewCommentDto(
+            comment.FilePath,
+            comment.LineNumber,
+            comment.Severity,
+            comment.Message,
+            comment.OriginPassKind ?? fallbackOriginPassKind);
     }
 
     private static string ResolveProviderProjectKey(ReviewJob job)

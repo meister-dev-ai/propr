@@ -41,6 +41,26 @@ public sealed class RoslynSyntaxStructuralAnalyzerTests
     }
 
     [Fact]
+    public async Task ExtractCodeTextAsync_blanks_comments_and_strings_keeps_code()
+    {
+        const string source = "var token = GetValue();\n// token in a comment\nvar s = \"token in a string\";\n";
+
+        var code = await Analyzer().ExtractCodeTextAsync(Request(source), CancellationToken.None);
+        var lines = code.Replace("\r\n", "\n", StringComparison.Ordinal).Split('\n');
+
+        Assert.True(lines.Length >= 3);
+        Assert.Contains("token", lines[0], StringComparison.Ordinal); // real identifier kept
+        Assert.DoesNotContain("token", lines[1], StringComparison.Ordinal); // comment blanked
+        Assert.DoesNotContain("token", lines[2], StringComparison.Ordinal); // string literal blanked
+    }
+
+    [Fact]
+    public async Task ExtractCodeTextAsync_empty_source_returns_empty()
+    {
+        Assert.Equal(string.Empty, await Analyzer().ExtractCodeTextAsync(Request(string.Empty), CancellationToken.None));
+    }
+
+    [Fact]
     public void CanAnalyze_only_cs_files()
     {
         var analyzer = Analyzer();

@@ -4,7 +4,6 @@
 using System.Diagnostics.Metrics;
 using System.Text;
 using System.Text.Json;
-using System.Text.RegularExpressions;
 using MeisterProPR.Application.Features.Reviewing.Execution.Models;
 using MeisterProPR.Application.Features.Reviewing.Execution.Ports;
 using MeisterProPR.Application.Features.Reviewing.Execution.Services;
@@ -13,8 +12,6 @@ using MeisterProPR.Application.Options;
 using MeisterProPR.Application.ValueObjects;
 using MeisterProPR.CodeAnalysis;
 using MeisterProPR.Infrastructure.Features.Reviewing.Diagnostics.Persistence;
-using MeisterProPR.ProRV.Abstractions;
-using Microsoft.Extensions.Logging;
 
 namespace MeisterProPR.Infrastructure.Features.Reviewing.Execution.Strategies.FileByFile;
 
@@ -74,13 +71,14 @@ internal sealed class FileByFileContextPrefetchStage(
         }
 
         var callerBudget = Math.Max(0, this._options.MaxPrefetchCallerSites);
+        var fanOut = FanOutSignal.Unavailable;
         if (callerBudget > 0)
         {
             if (this._options.EnableStructuralReferenceTools && this._analyzer is not null)
             {
                 // Deterministic caller-evidence feed driven by the CHANGED definitions in the changed
-                // file. Independent of whether the model invokes a tool.
-                await this.AppendChangedSymbolCallerEvidenceAsync(context, reviewTools, evidence, callerBudget, cancellationToken);
+                // file. Independent of whether the model invokes a tool. Also yields the blast-radius signal.
+                fanOut = await this.AppendChangedSymbolCallerEvidenceAsync(context, reviewTools, evidence, callerBudget, cancellationToken);
             }
             else
             {
@@ -89,15 +87,17 @@ internal sealed class FileByFileContextPrefetchStage(
             }
         }
 
+        // Persist the fan-out signal regardless of caller evidence; the triage decision reads it later.
+        context.FileReviewContext.PerFileHint = fileHint with
+        {
+            PrefetchedContextEvidence = evidence.Count > 0 ? evidence : fileHint.PrefetchedContextEvidence,
+            FanOut = fanOut,
+        };
+
         if (evidence.Count == 0)
         {
             return context;
         }
-
-        context.FileReviewContext.PerFileHint = fileHint with
-        {
-            PrefetchedContextEvidence = evidence,
-        };
 
         var recorder = this._protocolRecorder ?? context.FileReviewContext.ProtocolRecorder;
         if (context.ProtocolId.HasValue && recorder is not null)
@@ -151,7 +151,7 @@ internal sealed class FileByFileContextPrefetchStage(
     ///     comment/string occurrences excluded. Deterministic; does not depend on the model invoking a
     ///     tool. Never throws to the review.
     /// </summary>
-    private async Task AppendChangedSymbolCallerEvidenceAsync(
+    private async Task<FanOutSignal> AppendChangedSymbolCallerEvidenceAsync(
         PerFileReviewContext context,
         IReviewContextTools reviewTools,
         List<PrefetchedContextEvidenceItem> evidence,
@@ -162,12 +162,12 @@ internal sealed class FileByFileContextPrefetchStage(
         var content = context.ChangedFile.FullContent;
         if (this._analyzer is null || !this._analyzer.CanAnalyze(path) || string.IsNullOrEmpty(content))
         {
-            return;
+            return FanOutSignal.Unavailable;
         }
 
         if (LanguagePaths.TryResolve(path) is not { } language)
         {
-            return;
+            return FanOutSignal.Unavailable;
         }
 
         IReadOnlyList<(int Start, int End)> hunkRanges;
@@ -177,12 +177,12 @@ internal sealed class FileByFileContextPrefetchStage(
         }
         catch
         {
-            return;
+            return FanOutSignal.Unavailable;
         }
 
         if (hunkRanges.Count == 0)
         {
-            return;
+            return FanOutSignal.Unavailable;
         }
 
         var changedRanges = hunkRanges.Select(r => new ChangedLineRange(r.Start, r.End)).ToList();
@@ -199,7 +199,7 @@ internal sealed class FileByFileContextPrefetchStage(
         }
         catch
         {
-            return;
+            return FanOutSignal.Unavailable;
         }
 
         var changedSymbols = enclosing
@@ -211,13 +211,14 @@ internal sealed class FileByFileContextPrefetchStage(
         var injected = 0;
         var seen = new HashSet<string>(StringComparer.Ordinal);
 
+        // Blast-radius accumulation across ALL changed symbols (independent of the evidence-injection budget):
+        // total confirmed references, whether any lookup truncated, and whether any lookup produced data.
+        var totalReferences = 0;
+        var anyTruncated = false;
+        var gotData = false;
+
         foreach (var symbol in changedSymbols)
         {
-            if (injected >= callerBudget)
-            {
-                break;
-            }
-
             ReferenceLookupResult references;
             try
             {
@@ -232,6 +233,13 @@ internal sealed class FileByFileContextPrefetchStage(
             catch
             {
                 continue;
+            }
+
+            if (!references.Unavailable)
+            {
+                gotData = true;
+                totalReferences += references.Sites.Count;
+                anyTruncated |= references.Truncated;
             }
 
             foreach (var site in references.Sites.Where(s => !string.Equals(s.FilePath, path, StringComparison.Ordinal)))
@@ -256,6 +264,13 @@ internal sealed class FileByFileContextPrefetchStage(
                 injected++;
             }
         }
+
+        if (!gotData)
+        {
+            return FanOutSignal.Unavailable;
+        }
+
+        return anyTruncated ? FanOutSignal.Truncated(totalReferences) : FanOutSignal.Measured(totalReferences);
     }
 
     /// <summary>
@@ -678,147 +693,5 @@ internal sealed class FileByFileContextPrefetchStage(
 
         truncated = true;
         return normalized[..maxChars].TrimEnd();
-    }
-}
-
-internal static class FallbackReasonTraceExtensions
-{
-    private static readonly IReadOnlyDictionary<FallbackReason, string> TraceStrings =
-        new Dictionary<FallbackReason, string>
-        {
-            [FallbackReason.AnalyzerDisabled] = "analyzer_disabled",
-            [FallbackReason.NativeUnavailable] = "native_unavailable",
-            [FallbackReason.UnsupportedLanguage] = "unsupported_language",
-            [FallbackReason.ParseFault] = "parse_fault",
-            [FallbackReason.ParseTimeout] = "parse_timeout",
-            [FallbackReason.FileTooLarge] = "file_too_large",
-            [FallbackReason.NoEnclosingDefinition] = "no_enclosing_definition",
-        };
-
-    /// <summary>Lowercase snake_case trace string for <c>fallbackReason</c> per contracts/trace-event.md.</summary>
-    public static string ToTraceString(this FallbackReason reason)
-    {
-        return TraceStrings.TryGetValue(reason, out var s) ? s : reason.ToString().ToLowerInvariant();
-    }
-
-    /// <summary>Lowercase trace string for <c>enclosingKind</c> per contracts/trace-event.md.</summary>
-    public static string ToTraceString(this DefinitionKind kind)
-    {
-        return kind.ToString().ToLowerInvariant();
-    }
-}
-
-internal sealed class FileByFileRiskMarkerStage : IReviewPipelineStage<PerFileReviewContext>
-{
-    public const string StageIdConstant = "file-by-file.risk-marker";
-
-    private static readonly IReadOnlyList<(string MarkerId, string Pattern, bool IsSecurity)> MarkerRules =
-    [
-        ("security.auth-token", "token|oauth|jwt|bearer|secret|apikey|api_key|password|cookie", true),
-        ("security.url-redirect", "redirect|returnurl|callbackurl|open\\(|window\\.open|location\\.|iframe|x-frame-options|frame-ancestors|origin|referer",
-            true),
-        ("security.allow-deny", "allowlist|denylist|whitelist|blacklist|regex.*domain|domain.*regex|cors", true),
-        ("concurrency.async-loop", "foreach\\s*\\(\\s*async|promise\\.all|task\\.whenall|await foreach|goroutine|go\\s+func", false),
-        ("concurrency.locking", "lock\\s*\\(|semaphore|mutex|monitor\\.|interlocked", false),
-        ("concurrency.shared-counter", "\\+\\+|--|updatemany|cache.?key", false),
-    ];
-
-    public string StageId => StageIdConstant;
-
-    public Task<PerFileReviewContext> ExecuteAsync(PerFileReviewContext context, CancellationToken cancellationToken)
-    {
-        if (context.FileReviewContext.PerFileHint is null)
-        {
-            return Task.FromResult(context);
-        }
-
-        var diff = context.ChangedFile.UnifiedDiff;
-        if (string.IsNullOrWhiteSpace(diff))
-        {
-            return Task.FromResult(context);
-        }
-
-        var matchedMarkers = MarkerRules
-            .Where(rule => Regex.IsMatch(diff, rule.Pattern, RegexOptions.IgnoreCase | RegexOptions.CultureInvariant))
-            .Select(rule => (rule.MarkerId, rule.IsSecurity))
-            .ToList();
-
-        if (matchedMarkers.Count == 0)
-        {
-            context.FileReviewContext.PerFileHint = context.FileReviewContext.PerFileHint with
-            {
-                RiskMarkers = FileRiskMarkers.None,
-            };
-            return Task.FromResult(context);
-        }
-
-        context.FileReviewContext.PerFileHint = context.FileReviewContext.PerFileHint with
-        {
-            RiskMarkers = new FileRiskMarkers(
-                matchedMarkers.Any(marker => marker.IsSecurity),
-                matchedMarkers.Any(marker => !marker.IsSecurity),
-                matchedMarkers.Select(marker => marker.MarkerId).Distinct(StringComparer.Ordinal).ToArray()),
-        };
-
-        return Task.FromResult(context);
-    }
-}
-
-internal sealed class FileByFileProRvPrefilterStage(
-    IProtocolRecorder protocolRecorder,
-    IProRVPrefilter? proRvPrefilter,
-    IAiConnectionRepository? aiConnectionRepository,
-    IAiChatClientFactory? aiClientFactory,
-    IAiRuntimeResolver? aiRuntimeResolver,
-    ILogger<FileByFileProRvPrefilterStage> logger) : IReviewPipelineStage<PerFileReviewContext>
-{
-    // This id is part of persisted/profile-selected Reviewing protocol identity.
-    public const string StageIdConstant = "file-by-file.prorv-prefilter";
-
-    public string StageId => StageIdConstant;
-
-    public async Task<PerFileReviewContext> ExecuteAsync(PerFileReviewContext context, CancellationToken cancellationToken)
-    {
-        if (context.ReviewResult is not null ||
-            context.FileReviewContext.PerFileHint is null ||
-            !context.FileReviewContext.EnableProRV ||
-            (context.FileReviewContext.AugmentationMode != ReviewAugmentationMode.EarlySteering
-             && context.FileReviewContext.PassKind != ReviewPassKind.ProRVAugmentation))
-        {
-            return context;
-        }
-
-        var fallbackChatClient = context.FileReviewContext.TierChatClient ?? context.FileReviewContext.DefaultReviewChatClient;
-        if (fallbackChatClient is null)
-        {
-            return context;
-        }
-
-        var focusedReviewGuidance = await ProRVFocusedReviewGuidanceResolver.TryResolveAsync(
-            context.Job,
-            context.ChangedFile,
-            context.FileReviewContext,
-            fallbackChatClient,
-            context.ProtocolId,
-            protocolRecorder,
-            proRvPrefilter,
-            aiConnectionRepository,
-            aiClientFactory,
-            aiRuntimeResolver,
-            logger,
-            StageIdConstant,
-            cancellationToken);
-
-        if (focusedReviewGuidance.Guidance.Count == 0)
-        {
-            return context;
-        }
-
-        context.FileReviewContext.PerFileHint = context.FileReviewContext.PerFileHint with
-        {
-            FocusedReviewGuidance = focusedReviewGuidance.Guidance,
-        };
-
-        return context;
     }
 }

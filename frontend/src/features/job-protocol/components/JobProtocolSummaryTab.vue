@@ -99,7 +99,14 @@
                             </div>
                         </div>
 
-                        <div class="severity-summary-row">
+                        <p
+                            v-if="(vm.reviewStatus?.result?.comments?.length ?? 0) === 0 && vm.reviewStatus?.status !== 'processing'"
+                            class="aggregate-clean-state"
+                            data-testid="aggregate-clean-state"
+                        >
+                            No findings — the review completed clean.
+                        </p>
+                        <div v-else class="severity-summary-row">
                             <div
                                 v-for="(count, sev) in vm.severityCounts"
                                 :key="sev"
@@ -112,6 +119,27 @@
                             </div>
                         </div>
                     </div>
+
+                    <!-- Aggregate findings view: every finding, grouped by file, each
+                         annotated with the pass that produced it (origin badge). This is
+                         the provenance home per EXPERIENCE.md §IA. -->
+                    <section
+                        v-if="(vm.reviewStatus?.result?.comments?.length ?? 0) > 0"
+                        class="aggregate-findings-section"
+                        data-testid="aggregate-findings"
+                    >
+                        <div class="aggregate-findings-header">
+                            <h4>Findings by file</h4>
+                            <span class="aggregate-findings-hint">Each finding links to the pass that produced it.</span>
+                        </div>
+                        <JobProtocolCommentGroups
+                            :vm="vm"
+                            :groups="vm.aggregateFindingsByFile"
+                            empty-message="No findings — the review completed clean."
+                            show-origin
+                            show-root-header
+                        />
+                    </section>
                 </div>
 
                 <section v-else class="events-section selected-file-view">
@@ -145,6 +173,7 @@
                             :groups="vm.groupedReviewComments"
                             empty-message="No comments found for this selection."
                             show-dismiss
+                            show-origin
                         />
                     </div>
                 </section>
@@ -513,6 +542,37 @@ const severities = ['error', 'warning', 'info', 'suggestion']
     gap: 0.75rem;
     margin-top: 1.5rem;
     flex-wrap: wrap;
+}
+
+.aggregate-clean-state {
+    margin: 1.5rem 0 0;
+    color: var(--color-text-muted);
+    font-size: 0.9rem;
+}
+
+.aggregate-findings-section {
+    margin-top: 1.5rem;
+}
+
+.aggregate-findings-header {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    border-bottom: 1px solid var(--color-border);
+    padding-bottom: 0.5rem;
+    margin-bottom: 0.5rem;
+}
+
+.aggregate-findings-header h4 {
+    margin: 0;
+    font-size: 0.95rem;
+}
+
+.aggregate-findings-hint {
+    color: var(--color-text-muted);
+    font-size: 0.78rem;
 }
 
 .sev-summary-pill {

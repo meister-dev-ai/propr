@@ -367,7 +367,7 @@ public sealed class FileByFileReviewOrchestratorCommentRelevanceFilterTests
                 Arg.Any<Guid?>(),
                 Arg.Any<AiConnectionModelCategory?>(),
                 Arg.Any<string?>(),
-                Arg.Any<CancellationToken>())
+                Arg.Any<CancellationToken>(), Arg.Any<ReviewPassKind?>(), Arg.Any<string?>())
             .Returns(Guid.NewGuid());
         recorder.SetCompletedAsync(
                 Arg.Any<Guid>(),

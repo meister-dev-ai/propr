@@ -1600,7 +1600,8 @@ internal sealed partial class AgenticFileReviewer(
                 fileResult.Id,
                 tierCategory,
                 tierModelId,
-                ct);
+                ct,
+                ReviewPassKind.Baseline);
         }
         catch (Exception ex)
         {

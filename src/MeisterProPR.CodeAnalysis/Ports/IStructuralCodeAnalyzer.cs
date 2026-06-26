@@ -81,4 +81,18 @@ public interface IStructuralCodeAnalyzer
         StructuralParseRequest request,
         string symbol,
         CancellationToken ct);
+
+    /// <summary>
+    ///     Returns <see cref="StructuralParseRequest.SourceText" /> with every comment and
+    ///     string/char/interpolated-literal span blanked (replaced by spaces; newlines preserved so line
+    ///     numbers and line count are unchanged), leaving only real code. Lets callers match patterns
+    ///     against code without spurious hits inside comments or string literals.
+    /// </summary>
+    /// <returns>
+    ///     The code-only projection of the source. Empty string on fault/timeout/oversize/unsupported or
+    ///     when the backend is unavailable; MUST NOT throw.
+    /// </returns>
+    Task<string> ExtractCodeTextAsync(
+        StructuralParseRequest request,
+        CancellationToken ct);
 }

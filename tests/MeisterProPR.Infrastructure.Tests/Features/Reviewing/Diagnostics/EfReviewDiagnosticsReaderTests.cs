@@ -10,8 +10,10 @@ using MeisterProPR.Infrastructure.Data;
 using MeisterProPR.Infrastructure.Features.Reviewing.Diagnostics.Persistence;
 using MeisterProPR.Infrastructure.Features.Reviewing.Execution.Strategies;
 using MeisterProPR.Infrastructure.Features.Reviewing.Execution.Strategies.AgenticFileByFile;
+using MeisterProPR.Infrastructure.Repositories;
 using MeisterProPR.Infrastructure.Tests.Fixtures;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging.Abstractions;
 using NSubstitute;
 
 namespace MeisterProPR.Infrastructure.Tests.Features.Reviewing.Diagnostics;
@@ -923,5 +925,361 @@ public sealed class EfReviewDiagnosticsReaderTests
             inherited.Events[0].OutputSummary);
 
         await repository.DidNotReceive().GetByIdWithProtocolsAsync(sourceJobId, Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task GetJobProtocolAsync_WhenEventBodyExceedsCap_TruncatesShippedTextButLeavesSmallFields()
+    {
+        var job = new ReviewJob(Guid.NewGuid(), Guid.NewGuid(), "https://dev.azure.com/org", "proj", "repo", 71, 1);
+        var protocol = new ReviewJobProtocol
+        {
+            Id = Guid.NewGuid(),
+            JobId = job.Id,
+            AttemptNumber = 1,
+            Label = "src/Foo.cs",
+            StartedAt = DateTimeOffset.UtcNow.AddMinutes(-1),
+            CompletedAt = DateTimeOffset.UtcNow,
+            Outcome = "Completed",
+        };
+
+        var hugeOutput = new string('A', 250_000);
+        const string smallInput = "short user prompt";
+        protocol.Events.Add(
+            new ProtocolEvent
+            {
+                Id = Guid.NewGuid(),
+                ProtocolId = protocol.Id,
+                Kind = ProtocolEventKind.AiCall,
+                Name = "ai_call_iter_1",
+                OccurredAt = DateTimeOffset.UtcNow.AddSeconds(-1),
+                InputTextSample = smallInput,
+                OutputSummary = hugeOutput,
+            });
+
+        job.Protocols.Add(protocol);
+
+        var repository = Substitute.For<IJobRepository>();
+        repository.GetByIdWithProtocolsAsync(job.Id, Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<ReviewJob?>(job));
+
+        var sut = new EfReviewDiagnosticsReader(repository);
+
+        var result = await sut.GetJobProtocolAsync(job.Id, ct: CancellationToken.None);
+
+        var returnedProtocol = Assert.Single(result!.Protocols);
+        var returnedEvent = Assert.Single(returnedProtocol.Events);
+
+        Assert.NotNull(returnedEvent.OutputSummary);
+        Assert.True(returnedEvent.OutputSummary!.Length < hugeOutput.Length);
+        Assert.True(returnedEvent.OutputSummary.Length < 8_000);
+        Assert.Contains("truncated", returnedEvent.OutputSummary);
+        Assert.StartsWith(new string('A', 1_000), returnedEvent.OutputSummary);
+        Assert.Equal(smallInput, returnedEvent.InputTextSample);
+        // A null field passes through as null (no marker).
+        Assert.Null(returnedEvent.SystemPrompt);
+    }
+
+    [Fact]
+    public async Task GetJobProtocolAsync_WhenStructuredJsonBodyExceedsCap_LeavesItWholeForTheUiPanels()
+    {
+        var job = new ReviewJob(Guid.NewGuid(), Guid.NewGuid(), "https://dev.azure.com/org", "proj", "repo", 73, 1);
+        var protocol = new ReviewJobProtocol
+        {
+            Id = Guid.NewGuid(),
+            JobId = job.Id,
+            AttemptNumber = 1,
+            Label = "src/Foo.cs",
+            StartedAt = DateTimeOffset.UtcNow.AddMinutes(-1),
+            CompletedAt = DateTimeOffset.UtcNow,
+            Outcome = "Completed",
+        };
+
+        // A structured JSON body (the frontend JSON.parses these for its panels) that is
+        // larger than the cap must NOT be truncated, or the panel would silently blank.
+        var jsonBody = "{\"tier\":\"high\",\"why\":\"" + new string('w', 6_000) + "\"}";
+        protocol.Events.Add(
+            new ProtocolEvent
+            {
+                Id = Guid.NewGuid(),
+                ProtocolId = protocol.Id,
+                Kind = ProtocolEventKind.Operational,
+                Name = "triage_decision",
+                OccurredAt = DateTimeOffset.UtcNow.AddSeconds(-1),
+                OutputSummary = jsonBody,
+            });
+
+        job.Protocols.Add(protocol);
+
+        var repository = Substitute.For<IJobRepository>();
+        repository.GetByIdWithProtocolsAsync(job.Id, Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<ReviewJob?>(job));
+
+        var sut = new EfReviewDiagnosticsReader(repository);
+
+        var result = await sut.GetJobProtocolAsync(job.Id, ct: CancellationToken.None);
+
+        var returnedEvent = Assert.Single(Assert.Single(result!.Protocols).Events);
+        Assert.Equal(jsonBody, returnedEvent.OutputSummary);
+        Assert.DoesNotContain("truncated", returnedEvent.OutputSummary ?? string.Empty);
+    }
+
+    [Fact]
+    public async Task GetJobProtocolAsync_WhenTruncationBoundaryHitsSurrogatePair_DoesNotEmitLoneSurrogate()
+    {
+        var job = new ReviewJob(Guid.NewGuid(), Guid.NewGuid(), "https://dev.azure.com/org", "proj", "repo", 74, 1);
+        var protocol = new ReviewJobProtocol
+        {
+            Id = Guid.NewGuid(),
+            JobId = job.Id,
+            AttemptNumber = 1,
+            Label = "src/Foo.cs",
+            StartedAt = DateTimeOffset.UtcNow.AddMinutes(-1),
+            CompletedAt = DateTimeOffset.UtcNow,
+            Outcome = "Completed",
+        };
+
+        // "😀" (U+1F600) is a surrogate pair straddling indices 3999/4000 — the cut must not
+        // keep its lone high surrogate.
+        var body = new string('A', 3_999) + "😀" + new string('B', 5_000);
+        protocol.Events.Add(
+            new ProtocolEvent
+            {
+                Id = Guid.NewGuid(),
+                ProtocolId = protocol.Id,
+                Kind = ProtocolEventKind.AiCall,
+                Name = "ai_call_iter_1",
+                OccurredAt = DateTimeOffset.UtcNow.AddSeconds(-1),
+                OutputSummary = body,
+            });
+
+        job.Protocols.Add(protocol);
+
+        var repository = Substitute.For<IJobRepository>();
+        repository.GetByIdWithProtocolsAsync(job.Id, Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<ReviewJob?>(job));
+
+        var sut = new EfReviewDiagnosticsReader(repository);
+
+        var result = await sut.GetJobProtocolAsync(job.Id, ct: CancellationToken.None);
+
+        var returnedEvent = Assert.Single(Assert.Single(result!.Protocols).Events);
+        Assert.Contains("truncated", returnedEvent.OutputSummary ?? string.Empty);
+        Assert.False(returnedEvent.OutputSummary!.Contains('\uD83D'));
+    }
+
+    [Fact]
+    public async Task GetJobProtocolAsync_WhenWorkspaceEntityJsonExceedsCap_ResolverStillReadsFullEntity()
+    {
+        var job = new ReviewJob(Guid.NewGuid(), Guid.NewGuid(), "https://dev.azure.com/org", "proj", "repo", 72, 1);
+        var protocol = new ReviewJobProtocol
+        {
+            Id = Guid.NewGuid(),
+            JobId = job.Id,
+            AttemptNumber = 1,
+            Label = "src/Foo.cs",
+            StartedAt = DateTimeOffset.UtcNow.AddMinutes(-1),
+            CompletedAt = DateTimeOffset.UtcNow,
+            Outcome = "Completed",
+        };
+
+        // Valid JSON whose length exceeds the truncation cap; the resolver must read the
+        // full entity body, not the truncated DTO.
+        var workspaceJson = "{\"workspaceKey\":\"ws-123\",\"filler\":\"" + new string('a', 6_000) + "\"}";
+        protocol.Events.Add(
+            new ProtocolEvent
+            {
+                Id = Guid.NewGuid(),
+                ProtocolId = protocol.Id,
+                Kind = ProtocolEventKind.Operational,
+                Name = "local_workspace_prepared",
+                OccurredAt = DateTimeOffset.UtcNow.AddSeconds(-1),
+                OutputSummary = workspaceJson,
+            });
+
+        job.Protocols.Add(protocol);
+
+        var repository = Substitute.For<IJobRepository>();
+        repository.GetByIdWithProtocolsAsync(job.Id, Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<ReviewJob?>(job));
+
+        var sut = new EfReviewDiagnosticsReader(repository);
+
+        var result = await sut.GetJobProtocolAsync(job.Id, ct: CancellationToken.None);
+
+        var returnedProtocol = Assert.Single(result!.Protocols);
+
+        // The resolver reads the full entity JSON; the structured body is JSON, so the DTO
+        // copy is left whole (never truncated) and the workspace panel keeps working.
+        Assert.NotNull(returnedProtocol.Workspace);
+        Assert.Equal("ws-123", returnedProtocol.Workspace!.WorkspaceKey);
+
+        var returnedEvent = Assert.Single(returnedProtocol.Events);
+        Assert.Equal(workspaceJson, returnedEvent.OutputSummary);
+        Assert.DoesNotContain("truncated", returnedEvent.OutputSummary ?? string.Empty);
+    }
+
+    [Fact]
+    public async Task GetJobProtocolAsync_OmitsPhaseTimingsOnOverviewButKeepsThemOnDetail()
+    {
+        // The detail (includeEvents=true) path loads the full job with phase timings via
+        // GetByIdWithProtocolsAsync; the overview (includeEvents=false) path loads via the projected
+        // GetByIdWithProtocolsForOverviewAsync, which omits phase_timings. Mirror that routing here.
+        var detailJob = BuildPhaseTimingJob(out var jobId, true);
+        var overviewJob = BuildPhaseTimingJob(jobId, false);
+
+        var repository = Substitute.For<IJobRepository>();
+        repository.GetByIdWithProtocolsAsync(jobId, Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<ReviewJob?>(detailJob));
+        repository.GetByIdWithProtocolsForOverviewAsync(jobId, Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<ReviewJob?>(overviewJob));
+
+        var sut = new EfReviewDiagnosticsReader(repository);
+
+        var overview = await sut.GetJobProtocolAsync(jobId, false, CancellationToken.None);
+        var overviewEvent = Assert.Single(Assert.Single(overview!.Protocols).Events);
+        Assert.Null(overviewEvent.PhaseTimings);
+
+        var detail = await sut.GetJobProtocolAsync(jobId, true, CancellationToken.None);
+        var detailEvent = Assert.Single(Assert.Single(detail!.Protocols).Events);
+        Assert.NotNull(detailEvent.PhaseTimings);
+        Assert.Equal(2, detailEvent.PhaseTimings!.Count);
+    }
+
+    /// <summary>
+    ///     The overview (<c>includeEvents=false</c>) load is served by
+    ///     <see cref="IJobRepository.GetByIdWithProtocolsForOverviewAsync" />, which projects every event column
+    ///     except <c>phase_timings</c> while keeping the text columns. This drives that path through a real
+    ///     <see cref="JobRepository" /> over an in-memory <see cref="MeisterProPRDbContext" /> and asserts the
+    ///     workspace pass badge still resolves (text loaded + <c>ResolveWorkspace</c> works) while every returned
+    ///     event's <see cref="ProtocolEvent.PhaseTimings" /> is null.
+    /// </summary>
+    [Fact]
+    public async Task GetJobProtocolAsync_OnOverview_KeepsWorkspaceBadgeButDropsPhaseTimings()
+    {
+        var options = new DbContextOptionsBuilder<MeisterProPRDbContext>()
+            .UseInMemoryDatabase($"EfReviewDiagnosticsReaderTests-{Guid.NewGuid():N}")
+            .Options;
+
+        var jobId = Guid.NewGuid();
+        var clientId = Guid.NewGuid();
+        var protocolId = Guid.NewGuid();
+
+        await using (var seedDb = new MeisterProPRDbContext(options))
+        {
+            var job = new ReviewJob(jobId, clientId, "https://dev.azure.com/org", "proj", "repo", 91, 1);
+            job.SelectReviewStrategy(
+                ReviewStrategy.AgenticFileByFile,
+                ReviewStrategySelectionSource.ClientDefault,
+                ReviewComparisonMode.Single,
+                ReviewPublicationMode.Publish,
+                null);
+            seedDb.ReviewJobs.Add(job);
+
+            seedDb.ReviewJobProtocols.Add(
+                new ReviewJobProtocol
+                {
+                    Id = protocolId,
+                    JobId = jobId,
+                    AttemptNumber = 1,
+                    Label = "src/Foo.cs",
+                    StartedAt = DateTimeOffset.UtcNow.AddMinutes(-1),
+                    CompletedAt = DateTimeOffset.UtcNow,
+                    Outcome = "Completed",
+                });
+
+            // A workspace-prepared event whose OutputSummary JSON carries the workspaceKey the overview's
+            // ResolveWorkspace badge parses — its presence in the result proves text columns still load.
+            seedDb.ProtocolEvents.Add(
+                new ProtocolEvent
+                {
+                    Id = Guid.NewGuid(),
+                    ProtocolId = protocolId,
+                    Kind = ProtocolEventKind.ToolCall,
+                    Name = "local_workspace_prepared",
+                    OccurredAt = DateTimeOffset.UtcNow.AddSeconds(-2),
+                    OutputSummary = "{\"workspaceKey\":\"ws-abc-123\"}",
+                    PhaseTimings = new List<ProtocolEventPhaseTiming>
+                    {
+                        new("repository_search", "Repository search", 1, null, DateTimeOffset.UtcNow, DateTimeOffset.UtcNow, 4, "captured", "succeeded"),
+                    },
+                });
+            seedDb.ProtocolEvents.Add(
+                new ProtocolEvent
+                {
+                    Id = Guid.NewGuid(),
+                    ProtocolId = protocolId,
+                    Kind = ProtocolEventKind.AiCall,
+                    Name = "ai_call_iter_1",
+                    OccurredAt = DateTimeOffset.UtcNow.AddSeconds(-1),
+                    InputTextSample = "user prompt",
+                    SystemPrompt = "system prompt",
+                    OutputSummary = "ok",
+                    PhaseTimings = new List<ProtocolEventPhaseTiming>
+                    {
+                        new("result_shaping", "Result shaping", 1, null, DateTimeOffset.UtcNow, DateTimeOffset.UtcNow, 2, "captured", "succeeded"),
+                    },
+                });
+
+            await seedDb.SaveChangesAsync();
+        }
+
+        await using var readDb = new MeisterProPRDbContext(options);
+        var repository = new JobRepository(readDb, new TestDbContextFactory(options), NullLogger<JobRepository>.Instance);
+        var sut = new EfReviewDiagnosticsReader(repository, new TestDbContextFactory(options));
+
+        var overview = await sut.GetJobProtocolAsync(jobId, false, CancellationToken.None);
+
+        Assert.NotNull(overview);
+        var pass = Assert.Single(overview!.Protocols);
+
+        // (a) The workspace badge resolved from the event text → text columns loaded and Resolve* ran.
+        Assert.NotNull(pass.Workspace);
+        Assert.Equal("ws-abc-123", pass.Workspace!.WorkspaceKey);
+
+        // (b) Every returned event dropped phase_timings on the overview path.
+        Assert.Equal(2, pass.Events.Count);
+        Assert.All(pass.Events, evt => Assert.Null(evt.PhaseTimings));
+    }
+
+    private static ReviewJob BuildPhaseTimingJob(out Guid jobId, bool withPhaseTimings)
+    {
+        jobId = Guid.NewGuid();
+        return BuildPhaseTimingJob(jobId, withPhaseTimings);
+    }
+
+    private static ReviewJob BuildPhaseTimingJob(Guid jobId, bool withPhaseTimings)
+    {
+        var job = new ReviewJob(jobId, Guid.NewGuid(), "https://dev.azure.com/org", "proj", "repo", 75, 1);
+        var protocol = new ReviewJobProtocol
+        {
+            Id = Guid.NewGuid(),
+            JobId = job.Id,
+            AttemptNumber = 1,
+            Label = "src/Foo.cs",
+            StartedAt = DateTimeOffset.UtcNow.AddMinutes(-1),
+            CompletedAt = DateTimeOffset.UtcNow,
+            Outcome = "Completed",
+        };
+        protocol.Events.Add(
+            new ProtocolEvent
+            {
+                Id = Guid.NewGuid(),
+                ProtocolId = protocol.Id,
+                Kind = ProtocolEventKind.ToolCall,
+                Name = "find_references",
+                OccurredAt = DateTimeOffset.UtcNow.AddSeconds(-1),
+                PhaseTimings = withPhaseTimings
+                    ? new List<ProtocolEventPhaseTiming>
+                    {
+                        new(
+                            "scm_file_content_fetch", "SCM file content fetch", 1, null, DateTimeOffset.UtcNow, DateTimeOffset.UtcNow, 5, "captured",
+                            "succeeded",
+                            "file=x"),
+                        new("repository_search", "Repository search", 2, null, DateTimeOffset.UtcNow, DateTimeOffset.UtcNow, 3, "captured", "succeeded"),
+                    }
+                    : null,
+            });
+        job.Protocols.Add(protocol);
+        return job;
     }
 }

@@ -28,6 +28,18 @@
                     <div class="comment-msg-container markdown-content">
                         <div v-html="vm.renderMarkdown(comment.message)"></div>
                     </div>
+                    <div v-if="showOrigin && vm.commentOriginLabel(comment)" class="comment-origin-row">
+                        <button
+                            type="button"
+                            class="origin-badge"
+                            :aria-label="`Found by ${vm.commentOriginLabel(comment)} on ${comment.filePath ?? comment.file_path ?? 'this PR'}`"
+                            data-testid="origin-badge"
+                            @click.stop="vm.selectFindingOrigin(comment)"
+                        >
+                            <span class="origin-badge-lbl">found by</span>
+                            {{ vm.commentOriginLabel(comment) }}
+                        </button>
+                    </div>
                 </li>
             </ul>
         </div>
@@ -37,13 +49,15 @@
 
 <script setup lang="ts">
 import type { JobProtocolViewModel } from '@/features/job-protocol/composables/useJobProtocolViewModel'
+import type { CommentGroupComment } from '../types'
 
 defineProps<{
     vm: JobProtocolViewModel
-    groups: Array<{ directory: string; comments: any[] }>
+    groups: Array<{ directory: string; comments: CommentGroupComment[] }>
     emptyMessage: string
     showDismiss?: boolean
     showRootHeader?: boolean
+    showOrigin?: boolean
 }>()
 </script>
 
@@ -100,6 +114,36 @@ defineProps<{
 .comment-msg-container {
     width: 100%;
     overflow: hidden;
+}
+
+.comment-origin-row {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin-top: 0.75rem;
+}
+
+.origin-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    font-size: 0.72rem;
+    color: var(--color-text);
+    background: rgba(255, 255, 255, 0.06);
+    border: 1px solid var(--color-border);
+    padding: 0.15rem 0.5rem;
+    border-radius: var(--radius-xs);
+    cursor: pointer;
+    font-family: inherit;
+    transition: border-color 0.15s;
+}
+
+.origin-badge:hover {
+    border-color: var(--color-accent);
+}
+
+.origin-badge-lbl {
+    color: var(--color-text-muted);
 }
 
 .json-comments-list {

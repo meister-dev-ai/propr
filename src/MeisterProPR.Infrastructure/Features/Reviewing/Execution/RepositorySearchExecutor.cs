@@ -92,55 +92,54 @@ internal static class RepositorySearchExecutor
         var matches = new List<RepositorySearchMatch>();
         var truncated = false;
 
-        foreach (var candidatePath in candidatePaths)
-        {
-            if (BinaryFileDetector.IsBinary(candidatePath))
+        await ToolTimingCollectorContext.RecordAsync(
+            ProtocolEventToolPhaseNames.RepositorySearch,
+            "Repository search",
+            async () =>
             {
-                limitations.Add(
-                    new RepositorySearchLimitation(candidatePath, RepositorySearchLimitationReasons.BinaryFile, "Binary files are not searchable."));
-                continue;
-            }
-
-            string? content;
-            try
-            {
-                content = await ToolTimingCollectorContext.RecordAsync(
-                    ProtocolEventToolPhaseNames.ScmFileContentFetch,
-                    "SCM file content fetch",
-                    () => fetchRawFileContentAsync(candidatePath, branch, ct),
-                    fetched => fetched is null ? $"file={candidatePath};missing=true" : $"file={candidatePath};chars={fetched.Length}");
-            }
-            catch (Exception ex)
-            {
-                limitations.Add(new RepositorySearchLimitation(candidatePath, RepositorySearchLimitationReasons.ProviderFetchFailed, ex.Message));
-                continue;
-            }
-
-            if (content is null)
-            {
-                limitations.Add(
-                    new RepositorySearchLimitation(
-                        candidatePath, RepositorySearchLimitationReasons.MissingOnBranch, "The file was not found on the requested branch."));
-                continue;
-            }
-
-            var byteSize = Encoding.UTF8.GetByteCount(content);
-            if (byteSize > maxFileSizeBytes)
-            {
-                limitations.Add(
-                    new RepositorySearchLimitation(
-                        candidatePath,
-                        RepositorySearchLimitationReasons.UnreadableFile,
-                        $"The file is too large to search ({byteSize} bytes exceeds the limit of {maxFileSizeBytes} bytes)."));
-                continue;
-            }
-
-            var lines = content.Split('\n');
-            var searchTerminated = ToolTimingCollectorContext.Record(
-                ProtocolEventToolPhaseNames.RepositorySearch,
-                "Repository search",
-                () =>
+                var scanned = 0;
+                foreach (var candidatePath in candidatePaths)
                 {
+                    scanned++;
+                    if (BinaryFileDetector.IsBinary(candidatePath))
+                    {
+                        limitations.Add(
+                            new RepositorySearchLimitation(candidatePath, RepositorySearchLimitationReasons.BinaryFile, "Binary files are not searchable."));
+                        continue;
+                    }
+
+                    string? content;
+                    try
+                    {
+                        content = await fetchRawFileContentAsync(candidatePath, branch, ct);
+                    }
+                    catch (Exception ex)
+                    {
+                        limitations.Add(new RepositorySearchLimitation(candidatePath, RepositorySearchLimitationReasons.ProviderFetchFailed, ex.Message));
+                        continue;
+                    }
+
+                    if (content is null)
+                    {
+                        limitations.Add(
+                            new RepositorySearchLimitation(
+                                candidatePath, RepositorySearchLimitationReasons.MissingOnBranch, "The file was not found on the requested branch."));
+                        continue;
+                    }
+
+                    var byteSize = Encoding.UTF8.GetByteCount(content);
+                    if (byteSize > maxFileSizeBytes)
+                    {
+                        limitations.Add(
+                            new RepositorySearchLimitation(
+                                candidatePath,
+                                RepositorySearchLimitationReasons.UnreadableFile,
+                                $"The file is too large to search ({byteSize} bytes exceeds the limit of {maxFileSizeBytes} bytes)."));
+                        continue;
+                    }
+
+                    var lines = content.Split('\n');
+                    var searchTerminated = false;
                     for (var i = 0; i < lines.Length; i++)
                     {
                         if (!regex.IsMatch(lines[i]))
@@ -164,20 +163,20 @@ internal static class RepositorySearchExecutor
                                     $"Only the first {RepositoryDiscoveryHelpers.MaxReturnedMatches} matches were returned."));
                         }
 
-                        return true;
+                        searchTerminated = true;
+                        break;
                     }
 
-                    return false;
-                },
-                terminated => $"file={candidatePath};matches={matches.Count};terminated={terminated}");
+                    if (searchTerminated)
+                    {
+                        break;
+                    }
+                }
 
-            if (searchTerminated)
-            {
-                goto Complete;
-            }
-        }
+                return scanned;
+            },
+            scanned => $"files_scanned={scanned};matches={matches.Count};truncated={truncated}");
 
-        Complete:
         var status = ToolTimingCollectorContext.Record(
             ProtocolEventToolPhaseNames.ResultShaping,
             "Result shaping",

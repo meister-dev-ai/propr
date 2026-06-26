@@ -223,6 +223,43 @@ export type ReviewCommentRecord = {
     lineNumber?: number | null
     severity?: string | null
     message: string
+    originPassKind?: string | null
+}
+
+/**
+ * The common comment shape rendered by JobProtocolCommentGroups. Both the
+ * generated ProtocolReviewComment (aggregate findings) and the hand-rolled
+ * ReviewCommentRecord (per-pass final comments) structurally satisfy this, so
+ * the component can accept either without an `any` and still read origin/file
+ * aliases defensively.
+ */
+export interface CommentGroupComment {
+    filePath?: string | null
+    file_path?: string | null
+    lineNumber?: number | null
+    line_number?: number | null
+    severity?: string | null
+    message?: string | null
+    originPassKind?: string | null
+}
+
+/** Parsed details of a `triage_decision` protocol event. */
+export interface TriageDecisionEventDetails {
+    filePath?: string | null
+    tier?: string | null
+    why?: string | null
+    securityEscalate?: boolean | null
+    securityFlagged?: boolean | null
+    fanOutKind?: string | null
+    fanOutCount?: number | null
+}
+
+/** Display-ready triage rationale shown inline in the trace UI. */
+export interface TriageDecisionPresentation {
+    tier: string
+    why: string
+    security: string
+    blastRadius: string
 }
 
 export interface MergedEvent {
@@ -361,3 +398,34 @@ export interface CommentTreeNode {
 export type CommentSidebarItem =
     | { type: 'folder'; name: string; path: string; depth: number; isCollapsed: boolean; isLast: boolean }
     | { type: 'file'; name: string; path: string; depth: number; commentCount: number; isLast: boolean }
+
+/** One reviewed pass projected for the file → pass-tab selector. */
+export interface PassTab {
+    id: string
+    label: string
+    reason: string | null
+    tokens: number
+    findingCount: number
+    failed: boolean
+}
+
+/**
+ * A selectable file in the trace selector: the file path (or the synthetic
+ * "PR-level" key) plus its passes in chronological order and file-aggregate
+ * stats. Non-file passes (synthesis, pr-wide review, …) collect under
+ * `isPrLevel` with `path === ''`.
+ */
+export interface FileGroup {
+    /** File path used as the URL `file` key; '' for the PR-level group. */
+    path: string
+    /** Display label: the file path, or "PR-level" for job-wide passes. */
+    label: string
+    isPrLevel: boolean
+    /** Folder segment used to group rows in the dropdown. */
+    directory: string
+    filename: string
+    passes: ReviewProtocolPass[]
+    tabs: PassTab[]
+    totalTokens: number
+    totalFindings: number
+}

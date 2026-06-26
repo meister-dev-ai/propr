@@ -34,7 +34,9 @@ public sealed class EfProtocolRecorder(
         Guid? fileResultId = null,
         AiConnectionModelCategory? connectionCategory = null,
         string? modelId = null,
-        CancellationToken ct = default)
+        CancellationToken ct = default,
+        ReviewPassKind? passKind = null,
+        string? reason = null)
     {
         await using var db = await contextFactory.CreateDbContextAsync(ct);
         var protocol = new ReviewJobProtocol
@@ -47,6 +49,8 @@ public sealed class EfProtocolRecorder(
             StartedAt = DateTimeOffset.UtcNow,
             AiConnectionCategory = connectionCategory,
             ModelId = modelId,
+            PassKind = passKind?.ToString(),
+            Reason = reason,
         };
         db.ReviewJobProtocols.Add(protocol);
         await db.SaveChangesAsync(ct);
