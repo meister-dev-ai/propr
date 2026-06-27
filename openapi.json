@@ -893,11 +893,11 @@
       }
     },
     "/admin/identity/users/{id}": {
-      "delete": {
+      "patch": {
         "tags": [
           "AdminUsers"
         ],
-        "summary": "Disables a user and revokes all their tokens and PATs.",
+        "summary": "Enables or disables a user. Idempotent: confirming the current state is a no-op. Whenever the\nactive flag actually flips, all refresh tokens and PATs are revoked so the user must\nre-authenticate. Disabling the last active global admin is refused with 409.",
         "parameters": [
           {
             "name": "id",
@@ -909,6 +909,25 @@
             }
           }
         ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SetUserActiveRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SetUserActiveRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/SetUserActiveRequest"
+              }
+            }
+          }
+        },
         "responses": {
           "200": {
             "description": "OK"
@@ -939,11 +958,11 @@
       }
     },
     "/admin/users/{id}": {
-      "delete": {
+      "patch": {
         "tags": [
           "AdminUsers"
         ],
-        "summary": "Disables a user and revokes all their tokens and PATs.",
+        "summary": "Enables or disables a user. Idempotent: confirming the current state is a no-op. Whenever the\nactive flag actually flips, all refresh tokens and PATs are revoked so the user must\nre-authenticate. Disabling the last active global admin is refused with 409.",
         "parameters": [
           {
             "name": "id",
@@ -955,6 +974,25 @@
             }
           }
         ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SetUserActiveRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SetUserActiveRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/SetUserActiveRequest"
+              }
+            }
+          }
+        },
         "responses": {
           "200": {
             "description": "OK"
@@ -19768,6 +19806,16 @@
         },
         "additionalProperties": false,
         "description": "Request body for setting a client-scoped provider reviewer-trigger identity."
+      },
+      "SetUserActiveRequest": {
+        "type": "object",
+        "properties": {
+          "isActive": {
+            "type": "boolean"
+          }
+        },
+        "additionalProperties": false,
+        "description": "Enable/disable request for a user."
       },
       "SubmitReviewRequest": {
         "type": "object",

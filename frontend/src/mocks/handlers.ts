@@ -2514,7 +2514,8 @@ export const handlers = [
     await delay(400)
     return HttpResponse.json([
       { id: 'u1', username: 'admin', globalRole: 'Admin', isActive: true, createdAt: new Date().toISOString() },
-      { id: 'u2', username: 'jsmith', globalRole: 'User', isActive: true, createdAt: new Date().toISOString() }
+      { id: 'u2', username: 'jsmith', globalRole: 'User', isActive: true, createdAt: new Date().toISOString() },
+      { id: 'u3', username: 'former.employee', globalRole: 'User', isActive: false, createdAt: new Date().toISOString() }
     ])
   }),
 
@@ -2525,6 +2526,11 @@ export const handlers = [
          { assignmentId: 'a2', clientId: '2', role: 'ClientUser', assignedAt: new Date().toISOString() }
        ]
     })
+  }),
+
+  http.patch(`${base}/admin/users/:id`, async () => {
+    await delay(200)
+    return new HttpResponse(null, { status: 204 })
   }),
 
   http.get(`${base}/users/me/pats`, async () => {

@@ -95,10 +95,19 @@
                 <button
                   v-if="user.isActive"
                   class="btn-danger"
-                  :disabled="disabling === user.id"
+                  :disabled="togglingActive === user.id"
                   @click="handleDisable(user.id)"
                 >
-                  {{ disabling === user.id ? '…' : 'Disable' }}
+                  {{ togglingActive === user.id ? '…' : 'Disable' }}
+                </button>
+                <button
+                  v-else
+                  class="btn-primary"
+                  :disabled="togglingActive === user.id"
+                  @click="handleReenable(user.id)"
+                >
+                  <i class="fi fi-rr-refresh"></i>
+                  {{ togglingActive === user.id ? '…' : 'Re-enable' }}
                 </button>
                 <button
                   class="btn-secondary"
@@ -174,6 +183,7 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
 import { useSession } from '@/composables/useSession'
+import { useNotification } from '@/composables/useNotification'
 import { API_BASE_URL } from '@/services/apiBase'
 
 interface UserItem {
@@ -198,6 +208,7 @@ interface ClientItem {
 }
 
 const { getAccessToken } = useSession()
+const { notify } = useNotification()
 const base = API_BASE_URL
 
 function authHeaders(): Record<string, string> {
@@ -209,7 +220,7 @@ function authHeaders(): Record<string, string> {
 const users = ref<UserItem[]>([])
 const loading = ref(false)
 const loadError = ref('')
-const disabling = ref<string | null>(null)
+const togglingActive = ref<string | null>(null)
 
 // Create user state
 const showCreate = ref(false)
@@ -289,15 +300,34 @@ async function handleCreate() {
 
 async function handleDisable(id: string) {
   if (!confirm('Disable this user? All their tokens and PATs will be revoked.')) return
-  disabling.value = id
+  await setUserActive(id, false)
+}
+
+async function handleReenable(id: string) {
+  if (!confirm('Re-enable this user? They will need to log in again.')) return
+  await setUserActive(id, true)
+}
+
+async function setUserActive(id: string, isActive: boolean) {
+  togglingActive.value = id
   try {
-    const res = await fetch(`${base}/admin/users/${id}`, { method: 'DELETE', headers: authHeaders() })
+    const res = await fetch(`${base}/admin/users/${id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json', ...authHeaders() },
+      body: JSON.stringify({ isActive }),
+    })
     if (res.ok) {
       const user = users.value.find(u => u.id === id)
-      if (user) user.isActive = false
+      if (user) user.isActive = isActive
+      notify(isActive ? 'User re-enabled.' : 'User disabled.', 'success')
+    } else {
+      const body = await res.json().catch(() => ({ error: `HTTP ${res.status}` })) as { error?: string }
+      notify(body.error ?? `HTTP ${res.status}`, 'error')
     }
+  } catch (e) {
+    notify(String(e), 'error')
   } finally {
-    disabling.value = null
+    togglingActive.value = null
   }
 }
 

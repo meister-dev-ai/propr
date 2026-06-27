@@ -720,8 +720,15 @@ export interface paths {
         };
         put?: never;
         post?: never;
-        /** Disables a user and revokes all their tokens and PATs. */
-        delete: {
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Enables or disables a user. Idempotent: confirming the current state is a no-op. Whenever the
+         *     active flag actually flips, all refresh tokens and PATs are revoked so the user must
+         *     re-authenticate. Disabling the last active global admin is refused with 409.
+         */
+        patch: {
             parameters: {
                 query?: never;
                 header?: never;
@@ -730,7 +737,13 @@ export interface paths {
                 };
                 cookie?: never;
             };
-            requestBody?: never;
+            requestBody?: {
+                content: {
+                    "application/json": components["schemas"]["SetUserActiveRequest"];
+                    "text/json": components["schemas"]["SetUserActiveRequest"];
+                    "application/*+json": components["schemas"]["SetUserActiveRequest"];
+                };
+            };
             responses: {
                 /** @description OK */
                 200: {
@@ -741,9 +754,6 @@ export interface paths {
                 };
             };
         };
-        options?: never;
-        head?: never;
-        patch?: never;
         trace?: never;
     };
     "/admin/users/{id}": {
@@ -776,8 +786,15 @@ export interface paths {
         };
         put?: never;
         post?: never;
-        /** Disables a user and revokes all their tokens and PATs. */
-        delete: {
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Enables or disables a user. Idempotent: confirming the current state is a no-op. Whenever the
+         *     active flag actually flips, all refresh tokens and PATs are revoked so the user must
+         *     re-authenticate. Disabling the last active global admin is refused with 409.
+         */
+        patch: {
             parameters: {
                 query?: never;
                 header?: never;
@@ -786,7 +803,13 @@ export interface paths {
                 };
                 cookie?: never;
             };
-            requestBody?: never;
+            requestBody?: {
+                content: {
+                    "application/json": components["schemas"]["SetUserActiveRequest"];
+                    "text/json": components["schemas"]["SetUserActiveRequest"];
+                    "application/*+json": components["schemas"]["SetUserActiveRequest"];
+                };
+            };
             responses: {
                 /** @description OK */
                 200: {
@@ -797,9 +820,6 @@ export interface paths {
                 };
             };
         };
-        options?: never;
-        head?: never;
-        patch?: never;
         trace?: never;
     };
     "/admin/identity/users/{id}/clients": {
@@ -11974,6 +11994,10 @@ export interface components {
             login?: string | null;
             displayName?: string | null;
             isBot?: boolean;
+        };
+        /** @description Enable/disable request for a user. */
+        SetUserActiveRequest: {
+            isActive?: boolean;
         };
         /** @description Request payload for provider-neutral review intake. */
         SubmitReviewRequest: {

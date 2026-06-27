@@ -15,7 +15,8 @@ public sealed class AdminUsersController(
     IUserRepository userRepository,
     IRefreshTokenRepository refreshTokenRepository,
     IUserPatRepository userPatRepository,
-    IPasswordHashService passwordHashService) : ControllerBase
+    IPasswordHashService passwordHashService,
+    IUserAccountAuditLog auditLog) : ControllerBase
 {
     /// <summary>Returns all users.</summary>
     [HttpGet("/admin/identity/users")]
@@ -73,15 +74,27 @@ public sealed class AdminUsersController(
         return this.CreatedAtAction(nameof(this.ListUsers), null, MapToResponse(user));
     }
 
-    /// <summary>Disables a user and revokes all their tokens and PATs.</summary>
-    [HttpDelete("/admin/identity/users/{id:guid}")]
-    [HttpDelete("/admin/users/{id:guid}")]
-    public async Task<IActionResult> DisableUser(Guid id, CancellationToken ct)
+    /// <summary>
+    ///     Enables or disables a user. Idempotent: confirming the current state is a no-op. Whenever the
+    ///     active flag actually flips, all refresh tokens and PATs are revoked so the user must
+    ///     re-authenticate. Disabling the last active global admin is refused with 409.
+    /// </summary>
+    [HttpPatch("/admin/identity/users/{id:guid}")]
+    [HttpPatch("/admin/users/{id:guid}")]
+    public async Task<IActionResult> SetUserActive(
+        Guid id,
+        [FromBody] SetUserActiveRequest? request,
+        CancellationToken ct)
     {
         var auth = AuthHelpers.RequireAdmin(this.HttpContext);
         if (auth is not null)
         {
             return auth;
+        }
+
+        if (request is null)
+        {
+            return this.BadRequest(new { error = "A request body with an isActive value is required." });
         }
 
         var user = await userRepository.GetByIdAsync(id, ct);
@@ -90,9 +103,38 @@ public sealed class AdminUsersController(
             return this.NotFound();
         }
 
-        await userRepository.SetActiveAsync(id, false, ct);
+        // Confirming the value the user already has changes nothing and leaves no audit trail.
+        if (user.IsActive == request.IsActive)
+        {
+            return this.NoContent();
+        }
+
+        var actorUserId = AuthHelpers.GetUserId(this.HttpContext) ?? Guid.Empty;
+
+        // Reaching here with request.IsActive == false means the user is currently active, so a global
+        // admin would lose their access; refuse when no other active global admin would remain.
+        if (!request.IsActive && user.GlobalRole == AppUserRole.Admin)
+        {
+            var activeAdmins = await userRepository.CountActiveAdminsAsync(ct);
+            if (activeAdmins <= 1)
+            {
+                auditLog.DisableBlockedByLastAdmin(actorUserId, user.Id, user.Username);
+                return this.Conflict(new { error = "Cannot disable the last active global admin." });
+            }
+        }
+
+        await userRepository.SetActiveAsync(id, request.IsActive, ct);
         await refreshTokenRepository.RevokeAllForUserAsync(id, ct);
         await userPatRepository.RevokeAllForUserAsync(id, ct);
+
+        if (request.IsActive)
+        {
+            auditLog.Reenabled(actorUserId, user.Id, user.Username);
+        }
+        else
+        {
+            auditLog.Disabled(actorUserId, user.Id, user.Username);
+        }
 
         return this.NoContent();
     }
@@ -191,6 +233,9 @@ public sealed class AdminUsersController(
 
 /// <summary>Create-user request.</summary>
 public sealed record CreateUserRequest(string Username, string Password, AppUserRole? GlobalRole);
+
+/// <summary>Enable/disable request for a user.</summary>
+public sealed record SetUserActiveRequest(bool IsActive);
 
 /// <summary>Assign-client-role request.</summary>
 public sealed record AssignClientRoleRequest(Guid ClientId, ClientRole Role);

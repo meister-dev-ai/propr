@@ -60,6 +60,16 @@ public sealed class AuthMiddleware(RequestDelegate next)
                             if (userRepo is not null)
                             {
                                 var user = await userRepo.GetByIdWithAssignmentsAsync(userId, context.RequestAborted);
+
+                                // A still-valid access token must not outlive a disabled account: the
+                                // refresh-token and PAT paths already reject disabled users, and this
+                                // closes the same gap for bearer JWTs.
+                                if (user is not null && !user.IsActive)
+                                {
+                                    await WriteNotActiveAsync(context);
+                                    return;
+                                }
+
                                 var explicitClientRoles = user is not null
                                     ? CreateExplicitClientRoles(user)
                                     : await userRepo.GetUserClientRolesAsync(userId, context.RequestAborted);
@@ -113,11 +123,25 @@ public sealed class AuthMiddleware(RequestDelegate next)
                         await next(context);
                         return;
                     }
+
+                    // Defense in depth: PATs are revoked when a user is disabled, so this should not
+                    // normally fire, but reject explicitly if a live PAT ever outlives the account.
+                    if (user is not null && !user.IsActive)
+                    {
+                        await WriteNotActiveAsync(context);
+                        return;
+                    }
                 }
             }
         }
 
         await next(context);
+    }
+
+    private static Task WriteNotActiveAsync(HttpContext context)
+    {
+        context.Response.StatusCode = StatusCodes.Status401Unauthorized;
+        return context.Response.WriteAsJsonAsync(new { error = "User account is not active." });
     }
 
     private static Dictionary<Guid, ClientRole> CreateExplicitClientRoles(AppUser user)

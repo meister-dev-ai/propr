@@ -27,6 +27,9 @@ public interface IUserRepository
     /// <summary>Sets the IsActive flag for the given user.</summary>
     Task SetActiveAsync(Guid id, bool isActive, CancellationToken ct = default);
 
+    /// <summary>Returns the number of users that are global administrators and currently active.</summary>
+    Task<int> CountActiveAdminsAsync(CancellationToken ct = default);
+
     /// <summary>Updates the password hash for the given user.</summary>
     Task UpdatePasswordHashAsync(Guid id, string passwordHash, CancellationToken ct = default);
 

@@ -46,6 +46,7 @@ public static class IdentityAndAccessModuleServiceCollectionExtensions
 
         services.AddSingleton<IPasswordHashService, PasswordHashService>();
         services.AddSingleton<IJwtTokenService, JwtTokenService>();
+        services.AddSingleton<IUserAccountAuditLog, UserAccountAuditLog>();
 
         return services;
     }
