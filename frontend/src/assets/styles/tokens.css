@@ -16,6 +16,10 @@
   --color-primary-hover: #E4E4E7;
   --color-danger: #ef4444;
   --color-danger-hover: #dc2626;
+  /* Critical: irreversible actions (e.g. permanent delete). A deeper red than danger
+   * so the two destructive tiers read as distinct. */
+  --color-critical: #b91c1c;
+  --color-critical-hover: #7f1d1d;
   --color-success: #22c55e;
   --color-warning: #f59e0b;
   --color-accent: #22D3EE;

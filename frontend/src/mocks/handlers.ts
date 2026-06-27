@@ -2533,6 +2533,11 @@ export const handlers = [
     return new HttpResponse(null, { status: 204 })
   }),
 
+  http.delete(`${base}/admin/users/:id/permanent`, async () => {
+    await delay(200)
+    return new HttpResponse(null, { status: 204 })
+  }),
+
   http.get(`${base}/users/me/pats`, async () => {
     await delay(200)
     return HttpResponse.json([

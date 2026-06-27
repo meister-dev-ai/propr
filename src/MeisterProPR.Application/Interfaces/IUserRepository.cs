@@ -30,6 +30,13 @@ public interface IUserRepository
     /// <summary>Returns the number of users that are global administrators and currently active.</summary>
     Task<int> CountActiveAdminsAsync(CancellationToken ct = default);
 
+    /// <summary>
+    ///     Permanently removes the user. Dependent rows (client assignments, tenant memberships,
+    ///     external identities, PATs, refresh tokens) are removed by database cascade; nullable audit
+    ///     references to the user are set to null. No-op when the user does not exist.
+    /// </summary>
+    Task DeleteAsync(Guid id, CancellationToken ct = default);
+
     /// <summary>Updates the password hash for the given user.</summary>
     Task UpdatePasswordHashAsync(Guid id, string passwordHash, CancellationToken ct = default);
 
