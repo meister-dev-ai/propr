@@ -43,4 +43,25 @@ public sealed class UserAccountAuditLog(ILogger<UserAccountAuditLog> logger) : I
             targetUsername,
             "last_active_admin");
     }
+
+    public void Deleted(Guid actorUserId, Guid targetUserId, string targetUsername)
+    {
+        logger.LogInformation(
+            "{AuditEvent} actor={ActorUserId} target={TargetUserId} username={TargetUsername}",
+            "user.deleted",
+            actorUserId,
+            targetUserId,
+            targetUsername);
+    }
+
+    public void DeleteBlockedByLastAdmin(Guid actorUserId, Guid targetUserId, string targetUsername)
+    {
+        logger.LogWarning(
+            "{AuditEvent} blocked actor={ActorUserId} target={TargetUserId} username={TargetUsername} reason={Reason}",
+            "user.deleted",
+            actorUserId,
+            targetUserId,
+            targetUsername,
+            "last_active_admin");
+    }
 }

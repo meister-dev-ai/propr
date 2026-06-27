@@ -1022,6 +1022,54 @@
         }
       }
     },
+    "/admin/identity/users/{id}/permanent": {
+      "delete": {
+        "tags": [
+          "AdminUsers"
+        ],
+        "summary": "Permanently deletes a user and all their dependent records. Refuses to delete the last\nactive global administrator.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/admin/users/{id}/permanent": {
+      "delete": {
+        "tags": [
+          "AdminUsers"
+        ],
+        "summary": "Permanently deletes a user and all their dependent records. Refuses to delete the last\nactive global administrator.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
     "/admin/identity/users/{id}/clients": {
       "post": {
         "tags": [

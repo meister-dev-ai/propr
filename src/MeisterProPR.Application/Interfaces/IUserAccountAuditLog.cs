@@ -21,4 +21,13 @@ public interface IUserAccountAuditLog
     ///     active global administrator. No state change occurred.
     /// </summary>
     void DisableBlockedByLastAdmin(Guid actorUserId, Guid targetUserId, string targetUsername);
+
+    /// <summary>Records that a user was permanently deleted by an administrator.</summary>
+    void Deleted(Guid actorUserId, Guid targetUserId, string targetUsername);
+
+    /// <summary>
+    ///     Records that a delete request was refused because it would have left the system with no
+    ///     active global administrator. No deletion occurred.
+    /// </summary>
+    void DeleteBlockedByLastAdmin(Guid actorUserId, Guid targetUserId, string targetUsername);
 }

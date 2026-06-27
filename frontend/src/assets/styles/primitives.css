@@ -5,7 +5,8 @@
 /* ── Buttons ─────────────────────────────────────────────────────────────── */
 .btn-primary,
 .btn-secondary,
-.btn-danger {
+.btn-danger,
+.btn-critical {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -31,7 +32,8 @@
 
 .btn-primary:disabled,
 .btn-secondary:disabled,
-.btn-danger:disabled {
+.btn-danger:disabled,
+.btn-critical:disabled {
   opacity: 0.5;
   cursor: not-allowed;
   transform: none;
@@ -55,6 +57,15 @@
 
 .btn-danger:hover {
   background: var(--color-danger-hover);
+}
+
+.btn-critical {
+  background: var(--color-critical);
+  color: #ffffff !important;
+}
+
+.btn-critical:hover {
+  background: var(--color-critical-hover);
 }
 
 .btn-ghost {

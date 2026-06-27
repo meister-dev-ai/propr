@@ -139,6 +139,45 @@ public sealed class AdminUsersController(
         return this.NoContent();
     }
 
+    /// <summary>
+    ///     Permanently deletes a user and all their dependent records. Refuses to delete the last
+    ///     active global administrator.
+    /// </summary>
+    [HttpDelete("/admin/identity/users/{id:guid}/permanent")]
+    [HttpDelete("/admin/users/{id:guid}/permanent")]
+    public async Task<IActionResult> DeleteUserPermanent(Guid id, CancellationToken ct)
+    {
+        var auth = AuthHelpers.RequireAdmin(this.HttpContext);
+        if (auth is not null)
+        {
+            return auth;
+        }
+
+        var user = await userRepository.GetByIdAsync(id, ct);
+        if (user is null)
+        {
+            return this.NotFound();
+        }
+
+        var actorUserId = AuthHelpers.GetUserId(this.HttpContext) ?? Guid.Empty;
+
+        // Deleting an active admin lowers the active-admin count by one; refuse when none would remain.
+        if (user.GlobalRole == AppUserRole.Admin && user.IsActive)
+        {
+            var activeAdmins = await userRepository.CountActiveAdminsAsync(ct);
+            if (activeAdmins <= 1)
+            {
+                auditLog.DeleteBlockedByLastAdmin(actorUserId, user.Id, user.Username);
+                return this.Conflict(new { error = "Cannot delete the last active administrator." });
+            }
+        }
+
+        await userRepository.DeleteAsync(id, ct);
+        auditLog.Deleted(actorUserId, user.Id, user.Username);
+
+        return this.NoContent();
+    }
+
     /// <summary>Returns a single user with their client role assignments.</summary>
     [HttpGet("/admin/identity/users/{id:guid}")]
     [HttpGet("/admin/users/{id:guid}")]

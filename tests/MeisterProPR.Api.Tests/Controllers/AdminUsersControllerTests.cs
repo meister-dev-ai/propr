@@ -49,6 +49,13 @@ public sealed class AdminUsersControllerTests(AdminUsersControllerTests.AdminUse
         return request;
     }
 
+    private HttpRequestMessage DeleteRequest(Guid id, string role = "Admin")
+    {
+        var request = new HttpRequestMessage(HttpMethod.Delete, $"/admin/users/{id}/permanent");
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", factory.GenerateUserToken(Guid.NewGuid(), role));
+        return request;
+    }
+
     [Fact]
     public async Task Patch_DisablesActiveUser_Returns204AndRevokesAndAudits()
     {
@@ -236,6 +243,104 @@ public sealed class AdminUsersControllerTests(AdminUsersControllerTests.AdminUse
         // Reset the caller stub so other tests keep their default (null) identity resolution.
         factory.UserRepository.GetByIdWithAssignmentsAsync(callerId, Arg.Any<CancellationToken>())
             .Returns(Task.FromResult<AppUser?>(null));
+    }
+
+    [Fact]
+    public async Task Delete_NonAdminUser_Returns204AndDeletesAndAudits()
+    {
+        this.ResetSubstitutes();
+        var id = Guid.NewGuid();
+        factory.UserRepository.GetByIdAsync(id, Arg.Any<CancellationToken>())
+            .Returns(User(id, true, AppUserRole.User, "victim"));
+
+        var client = factory.CreateClient();
+        var response = await client.SendAsync(this.DeleteRequest(id));
+
+        Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
+        await factory.UserRepository.Received(1).DeleteAsync(id, Arg.Any<CancellationToken>());
+        factory.AuditLog.Received(1).Deleted(Arg.Any<Guid>(), id, "victim");
+    }
+
+    [Fact]
+    public async Task Delete_DisabledAdmin_IsNotBlockedByLastAdminGuard()
+    {
+        this.ResetSubstitutes();
+        var id = Guid.NewGuid();
+        // A disabled admin does not count toward active admins, so deleting one is always allowed.
+        factory.UserRepository.GetByIdAsync(id, Arg.Any<CancellationToken>())
+            .Returns(User(id, false, AppUserRole.Admin, "olddmin"));
+        factory.UserRepository.CountActiveAdminsAsync(Arg.Any<CancellationToken>()).Returns(1);
+
+        var client = factory.CreateClient();
+        var response = await client.SendAsync(this.DeleteRequest(id));
+
+        Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
+        await factory.UserRepository.Received(1).DeleteAsync(id, Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task Delete_Admin_WhenAnotherActiveAdminRemains_Succeeds()
+    {
+        this.ResetSubstitutes();
+        var id = Guid.NewGuid();
+        factory.UserRepository.GetByIdAsync(id, Arg.Any<CancellationToken>())
+            .Returns(User(id, true, AppUserRole.Admin, "admin2"));
+        factory.UserRepository.CountActiveAdminsAsync(Arg.Any<CancellationToken>()).Returns(2);
+
+        var client = factory.CreateClient();
+        var response = await client.SendAsync(this.DeleteRequest(id));
+
+        Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
+        await factory.UserRepository.Received(1).DeleteAsync(id, Arg.Any<CancellationToken>());
+        factory.AuditLog.Received(1).Deleted(Arg.Any<Guid>(), id, "admin2");
+    }
+
+    [Fact]
+    public async Task Delete_LastActiveAdmin_Returns409AndAuditsBlockedAndDoesNotDelete()
+    {
+        this.ResetSubstitutes();
+        var id = Guid.NewGuid();
+        factory.UserRepository.GetByIdAsync(id, Arg.Any<CancellationToken>())
+            .Returns(User(id, true, AppUserRole.Admin, "lastadmin"));
+        factory.UserRepository.CountActiveAdminsAsync(Arg.Any<CancellationToken>()).Returns(1);
+
+        var client = factory.CreateClient();
+        var response = await client.SendAsync(this.DeleteRequest(id));
+
+        Assert.Equal(HttpStatusCode.Conflict, response.StatusCode);
+        var body = JsonDocument.Parse(await response.Content.ReadAsStringAsync()).RootElement;
+        Assert.Equal("Cannot delete the last active administrator.", body.GetProperty("error").GetString());
+
+        factory.AuditLog.Received(1).DeleteBlockedByLastAdmin(Arg.Any<Guid>(), id, "lastadmin");
+        factory.AuditLog.DidNotReceive().Deleted(Arg.Any<Guid>(), Arg.Any<Guid>(), Arg.Any<string>());
+        await factory.UserRepository.DidNotReceive().DeleteAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task Delete_UnknownUser_Returns404()
+    {
+        this.ResetSubstitutes();
+        var id = Guid.NewGuid();
+        factory.UserRepository.GetByIdAsync(id, Arg.Any<CancellationToken>()).Returns(Task.FromResult<AppUser?>(null));
+
+        var client = factory.CreateClient();
+        var response = await client.SendAsync(this.DeleteRequest(id));
+
+        Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
+        await factory.UserRepository.DidNotReceive().DeleteAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task Delete_NonAdminCaller_Returns403()
+    {
+        this.ResetSubstitutes();
+        var id = Guid.NewGuid();
+        factory.UserRepository.GetByIdAsync(id, Arg.Any<CancellationToken>()).Returns(User(id, true));
+
+        var client = factory.CreateClient();
+        var response = await client.SendAsync(this.DeleteRequest(id, "User"));
+
+        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
     }
 
     public sealed class AdminUsersApiFactory : WebApplicationFactory<Program>

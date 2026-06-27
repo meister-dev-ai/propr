@@ -115,6 +115,48 @@
                 >
                   {{ expandedUser === user.id ? 'Close' : 'Assignments' }}
                 </button>
+                <button
+                  class="btn-critical"
+                  :disabled="isLastActiveAdmin(user)"
+                  :title="isLastActiveAdmin(user)
+                    ? 'Cannot delete the last active administrator.'
+                    : 'Permanently delete this user'"
+                  @click="startDelete(user.id)"
+                >
+                  Delete
+                </button>
+              </td>
+            </tr>
+            <!-- Inline typed-confirmation for permanent delete -->
+            <tr v-if="deletingUser === user.id" class="delete-confirm-row">
+              <td colspan="5">
+                <div class="delete-confirm-panel">
+                  <p class="delete-confirm-text">
+                    This permanently deletes <strong>{{ user.username }}</strong> along with their tokens,
+                    PATs, client assignments, tenant memberships, and external identities.
+                    This cannot be undone.
+                  </p>
+                  <label :for="`delete-confirm-${user.id}`">
+                    Type <strong>{{ user.username }}</strong> to confirm:
+                  </label>
+                  <div class="delete-confirm-form">
+                    <input
+                      :id="`delete-confirm-${user.id}`"
+                      v-model="deleteConfirmText"
+                      type="text"
+                      autocomplete="off"
+                      :placeholder="user.username"
+                    />
+                    <button
+                      class="btn-critical"
+                      :disabled="deleteConfirmText !== user.username || deleteBusy === user.id"
+                      @click="confirmDelete(user)"
+                    >
+                      {{ deleteBusy === user.id ? '…' : 'Permanently delete' }}
+                    </button>
+                    <button class="btn-secondary" @click="cancelDelete">Cancel</button>
+                  </div>
+                </div>
               </td>
             </tr>
             <!-- Inline assignments panel -->
@@ -181,7 +223,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { useSession } from '@/composables/useSession'
 import { useNotification } from '@/composables/useNotification'
 import { API_BASE_URL } from '@/services/apiBase'
@@ -221,6 +263,19 @@ const users = ref<UserItem[]>([])
 const loading = ref(false)
 const loadError = ref('')
 const togglingActive = ref<string | null>(null)
+
+// Hard-delete state: a typed confirmation gates the irreversible action per row.
+const deletingUser = ref<string | null>(null)
+const deleteConfirmText = ref('')
+const deleteBusy = ref<string | null>(null)
+
+const activeAdminCount = computed(
+  () => users.value.filter(u => u.isActive && u.globalRole === 'Admin').length,
+)
+
+function isLastActiveAdmin(user: UserItem): boolean {
+  return user.isActive && user.globalRole === 'Admin' && activeAdminCount.value === 1
+}
 
 // Create user state
 const showCreate = ref(false)
@@ -331,6 +386,42 @@ async function setUserActive(id: string, isActive: boolean) {
   }
 }
 
+function startDelete(id: string) {
+  deletingUser.value = id
+  deleteConfirmText.value = ''
+}
+
+function cancelDelete() {
+  deletingUser.value = null
+  deleteConfirmText.value = ''
+}
+
+async function confirmDelete(user: UserItem) {
+  // Guard against firing if the typed name no longer matches (defence in depth; the button is disabled too).
+  if (deleteConfirmText.value !== user.username) return
+  deleteBusy.value = user.id
+  try {
+    const res = await fetch(`${base}/admin/users/${user.id}/permanent`, {
+      method: 'DELETE',
+      headers: authHeaders(),
+    })
+    if (res.status === 204) {
+      users.value = users.value.filter(u => u.id !== user.id)
+      if (expandedUser.value === user.id) expandedUser.value = null
+      deletingUser.value = null
+      deleteConfirmText.value = ''
+      notify('User permanently deleted.', 'success')
+    } else {
+      const body = await res.json().catch(() => ({ error: `HTTP ${res.status}` })) as { error?: string }
+      notify(body.error ?? `HTTP ${res.status}`, 'error')
+    }
+  } catch (e) {
+    notify(String(e), 'error')
+  } finally {
+    deleteBusy.value = null
+  }
+}
+
 async function toggleAssignments(userId: string) {
   if (expandedUser.value === userId) {
     expandedUser.value = null
@@ -429,6 +520,56 @@ select:focus { outline: none; border-color: var(--color-accent); box-shadow: 0 0
 
 .row-inactive td {
   opacity: 0.4;
+}
+
+.delete-confirm-row > td {
+  padding: 0;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.delete-confirm-panel {
+  background: var(--color-danger-soft);
+  padding: 1.25rem 1.5rem;
+  border-radius: var(--radius-lg);
+  margin: 1rem 1.5rem 1.5rem 1.5rem;
+  border: 1px solid var(--color-critical);
+}
+
+.delete-confirm-text {
+  margin: 0 0 0.75rem;
+  font-size: 0.875rem;
+}
+
+.delete-confirm-panel label {
+  display: block;
+  font-size: 0.8rem;
+  color: var(--color-text-muted);
+  margin-bottom: 0.5rem;
+}
+
+.delete-confirm-form {
+  display: flex;
+  gap: 0.75rem;
+  align-items: center;
+}
+
+.delete-confirm-form input {
+  flex: 0 1 18rem;
+  padding: 0.625rem 0.875rem;
+  border: 1px solid var(--color-border);
+  border-radius: 0.5rem;
+  background: var(--color-bg);
+  color: var(--color-text);
+  font-size: 0.875rem;
+}
+
+.delete-confirm-form input:focus {
+  outline: none;
+  border-color: var(--color-critical);
+}
+
+.delete-confirm-row:hover td {
+  background: transparent !important;
 }
 
 .actions-cell {

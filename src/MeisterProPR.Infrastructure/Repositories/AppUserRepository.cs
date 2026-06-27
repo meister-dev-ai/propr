@@ -77,6 +77,20 @@ public sealed class AppUserRepository(MeisterProPRDbContext db) : IUserRepositor
         return db.AppUsers.CountAsync(u => u.GlobalRole == AppUserRole.Admin && u.IsActive, ct);
     }
 
+    public async Task DeleteAsync(Guid id, CancellationToken ct = default)
+    {
+        var record = await db.AppUsers.FindAsync([id], ct);
+        if (record is null)
+        {
+            return;
+        }
+
+        // The dependent rows are wired with ON DELETE CASCADE and the nullable audit references with
+        // ON DELETE SET NULL, so removing the principal row is sufficient.
+        db.AppUsers.Remove(record);
+        await db.SaveChangesAsync(ct);
+    }
+
     public async Task UpdatePasswordHashAsync(Guid id, string passwordHash, CancellationToken ct = default)
     {
         var record = await db.AppUsers.FindAsync([id], ct);
