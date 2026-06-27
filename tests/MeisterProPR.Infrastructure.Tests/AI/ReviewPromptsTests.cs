@@ -117,7 +117,7 @@ public class ReviewPromptsTests
     {
         var prompt = ReviewPrompts.BuildPerFileSystemPrompt(null, "src/Foo.cs", 2, 5);
 
-        Assert.Contains("shared mechanism", prompt, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("find_references", prompt, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("bounded defect", prompt, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("src/Foo.cs", prompt);
         Assert.Contains("2 of 5", prompt);
