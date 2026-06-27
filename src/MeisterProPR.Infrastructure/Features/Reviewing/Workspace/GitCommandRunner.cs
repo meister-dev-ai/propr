@@ -64,7 +64,7 @@ internal sealed class GitCommandRunner(ILogger<GitCommandRunner> logger)
         logger.LogDebug(
             "Running git command in {WorkingDirectory}: git {Arguments}",
             workingDirectory,
-            string.Join(' ', arguments));
+            SanitizeForLog(string.Join(' ', arguments)));
 
         process.Start();
         process.StandardInput.Close();
@@ -75,6 +75,13 @@ internal sealed class GitCommandRunner(ILogger<GitCommandRunner> logger)
         await Task.WhenAll(outputTask, errorTask);
 
         return new GitCommandResult(process.ExitCode, standardOutput.ToString(), standardError.ToString());
+    }
+
+    // Git arguments include user-controlled values (remote URLs, refs, branch names from the
+    // review request), so strip line breaks before logging to prevent forged log entries.
+    private static string SanitizeForLog(string value)
+    {
+        return value.Replace('\r', ' ').Replace('\n', ' ').Replace('\t', ' ');
     }
 
     private static async Task ConsumeAsync(StreamReader reader, StringBuilder buffer, CancellationToken ct)
