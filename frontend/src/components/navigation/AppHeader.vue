@@ -31,6 +31,17 @@
       </div>
     </nav>
     <div class="header-actions">
+      <a
+        href="https://github.com/meister-dev-ai/propr"
+        target="_blank"
+        rel="noopener noreferrer"
+        class="nav-link nav-link-button github-link"
+        aria-label="View source on GitHub"
+        title="View source on GitHub"
+      >
+        <span class="github-icon" aria-hidden="true" v-html="githubMark"></span>
+        <span>GitHub</span>
+      </a>
       <RouterLink :to="{ name: 'settings' }" class="nav-link nav-link-button" :class="{ 'router-link-active': $route.name === 'settings' }">
         <i class="fi fi-rr-settings"></i>
         <span>Settings</span>
@@ -48,6 +59,7 @@ import { computed, ref } from 'vue'
 import { RouterLink, useRouter } from 'vue-router'
 import { useSession } from '@/composables/useSession'
 import icon from '@/assets/logo_standalone.png'
+import githubMark from '@/assets/icons/github.svg?raw'
 
 const router = useRouter()
 const { logout: endSession, isAdmin, clientRoles, tenantRoles, edition } = useSession()
@@ -138,6 +150,19 @@ async function logout() {
 
 .nav-link-button i {
   color: var(--color-accent);
+}
+
+/* The SVG is injected via v-html, so it carries no scoped-style attribute;
+   color cascades through currentColor, and :deep() reaches it for sizing. */
+.github-icon {
+  display: inline-flex;
+  color: var(--color-accent);
+}
+
+.github-icon :deep(svg) {
+  display: block;
+  width: 1.05rem;
+  height: 1.05rem;
 }
 
 .logout-btn {
