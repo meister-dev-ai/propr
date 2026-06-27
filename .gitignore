@@ -68,6 +68,7 @@ _bmad-output/
 .agents
 skills-lock.json
 AGENTS.md
+skills/
 
 .playwright-mcp
 
