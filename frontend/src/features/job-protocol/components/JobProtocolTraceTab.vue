@@ -369,18 +369,17 @@
                                         </span>
                                     </div>
 
-                                    <!-- File/category pills and search snippets are trace-search affordances: within a single
-                                         pass the file and category are constant and the snippet just echoes the event name, so
-                                         they only earn their space when a cross-pass search is active. -->
-                                    <template v-if="vm.hasActiveTraceFilters">
-                                        <div v-if="row.traceFilePath || row.traceEventCategory" class="event-meta-line">
-                                            <span v-if="row.traceFilePath" class="event-meta-pill event-meta-pill--path" :title="row.traceFilePath">{{ row.traceFilePath }}</span>
-                                            <span class="event-meta-pill">{{ row.traceEventCategory }}</span>
-                                        </div>
-                                        <div v-if="row.traceMatchSnippet" class="event-match-snippet"><strong>{{ row.traceMatchedField }}:</strong> {{ row.traceMatchSnippet }}</div>
-                                        <div v-if="row.traceContextSnippet" class="event-context-snippet">{{ row.traceContextSnippet }}</div>
-                                        <div v-else-if="row.traceHasLimitedMetadata" class="event-context-limitation">Supporting metadata or nearby trace context was not captured for this row.</div>
-                                    </template>
+                                    <!-- A searched row stays as compact as an unfiltered one. The file/category are constant
+                                         within a single pass (the file is already named by the selector), and the fuller context
+                                         lives in the detail modal, so search only adds a single clamped line showing what the
+                                         free-text query matched. A name match is skipped — the event name is already on the line
+                                         above, so echoing it here is just noise. -->
+                                    <div
+                                        v-if="vm.hasActiveTraceFilters && row.traceMatchSnippet && row.traceMatchedField !== 'eventName'"
+                                        class="event-match-snippet"
+                                    >
+                                        <strong>{{ row.traceMatchedField }}:</strong> {{ row.traceMatchSnippet }}
+                                    </div>
 
                                     <!-- A real error message gets its own attention-drawing block; evidence/finalization metadata
                                          already rides inline above as neutral pills. -->
@@ -526,8 +525,7 @@ function retryFileDiff() {
 
 .trace-filter-subtitle,
 .trace-filter-summary,
-.events-section-context,
-.event-context-limitation {
+.events-section-context {
     margin: 0;
     color: var(--color-text-muted);
     font-size: 0.85rem;
@@ -1149,13 +1147,6 @@ function retryFileDiff() {
     min-width: 0;
 }
 
-.event-meta-line {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 0.45rem;
-    min-width: 0;
-}
-
 .event-meta-pill {
     display: inline-flex;
     align-items: center;
@@ -1182,24 +1173,16 @@ function retryFileDiff() {
     background: rgba(34, 211, 238, 0.09);
 }
 
-.event-match-snippet,
-.event-context-snippet,
-.event-context-limitation {
-    max-width: 100%;
-    overflow-wrap: anywhere;
-    word-break: break-word;
-}
-
+/* A searched row keeps the compact single-line shape: the match snippet truncates with an ellipsis
+   rather than wrapping into the multi-line block the cards used before compacting. */
 .event-match-snippet {
+    max-width: 100%;
     color: var(--color-text);
-    font-size: 0.88rem;
-    line-height: 1.5;
-}
-
-.event-context-snippet {
-    color: var(--color-text-muted);
-    font-size: 0.84rem;
-    line-height: 1.5;
+    font-size: 0.85rem;
+    line-height: 1.4;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 
 .timing-duration {

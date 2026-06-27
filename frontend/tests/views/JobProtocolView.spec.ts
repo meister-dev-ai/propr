@@ -2112,7 +2112,9 @@ describe('JobProtocolView — comment search and filter (T042)', () => {
     expect(wrapper.text()).not.toContain('posting duplicate suppression metadata')
     expect(wrapper.text()).toContain('Review src/foo.ts for suspicious auth behavior')
     expect(wrapper.text()).toContain('searching src/foo.ts for suspicious evidence')
-    expect(wrapper.text()).toContain('Found suspicious evidence in auth flow [REDACTED]')
+    // The fuller context snippet is no longer rendered inline — a searched card stays compact and the
+    // surrounding context lives in the detail modal.
+    expect(wrapper.text()).not.toContain('Found suspicious evidence in auth flow [REDACTED]')
     expect(wrapper.text()).toContain('Redacted')
   })
 
@@ -2145,7 +2147,7 @@ describe('JobProtocolView — comment search and filter (T042)', () => {
     expect(wrapper.text()).toContain('No trace rows in this review match the current filters.')
   })
 
-  it('shows explicit limitation messaging when a matching row has sparse metadata and no surrounding context', async () => {
+  it('keeps a sparse matched row compact — the limited-metadata flag without a verbose limitation line', async () => {
     mockGet.mockImplementation((path: string) => {
       if (path.includes('/protocol')) {
         return Promise.resolve({
@@ -2177,16 +2179,18 @@ describe('JobProtocolView — comment search and filter (T042)', () => {
     await tracesTab!.trigger('click')
     await flushPromises()
 
-    // The "Limited metadata" flag is always shown, but the verbose limitation message — like the
-    // file/category pills and match/context snippets — is a trace-search affordance: it explains why
-    // a *matched* row has no surrounding context, so it only renders while a search is active.
+    // Compact trace cards: the "Limited metadata" flag still rides inline, but the verbose limitation
+    // sentence the cards used before compacting is gone, so a searched row is no busier than an unfiltered one.
     await openTraceSearchPanel(wrapper)
     const queryInput = wrapper.get('[data-testid="trace-filter-query"] input')
     await queryInput.setValue('summary_reconciliation')
     await flushPromises()
 
     expect(wrapper.text()).toContain('Limited metadata')
-    expect(wrapper.text()).toContain('Supporting metadata or nearby trace context was not captured for this row.')
+    expect(wrapper.text()).not.toContain('Supporting metadata or nearby trace context was not captured for this row.')
+    // The query matches the event name, which already shows on the card line, so the snippet is suppressed
+    // rather than echoing the name a second time.
+    expect(wrapper.text()).not.toContain('eventName: summary_reconciliation')
   })
 
   it('can quickly filter the trace tree to files with final findings only', async () => {
@@ -2307,7 +2311,10 @@ describe('JobProtocolView — comment search and filter (T042)', () => {
     await flushPromises()
 
     expect((filePathInput.element as HTMLInputElement).value).toBe('src/bar.ts')
-    expect(wrapper.text()).toContain('bar trace output')
+    // Narrowed to the bar.ts pass only; its row renders compactly, so the outputSummary context snippet
+    // ("bar trace output") is no longer shown inline, and the foo.ts pass is filtered out.
+    expect(wrapper.text()).toContain('summary_reconciliation')
+    expect(wrapper.text()).not.toContain('bar trace output')
     expect(wrapper.text()).not.toContain('Found suspicious evidence in auth flow [REDACTED]')
 
     const clearButton = wrapper.find('button.trace-filter-clear')
