@@ -333,6 +333,10 @@ export type ReviewProtocolPass = ReviewJobProtocolDto & {
     attemptNumber?: number
     label?: string | null
     outcome?: string | null
+    /** Review pass kind name (e.g. "Baseline", "ProRVAugmentation"); null for legacy/synthesis passes. */
+    passKind?: string | null
+    /** Human-readable reason this pass ran (e.g. a high-risk augmentation re-review); null for baseline/legacy. */
+    reason?: string | null
     resolvedReviewStrategy?: ReviewStrategy | null
     strategySelectionSource?: string | null
     fileOutcome?: ProtocolFileOutcome | null

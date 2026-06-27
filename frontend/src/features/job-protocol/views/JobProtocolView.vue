@@ -28,7 +28,7 @@
             <div class="job-stat-strip compact-stats">
                 <div class="stat-pill"><span class="stat-label">Job</span><span class="stat-value monospace-value" :title="vm.protocols[0].jobId">{{ vm.jobShortId }}</span></div>
                 <div class="stat-pill"><span class="stat-label">Duration</span><span class="stat-value">{{ vm.overallDuration }}</span></div>
-                <div class="stat-pill"><span class="stat-label">Visible Passes</span><span class="stat-value">{{ vm.protocols.length }}</span></div>
+                <div class="stat-pill"><span class="stat-label">Visible Passes</span><span class="stat-value" data-testid="visible-pass-count">{{ vm.visiblePassCount }}</span></div>
                 <div class="stat-pill"><span class="stat-label">Inherited</span><span class="stat-value">{{ vm.inheritedProtocolCount }}</span></div>
                 <div class="stat-pill"><span class="stat-label">Total Tokens</span><span class="stat-value fat-tokens">{{ vm.formatTokens(vm.totalInputTokens + vm.totalOutputTokens) }}</span></div>
                 <div class="stat-pill"><span class="stat-label">Cached Input</span><span class="stat-value fat-tokens">{{ vm.formatTokens(vm.totalCachedInputTokens) }}</span></div>

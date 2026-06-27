@@ -37,6 +37,37 @@
                     </button>
                 </div>
             </div>
+            <div
+                v-show="!vm.isTraceSearchCollapsed"
+                class="trace-chip-row"
+                role="group"
+                aria-label="Quick filters"
+                data-testid="trace-chip-row"
+            >
+                <template v-for="(groupDef, groupIndex) in vm.traceChipGroups" :key="groupDef.group">
+                    <span v-if="groupIndex > 0" class="trace-chip-divider" aria-hidden="true"></span>
+                    <div class="trace-chip-group">
+                        <span class="trace-chip-group-label">{{ groupDef.label }}</span>
+                        <div class="trace-chip-group-chips">
+                            <button
+                                v-for="chip in vm.traceChips.filter(c => c.group === groupDef.group)"
+                                :key="chip.id"
+                                type="button"
+                                class="chip chip-sm trace-chip"
+                                :class="{ 'trace-chip--active': chip.isActive, 'trace-chip--disabled': chip.isDisabled }"
+                                :aria-pressed="chip.isActive"
+                                :disabled="chip.isDisabled"
+                                :title="chip.isDisabled ? 'No matching rows for the current filters' : undefined"
+                                :data-testid="`trace-chip-${chip.id}`"
+                                @click="vm.toggleTraceChip(chip.id)"
+                            >
+                                <span class="trace-chip-label">{{ chip.label }}</span>
+                                <span class="trace-chip-count" data-testid="trace-chip-count">{{ chip.countLabel }}</span>
+                            </button>
+                        </div>
+                    </div>
+                </template>
+            </div>
             <div v-show="!vm.isTraceSearchCollapsed" class="trace-filter-grid" data-testid="trace-search-panel">
                 <v-text-field
                     v-model="vm.traceFilters.queryText"
@@ -256,9 +287,20 @@
                             <p v-if="vm.hasActiveTraceFilters" class="events-section-context">Global trace search is active for this review.</p>
                         </div>
                         <p v-if="!vm.activePass.events?.length && !vm.hasActiveTraceFilters" class="empty-state">{{ vm.emptyPassMessage(vm.activePass) }}</p>
-                        <p v-else-if="vm.activePassEventRows.length === 0" class="empty-state trace-empty-state">
-                            {{ vm.visibleTraceRows.length === 0 ? 'No trace rows in this review match the current filters.' : 'No trace rows in this pass match the current filters.' }}
-                        </p>
+                        <div v-else-if="vm.activePassEventRows.length === 0" class="empty-state trace-empty-state" data-testid="trace-empty-state">
+                            <p class="trace-empty-state-message">
+                                {{ vm.visibleTraceRows.length === 0 ? 'No trace rows in this review match the current filters.' : 'No trace rows in this pass match the current filters.' }}
+                            </p>
+                            <button
+                                v-if="vm.hasActiveTraceFilters"
+                                type="button"
+                                class="btn-secondary btn-sm"
+                                data-testid="trace-empty-state-clear"
+                                @click="vm.clearTraceFilters"
+                            >
+                                Clear filters
+                            </button>
+                        </div>
                         <TransitionGroup v-else name="list" tag="div" class="events-list">
                             <article
                                 v-for="row in vm.activePassEventRows"
@@ -556,6 +598,105 @@ function retryFileDiff() {
     color: var(--color-text);
     background: rgba(34, 211, 238, 0.12);
     border-color: rgba(34, 211, 238, 0.28);
+}
+
+.trace-chip-row {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 0.65rem;
+    row-gap: 0.5rem;
+}
+
+.trace-chip-divider {
+    width: 1px;
+    align-self: stretch;
+    min-height: 1.5rem;
+    background: var(--color-border);
+}
+
+.trace-chip-group {
+    display: flex;
+    align-items: center;
+    gap: 0.45rem;
+    flex-wrap: wrap;
+    min-width: 0;
+}
+
+.trace-chip-group-label {
+    font-size: 0.68rem;
+    font-weight: 600;
+    color: var(--color-text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    white-space: nowrap;
+}
+
+.trace-chip-group-chips {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    flex-wrap: wrap;
+    min-width: 0;
+}
+
+/* Inactive chips read as outlined; active chips fill in the accent tint. The
+ * base .chip/.chip-sm primitives supply the pill shape and sizing. */
+.trace-chip {
+    appearance: none;
+    cursor: pointer;
+    border: 1px solid var(--color-border);
+    background: transparent;
+    color: var(--color-text-muted);
+    font: inherit;
+    font-size: 0.7rem;
+    font-weight: 600;
+    transition: color 0.15s, background 0.15s, border-color 0.15s;
+}
+
+.trace-chip:hover:not(.trace-chip--disabled) {
+    color: var(--color-text);
+    border-color: rgba(255, 255, 255, 0.18);
+}
+
+.trace-chip--active {
+    color: var(--color-accent);
+    background: var(--color-accent-soft, rgba(34, 211, 238, 0.15));
+    border-color: rgba(34, 211, 238, 0.4);
+}
+
+.trace-chip--disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+}
+
+.trace-chip-count {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 1.1rem;
+    padding: 0 0.3rem;
+    border-radius: var(--radius-pill);
+    background: rgba(255, 255, 255, 0.1);
+    font-size: 0.66rem;
+    font-weight: 700;
+    line-height: 1.3;
+}
+
+.trace-chip--active .trace-chip-count {
+    background: rgba(34, 211, 238, 0.22);
+    color: var(--color-accent);
+}
+
+.trace-empty-state {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.75rem;
+}
+
+.trace-empty-state-message {
+    margin: 0;
 }
 
 .protocol-content {

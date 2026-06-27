@@ -4,6 +4,28 @@
 import { computed, ref } from 'vue'
 import type { Ref } from 'vue'
 import type { ProtocolEventDto, ReviewProtocolPass, TraceSearchableRow } from '../types'
+import {
+    TRACE_CHIP_COUNT_CAP,
+    formatTraceChipCount,
+    rowMatchesActiveChips,
+    traceChipDefinitions,
+    traceChipGroups,
+} from './traceQuickFilters'
+import type { TraceChipGroup, TraceChipId } from './traceQuickFilters'
+
+/** View-model entry for one quick-filter chip rendered in the toolbar. */
+export interface TraceChipViewModel {
+    id: TraceChipId
+    label: string
+    group: TraceChipGroup
+    isActive: boolean
+    /** Number of rows this chip would match against the current non-chip filter state (uncapped). */
+    count: number
+    /** Display label for the count badge, capped at "1000+". */
+    countLabel: string
+    /** A chip with zero matches against the non-chip filter state is disabled. */
+    isDisabled: boolean
+}
 
 /**
  * Owns the trace-tab search/filter state and the row-matching logic. The
@@ -14,6 +36,7 @@ import type { ProtocolEventDto, ReviewProtocolPass, TraceSearchableRow } from '.
 export function useTraceSearch(protocols: Ref<ReviewProtocolPass[]>) {
     const isTraceSearchCollapsed = ref(true)
     const traceFindingsOnly = ref(false)
+    const activeTraceChipIds = ref<Set<TraceChipId>>(new Set())
     const traceFilters = ref({
         queryText: '',
         filePath: '',
@@ -28,8 +51,14 @@ export function useTraceSearch(protocols: Ref<ReviewProtocolPass[]>) {
         modelId: traceFilters.value.modelId.trim().toLowerCase(),
     }))
 
-    const hasActiveTraceFilters = computed(() =>
+    const hasActiveTextTraceFilters = computed(() =>
         Object.values(normalizedTraceFilters.value).some(value => value.length > 0),
+    )
+
+    const hasActiveTraceChips = computed(() => activeTraceChipIds.value.size > 0)
+
+    const hasActiveTraceFilters = computed(() =>
+        hasActiveTextTraceFilters.value || hasActiveTraceChips.value,
     )
 
     const traceSearchToggleLabel = computed(() => (isTraceSearchCollapsed.value ? 'Show filters' : 'Hide filters'))
@@ -180,13 +209,22 @@ export function useTraceSearch(protocols: Ref<ReviewProtocolPass[]>) {
         return row
     }
 
-    function matchesTraceFilters(protocol: ReviewProtocolPass, event: ProtocolEventDto): boolean {
+    // Row-level free-text/file-path/model matching, independent of the quick
+    // filter chips. The chip count badges are computed against this baseline so
+    // each badge reflects "how many rows this chip alone would add".
+    function matchesNonChipTraceFilters(protocol: ReviewProtocolPass, event: ProtocolEventDto): boolean {
         const filters = normalizedTraceFilters.value
         const row = buildTraceSearchableRow(protocol, event)
 
         if (filters.queryText && !row.matchSnippet) return false
         if (filters.filePath && !(row.filePath ?? '').toLowerCase().includes(filters.filePath)) return false
         if (filters.modelId && !(row.modelId ?? '').toLowerCase().includes(filters.modelId)) return false
+        return true
+    }
+
+    function matchesTraceFilters(protocol: ReviewProtocolPass, event: ProtocolEventDto): boolean {
+        if (!matchesNonChipTraceFilters(protocol, event)) return false
+        if (!rowMatchesActiveChips(protocol, event, activeTraceChipIds.value)) return false
         return true
     }
 
@@ -212,28 +250,120 @@ export function useTraceSearch(protocols: Ref<ReviewProtocolPass[]>) {
         )
     }
 
+    // Per-chip match counts against the non-chip filter baseline. Recomputed
+    // only when the loaded event data or the non-chip filters change; counting
+    // stops at the display cap so very large reviews stay cheap.
+    const traceChipCounts = computed<Record<TraceChipId, number>>(() => {
+        const counts = Object.fromEntries(
+            traceChipDefinitions.map(definition => [definition.id, 0]),
+        ) as Record<TraceChipId, number>
+
+        const remaining = new Set(traceChipDefinitions.map(definition => definition.id))
+
+        for (const protocol of protocols.value) {
+            for (const event of protocol.events ?? []) {
+                if (!matchesNonChipTraceFilters(protocol, event)) {
+                    continue
+                }
+
+                for (const definition of traceChipDefinitions) {
+                    if (!remaining.has(definition.id)) {
+                        continue
+                    }
+
+                    if (definition.matches(protocol, event)) {
+                        counts[definition.id] += 1
+                        if (counts[definition.id] >= TRACE_CHIP_COUNT_CAP) {
+                            remaining.delete(definition.id)
+                        }
+                    }
+                }
+
+                if (remaining.size === 0) {
+                    return counts
+                }
+            }
+        }
+
+        return counts
+    })
+
+    const traceChips = computed<TraceChipViewModel[]>(() =>
+        traceChipDefinitions.map(definition => {
+            const count = traceChipCounts.value[definition.id]
+            const isActive = activeTraceChipIds.value.has(definition.id)
+            return {
+                id: definition.id,
+                label: definition.label,
+                group: definition.group,
+                isActive,
+                count,
+                countLabel: formatTraceChipCount(count),
+                // A chip with no matches against the non-chip filters is disabled,
+                // unless it is already active (so it can still be toggled off).
+                isDisabled: count === 0 && !isActive,
+            }
+        }),
+    )
+
+    function toggleTraceChip(chipId: TraceChipId): void {
+        const next = new Set(activeTraceChipIds.value)
+        if (next.has(chipId)) {
+            next.delete(chipId)
+        } else {
+            const count = traceChipCounts.value[chipId] ?? 0
+            // Clicking a disabled chip is a no-op.
+            if (count === 0) {
+                return
+            }
+
+            next.add(chipId)
+        }
+
+        activeTraceChipIds.value = next
+    }
+
+    function setActiveTraceChips(chipIds: Iterable<TraceChipId>): void {
+        activeTraceChipIds.value = new Set(chipIds)
+    }
+
+    function clearTraceChips(): void {
+        if (activeTraceChipIds.value.size > 0) {
+            activeTraceChipIds.value = new Set()
+        }
+    }
+
     function clearTraceFilters() {
         traceFilters.value = {
             queryText: '',
             filePath: '',
             modelId: '',
         }
+        clearTraceChips()
     }
 
     return {
         isTraceSearchCollapsed,
         traceFindingsOnly,
+        activeTraceChipIds,
         traceFilters,
         normalizedTraceFilters,
+        hasActiveTextTraceFilters,
+        hasActiveTraceChips,
         hasActiveTraceFilters,
         traceSearchToggleLabel,
         traceSearchToggleIcon,
         traceSuggestions,
         traceAutocompleteValue,
+        traceChips,
+        traceChipGroups,
         setTraceFilterValue,
         buildTraceSearchableRow,
         matchesTraceFilters,
         protocolHasVisibleTraceRows,
+        toggleTraceChip,
+        setActiveTraceChips,
+        clearTraceChips,
         clearTraceFilters,
     }
 }

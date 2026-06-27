@@ -12,6 +12,7 @@ import { originLabel, passKindLabel } from './passLabels'
 import { useFileDiff } from './useFileDiff'
 import { useTokenTotals } from './useTokenTotals'
 import { useTraceSearch } from './useTraceSearch'
+import { parseTraceChipParam, serializeTraceChips } from './traceQuickFilters'
 import type {
     AgenticInvestigationOutputRecord,
     CommentGroupComment,
@@ -143,6 +144,7 @@ export function useJobProtocolViewModel() {
     const {
         isTraceSearchCollapsed,
         traceFindingsOnly,
+        activeTraceChipIds,
         traceFilters,
         normalizedTraceFilters,
         hasActiveTraceFilters,
@@ -150,10 +152,15 @@ export function useJobProtocolViewModel() {
         traceSearchToggleIcon,
         traceSuggestions,
         traceAutocompleteValue,
+        traceChips,
+        traceChipGroups,
         setTraceFilterValue,
         buildTraceSearchableRow,
         matchesTraceFilters,
         protocolHasVisibleTraceRows,
+        toggleTraceChip,
+        setActiveTraceChips,
+        clearTraceChips,
         clearTraceFilters,
     } = useTraceSearch(protocols)
 
@@ -579,6 +586,14 @@ export function useJobProtocolViewModel() {
         }
     }
 
+    // Pass count after the active trace filters and chips are applied; the stat
+    // strip "Visible Passes" counter reflects this rather than the raw total.
+    const visiblePassCount = computed<number>(() =>
+        hasActiveTraceFilters.value || traceFindingsOnly.value
+            ? treeVisiblePasses.value.length
+            : protocols.value.length,
+    )
+
     const commentSidebarItems = computed<CommentSidebarItem[]>(() => {
         const comments = filteredCommentsForTree.value
         const root: CommentTreeNode = { name: '', path: '', children: {}, files: {} }
@@ -995,13 +1010,18 @@ export function useJobProtocolViewModel() {
         return presentation
     }
 
-    // Cache keyed by (protocol object, collapsed-set identity, filter snapshot) so unchanged passes skip full recompute
+    // Cache keyed by (protocol object, collapsed-set identity, filter snapshot) so unchanged passes skip full recompute.
+    // The filter snapshot covers both the text filters and the active quick-filter chips so chip toggles invalidate it.
     const eventRowsCache = new WeakMap<ReviewProtocolPass, { collapseKey: Set<string>, filterKey: string, rows: EventDisplayRow[] }>()
+
+    function traceFilterCacheKey(): string {
+        return `${JSON.stringify(normalizedTraceFilters.value)}|${serializeTraceChips(activeTraceChipIds.value) ?? ''}`
+    }
 
     function buildEventRows(protocol: ReviewProtocolPass | null | undefined): EventDisplayRow[] {
         if (protocol) {
             const expanded = expandedEventParents.value
-            const filterKey = JSON.stringify(normalizedTraceFilters.value)
+            const filterKey = traceFilterCacheKey()
             const cached = eventRowsCache.get(protocol)
             if (cached && cached.collapseKey === expanded && cached.filterKey === filterKey) {
                 return cached.rows
@@ -1135,7 +1155,7 @@ export function useJobProtocolViewModel() {
         if (protocol) {
             eventRowsCache.set(protocol, {
                 collapseKey: expandedEventParents.value,
-                filterKey: JSON.stringify(normalizedTraceFilters.value),
+                filterKey: traceFilterCacheKey(),
                 rows,
             })
         }
@@ -1673,7 +1693,16 @@ export function useJobProtocolViewModel() {
         }
     }
 
+    // Apply the chip set encoded in the URL to the active chips. Returns the
+    // canonical token list it applied so the writer can avoid redundant pushes.
+    function applyTraceChipsFromRoute(): string | null {
+        const chipIds = parseTraceChipParam(route.query.traceChips as string | string[] | undefined)
+        setActiveTraceChips(chipIds)
+        return serializeTraceChips(activeTraceChipIds.value)
+    }
+
     onMounted(() => {
+        applyTraceChipsFromRoute()
         void loadProtocol(true)
     })
 
@@ -1755,6 +1784,39 @@ export function useJobProtocolViewModel() {
             if (desiredPassId && desiredPassId !== activePassId.value) {
                 activePassId.value = desiredPassId
             }
+        },
+    )
+
+    // Mirror chip toggles into the URL query string so back/forward navigation
+    // and shared links restore the same chip state. Uses replace to avoid
+    // flooding history while toggling chips.
+    watch(activeTraceChipIds, () => {
+        const serialized = serializeTraceChips(activeTraceChipIds.value)
+        const current = typeof route.query.traceChips === 'string' ? route.query.traceChips : null
+        if (serialized === current) {
+            return
+        }
+
+        const nextQuery = { ...route.query }
+        if (serialized) {
+            nextQuery.traceChips = serialized
+        } else {
+            delete nextQuery.traceChips
+        }
+
+        void router.replace({ query: nextQuery })
+    })
+
+    // Restore chip state when the URL's chip param changes from outside (browser
+    // back/forward or a shared link landing on this view).
+    watch(
+        () => (typeof route.query.traceChips === 'string' ? route.query.traceChips : ''),
+        nextParam => {
+            if (serializeTraceChips(activeTraceChipIds.value) === (nextParam || null)) {
+                return
+            }
+
+            setActiveTraceChips(parseTraceChipParam(nextParam))
         },
     )
 
@@ -1937,6 +1999,9 @@ export function useJobProtocolViewModel() {
         focusedEventId,
         isTraceSearchCollapsed,
         traceFindingsOnly,
+        activeTraceChipIds,
+        traceChips,
+        traceChipGroups,
         traceFilters,
         detailTab,
         fileDiff,
@@ -1960,6 +2025,7 @@ export function useJobProtocolViewModel() {
         traceSearchToggleIcon,
         traceSuggestions,
         treeVisiblePasses,
+        visiblePassCount,
         sidebarItems,
         commentSidebarItems,
         groupedReviewComments,
@@ -2027,6 +2093,8 @@ export function useJobProtocolViewModel() {
         traceAutocompleteValue,
         setTraceFilterValue,
         protocolHasVisibleTraceRows,
+        toggleTraceChip,
+        clearTraceChips,
         clearTraceFilters,
         processEvents,
         buildEventRows,
