@@ -33,7 +33,7 @@ public sealed class VerificationDegradationTests
                     false),
             ],
             new ThrowingInvariantFactList(),
-            CancellationToken.None);
+            ct: CancellationToken.None);
         var outcome = outcomes[0];
 
         Assert.True(outcome.Degraded);
@@ -114,7 +114,7 @@ public sealed class VerificationDegradationTests
                     false),
             ],
             [],
-            CancellationToken.None);
+            ct: CancellationToken.None);
 
         var outcome = Assert.Single(outcomes);
         Assert.Equal(VerificationOutcome.NonVerifiableKind, outcome.OutcomeKind);
@@ -155,7 +155,7 @@ public sealed class VerificationDegradationTests
                     false),
             ],
             [],
-            CancellationToken.None);
+            ct: CancellationToken.None);
 
         var outcome = Assert.Single(outcomes);
         Assert.Equal(VerificationOutcome.SupportedKind, outcome.OutcomeKind);
@@ -193,7 +193,7 @@ public sealed class VerificationDegradationTests
                     false),
             ],
             [],
-            CancellationToken.None);
+            ct: CancellationToken.None);
 
         var outcome = Assert.Single(outcomes);
         Assert.Equal(VerificationOutcome.NonVerifiableKind, outcome.OutcomeKind);
@@ -234,7 +234,7 @@ public sealed class VerificationDegradationTests
                     false),
             ],
             [],
-            CancellationToken.None);
+            ct: CancellationToken.None);
 
         var outcome = Assert.Single(outcomes);
         Assert.Equal(VerificationOutcome.NonVerifiableKind, outcome.OutcomeKind);

@@ -1411,6 +1411,7 @@ internal sealed partial class AgenticFileReviewer(
             state.ProtocolId,
             state.InvariantFacts,
             GetDetailedAgenticCandidateFindings(state.FileContext),
+            null,
             ct);
 
         state.FileContext.PerFileHint = state.FileContext.PerFileHint is null

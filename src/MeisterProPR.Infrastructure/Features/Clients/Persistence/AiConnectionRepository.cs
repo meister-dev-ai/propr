@@ -577,6 +577,10 @@ public sealed class AiConnectionRepository(
             // ReviewDefault below), so the model still judges complexity on a cheap model when no dedicated
             // triage binding is configured — instead of silently dropping to the size heuristic.
             AiPurpose.ReviewTriage => AiPurpose.ReviewLowEffort,
+            // Evidence-gathering verification falls back to the cheap triage model (then to low-effort →
+            // default), so verification runs on an independent, inexpensive model rather than self-verifying
+            // on the reviewer's model when no dedicated verification binding is configured.
+            AiPurpose.ReviewVerification => AiPurpose.ReviewTriage,
             AiPurpose.ProRVPrefilter
                 or AiPurpose.ReviewLowEffort
                 or AiPurpose.ReviewMediumEffort

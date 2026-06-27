@@ -698,14 +698,28 @@ internal sealed partial class FileReviewer(
             return result;
         }
 
-        return localReviewVerificationExecutor is null
-            ? result
-            : await localReviewVerificationExecutor.ApplyAsync(
-                result,
-                state.FileResult,
-                state.ProtocolId,
-                state.InvariantFacts,
-                ct);
+        if (localReviewVerificationExecutor is null)
+        {
+            return result;
+        }
+
+        // Supply the per-file context so an evidence-gathering verifier can read the anchor code,
+        // judge with the file's tier client, and substantiate (or refute) a withheld claim.
+        var verificationContext = new ReviewVerificationContext(
+            state.FileContext.ReviewTools,
+            state.FilePullRequest.SourceBranch,
+            state.FileContext.TierChatClient,
+            state.FileContext.ModelId,
+            state.Job.ClientId,
+            aiRuntimeResolver);
+
+        return await localReviewVerificationExecutor.ApplyAsync(
+            result,
+            state.FileResult,
+            state.ProtocolId,
+            state.InvariantFacts,
+            verificationContext,
+            ct);
     }
 
     private ReviewResult ApplyReviewFilters(

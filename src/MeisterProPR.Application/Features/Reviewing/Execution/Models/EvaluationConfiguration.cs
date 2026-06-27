@@ -102,6 +102,7 @@ public sealed record EvaluationTieredModels(
     string? Triage = null,
     string? ProRvPrefilter = null,
     string? Embedding = null,
+    string? Verification = null,
     string? Default = null)
 {
     /// <summary>
@@ -121,6 +122,7 @@ public sealed record EvaluationTieredModels(
             AiPurpose.ReviewHighEffort => this.HighEffort ?? this.Default ?? ultimateFallback,
             AiPurpose.ReviewDefault => this.Default ?? ultimateFallback,
             AiPurpose.ProRVPrefilter => this.ProRvPrefilter ?? this.Default ?? ultimateFallback,
+            AiPurpose.ReviewVerification => this.Verification ?? this.Triage ?? this.LowEffort ?? this.Default ?? ultimateFallback,
             _ => null,
         };
     }

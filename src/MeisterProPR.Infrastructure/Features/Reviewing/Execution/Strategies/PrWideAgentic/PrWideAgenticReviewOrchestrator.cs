@@ -958,7 +958,7 @@ public sealed partial class PrWideAgenticReviewOrchestrator(
                 IReadOnlyList<VerificationOutcome> outcomes;
                 try
                 {
-                    outcomes = await this._reviewFindingVerifier!.VerifyAsync(workItems, this._reviewInvariantFacts, ct);
+                    outcomes = await this._reviewFindingVerifier!.VerifyAsync(workItems, this._reviewInvariantFacts, null, ct);
                 }
                 catch (Exception ex) when (!ct.IsCancellationRequested)
                 {
@@ -1109,7 +1109,7 @@ public sealed partial class PrWideAgenticReviewOrchestrator(
                 VerificationWorkItem.CrossFileScope,
                 true,
                 updatedEvidence);
-            var outcome = (await prLevelVerifier.VerifyAsync([evidenceBackedWorkItem], [], ct))[0];
+            var outcome = (await prLevelVerifier.VerifyAsync([evidenceBackedWorkItem], [], null, ct))[0];
 
             if (baseContext.ActiveProtocolId.HasValue && baseContext.ProtocolRecorder is not null)
             {

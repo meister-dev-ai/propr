@@ -27,9 +27,10 @@ internal sealed class LocalReviewVerificationExecutor(
         ReviewFileResult fileResult,
         Guid? protocolId,
         IReadOnlyList<InvariantFact> invariantFacts,
+        ReviewVerificationContext? verificationContext,
         CancellationToken ct)
     {
-        return (await this.ApplyDetailedAsync(result, fileResult, protocolId, invariantFacts, null, ct)).Result;
+        return (await this.ApplyDetailedAsync(result, fileResult, protocolId, invariantFacts, null, verificationContext, ct)).Result;
     }
 
     public async Task<LocalVerificationApplicationResult> ApplyDetailedAsync(
@@ -38,6 +39,7 @@ internal sealed class LocalReviewVerificationExecutor(
         Guid? protocolId,
         IReadOnlyList<InvariantFact> invariantFacts,
         IReadOnlyList<CandidateReviewFinding>? enrichedCandidateFindings,
+        ReviewVerificationContext? verificationContext,
         CancellationToken ct)
     {
         if (reviewClaimExtractor is null || reviewFindingVerifier is null || result.Comments.Count == 0)
@@ -65,7 +67,7 @@ internal sealed class LocalReviewVerificationExecutor(
             return new LocalVerificationApplicationResult(result, candidateFindings);
         }
 
-        var outcomes = await reviewFindingVerifier.VerifyAsync(workItems, invariantFacts, ct);
+        var outcomes = await reviewFindingVerifier.VerifyAsync(workItems, invariantFacts, verificationContext, ct);
         var outcomesByFindingId = outcomes
             .GroupBy(outcome => outcome.FindingId, StringComparer.Ordinal)
             .ToDictionary(

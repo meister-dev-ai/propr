@@ -14,8 +14,10 @@ public sealed class DeterministicLocalReviewVerifier : IReviewFindingVerifier
     public Task<IReadOnlyList<VerificationOutcome>> VerifyAsync(
         IReadOnlyList<VerificationWorkItem> workItems,
         IReadOnlyList<InvariantFact> invariantFacts,
+        ReviewVerificationContext? verificationContext = null,
         CancellationToken ct = default)
     {
+        _ = verificationContext;
         ArgumentNullException.ThrowIfNull(workItems);
         ArgumentNullException.ThrowIfNull(invariantFacts);
 

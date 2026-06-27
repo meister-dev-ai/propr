@@ -215,6 +215,14 @@ public sealed class AiReviewOptions
     public bool EnableStructuralReferenceTools { get; set; } = true;
 
     /// <summary>
+    ///     Enables evidence-gathering local verification: claims the deterministic verifier would withhold for
+    ///     lack of bounded evidence are escalated to a verifier that reads the anchor code and judges whether
+    ///     the asserted defect is actually present, promoting confirmed claims to publication. When <c>false</c>
+    ///     (default), only the deterministic verifier runs. Bound to <c>AI_ENABLE_EVIDENCE_BACKED_VERIFICATION</c>.
+    /// </summary>
+    public bool EnableEvidenceBackedVerification { get; set; }
+
+    /// <summary>
     ///     Maximum number of candidate files scanned per reference/definition lookup before the
     ///     result is marked truncated. Bound to <c>AI_MAX_REFERENCE_CANDIDATE_FILES</c>.
     /// </summary>

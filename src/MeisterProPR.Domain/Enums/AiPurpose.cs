@@ -34,4 +34,7 @@ public enum AiPurpose
 
     /// <summary>Cheap per-file complexity-triage classification (replaces the size-based heuristic).</summary>
     ReviewTriage = 7,
+
+    /// <summary>Evidence-gathering verification of a candidate finding before publication.</summary>
+    ReviewVerification = 8,
 }

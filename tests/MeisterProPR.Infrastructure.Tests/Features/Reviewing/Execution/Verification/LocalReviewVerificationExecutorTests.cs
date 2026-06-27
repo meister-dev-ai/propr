@@ -30,7 +30,7 @@ public sealed class LocalReviewVerificationExecutorTests
         var sut = new LocalReviewVerificationExecutor(extractor, verifier, CreateProtocolRecorder());
         var result = new ReviewResult("summary", [new ReviewComment("src/Foo.cs", 0, CommentSeverity.Warning, "Potential issue.")]);
 
-        var actual = await sut.ApplyAsync(result, new ReviewFileResult(Guid.NewGuid(), "src/Foo.cs"), Guid.NewGuid(), [], CancellationToken.None);
+        var actual = await sut.ApplyAsync(result, new ReviewFileResult(Guid.NewGuid(), "src/Foo.cs"), Guid.NewGuid(), [], null, CancellationToken.None);
 
         Assert.Same(result, actual);
         Assert.NotNull(capturedFinding);
@@ -65,7 +65,9 @@ public sealed class LocalReviewVerificationExecutorTests
         var keepFindingId = FileByFileReviewOrchestrator.BuildPerFileFindingId(fileResult, 1);
         var summaryOnlyFindingId = FileByFileReviewOrchestrator.BuildPerFileFindingId(fileResult, 2);
         var droppedFindingId = FileByFileReviewOrchestrator.BuildPerFileFindingId(fileResult, 3);
-        verifier.VerifyAsync(Arg.Any<IReadOnlyList<VerificationWorkItem>>(), Arg.Any<IReadOnlyList<InvariantFact>>(), Arg.Any<CancellationToken>())
+        verifier.VerifyAsync(
+                Arg.Any<IReadOnlyList<VerificationWorkItem>>(), Arg.Any<IReadOnlyList<InvariantFact>>(), Arg.Any<ReviewVerificationContext?>(),
+                Arg.Any<CancellationToken>())
             .Returns(
                 Task.FromResult<IReadOnlyList<VerificationOutcome>>(
                 [
@@ -113,7 +115,7 @@ public sealed class LocalReviewVerificationExecutorTests
                 new ReviewComment("src/Foo.cs", 14, CommentSeverity.Warning, "Drop this finding."),
             ]);
 
-        var actual = await sut.ApplyAsync(original, fileResult, null, [], CancellationToken.None);
+        var actual = await sut.ApplyAsync(original, fileResult, null, [], null, CancellationToken.None);
 
         var comment = Assert.Single(actual.Comments);
         Assert.Equal("Keep this finding.", comment.Message);
@@ -136,7 +138,7 @@ public sealed class LocalReviewVerificationExecutorTests
         var sut = new LocalReviewVerificationExecutor(extractor, verifier, protocolRecorder);
         var result = new ReviewResult("summary", [new ReviewComment("src/Foo.cs", 10, CommentSeverity.Warning, "Potential issue.")]);
 
-        var actual = await sut.ApplyAsync(result, new ReviewFileResult(Guid.NewGuid(), "src/Foo.cs"), protocolId, [], CancellationToken.None);
+        var actual = await sut.ApplyAsync(result, new ReviewFileResult(Guid.NewGuid(), "src/Foo.cs"), protocolId, [], null, CancellationToken.None);
 
         Assert.Same(result, actual);
         _ = verifier.DidNotReceiveWithAnyArgs().VerifyAsync(default!, default!);
@@ -174,7 +176,9 @@ public sealed class LocalReviewVerificationExecutorTests
             });
 
         var verifier = Substitute.For<IReviewFindingVerifier>();
-        verifier.VerifyAsync(Arg.Any<IReadOnlyList<VerificationWorkItem>>(), Arg.Any<IReadOnlyList<InvariantFact>>(), Arg.Any<CancellationToken>())
+        verifier.VerifyAsync(
+                Arg.Any<IReadOnlyList<VerificationWorkItem>>(), Arg.Any<IReadOnlyList<InvariantFact>>(), Arg.Any<ReviewVerificationContext?>(),
+                Arg.Any<CancellationToken>())
             .Returns(callInfo =>
             {
                 var workItems = callInfo.Arg<IReadOnlyList<VerificationWorkItem>>();
@@ -222,6 +226,7 @@ public sealed class LocalReviewVerificationExecutorTests
             Guid.NewGuid(),
             [],
             [enrichedFinding],
+            null,
             CancellationToken.None);
 
         var verifiedFinding = Assert.Single(verification.VerifiedCandidateFindings);
@@ -257,7 +262,9 @@ public sealed class LocalReviewVerificationExecutorTests
 
         IReadOnlyList<VerificationWorkItem>? capturedWorkItems = null;
         var verifier = Substitute.For<IReviewFindingVerifier>();
-        verifier.VerifyAsync(Arg.Any<IReadOnlyList<VerificationWorkItem>>(), Arg.Any<IReadOnlyList<InvariantFact>>(), Arg.Any<CancellationToken>())
+        verifier.VerifyAsync(
+                Arg.Any<IReadOnlyList<VerificationWorkItem>>(), Arg.Any<IReadOnlyList<InvariantFact>>(), Arg.Any<ReviewVerificationContext?>(),
+                Arg.Any<CancellationToken>())
             .Returns(callInfo =>
             {
                 capturedWorkItems = callInfo.Arg<IReadOnlyList<VerificationWorkItem>>();
@@ -289,6 +296,7 @@ public sealed class LocalReviewVerificationExecutorTests
             null,
             [],
             [baselineFinding, prorvFinding],
+            null,
             CancellationToken.None);
 
         Assert.NotNull(capturedWorkItems);
