@@ -25,6 +25,15 @@ public static class OfflineReviewingServiceCollectionExtensions
         IConfiguration configuration)
     {
         services.TryAddScoped<IReviewEvaluationFixtureAccessor, ReviewEvaluationFixtureAccessor>();
+
+        // Per-purpose model resolution for the offline harness. The accessor carries the active run's tiered
+        // model map; the resolver maps each AiPurpose to a configured model (or throws like the persisted
+        // resolver when no tiered selection is active, preserving single-model behavior). This override must
+        // win over the persisted AiRuntimeResolver registered in AddInfrastructureSupport.
+        services.TryAddScoped<IOfflineTierModelAccessor, OfflineTierModelAccessor>();
+        services.RemoveAll<IAiRuntimeResolver>();
+        services.AddScoped<IAiRuntimeResolver, OfflineConfigAiRuntimeResolver>();
+
         services.TryAddSingleton<InMemoryReviewJobRepository>();
         services.TryAddSingleton<IJobRepository>(sp => sp.GetRequiredService<InMemoryReviewJobRepository>());
         services.TryAddSingleton<IProtocolRecorder, InMemoryProtocolRecorder>();

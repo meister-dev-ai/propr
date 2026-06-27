@@ -28,7 +28,8 @@ public sealed class ReviewWorkflowRunner(
     IRepositoryInstructionEvaluator instructionEvaluator,
     IReviewStrategyDispatcher reviewStrategyDispatcher,
     IReviewRepositoryWorkspaceManager? workspaceManager = null,
-    IEnumerable<BoundaryIssueReport>? boundaryIssues = null) : IReviewWorkflowRunner
+    IEnumerable<BoundaryIssueReport>? boundaryIssues = null,
+    IOfflineTierModelAccessor? tierModelAccessor = null) : IReviewWorkflowRunner
 {
     private readonly IReadOnlyList<BoundaryIssueReport> _boundaryIssues = boundaryIssues?.ToList() ?? [];
 
@@ -157,6 +158,18 @@ public sealed class ReviewWorkflowRunner(
                 ReviewWorkspace = workspacePreparation.Workspace,
             };
 
+            // Activate per-purpose model selection for this run when the configuration defines tiered models,
+            // so the offline runtime resolver routes each tier/triage to its configured model. Left null
+            // otherwise, which keeps single-model behavior.
+            var tieredModels = request.Configuration?.ModelSelection.TieredModels;
+            if (tierModelAccessor is not null && tieredModels is not null)
+            {
+                tierModelAccessor.Selection = new OfflineTierModelSelection(
+                    request.ChatClient,
+                    tieredModels,
+                    request.Configuration?.ModelSelection.ModelId);
+            }
+
             ReviewResult result;
             try
             {
@@ -201,6 +214,10 @@ public sealed class ReviewWorkflowRunner(
         {
             fixtureAccessor.ScenarioId = null;
             fixtureAccessor.Fixture = null;
+            if (tierModelAccessor is not null)
+            {
+                tierModelAccessor.Selection = null;
+            }
         }
     }
 

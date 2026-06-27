@@ -5,28 +5,51 @@ using System.ClientModel;
 using Azure.AI.OpenAI;
 using Azure.Identity;
 using MeisterProPR.Application.Interfaces;
+using MeisterProPR.Domain.Enums;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Logging;
+using OpenAI;
 
 namespace MeisterProPR.Infrastructure.AI;
 
 /// <summary>
-///     Creates <see cref="IChatClient" /> instances targeting the Azure OpenAI Responses API.
-///     Supports both <c>*.openai.azure.com</c> and <c>*.services.ai.azure.com</c> (Azure AI Foundry)
-///     endpoints with optional API key or <see cref="DefaultAzureCredential" /> auth.
+///     Creates <see cref="IChatClient" /> instances targeting the OpenAI Responses API. Azure OpenAI and Azure
+///     AI Foundry endpoints (<c>*.openai.azure.com</c>, <c>*.services.ai.azure.com</c>) are reached through the
+///     Azure SDK with optional API key or <see cref="DefaultAzureCredential" /> auth; OpenAI-compatible endpoints
+///     (plain OpenAI or a LiteLLM proxy) are reached through the OpenAI SDK pointed at the configured base URL.
+///     Either way the returned client is endpoint-bound and selects the deployment per request via
+///     <see cref="ChatOptions.ModelId" />.
 /// </summary>
 public sealed partial class AiChatClientFactory(ILogger<AiChatClientFactory> logger) : IAiChatClientFactory
 {
     /// <inheritdoc />
     public IChatClient CreateClient(string endpointUrl, string? apiKey)
     {
-        var uri = NormaliseRoot(endpointUrl);
+        return this.CreateClient(endpointUrl, apiKey, AiProviderKind.AzureOpenAi);
+    }
 
+    /// <inheritdoc />
+    public IChatClient CreateClient(string endpointUrl, string? apiKey, AiProviderKind provider)
+    {
         // Reasoning models can take several minutes to generate a response.
         // The default NetworkTimeout of 100 s is too short — raise it to 10 min.
+        var networkTimeout = TimeSpan.FromMinutes(10);
+
+        if (provider is AiProviderKind.OpenAi or AiProviderKind.LiteLlm)
+        {
+            var openAiOptions = new OpenAIClientOptions
+            {
+                Endpoint = new Uri(endpointUrl, UriKind.Absolute),
+                NetworkTimeout = networkTimeout,
+            };
+            var openAiClient = new OpenAIClient(new ApiKeyCredential(apiKey ?? string.Empty), openAiOptions);
+            return openAiClient.GetResponsesClient().AsIChatClient();
+        }
+
+        var uri = NormaliseRoot(endpointUrl);
         var options = new AzureOpenAIClientOptions
         {
-            NetworkTimeout = TimeSpan.FromMinutes(10),
+            NetworkTimeout = networkTimeout,
         };
 
         var azureClient = string.IsNullOrWhiteSpace(apiKey)
