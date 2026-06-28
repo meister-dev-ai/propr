@@ -14,7 +14,13 @@ public sealed class RoslynSyntaxStructuralAnalyzerTests
 
     private static RoslynSyntaxStructuralAnalyzer Analyzer(AiReviewOptions? options = null)
     {
-        return new RoslynSyntaxStructuralAnalyzer(Options.Create(options ?? new AiReviewOptions()), NullLogger<RoslynSyntaxStructuralAnalyzer>.Instance);
+        // The parse timeout is a wall-clock budget; under the full parallel test run a CPU-starved
+        // cold-start parse can blow the 200ms production default and soft-fail to empty, which has nothing
+        // to do with the blanking/definition logic under test. Use a generous budget so these tests are
+        // deterministic regardless of machine load.
+        return new RoslynSyntaxStructuralAnalyzer(
+            Options.Create(options ?? new AiReviewOptions { StructuralParseTimeoutMs = 5000 }),
+            NullLogger<RoslynSyntaxStructuralAnalyzer>.Instance);
     }
 
     private static StructuralParseRequest Request(string source, params (int Start, int End)[] ranges)

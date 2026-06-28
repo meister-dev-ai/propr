@@ -90,23 +90,21 @@ public sealed class EvidenceBackedReviewVerifier : IReviewFindingVerifier
 
         try
         {
+            var (windowStart, windowEnd) = ComputeAnchorWindow(claim.AnchorLineNumber);
             var anchorSource = await context.Tools
-                .GetFileContentAsync(claim.AnchorFilePath!, context.SourceBranch, 1, MaxAnchorLines, ct)
+                .GetFileContentAsync(claim.AnchorFilePath!, context.SourceBranch, windowStart, windowEnd, ct)
                 .ConfigureAwait(false);
             if (string.IsNullOrWhiteSpace(anchorSource))
             {
                 return ConservativeWithhold(claim);
             }
 
-            if (anchorSource.Length > MaxAnchorChars)
-            {
-                anchorSource = string.Concat(anchorSource.AsSpan(0, MaxAnchorChars), "\n…(truncated)");
-            }
+            var (boundedSource, boundedStartLine) = BoundAnchorChars(anchorSource, windowStart, claim.AnchorLineNumber);
 
             var response = await judgeClient.GetResponseAsync(
                 [
                     new ChatMessage(ChatRole.System, BuildSystemPrompt()),
-                    new ChatMessage(ChatRole.User, BuildUserMessage(claim, anchorSource)),
+                    new ChatMessage(ChatRole.User, BuildUserMessage(claim, boundedSource, boundedStartLine)),
                 ],
                 new ChatOptions { ModelId = judgeModel },
                 ct).ConfigureAwait(false);
@@ -140,6 +138,80 @@ public sealed class EvidenceBackedReviewVerifier : IReviewFindingVerifier
         }
     }
 
+    // Reads a window centered on the claim's anchor line so a defect deep in a large file still reaches the
+    // judge. When the anchor line is unknown we fall back to the file head, preserving the prior behavior.
+    private static (int StartLine, int EndLine) ComputeAnchorWindow(int? anchorLineNumber)
+    {
+        if (anchorLineNumber is not int line || line <= 0)
+        {
+            return (1, MaxAnchorLines);
+        }
+
+        var start = Math.Max(1, line - MaxAnchorLines / 2);
+        return (start, start + MaxAnchorLines - 1);
+    }
+
+    // Enforces the character ceiling while keeping the anchor line inside the window: an over-budget window
+    // is sliced around the anchor (not from its head) so the cited code is never the part dropped. Returns
+    // the bounded text together with the file line its first retained line corresponds to.
+    private static (string Text, int StartLine) BoundAnchorChars(string source, int windowStartLine, int? anchorLineNumber)
+    {
+        if (source.Length <= MaxAnchorChars)
+        {
+            return (source, windowStartLine);
+        }
+
+        var sliceStart = 0;
+        if (anchorLineNumber is int line && line >= windowStartLine)
+        {
+            var anchorOffset = OffsetOfLine(source, line - windowStartLine);
+            sliceStart = Math.Clamp(anchorOffset - MaxAnchorChars / 2, 0, source.Length - MaxAnchorChars);
+        }
+
+        var slice = source.Substring(sliceStart, MaxAnchorChars);
+        var retainedStartLine = windowStartLine + CountNewlines(source, 0, sliceStart);
+        var prefix = sliceStart > 0 ? "…(truncated)\n" : string.Empty;
+        var suffix = sliceStart + MaxAnchorChars < source.Length ? "\n…(truncated)" : string.Empty;
+        return (prefix + slice + suffix, retainedStartLine);
+    }
+
+    // Character offset of the start of the line at the given zero-based index within the text.
+    private static int OffsetOfLine(string text, int lineIndex)
+    {
+        if (lineIndex <= 0)
+        {
+            return 0;
+        }
+
+        var offset = 0;
+        for (var seen = 0; seen < lineIndex; seen++)
+        {
+            var next = text.IndexOf('\n', offset);
+            if (next < 0)
+            {
+                return text.Length;
+            }
+
+            offset = next + 1;
+        }
+
+        return offset;
+    }
+
+    private static int CountNewlines(string text, int start, int end)
+    {
+        var count = 0;
+        for (var index = start; index < end; index++)
+        {
+            if (text[index] == '\n')
+            {
+                count++;
+            }
+        }
+
+        return count;
+    }
+
     private static VerificationOutcome ConservativeWithhold(ClaimDescriptor claim)
     {
         return new VerificationOutcome(
@@ -166,12 +238,13 @@ public sealed class EvidenceBackedReviewVerifier : IReviewFindingVerifier
                + "{\"verdict\":\"confirmed|not_confirmed\",\"reason\":\"<one sentence; cite the line or symbol>\"}.";
     }
 
-    private static string BuildUserMessage(ClaimDescriptor claim, string anchorSource)
+    private static string BuildUserMessage(ClaimDescriptor claim, string anchorSource, int sourceStartLine)
     {
         var subject = string.IsNullOrWhiteSpace(claim.SubjectIdentifier) ? "(none)" : claim.SubjectIdentifier;
         var anchorLine = claim.AnchorLineNumber?.ToString() ?? "(unknown)";
+        var startLine = sourceStartLine.ToString();
         return $"CLAIM: {claim.AssertionText}\nSubject symbol: {subject}\nAnchor: {claim.AnchorFilePath}:{anchorLine}\n\n"
-               + $"CURRENT SOURCE OF {claim.AnchorFilePath} (source branch):\n{anchorSource}";
+               + $"CURRENT SOURCE OF {claim.AnchorFilePath} (source branch, starting at line {startLine}):\n{anchorSource}";
     }
 
     private static ParsedVerdict? TryParseVerdict(string? text)
