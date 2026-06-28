@@ -10216,7 +10216,7 @@ export interface components {
          * @description Product-owned AI purposes that resolve to configured models.
          * @enum {string}
          */
-        AiPurpose: "reviewDefault" | "proRvPrefilter" | "reviewLowEffort" | "reviewMediumEffort" | "reviewHighEffort" | "memoryReconsideration" | "embeddingDefault" | "reviewTriage";
+        AiPurpose: "reviewDefault" | "proRvPrefilter" | "reviewLowEffort" | "reviewMediumEffort" | "reviewHighEffort" | "memoryReconsideration" | "embeddingDefault" | "reviewTriage" | "reviewVerification";
         /** @description One configured AI purpose binding for an AI connection profile. */
         AiPurposeBindingDto: {
             /** Format: uuid */
@@ -10330,6 +10330,7 @@ export interface components {
             customSystemMessage?: string | null;
             scmCommentPostingEnabled?: boolean;
             enableProRV?: boolean;
+            enableEvidenceBackedVerification?: boolean;
             /** Format: uuid */
             tenantId?: string | null;
             tenantSlug?: string | null;
@@ -10920,6 +10921,7 @@ export interface components {
             customSystemMessage?: string | null;
             scmCommentPostingEnabled?: boolean | null;
             enableProRV?: boolean | null;
+            enableEvidenceBackedVerification?: boolean | null;
             defaultReviewStrategy?: components["schemas"]["ReviewStrategy"];
         };
         /** @description Patch payload for one premium capability override. */

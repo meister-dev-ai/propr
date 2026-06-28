@@ -50,6 +50,12 @@ public sealed class ClientRecord
     /// </summary>
     public bool EnableProRV { get; set; } = false;
 
+    /// <summary>
+    ///     Controls whether evidence-backed local verification escalates conservatively-withheld claims for this client.
+    ///     Defaults to <see langword="false" /> so new clients opt in explicitly.
+    /// </summary>
+    public bool EnableEvidenceBackedVerification { get; set; } = false;
+
     public TenantRecord? Tenant { get; set; }
 
     public ICollection<ClientScmConnectionRecord> ScmConnections { get; set; } = [];

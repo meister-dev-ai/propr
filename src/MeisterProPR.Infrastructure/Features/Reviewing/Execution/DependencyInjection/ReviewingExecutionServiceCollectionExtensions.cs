@@ -5,7 +5,6 @@ using MeisterProPR.Application.Features.Reviewing.Execution.Models;
 using MeisterProPR.Application.Features.Reviewing.Execution.Ports;
 using MeisterProPR.Application.Features.Reviewing.Execution.Strategies.Ports;
 using MeisterProPR.Application.Interfaces;
-using MeisterProPR.Application.Options;
 using MeisterProPR.Application.Services;
 using MeisterProPR.Infrastructure.Features.Reviewing.Execution.Persistence;
 using MeisterProPR.Infrastructure.Features.Reviewing.Execution.ReviewFindingGate;
@@ -15,7 +14,6 @@ using MeisterProPR.Infrastructure.Features.Reviewing.Execution.Strategies.FileBy
 using MeisterProPR.Infrastructure.Features.Reviewing.Execution.Verification;
 using MeisterProPR.ProRV.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Options;
 
 namespace MeisterProPR.Infrastructure.Features.Reviewing.Execution.DependencyInjection;
 
@@ -58,16 +56,15 @@ public static class ReviewingExecutionServiceCollectionExtensions
         services.AddSingleton<IReviewInvariantFactProvider, DomainReviewInvariantFactProvider>();
         services.AddSingleton<IReviewInvariantFactProvider, PersistenceReviewInvariantFactProvider>();
         services.AddSingleton<IReviewClaimExtractor, DeterministicReviewClaimExtractor>();
-        // Local verification = deterministic rules, plus (gated by AiReviewOptions.EnableEvidenceBackedVerification,
-        // default off) an evidence-gathering verifier that escalates the claims deterministic rules can only
-        // withhold for lack of bounded evidence. The composite is a no-op equal to the deterministic verifier
-        // when the flag is off.
+        // Local verification = deterministic rules, plus (gated per-client via the review context's
+        // EvidenceVerificationEnabled flag, default off) an evidence-gathering verifier that escalates the
+        // claims deterministic rules can only withhold for lack of bounded evidence. The composite is a no-op
+        // equal to the deterministic verifier when the per-client flag is off.
         services.AddSingleton<DeterministicLocalReviewVerifier>();
         services.AddSingleton<EvidenceBackedReviewVerifier>();
         services.AddSingleton<IReviewFindingVerifier>(sp => new CompositeReviewFindingVerifier(
             sp.GetRequiredService<DeterministicLocalReviewVerifier>(),
-            sp.GetRequiredService<EvidenceBackedReviewVerifier>(),
-            sp.GetRequiredService<IOptions<AiReviewOptions>>()));
+            sp.GetRequiredService<EvidenceBackedReviewVerifier>()));
         services.AddProRV();
         services.AddSingleton<LocalReviewVerificationExecutor>();
         services.AddSingleton<IReviewEvidenceCollector, ReviewContextEvidenceCollector>();

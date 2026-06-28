@@ -349,6 +349,16 @@ public sealed class ClientsValidatorTests
     }
 
     [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void PatchClient_EnableEvidenceBackedVerificationBoolean_Passes(bool value)
+    {
+        var result = PatchClientValidator.Validate(new PatchClientRequest(EnableEvidenceBackedVerification: value));
+
+        Assert.True(result.IsValid);
+    }
+
+    [Theory]
     [InlineData(ReviewStrategy.PrWideAgentic)]
     [InlineData(ReviewStrategy.AgenticFileByFile)]
     public void PatchClient_DisabledDefaultReviewStrategy_Fails(ReviewStrategy strategy)

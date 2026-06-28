@@ -253,6 +253,7 @@ internal sealed partial class FileByFileReviewOrchestrator(
                 // this context) honors opt-out. The discovery pass itself still skips the ProRV prefilter
                 // stage (gated on AugmentationMode/PassKind), so this only affects what augmentation inherits.
                 EnableProRV = baseContext.EnableProRV,
+                EnableEvidenceBackedVerification = baseContext.EnableEvidenceBackedVerification,
                 AugmentationMode = baseContext.AugmentationMode,
                 PassKind = ReviewPassKind.Baseline,
                 PerFileHint = new PerFileReviewHint(file.Path, index + 1, filesToReview.Count, pr.AllPrFileSummaries),

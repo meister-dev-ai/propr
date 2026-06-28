@@ -21,6 +21,7 @@ public sealed record ClientDto(
     DateTimeOffset? DefaultReviewPipelineProfileUpdatedAtUtc,
     bool ScmCommentPostingEnabled,
     bool EnableProRV,
+    bool EnableEvidenceBackedVerification = false,
     Guid? TenantId = null,
     string? TenantSlug = null,
     string? TenantDisplayName = null);

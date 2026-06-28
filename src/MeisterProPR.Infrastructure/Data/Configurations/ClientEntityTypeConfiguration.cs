@@ -66,6 +66,10 @@ internal sealed class ClientEntityTypeConfiguration : IEntityTypeConfiguration<C
             .HasColumnName("enable_prorv")
             .HasDefaultValue(false);
 
+        builder.Property(c => c.EnableEvidenceBackedVerification)
+            .HasColumnName("enable_evidence_backed_verification")
+            .HasDefaultValue(false);
+
         builder.HasIndex(c => c.TenantId)
             .HasDatabaseName("ix_clients_tenant_id");
 

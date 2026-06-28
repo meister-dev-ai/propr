@@ -640,6 +640,7 @@ public sealed partial class ReviewOrchestrationService(
 
         var customSystemMessage = await clientRegistry.GetCustomSystemMessageAsync(job.ClientId, ct);
         var enableProRv = await clientRegistry.GetProRvEnabledAsync(job.ClientId, ct);
+        var enableEvidenceBackedVerification = await clientRegistry.GetEvidenceBackedVerificationEnabledAsync(job.ClientId, ct);
 
         var workspacePreparation = preparedWorkspace;
 
@@ -704,6 +705,7 @@ public sealed partial class ReviewOrchestrationService(
             DefaultReviewModelId = job.AiModel,
             RuntimeCapabilities = runtimeCapabilities,
             EnableProRV = enableProRv,
+            EnableEvidenceBackedVerification = enableEvidenceBackedVerification,
             AugmentationMode = ReviewAugmentationMode.LateAugmentation,
             ExclusionRules = exclusionRules,
             ModelId = job.AiModel,

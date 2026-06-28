@@ -26,6 +26,10 @@ public sealed class PatchClientRequestValidator : AbstractValidator<PatchClientR
             .Must(_ => true)
             .When(r => r.EnableProRV.HasValue);
 
+        this.RuleFor(r => r.EnableEvidenceBackedVerification)
+            .Must(_ => true)
+            .When(r => r.EnableEvidenceBackedVerification.HasValue);
+
         this.RuleFor(r => r.DefaultReviewStrategy)
             .Must(strategy => !strategy.HasValue || ReviewStrategyPolicy.IsSelectable(strategy.Value))
             .WithMessage(request => ReviewStrategyPolicy.GetDisabledSelectionMessage(request.DefaultReviewStrategy ?? ReviewStrategy.FileByFile));

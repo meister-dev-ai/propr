@@ -315,6 +315,7 @@ function buildMockClient(id: string, displayName = `Mocked Client ${id}`, overri
     defaultReviewPipelineProfileUpdatedAtUtc: clientReviewProfiles[id]?.updatedAtUtc ?? null,
     scmCommentPostingEnabled: true,
     enableProRV: true,
+    enableEvidenceBackedVerification: false,
     ...overrides,
   }
 }

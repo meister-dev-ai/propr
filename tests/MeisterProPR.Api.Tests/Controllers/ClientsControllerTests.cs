@@ -746,6 +746,41 @@ public sealed class ClientsControllerTests(ClientsControllerTests.ClientsApiFact
     }
 
     [Fact]
+    public async Task PatchClient_EnableEvidenceBackedVerification_PersistedAndReturned()
+    {
+        using var scope = factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<MeisterProPRDbContext>();
+        var tenantId = Guid.NewGuid();
+        db.Tenants.Add(CreateTenantRecord(tenantId, "evidence-test", "Evidence Tenant"));
+        var record = new ClientRecord
+        {
+            Id = Guid.NewGuid(),
+            TenantId = tenantId,
+            DisplayName = "Evidence Test",
+            IsActive = true,
+            CreatedAt = DateTimeOffset.UtcNow,
+            EnableEvidenceBackedVerification = false,
+        };
+        db.Clients.Add(record);
+        await db.SaveChangesAsync();
+
+        var client = factory.CreateClient();
+        using var request = new HttpRequestMessage(HttpMethod.Patch, $"/clients/{record.Id}");
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", factory.GenerateAdminToken());
+        request.Content = JsonContent.Create(new { enableEvidenceBackedVerification = true });
+
+        var response = await client.SendAsync(request);
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+
+        var body = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        Assert.True(body.RootElement.GetProperty("enableEvidenceBackedVerification").GetBoolean());
+
+        db.ChangeTracker.Clear();
+        var updated = await db.Clients.SingleAsync(c => c.Id == record.Id);
+        Assert.True(updated.EnableEvidenceBackedVerification);
+    }
+
+    [Fact]
     public async Task PatchClient_OmittedEnableProRv_LeavesExistingValueUnchanged()
     {
         using var scope = factory.Services.CreateScope();

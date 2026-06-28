@@ -44,6 +44,7 @@ const sampleClient = {
   defaultReviewPipelineProfileUpdatedAtUtc: null,
   scmCommentPostingEnabled: true,
   enableProRV: true,
+  enableEvidenceBackedVerification: false,
 }
 
 const sampleReviewProfiles = {
@@ -153,6 +154,7 @@ describe('useClientDetailViewModel (FR-007, FR-008, FR-012)', () => {
         defaultReviewStrategy: 'prWideAgentic',
         scmCommentPostingEnabled: false,
         enableProRV: false,
+        enableEvidenceBackedVerification: false,
       },
     })
   })

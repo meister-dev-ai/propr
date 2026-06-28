@@ -15150,7 +15150,8 @@
           "reviewHighEffort",
           "memoryReconsideration",
           "embeddingDefault",
-          "reviewTriage"
+          "reviewTriage",
+          "reviewVerification"
         ],
         "type": "string",
         "description": "Product-owned AI purposes that resolve to configured models."
@@ -15461,6 +15462,9 @@
             "type": "boolean"
           },
           "enableProRV": {
+            "type": "boolean"
+          },
+          "enableEvidenceBackedVerification": {
             "type": "boolean"
           },
           "tenantId": {
@@ -16973,6 +16977,10 @@
             "nullable": true
           },
           "enableProRV": {
+            "type": "boolean",
+            "nullable": true
+          },
+          "enableEvidenceBackedVerification": {
             "type": "boolean",
             "nullable": true
           },

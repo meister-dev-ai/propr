@@ -144,6 +144,13 @@ public sealed class ReviewSystemContext
     public bool EnableProRV { get; set; } = true;
 
     /// <summary>
+    ///     Controls whether evidence-backed local verification escalates conservatively-withheld claims for this
+    ///     execution context. When <see langword="false" /> the composite verifier behaves exactly like the
+    ///     deterministic verifier.
+    /// </summary>
+    public bool EnableEvidenceBackedVerification { get; set; } = false;
+
+    /// <summary>
     ///     Controls whether review execution uses disabled, early-steering, or late-augmentation semantics.
     /// </summary>
     public ReviewAugmentationMode AugmentationMode { get; set; } = ReviewAugmentationMode.EarlySteering;

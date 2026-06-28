@@ -32,6 +32,7 @@ public sealed class ClientsController(
             client.CustomSystemMessage,
             client.ScmCommentPostingEnabled,
             client.EnableProRV,
+            client.EnableEvidenceBackedVerification,
             client.TenantId,
             client.TenantSlug,
             client.TenantDisplayName,
@@ -392,6 +393,7 @@ public sealed class ClientsController(
             null,
             request.ScmCommentPostingEnabled,
             request.EnableProRV,
+            request.EnableEvidenceBackedVerification,
             request.DefaultReviewStrategy,
             ct);
         return client is null ? this.NotFound() : this.Ok(ToClientResponse(client));
@@ -409,6 +411,7 @@ public sealed record ClientResponse(
     string? CustomSystemMessage,
     bool ScmCommentPostingEnabled,
     bool EnableProRV,
+    bool EnableEvidenceBackedVerification,
     Guid? TenantId,
     string? TenantSlug,
     string? TenantDisplayName,
@@ -481,4 +484,5 @@ public sealed record PatchClientRequest(
     string? CustomSystemMessage = null,
     bool? ScmCommentPostingEnabled = null,
     bool? EnableProRV = null,
+    bool? EnableEvidenceBackedVerification = null,
     ReviewStrategy? DefaultReviewStrategy = null);

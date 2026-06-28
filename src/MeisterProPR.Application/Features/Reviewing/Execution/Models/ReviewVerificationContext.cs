@@ -14,6 +14,8 @@ namespace MeisterProPR.Application.Features.Reviewing.Execution.Models;
 ///     <c>AiPurpose.ReviewVerification</c> over the reviewer's own (<see cref="ChatClient" />) model. Any
 ///     field may be <see langword="null" /> when the hosting path cannot supply it; an evidence-backed
 ///     verifier must then degrade to the conservative deterministic outcome.
+///     <see cref="EvidenceVerificationEnabled" /> carries the per-client opt-in: when <see langword="false" />
+///     the composite verifier behaves exactly like the deterministic verifier and never calls a model.
 /// </summary>
 public sealed record ReviewVerificationContext(
     IReviewContextTools? Tools,
@@ -21,4 +23,5 @@ public sealed record ReviewVerificationContext(
     IChatClient? ChatClient,
     string? ModelId,
     Guid ClientId = default,
-    IAiRuntimeResolver? Resolver = null);
+    IAiRuntimeResolver? Resolver = null,
+    bool EvidenceVerificationEnabled = false);

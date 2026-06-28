@@ -35,10 +35,6 @@ public static class ReviewEvalHarnessServiceCollectionExtensions
         services.AddSingleton<IScmProviderRegistry, NoOpScmProviderRegistry>();
         services.AddReviewingModule(configuration);
 
-        // The composite (evidence-gathering) verifier is registered in AddReviewingExecution, gated off by
-        // default. The harness exists to exercise it, so force the flag on here.
-        services.PostConfigure<AiReviewOptions>(options => options.EnableEvidenceBackedVerification = true);
-
         services.RemoveAll<ReviewOrchestrationService>();
         services.RemoveAll<IReviewJobProcessor>();
         services.AddScoped<IPromptExperimentBatchRunner, PromptExperimentBatchRunner>();

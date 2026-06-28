@@ -79,6 +79,7 @@ public sealed class ClientAdminService(
         string? defaultReviewPipelineProfileId = null,
         bool? scmCommentPostingEnabled = null,
         bool? enableProRV = null,
+        bool? enableEvidenceBackedVerification = null,
         ReviewStrategy? defaultReviewStrategy = null,
         CancellationToken ct = default)
     {
@@ -140,6 +141,11 @@ public sealed class ClientAdminService(
         if (enableProRV.HasValue)
         {
             client.EnableProRV = enableProRV.Value;
+        }
+
+        if (enableEvidenceBackedVerification.HasValue)
+        {
+            client.EnableEvidenceBackedVerification = enableEvidenceBackedVerification.Value;
         }
 
         await dbContext.SaveChangesAsync(ct);
@@ -311,6 +317,7 @@ public sealed class ClientAdminService(
             client.DefaultReviewPipelineProfileUpdatedAtUtc,
             client.ScmCommentPostingEnabled,
             client.EnableProRV,
+            client.EnableEvidenceBackedVerification,
             tenantId,
             tenantSlug,
             tenantDisplayName);

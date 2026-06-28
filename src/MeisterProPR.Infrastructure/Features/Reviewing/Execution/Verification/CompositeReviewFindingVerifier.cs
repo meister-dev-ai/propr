@@ -3,8 +3,6 @@
 
 using MeisterProPR.Application.Features.Reviewing.Execution.Models;
 using MeisterProPR.Application.Features.Reviewing.Execution.Ports;
-using MeisterProPR.Application.Options;
-using Microsoft.Extensions.Options;
 
 namespace MeisterProPR.Infrastructure.Features.Reviewing.Execution.Verification;
 
@@ -17,11 +15,8 @@ namespace MeisterProPR.Infrastructure.Features.Reviewing.Execution.Verification;
 /// </summary>
 public sealed class CompositeReviewFindingVerifier(
     DeterministicLocalReviewVerifier deterministicVerifier,
-    EvidenceBackedReviewVerifier evidenceVerifier,
-    IOptions<AiReviewOptions> options) : IReviewFindingVerifier
+    EvidenceBackedReviewVerifier evidenceVerifier) : IReviewFindingVerifier
 {
-    private readonly AiReviewOptions _options = options.Value;
-
     public async Task<IReadOnlyList<VerificationOutcome>> VerifyAsync(
         IReadOnlyList<VerificationWorkItem> workItems,
         IReadOnlyList<InvariantFact> invariantFacts,
@@ -34,8 +29,8 @@ public sealed class CompositeReviewFindingVerifier(
             .VerifyAsync(workItems, invariantFacts, verificationContext, ct)
             .ConfigureAwait(false);
 
-        // Flag-gated (default off): when disabled, behave exactly like the deterministic verifier.
-        if (!this._options.EnableEvidenceBackedVerification)
+        // Per-client gated (default off): when disabled, behave exactly like the deterministic verifier.
+        if (verificationContext?.EvidenceVerificationEnabled != true)
         {
             return baseOutcomes;
         }

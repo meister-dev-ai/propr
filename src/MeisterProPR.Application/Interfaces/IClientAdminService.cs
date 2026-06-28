@@ -50,6 +50,7 @@ public interface IClientAdminService
     /// </param>
     /// <param name="scmCommentPostingEnabled">When non-null, sets whether new review comments are posted back to SCM.</param>
     /// <param name="enableProRV">When non-null, sets whether ProRV executes for new reviews.</param>
+    /// <param name="enableEvidenceBackedVerification">When non-null, sets whether evidence-backed local verification runs for new reviews.</param>
     /// <param name="defaultReviewStrategy">When non-null, sets the default review strategy for newly submitted jobs.</param>
     /// <param name="ct">Cancellation token.</param>
     Task<ClientDto?> PatchAsync(
@@ -61,6 +62,7 @@ public interface IClientAdminService
         string? defaultReviewPipelineProfileId = null,
         bool? scmCommentPostingEnabled = null,
         bool? enableProRV = null,
+        bool? enableEvidenceBackedVerification = null,
         ReviewStrategy? defaultReviewStrategy = null,
         CancellationToken ct = default);
 

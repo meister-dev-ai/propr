@@ -118,6 +118,20 @@
                             </p>
                         </label>
                     </div>
+                </div>
+                <div class="inline-field-row review-publication-row">
+                    <div class="form-field flex-1 review-publication-field">
+                        <label class="checkbox-field" for="enableEvidenceBackedVerification">
+                            <input id="enableEvidenceBackedVerification"
+                                v-model="editedEnableEvidenceBackedVerification"
+                                name="enableEvidenceBackedVerification" type="checkbox" />
+                            <strong>Enable evidence-backed verification</strong>
+                            <p class="muted review-publication-copy">
+                                Enable this to let the reviewer read anchor code and confirm candidate
+                                findings the deterministic verifier would otherwise withhold.
+                            </p>
+                        </label>
+                    </div>
                     <button :disabled="!isAdvancedSettingsButtonEnabled()"
                         class="btn-primary inline-save-btn scm-advanced-settings-save-btn"
                         @click="saveAdvancedSettings">
@@ -164,6 +178,7 @@ const {
     editedDefaultReviewPipelineProfileId,
     editedScmCommentPostingEnabled,
     editedEnableProRV,
+    editedEnableEvidenceBackedVerification,
     reviewProfiles,
     clientReviewProfile,
     saveDisplayName,

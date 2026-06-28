@@ -147,6 +147,7 @@ const sampleClient = {
   defaultReviewPipelineProfileUpdatedAtUtc: null,
   scmCommentPostingEnabled: true,
   enableProRV: false,
+  enableEvidenceBackedVerification: false,
 }
 
 const sampleReviewProfiles = {
@@ -266,7 +267,7 @@ describe('ClientDetailView', () => {
       '/clients/{clientId}',
         expect.objectContaining({
           params: { path: { clientId: 'client-1' } },
-          body: { defaultReviewStrategy: 'fileByFile', scmCommentPostingEnabled: false, enableProRV: false },
+          body: { defaultReviewStrategy: 'fileByFile', scmCommentPostingEnabled: false, enableProRV: false, enableEvidenceBackedVerification: false },
         })
     )
   })
@@ -294,7 +295,7 @@ describe('ClientDetailView', () => {
       '/clients/{clientId}',
         expect.objectContaining({
           params: { path: { clientId: 'client-1' } },
-          body: { defaultReviewStrategy: 'fileByFile', scmCommentPostingEnabled: true, enableProRV: false },
+          body: { defaultReviewStrategy: 'fileByFile', scmCommentPostingEnabled: true, enableProRV: false, enableEvidenceBackedVerification: false },
         })
     )
   })
@@ -318,7 +319,7 @@ describe('ClientDetailView', () => {
       '/clients/{clientId}',
         expect.objectContaining({
           params: { path: { clientId: 'client-1' } },
-          body: { defaultReviewStrategy: 'prWideAgentic', scmCommentPostingEnabled: true, enableProRV: false },
+          body: { defaultReviewStrategy: 'prWideAgentic', scmCommentPostingEnabled: true, enableProRV: false, enableEvidenceBackedVerification: false },
         })
     )
   })
@@ -341,7 +342,7 @@ describe('ClientDetailView', () => {
       '/clients/{clientId}',
         expect.objectContaining({
           params: { path: { clientId: 'client-1' } },
-          body: { defaultReviewStrategy: 'agenticFileByFile', scmCommentPostingEnabled: true, enableProRV: false },
+          body: { defaultReviewStrategy: 'agenticFileByFile', scmCommentPostingEnabled: true, enableProRV: false, enableEvidenceBackedVerification: false },
         })
     )
   })

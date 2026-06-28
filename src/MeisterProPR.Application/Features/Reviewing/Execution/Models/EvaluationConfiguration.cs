@@ -39,6 +39,7 @@ public sealed record EvaluationConfiguration(
     EvaluationAiConnection? AiConnection = null,
     float? Temperature = null,
     bool EnableProRV = false,
+    bool EnableEvidenceBackedVerification = false,
     ReviewAugmentationMode? AugmentationMode = null,
     EvaluationProCursorContext? ProCursor = null)
 {

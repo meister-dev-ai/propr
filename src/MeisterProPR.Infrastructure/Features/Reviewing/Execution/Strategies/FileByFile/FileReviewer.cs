@@ -263,6 +263,7 @@ internal sealed partial class FileReviewer(
             RuntimeCapabilities = tierCapabilities ?? baseContext.RuntimeCapabilities,
             Temperature = baseContext.Temperature,
             EnableProRV = enableProRvForCurrentPass,
+            EnableEvidenceBackedVerification = baseContext.EnableEvidenceBackedVerification,
             AugmentationMode = baseContext.AugmentationMode,
             PassKind = baseContext.PassKind,
             PromptExperiment = baseContext.PromptExperiment,
@@ -406,6 +407,7 @@ internal sealed partial class FileReviewer(
             RuntimeCapabilities = baseContext.RuntimeCapabilities,
             Temperature = baseContext.Temperature,
             EnableProRV = baseContext.EnableProRV,
+            EnableEvidenceBackedVerification = baseContext.EnableEvidenceBackedVerification,
             AugmentationMode = baseContext.AugmentationMode,
             PassKind = ReviewPassKind.ProRVAugmentation,
             PerFileHint = baseContext.PerFileHint,
@@ -711,7 +713,8 @@ internal sealed partial class FileReviewer(
             state.FileContext.TierChatClient,
             state.FileContext.ModelId,
             state.Job.ClientId,
-            aiRuntimeResolver);
+            aiRuntimeResolver,
+            state.FileContext.EnableEvidenceBackedVerification);
 
         return await localReviewVerificationExecutor.ApplyAsync(
             result,

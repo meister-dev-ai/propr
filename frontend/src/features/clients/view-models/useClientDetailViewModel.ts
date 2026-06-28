@@ -33,6 +33,7 @@ export interface ClientDetailDto {
   defaultReviewPipelineProfileUpdatedAtUtc?: string | null
   scmCommentPostingEnabled: boolean
   enableProRV: boolean
+  enableEvidenceBackedVerification: boolean
 }
 
 export interface ReviewProfileCatalogItemDto {
@@ -62,6 +63,7 @@ export interface ClientDetailViewModel {
   editedDefaultReviewPipelineProfileId: Ref<string>
   editedScmCommentPostingEnabled: Ref<boolean>
   editedEnableProRV: Ref<boolean>
+  editedEnableEvidenceBackedVerification: Ref<boolean>
   reviewProfiles: Ref<ReviewProfileCatalogItemDto[]>
   clientReviewProfile: Ref<ClientReviewProfileDto | null>
   isProviderDetailOpen: Ref<boolean>
@@ -168,6 +170,7 @@ export function useClientDetailViewModel(options: UseClientDetailViewModelOption
   const editedDefaultReviewPipelineProfileId = ref('file-by-file-balanced')
   const editedScmCommentPostingEnabled = ref(true)
   const editedEnableProRV = ref(false)
+  const editedEnableEvidenceBackedVerification = ref(false)
   const reviewProfiles = ref<ReviewProfileCatalogItemDto[]>([])
   const clientReviewProfile = ref<ClientReviewProfileDto | null>(null)
 
@@ -208,6 +211,7 @@ export function useClientDetailViewModel(options: UseClientDetailViewModelOption
     editedDefaultReviewPipelineProfileId.value = nextClient.defaultReviewPipelineProfileId ?? 'file-by-file-balanced'
     editedScmCommentPostingEnabled.value = Boolean(nextClient.scmCommentPostingEnabled)
     editedEnableProRV.value = Boolean(nextClient.enableProRV)
+    editedEnableEvidenceBackedVerification.value = Boolean(nextClient.enableEvidenceBackedVerification)
   }
 
   function applyClientReviewProfile(nextProfile: ClientReviewProfileDto): void {
@@ -355,6 +359,7 @@ export function useClientDetailViewModel(options: UseClientDetailViewModelOption
         defaultReviewStrategy: editedDefaultReviewStrategy.value,
         scmCommentPostingEnabled: editedScmCommentPostingEnabled.value,
         enableProRV: editedEnableProRV.value,
+        enableEvidenceBackedVerification: editedEnableEvidenceBackedVerification.value,
       })
       applyClient(data as ClientDetailDto)
     } catch {
@@ -395,6 +400,7 @@ export function useClientDetailViewModel(options: UseClientDetailViewModelOption
       (
         editedScmCommentPostingEnabled.value !== Boolean(client.value.scmCommentPostingEnabled) ||
         editedEnableProRV.value !== Boolean(client.value.enableProRV) ||
+        editedEnableEvidenceBackedVerification.value !== Boolean(client.value.enableEvidenceBackedVerification) ||
         editedDefaultReviewStrategy.value !== (client.value.defaultReviewStrategy ?? 'fileByFile')
       )
     )
@@ -432,6 +438,7 @@ export function useClientDetailViewModel(options: UseClientDetailViewModelOption
     editedDefaultReviewPipelineProfileId,
     editedScmCommentPostingEnabled,
     editedEnableProRV,
+    editedEnableEvidenceBackedVerification,
     reviewProfiles,
     clientReviewProfile,
     isProviderDetailOpen,
