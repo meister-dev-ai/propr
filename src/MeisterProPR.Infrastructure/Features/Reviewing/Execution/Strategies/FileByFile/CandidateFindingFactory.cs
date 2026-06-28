@@ -4,6 +4,7 @@
 using System.Globalization;
 using MeisterProPR.Application.Features.Reviewing.Execution.Models;
 using MeisterProPR.Application.Features.Reviewing.Execution.Ports;
+using MeisterProPR.Application.Features.Reviewing.Execution.Services;
 using MeisterProPR.Domain.Entities;
 using MeisterProPR.Domain.ValueObjects;
 
@@ -20,7 +21,8 @@ internal sealed class CandidateFindingFactory(IReviewClaimExtractor? reviewClaim
     public List<CandidateReviewFinding> Build(
         IReadOnlyList<ReviewFileResult> freshResults,
         IReadOnlyList<ReviewComment>? commentsOverride = null,
-        ReviewPassKind passKind = ReviewPassKind.Baseline)
+        ReviewPassKind passKind = ReviewPassKind.Baseline,
+        IReadOnlyDictionary<string, IReadOnlyList<(int Start, int End)>>? changedLineRangesByPath = null)
     {
         var originalFindings = new List<CandidateReviewFinding>();
         var findingsBySignature = new Dictionary<string, Queue<CandidateReviewFinding>>(StringComparer.Ordinal);
@@ -49,7 +51,8 @@ internal sealed class CandidateFindingFactory(IReviewClaimExtractor? reviewClaim
                     FileByFileReviewOrchestrator.DetermineCategory(comment),
                     comment.FilePath,
                     normalizedLineNumber,
-                    invariantCheckContext: this.BuildInvariantCheckContext(fileResult, comment, index + 1));
+                    invariantCheckContext: this.BuildInvariantCheckContext(fileResult, comment, index + 1),
+                    scopeRelation: ClassifyScopeRelation(comment.FilePath ?? fileResult.FilePath, normalizedLineNumber, changedLineRangesByPath));
                 originalFindings.Add(finding);
 
                 var signature = CreateCommentSignature(comment);
@@ -79,10 +82,29 @@ internal sealed class CandidateFindingFactory(IReviewClaimExtractor? reviewClaim
                 continue;
             }
 
-            finalFindings.Add(this.CreateDerivedCandidateFinding(comment, derivedOrdinal++, passKind));
+            finalFindings.Add(this.CreateDerivedCandidateFinding(comment, derivedOrdinal++, passKind, changedLineRangesByPath));
         }
 
         return finalFindings;
+    }
+
+    /// <summary>
+    ///     Deterministically classifies a finding's anchor line against the file's changed-line ranges.
+    ///     Returns <see langword="null" /> when the path is unknown, the line is unknown, or the file has no
+    ///     resolvable changed ranges, so such findings are never labeled.
+    /// </summary>
+    private static ChangedLineRelation? ClassifyScopeRelation(
+        string? filePath,
+        int? lineNumber,
+        IReadOnlyDictionary<string, IReadOnlyList<(int Start, int End)>>? changedLineRangesByPath)
+    {
+        if (filePath is null || changedLineRangesByPath is null ||
+            !changedLineRangesByPath.TryGetValue(ReviewDiffProcessor.NormalizeReviewPath(filePath), out var ranges))
+        {
+            return null;
+        }
+
+        return ReviewDiffProcessor.ClassifyChangedLineRelation(lineNumber, ranges);
     }
 
     public static IReadOnlyList<CandidateReviewFinding> MergeFindings(
@@ -168,7 +190,8 @@ internal sealed class CandidateFindingFactory(IReviewClaimExtractor? reviewClaim
                     finding.Evidence,
                     finding.CandidateSummaryText,
                     finding.InvariantCheckContext,
-                    finding.VerificationOutcome));
+                    finding.VerificationOutcome,
+                    finding.ScopeRelation));
         }
 
         return assigned;
@@ -181,7 +204,11 @@ internal sealed class CandidateFindingFactory(IReviewClaimExtractor? reviewClaim
             $"{comment.FilePath}|{FileByFileReviewOrchestrator.NormalizeLineNumber(comment.LineNumber)}|{comment.Severity}|{comment.Message}");
     }
 
-    private CandidateReviewFinding CreateDerivedCandidateFinding(ReviewComment comment, int ordinal, ReviewPassKind passKind)
+    private CandidateReviewFinding CreateDerivedCandidateFinding(
+        ReviewComment comment,
+        int ordinal,
+        ReviewPassKind passKind,
+        IReadOnlyDictionary<string, IReadOnlyList<(int Start, int End)>>? changedLineRangesByPath)
     {
         var provenanceKind = GetProvenanceKind(passKind);
         if (TryBuildDerivedCrossFileEvidence(comment, out var evidence))
@@ -225,7 +252,8 @@ internal sealed class CandidateFindingFactory(IReviewClaimExtractor? reviewClaim
                 FileByFileReviewOrchestrator.DetermineCategory(comment),
                 comment.FilePath,
                 normalizedLineNumber,
-                null));
+                null),
+            scopeRelation: ClassifyScopeRelation(comment.FilePath, normalizedLineNumber, changedLineRangesByPath));
     }
 
     private IReadOnlyDictionary<string, string>? BuildInvariantCheckContext(

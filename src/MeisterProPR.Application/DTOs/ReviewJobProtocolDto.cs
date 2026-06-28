@@ -2,6 +2,7 @@
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
 using MeisterProPR.Domain.Enums;
+using MeisterProPR.Domain.ValueObjects;
 
 namespace MeisterProPR.Application.DTOs;
 
@@ -248,12 +249,17 @@ public sealed record ProtocolWorkspaceDto(
 /// <param name="Severity">Normalized comment severity.</param>
 /// <param name="Message">Final comment text.</param>
 /// <param name="OriginPassKind">The <c>ReviewPassKind</c> name of the pass that produced this finding, when known.</param>
+/// <param name="ChangedLineRelation">
+///     Deterministic classification of the comment's anchor line relative to the pull request's changed-line
+///     ranges, when known. <see langword="null" /> for comments that could not be classified.
+/// </param>
 public sealed record ProtocolReviewCommentDto(
     string? FilePath,
     int? LineNumber,
     CommentSeverity Severity,
     string Message,
-    string? OriginPassKind = null);
+    string? OriginPassKind = null,
+    ReviewCommentScopeRelation? ChangedLineRelation = null);
 
 /// <summary>
 ///     Terminal outcome metadata for one file-linked protocol pass.

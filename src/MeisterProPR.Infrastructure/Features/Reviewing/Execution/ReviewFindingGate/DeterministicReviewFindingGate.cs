@@ -30,11 +30,35 @@ public sealed class DeterministicReviewFindingGate : IDeterministicReviewFinding
         ArgumentNullException.ThrowIfNull(invariantFacts);
 
         IReadOnlyList<FinalGateDecision> decisions = findings
-            .Select(finding => EvaluateFinding(finding, invariantFacts))
+            .Select(finding => LabelOutsideChangedLines(finding, EvaluateFinding(finding, invariantFacts)))
             .ToList()
             .AsReadOnly();
 
         return Task.FromResult(decisions);
+    }
+
+    /// <summary>
+    ///     Attaches the <see cref="ReviewFindingGateReasonCodes.OutsideChangedLines" /> reason code to a
+    ///     finding whose anchor line is classified as outside the pull request's changed-line ranges. This is
+    ///     a label only: the disposition, rule source, evidence, and summary text are all left unchanged, so
+    ///     an outside-change finding keeps whatever publish/summary/drop decision the rules already made.
+    /// </summary>
+    private static FinalGateDecision LabelOutsideChangedLines(CandidateReviewFinding finding, FinalGateDecision decision)
+    {
+        if (finding.ScopeRelation != ChangedLineRelation.OutsideChange ||
+            decision.ReasonCodes.Contains(ReviewFindingGateReasonCodes.OutsideChangedLines, StringComparer.Ordinal))
+        {
+            return decision;
+        }
+
+        return new FinalGateDecision(
+            decision.FindingId,
+            decision.Disposition,
+            [.. decision.ReasonCodes, ReviewFindingGateReasonCodes.OutsideChangedLines],
+            decision.RuleSource,
+            decision.BlockedInvariantIds,
+            decision.EvidenceSnapshot,
+            decision.SummaryText);
     }
 
     private static FinalGateDecision EvaluateFinding(

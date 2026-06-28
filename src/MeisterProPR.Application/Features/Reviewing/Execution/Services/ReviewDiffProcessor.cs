@@ -2,6 +2,7 @@
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
 using System.Text;
+using MeisterProPR.Application.Features.Reviewing.Execution.Models;
 using MeisterProPR.Domain.Enums;
 using MeisterProPR.Domain.ValueObjects;
 
@@ -12,6 +13,13 @@ namespace MeisterProPR.Application.Features.Reviewing.Execution.Services;
 /// </summary>
 public static class ReviewDiffProcessor
 {
+    /// <summary>
+    ///     Number of lines on either side of a changed range that still count as part of the change.
+    ///     Context lines immediately adjacent to an edit are effectively touched by it, so a finding
+    ///     within this neighborhood is treated as in-scope rather than pre-existing code.
+    /// </summary>
+    public const int AdjacentLineTolerance = 3;
+
     /// <summary>
     ///     Classifies a changed file into a complexity tier based on changed-line count.
     ///     This identity is consumed by protocol and tier-selection paths, so threshold changes are behavioral changes.
@@ -290,6 +298,72 @@ public static class ReviewDiffProcessor
 
         merged.Add((ms, me));
         return merged;
+    }
+
+    /// <summary>
+    ///     Builds a lookup of merged changed-line ranges keyed by repository-relative file path, for use in
+    ///     deterministic finding-scope classification. Binary files and files whose diff yields no resolvable
+    ///     ranges are omitted, so findings on those files fall back to a <see langword="null" /> relation.
+    /// </summary>
+    public static IReadOnlyDictionary<string, IReadOnlyList<(int Start, int End)>> BuildChangedLineRangesByPath(IReadOnlyList<ChangedFile> changedFiles)
+    {
+        ArgumentNullException.ThrowIfNull(changedFiles);
+
+        // Keyed by NormalizeReviewPath + OrdinalIgnoreCase so AI-emitted finding paths (which can arrive
+        // with a leading slash or different casing) match the repository-relative changed-file paths.
+        var lookup = new Dictionary<string, IReadOnlyList<(int Start, int End)>>(StringComparer.OrdinalIgnoreCase);
+        foreach (var changedFile in changedFiles)
+        {
+            if (changedFile.IsBinary)
+            {
+                continue;
+            }
+
+            var ranges = ExtractChangedNewLineRanges(changedFile.UnifiedDiff);
+            if (ranges.Count > 0)
+            {
+                lookup[NormalizeReviewPath(changedFile.Path)] = ranges;
+            }
+        }
+
+        return lookup;
+    }
+
+    /// <summary>
+    ///     Deterministically classifies a finding's anchor line against a file's merged changed-line ranges.
+    ///     A line inside a range is <see cref="ChangedLineRelation.OnChangedLine" />; a line within
+    ///     <see cref="AdjacentLineTolerance" /> of a range is <see cref="ChangedLineRelation.AdjacentToChange" />;
+    ///     any other line is <see cref="ChangedLineRelation.OutsideChange" />. Returns <see langword="null" />
+    ///     when the line is unknown or the file yielded no resolvable ranges, so such findings are never labeled.
+    /// </summary>
+    /// <param name="lineNumber">One-based new-file line number of the finding anchor, when known.</param>
+    /// <param name="changedRanges">Merged, ascending changed-line ranges for the finding's file.</param>
+    public static ChangedLineRelation? ClassifyChangedLineRelation(
+        int? lineNumber,
+        IReadOnlyList<(int Start, int End)>? changedRanges)
+    {
+        if (lineNumber is not { } line || changedRanges is null || changedRanges.Count == 0)
+        {
+            return null;
+        }
+
+        foreach (var (start, end) in changedRanges)
+        {
+            if (line >= start && line <= end)
+            {
+                return ChangedLineRelation.OnChangedLine;
+            }
+        }
+
+        foreach (var (start, end) in changedRanges)
+        {
+            if (line >= start - AdjacentLineTolerance && line <= end + AdjacentLineTolerance)
+            {
+                return ChangedLineRelation.AdjacentToChange;
+            }
+        }
+
+        return ChangedLineRelation.OutsideChange;
     }
 
     private static bool TryParseUnifiedDiffNewLineStart(string diffLine, out int newLineStart)

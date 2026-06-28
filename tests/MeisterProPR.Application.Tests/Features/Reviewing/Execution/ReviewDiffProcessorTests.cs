@@ -1,7 +1,10 @@
 // Copyright (c) Andreas Rain.
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
+using MeisterProPR.Application.Features.Reviewing.Execution.Models;
 using MeisterProPR.Application.Features.Reviewing.Execution.Services;
+using MeisterProPR.Domain.Enums;
+using MeisterProPR.Domain.ValueObjects;
 
 namespace MeisterProPR.Application.Tests.Features.Reviewing.Execution;
 
@@ -150,5 +153,54 @@ public sealed class ReviewDiffProcessorTests
         Assert.Equal(50, ranges[0].Start);
         Assert.Equal(200, ranges[1].Start);
         Assert.Equal(300, ranges[2].Start);
+    }
+
+    [Theory]
+    [InlineData(10, ChangedLineRelation.OnChangedLine)]
+    [InlineData(12, ChangedLineRelation.OnChangedLine)]
+    [InlineData(14, ChangedLineRelation.OnChangedLine)]
+    [InlineData(9, ChangedLineRelation.AdjacentToChange)]
+    [InlineData(7, ChangedLineRelation.AdjacentToChange)]
+    [InlineData(17, ChangedLineRelation.AdjacentToChange)]
+    [InlineData(6, ChangedLineRelation.OutsideChange)]
+    [InlineData(18, ChangedLineRelation.OutsideChange)]
+    [InlineData(244, ChangedLineRelation.OutsideChange)]
+    public void ClassifyChangedLineRelation_ClassifiesByDistanceFromRange(int line, ChangedLineRelation expected)
+    {
+        IReadOnlyList<(int Start, int End)> ranges = [(10, 14)];
+
+        Assert.Equal(expected, ReviewDiffProcessor.ClassifyChangedLineRelation(line, ranges));
+    }
+
+    [Fact]
+    public void ClassifyChangedLineRelation_NullLine_ReturnsNull()
+    {
+        IReadOnlyList<(int Start, int End)> ranges = [(10, 14)];
+
+        Assert.Null(ReviewDiffProcessor.ClassifyChangedLineRelation(null, ranges));
+    }
+
+    [Fact]
+    public void ClassifyChangedLineRelation_NoRanges_ReturnsNull()
+    {
+        Assert.Null(ReviewDiffProcessor.ClassifyChangedLineRelation(12, null));
+        Assert.Null(ReviewDiffProcessor.ClassifyChangedLineRelation(12, []));
+    }
+
+    [Fact]
+    public void BuildChangedLineRangesByPath_SkipsBinaryAndRangelessFiles()
+    {
+        var changedFiles = new[]
+        {
+            new ChangedFile("src/Foo.cs", ChangeType.Edit, string.Empty, "@@ -1,1 +10,2 @@\n+added one\n+added two"),
+            new ChangedFile("assets/logo.png", ChangeType.Edit, string.Empty, string.Empty, true),
+            new ChangedFile("src/Empty.cs", ChangeType.Edit, string.Empty, string.Empty),
+        };
+
+        var lookup = ReviewDiffProcessor.BuildChangedLineRangesByPath(changedFiles);
+
+        Assert.True(lookup.ContainsKey("src/Foo.cs"));
+        Assert.False(lookup.ContainsKey("assets/logo.png"));
+        Assert.False(lookup.ContainsKey("src/Empty.cs"));
     }
 }

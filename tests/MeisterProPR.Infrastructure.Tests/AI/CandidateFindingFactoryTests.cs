@@ -185,6 +185,109 @@ public sealed class CandidateFindingFactoryTests
         Assert.Equal([ReviewPassKind.Baseline, ReviewPassKind.ProRVAugmentation], finding.MergedFinding.SourcePasses);
     }
 
+    [Fact]
+    public void Build_FindingOnChangedLine_ClassifiesAsOnChangedLine()
+    {
+        var comment = new ReviewComment("src/Foo.cs", 12, CommentSeverity.Warning, "On a changed line.");
+        var fileResult = CreateCompletedFileResult("src/Foo.cs", [comment]);
+        var ranges = RangesByPath("src/Foo.cs", (10, 14));
+        var sut = new CandidateFindingFactory(null);
+
+        var finding = Assert.Single(sut.Build([fileResult], changedLineRangesByPath: ranges));
+
+        Assert.Equal(ChangedLineRelation.OnChangedLine, finding.ScopeRelation);
+    }
+
+    [Fact]
+    public void Build_FindingPathHasLeadingSlash_StillClassifiesAgainstRepoRelativeRanges()
+    {
+        // The AI emits comment file paths that can carry a leading slash (e.g. "/src/Foo.cs"), while the
+        // changed-range lookup is keyed by the repository-relative path. Classification must normalize both
+        // sides — otherwise every lookup misses and scope labeling silently no-ops in production.
+        var comment = new ReviewComment("/src/Foo.cs", 12, CommentSeverity.Warning, "Leading-slash path.");
+        var fileResult = CreateCompletedFileResult("/src/Foo.cs", [comment]);
+        var ranges = RangesByPath("src/Foo.cs", (10, 14));
+        var sut = new CandidateFindingFactory(null);
+
+        var finding = Assert.Single(sut.Build([fileResult], changedLineRangesByPath: ranges));
+
+        Assert.Equal(ChangedLineRelation.OnChangedLine, finding.ScopeRelation);
+    }
+
+    [Fact]
+    public void Build_FindingWithinToleranceOfChangedRange_ClassifiesAsAdjacent()
+    {
+        var comment = new ReviewComment("src/Foo.cs", 17, CommentSeverity.Warning, "Just past the edit.");
+        var fileResult = CreateCompletedFileResult("src/Foo.cs", [comment]);
+        var ranges = RangesByPath("src/Foo.cs", (10, 14));
+        var sut = new CandidateFindingFactory(null);
+
+        var finding = Assert.Single(sut.Build([fileResult], changedLineRangesByPath: ranges));
+
+        Assert.Equal(ChangedLineRelation.AdjacentToChange, finding.ScopeRelation);
+    }
+
+    [Fact]
+    public void Build_FindingFarFromChangedRange_ClassifiesAsOutsideChange()
+    {
+        var comment = new ReviewComment("src/Foo.cs", 244, CommentSeverity.Warning, "Pre-existing defect far from the edit.");
+        var fileResult = CreateCompletedFileResult("src/Foo.cs", [comment]);
+        var ranges = RangesByPath("src/Foo.cs", (120, 130));
+        var sut = new CandidateFindingFactory(null);
+
+        var finding = Assert.Single(sut.Build([fileResult], changedLineRangesByPath: ranges));
+
+        Assert.Equal(ChangedLineRelation.OutsideChange, finding.ScopeRelation);
+    }
+
+    [Fact]
+    public void Build_FindingWithNullLine_HasNoScopeRelation()
+    {
+        var comment = new ReviewComment("src/Foo.cs", null, CommentSeverity.Warning, "Unknown line.");
+        var fileResult = CreateCompletedFileResult("src/Foo.cs", [comment]);
+        var ranges = RangesByPath("src/Foo.cs", (10, 14));
+        var sut = new CandidateFindingFactory(null);
+
+        var finding = Assert.Single(sut.Build([fileResult], changedLineRangesByPath: ranges));
+
+        Assert.Null(finding.ScopeRelation);
+    }
+
+    [Fact]
+    public void Build_FileWithNoResolvableRanges_HasNoScopeRelation()
+    {
+        var comment = new ReviewComment("src/Foo.cs", 12, CommentSeverity.Warning, "No ranges for this file.");
+        var fileResult = CreateCompletedFileResult("src/Foo.cs", [comment]);
+        var sut = new CandidateFindingFactory(null);
+
+        // No entry for the file path means the diff yielded no resolvable ranges.
+        var finding = Assert.Single(sut.Build([fileResult], changedLineRangesByPath: RangesByPath("src/Other.cs", (1, 5))));
+
+        Assert.Null(finding.ScopeRelation);
+    }
+
+    [Fact]
+    public void Build_WithoutRangeLookup_HasNoScopeRelation()
+    {
+        var comment = new ReviewComment("src/Foo.cs", 12, CommentSeverity.Warning, "No lookup supplied.");
+        var fileResult = CreateCompletedFileResult("src/Foo.cs", [comment]);
+        var sut = new CandidateFindingFactory(null);
+
+        var finding = Assert.Single(sut.Build([fileResult]));
+
+        Assert.Null(finding.ScopeRelation);
+    }
+
+    private static IReadOnlyDictionary<string, IReadOnlyList<(int Start, int End)>> RangesByPath(
+        string path,
+        params (int Start, int End)[] ranges)
+    {
+        return new Dictionary<string, IReadOnlyList<(int Start, int End)>>(StringComparer.Ordinal)
+        {
+            [path] = ranges,
+        };
+    }
+
     private static ReviewFileResult CreateCompletedFileResult(string filePath, IReadOnlyList<ReviewComment> comments)
     {
         var fileResult = new ReviewFileResult(Guid.NewGuid(), filePath);

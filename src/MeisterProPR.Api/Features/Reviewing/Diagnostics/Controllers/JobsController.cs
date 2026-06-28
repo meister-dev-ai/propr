@@ -227,7 +227,7 @@ public sealed class JobsController(
                 new ReviewResultDto(
                     job.Result.Summary,
                     job.Result.Comments
-                        .Select(c => new ReviewCommentDto(c.FilePath, c.LineNumber, c.Severity, c.Message, c.OriginPassKind))
+                        .Select(c => new ReviewCommentDto(c.FilePath, c.LineNumber, c.Severity, c.Message, c.OriginPassKind, c.ScopeRelation))
                         .ToArray())));
     }
 

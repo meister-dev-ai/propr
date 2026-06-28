@@ -72,4 +72,10 @@ public static class ReviewFindingGateReasonCodes
     ///     Reason code used when repeated judgment did not agree on publication.
     /// </summary>
     public const string RepeatedJudgmentDisagreement = "repeated_judgment_disagreement";
+
+    /// <summary>
+    ///     Reason code attached when a finding's anchor line falls outside the pull request's changed-line
+    ///     ranges (pre-existing code). It is a label only and never changes the finding's disposition.
+    /// </summary>
+    public const string OutsideChangedLines = "outside_changed_lines";
 }

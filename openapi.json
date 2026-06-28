@@ -18763,6 +18763,9 @@
             "type": "string",
             "description": "The `ReviewPassKind` name of the pass that produced this finding, when known.",
             "nullable": true
+          },
+          "changedLineRelation": {
+            "$ref": "#/components/schemas/ReviewCommentScopeRelation"
           }
         },
         "additionalProperties": false,
@@ -19190,10 +19193,22 @@
           "originPassKind": {
             "type": "string",
             "nullable": true
+          },
+          "changedLineRelation": {
+            "$ref": "#/components/schemas/ReviewCommentScopeRelation"
           }
         },
         "additionalProperties": false,
         "description": "DTO for a single review comment."
+      },
+      "ReviewCommentScopeRelation": {
+        "enum": [
+          "onChangedLine",
+          "adjacentToChange",
+          "outsideChange"
+        ],
+        "type": "string",
+        "description": "Deterministic classification of where a review comment's anchor line falls relative to the\npull request's changed-line ranges for its file. Provenance metadata only — it does not\nparticipate in deduplication and is null when the comment could not be\nclassified (unknown line or a file with no resolvable changed ranges)."
       },
       "ReviewComparisonMode": {
         "enum": [

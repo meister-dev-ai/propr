@@ -130,6 +130,10 @@ public sealed record CandidateReviewFinding
     /// <param name="candidateSummaryText">Optional candidate summary produced before final gating.</param>
     /// <param name="invariantCheckContext">Optional invariant metadata captured during validation.</param>
     /// <param name="verificationOutcome">Optional verification result associated with the finding.</param>
+    /// <param name="scopeRelation">
+    ///     Optional deterministic classification of the finding's anchor line relative to the pull request's
+    ///     changed-line ranges. <see langword="null" /> when the line is unknown or no ranges were resolvable.
+    /// </param>
     public CandidateReviewFinding(
         string findingId,
         CandidateFindingProvenance provenance,
@@ -141,7 +145,8 @@ public sealed record CandidateReviewFinding
         EvidenceReference? evidence = null,
         string? candidateSummaryText = null,
         IReadOnlyDictionary<string, string>? invariantCheckContext = null,
-        VerificationOutcome? verificationOutcome = null)
+        VerificationOutcome? verificationOutcome = null,
+        ChangedLineRelation? scopeRelation = null)
     {
         if (string.IsNullOrWhiteSpace(findingId))
         {
@@ -171,6 +176,7 @@ public sealed record CandidateReviewFinding
             ? new Dictionary<string, string>()
             : new Dictionary<string, string>(invariantCheckContext, StringComparer.Ordinal);
         this.VerificationOutcome = verificationOutcome;
+        this.ScopeRelation = scopeRelation;
     }
 
     /// <summary>
@@ -227,6 +233,13 @@ public sealed record CandidateReviewFinding
     ///     Gets the verification result associated with the finding when available.
     /// </summary>
     public VerificationOutcome? VerificationOutcome { get; }
+
+    /// <summary>
+    ///     Gets the deterministic classification of this finding's anchor line relative to the pull
+    ///     request's changed-line ranges, or <see langword="null" /> when the finding could not be classified
+    ///     (unknown line or a file with no resolvable changed ranges).
+    /// </summary>
+    public ChangedLineRelation? ScopeRelation { get; init; }
 
     /// <summary>
     ///     Gets merged-candidate metadata when the finding has been through late-steering merge.

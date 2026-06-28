@@ -241,6 +241,7 @@ export interface CommentGroupComment {
     severity?: string | null
     message?: string | null
     originPassKind?: string | null
+    changedLineRelation?: ReviewCommentDto['changedLineRelation']
 }
 
 /** Parsed details of a `triage_decision` protocol event. */

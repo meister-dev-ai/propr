@@ -5,6 +5,7 @@ using System.Text.Json;
 using MeisterProPR.Application.DTOs;
 using MeisterProPR.Application.Features.Reviewing.Execution.Models;
 using MeisterProPR.Application.Features.Reviewing.Execution.Ports;
+using MeisterProPR.Application.Features.Reviewing.Execution.Services;
 using MeisterProPR.Application.Interfaces;
 using MeisterProPR.Application.Options;
 using MeisterProPR.Application.Services;
@@ -93,7 +94,9 @@ internal sealed class AgenticReviewSynthesisExecutor(
             deduped = await qualityFilterExecutor.ApplyAsync(job.Id, deduped, baseContext, effectiveClient, ct);
         }
 
-        var baselinePerFileFindings = candidateFindingFactory.Build(freshResults, deduped, agenticCandidateFindings);
+        var changedLineRangesByPath = ReviewDiffProcessor.BuildChangedLineRangesByPath(pr.ChangedFiles);
+        var baselinePerFileFindings = candidateFindingFactory.Build(
+            freshResults, deduped, agenticCandidateFindings, changedLineRangesByPath: changedLineRangesByPath);
         var perFileCandidateFindings = CandidateFindingFactory.MergeFindings(
             baselinePerFileFindings,
             augmentationCandidateFindings ?? []);
@@ -114,6 +117,7 @@ internal sealed class AgenticReviewSynthesisExecutor(
                         with
                         {
                             OriginPassKind = finding.Provenance.ResolveOriginPassKindName(),
+                            ScopeRelation = ReviewCommentScopeRelationMapper.Map(finding.ScopeRelation),
                         })
                     .Concat(deduped)
                     .ToList()
@@ -174,6 +178,7 @@ internal sealed class AgenticReviewSynthesisExecutor(
         var reconciler = summaryReconciliationService ?? new SummaryReconciliationService();
         var reconciliation = GroundSummaryToFinalGateOutcomes(
             reconciler.Reconcile(synthesisOutcome.FinalSummary, candidateFindings, gateDecisions),
+            candidateFindings,
             gateDecisions);
 
         if (protocolId.HasValue)
@@ -686,15 +691,18 @@ internal sealed class AgenticReviewSynthesisExecutor(
                 with
                 {
                     OriginPassKind = finding.Provenance.ResolveOriginPassKindName(),
+                    ScopeRelation = ReviewCommentScopeRelationMapper.Map(finding.ScopeRelation),
                 })
             .ToList();
     }
 
     private static SummaryReconciliationResult GroundSummaryToFinalGateOutcomes(
         SummaryReconciliationResult reconciliation,
+        IReadOnlyList<CandidateReviewFinding> candidateFindings,
         IReadOnlyList<FinalGateDecision> gateDecisions)
     {
         ArgumentNullException.ThrowIfNull(reconciliation);
+        ArgumentNullException.ThrowIfNull(candidateFindings);
         ArgumentNullException.ThrowIfNull(gateDecisions);
 
         var publishCount = gateDecisions.Count(decision =>
@@ -707,7 +715,9 @@ internal sealed class AgenticReviewSynthesisExecutor(
             .Distinct(StringComparer.Ordinal)
             .ToList();
 
-        var groundedSummary = BuildGroundedSummary(reconciliation.FinalSummary, publishCount, summaryOnlyItems);
+        var outsideChangeCount = CountRetainedOutsideChangeFindings(candidateFindings, gateDecisions);
+
+        var groundedSummary = BuildGroundedSummary(reconciliation.FinalSummary, publishCount, summaryOnlyItems, outsideChangeCount);
         if (string.Equals(reconciliation.FinalSummary, groundedSummary, StringComparison.Ordinal))
         {
             return reconciliation;
@@ -722,7 +732,29 @@ internal sealed class AgenticReviewSynthesisExecutor(
             "deterministic_summary_grounding");
     }
 
-    private static string BuildGroundedSummary(string reconciledSummary, int publishCount, IReadOnlyList<string> summaryOnlyItems)
+    /// <summary>
+    ///     Counts retained (published) findings whose anchor line is classified as outside the pull request's
+    ///     changed-line ranges, so the grounded summary can note that they live in pre-existing code.
+    /// </summary>
+    private static int CountRetainedOutsideChangeFindings(
+        IReadOnlyList<CandidateReviewFinding> candidateFindings,
+        IReadOnlyList<FinalGateDecision> gateDecisions)
+    {
+        var publishedFindingIds = gateDecisions
+            .Where(decision => string.Equals(decision.Disposition, FinalGateDecision.PublishDisposition, StringComparison.Ordinal))
+            .Select(decision => decision.FindingId)
+            .ToHashSet(StringComparer.Ordinal);
+
+        return candidateFindings.Count(finding =>
+            finding.ScopeRelation == ChangedLineRelation.OutsideChange &&
+            publishedFindingIds.Contains(finding.FindingId));
+    }
+
+    private static string BuildGroundedSummary(
+        string reconciledSummary,
+        int publishCount,
+        IReadOnlyList<string> summaryOnlyItems,
+        int outsideChangeCount)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(reconciledSummary);
 
@@ -742,6 +774,11 @@ internal sealed class AgenticReviewSynthesisExecutor(
         if (publishCount > 0)
         {
             lines.Add($"Verification retained {publishCount} publishable finding{(publishCount == 1 ? string.Empty : "s")}.");
+
+            if (outsideChangeCount > 0)
+            {
+                lines.Add($"{outsideChangeCount} of these {(outsideChangeCount == 1 ? "is" : "are")} in pre-existing code outside this change.");
+            }
         }
 
         if (summaryOnlyItems.Count > 0)

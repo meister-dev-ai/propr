@@ -28,8 +28,12 @@
                     <div class="comment-msg-container markdown-content">
                         <div v-html="vm.renderMarkdown(comment.message)"></div>
                     </div>
-                    <div v-if="showOrigin && vm.commentOriginLabel(comment)" class="comment-origin-row">
+                    <div
+                        v-if="(showOrigin && vm.commentOriginLabel(comment)) || comment.changedLineRelation === 'outsideChange'"
+                        class="comment-origin-row"
+                    >
                         <button
+                            v-if="showOrigin && vm.commentOriginLabel(comment)"
                             type="button"
                             class="origin-badge"
                             :aria-label="`Found by ${vm.commentOriginLabel(comment)} on ${comment.filePath ?? comment.file_path ?? 'this PR'}`"
@@ -39,6 +43,14 @@
                             <span class="origin-badge-lbl">found by</span>
                             {{ vm.commentOriginLabel(comment) }}
                         </button>
+                        <span
+                            v-if="comment.changedLineRelation === 'outsideChange'"
+                            class="scope-badge"
+                            data-testid="outside-change-badge"
+                            title="This finding is in pre-existing code, outside the lines this pull request changed."
+                        >
+                            Outside your changes
+                        </span>
                     </div>
                 </li>
             </ul>
@@ -144,6 +156,17 @@ defineProps<{
 
 .origin-badge-lbl {
     color: var(--color-text-muted);
+}
+
+.scope-badge {
+    display: inline-flex;
+    align-items: center;
+    font-size: 0.72rem;
+    color: var(--color-text-muted);
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px dashed var(--color-border);
+    padding: 0.15rem 0.5rem;
+    border-radius: var(--radius-xs);
 }
 
 .json-comments-list {

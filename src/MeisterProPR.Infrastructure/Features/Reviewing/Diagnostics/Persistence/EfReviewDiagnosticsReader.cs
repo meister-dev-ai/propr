@@ -736,7 +736,8 @@ public sealed class EfReviewDiagnosticsReader(
             comment.LineNumber,
             comment.Severity,
             comment.Message,
-            comment.OriginPassKind ?? fallbackOriginPassKind);
+            comment.OriginPassKind ?? fallbackOriginPassKind,
+            comment.ScopeRelation);
     }
 
     private static string ResolveProviderProjectKey(ReviewJob job)

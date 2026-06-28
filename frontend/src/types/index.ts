@@ -11623,6 +11623,7 @@ export interface components {
             message?: string | null;
             /** @description The `ReviewPassKind` name of the pass that produced this finding, when known. */
             originPassKind?: string | null;
+            changedLineRelation?: components["schemas"]["ReviewCommentScopeRelation"];
         };
         /** @description Visibility for one tool-result evidence bounding or refresh action. */
         ProtocolToolEvidenceDto: {
@@ -11772,7 +11773,16 @@ export interface components {
             severity?: components["schemas"]["CommentSeverity"];
             message?: string | null;
             originPassKind?: string | null;
+            changedLineRelation?: components["schemas"]["ReviewCommentScopeRelation"];
         };
+        /**
+         * @description Deterministic classification of where a review comment's anchor line falls relative to the
+         *     pull request's changed-line ranges for its file. Provenance metadata only — it does not
+         *     participate in deduplication and is null when the comment could not be
+         *     classified (unknown line or a file with no resolvable changed ranges).
+         * @enum {string}
+         */
+        ReviewCommentScopeRelation: "onChangedLine" | "adjacentToChange" | "outsideChange";
         /**
          * @description Controls whether one or more review strategies execute against a PR snapshot.
          * @enum {string}

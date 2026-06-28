@@ -84,6 +84,83 @@ describe('JobProtocolCommentGroups — origin badges', () => {
         expect(wrapper.find('[data-testid="origin-badge"]').exists()).toBe(false)
     })
 
+    it('renders an "Outside your changes" badge when the relation is outsideChange', () => {
+        const wrapper = mount(JobProtocolCommentGroups, {
+            props: {
+                vm: stubVm(),
+                groups: [
+                    {
+                        directory: 'src/foo.ts',
+                        comments: [
+                            {
+                                severity: 'error',
+                                message: 'pre-existing defect',
+                                filePath: 'src/foo.ts',
+                                lineNumber: 244,
+                                originPassKind: 'Baseline',
+                                changedLineRelation: 'outsideChange',
+                            },
+                        ],
+                    },
+                ],
+                emptyMessage: 'none',
+                showOrigin: true,
+            },
+        })
+
+        const badge = wrapper.find('[data-testid="outside-change-badge"]')
+        expect(badge.exists()).toBe(true)
+        expect(badge.text()).toContain('Outside your changes')
+    })
+
+    it('renders the outside-change badge even when origin badges are hidden', () => {
+        const wrapper = mount(JobProtocolCommentGroups, {
+            props: {
+                vm: stubVm(),
+                groups: [
+                    {
+                        directory: 'src/foo.ts',
+                        comments: [
+                            {
+                                severity: 'warning',
+                                message: 'pre-existing defect',
+                                filePath: 'src/foo.ts',
+                                lineNumber: 244,
+                                changedLineRelation: 'outsideChange',
+                            },
+                        ],
+                    },
+                ],
+                emptyMessage: 'none',
+            },
+        })
+
+        expect(wrapper.find('[data-testid="outside-change-badge"]').exists()).toBe(true)
+        expect(wrapper.find('[data-testid="origin-badge"]').exists()).toBe(false)
+    })
+
+    it('omits the outside-change badge for on-changed-line and adjacent relations', () => {
+        const wrapper = mount(JobProtocolCommentGroups, {
+            props: {
+                vm: stubVm(),
+                groups: [
+                    {
+                        directory: 'src/foo.ts',
+                        comments: [
+                            { severity: 'error', message: 'on the change', filePath: 'src/foo.ts', lineNumber: 12, changedLineRelation: 'onChangedLine' },
+                            { severity: 'warning', message: 'next to the change', filePath: 'src/foo.ts', lineNumber: 17, changedLineRelation: 'adjacentToChange' },
+                            { severity: 'note', message: 'unclassified', filePath: 'src/foo.ts', lineNumber: 3 },
+                        ],
+                    },
+                ],
+                emptyMessage: 'none',
+                showOrigin: true,
+            },
+        })
+
+        expect(wrapper.find('[data-testid="outside-change-badge"]').exists()).toBe(false)
+    })
+
     it('deep-links to the origin trace when the badge is clicked', async () => {
         const selectFindingOrigin = vi.fn()
         const wrapper = mount(JobProtocolCommentGroups, {

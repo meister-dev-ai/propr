@@ -17,7 +17,8 @@ public sealed class DeterministicReviewFindingGateTests
         string? candidateSummaryText = null,
         string? filePath = null,
         int? lineNumber = null,
-        VerificationOutcome? verificationOutcome = null)
+        VerificationOutcome? verificationOutcome = null,
+        ChangedLineRelation? scopeRelation = null)
     {
         return new CandidateReviewFinding(
             findingId,
@@ -34,7 +35,86 @@ public sealed class DeterministicReviewFindingGateTests
             lineNumber,
             evidence,
             candidateSummaryText,
-            verificationOutcome: verificationOutcome);
+            verificationOutcome: verificationOutcome,
+            scopeRelation: scopeRelation);
+    }
+
+    [Fact]
+    public async Task EvaluateAsync_OutsideChangeDefaultPublish_AttachesReasonCodeWithoutChangingDisposition()
+    {
+        var sut = new DeterministicReviewFindingGate();
+        var finding = CreateFinding(
+            "finding-pf-001",
+            "Null dereference in pre-existing helper.",
+            CandidateReviewFinding.PerFileCommentCategory,
+            filePath: "src/Foo.cs",
+            lineNumber: 244,
+            scopeRelation: ChangedLineRelation.OutsideChange);
+
+        var decision = Assert.Single(await sut.EvaluateAsync([finding], []));
+
+        Assert.Equal(FinalGateDecision.PublishDisposition, decision.Disposition);
+        Assert.Contains(ReviewFindingGateReasonCodes.DefaultPublish, decision.ReasonCodes);
+        Assert.Contains(ReviewFindingGateReasonCodes.OutsideChangedLines, decision.ReasonCodes);
+        Assert.Equal("default_publish_rules", decision.RuleSource);
+    }
+
+    [Fact]
+    public async Task EvaluateAsync_OutsideChangeSummaryOnly_AttachesReasonCodeAndKeepsSummaryOnly()
+    {
+        var sut = new DeterministicReviewFindingGate();
+        var finding = CreateFinding(
+            "finding-arch-001",
+            "Architecture concerns span the PR and should be revisited.",
+            "architecture",
+            candidateSummaryText: "Potential architecture concern noted.",
+            filePath: "src/Foo.cs",
+            lineNumber: 244,
+            scopeRelation: ChangedLineRelation.OutsideChange);
+
+        var decision = Assert.Single(await sut.EvaluateAsync([finding], []));
+
+        Assert.Equal(FinalGateDecision.SummaryOnlyDisposition, decision.Disposition);
+        Assert.Contains(ReviewFindingGateReasonCodes.WeakBroadFinding, decision.ReasonCodes);
+        Assert.Contains(ReviewFindingGateReasonCodes.OutsideChangedLines, decision.ReasonCodes);
+        Assert.NotNull(decision.SummaryText);
+    }
+
+    [Theory]
+    [InlineData(ChangedLineRelation.OnChangedLine)]
+    [InlineData(ChangedLineRelation.AdjacentToChange)]
+    public async Task EvaluateAsync_InScopeRelation_DoesNotAttachOutsideChangedLinesReasonCode(ChangedLineRelation relation)
+    {
+        var sut = new DeterministicReviewFindingGate();
+        var finding = CreateFinding(
+            "finding-pf-002",
+            "Null dereference on the changed line.",
+            CandidateReviewFinding.PerFileCommentCategory,
+            filePath: "src/Foo.cs",
+            lineNumber: 12,
+            scopeRelation: relation);
+
+        var decision = Assert.Single(await sut.EvaluateAsync([finding], []));
+
+        Assert.Equal(FinalGateDecision.PublishDisposition, decision.Disposition);
+        Assert.DoesNotContain(ReviewFindingGateReasonCodes.OutsideChangedLines, decision.ReasonCodes);
+    }
+
+    [Fact]
+    public async Task EvaluateAsync_NullScopeRelation_DoesNotAttachOutsideChangedLinesReasonCode()
+    {
+        var sut = new DeterministicReviewFindingGate();
+        var finding = CreateFinding(
+            "finding-pf-003",
+            "Null dereference with unknown scope.",
+            CandidateReviewFinding.PerFileCommentCategory,
+            filePath: "src/Foo.cs",
+            lineNumber: 12);
+
+        var decision = Assert.Single(await sut.EvaluateAsync([finding], []));
+
+        Assert.Equal(FinalGateDecision.PublishDisposition, decision.Disposition);
+        Assert.DoesNotContain(ReviewFindingGateReasonCodes.OutsideChangedLines, decision.ReasonCodes);
     }
 
     [Fact]
