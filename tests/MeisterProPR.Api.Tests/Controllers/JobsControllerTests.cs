@@ -93,6 +93,49 @@ public sealed class JobsControllerTests(JobsControllerTests.JobsApiFactory facto
         }
     }
 
+    [Fact]
+    public async Task GetJobs_ProjectsExpectedFieldsAcrossStates()
+    {
+        // Scope the listing to one client so unrelated seeded jobs from other tests do not interfere.
+        var clientId = Guid.NewGuid();
+        var repo = factory.Services.GetRequiredService<IJobRepository>();
+
+        var completed = new ReviewJob(Guid.NewGuid(), clientId, "https://dev.azure.com/org", "proj", "repo", 6001, 1);
+        await repo.AddAsync(completed);
+        await repo.TryTransitionAsync(completed.Id, JobStatus.Pending, JobStatus.Processing);
+        await repo.SetResultAsync(completed.Id, new ReviewResult("api summary", []));
+
+        var processing = new ReviewJob(Guid.NewGuid(), clientId, "https://dev.azure.com/org", "proj", "repo", 6002, 1);
+        await repo.AddAsync(processing);
+        await repo.TryTransitionAsync(processing.Id, JobStatus.Pending, JobStatus.Processing);
+
+        var failed = new ReviewJob(Guid.NewGuid(), clientId, "https://dev.azure.com/org", "proj", "repo", 6003, 1);
+        await repo.AddAsync(failed);
+        await repo.SetFailedAsync(failed.Id, "api error");
+
+        var client = factory.CreateClient();
+        using var request = new HttpRequestMessage(HttpMethod.Get, $"/reviewing/jobs?clientId={clientId}&limit=1000");
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", factory.GenerateAdminToken());
+
+        var response = await client.SendAsync(request);
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+
+        var body = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        var items = body.RootElement.GetProperty("items").EnumerateArray().ToList();
+
+        var completedItem = items.Single(i => i.GetProperty("id").GetString() == completed.Id.ToString());
+        Assert.Equal("api summary", completedItem.GetProperty("resultSummary").GetString());
+        Assert.Equal(0L, completedItem.GetProperty("totalInputTokens").GetInt64());
+        Assert.Equal(0L, completedItem.GetProperty("totalOutputTokens").GetInt64());
+
+        var processingItem = items.Single(i => i.GetProperty("id").GetString() == processing.Id.ToString());
+        Assert.Equal(JsonValueKind.Null, processingItem.GetProperty("resultSummary").ValueKind);
+
+        var failedItem = items.Single(i => i.GetProperty("id").GetString() == failed.Id.ToString());
+        Assert.Equal(JsonValueKind.Null, failedItem.GetProperty("resultSummary").ValueKind);
+        Assert.Equal("api error", failedItem.GetProperty("errorMessage").GetString());
+    }
+
 
     /// <summary>
     ///     Verifies GET /reviewing/jobs?limit=100 responds in under 2 seconds even with 10,000 seeded jobs.

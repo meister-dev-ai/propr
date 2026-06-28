@@ -1,6 +1,7 @@
 // Copyright (c) Andreas Rain.
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
+using MeisterProPR.Application.DTOs;
 using MeisterProPR.Application.Interfaces;
 using MeisterProPR.Application.Support;
 using MeisterProPR.Domain.Entities;
@@ -186,6 +187,68 @@ public sealed partial class JobRepository(
     }
 
     /// <inheritdoc />
+    public async Task<(int total, IReadOnlyList<JobListPageItemDto> items)> GetJobListPageAsync(
+        int limit,
+        int offset,
+        JobStatus? status,
+        Guid? clientId = null,
+        int? pullRequestId = null,
+        CancellationToken ct = default)
+    {
+        var query = dbContext.ReviewJobs.AsNoTracking();
+        if (status.HasValue)
+        {
+            query = query.Where(j => j.Status == status.Value);
+        }
+
+        if (clientId.HasValue)
+        {
+            query = query.Where(j => j.ClientId == clientId.Value);
+        }
+
+        if (pullRequestId.HasValue)
+        {
+            query = query.Where(j => j.PullRequestId == pullRequestId.Value);
+        }
+
+        var total = await query.CountAsync(ct).ConfigureAwait(false);
+
+        // Project to a non-entity DTO: selects only scalar columns (the summary from result_summary, never
+        // result_json), sums protocol tokens as a correlated subquery coalesced to 0, and is untracked by
+        // construction. No source-scope hydration — the overview never renders it.
+        var items = await query
+            .OrderByDescending(j => j.SubmittedAt)
+            .Skip(offset)
+            .Take(limit)
+            .Select(j => new JobListPageItemDto(
+                j.Id,
+                j.ClientId,
+                j.OrganizationUrl,
+                j.ProjectId,
+                j.RepositoryId,
+                j.PullRequestId,
+                j.IterationId,
+                j.Status,
+                j.SubmittedAt,
+                j.ProcessingStartedAt,
+                j.CompletedAt,
+                j.ResultSummary,
+                j.ErrorMessage,
+                j.TotalInputTokensAggregated ?? j.Protocols.Sum(p => p.TotalInputTokens) ?? 0L,
+                j.TotalOutputTokensAggregated ?? j.Protocols.Sum(p => p.TotalOutputTokens) ?? 0L,
+                j.PrTitle,
+                j.PrSourceBranch,
+                j.PrTargetBranch,
+                j.PrRepositoryName,
+                j.AiModel,
+                j.ReviewStrategy))
+            .ToListAsync(ct)
+            .ConfigureAwait(false);
+
+        return (total, items);
+    }
+
+    /// <inheritdoc />
     public async Task<IReadOnlyList<ReviewJob>> GetProcessingJobsAsync(CancellationToken ct = default)
     {
         var jobs = await dbContext.ReviewJobs
@@ -329,7 +392,7 @@ public sealed partial class JobRepository(
             return;
         }
 
-        job.Result = result;
+        job.ApplyResult(result);
         job.Status = JobStatus.Completed;
         job.CompletedAt = DateTimeOffset.UtcNow;
         await dbContext.SaveChangesAsync(ct).ConfigureAwait(false);

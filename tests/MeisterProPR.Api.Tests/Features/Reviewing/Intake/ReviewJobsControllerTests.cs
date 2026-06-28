@@ -87,10 +87,11 @@ public sealed class ReviewJobsControllerTests
         {
             Status = JobStatus.Completed,
             CompletedAt = DateTimeOffset.UtcNow,
-            Result = new ReviewResult(
-                "Looks good",
-                [new ReviewComment("file.cs", 10, CommentSeverity.Warning, "Note")]),
         };
+        job.ApplyResult(
+            new ReviewResult(
+                "Looks good",
+                [new ReviewComment("file.cs", 10, CommentSeverity.Warning, "Note")]));
         store.GetByIdAsync(jobId, Arg.Any<CancellationToken>()).Returns(job);
 
         var controller = CreateController(store, clientId, ClientRole.ClientUser);
@@ -233,10 +234,11 @@ public sealed class ReviewJobsControllerTests
         {
             Status = JobStatus.Completed,
             CompletedAt = DateTimeOffset.UtcNow,
-            Result = new ReviewResult(
-                "PR-wide review identified one publishable cross-file finding.",
-                [new ReviewComment(null, null, CommentSeverity.Warning, "Cross-file registration ordering can still publish stale results.")]),
         };
+        job.ApplyResult(
+            new ReviewResult(
+                "PR-wide review identified one publishable cross-file finding.",
+                [new ReviewComment(null, null, CommentSeverity.Warning, "Cross-file registration ordering can still publish stale results.")]));
         job.SelectReviewStrategy(
             ReviewStrategy.PrWideAgentic,
             ReviewStrategySelectionSource.ClientDefault,

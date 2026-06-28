@@ -84,7 +84,7 @@ public sealed class JobsController(
         limit = Math.Clamp(limit, 1, 1000);
         offset = Math.Max(offset, 0);
 
-        var (total, items) = await jobRepository.GetAllJobsAsync(
+        var (total, items) = await jobRepository.GetJobListPageAsync(
             limit,
             offset,
             status,
@@ -107,10 +107,10 @@ public sealed class JobsController(
                         j.SubmittedAt,
                         j.ProcessingStartedAt,
                         j.CompletedAt,
-                        j.Result?.Summary,
+                        j.ResultSummary,
                         j.ErrorMessage,
-                        j.TotalInputTokensAggregated ?? j.Protocols.Sum(p => p.TotalInputTokens),
-                        j.TotalOutputTokensAggregated ?? j.Protocols.Sum(p => p.TotalOutputTokens),
+                        j.TotalInputTokens,
+                        j.TotalOutputTokens,
                         j.PrTitle,
                         j.PrSourceBranch,
                         j.PrTargetBranch,

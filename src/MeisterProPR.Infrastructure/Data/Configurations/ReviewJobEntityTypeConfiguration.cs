@@ -178,6 +178,12 @@ internal sealed class ReviewJobEntityTypeConfiguration : IEntityTypeConfiguratio
                 v => v == null ? null : JsonSerializer.Serialize(v, (JsonSerializerOptions?)null),
                 v => v == null ? null : JsonSerializer.Deserialize<ReviewResult>(v, (JsonSerializerOptions?)null));
 
+        // Denormalized summary so the overview list never has to materialize result_json.
+        builder.Property(j => j.ResultSummary)
+            .HasColumnName("result_summary")
+            .HasColumnType("text")
+            .IsRequired(false);
+
         builder.Property(j => j.TotalInputTokensAggregated)
             .HasColumnName("total_input_tokens_aggregated")
             .IsRequired(false);

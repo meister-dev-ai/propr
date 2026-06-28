@@ -1,6 +1,7 @@
 // Copyright (c) Andreas Rain.
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
+using MeisterProPR.Application.DTOs;
 using MeisterProPR.Domain.Entities;
 using MeisterProPR.Domain.Enums;
 using MeisterProPR.Domain.ValueObjects;
@@ -58,6 +59,19 @@ public interface IJobRepository
 
     /// <summary>Returns all jobs across all clients, newest first, with optional status filter and pagination.</summary>
     Task<(int total, IReadOnlyList<ReviewJob> items)> GetAllJobsAsync(
+        int limit,
+        int offset,
+        JobStatus? status,
+        Guid? clientId = null,
+        int? pullRequestId = null,
+        CancellationToken ct = default);
+
+    /// <summary>
+    ///     Returns a projected page of the review overview list, newest first. Reads only the scalar fields the
+    ///     overview renders: the summary comes from the denormalized column and token totals are summed in the
+    ///     database, so the result blob and protocol rows are never materialized and the query runs untracked.
+    /// </summary>
+    Task<(int total, IReadOnlyList<JobListPageItemDto> items)> GetJobListPageAsync(
         int limit,
         int offset,
         JobStatus? status,

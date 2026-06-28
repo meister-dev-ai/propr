@@ -1,6 +1,7 @@
 // Copyright (c) Andreas Rain.
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
+using MeisterProPR.Application.DTOs;
 using MeisterProPR.Application.Features.Reviewing.Diagnostics.Ports;
 using MeisterProPR.Application.Interfaces;
 using MeisterProPR.Domain.Entities;
@@ -123,6 +124,17 @@ public sealed class ReviewingDiagnosticsServiceCollectionExtensionsTests
             CancellationToken ct = default)
         {
             return Task.FromResult((0, (IReadOnlyList<ReviewJob>)[]));
+        }
+
+        public Task<(int total, IReadOnlyList<JobListPageItemDto> items)> GetJobListPageAsync(
+            int limit,
+            int offset,
+            JobStatus? status,
+            Guid? clientId = null,
+            int? pullRequestId = null,
+            CancellationToken ct = default)
+        {
+            return Task.FromResult((0, (IReadOnlyList<JobListPageItemDto>)[]));
         }
 
         public ReviewJob? GetById(Guid id)

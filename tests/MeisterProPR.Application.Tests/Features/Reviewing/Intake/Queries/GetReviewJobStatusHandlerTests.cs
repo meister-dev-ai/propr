@@ -31,10 +31,11 @@ public sealed class GetReviewJobStatusHandlerTests
         {
             Status = JobStatus.Completed,
             CompletedAt = DateTimeOffset.UtcNow,
-            Result = new ReviewResult(
-                "Looks good",
-                [new ReviewComment("file.cs", 12, CommentSeverity.Warning, "Double check null handling")]),
         };
+        job.ApplyResult(
+            new ReviewResult(
+                "Looks good",
+                [new ReviewComment("file.cs", 12, CommentSeverity.Warning, "Double check null handling")]));
 
         var store = Substitute.For<IReviewJobIntakeStore>();
         store.GetByIdAsync(job.Id, Arg.Any<CancellationToken>()).Returns(job);

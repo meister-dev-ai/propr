@@ -2,6 +2,7 @@
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
 using System.Collections.Concurrent;
+using MeisterProPR.Application.DTOs;
 using MeisterProPR.Application.Interfaces;
 using MeisterProPR.Application.Support;
 using MeisterProPR.Domain.Entities;
@@ -168,6 +169,62 @@ public sealed class InMemoryReviewJobRepository : IJobRepository
         return Task.FromResult<(int total, IReadOnlyList<ReviewJob> items)>((ordered.Count, page));
     }
 
+    public Task<(int total, IReadOnlyList<JobListPageItemDto> items)> GetJobListPageAsync(
+        int limit,
+        int offset,
+        JobStatus? status,
+        Guid? clientId = null,
+        int? pullRequestId = null,
+        CancellationToken ct = default)
+    {
+        var query = this._jobs.Values.AsEnumerable();
+
+        if (status.HasValue)
+        {
+            query = query.Where(job => job.Status == status.Value);
+        }
+
+        if (clientId.HasValue)
+        {
+            query = query.Where(job => job.ClientId == clientId.Value);
+        }
+
+        if (pullRequestId.HasValue)
+        {
+            query = query.Where(job => job.PullRequestId == pullRequestId.Value);
+        }
+
+        var ordered = query.OrderByDescending(job => job.SubmittedAt).ToList();
+        var page = ordered
+            .Skip(offset)
+            .Take(limit)
+            .Select(job => new JobListPageItemDto(
+                job.Id,
+                job.ClientId,
+                job.OrganizationUrl,
+                job.ProjectId,
+                job.RepositoryId,
+                job.PullRequestId,
+                job.IterationId,
+                job.Status,
+                job.SubmittedAt,
+                job.ProcessingStartedAt,
+                job.CompletedAt,
+                job.ResultSummary,
+                job.ErrorMessage,
+                job.TotalInputTokensAggregated ?? job.Protocols.Sum(p => p.TotalInputTokens) ?? 0L,
+                job.TotalOutputTokensAggregated ?? job.Protocols.Sum(p => p.TotalOutputTokens) ?? 0L,
+                job.PrTitle,
+                job.PrSourceBranch,
+                job.PrTargetBranch,
+                job.PrRepositoryName,
+                job.AiModel,
+                job.ReviewStrategy))
+            .ToList()
+            .AsReadOnly();
+        return Task.FromResult<(int total, IReadOnlyList<JobListPageItemDto> items)>((ordered.Count, page));
+    }
+
     public ReviewJob? GetById(Guid id)
     {
         return this._jobs.TryGetValue(id, out var job) ? job : null;
@@ -254,7 +311,7 @@ public sealed class InMemoryReviewJobRepository : IJobRepository
     {
         if (this._jobs.TryGetValue(id, out var job))
         {
-            job.Result = result;
+            job.ApplyResult(result);
             job.Status = JobStatus.Completed;
             job.CompletedAt = DateTimeOffset.UtcNow;
         }

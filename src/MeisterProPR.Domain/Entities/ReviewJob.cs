@@ -113,9 +113,17 @@ public sealed class ReviewJob
     public JobStatus Status { get; set; }
 
     /// <summary>
-    ///     Result of the review, if completed.
+    ///     Result of the review, if completed. Written only through <see cref="ApplyResult" /> so the
+    ///     denormalized <see cref="ResultSummary" /> can never drift from it.
     /// </summary>
-    public ReviewResult? Result { get; set; }
+    public ReviewResult? Result { get; private set; }
+
+    /// <summary>
+    ///     Denormalized copy of <see cref="ValueObjects.ReviewResult.Summary" />, populated when the result is
+    ///     finalized via <see cref="ApplyResult" />. Lets the overview list render the summary without
+    ///     materializing the full result blob. Null until the review result is finalized.
+    /// </summary>
+    public string? ResultSummary { get; private set; }
 
     /// <summary>
     ///     Organization URL containing the repository.
@@ -284,6 +292,18 @@ public sealed class ReviewJob
 
     /// <summary>Repository display name from ADO. Null when unavailable.</summary>
     public string? PrRepositoryName { get; private set; }
+
+    /// <summary>
+    ///     Finalizes the review result onto the job and denormalizes its summary into
+    ///     <see cref="ResultSummary" />. The single seam both repository implementations use, so the stored
+    ///     summary stays consistent across first runs, restarts, and resumes (all re-finalize through here).
+    /// </summary>
+    /// <param name="result">The completed review result.</param>
+    public void ApplyResult(ReviewResult result)
+    {
+        this.Result = result;
+        this.ResultSummary = result.Summary;
+    }
 
     /// <summary>Increments the token aggregates. Called after each protocol pass completes.</summary>
     public void AccumulateTokens(long inputTokens, long outputTokens)

@@ -11,6 +11,7 @@ using MeisterProPR.Infrastructure.Features.IdentityAndAccess;
 using MeisterProPR.Infrastructure.Repositories;
 using MeisterProPR.Infrastructure.Tests.Fixtures;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.Extensions.Logging.Abstractions;
 using FactAttribute = Xunit.SkippableFactAttribute;
 
@@ -697,5 +698,197 @@ public sealed class JobRepositoryTests(PostgresContainerFixture fixture) : IAsyn
             .SingleAsync(p => p.Id == open1.Id);
         Assert.Null(protocol.CompletedAt);
         Assert.Null(protocol.Outcome);
+    }
+
+    private static ReviewJobProtocol MakeProtocolWithTokens(Guid jobId, long inputTokens, long outputTokens)
+    {
+        return new ReviewJobProtocol
+        {
+            Id = Guid.NewGuid(),
+            JobId = jobId,
+            AttemptNumber = 1,
+            StartedAt = DateTimeOffset.UtcNow,
+            CompletedAt = DateTimeOffset.UtcNow,
+            Outcome = "Completed",
+            TotalInputTokens = inputTokens,
+            TotalOutputTokens = outputTokens,
+        };
+    }
+
+    [Fact]
+    public async Task GetJobListPageAsync_DoesNotMaterializeResultJson_AndSumsProtocolTokensInSql()
+    {
+        var job = MakeJob(prId: 900);
+        await this._repo.AddAsync(job);
+        await this._repo.TryTransitionAsync(job.Id, JobStatus.Pending, JobStatus.Processing);
+        await this._repo.SetResultAsync(job.Id, new ReviewResult("sql-summary", []));
+
+        // Run the projection through a context that logs its SQL so we can assert what it touches.
+        var sql = new List<string>();
+        var options = new DbContextOptionsBuilder<MeisterProPRDbContext>()
+            .UseNpgsql(fixture.ConnectionString, o => o.UseVector())
+            .LogTo(sql.Add, [RelationalEventId.CommandExecuted])
+            .Options;
+        await using var loggingContext = new MeisterProPRDbContext(options);
+        var loggingRepo = new JobRepository(loggingContext, new TestDbContextFactory(options), NullLogger<JobRepository>.Instance);
+
+        var (_, items) = await loggingRepo.GetJobListPageAsync(100, 0, null);
+
+        Assert.NotEmpty(items);
+        var combined = string.Join("\n", sql);
+        // The blob (summary + every comment) must never be selected by the overview query.
+        Assert.DoesNotContain("result_json", combined);
+        // The summary comes from its own denormalized column instead.
+        Assert.Contains("result_summary", combined);
+        // Token totals are a correlated SUM subquery, not a protocol-entity include.
+        Assert.Contains("SUM(", combined.ToUpperInvariant());
+    }
+
+    [Fact]
+    public async Task GetJobListPageAsync_ProjectsWithoutTrackingEntities()
+    {
+        var job = MakeJob(prId: 901);
+        await this._repo.AddAsync(job);
+        this._dbContext.ChangeTracker.Clear();
+
+        var (_, items) = await this._repo.GetJobListPageAsync(100, 0, null);
+
+        Assert.NotEmpty(items);
+        Assert.Empty(this._dbContext.ChangeTracker.Entries());
+    }
+
+    [Fact]
+    public async Task GetJobListPageAsync_NullAggregateAndNoProtocols_ReturnsZeroTokensNotNull()
+    {
+        var job = MakeJob(prId: 902);
+        await this._repo.AddAsync(job);
+        await this._repo.TryTransitionAsync(job.Id, JobStatus.Pending, JobStatus.Processing);
+        await this._repo.SetResultAsync(job.Id, new ReviewResult("no-protocols", []));
+
+        var (_, items) = await this._repo.GetJobListPageAsync(100, 0, null);
+        var dto = items.Single(i => i.Id == job.Id);
+
+        // SQL SUM over an empty set is null; the projection must coalesce to 0, matching the in-memory path.
+        Assert.Equal(0L, dto.TotalInputTokens);
+        Assert.Equal(0L, dto.TotalOutputTokens);
+    }
+
+    [Fact]
+    public async Task GetJobListPageAsync_WithProtocolsAndNullAggregate_SumsProtocolTokens()
+    {
+        var job = MakeJob(prId: 903);
+        await this._repo.AddAsync(job);
+        this._dbContext.ReviewJobProtocols.AddRange(
+            MakeProtocolWithTokens(job.Id, 100, 10),
+            MakeProtocolWithTokens(job.Id, 200, 20));
+        await this._dbContext.SaveChangesAsync();
+
+        var (_, items) = await this._repo.GetJobListPageAsync(100, 0, null);
+        var dto = items.Single(i => i.Id == job.Id);
+
+        Assert.Equal(300L, dto.TotalInputTokens);
+        Assert.Equal(30L, dto.TotalOutputTokens);
+    }
+
+    [Fact]
+    public async Task GetJobListPageAsync_WithAggregateColumns_UsesAggregateOverProtocolSum()
+    {
+        var job = MakeJob(prId: 904);
+        job.AccumulateTokens(1000, 500);
+        await this._repo.AddAsync(job);
+        // Protocols carry different token values; the aggregate columns must win.
+        this._dbContext.ReviewJobProtocols.Add(MakeProtocolWithTokens(job.Id, 7, 7));
+        await this._dbContext.SaveChangesAsync();
+
+        var (_, items) = await this._repo.GetJobListPageAsync(100, 0, null);
+        var dto = items.Single(i => i.Id == job.Id);
+
+        Assert.Equal(1000L, dto.TotalInputTokens);
+        Assert.Equal(500L, dto.TotalOutputTokens);
+    }
+
+    [Fact]
+    public async Task GetJobListPageAsync_MatchesEntityPath_AcrossStates()
+    {
+        var completed = MakeJob(prId: 910);
+        await this._repo.AddAsync(completed);
+        await this._repo.TryTransitionAsync(completed.Id, JobStatus.Pending, JobStatus.Processing);
+        await this._repo.SetResultAsync(completed.Id, new ReviewResult("done well", []));
+
+        var emptySummary = MakeJob(prId: 911);
+        await this._repo.AddAsync(emptySummary);
+        await this._repo.TryTransitionAsync(emptySummary.Id, JobStatus.Pending, JobStatus.Processing);
+        await this._repo.SetResultAsync(emptySummary.Id, new ReviewResult(string.Empty, []));
+
+        var processing = MakeJob(prId: 912);
+        await this._repo.AddAsync(processing);
+        await this._repo.TryTransitionAsync(processing.Id, JobStatus.Pending, JobStatus.Processing);
+
+        var failed = MakeJob(prId: 913);
+        await this._repo.AddAsync(failed);
+        await this._repo.SetFailedAsync(failed.Id, "kaboom");
+
+        var (_, entities) = await this._repo.GetAllJobsAsync(100, 0, null);
+        var (_, dtos) = await this._repo.GetJobListPageAsync(100, 0, null);
+
+        // The projected DTO must carry byte-identical values to the full-entity path for every state.
+        foreach (var entity in entities)
+        {
+            var dto = dtos.Single(d => d.Id == entity.Id);
+            Assert.Equal(entity.Result?.Summary, dto.ResultSummary);
+            Assert.Equal(entity.ErrorMessage, dto.ErrorMessage);
+            Assert.Equal(entity.Status, dto.Status);
+            Assert.Equal(entity.OrganizationUrl, dto.OrganizationUrl);
+            Assert.Equal(entity.PullRequestId, dto.PullRequestId);
+            Assert.Equal(entity.ReviewStrategy, dto.ReviewStrategy);
+            var expectedInput = entity.TotalInputTokensAggregated ?? entity.Protocols.Sum(p => p.TotalInputTokens) ?? 0;
+            var expectedOutput = entity.TotalOutputTokensAggregated ?? entity.Protocols.Sum(p => p.TotalOutputTokens) ?? 0;
+            Assert.Equal(expectedInput, dto.TotalInputTokens);
+            Assert.Equal(expectedOutput, dto.TotalOutputTokens);
+        }
+    }
+
+    [Fact]
+    public async Task SetResultAsync_PopulatesResultSummary()
+    {
+        var job = MakeJob(prId: 920);
+        await this._repo.AddAsync(job);
+        await this._repo.TryTransitionAsync(job.Id, JobStatus.Pending, JobStatus.Processing);
+        await this._repo.SetResultAsync(job.Id, new ReviewResult("first run summary", []));
+
+        var fetched = await this._dbContext.ReviewJobs.AsNoTracking().SingleAsync(j => j.Id == job.Id);
+        Assert.Equal("first run summary", fetched.ResultSummary);
+    }
+
+    [Fact]
+    public async Task SetResultAsync_Refinalize_UpdatesResultSummary()
+    {
+        // Restart and resume re-finalize the result through the same seam; the denormalized summary follows.
+        var job = MakeJob(prId: 921);
+        await this._repo.AddAsync(job);
+        await this._repo.TryTransitionAsync(job.Id, JobStatus.Pending, JobStatus.Processing);
+        await this._repo.SetResultAsync(job.Id, new ReviewResult("initial", []));
+        await this._repo.SetResultAsync(job.Id, new ReviewResult("after resume", []));
+
+        var fetched = await this._dbContext.ReviewJobs.AsNoTracking().SingleAsync(j => j.Id == job.Id);
+        Assert.Equal("after resume", fetched.ResultSummary);
+    }
+
+    [Fact]
+    public async Task BackfillSql_PopulatesResultSummaryFromPascalCaseSummaryKey()
+    {
+        var job = MakeJob(prId: 930);
+        await this._repo.AddAsync(job);
+        await this._repo.TryTransitionAsync(job.Id, JobStatus.Pending, JobStatus.Processing);
+        await this._repo.SetResultAsync(job.Id, new ReviewResult("backfill me", []));
+
+        // Simulate a pre-migration row: result_json is set but result_summary is still null.
+        await this._dbContext.Database.ExecuteSqlRawAsync("UPDATE review_jobs SET result_summary = NULL WHERE id = {0}", job.Id);
+
+        // The migration backfill expression: stored JSONB uses the PascalCase 'Summary' key.
+        await this._dbContext.Database.ExecuteSqlRawAsync("UPDATE review_jobs SET result_summary = result_json ->> 'Summary' WHERE result_json IS NOT NULL;");
+
+        var fetched = await this._dbContext.ReviewJobs.AsNoTracking().SingleAsync(j => j.Id == job.Id);
+        Assert.Equal("backfill me", fetched.ResultSummary);
     }
 }
