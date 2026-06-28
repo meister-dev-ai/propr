@@ -1,31 +1,45 @@
 // Copyright (c) Andreas Rain.
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
-using System.Text;
-using DiffPlex.DiffBuilder;
-using DiffPlex.DiffBuilder.Model;
+using DiffPlex.Renderer;
 
 namespace MeisterProPR.Infrastructure.Features.Providers.Common;
 
 internal static class UnifiedDiffBuilder
 {
-    public static string Build(string oldContent, string newContent)
+    // Unchanged context lines emitted on each side of every change — the git diff default.
+    private const int ContextLines = 3;
+
+    public static string Build(string oldContent, string newContent, string filePath)
     {
-        var diff = InlineDiffBuilder.Diff(oldContent ?? string.Empty, newContent ?? string.Empty);
-        var builder = new StringBuilder();
+        var name = string.IsNullOrEmpty(filePath) ? "file" : filePath;
+        var renderer = new UnidiffRenderer(null, ContextLines);
 
-        foreach (var line in diff.Lines)
+        return renderer.Generate(
+            TrimSingleTrailingNewline(oldContent ?? string.Empty),
+            TrimSingleTrailingNewline(newContent ?? string.Empty),
+            $"a/{name}",
+            $"b/{name}",
+            false,
+            false);
+    }
+
+    // Real file content normally ends in a line terminator. DiffPlex's line splitter treats that
+    // trailing terminator as an extra empty final line, which would surface as a phantom blank
+    // +/- line and inflate the hunk line count by one. Dropping one trailing CRLF or LF makes the
+    // output match what git emits for the same content.
+    private static string TrimSingleTrailingNewline(string content)
+    {
+        if (content.EndsWith("\r\n", StringComparison.Ordinal))
         {
-            var prefix = line.Type switch
-            {
-                ChangeType.Inserted => "+ ",
-                ChangeType.Deleted => "- ",
-                _ => "  ",
-            };
-
-            builder.AppendLine($"{prefix}{line.Text}");
+            return content[..^2];
         }
 
-        return builder.ToString();
+        if (content.EndsWith("\n", StringComparison.Ordinal))
+        {
+            return content[..^1];
+        }
+
+        return content;
     }
 }

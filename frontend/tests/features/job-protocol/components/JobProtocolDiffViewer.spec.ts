@@ -32,13 +32,15 @@ function createUiDouble() {
 let lastUi: ReturnType<typeof createUiDouble> | null = null
 let lastCallOptions: unknown = null
 let lastContainer: HTMLElement | null = null
+let lastDiffContent: string | null = null
 
 vi.mock('diff2html/lib/ui/js/diff2html-ui-base.js', () => ({
     // vitest 4: `new Diff2HtmlUI()` requires the impl to be a function/class, not an arrow.
-    Diff2HtmlUI: vi.fn().mockImplementation(function (container: HTMLElement, _diff: string, options: unknown) {
+    Diff2HtmlUI: vi.fn().mockImplementation(function (container: HTMLElement, diff: string, options: unknown) {
         lastUi = createUiDouble()
         lastCallOptions = options
         lastContainer = container
+        lastDiffContent = diff
         return lastUi
     }),
 }))
@@ -48,6 +50,7 @@ describe('JobProtocolDiffViewer', () => {
         lastUi = null
         lastCallOptions = null
         lastContainer = null
+        lastDiffContent = null
     })
 
     afterEach(() => {
@@ -233,6 +236,53 @@ describe('JobProtocolDiffViewer', () => {
         await nextTick()
         await nextTick()
         expect(wrapper.find('.d2h-dark-color-scheme').exists()).toBe(true)
+    })
+
+    it('passes a real multi-hunk unified diff to diff2html verbatim, without client-side pre-processing', async () => {
+        // A true unified diff as emitted server-side: "---"/"+++" headers and two separate "@@" hunks
+        // (the changes are far enough apart that the 3-line context windows do not merge).
+        const unifiedDiff = [
+            '--- a/src/Sample.cs',
+            '+++ b/src/Sample.cs',
+            '@@ -12,7 +12,7 @@',
+            ' L12',
+            ' L13',
+            ' L14',
+            '-L15',
+            '+L15-CHANGED',
+            ' L16',
+            ' L17',
+            ' L18',
+            '@@ -42,7 +42,7 @@',
+            ' L42',
+            ' L43',
+            ' L44',
+            '-L45',
+            '+L45-CHANGED',
+            ' L46',
+            ' L47',
+            ' L48',
+        ].join('\n')
+
+        mount(JobProtocolDiffViewer, {
+            props: {
+                fileResultId: 'file-result-1',
+                diff: createDiff({ unifiedDiff }),
+            },
+            global: {
+                stubs: {
+                    ProgressOrb: { template: '<div class="orb-stub" />' },
+                },
+            },
+        })
+
+        await nextTick()
+        await nextTick()
+
+        // The defensive hunk-header synthesis must not fire for a real unified diff: the payload
+        // reaches diff2html unchanged, with both "@@" hunk headers preserved.
+        expect(lastDiffContent).toBe(unifiedDiff)
+        expect((lastDiffContent ?? '').match(/^@@ /gm)?.length).toBe(2)
     })
 
     it('configures diff2html with large-diff protection options', async () => {

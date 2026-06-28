@@ -240,9 +240,9 @@ public sealed partial class AdoPrFetcher(
                 ? ChangeType.Delete
                 : ChangeType.Edit;
 
-        var diff = BuildUnifiedDiff(baseContent, headContent);
+        var diff = BuildUnifiedDiff(baseContent, headContent, filePath);
 
-        return new ChangedFile(filePath, changeType, headContent, diff, false);
+        return new ChangedFile(filePath, changeType, headContent, diff);
     }
 
     private static ChangedFileSummary? CreateSummaryFromChange(GitPullRequestChange change)
@@ -376,7 +376,7 @@ public sealed partial class AdoPrFetcher(
             }
         }
 
-        var resolvedDiff = isBinary ? "" : diff ?? BuildUnifiedDiff(baseContent, headContent);
+        var resolvedDiff = isBinary ? "" : diff ?? BuildUnifiedDiff(baseContent, headContent, path);
 
         return new ChangedFile(path, changeType, headContent, resolvedDiff, isBinary, originalPath);
     }
@@ -469,9 +469,9 @@ public sealed partial class AdoPrFetcher(
         return headContent;
     }
 
-    private static string BuildUnifiedDiff(string oldContent, string newContent)
+    private static string BuildUnifiedDiff(string oldContent, string newContent, string filePath)
     {
-        return UnifiedDiffBuilder.Build(oldContent, newContent);
+        return UnifiedDiffBuilder.Build(oldContent, newContent, filePath);
     }
 
     [LoggerMessage(

@@ -148,9 +148,9 @@ internal sealed class ForgejoPullRequestFetcher(
                 ? ChangeType.Delete
                 : ChangeType.Edit;
 
-        var diff = UnifiedDiffBuilder.Build(baseContent ?? string.Empty, headContent ?? string.Empty);
+        var diff = UnifiedDiffBuilder.Build(baseContent ?? string.Empty, headContent ?? string.Empty, path);
 
-        return new ChangedFile(path, changeType, headContent ?? string.Empty, diff, false);
+        return new ChangedFile(path, changeType, headContent ?? string.Empty, diff);
     }
 
     private async Task<IReadOnlyList<ForgejoPullRequestFileResponse>?> TryGetDeltaFilesAsync(
@@ -367,7 +367,7 @@ internal sealed class ForgejoPullRequestFetcher(
             var diff = isBinary
                 ? string.Empty
                 : string.IsNullOrWhiteSpace(file.Patch)
-                    ? UnifiedDiffBuilder.Build(baseContent, headContent)
+                    ? UnifiedDiffBuilder.Build(baseContent, headContent, path)
                     : file.Patch!;
 
             changedFiles.Add(new ChangedFile(path, changeType, headContent, diff, isBinary, originalPath));
