@@ -65,6 +65,11 @@ public sealed partial class ReviewOrchestrationService
     private static partial void LogReviewFailed(ILogger logger, Guid jobId, Exception ex);
 
     [LoggerMessage(
+        Level = LogLevel.Warning,
+        Message = "Recording posted-comment provenance failed for job {JobId} — publishing is unaffected")]
+    private static partial void LogPostedCommentOriginRecordingFailed(ILogger logger, Guid jobId, Exception ex);
+
+    [LoggerMessage(
         Level = LogLevel.Information,
         Message = "PR #{PrId} was abandoned — cancelling review job {JobId} instead of failing it")]
     private static partial void LogPrAbandonedCancellingJob(ILogger logger, int prId, Guid jobId);

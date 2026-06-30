@@ -775,6 +775,9 @@ public sealed class ForgejoCodeReviewPublicationServiceTests
                 "GET https://codeberg.example.com/api/v1/repos/acme/propr/pulls/42/reviews?limit=100",
                 "DELETE https://codeberg.example.com/api/v1/repos/acme/propr/pulls/42/reviews/7001",
                 "POST https://codeberg.example.com/api/v1/repos/acme/propr/pulls/42/reviews",
+
+                // Best-effort follow-up read that captures the created comment ids for posted-comment provenance.
+                "GET https://codeberg.example.com/api/v1/repos/acme/propr/pulls/42/reviews/9001/comments",
             ],
             requests);
     }

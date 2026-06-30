@@ -70,6 +70,111 @@ public sealed class ClientScmConnectionRepositoryTests : IDisposable
     }
 
     [Fact]
+    public async Task AddAsync_WithoutRetentionSettings_DefaultsToDisabledAndNullWindow()
+    {
+        var client = await this.SeedClientAsync();
+
+        var created = await this._repository.AddAsync(
+            client.Id,
+            ScmProvider.GitHub,
+            "https://github.com",
+            ScmAuthenticationKind.PersonalAccessToken,
+            null,
+            null,
+            "GitHub PAT",
+            "ghp_default_secret",
+            true,
+            ct: CancellationToken.None);
+
+        Assert.NotNull(created);
+        Assert.False(created!.StoreThreads);
+        Assert.False(created.StoreDiffs);
+        Assert.Null(created.RetentionDays);
+
+        var record = await this._dbContext.ClientScmConnections.SingleAsync(connection => connection.Id == created.Id);
+        Assert.False(record.StoreThreads);
+        Assert.False(record.StoreDiffs);
+        Assert.Null(record.RetentionDays);
+    }
+
+    [Fact]
+    public async Task AddAsync_WithRetentionSettings_PersistsThemThroughDto()
+    {
+        var client = await this.SeedClientAsync();
+
+        var created = await this._repository.AddAsync(
+            client.Id,
+            ScmProvider.GitHub,
+            "https://github.com",
+            ScmAuthenticationKind.PersonalAccessToken,
+            null,
+            null,
+            "GitHub PAT",
+            "ghp_retained_secret",
+            true,
+            storeThreads: true,
+            storeDiffs: true,
+            retentionDays: 90,
+            ct: CancellationToken.None);
+
+        Assert.NotNull(created);
+        Assert.True(created!.StoreThreads);
+        Assert.True(created.StoreDiffs);
+        Assert.Equal(90, created.RetentionDays);
+
+        var record = await this._dbContext.ClientScmConnections.SingleAsync(connection => connection.Id == created.Id);
+        Assert.True(record.StoreThreads);
+        Assert.True(record.StoreDiffs);
+        Assert.Equal(90, record.RetentionDays);
+    }
+
+    [Fact]
+    public async Task UpdateAsync_OverwritesRetentionSettingsFromArguments()
+    {
+        var client = await this.SeedClientAsync();
+        var created = await this._repository.AddAsync(
+            client.Id,
+            ScmProvider.GitHub,
+            "https://github.com",
+            ScmAuthenticationKind.PersonalAccessToken,
+            null,
+            null,
+            "GitHub PAT",
+            "ghp_initial_secret",
+            true,
+            storeThreads: true,
+            storeDiffs: true,
+            retentionDays: 90,
+            ct: CancellationToken.None);
+        Assert.NotNull(created);
+
+        var updated = await this._repository.UpdateAsync(
+            client.Id,
+            created!.Id,
+            "https://github.com",
+            ScmAuthenticationKind.PersonalAccessToken,
+            null,
+            null,
+            "GitHub PAT",
+            null,
+            true,
+            storeThreads: false,
+            storeDiffs: false,
+            retentionDays: null,
+            ct: CancellationToken.None);
+
+        Assert.NotNull(updated);
+        Assert.False(updated!.StoreThreads);
+        Assert.False(updated.StoreDiffs);
+        Assert.Null(updated.RetentionDays);
+
+        var record = await this._dbContext.ClientScmConnections.SingleAsync(connection => connection.Id == created.Id);
+        Assert.False(record.StoreThreads);
+        Assert.False(record.StoreDiffs);
+        Assert.Null(record.RetentionDays);
+    }
+
+    [Fact]
     public async Task UpdateAsync_GitHubAppRotation_ReprotectsSecretAndResetsVerification()
     {
         var client = await this.SeedClientAsync();
@@ -376,6 +481,58 @@ public sealed class ClientScmConnectionRepositoryTests : IDisposable
         var scope = await this._dbContext.ClientScmScopes.SingleAsync(candidate => candidate.ConnectionId == created.Id);
         Assert.Equal("https://ado-server.example.com/ado", record.HostBaseUrl);
         Assert.Equal("https://ado-server.example.com/ado/defaultcollection", scope.ScopePath);
+    }
+
+    [Fact]
+    public async Task GetAllForRetentionSweepAsync_ReturnsRetentionSettingsAcrossClients()
+    {
+        var firstClient = await this.SeedClientAsync();
+        var secondClient = await this.SeedClientAsync();
+
+        var enabled = await this._repository.AddAsync(
+            firstClient.Id,
+            ScmProvider.GitHub,
+            "https://github.com",
+            ScmAuthenticationKind.PersonalAccessToken,
+            null,
+            null,
+            "Enabled retention",
+            "ghp_enabled",
+            true,
+            storeThreads: true,
+            storeDiffs: false,
+            retentionDays: 90,
+            ct: CancellationToken.None);
+        Assert.NotNull(enabled);
+
+        var disabled = await this._repository.AddAsync(
+            secondClient.Id,
+            ScmProvider.GitHub,
+            "https://github.example.com",
+            ScmAuthenticationKind.PersonalAccessToken,
+            null,
+            null,
+            "Disabled retention",
+            "ghp_disabled",
+            true,
+            ct: CancellationToken.None);
+        Assert.NotNull(disabled);
+
+        var settings = await this._repository.GetAllForRetentionSweepAsync(CancellationToken.None);
+
+        Assert.Equal(2, settings.Count);
+
+        var enabledSettings = Assert.Single(settings, candidate => candidate.Id == enabled!.Id);
+        Assert.Equal(firstClient.Id, enabledSettings.ClientId);
+        Assert.True(enabledSettings.StoreThreads);
+        Assert.False(enabledSettings.StoreDiffs);
+        Assert.Equal(90, enabledSettings.RetentionDays);
+
+        var disabledSettings = Assert.Single(settings, candidate => candidate.Id == disabled!.Id);
+        Assert.Equal(secondClient.Id, disabledSettings.ClientId);
+        Assert.False(disabledSettings.StoreThreads);
+        Assert.False(disabledSettings.StoreDiffs);
+        Assert.Null(disabledSettings.RetentionDays);
     }
 
     private async Task<ClientRecord> SeedClientAsync()

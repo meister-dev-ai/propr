@@ -672,6 +672,39 @@ public sealed class ClientProviderConnectionsControllerTests(ClientProviderConne
     }
 
     [Fact]
+    public async Task PatchProviderConnection_ForgejoOverHttpHost_Returns200()
+    {
+        await factory.ResetProviderStateAsync();
+        var created = await factory.CreateConnectionAsync(
+            ScmProvider.Forgejo,
+            "http://127.0.0.1",
+            displayName: "Forgejo",
+            secret: "forgejo-token-value");
+
+        var httpClient = factory.CreateClient();
+        using var request = new HttpRequestMessage(
+            HttpMethod.Patch,
+            $"/clients/{factory.ClientId}/provider-connections/{created.Id}");
+        request.Headers.Authorization = new AuthenticationHeaderValue(
+            "Bearer",
+            factory.GenerateClientAdministratorToken());
+        request.Content = JsonContent.Create(
+            new
+            {
+                hostBaseUrl = "http://127.0.0.1",
+                authenticationKind = "personalAccessToken",
+                storeThreads = true,
+                retentionDays = 30,
+            });
+
+        var response = await httpClient.SendAsync(request);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var body = JsonDocument.Parse(await response.Content.ReadAsStringAsync()).RootElement;
+        Assert.True(body.GetProperty("storeThreads").GetBoolean());
+    }
+
+    [Fact]
     public async Task PatchProviderConnection_AzureDevOpsServerPatToWindowsWithoutSecret_Returns400()
     {
         await factory.ResetProviderStateAsync();
@@ -1311,7 +1344,7 @@ public sealed class ClientProviderConnectionsControllerTests(ClientProviderConne
                 gitHubAppId,
                 gitHubAppInstallationId,
                 userName,
-                CancellationToken.None);
+                ct: CancellationToken.None);
 
             this.ConnectionId = created!.Id;
             return created;

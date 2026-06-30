@@ -498,7 +498,7 @@ public sealed partial class ClientProviderConnectionsController(
 
     /// <summary>Creates a provider connection for a client.</summary>
     /// <param name="clientId">Client identifier.</param>
-    /// <param name="request">Provider-connection details.</param>
+    /// <param name="request">Provider-connection details, including the per-connection retention opt-in settings.</param>
     /// <param name="validator">Validator for the request body.</param>
     /// <param name="ct">Cancellation token.</param>
     /// <response code="201">Provider connection created.</response>
@@ -581,6 +581,9 @@ public sealed partial class ClientProviderConnectionsController(
                 request.GitHubAppId,
                 request.GitHubAppInstallationId,
                 request.UserName,
+                request.StoreThreads,
+                request.StoreDiffs,
+                request.RetentionDays,
                 ct);
 
             if (created is null)
@@ -608,7 +611,7 @@ public sealed partial class ClientProviderConnectionsController(
     /// <summary>Applies partial updates to one provider connection.</summary>
     /// <param name="clientId">Client identifier.</param>
     /// <param name="connectionId">Provider-connection identifier.</param>
-    /// <param name="request">Fields to update; omit a field to leave it unchanged.</param>
+    /// <param name="request">Fields to update, including the per-connection retention opt-in settings; omit a field to leave it unchanged.</param>
     /// <param name="validator">Validator for the request body.</param>
     /// <param name="ct">Cancellation token.</param>
     /// <response code="200">Provider connection updated.</response>
@@ -711,6 +714,9 @@ public sealed partial class ClientProviderConnectionsController(
                 persistedGitHubAppId,
                 persistedGitHubAppInstallationId,
                 effectiveAuthenticationKind == ScmAuthenticationKind.WindowsUserAccount ? effectiveUserName : null,
+                request.StoreThreads ?? existing.StoreThreads,
+                request.StoreDiffs ?? existing.StoreDiffs,
+                request.RetentionDays ?? existing.RetentionDays,
                 ct);
 
             return updated is null ? this.NotFound() : this.Ok(await this.EnrichConnectionAsync(clientId, updated, ct));
@@ -857,7 +863,10 @@ public sealed record CreateClientProviderConnectionRequest(
     string Secret,
     bool IsActive = true,
     long? GitHubAppId = null,
-    long? GitHubAppInstallationId = null);
+    long? GitHubAppInstallationId = null,
+    bool StoreThreads = false,
+    bool StoreDiffs = false,
+    int? RetentionDays = null);
 
 /// <summary>Request body for patching a client-scoped provider connection.</summary>
 public sealed record PatchClientProviderConnectionRequest(
@@ -870,4 +879,7 @@ public sealed record PatchClientProviderConnectionRequest(
     string? Secret = null,
     bool? IsActive = null,
     long? GitHubAppId = null,
-    long? GitHubAppInstallationId = null);
+    long? GitHubAppInstallationId = null,
+    bool? StoreThreads = null,
+    bool? StoreDiffs = null,
+    int? RetentionDays = null);

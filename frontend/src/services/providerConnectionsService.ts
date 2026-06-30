@@ -20,6 +20,9 @@ export interface ClientScmConnectionDto {
   oAuthClientId?: string | null
   gitHubAppId?: number | null
   gitHubAppInstallationId?: number | null
+  storeThreads?: boolean | null
+  storeDiffs?: boolean | null
+  retentionDays?: number | null
   displayName: string
   isActive: boolean
   verificationStatus: string
@@ -58,6 +61,9 @@ export interface CreateClientProviderConnectionRequest {
   oAuthClientId?: string | null
   gitHubAppId?: number | null
   gitHubAppInstallationId?: number | null
+  storeThreads?: boolean
+  storeDiffs?: boolean
+  retentionDays?: number | null
   displayName: string
   secret: string
   isActive: boolean
@@ -71,6 +77,9 @@ export interface PatchClientProviderConnectionRequest {
   oAuthClientId?: string | null
   gitHubAppId?: number | null
   gitHubAppInstallationId?: number | null
+  storeThreads?: boolean | null
+  storeDiffs?: boolean | null
+  retentionDays?: number | null
   displayName?: string
   secret?: string
   isActive?: boolean

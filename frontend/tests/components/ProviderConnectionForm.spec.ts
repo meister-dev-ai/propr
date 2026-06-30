@@ -17,6 +17,9 @@ describe('ProviderConnectionForm', () => {
       oAuthClientId: '',
       gitHubAppId: '',
       gitHubAppInstallationId: '',
+      storeThreads: false,
+      storeDiffs: false,
+      retentionDays: '',
       displayName: '',
       secret: '',
       isActive: true,
@@ -53,6 +56,9 @@ describe('ProviderConnectionForm', () => {
       oAuthClientId: '',
       gitHubAppId: '',
       gitHubAppInstallationId: '',
+      storeThreads: false,
+      storeDiffs: false,
+      retentionDays: '',
       displayName: 'GitHub Cloud',
       secret: '',
       isActive: true,
@@ -90,6 +96,9 @@ describe('ProviderConnectionForm', () => {
       oAuthClientId: '',
       gitHubAppId: '',
       gitHubAppInstallationId: '',
+      storeThreads: false,
+      storeDiffs: false,
+      retentionDays: '',
       displayName: 'GitHub Cloud',
       secret: '',
       isActive: true,
@@ -119,6 +128,9 @@ describe('ProviderConnectionForm', () => {
       oAuthClientId: '',
       gitHubAppId: '',
       gitHubAppInstallationId: '',
+      storeThreads: false,
+      storeDiffs: false,
+      retentionDays: '',
       displayName: '',
       secret: '',
       isActive: true,
@@ -158,6 +170,9 @@ describe('ProviderConnectionForm', () => {
       oAuthClientId: '',
       gitHubAppId: '',
       gitHubAppInstallationId: '',
+      storeThreads: false,
+      storeDiffs: false,
+      retentionDays: '',
       displayName: '',
       secret: '',
       isActive: true,
@@ -193,6 +208,9 @@ describe('ProviderConnectionForm', () => {
       oAuthClientId: '',
       gitHubAppId: '',
       gitHubAppInstallationId: '',
+      storeThreads: false,
+      storeDiffs: false,
+      retentionDays: '',
       displayName: '',
       secret: '',
       isActive: true,
@@ -233,6 +251,9 @@ describe('ProviderConnectionForm', () => {
       oAuthClientId: '',
       gitHubAppId: '',
       gitHubAppInstallationId: '',
+      storeThreads: false,
+      storeDiffs: false,
+      retentionDays: '',
       displayName: '',
       secret: '',
       isActive: true,
@@ -272,6 +293,9 @@ describe('ProviderConnectionForm', () => {
       oAuthClientId: '',
       gitHubAppId: '',
       gitHubAppInstallationId: '',
+      storeThreads: false,
+      storeDiffs: false,
+      retentionDays: '',
       displayName: '',
       secret: '',
       isActive: true,
@@ -288,5 +312,151 @@ describe('ProviderConnectionForm', () => {
 
     expect(wrapper.text()).not.toContain('require HTTPS')
     expect(wrapper.text()).not.toContain('trusted inside that runtime')
+  })
+
+  it('renders the data-retention switches and days input with the default hint', () => {
+    const form = reactive({
+      providerFamily: 'github' as const,
+      hostBaseUrl: 'https://github.com',
+      authenticationKind: 'personalAccessToken' as const,
+      userName: '',
+      oAuthTenantId: '',
+      oAuthClientId: '',
+      gitHubAppId: '',
+      gitHubAppInstallationId: '',
+      storeThreads: false,
+      storeDiffs: false,
+      retentionDays: '',
+      displayName: '',
+      secret: '',
+      isActive: true,
+    })
+
+    const wrapper = mount(ProviderConnectionForm, {
+      props: {
+        mode: 'create',
+        form,
+        submitLabel: 'Save Connection',
+        busyLabel: 'Saving…',
+      },
+    })
+
+    expect(wrapper.text()).toContain('Data retention')
+    expect(wrapper.find('[data-testid="retention-store-threads"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="retention-store-diffs"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="retention-days"]').exists()).toBe(true)
+    expect(wrapper.text()).toContain('Leave blank to use the 30-day default.')
+
+    const threadsToggle = wrapper.find('[data-testid="retention-store-threads"]')
+    expect((threadsToggle.element as HTMLInputElement).checked).toBe(false)
+    const diffsToggle = wrapper.find('[data-testid="retention-store-diffs"]')
+    expect((diffsToggle.element as HTMLInputElement).checked).toBe(false)
+  })
+
+  it('captures retention edits onto the bound model', async () => {
+    const form = reactive({
+      providerFamily: 'github' as const,
+      hostBaseUrl: 'https://github.com',
+      authenticationKind: 'personalAccessToken' as const,
+      userName: '',
+      oAuthTenantId: '',
+      oAuthClientId: '',
+      gitHubAppId: '',
+      gitHubAppInstallationId: '',
+      storeThreads: false,
+      storeDiffs: false,
+      retentionDays: '' as string | number,
+      displayName: '',
+      secret: '',
+      isActive: true,
+    })
+
+    const wrapper = mount(ProviderConnectionForm, {
+      props: {
+        mode: 'create',
+        form,
+        submitLabel: 'Save Connection',
+        busyLabel: 'Saving…',
+      },
+    })
+
+    await wrapper.find('[data-testid="retention-store-threads"]').setValue(true)
+    await wrapper.find('[data-testid="retention-store-diffs"]').setValue(true)
+    await wrapper.find('[data-testid="retention-days"]').setValue('90')
+
+    expect(form.storeThreads).toBe(true)
+    expect(form.storeDiffs).toBe(true)
+    expect(String(form.retentionDays)).toBe('90')
+  })
+
+  it('reflects an existing connection retention configuration in edit mode', () => {
+    const form = reactive({
+      providerFamily: 'github' as const,
+      hostBaseUrl: 'https://github.com',
+      authenticationKind: 'personalAccessToken' as const,
+      userName: '',
+      oAuthTenantId: '',
+      oAuthClientId: '',
+      gitHubAppId: '',
+      gitHubAppInstallationId: '',
+      storeThreads: true,
+      storeDiffs: true,
+      retentionDays: '120' as string | number,
+      displayName: 'GitHub Cloud',
+      secret: '',
+      isActive: true,
+    })
+
+    const wrapper = mount(ProviderConnectionForm, {
+      props: {
+        mode: 'edit',
+        form,
+        submitLabel: 'Save Changes',
+        busyLabel: 'Saving…',
+      },
+    })
+
+    expect((wrapper.find('[data-testid="retention-store-threads"]').element as HTMLInputElement).checked).toBe(true)
+    expect((wrapper.find('[data-testid="retention-store-diffs"]').element as HTMLInputElement).checked).toBe(true)
+    expect((wrapper.find('[data-testid="retention-days"]').element as HTMLInputElement).value).toBe('120')
+  })
+
+  it('rejects zero or negative retention days and accepts a blank value', async () => {
+    const form = reactive({
+      providerFamily: 'github' as const,
+      hostBaseUrl: 'https://github.com',
+      authenticationKind: 'personalAccessToken' as const,
+      userName: '',
+      oAuthTenantId: '',
+      oAuthClientId: '',
+      gitHubAppId: '',
+      gitHubAppInstallationId: '',
+      storeThreads: false,
+      storeDiffs: false,
+      retentionDays: '0' as string | number,
+      displayName: '',
+      secret: '',
+      isActive: true,
+    })
+
+    const wrapper = mount(ProviderConnectionForm, {
+      props: {
+        mode: 'create',
+        form,
+        submitLabel: 'Save Connection',
+        busyLabel: 'Saving…',
+      },
+    })
+
+    expect(wrapper.find('[data-testid="retention-days-error"]').exists()).toBe(true)
+
+    await wrapper.find('[data-testid="retention-days"]').setValue('-5')
+    expect(wrapper.find('[data-testid="retention-days-error"]').exists()).toBe(true)
+
+    await wrapper.find('[data-testid="retention-days"]').setValue('')
+    expect(wrapper.find('[data-testid="retention-days-error"]').exists()).toBe(false)
+
+    await wrapper.find('[data-testid="retention-days"]').setValue('30')
+    expect(wrapper.find('[data-testid="retention-days-error"]').exists()).toBe(false)
   })
 })

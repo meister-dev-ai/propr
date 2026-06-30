@@ -28,7 +28,10 @@ public sealed record ClientScmConnectionDto(
     IReadOnlyList<string>? MissingReadinessCriteria = null,
     long? GitHubAppId = null,
     long? GitHubAppInstallationId = null,
-    string? UserName = null)
+    string? UserName = null,
+    bool StoreThreads = false,
+    bool StoreDiffs = false,
+    int? RetentionDays = null)
 {
     /// <summary>Initializes a new instance of the <see cref="ClientScmConnectionDto" /> record with required parameters only.</summary>
     public ClientScmConnectionDto(

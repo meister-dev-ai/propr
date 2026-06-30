@@ -328,6 +328,57 @@ namespace MeisterProPR.Infrastructure.Migrations
                     b.ToTable("mention_reply_jobs", (string)null);
                 });
 
+            modelBuilder.Entity("MeisterProPR.Domain.Entities.PostedCommentOrigin", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<Guid>("ClientId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("client_id");
+
+                    b.Property<Guid>("JobId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("job_id");
+
+                    b.Property<DateTimeOffset>("PostedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("posted_at");
+
+                    b.Property<string>("ProviderCommentId")
+                        .IsRequired()
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)")
+                        .HasColumnName("provider_comment_id");
+
+                    b.Property<string>("ProviderThreadId")
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)")
+                        .HasColumnName("provider_thread_id");
+
+                    b.Property<long>("PullRequestId")
+                        .HasColumnType("bigint")
+                        .HasColumnName("pull_request_id");
+
+                    b.Property<string>("RepositoryId")
+                        .IsRequired()
+                        .HasMaxLength(512)
+                        .HasColumnType("character varying(512)")
+                        .HasColumnName("repository_id");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ClientId", "RepositoryId", "PullRequestId")
+                        .HasDatabaseName("ix_posted_comment_origins_pull_request");
+
+                    b.HasIndex("ClientId", "RepositoryId", "PullRequestId", "ProviderThreadId", "ProviderCommentId")
+                        .IsUnique()
+                        .HasDatabaseName("uq_posted_comment_origins_comment");
+
+                    b.ToTable("posted_comment_origins", (string)null);
+                });
+
             modelBuilder.Entity("MeisterProPR.Domain.Entities.ProCursorKnowledgeSource", b =>
                 {
                     b.Property<Guid>("Id")
@@ -639,6 +690,204 @@ namespace MeisterProPR.Infrastructure.Migrations
                         .HasDatabaseName("ix_protocol_events_protocol_id");
 
                     b.ToTable("protocol_events", (string)null);
+                });
+
+            modelBuilder.Entity("MeisterProPR.Domain.Entities.RetainedFileDiff", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<string>("ChangeType")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)")
+                        .HasColumnName("change_type");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<string>("EncryptedUnifiedDiff")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("encrypted_unified_diff");
+
+                    b.Property<string>("FilePath")
+                        .IsRequired()
+                        .HasMaxLength(512)
+                        .HasColumnType("character varying(512)")
+                        .HasColumnName("file_path");
+
+                    b.Property<bool>("IsBinary")
+                        .HasColumnType("boolean")
+                        .HasColumnName("is_binary");
+
+                    b.Property<Guid>("RetainedPullRequestId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("retained_pull_request_id");
+
+                    b.Property<string>("RevisionKey")
+                        .IsRequired()
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)")
+                        .HasColumnName("revision_key");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("RetainedPullRequestId", "RevisionKey", "FilePath")
+                        .IsUnique()
+                        .HasDatabaseName("uq_retained_file_diffs_identity");
+
+                    b.ToTable("retained_file_diffs", (string)null);
+                });
+
+            modelBuilder.Entity("MeisterProPR.Domain.Entities.RetainedPullRequest", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<Guid>("ClientId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("client_id");
+
+                    b.Property<Guid>("ConnectionId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("connection_id");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<DateTimeOffset>("LastActivityAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("last_activity_at");
+
+                    b.Property<string>("PrState")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)")
+                        .HasColumnName("pr_state");
+
+                    b.Property<long>("PullRequestId")
+                        .HasColumnType("bigint")
+                        .HasColumnName("pull_request_id");
+
+                    b.Property<string>("RepositoryId")
+                        .IsRequired()
+                        .HasMaxLength(512)
+                        .HasColumnType("character varying(512)")
+                        .HasColumnName("repository_id");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ConnectionId")
+                        .HasDatabaseName("ix_retained_pull_requests_connection_id");
+
+                    b.HasIndex("LastActivityAt")
+                        .HasDatabaseName("ix_retained_pull_requests_last_activity_at");
+
+                    b.HasIndex("ClientId", "ConnectionId", "RepositoryId", "PullRequestId")
+                        .IsUnique()
+                        .HasDatabaseName("uq_retained_pull_requests_identity");
+
+                    b.ToTable("retained_pull_requests", (string)null);
+                });
+
+            modelBuilder.Entity("MeisterProPR.Domain.Entities.RetainedThread", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<string>("FilePath")
+                        .HasMaxLength(512)
+                        .HasColumnType("character varying(512)")
+                        .HasColumnName("file_path");
+
+                    b.Property<int?>("Line")
+                        .HasColumnType("integer")
+                        .HasColumnName("line");
+
+                    b.Property<Guid>("RetainedPullRequestId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("retained_pull_request_id");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)")
+                        .HasColumnName("status");
+
+                    b.Property<string>("ThreadId")
+                        .IsRequired()
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)")
+                        .HasColumnName("thread_id");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("RetainedPullRequestId", "ThreadId")
+                        .IsUnique()
+                        .HasDatabaseName("uq_retained_threads_identity");
+
+                    b.ToTable("retained_threads", (string)null);
+                });
+
+            modelBuilder.Entity("MeisterProPR.Domain.Entities.RetainedThreadComment", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<string>("AuthorIdentity")
+                        .IsRequired()
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)")
+                        .HasColumnName("author_identity");
+
+                    b.Property<string>("CommentId")
+                        .IsRequired()
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)")
+                        .HasColumnName("comment_id");
+
+                    b.Property<string>("EncryptedText")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("encrypted_text");
+
+                    b.Property<bool>("IsAiAuthored")
+                        .HasColumnType("boolean")
+                        .HasColumnName("is_ai_authored");
+
+                    b.Property<Guid?>("OriginatingJobId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("originating_job_id");
+
+                    b.Property<DateTimeOffset>("PublishedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("published_at");
+
+                    b.Property<Guid>("RetainedThreadId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("retained_thread_id");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("RetainedThreadId")
+                        .HasDatabaseName("ix_retained_thread_comments_thread_id");
+
+                    b.ToTable("retained_thread_comments", (string)null);
                 });
 
             modelBuilder.Entity("MeisterProPR.Domain.Entities.ReviewFileResult", b =>
@@ -1883,6 +2132,22 @@ namespace MeisterProPR.Infrastructure.Migrations
                         .HasColumnType("integer")
                         .HasColumnName("provider");
 
+                    b.Property<int?>("RetentionDays")
+                        .HasColumnType("integer")
+                        .HasColumnName("retention_days");
+
+                    b.Property<bool>("StoreDiffs")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false)
+                        .HasColumnName("store_diffs");
+
+                    b.Property<bool>("StoreThreads")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false)
+                        .HasColumnName("store_threads");
+
                     b.Property<DateTimeOffset>("UpdatedAt")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("updated_at");
@@ -3016,6 +3281,39 @@ namespace MeisterProPR.Infrastructure.Migrations
                         .IsRequired();
                 });
 
+            modelBuilder.Entity("MeisterProPR.Domain.Entities.RetainedFileDiff", b =>
+                {
+                    b.HasOne("MeisterProPR.Domain.Entities.RetainedPullRequest", "RetainedPullRequest")
+                        .WithMany("FileDiffs")
+                        .HasForeignKey("RetainedPullRequestId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("RetainedPullRequest");
+                });
+
+            modelBuilder.Entity("MeisterProPR.Domain.Entities.RetainedThread", b =>
+                {
+                    b.HasOne("MeisterProPR.Domain.Entities.RetainedPullRequest", "RetainedPullRequest")
+                        .WithMany("Threads")
+                        .HasForeignKey("RetainedPullRequestId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("RetainedPullRequest");
+                });
+
+            modelBuilder.Entity("MeisterProPR.Domain.Entities.RetainedThreadComment", b =>
+                {
+                    b.HasOne("MeisterProPR.Domain.Entities.RetainedThread", "RetainedThread")
+                        .WithMany("Comments")
+                        .HasForeignKey("RetainedThreadId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("RetainedThread");
+                });
+
             modelBuilder.Entity("MeisterProPR.Domain.Entities.ReviewFileResult", b =>
                 {
                     b.HasOne("MeisterProPR.Domain.Entities.ReviewJob", null)
@@ -3458,6 +3756,18 @@ namespace MeisterProPR.Infrastructure.Migrations
             modelBuilder.Entity("MeisterProPR.Domain.Entities.ProCursorKnowledgeSource", b =>
                 {
                     b.Navigation("TrackedBranches");
+                });
+
+            modelBuilder.Entity("MeisterProPR.Domain.Entities.RetainedPullRequest", b =>
+                {
+                    b.Navigation("FileDiffs");
+
+                    b.Navigation("Threads");
+                });
+
+            modelBuilder.Entity("MeisterProPR.Domain.Entities.RetainedThread", b =>
+                {
+                    b.Navigation("Comments");
                 });
 
             modelBuilder.Entity("MeisterProPR.Domain.Entities.ReviewJob", b =>

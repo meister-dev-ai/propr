@@ -43,6 +43,7 @@ import {
   formatReadiness,
   formatVerification,
   getPreferredAuthenticationKind,
+  isRetentionDaysValid,
   normalizeAuthenticationKind,
   parseOptionalPositiveNumber,
   readinessChipClass,
@@ -122,6 +123,9 @@ export interface ProviderConnectionsViewModel {
     oAuthClientId: string
     gitHubAppId: string
     gitHubAppInstallationId: string
+    storeThreads: boolean
+    storeDiffs: boolean
+    retentionDays: string
     displayName: string
     secret: string
     isActive: boolean
@@ -136,6 +140,9 @@ export interface ProviderConnectionsViewModel {
     oAuthClientId: string
     gitHubAppId: string
     gitHubAppInstallationId: string
+    storeThreads: boolean
+    storeDiffs: boolean
+    retentionDays: string
     secret: string
     isActive: boolean
   }
@@ -243,6 +250,9 @@ export function useProviderConnectionsViewModel(
     oAuthClientId: '',
     gitHubAppId: '',
     gitHubAppInstallationId: '',
+    storeThreads: false,
+    storeDiffs: false,
+    retentionDays: '',
     displayName: '',
     secret: '',
     isActive: true,
@@ -258,6 +268,9 @@ export function useProviderConnectionsViewModel(
     oAuthClientId: '',
     gitHubAppId: '',
     gitHubAppInstallationId: '',
+    storeThreads: false,
+    storeDiffs: false,
+    retentionDays: '',
     secret: '',
     isActive: true,
   })
@@ -548,6 +561,11 @@ export function useProviderConnectionsViewModel(
       }
     }
 
+    if (!isRetentionDaysValid(createForm.retentionDays)) {
+      createError.value = 'Retention must be a whole number of days between 1 and 3650, or left blank for the 30-day default.'
+      return
+    }
+
     createError.value = ''
     saving.value = true
     try {
@@ -564,6 +582,9 @@ export function useProviderConnectionsViewModel(
         gitHubAppInstallationId: createForm.authenticationKind === 'appInstallation'
           ? parseOptionalPositiveNumber(createForm.gitHubAppInstallationId)
           : null,
+        storeThreads: createForm.storeThreads,
+        storeDiffs: createForm.storeDiffs,
+        retentionDays: parseOptionalPositiveNumber(createForm.retentionDays),
         displayName: createForm.displayName.trim(),
         secret: createForm.secret,
         isActive: createForm.isActive,
@@ -591,6 +612,9 @@ export function useProviderConnectionsViewModel(
     clearOAuthFields(createForm)
     clearUserNameField(createForm)
     clearGitHubAppFields(createForm)
+    createForm.storeThreads = false
+    createForm.storeDiffs = false
+    createForm.retentionDays = ''
     createForm.displayName = ''
     createForm.secret = ''
     createForm.isActive = true
@@ -608,6 +632,9 @@ export function useProviderConnectionsViewModel(
     editForm.oAuthClientId = connection.oAuthClientId ?? ''
     editForm.gitHubAppId = connection.gitHubAppId?.toString() ?? ''
     editForm.gitHubAppInstallationId = connection.gitHubAppInstallationId?.toString() ?? ''
+    editForm.storeThreads = connection.storeThreads ?? false
+    editForm.storeDiffs = connection.storeDiffs ?? false
+    editForm.retentionDays = connection.retentionDays?.toString() ?? ''
     editForm.secret = ''
     editForm.isActive = connection.isActive
     editError.value = ''
@@ -622,6 +649,9 @@ export function useProviderConnectionsViewModel(
     clearUserNameField(editForm)
     clearOAuthFields(editForm)
     clearGitHubAppFields(editForm)
+    editForm.storeThreads = false
+    editForm.storeDiffs = false
+    editForm.retentionDays = ''
     editForm.secret = ''
     editForm.isActive = true
     editError.value = ''
@@ -649,6 +679,11 @@ export function useProviderConnectionsViewModel(
       }
     }
 
+    if (!isRetentionDaysValid(editForm.retentionDays)) {
+      editError.value = 'Retention must be a whole number of days between 1 and 3650, or left blank for the 30-day default.'
+      return
+    }
+
     busyConnectionId.value = connectionId
     editError.value = ''
     try {
@@ -665,6 +700,9 @@ export function useProviderConnectionsViewModel(
         gitHubAppInstallationId: editForm.authenticationKind === 'appInstallation'
           ? parseOptionalPositiveNumber(editForm.gitHubAppInstallationId)
           : null,
+        storeThreads: editForm.storeThreads,
+        storeDiffs: editForm.storeDiffs,
+        retentionDays: parseOptionalPositiveNumber(editForm.retentionDays),
         secret: editForm.secret.trim() || undefined,
         isActive: editForm.isActive,
       })

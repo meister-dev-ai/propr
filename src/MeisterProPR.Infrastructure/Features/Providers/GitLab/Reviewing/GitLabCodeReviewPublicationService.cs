@@ -2,9 +2,11 @@
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
 using System.Diagnostics;
+using System.Globalization;
 using System.Net;
 using System.Net.Http.Json;
 using System.Text;
+using System.Text.Json;
 using System.Text.Json.Serialization;
 using MeisterProPR.Application.DTOs;
 using MeisterProPR.Application.Features.Reviewing.Execution.Models;
@@ -54,24 +56,32 @@ internal sealed class GitLabCodeReviewPublicationService(
             : null;
         var totalDiscussions = inlineComments.Count + (string.IsNullOrWhiteSpace(summaryBody) ? 0 : 1);
         var successfulDiscussionCount = 0;
+        var postedComments = new List<PostedReviewCommentRef>();
 
         if (!string.IsNullOrWhiteSpace(summaryBody))
         {
-            await PostDiscussionAsync(
+            var captured = await PostDiscussionAsync(
                 client,
                 context.Connection.Secret,
                 discussionUri,
                 new GitLabDiscussionRequest(summaryBody, null),
                 GitLabDiscussionTarget.Overview(1, totalDiscussions),
                 successfulDiscussionCount,
+                null,
+                null,
                 ct);
+            if (captured is not null)
+            {
+                postedComments.Add(captured);
+            }
+
             successfulDiscussionCount++;
         }
 
         foreach (var comment in inlineComments)
         {
             var normalizedPath = NormalizePath(comment.FilePath!);
-            await PostDiscussionAsync(
+            var captured = await PostDiscussionAsync(
                 client,
                 context.Connection.Secret,
                 discussionUri,
@@ -91,7 +101,14 @@ internal sealed class GitLabCodeReviewPublicationService(
                     normalizedPath,
                     comment.LineNumber!.Value),
                 successfulDiscussionCount,
+                normalizedPath,
+                comment.LineNumber,
                 ct);
+            if (captured is not null)
+            {
+                postedComments.Add(captured);
+            }
+
             successfulDiscussionCount++;
         }
 
@@ -100,16 +117,22 @@ internal sealed class GitLabCodeReviewPublicationService(
                 result.CarriedForwardCandidatesSkipped) with
             {
                 PostedCount = result.Comments.Count,
+                PostedComments = postedComments,
             };
     }
 
-    private static async Task PostDiscussionAsync(
+    // Posts a single discussion. On success, best-effort parses the created discussion's first note id —
+    // the value the thread crawler reports as the comment id — and returns it as provenance. Parsing never
+    // affects posting: an unparseable response simply yields a null ref and publishing continues unchanged.
+    private static async Task<PostedReviewCommentRef?> PostDiscussionAsync(
         HttpClient client,
         string token,
         Uri discussionUri,
         GitLabDiscussionRequest payload,
         GitLabDiscussionTarget target,
         int successfulDiscussionCount,
+        string? filePath,
+        int? line,
         CancellationToken ct)
     {
         using var request = GitLabConnectionVerifier.CreateAuthenticatedRequest(discussionUri, token, HttpMethod.Post);
@@ -118,7 +141,7 @@ internal sealed class GitLabCodeReviewPublicationService(
         using var response = await client.SendAsync(request, ct);
         if (response.IsSuccessStatusCode)
         {
-            return;
+            return await TryCaptureDiscussionRefAsync(response, filePath, line, ct);
         }
 
         var responseBody = await ReadFailureDetailAsync(response, ct);
@@ -142,6 +165,35 @@ internal sealed class GitLabCodeReviewPublicationService(
             BuildFailureMessage(
                 $"GitLab review publication failed while posting {target.Describe(successfulDiscussionCount)} with status {(int)response.StatusCode}.",
                 responseBody));
+    }
+
+    private static async Task<PostedReviewCommentRef?> TryCaptureDiscussionRefAsync(
+        HttpResponseMessage response,
+        string? filePath,
+        int? line,
+        CancellationToken ct)
+    {
+        try
+        {
+            var discussion = await response.Content.ReadFromJsonAsync<GitLabCreatedDiscussionResponse>(ct);
+            var firstNoteId = discussion?.Notes?
+                .Select(note => note.Id)
+                .FirstOrDefault(id => id.HasValue);
+            if (firstNoteId is not { } noteId)
+            {
+                return null;
+            }
+
+            return new PostedReviewCommentRef(
+                noteId.ToString(CultureInfo.InvariantCulture),
+                string.IsNullOrWhiteSpace(discussion?.Id) ? null : discussion!.Id,
+                filePath,
+                line);
+        }
+        catch (Exception ex) when (ex is JsonException or NotSupportedException or HttpRequestException)
+        {
+            return null;
+        }
     }
 
     private static string BuildSummaryBody(ReviewResult result, ReviewerIdentity author)
@@ -269,6 +321,12 @@ internal sealed class GitLabCodeReviewPublicationService(
             _ => "Info",
         };
     }
+
+    private sealed record GitLabCreatedDiscussionResponse(
+        [property: JsonPropertyName("id")] string? Id,
+        [property: JsonPropertyName("notes")] IReadOnlyList<GitLabCreatedNoteResponse>? Notes);
+
+    private sealed record GitLabCreatedNoteResponse([property: JsonPropertyName("id")] long? Id);
 
     private sealed record GitLabDiscussionRequest(
         [property: JsonPropertyName("body")] string Body,

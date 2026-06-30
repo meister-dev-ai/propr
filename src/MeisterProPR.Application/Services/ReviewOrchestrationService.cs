@@ -5,6 +5,7 @@ using System.Globalization;
 using System.Text.Json;
 using MeisterProPR.Application.DTOs;
 using MeisterProPR.Application.Exceptions;
+using MeisterProPR.Application.Features.ReviewArchive;
 using MeisterProPR.Application.Features.Reviewing.Execution.Models;
 using MeisterProPR.Application.Features.Reviewing.Execution.Ports;
 using MeisterProPR.Application.Interfaces;
@@ -13,6 +14,7 @@ using MeisterProPR.Application.Support;
 using MeisterProPR.Application.ValueObjects;
 using MeisterProPR.Domain.Entities;
 using MeisterProPR.Domain.Enums;
+using MeisterProPR.Domain.Events;
 using MeisterProPR.Domain.ValueObjects;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Logging;
@@ -43,7 +45,10 @@ public sealed partial class ReviewOrchestrationService(
     IPromptOverrideService? promptOverrideService = null,
     IProviderActivationService? providerActivationService = null,
     IAiRuntimeResolver? aiRuntimeResolver = null,
-    IReviewRepositoryWorkspaceManager? workspaceManager = null) : IReviewJobProcessor
+    IReviewRepositoryWorkspaceManager? workspaceManager = null,
+    IClientScmConnectionRepository? scmConnectionRepository = null,
+    IReviewArchiveIngestionService? reviewArchiveIngestionService = null,
+    IPostedCommentOriginStore? postedCommentOriginStore = null) : IReviewJobProcessor
 {
     private const string LocalWorkspacePreparedEventName = "local_workspace_prepared";
     private const string LocalWorkspaceFailedEventName = "local_workspace_failed";
@@ -227,7 +232,158 @@ public sealed partial class ReviewOrchestrationService(
         }
 
         await this.PublishReviewResultAsync(job, pr, result, compareToIterationId, ct);
+
+        await this.RetainIncrementDiffsAsync(job, pr, ct);
+
         return pr;
+    }
+
+    // Passive archive observer: when the producing connection opted in to diff retention, persist the
+    // increment's per-file canonical unified diffs into the review-archive store. This runs after the
+    // review is otherwise complete and decided. It never alters review behavior, deduplication, memory,
+    // or the scope snapshot; the changed-file diffs are already in hand on the fetched pull request, so
+    // no additional provider call is made. When retention is off it performs no diff-building work, and
+    // when the archive consumer is absent it is a no-op.
+    private async Task RetainIncrementDiffsAsync(ReviewJob job, PullRequest pr, CancellationToken ct)
+    {
+        if (reviewArchiveIngestionService is null || scmConnectionRepository is null)
+        {
+            return;
+        }
+
+        try
+        {
+            var connection = await this.ResolveRetentionConnectionAsync(job, ct);
+            if (connection is null || !connection.StoreDiffs)
+            {
+                return;
+            }
+
+            var revisionKey = ReviewRevisionKeys.GetStoredKey(job.ReviewRevisionReference, job.IterationId);
+
+            var fileDiffs = pr.ChangedFiles
+                .Select(changedFile => new ReviewIncrementFileDiff(
+                    changedFile.Path,
+                    MapRetainedChangeType(changedFile.ChangeType),
+                    changedFile.IsBinary,
+                    changedFile.IsBinary ? string.Empty : changedFile.UnifiedDiff))
+                .ToList();
+
+            var evt = new ReviewIncrementCompletedEvent(
+                job.ClientId,
+                connection.Id,
+                job.RepositoryId,
+                job.PullRequestId,
+                revisionKey,
+                pr.Status.ToString(),
+                DateTimeOffset.UtcNow,
+                fileDiffs);
+
+            await reviewArchiveIngestionService.HandleReviewIncrementDiffsAsync(evt, ct);
+        }
+        catch (Exception ex) when (!ct.IsCancellationRequested)
+        {
+            logger.LogWarning(
+                ex,
+                "Diff retention ingestion failed for PR {PullRequestId}; continuing without archiving.",
+                job.PullRequestId);
+        }
+    }
+
+    // Passive provenance observer: when the producing connection opted in to thread retention, persist a
+    // mapping from each provider comment this posting pass created back to the originating job, so a later
+    // ingestion step can stamp the job onto retained comments. This is strictly best-effort — it is wrapped
+    // so that nothing it does can disrupt or change publishing. When retention is off, the store is absent,
+    // or no provider comment ids were captured, it records nothing.
+    private async Task RecordPostedCommentOriginsAsync(
+        ReviewJob job,
+        ReviewCommentPostingDiagnosticsDto diagnostics,
+        CancellationToken ct)
+    {
+        if (postedCommentOriginStore is null || diagnostics.PostedComments.Count == 0)
+        {
+            return;
+        }
+
+        try
+        {
+            var connection = await this.ResolveRetentionConnectionAsync(job, ct);
+            if (connection is null || !connection.StoreThreads)
+            {
+                return;
+            }
+
+            var postedAt = DateTimeOffset.UtcNow;
+            var entries = diagnostics.PostedComments
+                .Where(comment => !string.IsNullOrWhiteSpace(comment.ProviderCommentId))
+                .Select(comment => new PostedCommentOriginEntry(
+                    job.ClientId,
+                    job.RepositoryId,
+                    job.PullRequestId,
+                    comment.ProviderThreadId,
+                    comment.ProviderCommentId,
+                    job.Id,
+                    postedAt))
+                .ToList();
+
+            if (entries.Count == 0)
+            {
+                return;
+            }
+
+            await postedCommentOriginStore.RecordAsync(entries, ct);
+        }
+        catch (Exception ex) when (!ct.IsCancellationRequested)
+        {
+            LogPostedCommentOriginRecordingFailed(logger, job.Id, ex);
+        }
+    }
+
+    private async Task<ClientScmConnectionDto?> ResolveRetentionConnectionAsync(ReviewJob job, CancellationToken ct)
+    {
+        if (scmConnectionRepository is null)
+        {
+            return null;
+        }
+
+        var host = job.ProviderHost;
+        var connections = await scmConnectionRepository.GetByClientIdAsync(job.ClientId, ct);
+
+        return connections
+            .Where(connection => connection.IsActive
+                                 && connection.ProviderFamily == host.Provider
+                                 && ConnectionHostMatchesAuthority(connection.HostBaseUrl, host.HostBaseUrl))
+            // Prefer the most specific host match when several connections share an authority.
+            .OrderByDescending(connection => connection.HostBaseUrl.Length)
+            .FirstOrDefault();
+    }
+
+    private static bool ConnectionHostMatchesAuthority(string connectionHostBaseUrl, string hostAuthority)
+    {
+        // The job host is normalized to an authority (scheme://host[:port]); a connection's stored host
+        // base URL may carry a path (e.g. an Azure DevOps organization URL). Match on the authority.
+        if (!Uri.TryCreate(connectionHostBaseUrl.Trim(), UriKind.Absolute, out var connectionUri))
+        {
+            return string.Equals(
+                connectionHostBaseUrl.Trim().TrimEnd('/'),
+                hostAuthority.Trim().TrimEnd('/'),
+                StringComparison.OrdinalIgnoreCase);
+        }
+
+        var connectionAuthority = connectionUri.GetLeftPart(UriPartial.Authority).TrimEnd('/');
+        return string.Equals(connectionAuthority, hostAuthority.Trim().TrimEnd('/'), StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static string MapRetainedChangeType(ChangeType changeType)
+    {
+        return changeType switch
+        {
+            ChangeType.Add => "Added",
+            ChangeType.Edit => "Modified",
+            ChangeType.Delete => "Deleted",
+            ChangeType.Rename => "Renamed",
+            _ => "Unknown",
+        };
     }
 
     private async Task SaveScanAndDeleteJobAsync(ReviewJob job, PullRequest pr, Guid? reviewerId, CancellationToken ct)
@@ -289,6 +445,8 @@ public sealed partial class ReviewOrchestrationService(
             }
 
             await jobs.SetResultAsync(job.Id, publicationResult, ct);
+
+            await this.RecordPostedCommentOriginsAsync(job, diagnostics, ct);
 
             if (protocolId.HasValue)
             {

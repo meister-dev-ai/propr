@@ -2,8 +2,10 @@
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license information.
 
 using MeisterProPR.Application.DTOs;
+using MeisterProPR.Application.Features.ReviewArchive;
 using MeisterProPR.Application.Features.Reviewing.Diagnostics.Queries.GetFileDiff;
 using MeisterProPR.Application.Interfaces;
+using MeisterProPR.Application.Support;
 using MeisterProPR.Domain.Entities;
 using MeisterProPR.Domain.Enums;
 using MeisterProPR.Domain.ValueObjects;
@@ -14,6 +16,183 @@ namespace MeisterProPR.Application.Tests.Features.Reviewing.Diagnostics.Queries.
 
 public sealed class GetFileDiffHandlerTests
 {
+    [Fact]
+    public async Task HandleAsync_WhenRetentionOnAndStoredDiffPresent_ServesFromStorage_WithoutFetchingRemote()
+    {
+        var jobId = Guid.NewGuid();
+        var fileResult = CreateFileResult(jobId, "src/Services/ReviewService.cs");
+        var job = CreateJob(jobId, [fileResult]);
+
+        var jobRepository = Substitute.For<IJobRepository>();
+        jobRepository.GetByIdWithFileResultsAsync(jobId, Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<ReviewJob?>(job));
+
+        var pullRequestFetcher = Substitute.For<IPullRequestFetcher>();
+
+        var connection = CreateRetentionConnection(job.ClientId, true);
+        var scmConnectionRepository = Substitute.For<IClientScmConnectionRepository>();
+        scmConnectionRepository.GetByClientIdAsync(job.ClientId, Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<IReadOnlyList<ClientScmConnectionDto>>([connection]));
+
+        const string storedDiff = "@@ -1,1 +1,2 @@\n+stored line";
+        var archiveStore = Substitute.For<IReviewArchiveStore>();
+        archiveStore.GetFileDiffAsync(
+                job.ClientId,
+                job.RepositoryId,
+                job.PullRequestId,
+                // The handler scopes the stored lookup to the job's own revision key (the iteration id
+                // string for a job with no revision reference), not the newest-across-iterations null key.
+                ReviewRevisionKeys.GetStoredKey(job.ReviewRevisionReference, job.IterationId),
+                fileResult.FilePath,
+                Arg.Any<CancellationToken>())
+            .Returns(
+                Task.FromResult<RetainedFileDiffView?>(
+                    new RetainedFileDiffView(
+                        "rev-1",
+                        "src/Services/ReviewService.cs",
+                        "Modified",
+                        false,
+                        storedDiff,
+                        DateTimeOffset.UtcNow)));
+
+        var handler = new GetFileDiffHandler(jobRepository, pullRequestFetcher, archiveStore, scmConnectionRepository);
+
+        var result = await handler.HandleAsync(new GetFileDiffQuery(jobId, fileResult.Id), CancellationToken.None);
+
+        Assert.Equal(FileDiffAvailability.Available, result.Availability);
+        Assert.Equal("src/Services/ReviewService.cs", result.FilePath);
+        Assert.Equal(storedDiff, result.UnifiedDiff);
+        Assert.Equal("Modified", result.ChangeType);
+        Assert.False(result.IsBinary);
+
+        // The served-from-storage path must never reach out to the source control provider.
+        await pullRequestFetcher.DidNotReceiveWithAnyArgs().FetchFileDiffAsync(default!, default!, default!, default, default, default!);
+    }
+
+    [Fact]
+    public async Task HandleAsync_WhenRetentionOff_FallsBackToRemoteFetch()
+    {
+        var jobId = Guid.NewGuid();
+        var fileResult = CreateFileResult(jobId, "src/Services/ReviewService.cs");
+        var job = CreateJob(jobId, [fileResult]);
+
+        var unifiedDiff = "@@ -1,1 +1,2 @@\n+remote line";
+        var changedFile = new ChangedFile(
+            "src/Services/ReviewService.cs",
+            ChangeType.Edit,
+            "full content",
+            unifiedDiff);
+
+        var jobRepository = Substitute.For<IJobRepository>();
+        jobRepository.GetByIdWithFileResultsAsync(jobId, Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<ReviewJob?>(job));
+
+        var pullRequestFetcher = Substitute.For<IPullRequestFetcher>();
+        pullRequestFetcher.FetchFileDiffAsync(
+                job.OrganizationUrl,
+                job.ProjectId,
+                job.RepositoryId,
+                job.PullRequestId,
+                job.IterationId,
+                fileResult.FilePath,
+                Arg.Any<int?>(),
+                job.ClientId,
+                Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<ChangedFile?>(changedFile));
+
+        var connection = CreateRetentionConnection(job.ClientId, false);
+        var scmConnectionRepository = Substitute.For<IClientScmConnectionRepository>();
+        scmConnectionRepository.GetByClientIdAsync(job.ClientId, Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<IReadOnlyList<ClientScmConnectionDto>>([connection]));
+
+        var archiveStore = Substitute.For<IReviewArchiveStore>();
+
+        var handler = new GetFileDiffHandler(jobRepository, pullRequestFetcher, archiveStore, scmConnectionRepository);
+
+        var result = await handler.HandleAsync(new GetFileDiffQuery(jobId, fileResult.Id), CancellationToken.None);
+
+        Assert.Equal(FileDiffAvailability.Available, result.Availability);
+        Assert.Equal(unifiedDiff, result.UnifiedDiff);
+
+        // Retention is off, so the store is never consulted and the remote fetch is used.
+        await archiveStore.DidNotReceiveWithAnyArgs()
+            .GetFileDiffAsync(default, default!, default, default, default!);
+        await pullRequestFetcher.Received(1).FetchFileDiffAsync(
+            job.OrganizationUrl,
+            job.ProjectId,
+            job.RepositoryId,
+            job.PullRequestId,
+            job.IterationId,
+            fileResult.FilePath,
+            Arg.Any<int?>(),
+            job.ClientId,
+            Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task HandleAsync_WhenRetentionOnButNoStoredDiff_FallsBackToRemoteFetch()
+    {
+        var jobId = Guid.NewGuid();
+        var fileResult = CreateFileResult(jobId, "src/Services/ReviewService.cs");
+        var job = CreateJob(jobId, [fileResult]);
+
+        var unifiedDiff = "@@ -1,1 +1,2 @@\n+remote line";
+        var changedFile = new ChangedFile(
+            "src/Services/ReviewService.cs",
+            ChangeType.Edit,
+            "full content",
+            unifiedDiff);
+
+        var jobRepository = Substitute.For<IJobRepository>();
+        jobRepository.GetByIdWithFileResultsAsync(jobId, Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<ReviewJob?>(job));
+
+        var pullRequestFetcher = Substitute.For<IPullRequestFetcher>();
+        pullRequestFetcher.FetchFileDiffAsync(
+                job.OrganizationUrl,
+                job.ProjectId,
+                job.RepositoryId,
+                job.PullRequestId,
+                job.IterationId,
+                fileResult.FilePath,
+                Arg.Any<int?>(),
+                job.ClientId,
+                Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<ChangedFile?>(changedFile));
+
+        var connection = CreateRetentionConnection(job.ClientId, true);
+        var scmConnectionRepository = Substitute.For<IClientScmConnectionRepository>();
+        scmConnectionRepository.GetByClientIdAsync(job.ClientId, Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<IReadOnlyList<ClientScmConnectionDto>>([connection]));
+
+        var archiveStore = Substitute.For<IReviewArchiveStore>();
+        archiveStore.GetFileDiffAsync(
+                Arg.Any<Guid>(),
+                Arg.Any<string>(),
+                Arg.Any<long>(),
+                Arg.Any<string?>(),
+                Arg.Any<string>(),
+                Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<RetainedFileDiffView?>(null));
+
+        var handler = new GetFileDiffHandler(jobRepository, pullRequestFetcher, archiveStore, scmConnectionRepository);
+
+        var result = await handler.HandleAsync(new GetFileDiffQuery(jobId, fileResult.Id), CancellationToken.None);
+
+        Assert.Equal(FileDiffAvailability.Available, result.Availability);
+        Assert.Equal(unifiedDiff, result.UnifiedDiff);
+        await pullRequestFetcher.Received(1).FetchFileDiffAsync(
+            job.OrganizationUrl,
+            job.ProjectId,
+            job.RepositoryId,
+            job.PullRequestId,
+            job.IterationId,
+            fileResult.FilePath,
+            Arg.Any<int?>(),
+            job.ClientId,
+            Arg.Any<CancellationToken>());
+    }
+
     [Fact]
     public async Task HandleAsync_WhenJobMissing_ReturnsNotFound()
     {
@@ -68,9 +247,7 @@ public sealed class GetFileDiffHandlerTests
             "src/Services/ReviewService.cs",
             ChangeType.Edit,
             "full content",
-            unifiedDiff,
-            false,
-            null);
+            unifiedDiff);
 
         var jobRepository = Substitute.For<IJobRepository>();
         jobRepository.GetByIdWithFileResultsAsync(jobId, Arg.Any<CancellationToken>())
@@ -113,8 +290,7 @@ public sealed class GetFileDiffHandlerTests
             ChangeType.Add,
             string.Empty,
             string.Empty,
-            true,
-            null);
+            true);
 
         var jobRepository = Substitute.For<IJobRepository>();
         jobRepository.GetByIdWithFileResultsAsync(jobId, Arg.Any<CancellationToken>())
@@ -208,6 +384,28 @@ public sealed class GetFileDiffHandlerTests
         Assert.Equal(FileDiffAvailability.ProviderUnavailable, result.Availability);
         Assert.Equal("src/Services/Foo.cs", result.FilePath);
         Assert.NotNull(result.AvailabilityMessage);
+    }
+
+    private static ClientScmConnectionDto CreateRetentionConnection(Guid clientId, bool storeDiffs)
+    {
+        var now = DateTimeOffset.UtcNow;
+        return new ClientScmConnectionDto(
+            Guid.NewGuid(),
+            clientId,
+            ScmProvider.AzureDevOps,
+            "https://dev.azure.com/org",
+            ScmAuthenticationKind.PersonalAccessToken,
+            "Azure DevOps",
+            true,
+            "verified",
+            now,
+            null,
+            null,
+            now,
+            now)
+        {
+            StoreDiffs = storeDiffs,
+        };
     }
 
     private static ReviewFileResult CreateFileResult(Guid jobId, string filePath)

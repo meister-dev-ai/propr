@@ -4,6 +4,7 @@
 using MeisterProPR.Application.Features.Reviewing.Execution.Models;
 using MeisterProPR.Domain.Enums;
 using MeisterProPR.Domain.ValueObjects;
+using Microsoft.TeamFoundation.SourceControl.WebApi;
 
 namespace MeisterProPR.Infrastructure.Tests.AzureDevOps;
 
@@ -318,5 +319,60 @@ public class AdoCommentPosterTests
         Assert.DoesNotContain("&quot;", body);
         Assert.Equal(-1, body.IndexOf("<script>", StringComparison.Ordinal));
         Assert.Contains("<\u200Bscript>", body);
+    }
+
+    [Fact]
+    public void CaptureCreatedComments_WithCreatedComment_CapturesCommentAndThreadIds()
+    {
+        var createdThread = new GitPullRequestCommentThread
+        {
+            Id = 5150,
+            Comments = [new Comment { Id = 7, Content = "WARNING: Guard this null case." }],
+        };
+
+        var captured = AdoCommentPoster.CaptureCreatedComments(createdThread, "/src/Program.cs", 42);
+
+        var reference = Assert.Single(captured);
+        Assert.Equal("7", reference.ProviderCommentId);
+        Assert.Equal("5150", reference.ProviderThreadId);
+        Assert.Equal("/src/Program.cs", reference.FilePath);
+        Assert.Equal(42, reference.Line);
+    }
+
+    [Fact]
+    public void CaptureCreatedComments_WithoutComments_ReturnsEmpty()
+    {
+        var createdThread = new GitPullRequestCommentThread { Id = 5150 };
+
+        var captured = AdoCommentPoster.CaptureCreatedComments(createdThread, "/src/Program.cs", 42);
+
+        Assert.Empty(captured);
+    }
+
+    [Fact]
+    public void CaptureCreatedComments_WithNullThread_ReturnsEmpty()
+    {
+        var captured = AdoCommentPoster.CaptureCreatedComments(null, "/src/Program.cs", 42);
+
+        Assert.Empty(captured);
+    }
+
+    [Fact]
+    public void CaptureCreatedComments_DropsCommentsWithoutResolvableId()
+    {
+        var createdThread = new GitPullRequestCommentThread
+        {
+            Id = 5150,
+            Comments =
+            [
+                new Comment { Id = 0, Content = "Unidentified comment" },
+                new Comment { Id = 9, Content = "WARNING: Guard this null case." },
+            ],
+        };
+
+        var captured = AdoCommentPoster.CaptureCreatedComments(createdThread, "/src/Program.cs", 42);
+
+        var reference = Assert.Single(captured);
+        Assert.Equal("9", reference.ProviderCommentId);
     }
 }

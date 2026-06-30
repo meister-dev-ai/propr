@@ -2,7 +2,7 @@
 <!-- Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms. -->
 
 <template>
-    <div class="page-view">
+    <div class="page-view pr-review-page">
         <div class="header-stack">
             <RouterLink class="back-link" :to="{ name: 'reviews' }">← Back to reviews</RouterLink>
             <h2>PR Review View</h2>
@@ -12,6 +12,43 @@
         <p v-else-if="error" class="error">{{ error }}</p>
 
         <template v-else-if="data">
+            <div class="pr-tabs" role="tablist" aria-label="Pull request review sections">
+                <button
+                    type="button"
+                    role="tab"
+                    class="tab-btn pr-tab-btn"
+                    :class="{ 'tab-active': activeTab === 'stats' }"
+                    :aria-selected="activeTab === 'stats'"
+                    data-testid="pr-tab-stats"
+                    @click="activeTab = 'stats'"
+                >
+                    Stats
+                </button>
+                <button
+                    type="button"
+                    role="tab"
+                    class="tab-btn pr-tab-btn"
+                    :class="{ 'tab-active': activeTab === 'conversation' }"
+                    :aria-selected="activeTab === 'conversation'"
+                    data-testid="pr-tab-conversation"
+                    @click="activeTab = 'conversation'"
+                >
+                    Conversation
+                </button>
+                <button
+                    type="button"
+                    role="tab"
+                    class="tab-btn pr-tab-btn"
+                    :class="{ 'tab-active': activeTab === 'browser' }"
+                    :aria-selected="activeTab === 'browser'"
+                    data-testid="pr-tab-browser"
+                    @click="activeTab = 'browser'"
+                >
+                    Browser
+                </button>
+            </div>
+
+            <div v-show="activeTab === 'stats'" role="tabpanel" data-testid="pr-panel-stats">
             <div class="pr-header-card">
                 <div class="pr-meta">
                     <span class="pr-id-badge">PR #{{ data.pullRequestId }}</span>
@@ -166,6 +203,24 @@
                     </table>
                 </div>
             </section>
+
+            </div>
+
+            <div v-show="activeTab === 'conversation'" role="tabpanel" data-testid="pr-panel-conversation">
+                <RetainedConversationTab
+                    v-if="retained && retainedIdentity"
+                    :retained="retained"
+                    :client-id="retainedIdentity.clientId"
+                />
+            </div>
+
+            <div v-show="activeTab === 'browser'" role="tabpanel" data-testid="pr-panel-browser">
+                <RetainedBrowserTab
+                    v-if="retained && retainedIdentity"
+                    :retained="retained"
+                    :client-id="retainedIdentity.clientId"
+                />
+            </div>
         </template>
 
         <p v-else class="empty-state">No data. Provide clientId, providerScopePath, providerProjectKey, repositoryId and pullRequestId query parameters.</p>
@@ -173,9 +228,16 @@
 </template>
 
 <script lang="ts" setup>
-import { computed, ref, onMounted } from 'vue'
+import { computed, ref, shallowRef, onMounted, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import TokenBreakdownTable from '@/components/usage/TokenBreakdownTable.vue'
+import RetainedConversationTab from '@/features/reviews/components/RetainedConversationTab.vue'
+import RetainedBrowserTab from '@/features/reviews/components/RetainedBrowserTab.vue'
+import {
+    useRetainedPrData,
+    type RetainedPrIdentity,
+    type UseRetainedPrData,
+} from '@/features/reviews/composables/useRetainedPrData'
 import { getPrView, type PrReviewViewDto } from '@/services/jobsService'
 
 const route = useRoute()
@@ -184,12 +246,46 @@ const loading = ref(false)
 const error = ref('')
 const data = ref<PrReviewViewDto | null>(null)
 const memoryTab = ref<'originated' | 'contributed'>('originated')
+const activeTab = ref<'stats' | 'conversation' | 'browser'>('stats')
 
 const clientId = computed(() => route.query.clientId as string | undefined)
 const providerScopePath = computed(() => route.query.providerScopePath as string | undefined)
 const providerProjectKey = computed(() => route.query.providerProjectKey as string | undefined)
 const repositoryId = computed(() => route.query.repositoryId as string | undefined)
 const pullRequestId = computed(() => route.query.pullRequestId ? Number(route.query.pullRequestId) : undefined)
+
+// Identity for the retained-archive section. The retained endpoints resolve the owning connection
+// server-side from the retained data, so the section only needs clientId + repositoryId +
+// pullRequestId. We build the identity once the data load has succeeded.
+const retainedIdentity = computed<RetainedPrIdentity | null>(() => {
+    if (!data.value) return null
+    if (!clientId.value || !repositoryId.value || pullRequestId.value == null) {
+        return null
+    }
+    return {
+        clientId: clientId.value,
+        providerScopePath: providerScopePath.value,
+        repositoryId: repositoryId.value,
+        pullRequestId: pullRequestId.value,
+    }
+})
+
+// The retained threads and files are shared across the Conversation and Browser tabs, so the
+// archive is fetched exactly once here (rather than per tab). The composable is keyed to a concrete
+// identity, so it is created — and its single load kicked off — only once the identity resolves.
+const retained = shallowRef<UseRetainedPrData | null>(null)
+
+watch(
+    retainedIdentity,
+    identity => {
+        if (identity && !retained.value) {
+            const instance = useRetainedPrData(identity)
+            retained.value = instance
+            void instance.load()
+        }
+    },
+    { immediate: true },
+)
 
 async function loadData() {
     if (!clientId.value || !providerScopePath.value || !providerProjectKey.value || !repositoryId.value || !pullRequestId.value) {
@@ -255,6 +351,12 @@ function statusBadgeClass(status: number): string {
 </script>
 
 <style scoped>
+/* This view (esp. the Browser tab's diff) needs the room, so it spans the full
+   width instead of the shared centered page max-width. */
+.pr-review-page {
+    max-width: none;
+}
+
 .header-stack {
     margin-bottom: 1.5rem;
 }
@@ -410,11 +512,25 @@ function statusBadgeClass(status: number): string {
     color: inherit;
     padding: 0.5rem 0.75rem;
     border-radius: 0.375rem;
+    cursor: pointer;
 }
 
 .tab-active {
     background: rgba(124, 124, 255, 0.12);
     border-color: rgba(124, 124, 255, 0.45);
+}
+
+.pr-tabs {
+    display: flex;
+    gap: 0.5rem;
+    margin-bottom: 1.25rem;
+    flex-wrap: wrap;
+}
+
+.pr-tab-btn {
+    padding: 0.55rem 1.1rem;
+    font-size: 0.95rem;
+    font-weight: 600;
 }
 
 .memory-table {
@@ -454,5 +570,39 @@ function statusBadgeClass(status: number): string {
 
 .error {
     color: var(--color-danger, var(--color-danger));
+}
+
+.retained-archive-section {
+    margin-bottom: 1.25rem;
+}
+
+.retained-notice {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.65rem;
+    padding: 1rem 1.1rem;
+    border: 1px dashed var(--color-border);
+    border-radius: var(--radius-lg);
+    background: rgba(255, 255, 255, 0.02);
+    color: var(--color-text-muted);
+    margin: 0;
+}
+
+.retained-notice i {
+    color: var(--color-accent);
+    flex: 0 0 auto;
+    margin-top: 0.1rem;
+}
+
+.retained-notice-title {
+    margin: 0 0 0.25rem 0;
+    font-weight: 600;
+    color: var(--color-text);
+}
+
+.retained-notice-detail {
+    margin: 0;
+    font-size: 0.85rem;
+    line-height: 1.4;
 }
 </style>

@@ -387,6 +387,112 @@ public sealed class GitHubCodeReviewPublicationServiceTests
         Assert.Contains("Resource not accessible by integration", ex.Message, StringComparison.OrdinalIgnoreCase);
     }
 
+    [Fact]
+    public async Task PublishReviewAsync_CapturesCreatedCommentIdsFromReviewCommentsEndpoint()
+    {
+        var clientId = Guid.NewGuid();
+        var host = new ProviderHostRef(ScmProvider.GitHub, "https://github.com");
+        var repository = new RepositoryRef(host, "101", "acme", "acme/propr");
+        var review = new CodeReviewRef(repository, CodeReviewPlatformKind.PullRequest, "42", 42);
+        var revision = new ReviewRevision("head-sha", "base-sha", null, "head-sha", "base-sha...head-sha");
+        var reviewer = new ReviewerIdentity(host, "99", "meister-review-bot[bot]", "Meister Review Bot", true);
+        var result = new ReviewResult(
+            "Looks solid overall.",
+            [new ReviewComment("src/file.ts", 18, CommentSeverity.Warning, "Guard this null case.")]);
+
+        var connectionRepository = Substitute.For<IClientScmConnectionRepository>();
+        connectionRepository.GetOperationalConnectionAsync(clientId, host, Arg.Any<CancellationToken>())
+            .Returns(
+                new ClientScmConnectionCredentialDto(
+                    Guid.NewGuid(),
+                    clientId,
+                    ScmProvider.GitHub,
+                    host.HostBaseUrl,
+                    ScmAuthenticationKind.PersonalAccessToken,
+                    "GitHub",
+                    "ghp_test",
+                    true));
+
+        var httpClientFactory = Substitute.For<IHttpClientFactory>();
+        using var httpClient = new HttpClient(
+            new StubHttpMessageHandler(request => Task.FromResult(
+                request.RequestUri!.AbsoluteUri switch
+                {
+                    "https://api.github.com/user" => CreateJsonResponse(new { login = "meister-dev" }),
+                    "https://api.github.com/repos/acme/propr/pulls/42/reviews" => CreateJsonResponse(new { id = 555L }),
+                    "https://api.github.com/repos/acme/propr/pulls/42/reviews/555/comments" => CreateJsonResponse(
+                        new[]
+                        {
+                            new { id = 9001L, path = "src/file.ts", line = 18 },
+                        }),
+                    _ => CreateJsonResponse(new { message = "Not Found" }, HttpStatusCode.NotFound),
+                })));
+        httpClientFactory.CreateClient("GitHubProvider").Returns(httpClient);
+
+        var sut = new GitHubCodeReviewPublicationService(
+            new GitHubConnectionVerifier(connectionRepository, httpClientFactory),
+            httpClientFactory);
+
+        var diagnostics = await sut.PublishReviewAsync(clientId, review, revision, result, reviewer);
+
+        var reference = Assert.Single(diagnostics.PostedComments);
+        Assert.Equal("9001", reference.ProviderCommentId);
+        Assert.Equal("555", reference.ProviderThreadId);
+        Assert.Equal("src/file.ts", reference.FilePath);
+        Assert.Equal(18, reference.Line);
+        Assert.Equal(1, diagnostics.PostedCount);
+    }
+
+    [Fact]
+    public async Task PublishReviewAsync_WhenCommentsEndpointUnavailable_PublishesWithEmptyPostedComments()
+    {
+        var clientId = Guid.NewGuid();
+        var host = new ProviderHostRef(ScmProvider.GitHub, "https://github.com");
+        var repository = new RepositoryRef(host, "101", "acme", "acme/propr");
+        var review = new CodeReviewRef(repository, CodeReviewPlatformKind.PullRequest, "42", 42);
+        var revision = new ReviewRevision("head-sha", "base-sha", null, "head-sha", "base-sha...head-sha");
+        var reviewer = new ReviewerIdentity(host, "99", "meister-review-bot[bot]", "Meister Review Bot", true);
+        var result = new ReviewResult(
+            "Looks solid overall.",
+            [new ReviewComment("src/file.ts", 18, CommentSeverity.Warning, "Guard this null case.")]);
+
+        var connectionRepository = Substitute.For<IClientScmConnectionRepository>();
+        connectionRepository.GetOperationalConnectionAsync(clientId, host, Arg.Any<CancellationToken>())
+            .Returns(
+                new ClientScmConnectionCredentialDto(
+                    Guid.NewGuid(),
+                    clientId,
+                    ScmProvider.GitHub,
+                    host.HostBaseUrl,
+                    ScmAuthenticationKind.PersonalAccessToken,
+                    "GitHub",
+                    "ghp_test",
+                    true));
+
+        var httpClientFactory = Substitute.For<IHttpClientFactory>();
+        using var httpClient = new HttpClient(
+            new StubHttpMessageHandler(request => Task.FromResult(
+                request.RequestUri!.AbsoluteUri switch
+                {
+                    "https://api.github.com/user" => CreateJsonResponse(new { login = "meister-dev" }),
+                    "https://api.github.com/repos/acme/propr/pulls/42/reviews" => CreateJsonResponse(new { id = 555L }),
+                    "https://api.github.com/repos/acme/propr/pulls/42/reviews/555/comments" => CreateJsonResponse(
+                        new { message = "Not Found" },
+                        HttpStatusCode.NotFound),
+                    _ => CreateJsonResponse(new { message = "Not Found" }, HttpStatusCode.NotFound),
+                })));
+        httpClientFactory.CreateClient("GitHubProvider").Returns(httpClient);
+
+        var sut = new GitHubCodeReviewPublicationService(
+            new GitHubConnectionVerifier(connectionRepository, httpClientFactory),
+            httpClientFactory);
+
+        var diagnostics = await sut.PublishReviewAsync(clientId, review, revision, result, reviewer);
+
+        Assert.Empty(diagnostics.PostedComments);
+        Assert.Equal(1, diagnostics.PostedCount);
+    }
+
     private static HttpResponseMessage CreateJsonResponse<T>(T payload, HttpStatusCode statusCode = HttpStatusCode.OK)
     {
         return new HttpResponseMessage(statusCode)

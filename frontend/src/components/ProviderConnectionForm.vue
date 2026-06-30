@@ -72,6 +72,30 @@
       <input v-model="form.isActive" type="checkbox" />
       <span>{{ isCreateMode ? 'Connection is active immediately' : 'Connection is active' }}</span>
     </label>
+    <fieldset class="provider-retention-group">
+      <legend>Data retention</legend>
+      <label class="toggle-checkbox">
+        <input v-model="form.storeThreads" type="checkbox" data-testid="retention-store-threads" />
+        <span>Store comment threads</span>
+      </label>
+      <label class="toggle-checkbox">
+        <input v-model="form.storeDiffs" type="checkbox" data-testid="retention-store-diffs" />
+        <span>Store diffs</span>
+      </label>
+      <div class="form-field provider-retention-days">
+        <label>Retention (days)</label>
+        <input
+          v-model="form.retentionDays"
+          type="number"
+          min="1"
+          max="3650"
+          placeholder="30"
+          data-testid="retention-days"
+        />
+        <span class="field-hint-inline">Leave blank to use the 30-day default.</span>
+        <p v-if="retentionDaysError" class="error" data-testid="retention-days-error">{{ retentionDaysError }}</p>
+      </div>
+    </fieldset>
     <p v-if="error" class="error">{{ error }}</p>
     <div class="form-actions">
       <button :class="submitButtonClass" :disabled="busy" @click="emit('submit')">
@@ -96,6 +120,9 @@ type ProviderConnectionFormModel = {
   oAuthClientId?: string
   gitHubAppId?: string | number
   gitHubAppInstallationId?: string | number
+  storeThreads: boolean
+  storeDiffs: boolean
+  retentionDays: string | number
   displayName: string
   secret: string
   isActive: boolean
@@ -176,6 +203,17 @@ const secretPlaceholder = computed(() => {
 
   return isCreateMode.value || props.secretRequired ? 'Paste the provider secret' : 'Optional replacement secret'
 })
+const retentionDaysError = computed(() => {
+  const raw = String(props.form.retentionDays ?? '').trim()
+  if (!raw) {
+    return ''
+  }
+
+  const parsed = Number(raw)
+  return Number.isInteger(parsed) && parsed >= 1 && parsed <= 3650
+    ? ''
+    : 'Retention must be a whole number of days between 1 and 3650.'
+})
 </script>
 
 <style scoped>
@@ -207,5 +245,25 @@ const secretPlaceholder = computed(() => {
   align-items: center;
   gap: 0.6rem;
   margin-top: 0.75rem;
+}
+
+.provider-retention-group {
+  border: 1px solid rgba(15, 23, 42, 0.08);
+  border-radius: 0.5rem;
+  margin-top: 1rem;
+  padding: 0.75rem 1rem 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.provider-retention-group legend {
+  font-weight: 600;
+  padding: 0 0.4rem;
+}
+
+.provider-retention-days {
+  margin-top: 0.75rem;
+  max-width: 220px;
 }
 </style>

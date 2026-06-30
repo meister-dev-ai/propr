@@ -3,6 +3,7 @@
 
 using System.Text.Json;
 using MeisterProPR.Application.DTOs;
+using MeisterProPR.Application.Features.ReviewArchive;
 using MeisterProPR.Application.Features.Reviewing.Execution.Models;
 using MeisterProPR.Application.Features.Reviewing.Execution.Ports;
 using MeisterProPR.Application.Interfaces;
@@ -256,7 +257,9 @@ public class ReviewOrchestrationServiceTests
         IReviewThreadReplyPublisher? threadReplyPublisher = null,
         IProviderActivationService? providerActivationService = null,
         IAiRuntimeResolver? aiRuntimeResolver = null,
-        IReviewStrategyDispatcher? reviewStrategyDispatcher = null)
+        IReviewStrategyDispatcher? reviewStrategyDispatcher = null,
+        IClientScmConnectionRepository? scmConnectionRepository = null,
+        IPostedCommentOriginStore? postedCommentOriginStore = null)
     {
         var fetcher = instructionFetcher ?? CreateDefaultInstructionFetcher();
         var evaluator = instructionEvaluator ?? CreateDefaultInstructionEvaluator();
@@ -292,7 +295,9 @@ public class ReviewOrchestrationServiceTests
             reviewStrategyDispatcher ?? CreateDispatcher(orchestrator),
             providerActivationService: providerActivationService,
             aiRuntimeResolver: aiRuntimeResolver,
-            workspaceManager: CreateDefaultWorkspaceManager());
+            workspaceManager: CreateDefaultWorkspaceManager(),
+            scmConnectionRepository: scmConnectionRepository,
+            postedCommentOriginStore: postedCommentOriginStore);
     }
 
     private static IReviewRepositoryWorkspaceManager CreateDefaultWorkspaceManager()
@@ -5287,5 +5292,200 @@ public class ReviewOrchestrationServiceTests
                 Arg.Any<ReviewerIdentity>(),
                 Arg.Any<CancellationToken>(),
                 Arg.Any<ReviewPublicationContext?>());
+    }
+
+    [Fact]
+    public async Task ProcessAsync_RetentionThreadsOn_RecordsPostedCommentOriginsForJob()
+    {
+        var (jobs, prFetcher, orchestrator, _, reviewerManager, clientRegistry, prScanRepository, _, _, logger) =
+            CreateDeps();
+
+        var job = CreateJob();
+        var pr = CreatePullRequest();
+        var result = CreateReviewResult();
+
+        SetupPostingPipeline(prFetcher, orchestrator, clientRegistry, job, pr, result);
+
+        var commentPoster = CreatePublishingPoster(
+        [
+            new PostedReviewCommentRef("comment-1", "thread-1", "src/A.cs", 10),
+            new PostedReviewCommentRef("comment-2", null, null, null),
+        ]);
+        var connectionRepository = CreateConnectionRepository(job, true);
+        var originStore = Substitute.For<IPostedCommentOriginStore>();
+
+        var service = CreateService(
+            jobs,
+            prFetcher,
+            orchestrator,
+            commentPoster,
+            reviewerManager,
+            clientRegistry,
+            prScanRepository,
+            logger,
+            scmConnectionRepository: connectionRepository,
+            postedCommentOriginStore: originStore);
+
+        await service.ProcessAsync(job, CancellationToken.None);
+
+        await originStore.Received(1).RecordAsync(
+            Arg.Is<IReadOnlyList<PostedCommentOriginEntry>>(entries =>
+                entries.Count == 2
+                && entries.All(entry => entry.JobId == job.Id && entry.ClientId == job.ClientId)
+                && entries.Any(entry => entry.ProviderCommentId == "comment-1" && entry.ProviderThreadId == "thread-1")
+                && entries.Any(entry => entry.ProviderCommentId == "comment-2" && entry.ProviderThreadId == null)),
+            Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task ProcessAsync_RetentionThreadsOff_RecordsNothing()
+    {
+        var (jobs, prFetcher, orchestrator, _, reviewerManager, clientRegistry, prScanRepository, _, _, logger) =
+            CreateDeps();
+
+        var job = CreateJob();
+        var pr = CreatePullRequest();
+        var result = CreateReviewResult();
+
+        SetupPostingPipeline(prFetcher, orchestrator, clientRegistry, job, pr, result);
+
+        var commentPoster = CreatePublishingPoster([new PostedReviewCommentRef("comment-1", "thread-1", "src/A.cs", 10)]);
+        var connectionRepository = CreateConnectionRepository(job, false);
+        var originStore = Substitute.For<IPostedCommentOriginStore>();
+
+        var service = CreateService(
+            jobs,
+            prFetcher,
+            orchestrator,
+            commentPoster,
+            reviewerManager,
+            clientRegistry,
+            prScanRepository,
+            logger,
+            scmConnectionRepository: connectionRepository,
+            postedCommentOriginStore: originStore);
+
+        await service.ProcessAsync(job, CancellationToken.None);
+
+        await originStore.DidNotReceiveWithAnyArgs()
+            .RecordAsync(Arg.Any<IReadOnlyList<PostedCommentOriginEntry>>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task ProcessAsync_OriginRecordingThrows_DoesNotFailPublish()
+    {
+        var (jobs, prFetcher, orchestrator, _, reviewerManager, clientRegistry, prScanRepository, _, _, logger) =
+            CreateDeps();
+
+        var job = CreateJob();
+        var pr = CreatePullRequest();
+        var result = CreateReviewResult();
+
+        SetupPostingPipeline(prFetcher, orchestrator, clientRegistry, job, pr, result);
+
+        var commentPoster = CreatePublishingPoster([new PostedReviewCommentRef("comment-1", "thread-1", "src/A.cs", 10)]);
+        var connectionRepository = CreateConnectionRepository(job, true);
+        var originStore = Substitute.For<IPostedCommentOriginStore>();
+        originStore.RecordAsync(Arg.Any<IReadOnlyList<PostedCommentOriginEntry>>(), Arg.Any<CancellationToken>())
+            .ThrowsAsync(new InvalidOperationException("origin store unavailable"));
+
+        var service = CreateService(
+            jobs,
+            prFetcher,
+            orchestrator,
+            commentPoster,
+            reviewerManager,
+            clientRegistry,
+            prScanRepository,
+            logger,
+            scmConnectionRepository: connectionRepository,
+            postedCommentOriginStore: originStore);
+
+        await service.ProcessAsync(job, CancellationToken.None);
+
+        // The publish itself must still complete and the result must still be set despite the recording failure.
+        await jobs.Received(1).SetResultAsync(job.Id, Arg.Any<ReviewResult>(), Arg.Any<CancellationToken>());
+        await AssertReviewPublishedAsync(commentPoster, job);
+    }
+
+    private static void SetupPostingPipeline(
+        IPullRequestFetcher prFetcher,
+        IFileByFileReviewOrchestrator orchestrator,
+        IClientRegistry clientRegistry,
+        ReviewJob job,
+        PullRequest pr,
+        ReviewResult result)
+    {
+        SetupReviewerIdReturns(clientRegistry, job, Guid.NewGuid());
+        prFetcher.FetchAsync(
+                Arg.Any<string>(),
+                Arg.Any<string>(),
+                Arg.Any<string>(),
+                Arg.Any<int>(),
+                Arg.Any<int>(),
+                Arg.Any<int?>(),
+                Arg.Any<Guid?>(),
+                Arg.Any<CancellationToken>(),
+                Arg.Any<ReviewRevision?>(),
+                Arg.Any<IReviewRepositoryWorkspace?>())
+            .Returns(pr);
+        orchestrator.ReviewAsync(
+                Arg.Any<ReviewJob>(),
+                Arg.Any<PullRequest>(),
+                Arg.Any<ReviewSystemContext>(),
+                Arg.Any<CancellationToken>(),
+                Arg.Any<IChatClient?>())
+            .Returns(result);
+    }
+
+    private static ICodeReviewPublicationService CreatePublishingPoster(IReadOnlyList<PostedReviewCommentRef> postedComments)
+    {
+        var commentPoster = Substitute.For<ICodeReviewPublicationService>();
+        commentPoster.Provider.Returns(ScmProvider.AzureDevOps);
+        commentPoster.PublishReviewAsync(
+                Arg.Any<Guid>(),
+                Arg.Any<CodeReviewRef>(),
+                Arg.Any<ReviewRevision>(),
+                Arg.Any<ReviewResult>(),
+                Arg.Any<ReviewerIdentity>(),
+                Arg.Any<CancellationToken>(),
+                Arg.Any<ReviewPublicationContext?>())
+            .Returns(
+                Task.FromResult(
+                    ReviewCommentPostingDiagnosticsDto.Empty(postedComments.Count) with
+                    {
+                        PostedCount = postedComments.Count,
+                        PostedComments = postedComments,
+                    }));
+
+        return commentPoster;
+    }
+
+    private static IClientScmConnectionRepository CreateConnectionRepository(ReviewJob job, bool storeThreads)
+    {
+        var connection = new ClientScmConnectionDto(
+            Guid.NewGuid(),
+            job.ClientId,
+            ScmProvider.AzureDevOps,
+            job.ProviderHost.HostBaseUrl,
+            ScmAuthenticationKind.PersonalAccessToken,
+            null,
+            null,
+            "Test connection",
+            true,
+            "verified",
+            DateTimeOffset.UtcNow,
+            null,
+            null,
+            DateTimeOffset.UtcNow,
+            DateTimeOffset.UtcNow,
+            StoreThreads: storeThreads,
+            StoreDiffs: false);
+
+        var repository = Substitute.For<IClientScmConnectionRepository>();
+        repository.GetByClientIdAsync(job.ClientId, Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<IReadOnlyList<ClientScmConnectionDto>>([connection]));
+
+        return repository;
     }
 }

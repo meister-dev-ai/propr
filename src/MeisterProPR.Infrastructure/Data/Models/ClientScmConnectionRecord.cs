@@ -22,6 +22,16 @@ public sealed class ClientScmConnectionRecord
     public string EncryptedSecretMaterial { get; set; } = string.Empty;
     public string VerificationStatus { get; set; } = "unknown";
     public bool IsActive { get; set; } = true;
+
+    // Per-connection opt-in to retain raw PR review threads.
+    public bool StoreThreads { get; set; }
+
+    // Per-connection opt-in to retain raw PR diffs.
+    public bool StoreDiffs { get; set; }
+
+    // Retention window in days; null defers to the downstream default.
+    public int? RetentionDays { get; set; }
+
     public DateTimeOffset CreatedAt { get; set; }
     public DateTimeOffset UpdatedAt { get; set; }
     public DateTimeOffset? LastVerifiedAt { get; set; }

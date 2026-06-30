@@ -153,6 +153,21 @@ public sealed class MeisterProPRDbContext(DbContextOptions<MeisterProPRDbContext
     /// <summary>Daily token usage aggregates per client and model.</summary>
     public DbSet<ClientTokenUsageSample> ClientTokenUsageSamples => this.Set<ClientTokenUsageSample>();
 
+    /// <summary>Opt-in retained raw pull requests (the per-PR purge unit for retained data).</summary>
+    public DbSet<RetainedPullRequest> RetainedPullRequests => this.Set<RetainedPullRequest>();
+
+    /// <summary>Retained pull-request review threads.</summary>
+    public DbSet<RetainedThread> RetainedThreads => this.Set<RetainedThread>();
+
+    /// <summary>Retained pull-request thread comments (comment body encrypted at rest).</summary>
+    public DbSet<RetainedThreadComment> RetainedThreadComments => this.Set<RetainedThreadComment>();
+
+    /// <summary>Retained per-file unified diffs (diff text encrypted at rest).</summary>
+    public DbSet<RetainedFileDiff> RetainedFileDiffs => this.Set<RetainedFileDiff>();
+
+    /// <summary>Provenance rows mapping posted provider comments back to the review job that posted them.</summary>
+    public DbSet<PostedCommentOrigin> PostedCommentOrigins => this.Set<PostedCommentOrigin>();
+
     /// <inheritdoc />
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {

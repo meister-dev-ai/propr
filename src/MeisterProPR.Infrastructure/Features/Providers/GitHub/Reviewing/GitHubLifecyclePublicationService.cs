@@ -2,6 +2,7 @@
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
 using System.Diagnostics;
+using System.Globalization;
 using System.Net;
 using System.Net.Http.Json;
 using System.Text;
@@ -16,7 +17,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 
 namespace MeisterProPR.Infrastructure.Features.Providers.GitHub.Reviewing;
 
-internal sealed class GitHubLifecyclePublicationService(
+internal sealed partial class GitHubLifecyclePublicationService(
     GitHubConnectionVerifier connectionVerifier,
     IHttpClientFactory httpClientFactory,
     ILogger<GitHubLifecyclePublicationService>? logger = null)
@@ -80,12 +81,72 @@ internal sealed class GitHubLifecyclePublicationService(
                     : $"GitHub review publication failed with status {(int)response.StatusCode}: {responseBody}");
         }
 
+        // Best-effort capture of the created provider comment ids. The crawler keys retained comments on
+        // each review comment's REST numeric id (GraphQL databaseId). The POST /reviews response only
+        // carries the review id, so the per-comment ids are fetched via a follow-up read. Any failure
+        // here must leave PostedComments empty without disrupting publishing.
+        var postedComments = await this.TryCapturePostedCommentsAsync(context, review, response, ct);
+
         return ReviewCommentPostingDiagnosticsDto.Empty(
                 result.Comments.Count + result.CarriedForwardCandidatesSkipped,
                 result.CarriedForwardCandidatesSkipped) with
             {
                 PostedCount = result.Comments.Count,
+                PostedComments = postedComments,
             };
+    }
+
+    private async Task<IReadOnlyList<PostedReviewCommentRef>> TryCapturePostedCommentsAsync(
+        GitHubConnectionVerifier.GitHubConnectionContext context,
+        CodeReviewRef review,
+        HttpResponseMessage reviewResponse,
+        CancellationToken ct)
+    {
+        try
+        {
+            var createdReview = await reviewResponse.Content
+                .ReadFromJsonAsync<GitHubReviewResponse>(ct);
+            if (createdReview?.Id is not { } reviewId)
+            {
+                return [];
+            }
+
+            var reviewIdText = reviewId.ToString(CultureInfo.InvariantCulture);
+            using var commentsRequest = new HttpRequestMessage(
+                HttpMethod.Get,
+                GitHubConnectionVerifier.BuildApiUri(
+                    review.Repository.Host,
+                    $"/repos/{BuildRepositoryPath(review.Repository)}/pulls/{review.Number}/reviews/{reviewIdText}/comments"));
+            await context.AuthorizeRequestAsync(commentsRequest, ct);
+
+            using var commentsResponse = await httpClientFactory.CreateClient("GitHubProvider")
+                .SendAsync(commentsRequest, ct);
+            if (!commentsResponse.IsSuccessStatusCode)
+            {
+                return [];
+            }
+
+            var comments = await commentsResponse.Content
+                .ReadFromJsonAsync<IReadOnlyList<GitHubReviewCommentResponse>>(ct);
+            if (comments is null || comments.Count == 0)
+            {
+                return [];
+            }
+
+            return comments
+                .Where(comment => comment.Id is not null)
+                .Select(comment => new PostedReviewCommentRef(
+                    comment.Id!.Value.ToString(CultureInfo.InvariantCulture),
+                    reviewIdText,
+                    comment.Path,
+                    comment.Line))
+                .ToList();
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            LogPostedCommentCaptureFailed(this._logger, review.Number, ex);
+            return [];
+        }
     }
 
     internal static GitHubReviewRequest BuildPayload(
@@ -164,6 +225,19 @@ internal sealed class GitHubLifecyclePublicationService(
         var normalized = body.Trim();
         return normalized.Length <= 1000 ? normalized : normalized[..1000].TrimEnd() + "...";
     }
+
+    [LoggerMessage(
+        EventId = 4781,
+        Level = LogLevel.Debug,
+        Message = "GitHub posted-comment id capture failed for pull request {ReviewNumber}; provenance left empty.")]
+    private static partial void LogPostedCommentCaptureFailed(ILogger logger, int reviewNumber, Exception exception);
+
+    private sealed record GitHubReviewResponse([property: JsonPropertyName("id")] long? Id);
+
+    private sealed record GitHubReviewCommentResponse(
+        [property: JsonPropertyName("id")] long? Id,
+        [property: JsonPropertyName("path")] string? Path,
+        [property: JsonPropertyName("line")] int? Line);
 
     internal sealed record GitHubReviewRequest(
         [property: JsonPropertyName("commit_id")]

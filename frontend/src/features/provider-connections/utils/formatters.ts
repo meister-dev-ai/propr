@@ -94,3 +94,15 @@ export function parseOptionalPositiveNumber(value: string | number): number | nu
   const parsed = Number(trimmed)
   return Number.isInteger(parsed) && parsed > 0 ? parsed : null
 }
+
+// A blank value is allowed (the API falls back to the 30-day default); when
+// supplied the retention window must be a whole number of days in 1..3650.
+export function isRetentionDaysValid(value: string | number): boolean {
+  const trimmed = String(value).trim()
+  if (!trimmed) {
+    return true
+  }
+
+  const parsed = Number(trimmed)
+  return Number.isInteger(parsed) && parsed >= 1 && parsed <= 3650
+}

@@ -2,6 +2,7 @@
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
 using System.Diagnostics;
+using System.Globalization;
 using System.Text;
 using MeisterProPR.Application.DTOs;
 using MeisterProPR.Application.Features.Reviewing.Execution.Models;
@@ -86,7 +87,7 @@ public sealed class AdoCommentPoster(
         // Post summary as PR-level thread, skipping if a bot summary already exists.
         if (!HasBotSummary(existingThreads, botId, publicationIdentity))
         {
-            await CreateThreadAsync(
+            var createdSummary = await CreateThreadAsync(
                 gitClient,
                 projectId,
                 repositoryId,
@@ -95,6 +96,7 @@ public sealed class AdoCommentPoster(
                 null,
                 null,
                 cancellationToken);
+            diagnostics.RecordPostedComments(CaptureCreatedComments(createdSummary, null, null));
         }
 
         // Post each inline comment, skipping locations the bot has already covered.
@@ -153,7 +155,7 @@ public sealed class AdoCommentPoster(
                 }
             }
 
-            await CreateThreadAsync(
+            var createdThread = await CreateThreadAsync(
                 gitClient,
                 projectId,
                 repositoryId,
@@ -164,6 +166,7 @@ public sealed class AdoCommentPoster(
                 cancellationToken);
 
             diagnostics.RecordPosted();
+            diagnostics.RecordPostedComments(CaptureCreatedComments(createdThread, comment.FilePath, comment.LineNumber));
         }
 
         return diagnostics.Build();
@@ -390,7 +393,7 @@ public sealed class AdoCommentPoster(
         };
     }
 
-    private static async Task CreateThreadAsync(
+    private static async Task<GitPullRequestCommentThread> CreateThreadAsync(
         GitHttpClient gitClient,
         string projectId,
         string repositoryId,
@@ -408,12 +411,36 @@ public sealed class AdoCommentPoster(
             ThreadContext = threadContext,
             PullRequestThreadContext = prThreadContext,
         };
-        await gitClient.CreateThreadAsync(
+        return await gitClient.CreateThreadAsync(
             thread,
             repositoryId,
             pullRequestId,
             projectId,
             ct);
+    }
+
+    // Best-effort provenance capture: maps each created comment's id (the value the thread crawler later
+    // reports as the comment id) and its owning thread id from the response Azure DevOps returns. A null
+    // or empty response yields no refs and never disrupts publishing.
+    internal static IReadOnlyList<PostedReviewCommentRef> CaptureCreatedComments(
+        GitPullRequestCommentThread? createdThread,
+        string? filePath,
+        int? line)
+    {
+        if (createdThread?.Comments is not { Count: > 0 } comments)
+        {
+            return [];
+        }
+
+        var threadId = createdThread.Id.ToString(CultureInfo.InvariantCulture);
+        return comments
+            .Where(comment => comment.Id > 0)
+            .Select(comment => new PostedReviewCommentRef(
+                comment.Id.ToString(CultureInfo.InvariantCulture),
+                threadId,
+                filePath,
+                line))
+            .ToList();
     }
 
     internal static string TruncateIfNeeded(string message)
@@ -787,6 +814,7 @@ public sealed class AdoCommentPoster(
     {
         private readonly HashSet<string> _degradedComponents = new(StringComparer.Ordinal);
         private readonly HashSet<string> _fallbackChecks = new(StringComparer.Ordinal);
+        private readonly List<PostedReviewCommentRef> _postedComments = [];
         private readonly Dictionary<string, int> _suppressionReasons = new(StringComparer.Ordinal);
         private int _affectedCandidateCount;
         private bool _consideredOpenThreads;
@@ -824,6 +852,11 @@ public sealed class AdoCommentPoster(
         public void RecordPosted()
         {
             this._postedCount++;
+        }
+
+        public void RecordPostedComments(IReadOnlyList<PostedReviewCommentRef> comments)
+        {
+            this._postedComments.AddRange(comments);
         }
 
         public void RecordSuppression(string reasonCode, int count = 1)
@@ -875,6 +908,7 @@ public sealed class AdoCommentPoster(
                     .AsReadOnly(),
                 DegradedCause = this._degradedCause,
                 AffectedCandidateCount = this._affectedCandidateCount,
+                PostedComments = this._postedComments.AsReadOnly(),
             };
         }
     }

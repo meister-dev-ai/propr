@@ -35,6 +35,7 @@ using MeisterProPR.Infrastructure.Features.Mentions;
 using MeisterProPR.Infrastructure.Features.ProCursor.Broker;
 using MeisterProPR.Infrastructure.Features.ProCursor.Remote;
 using MeisterProPR.Infrastructure.Features.PromptCustomization;
+using MeisterProPR.Infrastructure.Features.ReviewArchive;
 using MeisterProPR.Infrastructure.Features.Reviewing;
 using MeisterProPR.Infrastructure.Features.Reviewing.DependencyInjection;
 using MeisterProPR.Infrastructure.Features.UsageReporting;
@@ -184,6 +185,7 @@ try
     builder.Services.AddPromptCustomizationModule(builder.Configuration, builder.Environment);
     builder.Services.AddUsageReportingModule(builder.Configuration, builder.Environment);
     builder.Services.AddLicensingModule(builder.Configuration, builder.Environment);
+    builder.Services.AddReviewArchiveModule(builder.Configuration, builder.Environment);
     builder.Services.AddProCursorRemoteMode(builder.Configuration);
     builder.Services.AddScoped<ProCursorRuntimeConfigurationProjectionService>();
     builder.Services.AddScoped<ManagedRemoteProCursorGateway>();
@@ -313,6 +315,15 @@ try
     if (!isTesting && !disableHostedServices)
     {
         builder.Services.AddHostedService(sp => sp.GetRequiredService<MentionReplyWorker>());
+    }
+
+    // RetentionPurgeWorker deletes elapsed retained raw PR data. It depends on the review-archive
+    // store, which is only registered when a database connection string is configured, so gate it
+    // the same way to keep it inert in DB-less test runs.
+    builder.Services.AddSingleton<RetentionPurgeWorker>();
+    if (hasDatabaseConnectionString && !isTesting && !disableHostedServices)
+    {
+        builder.Services.AddHostedService(sp => sp.GetRequiredService<RetentionPurgeWorker>());
     }
 
     var allowedOrigins = BrowserOriginPolicy.GetAllowedOrigins(builder.Configuration);

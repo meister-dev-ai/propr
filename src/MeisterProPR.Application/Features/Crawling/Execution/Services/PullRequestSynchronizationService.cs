@@ -10,6 +10,7 @@ using MeisterProPR.Application.DTOs;
 using MeisterProPR.Application.Features.Crawling.Execution.Models;
 using MeisterProPR.Application.Features.Crawling.Execution.Ports;
 using MeisterProPR.Application.Features.Crawling.Webhooks.Ports;
+using MeisterProPR.Application.Features.ReviewArchive;
 using MeisterProPR.Application.Features.Reviewing.Execution.Models;
 using MeisterProPR.Application.Interfaces;
 using MeisterProPR.Application.Support;
@@ -29,7 +30,11 @@ public sealed class PullRequestSynchronizationService(
     IReviewerThreadStatusFetcher? threadStatusFetcher = null,
     IThreadMemoryService? threadMemoryService = null,
     IReviewPrScanRepository? prScanRepository = null,
-    IClientRegistry? clientRegistry = null) : IPullRequestSynchronizationService
+    IClientRegistry? clientRegistry = null,
+    IClientScmConnectionRepository? scmConnectionRepository = null,
+    IPullRequestFetcher? pullRequestFetcher = null,
+    IReviewArchiveIngestionService? reviewArchiveIngestionService = null,
+    IPostedCommentOriginStore? postedCommentOriginStore = null) : IPullRequestSynchronizationService
 {
     private const string ActivationSourceTagName = "pull_request.activation_source";
     private static readonly ActivitySource CrawlingActivitySource = new("MeisterProPR.Crawling", "1.0.0");
@@ -81,8 +86,10 @@ public sealed class PullRequestSynchronizationService(
                 return CompleteOutcome(activity, startedAt, request, outcome);
             }
 
-            var reviewerId = await this.ResolveReviewerIdAsync(request, ct);
+            var reviewerIdentity = await this.ResolveReviewerIdentityAsync(request, ct);
+            var reviewerId = ResolveReviewerId(reviewerIdentity);
             await this.RunThreadMemoryStateMachineAsync(request, reviewerId, ct);
+            await this.IngestRetainedThreadsAsync(request, reviewerIdentity, reviewerId, ct);
 
             var iterationId = request.CandidateIterationId;
             if (!iterationId.HasValue)
@@ -559,7 +566,9 @@ public sealed class PullRequestSynchronizationService(
         return null;
     }
 
-    private async Task<Guid?> ResolveReviewerIdAsync(PullRequestSynchronizationRequest request, CancellationToken ct)
+    private async Task<ReviewerIdentity?> ResolveReviewerIdentityAsync(
+        PullRequestSynchronizationRequest request,
+        CancellationToken ct)
     {
         var reviewerIdentity = request.RequestedReviewerIdentity;
         if (reviewerIdentity is null && clientRegistry is not null)
@@ -568,7 +577,7 @@ public sealed class PullRequestSynchronizationService(
             reviewerIdentity = await clientRegistry.GetEffectiveReviewerIdentityAsync(request.ClientId, host, ct);
         }
 
-        return ResolveReviewerId(reviewerIdentity);
+        return reviewerIdentity;
     }
 
     private static int? TryCreateSyntheticIterationId(ReviewRevision? revision)
@@ -682,6 +691,214 @@ public sealed class PullRequestSynchronizationService(
                 "Shared synchronization failed while reconciling thread memory for PR {PullRequestId}.",
                 request.PullRequestId);
         }
+    }
+
+    private async Task IngestRetainedThreadsAsync(
+        PullRequestSynchronizationRequest request,
+        ReviewerIdentity? reviewerIdentity,
+        Guid? reviewerId,
+        CancellationToken ct)
+    {
+        // Passive archive observer: only runs when an opted-in connection is resolved and the archive
+        // consumer is registered. When retention is off it performs no extra work and no extra fetch.
+        if (reviewArchiveIngestionService is null
+            || pullRequestFetcher is null
+            || scmConnectionRepository is null)
+        {
+            return;
+        }
+
+        try
+        {
+            var connection = await this.ResolveRetentionConnectionAsync(request, ct);
+            if (connection is null || !connection.StoreThreads)
+            {
+                return;
+            }
+
+            var pullRequest = await pullRequestFetcher.FetchAsync(
+                request.ProviderScopePath,
+                request.ProviderProjectKey,
+                request.RepositoryId,
+                request.PullRequestId,
+                1,
+                null,
+                request.ClientId,
+                ct);
+
+            // Resolve the originating-job provenance for the whole pull request in one pass. This is a
+            // passive side-read: when the store is absent or the read fails, stamping is simply skipped and
+            // ingestion proceeds with no originating job, never disrupting the crawl.
+            var originatingJobs = OriginatingJobResolver.FromRows(await this.ResolveOriginatingJobsAsync(request, ct));
+
+            var threads = pullRequest.ExistingThreads ?? [];
+            foreach (var thread in threads)
+            {
+                var evt = BuildThreadUpdatedEvent(request, connection.Id, thread, reviewerIdentity, reviewerId, originatingJobs);
+                await reviewArchiveIngestionService.HandleThreadUpdatedAsync(evt, ct);
+            }
+        }
+        catch (Exception ex) when (!ct.IsCancellationRequested)
+        {
+            logger.LogWarning(
+                ex,
+                "Thread retention ingestion failed for PR {PullRequestId}; continuing without archiving.",
+                request.PullRequestId);
+        }
+    }
+
+    private async Task<IReadOnlyList<PostedCommentOriginRow>> ResolveOriginatingJobsAsync(
+        PullRequestSynchronizationRequest request,
+        CancellationToken ct)
+    {
+        if (postedCommentOriginStore is null)
+        {
+            return [];
+        }
+
+        try
+        {
+            return await postedCommentOriginStore.GetJobIdsForPullRequestAsync(
+                request.ClientId,
+                request.RepositoryId,
+                request.PullRequestId,
+                ct);
+        }
+        catch (Exception ex) when (!ct.IsCancellationRequested)
+        {
+            // Provenance is a passive enrichment; a lookup failure must never disrupt the crawl. Fall back
+            // to no rows so retained comments are ingested without an originating job.
+            logger.LogWarning(
+                ex,
+                "Comment-origin lookup failed for PR {PullRequestId}; ingesting retained threads without originating jobs.",
+                request.PullRequestId);
+            return [];
+        }
+    }
+
+    private async Task<ClientScmConnectionDto?> ResolveRetentionConnectionAsync(
+        PullRequestSynchronizationRequest request,
+        CancellationToken ct)
+    {
+        if (scmConnectionRepository is null)
+        {
+            return null;
+        }
+
+        var host = request.Host ?? new ProviderHostRef(request.Provider, request.ProviderScopePath);
+        var connections = await scmConnectionRepository.GetByClientIdAsync(request.ClientId, ct);
+
+        return connections
+            .Where(connection => connection.IsActive
+                                 && connection.ProviderFamily == host.Provider
+                                 && ConnectionHostMatchesAuthority(connection.HostBaseUrl, host.HostBaseUrl))
+            // Prefer the most specific host match when several connections share an authority.
+            .OrderByDescending(connection => connection.HostBaseUrl.Length)
+            .FirstOrDefault();
+    }
+
+    private static bool ConnectionHostMatchesAuthority(string connectionHostBaseUrl, string hostAuthority)
+    {
+        // The request host is normalized to an authority (scheme://host[:port]); a connection's stored
+        // host base URL may carry a path (e.g. an Azure DevOps organization URL). Match on the authority.
+        if (!Uri.TryCreate(connectionHostBaseUrl.Trim(), UriKind.Absolute, out var connectionUri))
+        {
+            return string.Equals(
+                connectionHostBaseUrl.Trim().TrimEnd('/'),
+                hostAuthority.Trim().TrimEnd('/'),
+                StringComparison.OrdinalIgnoreCase);
+        }
+
+        var connectionAuthority = connectionUri.GetLeftPart(UriPartial.Authority).TrimEnd('/');
+        return string.Equals(connectionAuthority, hostAuthority.Trim().TrimEnd('/'), StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static ThreadUpdatedEvent BuildThreadUpdatedEvent(
+        PullRequestSynchronizationRequest request,
+        Guid connectionId,
+        PrCommentThread thread,
+        ReviewerIdentity? reviewerIdentity,
+        Guid? reviewerId,
+        OriginatingJobResolver originatingJobs)
+    {
+        var comments = new List<ThreadUpdatedComment>(thread.Comments.Count);
+        var lastActivityAt = DateTimeOffset.MinValue;
+        var threadId = thread.ThreadId.ToString(CultureInfo.InvariantCulture);
+
+        foreach (var comment in thread.Comments)
+        {
+            var publishedAt = comment.PublishedAt ?? DateTimeOffset.UtcNow;
+            if (publishedAt > lastActivityAt)
+            {
+                lastActivityAt = publishedAt;
+            }
+
+            var commentId = comment.CommentId.ToString(CultureInfo.InvariantCulture);
+            // Attribute comment-id-primary: the comment id alone resolves the originating job for providers
+            // whose comment ids are globally unique within the pull request (GitHub/GitLab/Forgejo), where
+            // the crawled thread id need not match the recorded one. Azure DevOps scopes comment ids to a
+            // thread, so several origins can share a comment id; the thread id breaks that collision.
+            var originatingJobId = originatingJobs.Resolve(threadId, commentId);
+
+            comments.Add(
+                new ThreadUpdatedComment(
+                    commentId,
+                    ResolveAuthorIdentity(comment),
+                    IsAiAuthored(comment, reviewerIdentity, reviewerId),
+                    publishedAt,
+                    comment.Content,
+                    originatingJobId));
+        }
+
+        if (lastActivityAt == DateTimeOffset.MinValue)
+        {
+            lastActivityAt = DateTimeOffset.UtcNow;
+        }
+
+        return new ThreadUpdatedEvent(
+            request.ClientId,
+            connectionId,
+            request.RepositoryId,
+            request.PullRequestId,
+            threadId,
+            thread.FilePath,
+            thread.LineNumber,
+            thread.Status ?? "Active",
+            lastActivityAt,
+            comments);
+    }
+
+    private static string ResolveAuthorIdentity(PrThreadComment comment)
+    {
+        if (comment.AuthorId.HasValue && comment.AuthorId.Value != Guid.Empty)
+        {
+            return comment.AuthorId.Value.ToString("D");
+        }
+
+        return string.IsNullOrWhiteSpace(comment.AuthorName) ? "unknown" : comment.AuthorName;
+    }
+
+    private static bool IsAiAuthored(PrThreadComment comment, ReviewerIdentity? reviewerIdentity, Guid? reviewerId)
+    {
+        if (reviewerIdentity is null)
+        {
+            return false;
+        }
+
+        // Identity-bearing providers (Azure DevOps) stamp the author GUID; match it to the resolved
+        // reviewer GUID. Other providers expose a login/display name; match on that instead.
+        if (comment.AuthorId.HasValue && reviewerId.HasValue && comment.AuthorId.Value == reviewerId.Value)
+        {
+            return true;
+        }
+
+        if (string.IsNullOrWhiteSpace(comment.AuthorName))
+        {
+            return false;
+        }
+
+        return string.Equals(comment.AuthorName, reviewerIdentity.Login, StringComparison.OrdinalIgnoreCase)
+               || string.Equals(comment.AuthorName, reviewerIdentity.DisplayName, StringComparison.OrdinalIgnoreCase);
     }
 
     private async Task UpdateLastSeenStatusesAsync(
@@ -858,5 +1075,57 @@ public sealed class PullRequestSynchronizationService(
             null,
             PullRequestSynchronizationLifecycleDecision.None,
             []);
+    }
+
+    /// <summary>
+    ///     Resolves a crawled comment back to the review job that posted it, comment-id-primary: among a
+    ///     pull request's origins sharing a comment id, a single match wins outright; only a thread-local
+    ///     collision (several origins under one comment id, as Azure DevOps produces) falls back to the
+    ///     crawled thread id to disambiguate. Comment ids that are globally unique within the pull request
+    ///     (GitHub/GitLab/Forgejo) therefore resolve on the comment id alone, ignoring a non-matching or
+    ///     null crawled thread id.
+    /// </summary>
+    private sealed class OriginatingJobResolver
+    {
+        private readonly IReadOnlyDictionary<string, IReadOnlyList<PostedCommentOriginRow>> _byCommentId;
+
+        private OriginatingJobResolver(IReadOnlyDictionary<string, IReadOnlyList<PostedCommentOriginRow>> byCommentId)
+        {
+            this._byCommentId = byCommentId;
+        }
+
+        public static OriginatingJobResolver FromRows(IReadOnlyList<PostedCommentOriginRow> rows)
+        {
+            var byCommentId = rows
+                .GroupBy(row => row.ProviderCommentId, StringComparer.Ordinal)
+                .ToDictionary(
+                    group => group.Key,
+                    group => (IReadOnlyList<PostedCommentOriginRow>)group.ToList(),
+                    StringComparer.Ordinal);
+            return new OriginatingJobResolver(byCommentId);
+        }
+
+        public Guid? Resolve(string? threadId, string commentId)
+        {
+            if (!this._byCommentId.TryGetValue(commentId, out var matches) || matches.Count == 0)
+            {
+                return null;
+            }
+
+            if (matches.Count == 1)
+            {
+                return matches[0].JobId;
+            }
+
+            foreach (var match in matches)
+            {
+                if (string.Equals(match.ProviderThreadId, threadId, StringComparison.Ordinal))
+                {
+                    return match.JobId;
+                }
+            }
+
+            return null;
+        }
     }
 }

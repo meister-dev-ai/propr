@@ -46,6 +46,12 @@ public sealed record ReviewCommentPostingDiagnosticsDto
     /// <summary>Number of candidates evaluated while degraded duplicate protection was active.</summary>
     public int AffectedCandidateCount { get; init; }
 
+    /// <summary>
+    ///     Provider-native comments created by this posting pass, in posting order. Empty when nothing was
+    ///     posted, or when the publishing adapter does not yet surface the created provider comment ids.
+    /// </summary>
+    public IReadOnlyList<PostedReviewCommentRef> PostedComments { get; init; } = [];
+
     /// <summary>True when any reduced duplicate checks were used during the posting pass.</summary>
     public bool UsedFallbackChecks => this.FallbackChecks.Count > 0;
 
@@ -73,6 +79,21 @@ public sealed record ReviewCommentPostingDiagnosticsDto
         };
     }
 }
+
+/// <summary>
+///     A single provider-native comment created by a posting pass, used to record posted-comment
+///     provenance. The provider comment id is the natural lookup key; the optional thread id, file path,
+///     and line are carried for context where the provider exposes them.
+/// </summary>
+/// <param name="ProviderCommentId">Provider-native comment identifier.</param>
+/// <param name="ProviderThreadId">Provider thread identifier, when the provider exposes one.</param>
+/// <param name="FilePath">File the comment was anchored to, when applicable.</param>
+/// <param name="Line">Line the comment was anchored to, when applicable.</param>
+public sealed record PostedReviewCommentRef(
+    string ProviderCommentId,
+    string? ProviderThreadId,
+    string? FilePath,
+    int? Line);
 
 /// <summary>
 ///     Result returned by the historical thread-memory duplicate-suppression lookup.

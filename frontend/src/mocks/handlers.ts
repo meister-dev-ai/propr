@@ -1305,6 +1305,23 @@ let providerScopesByConnection: Record<string, any[]> = {
       createdAt: new Date(Date.now() - 86400000 * 7).toISOString(),
       updatedAt: new Date(Date.now() - 4 * 3600000).toISOString(),
     },
+    {
+      // Matches the provider scope path carried on the review-history PR links so the
+      // retained-archive section can resolve this connection from the PR view route.
+      id: 'provider-scope-ado-acme',
+      clientId: '1',
+      connectionId: 'provider-conn-ado-1',
+      scopeType: 'organization',
+      externalScopeId: 'acme',
+      scopePath: 'https://dev.azure.com/acme',
+      displayName: 'Acme Org',
+      verificationStatus: 'verified',
+      isEnabled: true,
+      lastVerifiedAt: new Date(Date.now() - 4 * 3600000).toISOString(),
+      lastVerificationError: null,
+      createdAt: new Date(Date.now() - 86400000 * 7).toISOString(),
+      updatedAt: new Date(Date.now() - 4 * 3600000).toISOString(),
+    },
   ],
   'provider-conn-github-1': [
     {
@@ -1341,6 +1358,122 @@ let providerScopesByConnection: Record<string, any[]> = {
     },
   ],
 }
+
+// Retained pull request archive data, served for the repository + pull request shown by the
+// review-history links (repository `backend-service`, pull request #42). The owning connection is
+// resolved server-side, so the read endpoints carry no connectionId. Any other repository/PR
+// combination yields no retained data so the section's empty state is exercised.
+const retainedArchiveRepositoryId = 'backend-service'
+const retainedArchivePullRequestId = 42
+
+function hasRetainedArchive(repositoryId: string | null, pullRequestId: number): boolean {
+  return repositoryId === retainedArchiveRepositoryId && pullRequestId === retainedArchivePullRequestId
+}
+
+const retainedThreads = [
+  {
+    threadId: 'thread-pr-1',
+    filePath: null,
+    line: null,
+    status: 'Active',
+    updatedAt: new Date(Date.now() - 2 * 3600000).toISOString(),
+    comments: [
+      {
+        commentId: 'comment-pr-1-human',
+        authorIdentity: 'jane.developer',
+        isAiAuthored: false,
+        publishedAt: new Date(Date.now() - 3 * 3600000).toISOString(),
+        body: 'Can we double-check the token refresh path before merging?',
+      },
+    ],
+  },
+  {
+    threadId: 'thread-file-1',
+    filePath: 'src/auth/middleware.ts',
+    line: 42,
+    status: 'Fixed',
+    updatedAt: new Date(Date.now() - 90 * 60000).toISOString(),
+    comments: [
+      {
+        commentId: 'comment-file-1-ai',
+        authorIdentity: 'ProPR Reviewer',
+        isAiAuthored: true,
+        publishedAt: new Date(Date.now() - 2 * 3600000).toISOString(),
+        body: 'This handler swallows the rejected token error; surface it so callers can react.',
+        // Provenance: the review run that produced this AI comment, surfaced as a "View trace" link.
+        originatingJobId: '11111111-2222-3333-4444-555555555555',
+      },
+      {
+        commentId: 'comment-file-1-human',
+        authorIdentity: 'jane.developer',
+        isAiAuthored: false,
+        publishedAt: new Date(Date.now() - 100 * 60000).toISOString(),
+        body: 'Good catch, fixed by rethrowing with context.',
+      },
+    ],
+  },
+]
+
+const retainedFiles = [
+  {
+    filePath: 'src/auth/middleware.ts',
+    revisionKey: 'rev-2',
+    changeType: 'modified',
+    isBinary: false,
+    createdAt: new Date(Date.now() - 90 * 60000).toISOString(),
+  },
+  {
+    filePath: 'src/auth/tokens.ts',
+    revisionKey: 'rev-2',
+    changeType: 'added',
+    isBinary: false,
+    createdAt: new Date(Date.now() - 90 * 60000).toISOString(),
+  },
+]
+
+const retainedFileDiffs = [
+  {
+    filePath: 'src/auth/middleware.ts',
+    revisionKey: 'rev-2',
+    changeType: 'modified',
+    isBinary: false,
+    createdAt: new Date(Date.now() - 90 * 60000).toISOString(),
+    unifiedDiff: [
+      'diff --git a/src/auth/middleware.ts b/src/auth/middleware.ts',
+      'index 1111111..2222222 100644',
+      '--- a/src/auth/middleware.ts',
+      '+++ b/src/auth/middleware.ts',
+      '@@ -39,7 +39,9 @@ export function authenticate(req: Request): Principal {',
+      '   const token = readBearerToken(req)',
+      '   if (!token) {',
+      '-    return anonymous()',
+      '+    throw new UnauthorizedError(\'missing bearer token\')',
+      '   }',
+      '-  return verify(token)',
+      '+  const principal = verify(token)',
+      '+  return principal',
+      ' }',
+    ].join('\n'),
+  },
+  {
+    filePath: 'src/auth/tokens.ts',
+    revisionKey: 'rev-2',
+    changeType: 'added',
+    isBinary: false,
+    createdAt: new Date(Date.now() - 90 * 60000).toISOString(),
+    unifiedDiff: [
+      'diff --git a/src/auth/tokens.ts b/src/auth/tokens.ts',
+      'new file mode 100644',
+      'index 0000000..3333333',
+      '--- /dev/null',
+      '+++ b/src/auth/tokens.ts',
+      '@@ -0,0 +1,3 @@',
+      '+export function verify(token: string): Principal {',
+      '+  return decode(token)',
+      '+}',
+    ].join('\n'),
+  },
+]
 
 let providerReviewerIdentitiesByConnection: Record<string, any | null> = {
   'provider-conn-ado-1': {
@@ -3302,6 +3435,53 @@ export const handlers = [
       totalOutputTokens,
       samples,
     })
+  }),
+
+  // Retained Pull Request Archive (read-only threads, files, and stored diffs)
+  http.get(`${base}/clients/:clientId/review-archive/pull-requests/threads`, async ({ request }) => {
+    await delay(180)
+    const url = new URL(request.url)
+    const repositoryId = url.searchParams.get('repositoryId')
+    const pullRequestId = Number(url.searchParams.get('pullRequestId'))
+
+    if (!hasRetainedArchive(repositoryId, pullRequestId)) {
+      return HttpResponse.json([])
+    }
+
+    return HttpResponse.json(retainedThreads)
+  }),
+
+  http.get(`${base}/clients/:clientId/review-archive/pull-requests/files`, async ({ request }) => {
+    await delay(180)
+    const url = new URL(request.url)
+    const repositoryId = url.searchParams.get('repositoryId')
+    const pullRequestId = Number(url.searchParams.get('pullRequestId'))
+
+    if (!hasRetainedArchive(repositoryId, pullRequestId)) {
+      return HttpResponse.json([])
+    }
+
+    return HttpResponse.json(retainedFiles)
+  }),
+
+  http.get(`${base}/clients/:clientId/review-archive/pull-requests/file-diff`, async ({ request }) => {
+    await delay(180)
+    const url = new URL(request.url)
+    const repositoryId = url.searchParams.get('repositoryId')
+    const pullRequestId = Number(url.searchParams.get('pullRequestId'))
+    const filePath = url.searchParams.get('filePath')
+
+    if (!hasRetainedArchive(repositoryId, pullRequestId)) {
+      return new HttpResponse(null, { status: 404 })
+    }
+
+    const diff = retainedFileDiffs.find((entry) => entry.filePath === filePath)
+    if (!diff) {
+      // The documented "no stored diff for this file" case.
+      return new HttpResponse(null, { status: 404 })
+    }
+
+    return HttpResponse.json(diff)
   }),
 
   // PR Review View Aggregated Data

@@ -285,6 +285,33 @@ describe('JobProtocolDiffViewer', () => {
         expect((lastDiffContent ?? '').match(/^@@ /gm)?.length).toBe(2)
     })
 
+    it('does not inject inline-thread rows or render the thread slot when no inlineThreads are passed', async () => {
+        const wrapper = mount(JobProtocolDiffViewer, {
+            props: {
+                fileResultId: 'file-result-1',
+                diff: createDiff(),
+            },
+            slots: {
+                // A thread slot is provided but must never render without anchored threads.
+                thread: '<div class="should-not-render" />',
+            },
+            global: {
+                stubs: {
+                    ProgressOrb: { template: '<div class="orb-stub" />' },
+                },
+            },
+        })
+
+        await nextTick()
+        await nextTick()
+
+        // No DOM post-processing for the default (no-threads) caller: behavior is unchanged.
+        expect(wrapper.find('.d2h-inline-thread-row').exists()).toBe(false)
+        expect(wrapper.find('.should-not-render').exists()).toBe(false)
+        // The off-diff host stays empty.
+        expect(wrapper.find('.diff-inline-thread-host').element.children.length).toBe(0)
+    })
+
     it('configures diff2html with large-diff protection options', async () => {
         mount(JobProtocolDiffViewer, {
             props: {

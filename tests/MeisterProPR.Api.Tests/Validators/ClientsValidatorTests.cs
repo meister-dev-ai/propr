@@ -255,35 +255,9 @@ public sealed class ClientsValidatorTests
         Assert.True(result.IsValid);
     }
 
-    [Fact]
-    public void PatchProviderConnection_AzureDevOpsServerPatOnHttpHost_Fails()
-    {
-        var result = PatchProviderConnectionValidator.Validate(
-            new PatchClientProviderConnectionRequest(
-                "http://127.0.0.1",
-                ScmAuthenticationKind.PersonalAccessToken));
-
-        Assert.False(result.IsValid);
-        Assert.Contains(
-            result.Errors,
-            error => error.ErrorMessage.Contains(
-                "personal access token and Windows user-account authentication require an HTTPS host URL", StringComparison.OrdinalIgnoreCase));
-    }
-
-    [Fact]
-    public void PatchProviderConnection_AzureDevOpsServerWindowsAccountOnHttpHost_Fails()
-    {
-        var result = PatchProviderConnectionValidator.Validate(
-            new PatchClientProviderConnectionRequest(
-                "http://127.0.0.1",
-                ScmAuthenticationKind.WindowsUserAccount,
-                @"CONTOSO\\ado-user"));
-
-        Assert.False(result.IsValid);
-        Assert.Contains(
-            result.Errors,
-            error => error.ErrorMessage.Contains("requires an HTTPS host URL", StringComparison.OrdinalIgnoreCase));
-    }
+    // The provider-specific "credential auth requires an HTTPS host" rule is enforced by the controller
+    // (which knows the existing connection's provider), not the request-only patch validator, so a patch
+    // with PAT on an http host is provider-agnostic here. Controller coverage lives in the controller tests.
 
     [Fact]
     public void PatchProviderConnection_WindowsAccountAuthenticationWithoutUserName_Fails()

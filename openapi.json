@@ -3701,7 +3701,7 @@
           }
         ],
         "requestBody": {
-          "description": "Provider-connection details.",
+          "description": "Provider-connection details, including the per-connection retention opt-in settings.",
           "content": {
             "application/json": {
               "schema": {
@@ -3983,7 +3983,7 @@
           }
         ],
         "requestBody": {
-          "description": "Fields to update; omit a field to leave it unchanged.",
+          "description": "Fields to update, including the per-connection retention opt-in settings; omit a field to leave it unchanged.",
           "content": {
             "application/json": {
               "schema": {
@@ -10812,6 +10812,417 @@
         }
       }
     },
+    "/clients/{clientId}/review-archive/pull-requests/threads": {
+      "get": {
+        "tags": [
+          "RetainedPullRequestData"
+        ],
+        "summary": "Returns the retained discussion threads (with their comments) for a pull request. Each comment\ncarries its author identity, whether it was AI-authored, its status, publication timestamp, and\nbody. An empty array means no thread data is retained for the pull request.",
+        "parameters": [
+          {
+            "name": "clientId",
+            "in": "path",
+            "description": "Owning client identifier (route).",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "repositoryId",
+            "in": "query",
+            "description": "Provider repository identifier (may contain slashes or other path-like characters).",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "pullRequestId",
+            "in": "query",
+            "description": "Provider pull-request identifier.",
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Retained threads for the pull request (possibly empty).",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/RetainedThreadDto"
+                  }
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/RetainedThreadDto"
+                  }
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/RetainedThreadDto"
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Missing or invalid parameters.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid credentials.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Caller is not an admin.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/clients/{clientId}/review-archive/pull-requests/files": {
+      "get": {
+        "tags": [
+          "RetainedPullRequestData"
+        ],
+        "summary": "Returns the list of retained files for a pull request, each collapsed to its newest retained\nrevision. The diff text is not included. An empty array means no diff data is retained for the\npull request.",
+        "parameters": [
+          {
+            "name": "clientId",
+            "in": "path",
+            "description": "Owning client identifier (route).",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "repositoryId",
+            "in": "query",
+            "description": "Provider repository identifier (may contain slashes or other path-like characters).",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "pullRequestId",
+            "in": "query",
+            "description": "Provider pull-request identifier.",
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Retained files for the pull request (possibly empty).",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/RetainedFileDto"
+                  }
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/RetainedFileDto"
+                  }
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/RetainedFileDto"
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Missing or invalid parameters.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid credentials.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Caller is not an admin.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/clients/{clientId}/review-archive/pull-requests/file-diff": {
+      "get": {
+        "tags": [
+          "RetainedPullRequestData"
+        ],
+        "summary": "Returns a single retained file's stored unified diff for a pull request. When no revision is\nsupplied the newest retained revision for the file is returned.",
+        "parameters": [
+          {
+            "name": "clientId",
+            "in": "path",
+            "description": "Owning client identifier (route).",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "repositoryId",
+            "in": "query",
+            "description": "Provider repository identifier (may contain slashes or other path-like characters).",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "pullRequestId",
+            "in": "query",
+            "description": "Provider pull-request identifier.",
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          },
+          {
+            "name": "filePath",
+            "in": "query",
+            "description": "Repository-relative file path whose stored diff should be returned.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "revisionKey",
+            "in": "query",
+            "description": "Optional review increment to return; defaults to the newest retained revision.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The retained file diff.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/RetainedFileDiffDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RetainedFileDiffDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RetainedFileDiffDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Missing or invalid parameters.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid credentials.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Caller is not an admin.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No diff is retained for the file.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/reviewing/jobs/{jobId}/status": {
       "get": {
         "tags": [
@@ -15657,6 +16068,17 @@
           "userName": {
             "type": "string",
             "nullable": true
+          },
+          "storeThreads": {
+            "type": "boolean"
+          },
+          "storeDiffs": {
+            "type": "boolean"
+          },
+          "retentionDays": {
+            "type": "integer",
+            "format": "int32",
+            "nullable": true
           }
         },
         "additionalProperties": false,
@@ -16164,6 +16586,17 @@
           "gitHubAppInstallationId": {
             "type": "integer",
             "format": "int64",
+            "nullable": true
+          },
+          "storeThreads": {
+            "type": "boolean"
+          },
+          "storeDiffs": {
+            "type": "boolean"
+          },
+          "retentionDays": {
+            "type": "integer",
+            "format": "int32",
             "nullable": true
           }
         },
@@ -16933,6 +17366,19 @@
           "gitHubAppInstallationId": {
             "type": "integer",
             "format": "int64",
+            "nullable": true
+          },
+          "storeThreads": {
+            "type": "boolean",
+            "nullable": true
+          },
+          "storeDiffs": {
+            "type": "boolean",
+            "nullable": true
+          },
+          "retentionDays": {
+            "type": "integer",
+            "format": "int32",
             "nullable": true
           }
         },
@@ -19153,6 +19599,151 @@
         "additionalProperties": false,
         "description": "Resolved reviewer-trigger identity candidate returned by provider onboarding APIs."
       },
+      "RetainedCommentDto": {
+        "type": "object",
+        "properties": {
+          "commentId": {
+            "type": "string",
+            "description": "Provider comment identifier.",
+            "nullable": true
+          },
+          "authorIdentity": {
+            "type": "string",
+            "description": "Provider-neutral author identity.",
+            "nullable": true
+          },
+          "isAiAuthored": {
+            "type": "boolean",
+            "description": "Whether the comment was authored by the AI reviewer."
+          },
+          "publishedAt": {
+            "type": "string",
+            "description": "UTC timestamp the comment was published on the provider.",
+            "format": "date-time"
+          },
+          "body": {
+            "type": "string",
+            "description": "The comment body.",
+            "nullable": true
+          },
+          "originatingJobId": {
+            "type": "string",
+            "description": "The review job that produced this comment, when its provenance is retained; null otherwise.",
+            "format": "uuid",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false,
+        "description": "A retained comment within a MeisterProPR.Application.Features.ReviewArchive.RetainedThreadDto."
+      },
+      "RetainedFileDiffDto": {
+        "type": "object",
+        "properties": {
+          "filePath": {
+            "type": "string",
+            "description": "The file path the diff applies to.",
+            "nullable": true
+          },
+          "revisionKey": {
+            "type": "string",
+            "description": "The review increment the diff belongs to.",
+            "nullable": true
+          },
+          "changeType": {
+            "type": "string",
+            "description": "The kind of change.",
+            "nullable": true
+          },
+          "isBinary": {
+            "type": "boolean",
+            "description": "Whether the file is binary (and therefore has no renderable diff)."
+          },
+          "unifiedDiff": {
+            "type": "string",
+            "description": "The canonical unified diff (empty when the file is binary).",
+            "nullable": true
+          },
+          "createdAt": {
+            "type": "string",
+            "description": "UTC timestamp the diff was retained.",
+            "format": "date-time"
+          }
+        },
+        "additionalProperties": false,
+        "description": "A single retained file's stored diff for a pull request, for the in-app PR view."
+      },
+      "RetainedFileDto": {
+        "type": "object",
+        "properties": {
+          "filePath": {
+            "type": "string",
+            "description": "The file path the diff applies to.",
+            "nullable": true
+          },
+          "revisionKey": {
+            "type": "string",
+            "description": "The newest retained review increment the file belongs to.",
+            "nullable": true
+          },
+          "changeType": {
+            "type": "string",
+            "description": "The kind of change.",
+            "nullable": true
+          },
+          "isBinary": {
+            "type": "boolean",
+            "description": "Whether the file is binary (and therefore has no renderable diff)."
+          },
+          "createdAt": {
+            "type": "string",
+            "description": "UTC timestamp the newest retained diff for the file was captured.",
+            "format": "date-time"
+          }
+        },
+        "additionalProperties": false,
+        "description": "A retained file entry for a pull request (without diff text), for the in-app PR view."
+      },
+      "RetainedThreadDto": {
+        "type": "object",
+        "properties": {
+          "threadId": {
+            "type": "string",
+            "description": "Provider thread identifier.",
+            "nullable": true
+          },
+          "filePath": {
+            "type": "string",
+            "description": "File path the thread is anchored to, or null for pull-request-level threads.",
+            "nullable": true
+          },
+          "line": {
+            "type": "integer",
+            "description": "Line the thread is anchored to, or null for pull-request-level threads.",
+            "format": "int32",
+            "nullable": true
+          },
+          "status": {
+            "type": "string",
+            "description": "Last-known thread status.",
+            "nullable": true
+          },
+          "updatedAt": {
+            "type": "string",
+            "description": "UTC timestamp of the latest snapshot.",
+            "format": "date-time"
+          },
+          "comments": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/RetainedCommentDto"
+            },
+            "description": "Comments belonging to the thread, in publication order.",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false,
+        "description": "A retained discussion thread for a pull request, with its comments, for the in-app PR view."
+      },
       "ReviewCodeReviewRefDto": {
         "type": "object",
         "properties": {
@@ -20737,6 +21328,9 @@
     },
     {
       "name": "ProviderWebhookReceiver"
+    },
+    {
+      "name": "RetainedPullRequestData"
     },
     {
       "name": "ReviewJobs"

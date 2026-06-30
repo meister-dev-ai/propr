@@ -74,6 +74,18 @@ internal sealed class ClientScmConnectionEntityTypeConfiguration : IEntityTypeCo
             .HasColumnName("is_active")
             .HasDefaultValue(true);
 
+        builder.Property(connection => connection.StoreThreads)
+            .HasColumnName("store_threads")
+            .HasDefaultValue(false);
+
+        builder.Property(connection => connection.StoreDiffs)
+            .HasColumnName("store_diffs")
+            .HasDefaultValue(false);
+
+        builder.Property(connection => connection.RetentionDays)
+            .HasColumnName("retention_days")
+            .IsRequired(false);
+
         builder.Property(connection => connection.CreatedAt)
             .HasColumnName("created_at")
             .IsRequired();

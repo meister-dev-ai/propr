@@ -2,6 +2,7 @@
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
 using System.Diagnostics;
+using System.Globalization;
 using System.Net;
 using System.Net.Http.Json;
 using System.Text;
@@ -66,12 +67,73 @@ internal sealed class ForgejoCodeReviewPublicationService(
                     responseBody));
         }
 
+        // Best-effort capture of the created provider comment ids. The crawler keys retained comments on
+        // each review comment's id (from the per-review comments endpoint), not the review id, so the
+        // ids are fetched with a follow-up read. Any failure leaves PostedComments empty without
+        // disrupting publishing.
+        var postedComments = await this.TryCapturePostedCommentsAsync(
+            review,
+            context.Connection.Secret,
+            response,
+            ct);
+
         return ReviewCommentPostingDiagnosticsDto.Empty(
                 result.Comments.Count + result.CarriedForwardCandidatesSkipped,
                 result.CarriedForwardCandidatesSkipped) with
             {
                 PostedCount = result.Comments.Count,
+                PostedComments = postedComments,
             };
+    }
+
+    private async Task<IReadOnlyList<PostedReviewCommentRef>> TryCapturePostedCommentsAsync(
+        CodeReviewRef review,
+        string secret,
+        HttpResponseMessage reviewResponse,
+        CancellationToken ct)
+    {
+        try
+        {
+            var createdReview = await reviewResponse.Content
+                .ReadFromJsonAsync<ForgejoCreatedReviewResponse>(ct);
+            if (createdReview?.Id is not { } reviewId)
+            {
+                return [];
+            }
+
+            var reviewIdText = reviewId.ToString(CultureInfo.InvariantCulture);
+            using var commentsRequest = ForgejoConnectionVerifier.CreateAuthenticatedRequest(
+                ForgejoConnectionVerifier.BuildApiUri(
+                    review.Repository.Host,
+                    $"/repos/{ForgejoCodeReviewQueryService.BuildRepositoryPath(review.Repository)}/pulls/{review.Number}/reviews/{reviewIdText}/comments"),
+                secret);
+            using var commentsResponse = await httpClientFactory.CreateClient("ForgejoProvider")
+                .SendAsync(commentsRequest, ct);
+            if (!commentsResponse.IsSuccessStatusCode)
+            {
+                return [];
+            }
+
+            var comments = await commentsResponse.Content
+                .ReadFromJsonAsync<IReadOnlyList<ForgejoCreatedReviewCommentResponse>>(ct);
+            if (comments is null || comments.Count == 0)
+            {
+                return [];
+            }
+
+            return comments
+                .Where(comment => comment.Id is not null)
+                .Select(comment => new PostedReviewCommentRef(
+                    comment.Id!.Value.ToString(CultureInfo.InvariantCulture),
+                    reviewIdText,
+                    string.IsNullOrWhiteSpace(comment.Path) ? null : comment.Path,
+                    comment.Position ?? comment.OriginalPosition))
+                .ToList();
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            return [];
+        }
     }
 
     private async Task DeletePendingReviewsAsync(
@@ -258,6 +320,16 @@ internal sealed class ForgejoCodeReviewPublicationService(
         int NewPosition,
         [property: JsonPropertyName("old_position")]
         int OldPosition);
+
+    private sealed record ForgejoCreatedReviewResponse([property: JsonPropertyName("id")] long? Id);
+
+    private sealed record ForgejoCreatedReviewCommentResponse(
+        [property: JsonPropertyName("id")] int? Id,
+        [property: JsonPropertyName("path")] string? Path,
+        [property: JsonPropertyName("position")]
+        int? Position,
+        [property: JsonPropertyName("original_position")]
+        int? OriginalPosition);
 
     private sealed record ForgejoPullReviewSummary(
         [property: JsonPropertyName("id")] long Id,

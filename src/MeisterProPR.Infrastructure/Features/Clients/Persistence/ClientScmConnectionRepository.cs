@@ -46,6 +46,23 @@ public sealed class ClientScmConnectionRepository(
         return records.Select(ToDto).ToList().AsReadOnly();
     }
 
+    public async Task<IReadOnlyList<ClientScmConnectionRetentionDto>> GetAllForRetentionSweepAsync(CancellationToken ct = default)
+    {
+        var records = await this.WithReadDbAsync(
+            db => db.ClientScmConnections
+                .AsNoTracking()
+                .Select(connection => new ClientScmConnectionRetentionDto(
+                    connection.Id,
+                    connection.ClientId,
+                    connection.StoreThreads,
+                    connection.StoreDiffs,
+                    connection.RetentionDays))
+                .ToListAsync(ct),
+            ct);
+
+        return records.AsReadOnly();
+    }
+
     public async Task<ClientScmConnectionDto?> GetByIdAsync(
         Guid clientId,
         Guid connectionId,
@@ -157,6 +174,9 @@ public sealed class ClientScmConnectionRepository(
         long? gitHubAppId = null,
         long? gitHubAppInstallationId = null,
         string? userName = null,
+        bool storeThreads = false,
+        bool storeDiffs = false,
+        int? retentionDays = null,
         CancellationToken ct = default)
     {
         if (!await dbContext.Clients.AnyAsync(client => client.Id == clientId, ct))
@@ -196,6 +216,9 @@ public sealed class ClientScmConnectionRepository(
             EncryptedSecretMaterial = secretProtectionCodec.Protect(NormalizeRequired(secret), SecretPurpose),
             VerificationStatus = "unknown",
             IsActive = isActive,
+            StoreThreads = storeThreads,
+            StoreDiffs = storeDiffs,
+            RetentionDays = retentionDays,
             CreatedAt = now,
             UpdatedAt = now,
         };
@@ -226,6 +249,9 @@ public sealed class ClientScmConnectionRepository(
         long? gitHubAppId = null,
         long? gitHubAppInstallationId = null,
         string? userName = null,
+        bool storeThreads = false,
+        bool storeDiffs = false,
+        int? retentionDays = null,
         CancellationToken ct = default)
     {
         var record = await dbContext.ClientScmConnections
@@ -296,6 +322,9 @@ public sealed class ClientScmConnectionRepository(
             nameof(gitHubAppInstallationId));
         record.DisplayName = NormalizeRequired(displayName);
         record.IsActive = isActive;
+        record.StoreThreads = storeThreads;
+        record.StoreDiffs = storeDiffs;
+        record.RetentionDays = retentionDays;
         record.UpdatedAt = DateTimeOffset.UtcNow;
 
         if (!string.IsNullOrWhiteSpace(secret))
@@ -449,7 +478,10 @@ public sealed class ClientScmConnectionRepository(
             record.UpdatedAt,
             GitHubAppId: record.GitHubAppId,
             GitHubAppInstallationId: record.GitHubAppInstallationId,
-            UserName: record.UserName);
+            UserName: record.UserName,
+            StoreThreads: record.StoreThreads,
+            StoreDiffs: record.StoreDiffs,
+            RetentionDays: record.RetentionDays);
     }
 
     private ClientScmConnectionCredentialDto ToCredentialDto(ClientScmConnectionRecord record)
@@ -493,6 +525,9 @@ public sealed class ClientScmConnectionRepository(
             null,
             null,
             null,
+            false,
+            false,
+            null,
             ct);
     }
 
@@ -518,6 +553,9 @@ public sealed class ClientScmConnectionRepository(
             isActive,
             null,
             null,
+            null,
+            false,
+            false,
             null,
             ct);
     }

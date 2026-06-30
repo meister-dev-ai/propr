@@ -2712,7 +2712,7 @@ export interface paths {
                 };
                 cookie?: never;
             };
-            /** @description Provider-connection details. */
+            /** @description Provider-connection details, including the per-connection retention opt-in settings. */
             requestBody?: {
                 content: {
                     "application/json": components["schemas"]["CreateClientProviderConnectionRequest"];
@@ -2937,7 +2937,7 @@ export interface paths {
                 };
                 cookie?: never;
             };
-            /** @description Fields to update; omit a field to leave it unchanged. */
+            /** @description Fields to update, including the per-connection retention opt-in settings; omit a field to leave it unchanged. */
             requestBody?: {
                 content: {
                     "application/json": components["schemas"]["PatchClientProviderConnectionRequest"];
@@ -7445,6 +7445,269 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/clients/{clientId}/review-archive/pull-requests/threads": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Returns the retained discussion threads (with their comments) for a pull request. Each comment
+         *     carries its author identity, whether it was AI-authored, its status, publication timestamp, and
+         *     body. An empty array means no thread data is retained for the pull request.
+         */
+        get: {
+            parameters: {
+                query?: {
+                    /** @description Provider repository identifier (may contain slashes or other path-like characters). */
+                    repositoryId?: string;
+                    /** @description Provider pull-request identifier. */
+                    pullRequestId?: number;
+                };
+                header?: never;
+                path: {
+                    /** @description Owning client identifier (route). */
+                    clientId: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Retained threads for the pull request (possibly empty). */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["RetainedThreadDto"][];
+                        "application/json": components["schemas"]["RetainedThreadDto"][];
+                        "text/json": components["schemas"]["RetainedThreadDto"][];
+                    };
+                };
+                /** @description Missing or invalid parameters. */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Missing or invalid credentials. */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Caller is not an admin. */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/clients/{clientId}/review-archive/pull-requests/files": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Returns the list of retained files for a pull request, each collapsed to its newest retained
+         *     revision. The diff text is not included. An empty array means no diff data is retained for the
+         *     pull request.
+         */
+        get: {
+            parameters: {
+                query?: {
+                    /** @description Provider repository identifier (may contain slashes or other path-like characters). */
+                    repositoryId?: string;
+                    /** @description Provider pull-request identifier. */
+                    pullRequestId?: number;
+                };
+                header?: never;
+                path: {
+                    /** @description Owning client identifier (route). */
+                    clientId: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Retained files for the pull request (possibly empty). */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["RetainedFileDto"][];
+                        "application/json": components["schemas"]["RetainedFileDto"][];
+                        "text/json": components["schemas"]["RetainedFileDto"][];
+                    };
+                };
+                /** @description Missing or invalid parameters. */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Missing or invalid credentials. */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Caller is not an admin. */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/clients/{clientId}/review-archive/pull-requests/file-diff": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Returns a single retained file's stored unified diff for a pull request. When no revision is
+         *     supplied the newest retained revision for the file is returned.
+         */
+        get: {
+            parameters: {
+                query?: {
+                    /** @description Provider repository identifier (may contain slashes or other path-like characters). */
+                    repositoryId?: string;
+                    /** @description Provider pull-request identifier. */
+                    pullRequestId?: number;
+                    /** @description Repository-relative file path whose stored diff should be returned. */
+                    filePath?: string;
+                    /** @description Optional review increment to return; defaults to the newest retained revision. */
+                    revisionKey?: string;
+                };
+                header?: never;
+                path: {
+                    /** @description Owning client identifier (route). */
+                    clientId: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description The retained file diff. */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["RetainedFileDiffDto"];
+                        "application/json": components["schemas"]["RetainedFileDiffDto"];
+                        "text/json": components["schemas"]["RetainedFileDiffDto"];
+                    };
+                };
+                /** @description Missing or invalid parameters. */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Missing or invalid credentials. */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Caller is not an admin. */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description No diff is retained for the file. */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/reviewing/jobs/{jobId}/status": {
         parameters: {
             query?: never;
@@ -10400,6 +10663,10 @@ export interface components {
             /** Format: int64 */
             gitHubAppInstallationId?: number | null;
             userName?: string | null;
+            storeThreads?: boolean;
+            storeDiffs?: boolean;
+            /** Format: int32 */
+            retentionDays?: number | null;
         };
         /** @description Client-scoped SCM provider scope metadata returned by admin APIs. */
         ClientScmScopeDto: {
@@ -10576,6 +10843,10 @@ export interface components {
             gitHubAppId?: number | null;
             /** Format: int64 */
             gitHubAppInstallationId?: number | null;
+            storeThreads?: boolean;
+            storeDiffs?: boolean;
+            /** Format: int32 */
+            retentionDays?: number | null;
         };
         /** @description Request body for creating a client-scoped provider scope selection. */
         CreateClientProviderScopeRequest: {
@@ -10904,6 +11175,10 @@ export interface components {
             gitHubAppId?: number | null;
             /** Format: int64 */
             gitHubAppInstallationId?: number | null;
+            storeThreads?: boolean | null;
+            storeDiffs?: boolean | null;
+            /** Format: int32 */
+            retentionDays?: number | null;
         };
         /** @description Request body for patching a client-scoped provider scope selection. */
         PatchClientProviderScopeRequest: {
@@ -11757,6 +12032,82 @@ export interface components {
             login?: string | null;
             displayName?: string | null;
             isBot?: boolean;
+        };
+        /** @description A retained comment within a MeisterProPR.Application.Features.ReviewArchive.RetainedThreadDto. */
+        RetainedCommentDto: {
+            /** @description Provider comment identifier. */
+            commentId?: string | null;
+            /** @description Provider-neutral author identity. */
+            authorIdentity?: string | null;
+            /** @description Whether the comment was authored by the AI reviewer. */
+            isAiAuthored?: boolean;
+            /**
+             * Format: date-time
+             * @description UTC timestamp the comment was published on the provider.
+             */
+            publishedAt?: string;
+            /** @description The comment body. */
+            body?: string | null;
+            /**
+             * Format: uuid
+             * @description The review job that produced this comment, when its provenance is retained; null otherwise.
+             */
+            originatingJobId?: string | null;
+        };
+        /** @description A single retained file's stored diff for a pull request, for the in-app PR view. */
+        RetainedFileDiffDto: {
+            /** @description The file path the diff applies to. */
+            filePath?: string | null;
+            /** @description The review increment the diff belongs to. */
+            revisionKey?: string | null;
+            /** @description The kind of change. */
+            changeType?: string | null;
+            /** @description Whether the file is binary (and therefore has no renderable diff). */
+            isBinary?: boolean;
+            /** @description The canonical unified diff (empty when the file is binary). */
+            unifiedDiff?: string | null;
+            /**
+             * Format: date-time
+             * @description UTC timestamp the diff was retained.
+             */
+            createdAt?: string;
+        };
+        /** @description A retained file entry for a pull request (without diff text), for the in-app PR view. */
+        RetainedFileDto: {
+            /** @description The file path the diff applies to. */
+            filePath?: string | null;
+            /** @description The newest retained review increment the file belongs to. */
+            revisionKey?: string | null;
+            /** @description The kind of change. */
+            changeType?: string | null;
+            /** @description Whether the file is binary (and therefore has no renderable diff). */
+            isBinary?: boolean;
+            /**
+             * Format: date-time
+             * @description UTC timestamp the newest retained diff for the file was captured.
+             */
+            createdAt?: string;
+        };
+        /** @description A retained discussion thread for a pull request, with its comments, for the in-app PR view. */
+        RetainedThreadDto: {
+            /** @description Provider thread identifier. */
+            threadId?: string | null;
+            /** @description File path the thread is anchored to, or null for pull-request-level threads. */
+            filePath?: string | null;
+            /**
+             * Format: int32
+             * @description Line the thread is anchored to, or null for pull-request-level threads.
+             */
+            line?: number | null;
+            /** @description Last-known thread status. */
+            status?: string | null;
+            /**
+             * Format: date-time
+             * @description UTC timestamp of the latest snapshot.
+             */
+            updatedAt?: string;
+            /** @description Comments belonging to the thread, in publication order. */
+            comments?: components["schemas"]["RetainedCommentDto"][] | null;
         };
         /** @description Provider-neutral code review identity supplied by review intake clients. */
         ReviewCodeReviewRefDto: {

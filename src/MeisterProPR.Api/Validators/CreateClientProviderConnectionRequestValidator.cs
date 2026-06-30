@@ -108,6 +108,11 @@ public sealed class
                     .Null()
                     .WithMessage("GitHubAppInstallationId is only valid for GitHub provider connections.");
             });
+
+        this.RuleFor(request => request.RetentionDays)
+            .InclusiveBetween(1, 3650)
+            .WithMessage("RetentionDays must be between 1 and 3650 when provided.")
+            .When(request => request.RetentionDays.HasValue);
     }
 
     internal static bool RequiresOAuthMetadata(ScmProvider providerFamily, ScmAuthenticationKind authenticationKind)

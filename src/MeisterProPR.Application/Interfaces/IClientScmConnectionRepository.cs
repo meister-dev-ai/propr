@@ -13,6 +13,12 @@ public interface IClientScmConnectionRepository
     /// <summary>Returns all provider connections configured for the given client.</summary>
     Task<IReadOnlyList<ClientScmConnectionDto>> GetByClientIdAsync(Guid clientId, CancellationToken ct = default);
 
+    /// <summary>
+    ///     Returns the retention settings for every provider connection across all clients. Used by the
+    ///     retention sweep to decide, per connection, whether to purge expired or disabled archive data.
+    /// </summary>
+    Task<IReadOnlyList<ClientScmConnectionRetentionDto>> GetAllForRetentionSweepAsync(CancellationToken ct = default);
+
     /// <summary>Returns one provider connection for the given client, or <see langword="null" /> if not found.</summary>
     Task<ClientScmConnectionDto?> GetByIdAsync(Guid clientId, Guid connectionId, CancellationToken ct = default);
 
@@ -42,6 +48,9 @@ public interface IClientScmConnectionRepository
         long? gitHubAppId = null,
         long? gitHubAppInstallationId = null,
         string? userName = null,
+        bool storeThreads = false,
+        bool storeDiffs = false,
+        int? retentionDays = null,
         CancellationToken ct = default);
 
     /// <summary>Updates one provider connection for the given client.</summary>
@@ -58,6 +67,9 @@ public interface IClientScmConnectionRepository
         long? gitHubAppId = null,
         long? gitHubAppInstallationId = null,
         string? userName = null,
+        bool storeThreads = false,
+        bool storeDiffs = false,
+        int? retentionDays = null,
         CancellationToken ct = default);
 
     /// <summary>Updates verification state for one provider connection.</summary>

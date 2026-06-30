@@ -122,6 +122,22 @@
                     class="diff-viewer d2h-dark-color-scheme"
                     data-testid="diff-viewer"
                 ></div>
+
+                <!--
+                    Inline comment threads. Each anchored thread is teleported into a placeholder
+                    cell injected beneath its diff line (see `applyInlineThreads`). Rendering the
+                    bodies here — rather than as raw HTML strings — keeps Vue reactivity and the
+                    shared sanitized-markdown rendering owned by the caller's slot. The teleport
+                    target is the injected element; until it exists the teleport is disabled so the
+                    node simply stays parked in this off-diff host.
+                -->
+                <div ref="inlineThreadHost" class="diff-inline-thread-host" aria-hidden="true">
+                    <template v-for="anchor in anchoredThreads" :key="anchor.thread.id">
+                        <Teleport :to="anchor.target" :disabled="!anchor.target">
+                            <slot name="thread" :thread="anchor.thread" />
+                        </Teleport>
+                    </template>
+                </div>
             </div>
 
             <div v-else class="diff-fallback diff-fallback--empty" data-testid="diff-empty">
@@ -141,6 +157,26 @@ import ProgressOrb from '@/components/ProgressOrb.vue'
 
 type FileDiffDto = components['schemas']['FileDiffDto']
 
+/**
+ * A comment thread to anchor inline at a NEW-side diff line. Kept deliberately minimal and
+ * provider-neutral so this shared viewer does not depend on any caller's domain types; the
+ * caller renders the thread body through the `thread` slot. `T` lets the slot receive its own
+ * richer thread shape back unchanged.
+ */
+export interface InlineDiffThread<T = unknown> {
+    /** Stable identity for keying and anchored/unanchored bookkeeping. */
+    id: string
+    /** NEW-side line number the thread anchors to; null/0 is treated as unanchored. */
+    line?: number | null
+    /** Opaque payload handed back to the `thread` slot for rendering. */
+    payload: T
+}
+
+interface AnchoredThread {
+    thread: InlineDiffThread
+    target: HTMLElement
+}
+
 const props = withDefaults(
     defineProps<{
         fileResultId?: string | null
@@ -148,6 +184,12 @@ const props = withDefaults(
         loading?: boolean
         diffError?: string | null
         onRetry?: (() => void) | null
+        /**
+         * Optional comment threads to render inline at their NEW-side line. Empty (the default)
+         * means no DOM post-processing runs at all, so callers that don't pass threads — e.g. the
+         * job-protocol view — get exactly the original behavior.
+         */
+        inlineThreads?: InlineDiffThread[]
     }>(),
     {
         fileResultId: null,
@@ -155,11 +197,19 @@ const props = withDefaults(
         loading: false,
         diffError: null,
         onRetry: null,
+        inlineThreads: () => [],
     },
 )
 
+/** Reports which inline-thread ids were successfully anchored in the rendered diff. */
+const emit = defineEmits<{
+    (event: 'update:anchoredIds', ids: string[]): void
+}>()
+
 const outputFormat = ref<'side-by-side' | 'line-by-line'>('line-by-line')
 const diffContainer = ref<HTMLElement | null>(null)
+const inlineThreadHost = ref<HTMLElement | null>(null)
+const anchoredThreads = ref<AnchoredThread[]>([])
 
 const diffErrorMessage = computed(() => {
     if (props.diffError) return props.diffError
@@ -170,10 +220,80 @@ function setOutputFormat(value: 'side-by-side' | 'line-by-line') {
     outputFormat.value = value
 }
 
+function clearInlineThreads() {
+    // Drop the teleport targets first so Vue moves the rendered widgets back into the
+    // off-diff host before the injected rows are removed, then strip the injected rows.
+    anchoredThreads.value = []
+    if (diffContainer.value) {
+        diffContainer.value
+            .querySelectorAll('.d2h-inline-thread-row')
+            .forEach(row => row.remove())
+    }
+}
+
 function clearContainer() {
+    clearInlineThreads()
     if (diffContainer.value) {
         diffContainer.value.innerHTML = ''
     }
+}
+
+/**
+ * Injects a placeholder row beneath the diff line matching each thread's NEW-side line number,
+ * then records that placeholder as a teleport target so the thread widget renders inside it.
+ *
+ * Only runs in line-by-line mode: side-by-side splits old/new into separate tables, where a
+ * single full-width inline row has no well-defined home, so those threads stay in the caller's
+ * below-diff fallback. NEW-side anchoring reads `.line-num2` (line-by-line renders the new line
+ * number there; deleted lines leave it empty so they never match).
+ */
+function applyInlineThreads() {
+    clearInlineThreads()
+
+    if (props.inlineThreads.length === 0) {
+        emit('update:anchoredIds', [])
+        return
+    }
+    if (outputFormat.value !== 'line-by-line' || !diffContainer.value) {
+        // Nothing anchors: the caller renders every thread in the below-diff fallback.
+        emit('update:anchoredIds', [])
+        return
+    }
+
+    // Map each NEW-side line number to its diff row (first occurrence wins).
+    const rowByLine = new Map<number, HTMLTableRowElement>()
+    const rows = diffContainer.value.querySelectorAll<HTMLTableRowElement>('tr')
+    rows.forEach(row => {
+        const newNumberText = row.querySelector('.line-num2')?.textContent?.trim()
+        if (!newNumberText) return
+        const lineNumber = Number.parseInt(newNumberText, 10)
+        if (Number.isNaN(lineNumber) || rowByLine.has(lineNumber)) return
+        rowByLine.set(lineNumber, row)
+    })
+
+    const anchored: AnchoredThread[] = []
+    const anchoredIds: string[] = []
+
+    for (const thread of props.inlineThreads) {
+        const line = thread.line ?? 0
+        const row = line > 0 ? rowByLine.get(line) : undefined
+        if (!row?.parentElement) continue
+
+        const placeholderRow = document.createElement('tr')
+        placeholderRow.className = 'd2h-inline-thread-row'
+        const cell = document.createElement('td')
+        // Span both the line-number and code columns so the widget runs the table's full width.
+        cell.colSpan = 2
+        cell.className = 'd2h-inline-thread-cell'
+        placeholderRow.appendChild(cell)
+        row.parentElement.insertBefore(placeholderRow, row.nextSibling)
+
+        anchored.push({ thread, target: cell })
+        anchoredIds.push(thread.id)
+    }
+
+    anchoredThreads.value = anchored
+    emit('update:anchoredIds', anchoredIds)
 }
 
 function renderDiff() {
@@ -208,14 +328,24 @@ function renderDiff() {
         diffMaxLineLength: 1000,
     })
     ui.draw()
+    applyInlineThreads()
 }
 
+// Re-render (and re-anchor) when the diff text or layout mode changes.
 watch(
     () => [props.diff?.unifiedDiff, outputFormat.value],
     () => {
         void nextTick(renderDiff)
     },
     { immediate: true },
+)
+
+// Re-anchor without a full re-render when only the threads change (the diff DOM is untouched).
+watch(
+    () => props.inlineThreads,
+    () => {
+        void nextTick(applyInlineThreads)
+    },
 )
 
 onBeforeUnmount(clearContainer)
@@ -486,5 +616,27 @@ onBeforeUnmount(clearContainer)
 
 .diff-viewer :deep(.d2h-code-line-ctn) {
     font-size: 0.85rem;
+}
+
+/*
+ * Off-diff parking host for inline-thread widgets. Each widget is teleported out of here into an
+ * injected diff row; anything still parked (e.g. an unanchored thread, or while side-by-side mode
+ * disables injection) must not be visible or take layout space.
+ */
+.diff-inline-thread-host {
+    display: none;
+}
+
+/*
+ * The injected inline-thread row reuses the diff table's cell, so it inherits the `padding: 0`
+ * reset above (which already neutralises the global `td` bleed). Give the cell a normal block
+ * context for the teleported widget and let it break out of the monospaced code styling.
+ */
+.diff-viewer :deep(.d2h-inline-thread-row) {
+    background: transparent;
+}
+
+.diff-viewer :deep(.d2h-inline-thread-cell) {
+    white-space: normal;
 }
 </style>
