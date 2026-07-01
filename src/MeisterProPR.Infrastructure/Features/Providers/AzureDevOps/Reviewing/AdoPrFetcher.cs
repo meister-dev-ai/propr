@@ -214,19 +214,22 @@ public sealed partial class AdoPrFetcher(
         var baseCommit = iteration.CommonRefCommit?.CommitId
                          ?? pr.LastMergeTargetCommit?.CommitId ?? "";
 
-        var isBinary = BinaryFileDetector.IsBinary(filePath);
+        // Read from the ADO item API with the leading slash it expects, but emit a repo-relative path.
+        var apiPath = ToAdoApiPath(filePath);
+        var repoRelativePath = ToRepoRelativePath(filePath);
+        var isBinary = BinaryFileDetector.IsBinary(repoRelativePath);
 
         if (isBinary)
         {
-            return new ChangedFile(filePath, ChangeType.Edit, string.Empty, string.Empty, true);
+            return new ChangedFile(repoRelativePath, ChangeType.Edit, string.Empty, string.Empty, true);
         }
 
         var headContent = sourceCommit.Length >= 6
-            ? await this.TryResolveHeadContentAsync(gitClient, projectId, repositoryId, filePath, sourceCommit, cancellationToken)
+            ? await this.TryResolveHeadContentAsync(gitClient, projectId, repositoryId, apiPath, sourceCommit, cancellationToken)
             : string.Empty;
 
         var baseContent = baseCommit.Length >= 6
-            ? await this.TryResolveBaseContentAsync(gitClient, projectId, repositoryId, filePath, baseCommit, cancellationToken)
+            ? await this.TryResolveBaseContentAsync(gitClient, projectId, repositoryId, apiPath, baseCommit, cancellationToken)
             : string.Empty;
 
         if (string.IsNullOrEmpty(headContent) && string.IsNullOrEmpty(baseContent))
@@ -240,12 +243,29 @@ public sealed partial class AdoPrFetcher(
                 ? ChangeType.Delete
                 : ChangeType.Edit;
 
-        var diff = BuildUnifiedDiff(baseContent, headContent, filePath);
+        var diff = BuildUnifiedDiff(baseContent, headContent, repoRelativePath);
 
-        return new ChangedFile(filePath, changeType, headContent, diff);
+        return new ChangedFile(repoRelativePath, changeType, headContent, diff);
     }
 
-    private static ChangedFileSummary? CreateSummaryFromChange(GitPullRequestChange change)
+    // Azure DevOps returns repo-root-absolute item paths (with a leading slash); the rest of the pipeline
+    // and the other provider adapters use repo-relative paths without it. Paths that leave this adapter as
+    // ChangedFile/ChangedFileSummary are normalized to the repo-relative form so downstream path matching
+    // (comment anchoring, changed-line scope, retention diff keys) is provider-neutral.
+    internal static string ToRepoRelativePath(string path)
+    {
+        return string.IsNullOrEmpty(path) ? path : path.Replace('\\', '/').TrimStart('/');
+    }
+
+    // The inverse: the Azure DevOps item APIs expect the leading slash, so a repo-relative path handed
+    // back to the ADO client is given it.
+    private static string ToAdoApiPath(string path)
+    {
+        var normalized = path.Replace('\\', '/').Trim();
+        return normalized.StartsWith('/') ? normalized : "/" + normalized;
+    }
+
+    internal static ChangedFileSummary? CreateSummaryFromChange(GitPullRequestChange change)
     {
         if (change.Item?.IsFolder == true || string.IsNullOrEmpty(change.Item?.Path))
         {
@@ -260,7 +280,7 @@ public sealed partial class AdoPrFetcher(
             _ => ChangeType.Edit,
         };
 
-        return new ChangedFileSummary(change.Item.Path, changeType);
+        return new ChangedFileSummary(ToRepoRelativePath(change.Item.Path), changeType);
     }
 
     /// <summary>
@@ -376,9 +396,16 @@ public sealed partial class AdoPrFetcher(
             }
         }
 
-        var resolvedDiff = isBinary ? "" : diff ?? BuildUnifiedDiff(baseContent, headContent, path);
+        var repoRelativePath = ToRepoRelativePath(path);
+        var resolvedDiff = isBinary ? "" : diff ?? BuildUnifiedDiff(baseContent, headContent, repoRelativePath);
 
-        return new ChangedFile(path, changeType, headContent, resolvedDiff, isBinary, originalPath);
+        return new ChangedFile(
+            repoRelativePath,
+            changeType,
+            headContent,
+            resolvedDiff,
+            isBinary,
+            originalPath is null ? null : ToRepoRelativePath(originalPath));
     }
 
     /// <summary>

@@ -3,6 +3,7 @@
 
 using MeisterProPR.Domain.Enums;
 using MeisterProPR.Domain.ValueObjects;
+using Microsoft.TeamFoundation.SourceControl.WebApi;
 
 namespace MeisterProPR.Infrastructure.Tests.AzureDevOps;
 
@@ -49,6 +50,26 @@ public class AdoPrFetcherTests
         Assert.Equal(changeType, file.ChangeType);
         Assert.Equal(content, file.FullContent);
         Assert.Equal(diff, file.UnifiedDiff);
+    }
+
+    [Theory]
+    [InlineData("/src/Foo.cs", "src/Foo.cs")]
+    [InlineData("/frontend/src/App.vue", "frontend/src/App.vue")]
+    [InlineData("src/Already.cs", "src/Already.cs")]
+    public void CreateSummaryFromChange_NormalizesAdoLeadingSlashToRepoRelativePath(string adoPath, string expected)
+    {
+        // Azure DevOps returns repo-root-absolute item paths (leading slash); the adapter must emit
+        // repo-relative paths so downstream anchoring, scope, and retention keys match the other providers.
+        var change = new GitPullRequestChange
+        {
+            Item = new GitItem { Path = adoPath },
+            ChangeType = VersionControlChangeType.Edit,
+        };
+
+        var summary = AdoPrFetcher.CreateSummaryFromChange(change);
+
+        Assert.NotNull(summary);
+        Assert.Equal(expected, summary!.Path);
     }
 
     [Fact]
