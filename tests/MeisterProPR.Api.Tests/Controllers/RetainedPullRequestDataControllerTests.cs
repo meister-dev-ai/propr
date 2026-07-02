@@ -20,7 +20,7 @@ using NSubstitute;
 
 namespace MeisterProPR.Api.Tests.Controllers;
 
-/// <summary>Coverage for the retained pull-request data admin endpoints.</summary>
+/// <summary>Coverage for the retained pull-request data read endpoints.</summary>
 public sealed class RetainedPullRequestDataControllerTests(RetainedPullRequestDataControllerTests.RetainedDataApiFactory factory)
     : IClassFixture<RetainedPullRequestDataControllerTests.RetainedDataApiFactory>
 {
@@ -119,13 +119,68 @@ public sealed class RetainedPullRequestDataControllerTests(RetainedPullRequestDa
         Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
     }
 
+    [Fact]
+    public async Task GetRetainedThreads_ClientUserForOwningClient_Returns200()
+    {
+        // A non-admin caller with read (ClientUser) access to the owning client may read retained data —
+        // the endpoint is no longer admin-only.
+        var client = factory.CreateClient();
+        using var request = new HttpRequestMessage(
+            HttpMethod.Get,
+            $"/clients/{factory.ClientId}/review-archive/pull-requests/threads"
+            + $"?repositoryId={Uri.EscapeDataString(RepositoryId)}&pullRequestId={PullRequestId}");
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", factory.GenerateClientUserToken());
+
+        var response = await client.SendAsync(request);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task GetRetainedThreads_AuthenticatedNonMemberOfClient_Returns403()
+    {
+        // An authenticated user with no role on the owning client is still denied — read access is scoped
+        // per client, so it is not open to any authenticated caller.
+        var client = factory.CreateClient();
+        using var request = new HttpRequestMessage(
+            HttpMethod.Get,
+            $"/clients/{factory.ClientId}/review-archive/pull-requests/threads"
+            + $"?repositoryId={Uri.EscapeDataString(RepositoryId)}&pullRequestId={PullRequestId}");
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", factory.GenerateNonMemberToken());
+
+        var response = await client.SendAsync(request);
+
+        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+    }
+
     public sealed class RetainedDataApiFactory : WebApplicationFactory<Program>
     {
         private const string TestJwtSecret = "test-retained-data-jwt-secret-32!";
 
         public Guid ClientId { get; } = Guid.NewGuid();
 
+        public Guid ClientUserId { get; } = Guid.NewGuid();
+
+        public Guid NonMemberUserId { get; } = Guid.NewGuid();
+
         public string GenerateAdminToken()
+        {
+            return GenerateToken(Guid.NewGuid(), AppUserRole.Admin);
+        }
+
+        // A non-admin user who holds ClientUser (read) access on the owning client.
+        public string GenerateClientUserToken()
+        {
+            return GenerateToken(this.ClientUserId, AppUserRole.User);
+        }
+
+        // A non-admin user with no role on the owning client.
+        public string GenerateNonMemberToken()
+        {
+            return GenerateToken(this.NonMemberUserId, AppUserRole.User);
+        }
+
+        private static string GenerateToken(Guid userId, AppUserRole role)
         {
             var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(TestJwtSecret));
             var handler = new JwtSecurityTokenHandler { MapInboundClaims = false };
@@ -133,8 +188,8 @@ public sealed class RetainedPullRequestDataControllerTests(RetainedPullRequestDa
             {
                 Subject = new ClaimsIdentity(
                 [
-                    new Claim("sub", Guid.NewGuid().ToString()),
-                    new Claim("global_role", "Admin"),
+                    new Claim("sub", userId.ToString()),
+                    new Claim("global_role", role.ToString()),
                 ]),
                 Expires = DateTime.UtcNow.AddHours(1),
                 SigningCredentials = new SigningCredentials(key, SecurityAlgorithms.HmacSha256),
@@ -157,7 +212,29 @@ public sealed class RetainedPullRequestDataControllerTests(RetainedPullRequestDa
                 services.AddSingleton<IJwtTokenService, JwtTokenService>();
 
                 var userRepo = Substitute.For<IUserRepository>();
-                userRepo.GetByIdWithAssignmentsAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
+                userRepo.GetByIdWithAssignmentsAsync(this.ClientUserId, Arg.Any<CancellationToken>())
+                    .Returns(
+                        Task.FromResult<AppUser?>(
+                            new AppUser
+                            {
+                                Id = this.ClientUserId,
+                                Username = "client.user",
+                                GlobalRole = AppUserRole.User,
+                                IsActive = true,
+                                CreatedAt = DateTimeOffset.UtcNow,
+                                ClientAssignments =
+                                {
+                                    new UserClientRole
+                                    {
+                                        Id = Guid.NewGuid(),
+                                        UserId = this.ClientUserId,
+                                        ClientId = this.ClientId,
+                                        Role = ClientRole.ClientUser,
+                                        AssignedAt = DateTimeOffset.UtcNow,
+                                    },
+                                },
+                            }));
+                userRepo.GetByIdWithAssignmentsAsync(Arg.Is<Guid>(id => id != this.ClientUserId), Arg.Any<CancellationToken>())
                     .Returns(Task.FromResult<AppUser?>(null));
                 userRepo.GetUserClientRolesAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
                     .Returns(Task.FromResult(new Dictionary<Guid, ClientRole>()));

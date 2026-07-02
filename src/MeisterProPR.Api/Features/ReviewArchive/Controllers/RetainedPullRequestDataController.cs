@@ -3,13 +3,16 @@
 
 using MeisterProPR.Api.Extensions;
 using MeisterProPR.Application.Features.ReviewArchive;
+using MeisterProPR.Domain.Enums;
 using Microsoft.AspNetCore.Mvc;
 
 namespace MeisterProPR.Api.Controllers;
 
 /// <summary>
-///     Admin endpoints that serve the opt-in-retained raw pull-request data (archived discussion threads
-///     and per-file diffs) for the in-app pull-request view. All data is read from the review-archive
+///     Read endpoints that serve the opt-in-retained raw pull-request data (archived discussion threads
+///     and per-file diffs) for the in-app pull-request view. Authorized like the other review-read
+///     endpoints: the caller needs at least read (<see cref="ClientRole.ClientUser" />) access to the
+///     owning client, and a global admin passes for any client. All data is read from the review-archive
 ///     store; an empty result simply means nothing is retained for the pull request, so the caller can
 ///     degrade gracefully.
 /// </summary>
@@ -28,7 +31,7 @@ public sealed class RetainedPullRequestDataController(IReviewArchiveStore review
     /// <response code="200">Retained threads for the pull request (possibly empty).</response>
     /// <response code="400">Missing or invalid parameters.</response>
     /// <response code="401">Missing or invalid credentials.</response>
-    /// <response code="403">Caller is not an admin.</response>
+    /// <response code="403">Caller lacks read access to the client.</response>
     [HttpGet("/clients/{clientId:guid}/review-archive/pull-requests/threads")]
     [ProducesResponseType(typeof(IReadOnlyList<RetainedThreadDto>), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
@@ -82,7 +85,7 @@ public sealed class RetainedPullRequestDataController(IReviewArchiveStore review
     /// <response code="200">Retained files for the pull request (possibly empty).</response>
     /// <response code="400">Missing or invalid parameters.</response>
     /// <response code="401">Missing or invalid credentials.</response>
-    /// <response code="403">Caller is not an admin.</response>
+    /// <response code="403">Caller lacks read access to the client.</response>
     [HttpGet("/clients/{clientId:guid}/review-archive/pull-requests/files")]
     [ProducesResponseType(typeof(IReadOnlyList<RetainedFileDto>), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
@@ -127,7 +130,7 @@ public sealed class RetainedPullRequestDataController(IReviewArchiveStore review
     /// <response code="200">The retained file diff.</response>
     /// <response code="400">Missing or invalid parameters.</response>
     /// <response code="401">Missing or invalid credentials.</response>
-    /// <response code="403">Caller is not an admin.</response>
+    /// <response code="403">Caller lacks read access to the client.</response>
     /// <response code="404">No diff is retained for the file.</response>
     [HttpGet("/clients/{clientId:guid}/review-archive/pull-requests/file-diff")]
     [ProducesResponseType(typeof(RetainedFileDiffDto), StatusCodes.Status200OK)]
@@ -175,7 +178,10 @@ public sealed class RetainedPullRequestDataController(IReviewArchiveStore review
     // IActionResult (the error response) when the caller should not proceed.
     private IActionResult? ValidateLookup(Guid clientId, string repositoryId)
     {
-        var auth = AuthHelpers.RequireAdmin(this.HttpContext);
+        // Retained pull-request data is part of viewing a review, so any caller with at least read
+        // (ClientUser) access to the owning client may read it — the same authorization the other
+        // review-read endpoints use — while a global admin passes for any client.
+        var auth = AuthHelpers.RequireClientRole(this.HttpContext, clientId, ClientRole.ClientUser);
         if (auth is not null)
         {
             return auth;
