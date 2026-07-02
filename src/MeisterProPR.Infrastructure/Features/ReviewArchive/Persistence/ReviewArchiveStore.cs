@@ -370,30 +370,47 @@ public sealed class ReviewArchiveStore(
             return 0;
         }
 
-        // Load children so the cascade removes them under providers that do not enforce database-level
-        // cascade delete (the in-memory provider used in tests requires the dependents to be tracked).
-        var pullRequestIds = pullRequests.Select(pr => pr.Id).ToList();
+        var removed = 0;
 
-        var threads = await db.RetainedThreads
-            .Where(thread => pullRequestIds.Contains(thread.RetainedPullRequestId))
-            .ToListAsync(ct);
-        var threadIds = threads.Select(thread => thread.Id).ToList();
+        // Purge each pull request in its own transaction: a single SaveChangesAsync deletes that pull
+        // request's retained threads, comments, diffs, the pull-request row, and its posted-comment
+        // provenance together. A pull request is the coherent unit, so a crash or shutdown mid-sweep leaves
+        // whole pull requests either fully purged or fully intact, never partially deleted. Provenance shares
+        // the retained data's lifecycle and sits on this same context, so it is removed inside the same
+        // transaction rather than as a separate best-effort write. Children are loaded and removed explicitly
+        // so the delete works under providers without database-level cascade (the in-memory test provider).
+        foreach (var pullRequest in pullRequests)
+        {
+            var threads = await db.RetainedThreads
+                .Where(thread => thread.RetainedPullRequestId == pullRequest.Id)
+                .ToListAsync(ct);
+            var threadIds = threads.Select(thread => thread.Id).ToList();
 
-        var comments = await db.RetainedThreadComments
-            .Where(comment => threadIds.Contains(comment.RetainedThreadId))
-            .ToListAsync(ct);
+            var comments = await db.RetainedThreadComments
+                .Where(comment => threadIds.Contains(comment.RetainedThreadId))
+                .ToListAsync(ct);
 
-        var diffs = await db.RetainedFileDiffs
-            .Where(diff => pullRequestIds.Contains(diff.RetainedPullRequestId))
-            .ToListAsync(ct);
+            var diffs = await db.RetainedFileDiffs
+                .Where(diff => diff.RetainedPullRequestId == pullRequest.Id)
+                .ToListAsync(ct);
 
-        db.RetainedThreadComments.RemoveRange(comments);
-        db.RetainedThreads.RemoveRange(threads);
-        db.RetainedFileDiffs.RemoveRange(diffs);
-        db.RetainedPullRequests.RemoveRange(pullRequests);
+            var origins = await db.PostedCommentOrigins
+                .Where(origin => origin.ClientId == pullRequest.ClientId
+                                 && origin.RepositoryId == pullRequest.RepositoryId
+                                 && origin.PullRequestId == pullRequest.PullRequestId)
+                .ToListAsync(ct);
 
-        await db.SaveChangesAsync(ct);
-        return pullRequests.Count;
+            db.RetainedThreadComments.RemoveRange(comments);
+            db.RetainedThreads.RemoveRange(threads);
+            db.RetainedFileDiffs.RemoveRange(diffs);
+            db.PostedCommentOrigins.RemoveRange(origins);
+            db.RetainedPullRequests.Remove(pullRequest);
+
+            await db.SaveChangesAsync(ct);
+            removed++;
+        }
+
+        return removed;
     }
 
     // Resolves the owning retained pull request from its client-scoped identity alone, without a

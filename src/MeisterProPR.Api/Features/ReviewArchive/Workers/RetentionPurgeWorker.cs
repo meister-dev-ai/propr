@@ -95,10 +95,6 @@ public sealed partial class RetentionPurgeWorker(
                 return;
             }
 
-            // Provenance rows share the retained data's lifecycle, so they are purged for the same pull
-            // requests. The store is optional; when it is absent the sweep simply skips provenance.
-            var originStore = scope.ServiceProvider.GetService<IPostedCommentOriginStore>();
-
             var connections = await connectionRepository.GetAllForRetentionSweepAsync(stoppingToken);
             var now = DateTimeOffset.UtcNow;
             var removedTotal = 0;
@@ -111,30 +107,9 @@ public sealed partial class RetentionPurgeWorker(
                 {
                     var decision = DecideForConnection(connection, now);
 
-                    // Resolve which retained pull requests this decision touches before the archive purge
-                    // removes them, then purge their provenance so it shares the same lifecycle.
-                    if (originStore is not null)
-                    {
-                        var cutoff = decision.Action == RetentionAction.PurgeAllForConnection
-                            ? (DateTimeOffset?)null
-                            : decision.Cutoff;
-                        var purgedRefs = await archiveStore.ListPullRequestRefsForConnectionAsync(
-                            decision.ConnectionId,
-                            cutoff,
-                            stoppingToken);
-                        if (purgedRefs.Count > 0)
-                        {
-                            await originStore.PurgeForPullRequestsAsync(
-                                purgedRefs
-                                    .Select(pr => new PostedCommentOriginPullRequestRef(
-                                        pr.ClientId,
-                                        pr.RepositoryId,
-                                        pr.PullRequestId))
-                                    .ToList(),
-                                stoppingToken);
-                        }
-                    }
-
+                    // The archive purge deletes each pull request's retained data and its posted-comment
+                    // provenance together, one transaction per pull request (see ReviewArchiveStore), so no
+                    // separate provenance pass is needed here.
                     removedTotal += decision.Action == RetentionAction.PurgeAllForConnection
                         ? await archiveStore.PurgeForConnectionAsync(decision.ConnectionId, stoppingToken)
                         : await archiveStore.PurgeExpiredForConnectionAsync(decision.ConnectionId, decision.Cutoff, stoppingToken);

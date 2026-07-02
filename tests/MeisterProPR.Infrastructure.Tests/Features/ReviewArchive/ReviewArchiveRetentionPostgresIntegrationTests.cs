@@ -245,14 +245,13 @@ public sealed class ReviewArchiveRetentionPostgresIntegrationTests(PostgresConta
 
         await this._dbContext.SaveChangesAsync();
 
-        // Mirror the worker's full-purge decision: resolve the retained pull-request refs, purge their
-        // provenance, then purge the retained archive for each connection that held this pull request.
+        // Mirror the worker's full-purge decision: purge the retained archive for each connection that held
+        // this pull request. The archive purge removes each pull request's provenance in the same
+        // transaction, so no separate provenance pass is issued — the assertions below prove the archive
+        // purge alone cleared the posted-comment origins.
         var purgedAggregates = 0;
         foreach (var purgeConnectionId in new[] { connectionId, secondConnectionId })
         {
-            var refs = await this._store.ListPullRequestRefsForConnectionAsync(purgeConnectionId, null);
-            await this._originStore.PurgeForPullRequestsAsync(
-                refs.Select(pr => new PostedCommentOriginPullRequestRef(pr.ClientId, pr.RepositoryId, pr.PullRequestId)).ToList());
             purgedAggregates += await this._store.PurgeForConnectionAsync(purgeConnectionId);
         }
 
