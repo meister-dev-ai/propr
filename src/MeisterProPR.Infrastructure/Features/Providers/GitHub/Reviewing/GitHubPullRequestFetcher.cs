@@ -156,6 +156,27 @@ internal sealed class GitHubPullRequestFetcher(
         return new ChangedFile(path, changeType, headContent ?? string.Empty, diff);
     }
 
+    public async Task<IReadOnlyList<PrCommentThread>> FetchThreadsAsync(
+        string organizationUrl,
+        string projectId,
+        string repositoryId,
+        int pullRequestId,
+        Guid? clientId = null,
+        CancellationToken cancellationToken = default)
+    {
+        // Threads-only path for the passive thread-retention observer: run just the review-threads query,
+        // never the full pull-request fetch with changed-file content, so it stays cheap on every crawl cycle.
+        if (!clientId.HasValue)
+        {
+            throw new InvalidOperationException("GitHub pull-request fetches require a client identifier.");
+        }
+
+        var host = new ProviderHostRef(ScmProvider.GitHub, organizationUrl);
+        var context = await connectionVerifier.VerifyAsync(clientId.Value, host, cancellationToken);
+        var repositoryPath = await this.ResolveRepositoryPathAsync(context, host, repositoryId, cancellationToken);
+        return await this.FetchExistingThreadsAsync(context, host, repositoryPath, pullRequestId, cancellationToken);
+    }
+
     private async Task<IReadOnlyList<GitHubPullRequestFileResponse>?> TryGetDeltaFilesAsync(
         GitHubConnectionVerifier.GitHubConnectionContext context,
         ProviderHostRef host,

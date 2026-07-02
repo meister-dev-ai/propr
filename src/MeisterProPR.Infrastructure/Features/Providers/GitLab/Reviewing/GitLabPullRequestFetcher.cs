@@ -149,6 +149,26 @@ internal sealed class GitLabPullRequestFetcher(
         return new ChangedFile(path, changeType, headContent ?? string.Empty, diff);
     }
 
+    public async Task<IReadOnlyList<PrCommentThread>> FetchThreadsAsync(
+        string organizationUrl,
+        string projectId,
+        string repositoryId,
+        int pullRequestId,
+        Guid? clientId = null,
+        CancellationToken cancellationToken = default)
+    {
+        // Threads-only path for the passive thread-retention observer: fetch just the discussion threads,
+        // never the full merge request with changed-file content, so it stays cheap on every crawl cycle.
+        if (!clientId.HasValue)
+        {
+            throw new InvalidOperationException("GitLab pull-request fetches require a client identifier.");
+        }
+
+        var host = new ProviderHostRef(ScmProvider.GitLab, organizationUrl);
+        var context = await connectionVerifier.VerifyAsync(clientId.Value, host, cancellationToken);
+        return await this.FetchExistingThreadsAsync(context, host, repositoryId, pullRequestId, cancellationToken);
+    }
+
     private async Task<IReadOnlyList<GitLabMergeRequestChangeResponse>?> TryGetDeltaChangesAsync(
         GitLabConnectionVerifier.GitLabConnectionContext context,
         ProviderHostRef host,
