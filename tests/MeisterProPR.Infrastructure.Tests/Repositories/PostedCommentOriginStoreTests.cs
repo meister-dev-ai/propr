@@ -146,7 +146,8 @@ public sealed class PostedCommentOriginStoreTests : IDisposable
     public async Task RecordAsync_DuplicateEntriesInOneBatch_DoNotReachSaveChanges()
     {
         // Two entries sharing the full natural key (same thread + comment) must be deduped before insert,
-        // otherwise the second Add would collide on the unique constraint. The last write wins.
+        // otherwise the second Add would collide on the unique constraint. The first occurrence is kept and
+        // later same-key duplicates in the batch are skipped, so the first job id wins.
         var clientId = Guid.NewGuid();
         var firstJobId = Guid.NewGuid();
         var secondJobId = Guid.NewGuid();

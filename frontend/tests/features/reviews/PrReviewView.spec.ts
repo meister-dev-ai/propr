@@ -14,7 +14,7 @@ vi.mock('vue-router', async () => {
   const actual = await vi.importActual<typeof import('vue-router')>('vue-router')
   return {
     ...actual,
-    useRoute: () => ({ query: routeQuery.value }),
+    useRoute: () => ({ get query() { return routeQuery.value } }),
     useRouter: () => ({ push: vi.fn(), replace: vi.fn() }),
   }
 })
@@ -135,5 +135,24 @@ describe('PrReviewView', () => {
     expect(conversation.props('retained')).toBeTruthy()
     // Both tabs receive the exact same composable instance (single fetch).
     expect(conversation.props('retained')).toBe(browser.props('retained'))
+  })
+
+  it('creates a fresh retained instance when the route identity changes to a different pull request', async () => {
+    const wrapper = mountView()
+    await flushPromises()
+
+    const conversation = wrapper.findComponent({ name: 'RetainedConversationTab' })
+    const first = conversation.props('retained')
+    expect(first).toBeTruthy()
+
+    // Navigate to a different pull request on the same component instance.
+    routeQuery.value = { ...resolvableQuery, repositoryId: 'repo-b', pullRequestId: '43' }
+    await flushPromises()
+
+    const second = conversation.props('retained')
+    expect(second).toBeTruthy()
+    // The identity changed, so a new composable instance is created and loaded rather than leaving the
+    // previous pull request's retained data on screen.
+    expect(second).not.toBe(first)
   })
 })

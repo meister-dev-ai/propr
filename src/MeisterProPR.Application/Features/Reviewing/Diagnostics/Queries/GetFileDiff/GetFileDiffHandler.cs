@@ -30,7 +30,7 @@ public sealed class GetFileDiffHandler(
     /// </summary>
     public async Task<FileDiffDto> HandleAsync(GetFileDiffQuery query, CancellationToken ct = default)
     {
-        var job = jobRepository.GetByIdWithFileResultsAsync(query.JobId, ct).Result;
+        var job = await jobRepository.GetByIdWithFileResultsAsync(query.JobId, ct).ConfigureAwait(false);
         if (job is null)
         {
             return new FileDiffDto(

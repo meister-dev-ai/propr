@@ -271,18 +271,27 @@ const retainedIdentity = computed<RetainedPrIdentity | null>(() => {
 })
 
 // The retained threads and files are shared across the Conversation and Browser tabs, so the
-// archive is fetched exactly once here (rather than per tab). The composable is keyed to a concrete
-// identity, so it is created — and its single load kicked off — only once the identity resolves.
+// archive is fetched exactly once per identity here (rather than per tab). The composable is keyed to a
+// concrete identity; a fresh instance is created and loaded whenever the identity resolves or changes to
+// a different pull request, so navigating between pull requests on the same component instance does not
+// leave the earlier pull request's retained data on screen.
 const retained = shallowRef<UseRetainedPrData | null>(null)
 
 watch(
-    retainedIdentity,
-    identity => {
-        if (identity && !retained.value) {
-            const instance = useRetainedPrData(identity)
-            retained.value = instance
-            void instance.load()
+    () => {
+        const identity = retainedIdentity.value
+        return identity ? `${identity.clientId} ${identity.repositoryId} ${identity.pullRequestId}` : null
+    },
+    () => {
+        const identity = retainedIdentity.value
+        if (!identity) {
+            retained.value = null
+            return
         }
+
+        const instance = useRetainedPrData(identity)
+        retained.value = instance
+        void instance.load()
     },
     { immediate: true },
 )
