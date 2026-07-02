@@ -96,7 +96,9 @@ internal sealed class ReviewSynthesisExecutor(
             protocolId,
             ct);
 
-        var deduped = FindingDeduplicator.Deduplicate(allComments).ToList();
+        var deduped = FindingDeduplicator
+            .Deduplicate(FindingDeduplicator.CollapseSameFileDuplicates(allComments))
+            .ToList();
         var effectiveQualityFilterThreshold = ResolveQualityFilterThreshold(job, options);
         if (deduped.Count >= effectiveQualityFilterThreshold
             && !await this.TryRecordSkippedStepAsync(protocolId, baseContext, FileByFileReviewStepIds.QualityFilter, ct))

@@ -63,6 +63,52 @@ public class FindingDeduplicatorTests
         Assert.Equal(2, result.Count);
     }
 
+    [Fact]
+    public void CollapseSameFileDuplicates_NearIdenticalSameFileFindings_CollapseToFirst()
+    {
+        // Two passes independently reporting the same issue on the same file (different anchor lines,
+        // near-identical wording) collapse into a single comment, keeping the first occurrence.
+        var comments = new List<ReviewComment>
+        {
+            new("src/A.vue", 86, CommentSeverity.Error, "renderMarkdown output is bound to v-html which is a stored XSS sink"),
+            new("src/A.vue", 88, CommentSeverity.Error, "renderMarkdown output is bound to v-html which is a stored XSS sink here"),
+        }.AsReadOnly();
+
+        var result = FindingDeduplicator.CollapseSameFileDuplicates(comments);
+
+        Assert.Single(result);
+        Assert.Equal(86, result[0].LineNumber);
+    }
+
+    [Fact]
+    public void CollapseSameFileDuplicates_DistinctSameFileFindings_BothSurvive()
+    {
+        var comments = new List<ReviewComment>
+        {
+            new("src/A.cs", 10, CommentSeverity.Warning, "Missing null check on the input parameter before dereference"),
+            new("src/A.cs", 40, CommentSeverity.Warning, "Consider extracting this branch into a well named helper method"),
+        }.AsReadOnly();
+
+        var result = FindingDeduplicator.CollapseSameFileDuplicates(comments);
+
+        Assert.Equal(2, result.Count);
+    }
+
+    [Fact]
+    public void CollapseSameFileDuplicates_IdenticalMessagesOnDifferentFiles_BothSurvive()
+    {
+        // Cross-file collapse is the job of Deduplicate; same-file collapse leaves different files alone.
+        var comments = new List<ReviewComment>
+        {
+            new("src/A.cs", 1, CommentSeverity.Warning, "Use IDisposable pattern here"),
+            new("src/B.cs", 1, CommentSeverity.Warning, "Use IDisposable pattern here"),
+        }.AsReadOnly();
+
+        var result = FindingDeduplicator.CollapseSameFileDuplicates(comments);
+
+        Assert.Equal(2, result.Count);
+    }
+
     // T008 — Different severities are never merged even if messages are identical
     [Fact]
     public void Deduplicate_DifferentSeverities_NotMerged()

@@ -20,6 +20,14 @@ public static class FindingDeduplicator
     private const double JaccardThreshold = 0.50;
 
     /// <summary>
+    ///     Jaccard similarity threshold above which two findings anchored to the SAME file are treated as
+    ///     one finding reported twice (for example by a baseline pass and a verification pass). Set higher
+    ///     than <see cref="JaccardThreshold" /> so that distinct findings on different lines of one file are
+    ///     preserved and only near-identical restatements collapse.
+    /// </summary>
+    private const double SameFileDuplicateThreshold = 0.72;
+
+    /// <summary>
     ///     Stop words excluded from Jaccard tokenisation so that common grammatical words
     ///     do not inflate similarity scores between semantically different messages.
     /// </summary>
@@ -114,6 +122,42 @@ public static class FindingDeduplicator
         merged.AddRange(prLevelComments);
 
         return merged.AsReadOnly();
+    }
+
+    /// <summary>
+    ///     Collapses near-identical findings anchored to the SAME file into a single comment, keeping the
+    ///     first occurrence. Two comments collapse when they share a file path and severity and their
+    ///     messages exceed <see cref="SameFileDuplicateThreshold" /> token-set Jaccard similarity — the
+    ///     situation that arises when more than one review pass independently reports the same issue on the
+    ///     same file. Distinct findings on different lines survive because their messages do not clear the
+    ///     high similarity bar. This complements <see cref="Deduplicate" />, which merges across files and
+    ///     deliberately never touches same-file findings. Input order is preserved.
+    /// </summary>
+    /// <param name="comments">Input comments from the review orchestrator.</param>
+    /// <returns>The input list with same-file near-duplicates removed.</returns>
+    public static IReadOnlyList<ReviewComment> CollapseSameFileDuplicates(IReadOnlyList<ReviewComment> comments)
+    {
+        if (comments.Count <= 1)
+        {
+            return comments;
+        }
+
+        var kept = new List<ReviewComment>(comments.Count);
+        foreach (var comment in comments)
+        {
+            var isDuplicate = comment.FilePath is not null
+                              && kept.Any(existing =>
+                                  existing.FilePath is not null
+                                  && string.Equals(existing.FilePath, comment.FilePath, StringComparison.OrdinalIgnoreCase)
+                                  && existing.Severity == comment.Severity
+                                  && JaccardSimilarity(existing.Message, comment.Message) >= SameFileDuplicateThreshold);
+            if (!isDuplicate)
+            {
+                kept.Add(comment);
+            }
+        }
+
+        return kept.AsReadOnly();
     }
 
     /// <summary>

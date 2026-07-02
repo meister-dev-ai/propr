@@ -88,7 +88,9 @@ internal sealed class AgenticReviewSynthesisExecutor(
             protocolId,
             ct);
 
-        var deduped = FindingDeduplicator.Deduplicate(allComments).ToList();
+        var deduped = FindingDeduplicator
+            .Deduplicate(FindingDeduplicator.CollapseSameFileDuplicates(allComments))
+            .ToList();
         if (deduped.Count >= options.QualityFilterThreshold)
         {
             deduped = await qualityFilterExecutor.ApplyAsync(job.Id, deduped, baseContext, effectiveClient, ct);

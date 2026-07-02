@@ -222,7 +222,10 @@ internal sealed partial class HeuristicCommentRelevanceFilter : ICommentRelevanc
     private static bool IsWrongFileOrAnchor(CommentRelevanceFilterRequest request, ReviewComment comment)
     {
         if (!string.IsNullOrWhiteSpace(comment.FilePath) &&
-            !string.Equals(comment.FilePath, request.FilePath, StringComparison.OrdinalIgnoreCase))
+            !string.Equals(
+                NormalizeComparablePath(comment.FilePath),
+                NormalizeComparablePath(request.FilePath),
+                StringComparison.OrdinalIgnoreCase))
         {
             return true;
         }
@@ -234,6 +237,16 @@ internal sealed partial class HeuristicCommentRelevanceFilter : ICommentRelevanc
 
         var totalLines = CountLines(request.File.FullContent);
         return totalLines > 0 && comment.LineNumber.Value > totalLines;
+    }
+
+    // Normalizes a repo-relative path for equality comparison: unifies separators and trims a leading
+    // slash. A finding anchored to "src/Foo.cs" and a file under review recorded as "/src/Foo.cs" denote
+    // the same file, so the anchor check must not treat that leading-slash difference as a wrong file.
+    private static string NormalizeComparablePath(string? path)
+    {
+        return string.IsNullOrWhiteSpace(path)
+            ? string.Empty
+            : path.Replace('\\', '/').TrimStart('/');
     }
 
     private static bool IsSummaryLevelOnly(ReviewComment comment)
@@ -253,7 +266,13 @@ internal sealed partial class HeuristicCommentRelevanceFilter : ICommentRelevanc
 
     private static bool LooksLikeCrossFileReference(string message)
     {
-        return FileReferenceRegex().Matches(message).Count >= 2;
+        // Two or more DISTINCT file references signal a genuinely cross-file claim. Counting distinct
+        // paths rather than raw matches keeps a finding that names its own single file more than once
+        // from being misread as spanning multiple files.
+        return FileReferenceRegex().Matches(message)
+            .Select(match => match.Value)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .Count() >= 2;
     }
 
     private static double CalculateSimilarity(string left, string right)
@@ -334,6 +353,13 @@ internal sealed partial class HeuristicCommentRelevanceFilter : ICommentRelevanc
     [GeneratedRegex(@"(`[^`]+`|\b[A-Z][A-Za-z0-9_]+\b|\b[a-z_]+\([^\)]*\)|:[Ll]\d+|\bline\s+\d+\b)", RegexOptions.CultureInvariant)]
     private static partial Regex ConcreteObservableRegex();
 
-    [GeneratedRegex(@"[A-Za-z0-9_./\\-]+\.[A-Za-z0-9_]+", RegexOptions.CultureInvariant)]
+    // Matches a real file reference — a bare file name or a repo-relative path ending in a known
+    // source-file extension (GetFileDiffHandler.cs, src/Foo/Bar.cs, RetainedThreadPanel.vue). Matching
+    // is case-sensitive on purpose: source-file extensions are lowercase by convention, while member
+    // access in code findings is PascalCase (job.IterationId, settings.Json), so case alone rejects the
+    // member-access expressions that the previous any-dotted-token pattern miscounted as cross-file.
+    [GeneratedRegex(
+        @"\b[A-Za-z0-9_\-]+(?:[\\/][A-Za-z0-9_\-]+)*\.(?:cs|vue|ts|tsx|js|jsx|mjs|cjs|razor|cshtml|css|scss|less|json|ya?ml|xml|md|csproj|slnx?|props|targets|config|sql|sh|ps1|py|go|rs|java|kt|rb|php|html?|toml|ini)\b",
+        RegexOptions.CultureInvariant)]
     private static partial Regex FileReferenceRegex();
 }

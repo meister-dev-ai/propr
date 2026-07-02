@@ -101,7 +101,9 @@ public sealed class FileByFileReviewOrchestratorFinalGateTests
         Assert.DoesNotContain(result.Comments, comment => comment.Message == "Missing DI registration in multiple files.");
         Assert.DoesNotContain(result.Comments, comment => comment.Message == "Architecture concerns span the PR and should be revisited.");
         Assert.DoesNotContain(result.Comments, comment => comment.Message == "Consider refactoring this area for clarity.");
-        Assert.Contains("Verification retained 4 publishable findings.", result.Summary);
+        // The two identical per-file comments the AI core returns for each reviewed file collapse to the two
+        // distinct findings (src/Foo.cs and src/Bar.cs) after same-file de-duplication.
+        Assert.Contains("Verification retained 2 publishable findings.", result.Summary);
         Assert.Contains("Potential DI registration gap spans multiple files.", result.Summary);
         Assert.Contains("Potential architecture concern noted", result.Summary);
         Assert.DoesNotContain("Consider refactoring this area for clarity.", result.Summary);

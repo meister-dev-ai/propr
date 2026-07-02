@@ -487,6 +487,86 @@ public sealed class PrWideVerificationPipelineTests
     }
 
     [Fact]
+    public async Task ReviewAsync_CrossFileClaimOnSingleFileFinding_IsRoutedToVerificationNotScreeningDropped()
+    {
+        // A single-file finding whose wording trips the "unverifiable cross-file claim" screen (here via the
+        // cross-file term "elsewhere") must not be dropped by deterministic screening ahead of verification.
+        // Because verifiability is the only objection, the finding is routed onward; with no extractable
+        // claims it is conservatively retained as summary-only rather than silently discarded. Without the
+        // routing, screening would drop it and its summary text would never reach the review summary.
+        var fallback = Substitute.For<IFileByFileReviewOrchestrator>();
+        var protocolRecorder = CreateProtocolRecorder();
+        var reviewTools = CreateReviewTools(true);
+        var chatClient = Substitute.For<IChatClient>();
+        chatClient.GetResponseAsync(Arg.Any<IEnumerable<ChatMessage>>(), Arg.Any<ChatOptions?>(), Arg.Any<CancellationToken>())
+            .Returns(
+                new ChatResponse(
+                    new ChatMessage(
+                        ChatRole.Assistant, """
+                                            {
+                                              "plan_id": "plan-001",
+                                              "concerns": ["Check anchored local findings."],
+                                              "changed_areas": ["src"],
+                                              "investigation_tasks": [],
+                                              "no_investigation_reason": "Central synthesis can verify directly."
+                                            }
+                                            """)),
+                new ChatResponse(
+                    new ChatMessage(
+                        ChatRole.Assistant, """
+                                            {
+                                              "summary": "The PR may leave a computation unguarded.",
+                                              "candidate_findings": [
+                                                {
+                                                  "id": "candidate-001",
+                                                  "message": "Values assigned elsewhere feed this computation without a guard.",
+                                                  "severity": "warning",
+                                                  "category": "robustness",
+                                                  "candidate_summary_text": "Potential unguarded computation noted.",
+                                                  "confidence": { "concern": "runtime_state", "score": 84 },
+                                                  "supporting_files": ["src/Core/Aggregator.cs"],
+                                                  "file_path": "src/Core/Aggregator.cs",
+                                                  "line_number": 1
+                                                }
+                                              ]
+                                            }
+                                            """)));
+
+        var context = new ReviewSystemContext(null, [], reviewTools)
+        {
+            ActiveProtocolId = Guid.NewGuid(),
+            ProtocolRecorder = protocolRecorder,
+            ModelId = "test-model",
+        };
+
+        var sut = new PrWideAgenticReviewOrchestrator(
+            fallback,
+            Microsoft.Extensions.Options.Options.Create(new AiReviewOptions()),
+            Substitute.For<ILogger<PrWideAgenticReviewOrchestrator>>(),
+            new DeterministicReviewFindingGate(),
+            [new DomainReviewInvariantFactProvider()],
+            new EmptyClaimExtractor(),
+            new ReviewContextEvidenceCollector(),
+            new SummaryReconciliationService(),
+            new DeterministicLocalReviewVerifier());
+
+        var result = await sut.ReviewAsync(CreateJob(), CreatePr(), context, CancellationToken.None, chatClient);
+
+        // Retained as summary-only after verification — a screening drop would remove the summary text and
+        // record a Drop disposition instead.
+        Assert.Empty(result.Comments);
+        Assert.Contains("Potential unguarded computation noted.", result.Summary);
+
+        await protocolRecorder.Received().RecordPrWideStageEventAsync(
+            context.ActiveProtocolId.Value,
+            ReviewProtocolEventNames.PrWideVerificationCompleted,
+            Arg.Is<string?>(details => details != null && details.Contains("candidate-001", StringComparison.Ordinal)),
+            Arg.Is<string?>(output => output != null && output.Contains("\"recommendedDisposition\":\"SummaryOnly\"", StringComparison.Ordinal)),
+            Arg.Is<string?>(error => error == null),
+            Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
     public async Task ReviewAsync_TrimmedSeverityText_PreservesExplicitSeverity()
     {
         var fallback = Substitute.For<IFileByFileReviewOrchestrator>();

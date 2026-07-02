@@ -7,6 +7,7 @@ using MeisterProPR.Application.Features.Reviewing.Execution.Ports;
 using MeisterProPR.Application.Features.Reviewing.Execution.Strategies.Ports;
 using MeisterProPR.Application.Interfaces;
 using MeisterProPR.Application.Options;
+using MeisterProPR.Application.Services;
 using MeisterProPR.Application.ValueObjects;
 using MeisterProPR.Domain.Entities;
 using MeisterProPR.Domain.Enums;
@@ -822,7 +823,10 @@ public sealed partial class PrWideAgenticReviewOrchestrator(
                 ct);
         }
 
-        var publishedComments = MaterializePublishedComments(candidateFindings, gateDecisions);
+        // Collapse near-identical findings that more than one pass (baseline and verification) anchored to
+        // the same file into a single comment before publishing; the protocol trace above still records
+        // every finding.
+        var publishedComments = FindingDeduplicator.CollapseSameFileDuplicates(MaterializePublishedComments(candidateFindings, gateDecisions));
         var result = new ReviewResult(reconciliation.FinalSummary, publishedComments);
 
         await this.RecordNativeCompletionAsync(job, baseContext, candidateFindings, gateDecisions, reconciliation, result, ct);
@@ -1212,6 +1216,18 @@ public sealed partial class PrWideAgenticReviewOrchestrator(
                 continue;
             }
 
+            // Verifiability objections ("this cannot be confirmed from the comment text alone") are not
+            // grounds to drop a finding before the tool-equipped verifier has examined it. When those are
+            // the only objections, route the finding onward to verification instead of terminating it here:
+            // the verifier can open the anchor file and either confirm the finding or conservatively
+            // withhold it. Quality objections (hedging, summary-only, wrong anchor, non-actionable,
+            // duplicate) stay terminal, because verification cannot rehabilitate them.
+            if (decision.ReasonCodes.Count > 0 && decision.ReasonCodes.All(IsVerifiabilityReasonCode))
+            {
+                screenedFindings.Add(finding);
+                continue;
+            }
+
             var recommendedDisposition = decision.ReasonCodes.Count == 1 &&
                                          string.Equals(decision.ReasonCodes[0], CommentRelevanceReasonCodes.SummaryLevelOnly, StringComparison.Ordinal)
                 ? FinalGateDecision.SummaryOnlyDisposition
@@ -1301,6 +1317,15 @@ public sealed partial class PrWideAgenticReviewOrchestrator(
             comment,
             adaptedReasonCodes,
             decision.DecisionSource);
+    }
+
+    // Reason codes that express only "this cannot be verified from the comment text alone" rather than a
+    // quality defect. A finding whose sole objections are these is routed to the tool-equipped verifier
+    // instead of being dropped by deterministic screening.
+    private static bool IsVerifiabilityReasonCode(string reasonCode)
+    {
+        return reasonCode is CommentRelevanceReasonCodes.UnverifiableCrossFileClaim
+            or CommentRelevanceReasonCodes.MissingConcreteObservable;
     }
 
     private static bool ShouldIgnoreRelevanceReason(CandidateReviewFinding finding, IReadOnlyList<ClaimDescriptor> claims, string reasonCode)
