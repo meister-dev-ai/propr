@@ -151,6 +151,18 @@ public sealed partial class StubPullRequestFetcher(ILogger<StubPullRequestFetche
             || string.Equals(file.OriginalPath, filePath, StringComparison.Ordinal));
     }
 
+    public async Task<IReadOnlyList<PrCommentThread>> FetchThreadsAsync(
+        string organizationUrl,
+        string projectId,
+        string repositoryId,
+        int pullRequestId,
+        Guid? clientId = null,
+        CancellationToken cancellationToken = default)
+    {
+        var pr = await this.FetchAsync(organizationUrl, projectId, repositoryId, pullRequestId, 1, null, clientId, cancellationToken);
+        return pr.ExistingThreads ?? [];
+    }
+
     [LoggerMessage(
         Level = LogLevel.Warning,
         Message =

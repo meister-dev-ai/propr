@@ -716,13 +716,15 @@ public sealed class PullRequestSynchronizationService(
                 return;
             }
 
-            var pullRequest = await pullRequestFetcher.FetchAsync(
+            // Fetch only the comment threads; never download changed-file content here. Thread retention
+            // runs on every crawl cycle, so a full pull-request fetch would multiply the provider request
+            // load and risk rate limits. Diff retention captures diffs from the review's own fetched
+            // changes, not from this path.
+            var threads = await pullRequestFetcher.FetchThreadsAsync(
                 request.ProviderScopePath,
                 request.ProviderProjectKey,
                 request.RepositoryId,
                 request.PullRequestId,
-                1,
-                null,
                 request.ClientId,
                 ct);
 
@@ -730,8 +732,6 @@ public sealed class PullRequestSynchronizationService(
             // passive side-read: when the store is absent or the read fails, stamping is simply skipped and
             // ingestion proceeds with no originating job, never disrupting the crawl.
             var originatingJobs = OriginatingJobResolver.FromRows(await this.ResolveOriginatingJobsAsync(request, ct));
-
-            var threads = pullRequest.ExistingThreads ?? [];
             foreach (var thread in threads)
             {
                 var evt = BuildThreadUpdatedEvent(request, connection.Id, thread, reviewerIdentity, reviewerId, originatingJobs);

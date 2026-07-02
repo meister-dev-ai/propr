@@ -32,15 +32,26 @@ public sealed class PullRequestSynchronizationServiceThreadRetentionTests
 
         await harness.RunAsync();
 
-        await harness.PullRequestFetcher.Received(1).FetchAsync(
+        // Thread retention must fetch threads only, never a full pull request. A full fetch would download
+        // every changed file's content and diff on each crawl cycle and risk provider rate limits.
+        await harness.PullRequestFetcher.Received(1).FetchThreadsAsync(
             "https://dev.azure.com/org",
             "project",
             "repo-1",
             42,
-            1,
-            null,
             ClientId,
             Arg.Any<CancellationToken>());
+        await harness.PullRequestFetcher.DidNotReceive().FetchAsync(
+            Arg.Any<string>(),
+            Arg.Any<string>(),
+            Arg.Any<string>(),
+            Arg.Any<int>(),
+            Arg.Any<int>(),
+            Arg.Any<int?>(),
+            Arg.Any<Guid?>(),
+            Arg.Any<CancellationToken>(),
+            Arg.Any<ReviewRevision?>(),
+            Arg.Any<IReviewRepositoryWorkspace?>());
 
         await harness.IngestionService.Received(1).HandleThreadUpdatedAsync(
             Arg.Is<ThreadUpdatedEvent>(evt =>
@@ -162,17 +173,13 @@ public sealed class PullRequestSynchronizationServiceThreadRetentionTests
 
         await harness.RunAsync();
 
-        await harness.PullRequestFetcher.DidNotReceive().FetchAsync(
+        await harness.PullRequestFetcher.DidNotReceive().FetchThreadsAsync(
             Arg.Any<string>(),
             Arg.Any<string>(),
             Arg.Any<string>(),
             Arg.Any<int>(),
-            Arg.Any<int>(),
-            Arg.Any<int?>(),
             Arg.Any<Guid?>(),
-            Arg.Any<CancellationToken>(),
-            Arg.Any<ReviewRevision?>(),
-            Arg.Any<IReviewRepositoryWorkspace?>());
+            Arg.Any<CancellationToken>());
 
         await harness.IngestionService.DidNotReceive()
             .HandleThreadUpdatedAsync(Arg.Any<ThreadUpdatedEvent>(), Arg.Any<CancellationToken>());
@@ -208,16 +215,14 @@ public sealed class PullRequestSynchronizationServiceThreadRetentionTests
             scmConnectionRepository.GetByClientIdAsync(ClientId, Arg.Any<CancellationToken>())
                 .Returns([CreateConnection(storeThreads)]);
 
-            this.PullRequestFetcher.FetchAsync(
+            this.PullRequestFetcher.FetchThreadsAsync(
                     "https://dev.azure.com/org",
                     "project",
                     "repo-1",
                     42,
-                    1,
-                    null,
                     ClientId,
                     Arg.Any<CancellationToken>())
-                .Returns(CreatePullRequestWithThreads());
+                .Returns(CreateThreads());
 
             this._sut = new PullRequestSynchronizationService(
                 jobs,
@@ -286,33 +291,21 @@ public sealed class PullRequestSynchronizationServiceThreadRetentionTests
             };
         }
 
-        private static PullRequest CreatePullRequestWithThreads()
+        private static IReadOnlyList<PrCommentThread> CreateThreads()
         {
             var publishedAt = new DateTimeOffset(2026, 6, 1, 10, 0, 0, TimeSpan.Zero);
-            var thread = new PrCommentThread(
-                17,
-                "/src/file.ts",
-                12,
-                [
-                    new PrThreadComment("Review Bot", "Bot finding", ReviewerId, 100, publishedAt),
-                    new PrThreadComment("Jane Dev", "Human reply", HumanAuthorId, 101, publishedAt.AddMinutes(5)),
-                ],
-                "Active");
-
-            return new PullRequest(
-                "https://dev.azure.com/org",
-                "project",
-                "repo-1",
-                "repo-1",
-                42,
-                1,
-                "Title",
-                null,
-                "feature",
-                "main",
-                [],
-                PrStatus.Active,
-                [thread]);
+            return
+            [
+                new PrCommentThread(
+                    17,
+                    "/src/file.ts",
+                    12,
+                    [
+                        new PrThreadComment("Review Bot", "Bot finding", ReviewerId, 100, publishedAt),
+                        new PrThreadComment("Jane Dev", "Human reply", HumanAuthorId, 101, publishedAt.AddMinutes(5)),
+                    ],
+                    "Active"),
+            ];
         }
     }
 }

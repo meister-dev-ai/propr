@@ -88,4 +88,25 @@ public interface IPullRequestFetcher
         int? compareToIterationId = null,
         Guid? clientId = null,
         CancellationToken cancellationToken = default);
+
+    /// <summary>
+    ///     Fetches only the pull request's comment threads, without downloading changed-file content.
+    ///     Used by the passive thread-retention observer so it does not pull whole pull-request contents on
+    ///     every crawl cycle. Provider adapters may serve this with a single thread-API call (Azure DevOps
+    ///     does); others fall back to a full fetch.
+    /// </summary>
+    /// <param name="organizationUrl">The URL of the organization.</param>
+    /// <param name="projectId">The ID of the project.</param>
+    /// <param name="repositoryId">The ID of the repository.</param>
+    /// <param name="pullRequestId">The ID of the pull request.</param>
+    /// <param name="clientId">Optional client ID for credential retrieval.</param>
+    /// <param name="cancellationToken">A token to monitor for cancellation requests.</param>
+    /// <returns>A task that represents the asynchronous operation, containing the pull request's comment threads.</returns>
+    Task<IReadOnlyList<PrCommentThread>> FetchThreadsAsync(
+        string organizationUrl,
+        string projectId,
+        string repositoryId,
+        int pullRequestId,
+        Guid? clientId = null,
+        CancellationToken cancellationToken = default);
 }

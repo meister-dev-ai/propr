@@ -24,6 +24,24 @@ internal interface IProviderPullRequestFetcher
         IReviewRepositoryWorkspace? workspace = null);
 
     /// <summary>
+    ///     Fetches only the pull request's comment threads, without downloading changed-file content.
+    ///     Default implementation performs a full fetch and extracts the threads. ADO overrides this with a
+    ///     single thread-API call so the passive thread-retention observer never pulls whole pull-request
+    ///     contents on each crawl cycle.
+    /// </summary>
+    async Task<IReadOnlyList<PrCommentThread>> FetchThreadsAsync(
+        string organizationUrl,
+        string projectId,
+        string repositoryId,
+        int pullRequestId,
+        Guid? clientId = null,
+        CancellationToken cancellationToken = default)
+    {
+        var pr = await this.FetchAsync(organizationUrl, projectId, repositoryId, pullRequestId, 1, null, clientId, cancellationToken);
+        return pr.ExistingThreads ?? [];
+    }
+
+    /// <summary>
     ///     Default implementation: performs a full fetch and extracts just the ref info.
     ///     ADO overrides this with a lightweight single-API-call implementation.
     /// </summary>

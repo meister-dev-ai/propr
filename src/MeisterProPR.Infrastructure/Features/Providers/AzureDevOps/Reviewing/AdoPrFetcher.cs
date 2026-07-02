@@ -248,6 +248,29 @@ public sealed partial class AdoPrFetcher(
         return new ChangedFile(repoRelativePath, changeType, headContent, diff);
     }
 
+    public async Task<IReadOnlyList<PrCommentThread>> FetchThreadsAsync(
+        string organizationUrl,
+        string projectId,
+        string repositoryId,
+        int pullRequestId,
+        Guid? clientId = null,
+        CancellationToken cancellationToken = default)
+    {
+        // Passive thread-retention path: fetch only the pull request's comment threads in one API call and
+        // never download changed-file content. This runs once per crawl cycle when thread retention is on, so
+        // it must not pull the whole pull request the way the review-grade FetchAsync does.
+        var credentials = await AdoProviderAdapterHelpers.ResolveCredentialsAsync(
+            connectionRepository,
+            clientId,
+            organizationUrl,
+            cancellationToken);
+        var connection = await connectionFactory.GetConnectionAsync(organizationUrl, credentials, cancellationToken);
+        await connection.ConnectAsync(cancellationToken);
+        var gitClient = connection.GetClient<GitHttpClient>();
+
+        return await this.FetchExistingThreadsAsync(gitClient, projectId, repositoryId, pullRequestId, cancellationToken);
+    }
+
     // Azure DevOps returns repo-root-absolute item paths (with a leading slash); the rest of the pipeline
     // and the other provider adapters use repo-relative paths without it. Paths that leave this adapter as
     // ChangedFile/ChangedFileSummary are normalized to the repo-relative form so downstream path matching
