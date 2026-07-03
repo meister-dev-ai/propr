@@ -1,6 +1,7 @@
 // Copyright (c) Andreas Rain.
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
+using System.Diagnostics;
 using MeisterProPR.Application.Features.Reviewing.Execution.Models;
 using MeisterProPR.Domain.Enums;
 using MeisterProPR.Domain.ValueObjects;
@@ -111,6 +112,26 @@ public sealed class RepositorySearchExecutorTests
 
         Assert.Equal(RepositorySearchStatuses.InvalidRequest, result.Status);
         Assert.Contains(result.Limitations, limitation => limitation.Reason == RepositorySearchLimitationReasons.InvalidRegex);
+    }
+
+    [Fact]
+    public async Task SearchCodeAsync_PathologicalRegex_TimesOutInsteadOfHanging()
+    {
+        var harness = new SearchHarness();
+        harness.SetTree("src/Foo.cs");
+        harness.SetFile("src/Foo.cs", new string('a', 40) + '!');
+
+        var stopwatch = Stopwatch.StartNew();
+        var result = await harness.SearchCodeAsync(
+            new CodeSearchRequest(
+                "(a+)+$",
+                CodeSearchModes.Regex,
+                RepositorySearchBranchSides.Source,
+                RepositorySearchPathScopes.Repository));
+        stopwatch.Stop();
+
+        Assert.True(stopwatch.Elapsed < TimeSpan.FromSeconds(5), $"Search took {stopwatch.Elapsed}, the match timeout did not bound it.");
+        Assert.Contains(result.Limitations, limitation => limitation.Reason == RepositorySearchLimitationReasons.RegexTimedOut);
     }
 
     [Fact]

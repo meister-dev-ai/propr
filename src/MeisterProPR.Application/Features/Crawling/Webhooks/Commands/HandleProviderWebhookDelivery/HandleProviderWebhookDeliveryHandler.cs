@@ -600,7 +600,11 @@ public sealed partial class HandleProviderWebhookDeliveryHandler(
         var regexPattern = "^" + Regex.Escape(pattern.Trim())
             .Replace("\\*", ".*")
             .Replace("\\?", ".") + "$";
-        return Regex.IsMatch(targetBranch, regexPattern, RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+        return Regex.IsMatch(
+            targetBranch,
+            regexPattern,
+            RegexOptions.IgnoreCase | RegexOptions.CultureInvariant,
+            TimeSpan.FromSeconds(1));
     }
 
     private static string? StripRefsHeads(string? branchName)
@@ -718,7 +722,7 @@ public sealed partial class HandleProviderWebhookDeliveryHandler(
             return null;
         }
 
-        var trimmed = Regex.Replace(value.Trim(), "\\s+", " ");
+        var trimmed = Regex.Replace(value.Trim(), "\\s+", " ", RegexOptions.None, TimeSpan.FromSeconds(1));
         return trimmed.Length <= maxLength
             ? trimmed
             : trimmed[..maxLength].TrimEnd() + "...";

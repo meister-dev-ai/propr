@@ -47,7 +47,7 @@ internal static class RepositorySearchExecutor
             regex = ToolTimingCollectorContext.Record(
                 ProtocolEventToolPhaseNames.RequestPreparation,
                 "Request preparation",
-                () => new Regex(searchTerm, RegexOptions.CultureInvariant));
+                () => new Regex(searchTerm, RegexOptions.CultureInvariant, TimeSpan.FromSeconds(1)));
         }
         catch (ArgumentException ex)
         {
@@ -140,31 +140,45 @@ internal static class RepositorySearchExecutor
 
                     var lines = content.Split('\n');
                     var searchTerminated = false;
-                    for (var i = 0; i < lines.Length; i++)
+                    try
                     {
-                        if (!regex.IsMatch(lines[i]))
+                        for (var i = 0; i < lines.Length; i++)
                         {
-                            continue;
-                        }
+                            if (!regex.IsMatch(lines[i]))
+                            {
+                                continue;
+                            }
 
-                        matches.Add(new RepositorySearchMatch(candidatePath, i + 1, lines[i].TrimEnd('\r')));
-                        if (matches.Count < RepositoryDiscoveryHelpers.MaxReturnedMatches)
-                        {
-                            continue;
-                        }
+                            matches.Add(new RepositorySearchMatch(candidatePath, i + 1, lines[i].TrimEnd('\r')));
+                            if (matches.Count < RepositoryDiscoveryHelpers.MaxReturnedMatches)
+                            {
+                                continue;
+                            }
 
-                        truncated = HasMoreMatches(regex, lines, i + 1) || HasMoreCandidates(candidatePaths, candidatePath);
-                        if (truncated)
-                        {
-                            limitations.Add(
-                                new RepositorySearchLimitation(
-                                    null,
-                                    RepositorySearchLimitationReasons.ResultTruncated,
-                                    $"Only the first {RepositoryDiscoveryHelpers.MaxReturnedMatches} matches were returned."));
-                        }
+                            truncated = HasMoreMatches(regex, lines, i + 1) || HasMoreCandidates(candidatePaths, candidatePath);
+                            if (truncated)
+                            {
+                                limitations.Add(
+                                    new RepositorySearchLimitation(
+                                        null,
+                                        RepositorySearchLimitationReasons.ResultTruncated,
+                                        $"Only the first {RepositoryDiscoveryHelpers.MaxReturnedMatches} matches were returned."));
+                            }
 
+                            searchTerminated = true;
+                            break;
+                        }
+                    }
+                    catch (RegexMatchTimeoutException)
+                    {
+                        // The pattern is pathologically expensive against this file's content; retrying it
+                        // against the remaining candidates would just repeat the same timeout for each one.
+                        limitations.Add(
+                            new RepositorySearchLimitation(
+                                candidatePath,
+                                RepositorySearchLimitationReasons.RegexTimedOut,
+                                "The search pattern took too long to match and was aborted; try a simpler pattern."));
                         searchTerminated = true;
-                        break;
                     }
 
                     if (searchTerminated)

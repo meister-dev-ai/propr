@@ -36,7 +36,8 @@ internal sealed partial class AgentMentionAnswerService(
     private static readonly Regex MentionPrefixRegex =
         new(
             @"^@<[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}>\s*",
-            RegexOptions.IgnoreCase | RegexOptions.Compiled);
+            RegexOptions.IgnoreCase | RegexOptions.Compiled,
+            TimeSpan.FromSeconds(1));
 
     /// <inheritdoc />
     public async Task<string> AnswerAsync(

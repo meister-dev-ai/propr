@@ -54,7 +54,11 @@ internal sealed class FileByFileRiskMarkerStage(IStructuralCodeAnalyzer? analyze
         }
 
         var matchedMarkers = MarkerRules
-            .Where(rule => Regex.IsMatch(matchText, rule.Pattern, RegexOptions.IgnoreCase | RegexOptions.CultureInvariant))
+            .Where(rule => Regex.IsMatch(
+                matchText,
+                rule.Pattern,
+                RegexOptions.IgnoreCase | RegexOptions.CultureInvariant,
+                TimeSpan.FromSeconds(1)))
             .Select(rule => rule.MarkerId)
             .Distinct(StringComparer.Ordinal)
             .ToArray();

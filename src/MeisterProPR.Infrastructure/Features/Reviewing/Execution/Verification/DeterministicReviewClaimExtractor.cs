@@ -12,15 +12,19 @@ namespace MeisterProPR.Infrastructure.Features.Reviewing.Execution.Verification;
 /// </summary>
 public sealed class DeterministicReviewClaimExtractor : IReviewClaimExtractor
 {
-    private static readonly Regex IdentifierInBackticksRegex = new("`(?<identifier>[A-Za-z_][A-Za-z0-9_.]*)`", RegexOptions.Compiled);
+    private static readonly TimeSpan RegexTimeout = TimeSpan.FromSeconds(1);
+
+    private static readonly Regex IdentifierInBackticksRegex = new("`(?<identifier>[A-Za-z_][A-Za-z0-9_.]*)`", RegexOptions.Compiled, RegexTimeout);
 
     private static readonly Regex NamedProgramElementRegex = new(
         "\\b(?:method|function|helper|symbol|class|type|property|field|namespace)\\s+(?<identifier>[A-Za-z_][A-Za-z0-9_.]*)\\b",
-        RegexOptions.Compiled | RegexOptions.IgnoreCase);
+        RegexOptions.Compiled | RegexOptions.IgnoreCase,
+        RegexTimeout);
 
     private static readonly Regex MissingIdentifierRegex = new(
         "\\b(?<identifier>[A-Za-z_][A-Za-z0-9_.]*)\\b\\s+(?:is|are)\\s+missing\\b",
-        RegexOptions.Compiled | RegexOptions.IgnoreCase);
+        RegexOptions.Compiled | RegexOptions.IgnoreCase,
+        RegexTimeout);
 
     private static readonly Regex[] SubjectIdentifierRegexes =
     [

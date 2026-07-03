@@ -7,8 +7,9 @@ namespace MeisterProPR.Infrastructure.AI;
 
 internal sealed class PromptTemplateValidator
 {
-    private static readonly Regex PartialReferencePattern = new(@"{{>\s*(?<name>[^\s}]+)", RegexOptions.Compiled);
-    private static readonly Regex ValidPartialNamePattern = new(@"^[A-Za-z0-9][A-Za-z0-9_-]*$", RegexOptions.Compiled);
+    private static readonly TimeSpan RegexTimeout = TimeSpan.FromSeconds(1);
+    private static readonly Regex PartialReferencePattern = new(@"{{>\s*(?<name>[^\s}]+)", RegexOptions.Compiled, RegexTimeout);
+    private static readonly Regex ValidPartialNamePattern = new(@"^[A-Za-z0-9][A-Za-z0-9_-]*$", RegexOptions.Compiled, RegexTimeout);
 
     private readonly PromptTemplateFileProvider _fileProvider;
 

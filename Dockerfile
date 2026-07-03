@@ -97,7 +97,7 @@ COPY --from=kerberos /kerberos-root/usr/lib/x86_64-linux-gnu/ /usr/lib/x86_64-li
 COPY --from=kerberos /kerberos-root/lib/x86_64-linux-gnu/ /lib/x86_64-linux-gnu/
 COPY --from=kerberos /kerberos-root/etc/gss/ /etc/gss/
 COPY --from=gittools /git-root/ /
-COPY --from=build --chown=1654:1654 /app /app
+COPY --from=build --chown=1654:1654 --chmod=755 /app /app
 
 ENV GIT_EXEC_PATH=/usr/lib/git-core
 

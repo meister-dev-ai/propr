@@ -9,6 +9,12 @@ namespace MeisterProPR.Infrastructure.Features.Reviewing.Workspace;
 
 internal sealed class GitCommandRunner(ILogger<GitCommandRunner> logger)
 {
+    // The runtime container and WSL/Linux dev hosts install git at this fixed path (see the gittools
+    // stage in Dockerfile/procursor.dockerfile), so resolving it directly avoids an ambient PATH search.
+    // Windows dev hosts (scripts/run-local.ps1) have no equivalent fixed path, so fall back to a PATH
+    // search there.
+    private static readonly string GitExecutablePath = OperatingSystem.IsWindows() ? "git" : "/usr/bin/git";
+
     public async Task<GitCommandResult> RunAsync(
         string workingDirectory,
         IReadOnlyList<string> arguments,
@@ -24,7 +30,7 @@ internal sealed class GitCommandRunner(ILogger<GitCommandRunner> logger)
 
         var startInfo = new ProcessStartInfo
         {
-            FileName = "git",
+            FileName = GitExecutablePath,
             WorkingDirectory = workingDirectory,
             RedirectStandardInput = true,
             RedirectStandardOutput = true,

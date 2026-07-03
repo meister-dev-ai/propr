@@ -90,6 +90,11 @@ public static class RepositorySearchLimitationReasons
     public const string InvalidRegex = "invalid_regex";
 
     /// <summary>
+    ///     The search regex took too long to match and was aborted.
+    /// </summary>
+    public const string RegexTimedOut = "regex_timed_out";
+
+    /// <summary>
     ///     The file is missing on the branch.
     /// </summary>
     public const string MissingOnBranch = "missing_on_branch";
