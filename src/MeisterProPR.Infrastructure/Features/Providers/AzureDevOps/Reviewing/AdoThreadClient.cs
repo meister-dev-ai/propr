@@ -160,6 +160,6 @@ internal sealed partial class AdoThreadClient(
 
         var connection = await connectionFactory.GetConnectionAsync(organizationUrl, credentials, ct);
         await connection.ConnectAsync(ct);
-        return connection.GetClient<GitHttpClient>();
+        return await connection.GetClientAsync<GitHttpClient>(ct);
     }
 }

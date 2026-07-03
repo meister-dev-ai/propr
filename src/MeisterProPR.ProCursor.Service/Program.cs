@@ -214,7 +214,7 @@ try
         });
     app.MapPrometheusScrapingEndpoint();
 
-    app.Run();
+    await app.RunAsync();
 }
 catch (Exception ex) when (ex is not HostAbortedException)
 {
@@ -223,7 +223,7 @@ catch (Exception ex) when (ex is not HostAbortedException)
 }
 finally
 {
-    Log.CloseAndFlush();
+    await Log.CloseAndFlushAsync();
 }
 
 /// <summary>

@@ -29,7 +29,7 @@ public sealed partial class AdoPullRequestIterationResolver(
             organizationUrl,
             ct);
         var connection = await connectionFactory.GetConnectionAsync(organizationUrl, credentials, ct);
-        var gitClient = connection.GetClient<GitHttpClient>();
+        var gitClient = await connection.GetClientAsync<GitHttpClient>(ct);
         var iterations = await gitClient.GetPullRequestIterationsAsync(
             projectId,
             repositoryId,

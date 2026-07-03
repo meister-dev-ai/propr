@@ -1,6 +1,7 @@
 // Copyright (c) Andreas Rain.
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
+using System.Text.Json.Serialization;
 using FluentValidation;
 using FluentValidation.Results;
 using MeisterProPR.Api.Extensions;
@@ -853,9 +854,9 @@ public sealed partial class ClientProviderConnectionsController(
 
 /// <summary>Request body for creating a client-scoped provider connection.</summary>
 public sealed record CreateClientProviderConnectionRequest(
-    ScmProvider ProviderFamily,
+    [property: JsonRequired] ScmProvider ProviderFamily,
     string HostBaseUrl,
-    ScmAuthenticationKind AuthenticationKind,
+    [property: JsonRequired] ScmAuthenticationKind AuthenticationKind,
     string? UserName,
     string? OAuthTenantId,
     string? OAuthClientId,

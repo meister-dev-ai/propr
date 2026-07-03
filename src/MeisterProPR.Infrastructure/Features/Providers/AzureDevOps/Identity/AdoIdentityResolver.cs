@@ -33,7 +33,7 @@ public sealed class AdoIdentityResolver(
                 ct);
         AdoProviderAdapterHelpers.EnsureRuntimeCredentialsAvailable(organizationUrl, credentials);
         var connection = await connectionFactory.GetConnectionAsync(organizationUrl, credentials, ct);
-        var client = connection.GetClient<IdentityHttpClient>();
+        var client = await connection.GetClientAsync<IdentityHttpClient>(ct);
         var identities = await client.ReadIdentitiesAsync(
             IdentitySearchFilter.General,
             displayName,

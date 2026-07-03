@@ -711,7 +711,7 @@ public sealed partial class ProCursorQueryService(
             chunkMagnitude += chunkValue * chunkValue;
         }
 
-        if (queryMagnitude == 0 || chunkMagnitude == 0)
+        if (queryMagnitude <= 0d || chunkMagnitude <= 0d)
         {
             return 0;
         }

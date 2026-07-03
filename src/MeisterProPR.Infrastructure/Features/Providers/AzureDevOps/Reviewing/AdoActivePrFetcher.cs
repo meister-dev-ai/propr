@@ -49,7 +49,7 @@ internal sealed partial class AdoActivePrFetcher(
                 organizationUrl,
                 credentials,
                 cancellationToken);
-            var gitClient = connection.GetClient<GitHttpClient>();
+            var gitClient = await connection.GetClientAsync<GitHttpClient>(cancellationToken);
 
             // Intentionally no MinTime filter: ADO's minTime filters on creation date,
             // not last-update date. Old active PRs that gain a new @mention would be

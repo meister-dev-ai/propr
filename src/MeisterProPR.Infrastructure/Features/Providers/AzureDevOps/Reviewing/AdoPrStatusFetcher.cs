@@ -58,7 +58,7 @@ public sealed partial class AdoPrStatusFetcher(
             else
             {
                 var connection = await connectionFactory.GetConnectionAsync(organizationUrl, credentials, ct);
-                gitClient = connection.GetClient<GitHttpClient>();
+                gitClient = await connection.GetClientAsync<GitHttpClient>(ct);
             }
 
             var pr = await gitClient.GetPullRequestAsync(

@@ -79,7 +79,7 @@ internal sealed partial class AdoThreadReplier(
             activity?.SetTag("publication.author.id", authorizedIdentityId.ToString("D"));
         }
 
-        var gitClient = connection.GetClient<GitHttpClient>();
+        var gitClient = await connection.GetClientAsync<GitHttpClient>(cancellationToken);
         var renderedReplyText = FormatReplyText(replyText);
 
         var comment = new Comment

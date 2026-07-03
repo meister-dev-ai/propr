@@ -153,7 +153,7 @@ internal sealed class ParserPool : IDisposable
 
         if (winner == parseTask)
         {
-            timeoutCts.Cancel();
+            await timeoutCts.CancelAsync().ConfigureAwait(false);
             try
             {
                 tree = await parseTask.ConfigureAwait(false);

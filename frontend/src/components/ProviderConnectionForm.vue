@@ -5,53 +5,62 @@
   <div :class="shellClass">
     <div class="provider-form-grid">
       <div v-if="isCreateMode" class="form-field">
-        <label>Provider</label>
-        <select v-model="form.providerFamily" :disabled="availableProviderOptions.length === 0">
-          <option v-for="option in availableProviderOptions" :key="option.value" :value="option.value">
-            {{ option.label }}
-          </option>
-        </select>
+        <label>Provider
+          <select v-model="form.providerFamily" :disabled="availableProviderOptions.length === 0">
+            <option v-for="option in availableProviderOptions" :key="option.value" :value="option.value">
+              {{ option.label }}
+            </option>
+          </select>
+        </label>
         <p v-if="availableProviderOptions.length === 0" class="error provider-form-unavailable">No provider families are currently enabled.</p>
       </div>
       <div class="form-field">
-        <label>Display Name</label>
-        <input v-model="form.displayName" type="text" placeholder="e.g. GitHub Enterprise" />
+        <label>Display Name
+          <input v-model="form.displayName" type="text" placeholder="e.g. GitHub Enterprise" />
+        </label>
       </div>
       <div class="form-field">
-        <label>Host Base URL</label>
-        <input v-model="form.hostBaseUrl" type="text" :placeholder="hostPlaceholder" />
+        <label>Host Base URL
+          <input v-model="form.hostBaseUrl" type="text" :placeholder="hostPlaceholder" />
+        </label>
       </div>
       <div class="form-field">
-        <label>Authentication</label>
-        <select v-model="form.authenticationKind">
-          <option
-            v-for="option in authenticationOptions"
-            :key="option.value"
-            :value="option.value"
-          >
-            {{ option.label }}
-          </option>
-        </select>
+        <label>Authentication
+          <select v-model="form.authenticationKind">
+            <option
+              v-for="option in authenticationOptions"
+              :key="option.value"
+              :value="option.value"
+            >
+              {{ option.label }}
+            </option>
+          </select>
+        </label>
       </div>
       <div v-if="showAzureOAuthFields" class="form-field">
-        <label>OAuth Tenant ID</label>
-        <input v-model="form.oAuthTenantId" type="text" placeholder="contoso.onmicrosoft.com or tenant GUID" />
+        <label>OAuth Tenant ID
+          <input v-model="form.oAuthTenantId" type="text" placeholder="contoso.onmicrosoft.com or tenant GUID" />
+        </label>
       </div>
       <div v-if="showAzureOAuthFields" class="form-field">
-        <label>OAuth Client ID</label>
-        <input v-model="form.oAuthClientId" type="text" placeholder="Azure app registration client ID" />
+        <label>OAuth Client ID
+          <input v-model="form.oAuthClientId" type="text" placeholder="Azure app registration client ID" />
+        </label>
       </div>
       <div v-if="showUserNameField" class="form-field">
-        <label>User Name</label>
-        <input v-model="form.userName" type="text" placeholder="CONTOSO\\ado-user" />
+        <label>User Name
+          <input v-model="form.userName" type="text" placeholder="CONTOSO\\ado-user" />
+        </label>
       </div>
       <div v-if="showGitHubAppFields" class="form-field">
-        <label>GitHub App ID</label>
-        <input v-model="form.gitHubAppId" type="number" min="1" placeholder="123456" />
+        <label>GitHub App ID
+          <input v-model="form.gitHubAppId" type="number" min="1" placeholder="123456" />
+        </label>
       </div>
       <div v-if="showGitHubAppFields" class="form-field">
-        <label>Installation ID</label>
-        <input v-model="form.gitHubAppInstallationId" type="number" min="1" placeholder="987654321" />
+        <label>Installation ID
+          <input v-model="form.gitHubAppInstallationId" type="number" min="1" placeholder="987654321" />
+        </label>
       </div>
       <p v-if="showAzureDevOpsServerSecurityHint" class="provider-form-grid-full provider-form-hint">
         Self-hosted Azure DevOps Server PAT and Windows user-account connections require HTTPS. If ProPR runs on Linux, WSL, or in containers, the server certificate must also be trusted inside that runtime.
@@ -60,12 +69,12 @@
         <label>
           {{ secretLabel }}
           <span v-if="!isCreateMode" class="field-hint-inline">{{ secretHintText }}</span>
+          <input
+            v-model="form.secret"
+            type="password"
+            :placeholder="secretPlaceholder"
+          />
         </label>
-        <input
-          v-model="form.secret"
-          type="password"
-          :placeholder="secretPlaceholder"
-        />
       </div>
     </div>
     <label class="toggle-checkbox">
@@ -83,15 +92,16 @@
         <span>Store diffs</span>
       </label>
       <div class="form-field provider-retention-days">
-        <label>Retention (days)</label>
-        <input
-          v-model="form.retentionDays"
-          type="number"
-          min="1"
-          max="3650"
-          placeholder="30"
-          data-testid="retention-days"
-        />
+        <label>Retention (days)
+          <input
+            v-model="form.retentionDays"
+            type="number"
+            min="1"
+            max="3650"
+            placeholder="30"
+            data-testid="retention-days"
+          />
+        </label>
         <span class="field-hint-inline">Leave blank to use the 30-day default.</span>
         <p v-if="retentionDaysError" class="error" data-testid="retention-days-error">{{ retentionDaysError }}</p>
       </div>

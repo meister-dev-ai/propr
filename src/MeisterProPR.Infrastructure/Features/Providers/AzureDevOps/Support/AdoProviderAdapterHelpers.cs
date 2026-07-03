@@ -116,7 +116,7 @@ internal static class AdoProviderAdapterHelpers
 
         var credentials = await ResolveCredentialsAsync(connectionRepository, clientId, organizationUrl, ct);
         var connection = await connectionFactory.GetConnectionAsync(organizationUrl, credentials, ct);
-        return connection.GetClient<GitHttpClient>();
+        return await connection.GetClientAsync<GitHttpClient>(ct);
     }
 
     public static async Task<AdoConnectionCredentials?> ResolveCredentialsAsync(

@@ -3506,7 +3506,7 @@ export const handlers = [
         totalJobs: isSpecialPR ? 1 : 0,
         totalInputTokens: isSpecialPR ? 51355 : 0,
         totalOutputTokens: isSpecialPR ? 4658 : 0,
-        originatedMemoryCount: isSpecialPR ? 0 : 0,
+        originatedMemoryCount: 0,
         contributedMemoryCount: isSpecialPR ? 2 : 0,
         breakdownConsistent: true,
         aggregatedTokenBreakdown: isSpecialPR ? [

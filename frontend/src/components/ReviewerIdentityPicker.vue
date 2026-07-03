@@ -18,8 +18,9 @@
     <p v-else class="filters-empty-hint">No reviewer trigger saved for this connection. Matching crawl and webhook rules still process PRs by default.</p>
     <div class="provider-form-grid provider-form-grid-tight">
       <div class="form-field provider-form-grid-full">
-        <label>Search Reviewer Trigger</label>
-        <input v-model="reviewerSearchModel" type="text" placeholder="Search reviewer login or bot account" />
+        <label>Search Reviewer Trigger
+          <input v-model="reviewerSearchModel" type="text" placeholder="Search reviewer login or bot account" />
+        </label>
       </div>
     </div>
     <p v-if="error" class="error">{{ error }}</p>

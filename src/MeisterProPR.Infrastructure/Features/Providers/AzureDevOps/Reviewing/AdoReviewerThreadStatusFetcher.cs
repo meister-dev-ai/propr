@@ -123,7 +123,7 @@ public sealed partial class AdoReviewerThreadStatusFetcher(
             ct);
         var connection = await connectionFactory.GetConnectionAsync(organizationUrl, credentials, ct);
         await connection.ConnectAsync(ct);
-        return (connection.GetClient<GitHttpClient>(), connection.AuthorizedIdentity?.Id);
+        return (await connection.GetClientAsync<GitHttpClient>(ct), connection.AuthorizedIdentity?.Id);
     }
 
     private static bool IsReviewerOwnedAuthor(string? authorId, Guid reviewerId, Guid? authorizedIdentityId)

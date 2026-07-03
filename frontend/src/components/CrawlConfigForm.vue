@@ -164,7 +164,7 @@
         </div>
 
         <div v-if="editMode" class="form-group checkbox-group">
-          <label>Settings</label>
+          <span class="field-section-label">Settings</span>
           <label class="checkbox-label">
             <input type="checkbox" v-model="isActive" />
             <span class="checkbox-text">Crawl Is <strong>{{ isActive ? 'Active' : 'Paused' }}</strong></span>
@@ -175,7 +175,7 @@
       <div class="form-group full-width repo-filters-section">
         <div class="repo-filters-header">
           <div>
-            <label>Repository Filters</label>
+            <span class="field-section-label">Repository Filters</span>
             <p class="field-hint">Select discovered repositories and branch patterns. Leave the list empty to crawl every repository in the selected project.</p>
           </div>
           <button
@@ -239,7 +239,7 @@
               </div>
 
               <div class="form-group filter-branches-group">
-                <label>Branch Patterns</label>
+                <span class="field-section-label">Branch Patterns</span>
                 <div v-if="getBranchSuggestions(filter).length" class="branch-suggestions">
                   <button
                     v-for="suggestion in getBranchSuggestions(filter)"
@@ -297,7 +297,7 @@
       <div class="form-group full-width source-scope-section">
         <div class="repo-filters-header">
           <div>
-            <label>Review Knowledge Scope</label>
+            <span class="field-section-label">Review Knowledge Scope</span>
             <p class="field-hint">Choose whether crawl-triggered reviews can use every enabled ProCursor source on this client or only a selected subset.</p>
           </div>
           <span v-if="usesSelectedProCursorSources && selectedProCursorSourceCount" class="scope-count-pill">
@@ -366,7 +366,7 @@
       <div v-if="editMode && config?.id" class="form-group full-width prompt-overrides-section">
         <div class="repo-filters-header">
           <div>
-            <label>Prompt Overrides</label>
+            <span class="field-section-label">Prompt Overrides</span>
             <p class="field-hint">Crawl-specific prompt segments that override client-level settings.</p>
           </div>
           <button type="button" class="btn-add-row" @click="showOverrideForm = !showOverrideForm">
@@ -377,24 +377,26 @@
         <div v-if="showOverrideForm" class="override-create-form active">
           <div class="form-grid">
             <div class="form-group">
-              <label>Prompt Key</label>
-              <select v-model="newOverride.promptKey" class="form-input">
-                <option value="">— select —</option>
-                <option value="SystemPrompt">SystemPrompt</option>
-                <option value="AgenticLoopGuidance">AgenticLoopGuidance</option>
-                <option value="SynthesisSystemPrompt">SynthesisSystemPrompt</option>
-                <option value="QualityFilterSystemPrompt">QualityFilterSystemPrompt</option>
-                <option value="PerFileContextPrompt">PerFileContextPrompt</option>
-              </select>
+              <label>Prompt Key
+                <select v-model="newOverride.promptKey" class="form-input">
+                  <option value="">— select —</option>
+                  <option value="SystemPrompt">SystemPrompt</option>
+                  <option value="AgenticLoopGuidance">AgenticLoopGuidance</option>
+                  <option value="SynthesisSystemPrompt">SynthesisSystemPrompt</option>
+                  <option value="QualityFilterSystemPrompt">QualityFilterSystemPrompt</option>
+                  <option value="PerFileContextPrompt">PerFileContextPrompt</option>
+                </select>
+              </label>
             </div>
             <div class="form-group full-width">
-              <label>Override Text</label>
-              <textarea
-                v-model="newOverride.overrideText"
-                rows="4"
-                placeholder="Full replacement text..."
-                class="form-input"
-              />
+              <label>Override Text
+                <textarea
+                  v-model="newOverride.overrideText"
+                  rows="4"
+                  placeholder="Full replacement text..."
+                  class="form-input"
+                />
+              </label>
             </div>
           </div>
           <div class="form-actions-simple">
@@ -608,6 +610,9 @@ const {
   padding: 0.75rem 1rem !important;
   color: var(--color-text) !important;
   font-size: 1rem !important;
+  font-weight: normal !important;
+  text-transform: none !important;
+  letter-spacing: normal !important;
   transition: all 0.2s !important;
   box-sizing: border-box !important;
   font-family: inherit !important;

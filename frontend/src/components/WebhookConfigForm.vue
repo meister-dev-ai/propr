@@ -132,7 +132,7 @@
     <div class="form-group full-width">
       <div class="section-header-inline">
         <div>
-          <label>Enabled Events</label>
+          <span class="field-section-label">Enabled Events</span>
           <p class="field-hint">Select which pull-request events should activate this listener.</p>
         </div>
       </div>
@@ -161,7 +161,7 @@
     <div class="form-group full-width repo-filters-section">
       <div class="section-header-inline">
         <div>
-          <label>Repository Filters</label>
+          <span class="field-section-label">Repository Filters</span>
           <p class="field-hint">Add repository filters to scope this listener. Leave empty to allow all repositories in the selected scope.</p>
         </div>
         <button id="webhookAddFilter" type="button" class="btn-add-row" :disabled="editMode || !projectId" @click="addFilter">
@@ -212,7 +212,7 @@
             </div>
 
             <div class="form-group filter-branches-group">
-              <label>Branch Patterns</label>
+              <span class="field-section-label">Branch Patterns</span>
               <div v-if="filter.targetBranchPatterns.length" class="filter-branches">
                 <div
                   v-for="(pattern, patternIndex) in filter.targetBranchPatterns"

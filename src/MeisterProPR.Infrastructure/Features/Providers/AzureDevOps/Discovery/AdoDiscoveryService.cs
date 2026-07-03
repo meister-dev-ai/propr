@@ -266,7 +266,7 @@ public class AdoDiscoveryService(
         VssConnection connection,
         CancellationToken ct)
     {
-        var projectClient = connection.GetClient<ProjectHttpClient>();
+        var projectClient = await connection.GetClientAsync<ProjectHttpClient>(ct);
         var projects = await projectClient.GetProjects(top: 500, skip: 0, continuationToken: null);
         return projects.ToList().AsReadOnly();
     }
@@ -276,7 +276,7 @@ public class AdoDiscoveryService(
         string projectId,
         CancellationToken ct)
     {
-        var gitClient = connection.GetClient<GitHttpClient>();
+        var gitClient = await connection.GetClientAsync<GitHttpClient>(ct);
         var repositories = await gitClient.GetRepositoriesAsync(projectId, includeHidden: false, cancellationToken: ct);
         return repositories.ToList().AsReadOnly();
     }
@@ -297,7 +297,7 @@ public class AdoDiscoveryService(
         string repositoryId,
         CancellationToken ct)
     {
-        var gitClient = connection.GetClient<GitHttpClient>();
+        var gitClient = await connection.GetClientAsync<GitHttpClient>(ct);
         var branches = await gitClient.GetBranchesAsync(projectId, repositoryId, cancellationToken: ct);
         return branches.ToList().AsReadOnly();
     }
@@ -307,7 +307,7 @@ public class AdoDiscoveryService(
         string projectId,
         CancellationToken ct)
     {
-        var wikiClient = connection.GetClient<WikiHttpClient>();
+        var wikiClient = await connection.GetClientAsync<WikiHttpClient>(ct);
         var wikis = await wikiClient.GetAllWikisAsync(projectId, null, ct);
         return wikis.ToList().AsReadOnly();
     }

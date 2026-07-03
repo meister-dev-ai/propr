@@ -572,7 +572,7 @@
     <ModalDialog :isOpen="editBranchModal.open" :title="`Edit ${editBranchModal.branchName}`" @update:isOpen="editBranchModal.open = $event">
       <div class="modal-form-grid">
         <div class="form-field modal-form-grid-full">
-          <label>Branch Name</label>
+          <span class="field-caption">Branch Name</span>
           <div class="readonly-value">{{ editBranchModal.branchName }}</div>
         </div>
 
@@ -1102,6 +1102,14 @@ const {
   margin: 1rem 0 0;
   color: var(--color-text-muted);
   font-size: 0.85rem;
+}
+
+.field-caption {
+  display: block;
+  font-size: 0.875rem;
+  font-weight: 500;
+  margin-bottom: 0.5rem;
+  color: var(--color-text-muted);
 }
 
 .readonly-value {

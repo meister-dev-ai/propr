@@ -1,6 +1,7 @@
 // Copyright (c) Andreas Rain.
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
+using System.Text.Json.Serialization;
 using FluentValidation;
 using FluentValidation.Results;
 using MeisterProPR.Api.Extensions;
@@ -250,7 +251,7 @@ public sealed record SetClientReviewerIdentityRequest(
     string ExternalUserId,
     string Login,
     string DisplayName,
-    bool IsBot);
+    [property: JsonRequired] bool IsBot);
 
 /// <summary>Resolved reviewer-trigger identity candidate returned by provider onboarding APIs.</summary>
 public sealed record ResolvedReviewerIdentityResponse(

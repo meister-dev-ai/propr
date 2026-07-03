@@ -143,7 +143,6 @@ async function logout() {
 
 .nav-link-button.router-link-active,
 .nav-link-button:hover {
-  border-bottom-color: transparent;
   border-color: rgba(34, 211, 238, 0.3);
   background: rgba(34, 211, 238, 0.08);
 }

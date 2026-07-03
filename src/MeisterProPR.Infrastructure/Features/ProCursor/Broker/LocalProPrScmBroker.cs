@@ -137,7 +137,7 @@ public sealed class LocalProPrScmBroker(
         CancellationToken ct)
     {
         var connection = await connectionFactory.GetConnectionAsync(organizationUrl, credentials, ct);
-        return connection.GetClient<GitHttpClient>();
+        return await connection.GetClientAsync<GitHttpClient>(ct);
     }
 
     private async Task<IReadOnlyList<WikiV2>> ListWikisAsync(
@@ -146,7 +146,7 @@ public sealed class LocalProPrScmBroker(
         CancellationToken ct)
     {
         var connection = await connectionFactory.GetConnectionAsync(source.ProviderScopePath, credentials, ct);
-        var wikiClient = connection.GetClient<WikiHttpClient>();
+        var wikiClient = await connection.GetClientAsync<WikiHttpClient>(ct);
         var wikis = await wikiClient.GetAllWikisAsync(source.ProviderProjectKey, null, ct);
         return wikis.ToList().AsReadOnly();
     }

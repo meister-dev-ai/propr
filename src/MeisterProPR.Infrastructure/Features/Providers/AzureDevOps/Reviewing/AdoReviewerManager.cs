@@ -174,6 +174,6 @@ public sealed partial class AdoReviewerManager(
         }
 
         var connection = await connectionFactory.GetConnectionAsync(organizationUrl, credentials, ct);
-        return connection.GetClient<GitHttpClient>();
+        return await connection.GetClientAsync<GitHttpClient>(ct);
     }
 }

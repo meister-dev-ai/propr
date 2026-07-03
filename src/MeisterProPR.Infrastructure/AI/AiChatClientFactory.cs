@@ -95,9 +95,7 @@ public sealed partial class AiChatClientFactory(ILogger<AiChatClientFactory> log
     private static Uri NormaliseRoot(string endpointUrl)
     {
         var uri = new Uri(endpointUrl);
-        return uri.Host.EndsWith("services.ai.azure.com", StringComparison.OrdinalIgnoreCase)
-            ? new Uri($"{uri.Scheme}://{uri.Host}/")
-            : new Uri($"{uri.Scheme}://{uri.Host}/");
+        return new Uri($"{uri.Scheme}://{uri.Host}/");
     }
 
     [LoggerMessage(Level = LogLevel.Debug, Message = "AiChatClientFactory: probing deployments at {RequestUri}")]

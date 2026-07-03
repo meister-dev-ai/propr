@@ -764,7 +764,7 @@ public sealed partial class ClientAiConnectionsController(
 }
 
 /// <summary>Authentication settings for one AI connection profile request.</summary>
-public sealed record AiConnectionAuthRequest(AiAuthMode Mode, string? ApiKey = null);
+public sealed record AiConnectionAuthRequest([property: JsonRequired] AiAuthMode Mode, string? ApiKey = null);
 
 /// <summary>Configured model payload item for create, update, and discovery flows.</summary>
 public sealed record AiConfiguredModelRequest(
@@ -786,7 +786,7 @@ public sealed record AiConfiguredModelRequest(
 /// <summary>Purpose binding payload item for create and update flows.</summary>
 public sealed record AiPurposeBindingRequest(
     Guid? Id,
-    AiPurpose Purpose,
+    [property: JsonRequired] AiPurpose Purpose,
     Guid? ConfiguredModelId = null,
     string? RemoteModelId = null,
     AiProtocolMode ProtocolMode = AiProtocolMode.Auto,
@@ -795,7 +795,7 @@ public sealed record AiPurposeBindingRequest(
 /// <summary>Request body for creating a provider-neutral AI connection profile.</summary>
 public sealed record CreateAiConnectionRequest(
     string DisplayName,
-    AiProviderKind ProviderKind,
+    [property: JsonRequired] AiProviderKind ProviderKind,
     string BaseUrl,
     AiConnectionAuthRequest Auth,
     AiDiscoveryMode DiscoveryMode = AiDiscoveryMode.ProviderCatalog,
@@ -880,7 +880,7 @@ public sealed record UpdateAiConnectionRequest(
 
 /// <summary>Request body for model discovery against a provider without persisting a profile.</summary>
 public sealed record DiscoverModelsRequest(
-    AiProviderKind ProviderKind,
+    [property: JsonRequired] AiProviderKind ProviderKind,
     string BaseUrl,
     AiConnectionAuthRequest Auth,
     IReadOnlyDictionary<string, string>? DefaultHeaders = null,

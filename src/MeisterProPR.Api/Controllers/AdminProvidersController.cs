@@ -1,6 +1,7 @@
 // Copyright (c) Andreas Rain.
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
+using System.Text.Json.Serialization;
 using MeisterProPR.Api.Extensions;
 using MeisterProPR.Application.DTOs;
 using MeisterProPR.Application.Interfaces;
@@ -74,4 +75,4 @@ public sealed class AdminProvidersController(IProviderActivationService? provide
 
 /// <summary>Request body for updating one provider family's activation state.</summary>
 /// <param name="IsEnabled">Whether the provider family should be enabled installation-wide.</param>
-public sealed record PatchAdminProviderRequest(bool IsEnabled);
+public sealed record PatchAdminProviderRequest([property: JsonRequired] bool IsEnabled);

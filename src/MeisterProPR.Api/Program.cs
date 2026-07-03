@@ -524,7 +524,7 @@ try
         });
     app.MapPrometheusScrapingEndpoint();
 
-    app.Run();
+    await app.RunAsync();
 }
 catch (Exception ex) when (ex is not HostAbortedException and not InvalidOperationException)
 {
@@ -532,7 +532,7 @@ catch (Exception ex) when (ex is not HostAbortedException and not InvalidOperati
 }
 finally
 {
-    Log.CloseAndFlush();
+    await Log.CloseAndFlushAsync();
 }
 
 /// <summary>Entry point for the API application used by tests and host.</summary>

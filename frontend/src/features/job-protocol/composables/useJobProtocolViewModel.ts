@@ -636,7 +636,7 @@ export function useJobProtocolViewModel() {
                 return left.localeCompare(right)
             })
 
-            const sortedFileKeys = Object.keys(node.files ?? {}).sort()
+            const sortedFileKeys = Object.keys(node.files ?? {}).sort((left, right) => left.localeCompare(right))
 
             sortedFolderKeys.forEach((key, index) => {
                 const childNode = node.children[key]

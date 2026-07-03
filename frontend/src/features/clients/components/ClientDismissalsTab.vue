@@ -22,15 +22,17 @@
             <div v-if="showDismissalForm">
                 <div class="form-field">
                     <label>Finding Message
-                        <span class="field-hint-inline">(exact AI finding text)</span></label>
-                    <textarea v-model="newDismissal.originalMessage" rows="3"
-                        placeholder="Paste the exact finding message to suppress" class="form-input" />
+                        <span class="field-hint-inline">(exact AI finding text)</span>
+                        <textarea v-model="newDismissal.originalMessage" rows="3"
+                            placeholder="Paste the exact finding message to suppress" class="form-input" />
+                    </label>
                 </div>
                 <div class="form-field">
                     <label>Label
-                        <span class="field-hint-inline">(optional — why it's dismissed)</span></label>
-                    <input v-model="newDismissal.label" type="text"
-                        placeholder="e.g. False positive: naming style" class="form-input" />
+                        <span class="field-hint-inline">(optional — why it's dismissed)</span>
+                        <input v-model="newDismissal.label" type="text"
+                            placeholder="e.g. False positive: naming style" class="form-input" />
+                    </label>
                 </div>
                 <span v-if="dismissalCreateError" class="error">{{ dismissalCreateError }}</span>
                 <div class="form-actions">

@@ -32,7 +32,7 @@ public sealed partial class AdoPrFetcher(
             organizationUrl,
             cancellationToken);
         var connection = await connectionFactory.GetConnectionAsync(organizationUrl, credentials, cancellationToken);
-        var gitClient = connection.GetClient<GitHttpClient>();
+        var gitClient = await connection.GetClientAsync<GitHttpClient>(cancellationToken);
 
         var pr = await gitClient.GetPullRequestAsync(
             projectId,
@@ -70,7 +70,7 @@ public sealed partial class AdoPrFetcher(
         var connection = await connectionFactory.GetConnectionAsync(organizationUrl, credentials, cancellationToken);
         await connection.ConnectAsync(cancellationToken);
         var authorizedIdentityId = connection.AuthorizedIdentity?.Id;
-        var gitClient = connection.GetClient<GitHttpClient>();
+        var gitClient = await connection.GetClientAsync<GitHttpClient>(cancellationToken);
 
         // Get PR metadata
         var pr = await gitClient.GetPullRequestAsync(
@@ -193,7 +193,7 @@ public sealed partial class AdoPrFetcher(
             cancellationToken);
         var connection = await connectionFactory.GetConnectionAsync(organizationUrl, credentials, cancellationToken);
         await connection.ConnectAsync(cancellationToken);
-        var gitClient = connection.GetClient<GitHttpClient>();
+        var gitClient = await connection.GetClientAsync<GitHttpClient>(cancellationToken);
 
         var pr = await gitClient.GetPullRequestAsync(
             projectId,
@@ -266,7 +266,7 @@ public sealed partial class AdoPrFetcher(
             cancellationToken);
         var connection = await connectionFactory.GetConnectionAsync(organizationUrl, credentials, cancellationToken);
         await connection.ConnectAsync(cancellationToken);
-        var gitClient = connection.GetClient<GitHttpClient>();
+        var gitClient = await connection.GetClientAsync<GitHttpClient>(cancellationToken);
 
         return await this.FetchExistingThreadsAsync(gitClient, projectId, repositoryId, pullRequestId, cancellationToken);
     }

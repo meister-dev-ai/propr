@@ -640,7 +640,7 @@ public sealed partial class AdminCrawlConfigsController(
 
 /// <summary>Request body for creating an admin-managed crawl configuration.</summary>
 public sealed record CreateAdminCrawlConfigRequest(
-    Guid ClientId,
+    [property: JsonRequired] Guid ClientId,
     string ProviderProjectKey,
     ScmProvider Provider = ScmProvider.AzureDevOps,
     Guid? OrganizationScopeId = null,

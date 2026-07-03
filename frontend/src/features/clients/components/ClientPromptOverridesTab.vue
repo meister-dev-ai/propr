@@ -13,22 +13,24 @@
         <!-- Create form -->
         <div v-if="showOverrideForm" class="section-card-body">
             <div class="form-field">
-                <label>Prompt Key</label>
-                <select v-model="newOverride.promptKey" class="form-input">
-                    <option value="">— select —</option>
-                    <option value="SystemPrompt">SystemPrompt</option>
-                    <option value="AgenticLoopGuidance">AgenticLoopGuidance</option>
-                    <option value="SynthesisSystemPrompt">SynthesisSystemPrompt</option>
-                    <option value="QualityFilterSystemPrompt">QualityFilterSystemPrompt</option>
-                    <option value="PerFileContextPrompt">PerFileContextPrompt</option>
-                </select>
+                <label>Prompt Key
+                    <select v-model="newOverride.promptKey" class="form-input">
+                        <option value="">— select —</option>
+                        <option value="SystemPrompt">SystemPrompt</option>
+                        <option value="AgenticLoopGuidance">AgenticLoopGuidance</option>
+                        <option value="SynthesisSystemPrompt">SynthesisSystemPrompt</option>
+                        <option value="QualityFilterSystemPrompt">QualityFilterSystemPrompt</option>
+                        <option value="PerFileContextPrompt">PerFileContextPrompt</option>
+                    </select>
+                </label>
             </div>
             <div class="form-field">
                 <label>Override Text
                     <span class="field-hint-inline">(full replacement for the prompt
-                        segment)</span></label>
-                <textarea v-model="newOverride.overrideText" rows="6"
-                    placeholder="Enter the full replacement prompt text…" class="form-input" />
+                        segment)</span>
+                    <textarea v-model="newOverride.overrideText" rows="6"
+                        placeholder="Enter the full replacement prompt text…" class="form-input" />
+                </label>
             </div>
             <span v-if="overrideCreateError" class="error">{{ overrideCreateError }}</span>
             <div class="form-actions">

@@ -10,20 +10,24 @@
     <p class="muted-hint">{{ scopeHint }}</p>
     <div class="provider-form-grid provider-form-grid-tight">
       <div class="form-field">
-        <label>Scope Type</label>
-        <input v-model="form.scopeType" type="text" :placeholder="scopeTypePlaceholder" />
+        <label>Scope Type
+          <input v-model="form.scopeType" type="text" :placeholder="scopeTypePlaceholder" />
+        </label>
       </div>
       <div class="form-field">
-        <label>External Scope ID</label>
-        <input v-model="form.externalScopeId" type="text" :placeholder="externalScopeIdPlaceholder" />
+        <label>External Scope ID
+          <input v-model="form.externalScopeId" type="text" :placeholder="externalScopeIdPlaceholder" />
+        </label>
       </div>
       <div class="form-field provider-form-grid-full">
-        <label>Scope Path</label>
-        <input v-model="form.scopePath" type="text" :placeholder="scopePathPlaceholder" />
+        <label>Scope Path
+          <input v-model="form.scopePath" type="text" :placeholder="scopePathPlaceholder" />
+        </label>
       </div>
       <div class="form-field provider-form-grid-full">
-        <label>Display Name</label>
-        <input v-model="form.displayName" type="text" :placeholder="displayNamePlaceholder" />
+        <label>Display Name
+          <input v-model="form.displayName" type="text" :placeholder="displayNamePlaceholder" />
+        </label>
       </div>
     </div>
     <label class="toggle-checkbox">
@@ -93,7 +97,7 @@ const scopeHint = computed(() =>
     ? 'Create organization scopes for the Azure DevOps organizations this client should use. Use the full organization URL as the scope path.'
     : 'Create scope rows for the organizations or namespaces this client should use.',
 )
-const scopeTypePlaceholder = computed(() => isAzureDevOps.value ? 'organization' : 'organization')
+const scopeTypePlaceholder = 'organization'
 const externalScopeIdPlaceholder = computed(() => isAzureDevOps.value ? 'my-org' : 'acme')
 const scopePathPlaceholder = computed(() => isAzureDevOps.value ? 'https://dev.azure.com/my-org' : 'acme')
 const displayNamePlaceholder = computed(() => isAzureDevOps.value ? 'My Azure DevOps Organization' : 'Acme Organization')

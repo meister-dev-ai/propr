@@ -23,6 +23,8 @@ export type ProCursorKnowledgeSourceDto = components['schemas']['ProCursorKnowle
 export type ProCursorKnowledgeSourceRequest = components['schemas']['ProCursorKnowledgeSourceRequest']
 export type ProCursorRefreshRequest = components['schemas']['ProCursorRefreshRequest']
 export type ProCursorRefreshResponse = components['schemas']['ProCursorRefreshResponse']
+
+const DEFAULT_REFRESH_REQUEST: ProCursorRefreshRequest = { jobKind: 'refresh' }
 export type ProCursorRefreshTriggerMode = components['schemas']['ProCursorRefreshTriggerMode']
 export type ProCursorSourceKind = components['schemas']['ProCursorSourceKind']
 export type ProCursorTrackedBranchDto = components['schemas']['ProCursorTrackedBranchResponse']
@@ -191,7 +193,7 @@ export async function deleteProCursorTrackedBranch(
 async function queueProCursorRefreshInternal(
   clientId: string,
   sourceId: string,
-  request: ProCursorRefreshRequest = { jobKind: 'refresh' },
+  request: ProCursorRefreshRequest = DEFAULT_REFRESH_REQUEST,
 ): Promise<ProCursorRefreshResponse> {
   const { data, error, response } = await getClient().POST(
     '/admin/clients/{clientId}/procursor/sources/{sourceId}/refresh',
@@ -211,7 +213,7 @@ async function queueProCursorRefreshInternal(
 export async function queueProCursorRefresh(
   clientId: string,
   sourceId: string,
-  request: ProCursorRefreshRequest = { jobKind: 'refresh' },
+  request: ProCursorRefreshRequest = DEFAULT_REFRESH_REQUEST,
 ): Promise<ProCursorRefreshResponse> {
   return resolveProCursorService().queueProCursorRefresh(clientId, sourceId, request)
 }

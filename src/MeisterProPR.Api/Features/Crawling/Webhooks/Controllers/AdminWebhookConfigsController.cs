@@ -667,7 +667,7 @@ public sealed partial class AdminWebhookConfigsController(
 
 /// <summary>Request body for creating an admin-managed webhook configuration.</summary>
 public sealed record CreateAdminWebhookConfigRequest(
-    Guid ClientId,
+    [property: JsonRequired] Guid ClientId,
     WebhookProviderType Provider = WebhookProviderType.AzureDevOps,
     Guid? OrganizationScopeId = null,
     string? ProviderScopePath = null,

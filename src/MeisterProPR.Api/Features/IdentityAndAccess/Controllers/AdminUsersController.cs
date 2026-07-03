@@ -1,6 +1,7 @@
 // Copyright (c) Andreas Rain.
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
+using System.Text.Json.Serialization;
 using MeisterProPR.Api.Extensions;
 using MeisterProPR.Application.Interfaces;
 using MeisterProPR.Domain.Entities;
@@ -274,10 +275,12 @@ public sealed class AdminUsersController(
 public sealed record CreateUserRequest(string Username, string Password, AppUserRole? GlobalRole);
 
 /// <summary>Enable/disable request for a user.</summary>
-public sealed record SetUserActiveRequest(bool IsActive);
+public sealed record SetUserActiveRequest([property: JsonRequired] bool IsActive);
 
 /// <summary>Assign-client-role request.</summary>
-public sealed record AssignClientRoleRequest(Guid ClientId, ClientRole Role);
+public sealed record AssignClientRoleRequest(
+    [property: JsonRequired] Guid ClientId,
+    [property: JsonRequired] ClientRole Role);
 
 /// <summary>User response DTO.</summary>
 public sealed record UserResponse(

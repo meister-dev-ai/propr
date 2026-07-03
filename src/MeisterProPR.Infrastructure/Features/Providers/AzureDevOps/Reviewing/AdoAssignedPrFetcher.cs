@@ -193,7 +193,7 @@ public sealed partial class AdoAssignedPrFetcher(
         }
 
         var connection = await connectionFactory.GetConnectionAsync(config.ProviderScopePath, credentials, ct);
-        return connection.GetClient<GitHttpClient>();
+        return await connection.GetClientAsync<GitHttpClient>(ct);
     }
 
     private static async Task<ReviewRevision?> CreateReviewRevisionAsync(

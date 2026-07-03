@@ -32,23 +32,25 @@
               <div class="section-header">
                 <div class="header-main">
                   <div class="client-selector-wrapper">
-                    <label class="small-label">Client</label>
-                    <select v-model="selectedClientId" class="client-select" @change="loadEmbeddings(1)">
-                      <option value="">— Select client —</option>
-                      <option v-for="c in clients" :key="c.id" :value="c.id">{{ c.displayName }}</option>
-                    </select>
+                    <label class="small-label">Client
+                      <select v-model="selectedClientId" class="client-select" @change="loadEmbeddings(1)">
+                        <option value="">— Select client —</option>
+                        <option v-for="c in clients" :key="c.id" :value="c.id">{{ c.displayName }}</option>
+                      </select>
+                    </label>
                   </div>
                   <div class="search-wrapper">
-                    <label class="small-label">Search</label>
-                    <div class="input-with-icon">
-                      <i class="fi fi-rr-search"></i>
-                      <input
-                        v-model="search"
-                        class="glass-input search-field"
-                        placeholder="Repo, file, or summary..."
-                        @input="onSearchInput"
-                      />
-                    </div>
+                    <label class="small-label">Search
+                      <div class="input-with-icon">
+                        <i class="fi fi-rr-search"></i>
+                        <input
+                          v-model="search"
+                          class="glass-input search-field"
+                          placeholder="Repo, file, or summary..."
+                          @input="onSearchInput"
+                        />
+                      </div>
+                    </label>
                   </div>
                 </div>
                 <div class="header-stats" v-if="selectedClientId && !embeddingsLoading">
@@ -157,31 +159,34 @@
               <div class="section-header">
                 <div class="header-main">
                    <div class="client-selector-wrapper">
-                    <label class="small-label">Client</label>
-                    <select v-model="logClientId" class="client-select" @change="loadLog(1)">
-                      <option value="">— Select client —</option>
-                      <option v-for="c in clients" :key="c.id" :value="c.id">{{ c.displayName }}</option>
-                    </select>
+                    <label class="small-label">Client
+                      <select v-model="logClientId" class="client-select" @change="loadLog(1)">
+                        <option value="">— Select client —</option>
+                        <option v-for="c in clients" :key="c.id" :value="c.id">{{ c.displayName }}</option>
+                      </select>
+                    </label>
                   </div>
                   <div class="filter-wrapper">
-                    <label class="small-label">Action</label>
-                    <select v-model="logAction" @change="loadLog(1)">
-                      <option value="">All actions</option>
-                      <option value="0">Stored</option>
-                      <option value="1">Removed</option>
-                      <option value="2">NoOp</option>
-                    </select>
+                    <label class="small-label">Action
+                      <select v-model="logAction" @change="loadLog(1)">
+                        <option value="">All actions</option>
+                        <option value="0">Stored</option>
+                        <option value="1">Removed</option>
+                        <option value="2">NoOp</option>
+                      </select>
+                    </label>
                   </div>
                   <div class="filter-wrapper">
-                    <label class="small-label">PR #</label>
-                    <input
-                      v-model="logPrId"
-                      type="number"
-                      min="1"
-                      placeholder="Any"
-                      class="glass-input pr-filter-input"
-                      @input="onLogPrInput"
-                    />
+                    <label class="small-label">PR #
+                      <input
+                        v-model="logPrId"
+                        type="number"
+                        min="1"
+                        placeholder="Any"
+                        class="glass-input pr-filter-input"
+                        @input="onLogPrInput"
+                      />
+                    </label>
                   </div>
                 </div>
                 <div class="header-stats" v-if="logClientId">
@@ -272,14 +277,14 @@
           </div>
           <div class="panel-body">
             <div class="detail-group">
-              <label>Thread Info</label>
+              <span class="detail-caption">Thread Info</span>
               <div class="detail-value-box">
                 PR #{{ selectedEmbedding.pullRequestId }} — Thread {{ selectedEmbedding.threadId }}
               </div>
             </div>
-            
+
             <div class="detail-group">
-              <label>Repository & File</label>
+              <span class="detail-caption">Repository & File</span>
               <div class="detail-value">
                 <strong>{{ selectedEmbedding.repositoryId }}</strong>
               </div>
@@ -287,14 +292,14 @@
             </div>
 
             <div class="detail-group">
-              <label>Resolution Summary</label>
+              <span class="detail-caption">Resolution Summary</span>
               <div class="summary-box glass">
                 {{ selectedEmbedding.resolutionSummary }}
               </div>
             </div>
 
             <div class="detail-group">
-              <label>Timestamps</label>
+              <span class="detail-caption">Timestamps</span>
               <div class="timestamp-grid">
                 <div>
                   <span class="dim">Created:</span><br/>
@@ -592,6 +597,13 @@ function formatDateShort(iso: string): string {
   font-weight: 600;
 }
 
+.small-label select,
+.small-label input {
+  text-transform: none;
+  letter-spacing: normal;
+  font-weight: 400;
+}
+
 .glass-input {
   background: rgba(255, 255, 255, 0.03);
   border: 1px solid rgba(255, 255, 255, 0.08);
@@ -826,7 +838,7 @@ function formatDateShort(iso: string): string {
 }
 
 .detail-group { margin-bottom: 1.5rem; }
-.detail-group label { display: block; font-size: 0.7rem; text-transform: uppercase; color: var(--color-text-muted); margin-bottom: 0.5rem; font-weight: 600; }
+.detail-group .detail-caption { display: block; font-size: 0.7rem; text-transform: uppercase; color: var(--color-text-muted); margin-bottom: 0.5rem; font-weight: 600; }
 .detail-value { font-size: 1rem; color: var(--color-text); }
 .detail-value-box { background: rgba(34, 211, 238, 0.05); padding: 0.75rem; border-radius: var(--radius-md); border: 1px solid rgba(34, 211, 238, 0.1); font-weight: 600; }
 .detail-code-pill { background: rgba(255, 255, 255, 0.04); padding: 0.3rem 0.6rem; border-radius: var(--radius-xs); font-family: monospace; font-size: 0.8rem; border: 1px solid rgba(255, 255, 255, 0.05); margin-top: 0.4rem; overflow-wrap: break-word; }

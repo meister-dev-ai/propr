@@ -2,6 +2,7 @@
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 // This file implements commercial-only functionality. A commercial license is required to activate or use that functionality.
 
+using System.Text.Json.Serialization;
 using FluentValidation;
 using FluentValidation.Results;
 using MeisterProPR.Api.Extensions;
@@ -303,8 +304,8 @@ public record CreateTenantSsoProviderRequest(
     string? ClientSecret,
     IEnumerable<string>? Scopes,
     IEnumerable<string>? AllowedEmailDomains,
-    bool IsEnabled,
-    bool AutoCreateUsers);
+    [property: JsonRequired] bool IsEnabled,
+    [property: JsonRequired] bool AutoCreateUsers);
 
 /// <summary>Replace-tenant-provider request payload.</summary>
 public sealed record UpdateTenantSsoProviderRequest(

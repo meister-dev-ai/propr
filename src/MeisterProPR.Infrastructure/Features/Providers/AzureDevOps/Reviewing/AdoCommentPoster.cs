@@ -66,7 +66,7 @@ public sealed class AdoCommentPoster(
         diagnostics.SetThreadCoverage(
             ConsideredOpenThreads(existingThreads, botId),
             ConsideredResolvedThreads(existingThreads, botId));
-        var gitClient = connection.GetClient<GitHttpClient>();
+        var gitClient = await connection.GetClientAsync<GitHttpClient>(cancellationToken);
 
         // Build a map of normalized file path → changeTrackingId for inline comment anchoring.
         // changeTrackingId is required by ADO to resolve a file thread against the correct diff.

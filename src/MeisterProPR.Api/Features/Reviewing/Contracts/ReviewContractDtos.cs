@@ -1,6 +1,7 @@
 // Copyright (c) Andreas Rain.
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
+using System.Text.Json.Serialization;
 using MeisterProPR.Domain.Enums;
 using MeisterProPR.Domain.ValueObjects;
 
@@ -10,7 +11,10 @@ namespace MeisterProPR.Api.Features.Reviewing.Contracts;
 public sealed record ReviewRepositoryRefDto(string ExternalRepositoryId, string OwnerOrNamespace, string ProjectPath);
 
 /// <summary>Provider-neutral code review identity supplied by review intake clients.</summary>
-public sealed record ReviewCodeReviewRefDto(CodeReviewPlatformKind Platform, string ExternalReviewId, int Number);
+public sealed record ReviewCodeReviewRefDto(
+    [property: JsonRequired] CodeReviewPlatformKind Platform,
+    string ExternalReviewId,
+    [property: JsonRequired] int Number);
 
 /// <summary>Provider-neutral review revision identity supplied by review intake clients.</summary>
 public sealed record ReviewRevisionRefDto(
@@ -21,7 +25,11 @@ public sealed record ReviewRevisionRefDto(
     string? PatchIdentity);
 
 /// <summary>Provider-neutral reviewer identity supplied by review intake clients.</summary>
-public sealed record ReviewReviewerIdentityDto(string ExternalUserId, string Login, string DisplayName, bool IsBot);
+public sealed record ReviewReviewerIdentityDto(
+    string ExternalUserId,
+    string Login,
+    string DisplayName,
+    [property: JsonRequired] bool IsBot);
 
 /// <summary>Request payload for provider-neutral review intake.</summary>
 public sealed record SubmitReviewRequest(

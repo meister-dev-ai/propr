@@ -40,6 +40,15 @@ label {
   color: var(--color-text-muted);
 }
 
+/* Section heading styled like a form label but not associated with any single control. */
+.field-section-label {
+  display: block;
+  font-size: 0.875rem;
+  font-weight: 500;
+  margin-bottom: 0.5rem;
+  color: var(--color-text-muted);
+}
+
 input[type="text"],
 input[type="password"],
 input[type="search"],
