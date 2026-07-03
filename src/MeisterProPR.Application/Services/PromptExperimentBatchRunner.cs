@@ -84,7 +84,10 @@ public sealed class PromptExperimentBatchRunner(
             resolvedSecrets.TryGetValue(configuration.AiConnection.ApiKeyReferenceName, out apiKey);
         }
 
-        return aiChatClientFactory.CreateClient(configuration.AiConnection.EndpointUrl, apiKey);
+        return aiChatClientFactory.CreateClient(
+            configuration.AiConnection.EndpointUrl,
+            apiKey,
+            configuration.AiConnection.Provider);
     }
 
     private static IReadOnlyDictionary<string, string> MergeRunMetadata(
