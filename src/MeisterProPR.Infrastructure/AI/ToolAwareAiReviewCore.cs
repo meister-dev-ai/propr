@@ -1044,7 +1044,7 @@ internal sealed partial class ToolAwareAiReviewCore(
             {
                 Name = BoundedReviewContextTools.SearchSourceChangedFilesToolName,
                 Description =
-                    "Search only the PR changed files on the source branch using a regex search_term and an optional glob file_mask. Returns structured matches, limitations, and truncation metadata.",
+                    "Search only the PR changed files on the source branch using a regex searchTerm and an optional glob fileMask. Returns structured matches, limitations, and truncation metadata.",
             });
 
         var searchTargetRepo = AIFunctionFactory.Create(
@@ -1053,7 +1053,7 @@ internal sealed partial class ToolAwareAiReviewCore(
             {
                 Name = BoundedReviewContextTools.SearchTargetRepoToolName,
                 Description =
-                    "Search the PR target branch across the whole repository using a regex search_term and an optional glob file_mask. Use this when you need baseline behavior from the merge target.",
+                    "Search the PR target branch across the whole repository using a regex searchTerm and an optional glob fileMask. Use this when you need baseline behavior from the merge target.",
             });
 
         var searchTargetChangedFiles = AIFunctionFactory.Create(
@@ -1062,7 +1062,7 @@ internal sealed partial class ToolAwareAiReviewCore(
             {
                 Name = BoundedReviewContextTools.SearchTargetChangedFilesToolName,
                 Description =
-                    "Search only the PR changed paths on the target branch using a regex search_term and an optional glob file_mask. Use this to compare changed files against their target-branch baseline.",
+                    "Search only the PR changed paths on the target branch using a regex searchTerm and an optional glob fileMask. Use this to compare changed files against their target-branch baseline.",
             });
 
         var searchCode = AIFunctionFactory.Create(
@@ -1088,7 +1088,7 @@ internal sealed partial class ToolAwareAiReviewCore(
             {
                 Name = BoundedReviewContextTools.SearchCodeToolName,
                 Description =
-                    "Search code content with explicit branch_side (source|target), path_scope (repository|changed_files), search_mode (exact_identifier|exact_phrase|regex|related_symbol|related_config_key|related_route|related_dependency_registration|related_exception_or_log), and optional filters: language, file_glob, path_prefix, exclude_generated, exclude_tests. Returns ranked structured matches and limitations.",
+                    "Search code content with explicit branchSide (source|target), pathScope (repository|changed_files), searchMode (exact_identifier|exact_phrase|regex|related_symbol|related_config_key|related_route|related_dependency_registration|related_exception_or_log), and optional filters: language, fileGlob, pathPrefix, excludeGenerated, excludeTests. Returns ranked structured matches and limitations.",
             });
 
         var searchPaths = AIFunctionFactory.Create(
@@ -1114,7 +1114,7 @@ internal sealed partial class ToolAwareAiReviewCore(
             {
                 Name = BoundedReviewContextTools.SearchPathsToolName,
                 Description =
-                    "Search repository-relative paths without reading file content. Use match_mode contains, exact_name, or exact_path_prefix with branch_side, path_scope, and optional language/file_glob/path_prefix/exclude_generated/exclude_tests filters. Returns ranked paths and limitations.",
+                    "Search repository-relative paths without reading file content. Use matchMode contains, exact_name, or exact_path_prefix with branchSide, pathScope, and optional language/fileGlob/pathPrefix/excludeGenerated/excludeTests filters. Returns ranked paths and limitations.",
             });
 
         var getRepositoryOverview = AIFunctionFactory.Create(
