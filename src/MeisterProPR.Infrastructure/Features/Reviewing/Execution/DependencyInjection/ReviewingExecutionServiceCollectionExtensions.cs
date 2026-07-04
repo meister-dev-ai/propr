@@ -6,6 +6,7 @@ using MeisterProPR.Application.Features.Reviewing.Execution.Ports;
 using MeisterProPR.Application.Features.Reviewing.Execution.Strategies.Ports;
 using MeisterProPR.Application.Interfaces;
 using MeisterProPR.Application.Services;
+using MeisterProPR.Infrastructure.Features.Reviewing.Execution.Deduplication;
 using MeisterProPR.Infrastructure.Features.Reviewing.Execution.Persistence;
 using MeisterProPR.Infrastructure.Features.Reviewing.Execution.ReviewFindingGate;
 using MeisterProPR.Infrastructure.Features.Reviewing.Execution.Strategies;
@@ -74,6 +75,12 @@ public static class ReviewingExecutionServiceCollectionExtensions
         services.AddSingleton<QualityFilterExecutor>();
         services.AddScoped<FileReviewDispatchPlanner>();
         services.AddScoped<AgenticFileReviewDispatchPlanner>();
+        // Semantic finding dedup = same file + overlapping anchor + AI-judged same defect class, gated per-client
+        // via the review context's EnableMultiPassUnion flag (default off). The judge is degraded-safe: when no
+        // verification model is bound it returns keep-both, so the deduplicator only ever collapses confirmed
+        // duplicates and never merges distinct bugs.
+        services.AddSingleton<IFindingMergeJudge, AiFindingMergeJudge>();
+        services.AddSingleton<IFindingDeduplicator, SemanticFindingDeduplicator>();
         services.AddScoped<ReviewSynthesisExecutor>();
         services.AddScoped<AgenticReviewSynthesisExecutor>();
         services.AddSingleton<ISummaryReconciliationService, SummaryReconciliationService>();

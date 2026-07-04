@@ -42,9 +42,14 @@ internal sealed class ReviewSynthesisExecutor(
     IAiConnectionRepository? aiConnectionRepository,
     IAiChatClientFactory? aiClientFactory,
     IAiRuntimeResolver? aiRuntimeResolver,
-    IChatClient? defaultChatClient = null)
+    IChatClient? defaultChatClient = null,
+    IFindingDeduplicator? findingDeduplicator = null)
 {
     private static readonly JsonSerializerOptions FinalGateJsonOptions = new(JsonSerializerDefaults.Web);
+
+    // Default deduplicator used whenever the client has not opted into multi-pass union: the existing
+    // token-set Jaccard behavior, unchanged.
+    private static readonly IFindingDeduplicator DefaultFindingDeduplicator = new TokenJaccardFindingDeduplicator();
 
     public async Task<ReviewResult> SynthesizeAsync(
         ReviewJob job,
@@ -96,9 +101,7 @@ internal sealed class ReviewSynthesisExecutor(
             protocolId,
             ct);
 
-        var deduped = FindingDeduplicator
-            .Deduplicate(FindingDeduplicator.CollapseSameFileDuplicates(allComments))
-            .ToList();
+        var deduped = await this.DeduplicateAsync(job, baseContext, allComments, ct);
         var effectiveQualityFilterThreshold = ResolveQualityFilterThreshold(job, options);
         if (deduped.Count >= effectiveQualityFilterThreshold
             && !await this.TryRecordSkippedStepAsync(protocolId, baseContext, FileByFileReviewStepIds.QualityFilter, ct))
@@ -616,6 +619,24 @@ internal sealed class ReviewSynthesisExecutor(
                 FinalGateJsonOptions),
             null,
             ct);
+    }
+
+    // Selects the dedup strategy for this review. When the client opted into multi-pass union and a semantic
+    // deduplicator is available, the unioned candidate set is collapsed semantically (same file + overlapping
+    // anchor + same defect class); otherwise the exact token-Jaccard pipeline runs, so flag-off behavior is
+    // byte-identical to before.
+    private async Task<List<ReviewComment>> DeduplicateAsync(
+        ReviewJob job,
+        ReviewSystemContext baseContext,
+        IReadOnlyList<ReviewComment> allComments,
+        CancellationToken ct)
+    {
+        var deduplicator = baseContext.EnableMultiPassUnion && findingDeduplicator is not null
+            ? findingDeduplicator
+            : DefaultFindingDeduplicator;
+
+        var deduped = await deduplicator.DeduplicateAsync(allComments, job.ClientId, ct);
+        return deduped.ToList();
     }
 
     private static IReadOnlyList<ReviewComment> MaterializePublishedComments(

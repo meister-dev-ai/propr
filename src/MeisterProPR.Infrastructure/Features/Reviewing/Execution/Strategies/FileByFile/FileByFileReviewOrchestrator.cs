@@ -9,12 +9,14 @@ using MeisterProPR.Application.Features.Reviewing.Execution.Ports;
 using MeisterProPR.Application.Features.Reviewing.Execution.Strategies.Ports;
 using MeisterProPR.Application.Interfaces;
 using MeisterProPR.Application.Options;
+using MeisterProPR.Application.Services;
 using MeisterProPR.Application.ValueObjects;
 using MeisterProPR.Domain.Entities;
 using MeisterProPR.Domain.Enums;
 using MeisterProPR.Domain.ValueObjects;
 using MeisterProPR.Infrastructure.Features.Reviewing.Diagnostics.Persistence;
 using MeisterProPR.Infrastructure.Features.Reviewing.Execution.CommentRelevance;
+using MeisterProPR.Infrastructure.Features.Reviewing.Execution.Deduplication;
 using MeisterProPR.Infrastructure.Features.Reviewing.Execution.Verification;
 using MeisterProPR.ProRV.Abstractions;
 using Microsoft.Extensions.AI;
@@ -508,7 +510,8 @@ internal sealed partial class FileByFileReviewOrchestrator(
             aiConnectionRepository,
             aiClientFactory,
             aiRuntimeResolver,
-            chatClient);
+            chatClient,
+            new SemanticFindingDeduplicator(new AiFindingMergeJudge(aiRuntimeResolver)));
     }
 
     private CandidateFindingFactory GetCandidateFindingFactory()
