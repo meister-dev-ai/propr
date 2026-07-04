@@ -277,4 +277,78 @@ public sealed class FileReviewerMultiPassUnionTests
         Assert.Equal(3, this._observedModelIds.Count);
         Assert.All(this._observedModelIds, modelId => Assert.Equal("gpt-5.3-codex", modelId));
     }
+
+    [Fact]
+    public async Task CrossModel_RoutesResamplePassesToArmModels_BaselineKeepsTierModel()
+    {
+        var reviewer = this.CreateReviewer();
+        var file = FileForTier(FileComplexityTier.Medium);
+        var (job, pr) = Fixture(file);
+
+        var baseContext = new ReviewSystemContext(null, [], null)
+        {
+            DefaultReviewChatClient = Substitute.For<IChatClient>(),
+            EnableMultiPassUnion = true,
+            MultiPassUnionPassCount = 3,
+            ModelId = "gpt-5.3-codex",
+            MultiPassDiversity = new MultiPassDiversity(
+                MultiPassDiversityMode.CrossModel,
+                Arms:
+                [
+                    new MultiPassArm("gpt-5.4", "gpt-5.4"),
+                    new MultiPassArm("mini", "gpt-5.4-mini"),
+                ]),
+        };
+
+        await reviewer.ReviewAsync(job, pr, file, 1, 1, baseContext, null, Substitute.For<IChatClient>(), CancellationToken.None);
+
+        // The baseline pass stays on the file's tier model; the resample passes span the declared arm models.
+        Assert.Equal(new[] { "gpt-5.3-codex", "gpt-5.4", "gpt-5.4-mini" }, this._observedModelIds.ToArray());
+    }
+
+    [Fact]
+    public async Task CrossModel_CyclesArmsWhenFewerThanResamplePasses()
+    {
+        var reviewer = this.CreateReviewer();
+        var file = FileForTier(FileComplexityTier.High);
+        var (job, pr) = Fixture(file);
+
+        var baseContext = new ReviewSystemContext(null, [], null)
+        {
+            DefaultReviewChatClient = Substitute.For<IChatClient>(),
+            EnableMultiPassUnion = true,
+            MultiPassUnionPassCount = 3,
+            ModelId = "gpt-5.4",
+            // One arm, two resample passes — the arm model is reused for both.
+            MultiPassDiversity = new MultiPassDiversity(
+                MultiPassDiversityMode.CrossModel,
+                Arms: [new MultiPassArm("codex", "gpt-5.3-codex")]),
+        };
+
+        await reviewer.ReviewAsync(job, pr, file, 1, 1, baseContext, null, Substitute.For<IChatClient>(), CancellationToken.None);
+
+        Assert.Equal(new[] { "gpt-5.4", "gpt-5.3-codex", "gpt-5.3-codex" }, this._observedModelIds.ToArray());
+    }
+
+    [Fact]
+    public async Task CrossModel_WithoutArms_FallsBackToDefaultModel()
+    {
+        var reviewer = this.CreateReviewer();
+        var file = FileForTier(FileComplexityTier.Medium);
+        var (job, pr) = Fixture(file);
+
+        var baseContext = new ReviewSystemContext(null, [], null)
+        {
+            DefaultReviewChatClient = Substitute.For<IChatClient>(),
+            EnableMultiPassUnion = true,
+            MultiPassUnionPassCount = 3,
+            ModelId = "gpt-5.3-codex",
+            // Cross-model with no arms degrades to the diversity default model on the resample passes.
+            MultiPassDiversity = new MultiPassDiversity(MultiPassDiversityMode.CrossModel, "gpt-5.4", Arms: null),
+        };
+
+        await reviewer.ReviewAsync(job, pr, file, 1, 1, baseContext, null, Substitute.For<IChatClient>(), CancellationToken.None);
+
+        Assert.Equal(new[] { "gpt-5.3-codex", "gpt-5.4", "gpt-5.4" }, this._observedModelIds.ToArray());
+    }
 }

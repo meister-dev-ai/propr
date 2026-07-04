@@ -493,12 +493,18 @@ internal sealed partial class FileReviewer(
         var diversity = fileContext.MultiPassDiversity ?? MultiPassDiversity.Default;
         var armLabel = diversity.ResolveArmLabel();
 
+        // Plan the resample passes (2..k). Resampling routes every resample to the diversity default model;
+        // cross-model spreads them across the declared arm models. The baseline pass keeps the tier model.
+        var resamplePlan = diversity.ResolveResamplePasses(passCount - 1, tierModelId);
+
         // The baseline pass is union pass 1; additional resamples are passes 2..k.
         var unionComments = new List<ReviewComment>(baselineResult.Comments);
         var perPassCatchCounts = new List<int> { baselineResult.Comments.Count };
+        var perPassModels = new List<string?> { tierModelId };
 
         for (var passIndex = 2; passIndex <= passCount; passIndex++)
         {
+            var passArm = resamplePlan[passIndex - 2];
             var passResult = await this.RunUnionResamplePassAsync(
                 job,
                 pr,
@@ -514,11 +520,13 @@ internal sealed partial class FileReviewer(
                 effectiveClient,
                 passIndex,
                 diversity,
+                passArm,
                 pipelineProfile,
                 ct);
 
             unionComments.AddRange(StampUnionOrigin(passResult.Comments));
             perPassCatchCounts.Add(passResult.Comments.Count);
+            perPassModels.Add(passArm.ModelId ?? tierModelId);
         }
 
         await this.RecordMultiPassUnionCompletedAsync(
@@ -527,6 +535,7 @@ internal sealed partial class FileReviewer(
             armLabel,
             tier,
             perPassCatchCounts,
+            perPassModels,
             unionComments.Count,
             ct);
 
@@ -571,6 +580,7 @@ internal sealed partial class FileReviewer(
         IChatClient effectiveClient,
         int passIndex,
         MultiPassDiversity diversity,
+        MultiPassArm passArm,
         ReviewPipelineProfile pipelineProfile,
         CancellationToken ct)
     {
@@ -580,7 +590,7 @@ internal sealed partial class FileReviewer(
             file,
             tierCategory,
             tierModelId,
-            $"multi-pass union {diversity.ResolveArmLabel()} pass #{passIndex}",
+            $"multi-pass union {passArm.Label} pass #{passIndex}",
             ReviewPassKind.MultiPassUnion,
             ct);
 
@@ -605,26 +615,23 @@ internal sealed partial class FileReviewer(
                 effectiveClient,
                 fileContext.PerFileHint?.FocusedReviewGuidance ?? []);
 
-            // Resampling draws independent samples for the resample passes; nudge the temperature so the passes
-            // diverge, and route the resample passes (2..k) to the diversity default model when one is configured
-            // and it differs from the file's tier model. The baseline pass keeps the tier model — only these
-            // resample passes switch — so the recall lift comes from a stronger default model resampling the file.
+            // Each resample pass runs at the resampling temperature and against the model resolved for its arm:
+            // resampling routes every resample to the diversity default model; cross-model routes it to the arm's
+            // model so the passes span models and surface disjoint finds. The baseline pass (not this method) keeps
+            // the tier model — only these resample passes switch — so the recall lift comes from a different sampler
+            // reviewing the file, not from re-sampling the same one.
             //
             // Models are deployments on the tier connection and the review core selects the model purely by
             // ChatOptions.ModelId (see ToolAwareAiReviewCore), so overriding the context model id while reusing the
             // tier connection client is sufficient to switch the model. Tier capabilities are kept for the resample
             // model: the runtime resolver binds capabilities by purpose, not by an arbitrary model id, and the
             // resample runs against the same connection.
-            if (diversity.Mode == MultiPassDiversityMode.Resampling)
-            {
-                passContext.Temperature = diversity.ResampleTemperature;
+            passContext.Temperature = diversity.ResampleTemperature;
 
-                var tierModel = passContext.ModelId;
-                if (!string.IsNullOrWhiteSpace(diversity.DefaultModel)
-                    && !string.Equals(diversity.DefaultModel, tierModel, StringComparison.Ordinal))
-                {
-                    passContext.ModelId = diversity.DefaultModel;
-                }
+            if (!string.IsNullOrWhiteSpace(passArm.ModelId)
+                && !string.Equals(passArm.ModelId, passContext.ModelId, StringComparison.Ordinal))
+            {
+                passContext.ModelId = passArm.ModelId;
             }
 
             passContext = await this.RunDispatchPipelineAsync(
@@ -663,6 +670,7 @@ internal sealed partial class FileReviewer(
         string armLabel,
         FileComplexityTier tier,
         IReadOnlyList<int> perPassCatchCounts,
+        IReadOnlyList<string?> perPassModels,
         int unionCount,
         CancellationToken ct)
     {
@@ -686,6 +694,7 @@ internal sealed partial class FileReviewer(
                 new
                 {
                     perPassCatchCounts,
+                    perPassModels,
                     unionCount,
                 }),
             null,

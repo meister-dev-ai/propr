@@ -66,4 +66,72 @@ public sealed record MultiPassDiversity(
             _ => "resampling",
         };
     }
+
+    /// <summary>
+    ///     Resolves the model + provenance label for each resample pass (passes 2..k; the baseline pass keeps the
+    ///     file's tier model). Resampling uses the diversity default model for every resample; cross-model spreads
+    ///     the resamples across the declared arms (expanded by their count, cycling when there are more passes than
+    ///     arms). A resolved arm's <see cref="MultiPassArm.ModelId" /> is the model the pass runs; a null falls back
+    ///     to the diversity default, then to the tier model, so a pass never loses its model.
+    /// </summary>
+    /// <param name="resamplePassCount">The number of resample passes to plan (k - 1).</param>
+    /// <param name="tierModelId">The file's resolved tier model, used as the final model fallback.</param>
+    public IReadOnlyList<MultiPassArm> ResolveResamplePasses(int resamplePassCount, string? tierModelId)
+    {
+        if (resamplePassCount <= 0)
+        {
+            return [];
+        }
+
+        var result = new List<MultiPassArm>(resamplePassCount);
+        if (this.Mode == MultiPassDiversityMode.CrossModel)
+        {
+            var plan = this.ExpandArms();
+            for (var i = 0; i < resamplePassCount; i++)
+            {
+                if (plan.Count > 0)
+                {
+                    var arm = plan[i % plan.Count];
+                    result.Add(arm with { ModelId = arm.ModelId ?? this.DefaultModel ?? tierModelId });
+                }
+                else
+                {
+                    // Cross-model with no arms declared degrades to the default model (behaves like resampling).
+                    result.Add(new MultiPassArm(this.ResolveArmLabel(), this.DefaultModel ?? tierModelId));
+                }
+            }
+
+            return result;
+        }
+
+        // Resampling (and, until it is built, the lens mode): every resample runs the diversity default model.
+        var resampleModel = this.DefaultModel ?? tierModelId;
+        var label = this.ResolveArmLabel();
+        for (var i = 0; i < resamplePassCount; i++)
+        {
+            result.Add(new MultiPassArm(label, resampleModel));
+        }
+
+        return result;
+    }
+
+    private IReadOnlyList<MultiPassArm> ExpandArms()
+    {
+        if (this.Arms is null || this.Arms.Count == 0)
+        {
+            return [];
+        }
+
+        var expanded = new List<MultiPassArm>(this.Arms.Count);
+        foreach (var arm in this.Arms)
+        {
+            var count = Math.Max(1, arm.Count);
+            for (var i = 0; i < count; i++)
+            {
+                expanded.Add(arm);
+            }
+        }
+
+        return expanded;
+    }
 }
