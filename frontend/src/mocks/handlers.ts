@@ -1674,11 +1674,17 @@ export const handlers = [
     if (!session) {
       return new HttpResponse(null, { status: 401 })
     }
-    const accessToken = session === 'tenant'
-      ? mockTenantAccessToken
-      : session === 'sso'
-        ? mockTenantSsoAccessToken
-        : mockAdminAccessToken
+    let accessToken: string
+    switch (session) {
+      case 'tenant':
+        accessToken = mockTenantAccessToken
+        break
+      case 'sso':
+        accessToken = mockTenantSsoAccessToken
+        break
+      default:
+        accessToken = mockAdminAccessToken
+    }
     return HttpResponse.json({ accessToken, expiresIn: 900, tokenType: 'Bearer' })
   }),
 
@@ -1731,7 +1737,7 @@ export const handlers = [
     await delay(220)
     const tenantSlug = String(params.tenantSlug)
     const tenant = getMockTenantBySlug(tenantSlug)
-    if (!tenant || !tenant.localLoginEnabled) {
+    if (!tenant?.localLoginEnabled) {
       return HttpResponse.json({ error: 'Local sign-in is disabled for this tenant.' }, { status: 401 })
     }
 
@@ -3180,13 +3186,20 @@ export const handlers = [
     await delay(500)
     const body = await request.json() as any
     const scope = getScope(String(body.clientId), body.organizationScopeId)
-    const providerSegment = body.provider === 'azureDevOps'
-      ? 'ado'
-      : body.provider === 'gitLab'
-        ? 'gitlab'
-        : body.provider === 'forgejo'
-          ? 'forgejo'
-          : 'github'
+    let providerSegment: string
+    switch (body.provider) {
+      case 'azureDevOps':
+        providerSegment = 'ado'
+        break
+      case 'gitLab':
+        providerSegment = 'gitlab'
+        break
+      case 'forgejo':
+        providerSegment = 'forgejo'
+        break
+      default:
+        providerSegment = 'github'
+    }
 
     if (!Array.isArray(body.enabledEvents) || body.enabledEvents.length === 0) {
       return HttpResponse.json({ error: 'At least one enabled event is required.' }, { status: 400 })

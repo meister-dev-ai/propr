@@ -24,6 +24,10 @@ var proCursorHost = '${projectName}-procursor.internal.${env.properties.defaultD
 // Built-in role definition IDs
 var kvSecretsUserRoleId    = '4633458b-17de-408a-b874-0445c86b69e6'
 
+var dbSecretIdentityName = '${projectName}-db-secrets'
+var backendSecretIdentityName = '${projectName}-backend-secrets'
+var proCursorSecretIdentityName = '${projectName}-procursor-secrets'
+
 resource env 'Microsoft.App/managedEnvironments@2025-10-02-preview' existing = {
   name: envName
 }
@@ -33,23 +37,23 @@ resource kv 'Microsoft.KeyVault/vaults@2025-05-01' existing = {
 }
 
 resource dbSecretIdentity 'Microsoft.ManagedIdentity/userAssignedIdentities@2023-01-31' = {
-  name: '${projectName}-db-secrets'
+  name: dbSecretIdentityName
   location: location
 }
 
 resource backendSecretIdentity 'Microsoft.ManagedIdentity/userAssignedIdentities@2023-01-31' = {
-  name: '${projectName}-backend-secrets'
+  name: backendSecretIdentityName
   location: location
 }
 
 resource proCursorSecretIdentity 'Microsoft.ManagedIdentity/userAssignedIdentities@2023-01-31' = {
-  name: '${projectName}-procursor-secrets'
+  name: proCursorSecretIdentityName
   location: location
 }
 
 resource dbKvAccess 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
-  name: guid(dbSecretIdentity.id, kv.id, kvSecretsUserRoleId)
   scope: kv
+  name: guid(dbSecretIdentity.id, kv.id, kvSecretsUserRoleId)
   properties: {
     roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', kvSecretsUserRoleId)
     principalId: dbSecretIdentity.properties.principalId
@@ -58,8 +62,8 @@ resource dbKvAccess 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
 }
 
 resource backendKvAccess 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
-  name: guid(backendSecretIdentity.id, kv.id, kvSecretsUserRoleId)
   scope: kv
+  name: guid(backendSecretIdentity.id, kv.id, kvSecretsUserRoleId)
   properties: {
     roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', kvSecretsUserRoleId)
     principalId: backendSecretIdentity.properties.principalId
@@ -68,8 +72,8 @@ resource backendKvAccess 'Microsoft.Authorization/roleAssignments@2022-04-01' = 
 }
 
 resource proCursorKvAccess 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
-  name: guid(proCursorSecretIdentity.id, kv.id, kvSecretsUserRoleId)
   scope: kv
+  name: guid(proCursorSecretIdentity.id, kv.id, kvSecretsUserRoleId)
   properties: {
     roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', kvSecretsUserRoleId)
     principalId: proCursorSecretIdentity.properties.principalId
@@ -87,6 +91,7 @@ resource db 'Microsoft.App/containerapps@2025-10-02-preview' = {
       '${dbSecretIdentity.id}': {}
     }
   }
+  dependsOn: [dbKvAccess]
   properties: {
     managedEnvironmentId: env.id
     environmentId: env.id
@@ -137,7 +142,6 @@ resource db 'Microsoft.App/containerapps@2025-10-02-preview' = {
       ]
     }
   }
-  dependsOn: [dbKvAccess]
 }
 
 // ── Backend ───────────────────────────────────────────────────────────────────
@@ -150,6 +154,7 @@ resource backend 'Microsoft.App/containerapps@2025-10-02-preview' = {
       '${backendSecretIdentity.id}': {}
     }
   }
+  dependsOn: [backendKvAccess]
   properties: {
     managedEnvironmentId: env.id
     environmentId: env.id
@@ -209,7 +214,6 @@ resource backend 'Microsoft.App/containerapps@2025-10-02-preview' = {
       ]
     }
   }
-  dependsOn: [backendKvAccess]
 }
 
 resource proCursor 'Microsoft.App/containerapps@2025-10-02-preview' = {
@@ -221,6 +225,7 @@ resource proCursor 'Microsoft.App/containerapps@2025-10-02-preview' = {
       '${proCursorSecretIdentity.id}': {}
     }
   }
+  dependsOn: [proCursorKvAccess, backend]
   properties: {
     managedEnvironmentId: env.id
     environmentId: env.id
@@ -274,7 +279,6 @@ resource proCursor 'Microsoft.App/containerapps@2025-10-02-preview' = {
       ]
     }
   }
-  dependsOn: [proCursorKvAccess, backend]
 }
 
 // ── Frontend ──────────────────────────────────────────────────────────────────

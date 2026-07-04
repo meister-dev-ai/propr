@@ -30,6 +30,13 @@ public sealed class AuthMiddleware(RequestDelegate next)
 {
     private const string PatHeader = "X-User-Pat";
 
+    private enum AuthOutcome
+    {
+        NotAttempted,
+        Authenticated,
+        Rejected,
+    }
+
     /// <inheritdoc cref="IMiddleware.InvokeAsync" />
     public async Task InvokeAsync(HttpContext context)
     {
@@ -37,105 +44,145 @@ public sealed class AuthMiddleware(RequestDelegate next)
         context.Items["ClientRoles"] = new Dictionary<Guid, ClientRole>();
         context.Items["TenantRoles"] = new Dictionary<Guid, TenantRole>();
 
-        var authHeader = context.Request.Headers.Authorization.FirstOrDefault();
-        if (authHeader?.StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase) == true)
+        var bearerOutcome = await TryAuthenticateBearerAsync(context);
+        if (bearerOutcome == AuthOutcome.Rejected)
         {
-            var token = authHeader["Bearer ".Length..].Trim();
-            var jwtService = context.RequestServices.GetService<IJwtTokenService>();
-            if (jwtService is not null)
-            {
-                var principal = jwtService.ValidateAccessToken(token);
-                if (principal is not null)
-                {
-                    var sub = principal.FindFirst("sub")?.Value;
-                    var role = principal.FindFirst("global_role")?.Value;
-                    if (!string.IsNullOrEmpty(sub))
-                    {
-                        context.Items["UserId"] = sub;
-                        context.Items["IsAdmin"] = role == AppUserRole.Admin.ToString();
-
-                        if (Guid.TryParse(sub, out var userId))
-                        {
-                            var userRepo = context.RequestServices.GetService<IUserRepository>();
-                            if (userRepo is not null)
-                            {
-                                var user = await userRepo.GetByIdWithAssignmentsAsync(userId, context.RequestAborted);
-
-                                // A still-valid access token must not outlive a disabled account: the
-                                // refresh-token and PAT paths already reject disabled users, and this
-                                // closes the same gap for bearer JWTs.
-                                if (user is not null && !user.IsActive)
-                                {
-                                    await WriteNotActiveAsync(context);
-                                    return;
-                                }
-
-                                var explicitClientRoles = user is not null
-                                    ? CreateExplicitClientRoles(user)
-                                    : await userRepo.GetUserClientRolesAsync(userId, context.RequestAborted);
-
-                                var tenantRoles = user is not null
-                                    ? CreateTenantRoles(user)
-                                    : new Dictionary<Guid, TenantRole>();
-
-                                context.Items["ClientRoles"] =
-                                    await BuildEffectiveClientRolesAsync(
-                                        context,
-                                        explicitClientRoles,
-                                        tenantRoles,
-                                        context.RequestAborted);
-
-                                context.Items["TenantRoles"] = tenantRoles;
-                            }
-                        }
-                    }
-
-                    await next(context);
-                    return;
-                }
-            }
+            return;
         }
 
-        var pat = context.Request.Headers[PatHeader].FirstOrDefault();
-        if (!string.IsNullOrWhiteSpace(pat))
+        if (bearerOutcome == AuthOutcome.Authenticated)
         {
-            var patRepo = context.RequestServices.GetService<IUserPatRepository>();
-            var userRepo = context.RequestServices.GetService<IUserRepository>();
-            if (patRepo is not null && userRepo is not null)
-            {
-                var patEntity = await patRepo.GetActiveByRawTokenAsync(pat, context.RequestAborted);
-                if (patEntity is not null)
-                {
-                    var user = await userRepo.GetByIdWithAssignmentsAsync(patEntity.UserId, context.RequestAborted);
-                    if (user is not null && user.IsActive)
-                    {
-                        context.Items["UserId"] = user.Id.ToString();
-                        context.Items["IsAdmin"] = user.GlobalRole == AppUserRole.Admin;
-                        var tenantRoles = CreateTenantRoles(user);
-                        var explicitClientRoles = CreateExplicitClientRoles(user);
-                        context.Items["ClientRoles"] =
-                            await BuildEffectiveClientRolesAsync(
-                                context,
-                                explicitClientRoles,
-                                tenantRoles,
-                                context.RequestAborted);
-                        context.Items["TenantRoles"] = tenantRoles;
-                        await next(context);
-                        return;
-                    }
+            await next(context);
+            return;
+        }
 
-                    // Defense in depth: PATs are revoked when a user is disabled, so this should not
-                    // normally fire, but reject explicitly if a live PAT ever outlives the account.
-                    if (user is not null && !user.IsActive)
-                    {
-                        await WriteNotActiveAsync(context);
-                        return;
-                    }
-                }
-            }
+        var patOutcome = await TryAuthenticatePatAsync(context);
+        if (patOutcome == AuthOutcome.Rejected)
+        {
+            return;
+        }
+
+        if (patOutcome == AuthOutcome.Authenticated)
+        {
+            await next(context);
+            return;
         }
 
         await next(context);
+    }
+
+    private static async Task<AuthOutcome> TryAuthenticateBearerAsync(HttpContext context)
+    {
+        var authHeader = context.Request.Headers.Authorization.FirstOrDefault();
+        if (authHeader?.StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase) != true)
+        {
+            return AuthOutcome.NotAttempted;
+        }
+
+        var token = authHeader["Bearer ".Length..].Trim();
+        var jwtService = context.RequestServices.GetService<IJwtTokenService>();
+        if (jwtService is null)
+        {
+            return AuthOutcome.NotAttempted;
+        }
+
+        var principal = jwtService.ValidateAccessToken(token);
+        if (principal is null)
+        {
+            return AuthOutcome.NotAttempted;
+        }
+
+        var sub = principal.FindFirst("sub")?.Value;
+        var role = principal.FindFirst("global_role")?.Value;
+        if (string.IsNullOrEmpty(sub))
+        {
+            return AuthOutcome.Authenticated;
+        }
+
+        context.Items["UserId"] = sub;
+        context.Items["IsAdmin"] = role == AppUserRole.Admin.ToString();
+
+        if (!Guid.TryParse(sub, out var userId))
+        {
+            return AuthOutcome.Authenticated;
+        }
+
+        var userRepo = context.RequestServices.GetService<IUserRepository>();
+        if (userRepo is null)
+        {
+            return AuthOutcome.Authenticated;
+        }
+
+        var user = await userRepo.GetByIdWithAssignmentsAsync(userId, context.RequestAborted);
+
+        // A still-valid access token must not outlive a disabled account: the
+        // refresh-token and PAT paths already reject disabled users, and this
+        // closes the same gap for bearer JWTs.
+        if (user is not null && !user.IsActive)
+        {
+            await WriteNotActiveAsync(context);
+            return AuthOutcome.Rejected;
+        }
+
+        var explicitClientRoles = user is not null
+            ? CreateExplicitClientRoles(user)
+            : await userRepo.GetUserClientRolesAsync(userId, context.RequestAborted);
+
+        var tenantRoles = user is not null
+            ? CreateTenantRoles(user)
+            : new Dictionary<Guid, TenantRole>();
+
+        context.Items["ClientRoles"] =
+            await BuildEffectiveClientRolesAsync(context, explicitClientRoles, tenantRoles, context.RequestAborted);
+
+        context.Items["TenantRoles"] = tenantRoles;
+
+        return AuthOutcome.Authenticated;
+    }
+
+    private static async Task<AuthOutcome> TryAuthenticatePatAsync(HttpContext context)
+    {
+        var pat = context.Request.Headers[PatHeader].FirstOrDefault();
+        if (string.IsNullOrWhiteSpace(pat))
+        {
+            return AuthOutcome.NotAttempted;
+        }
+
+        var patRepo = context.RequestServices.GetService<IUserPatRepository>();
+        var userRepo = context.RequestServices.GetService<IUserRepository>();
+        if (patRepo is null || userRepo is null)
+        {
+            return AuthOutcome.NotAttempted;
+        }
+
+        var patEntity = await patRepo.GetActiveByRawTokenAsync(pat, context.RequestAborted);
+        if (patEntity is null)
+        {
+            return AuthOutcome.NotAttempted;
+        }
+
+        var user = await userRepo.GetByIdWithAssignmentsAsync(patEntity.UserId, context.RequestAborted);
+        if (user is not null && user.IsActive)
+        {
+            context.Items["UserId"] = user.Id.ToString();
+            context.Items["IsAdmin"] = user.GlobalRole == AppUserRole.Admin;
+            var tenantRoles = CreateTenantRoles(user);
+            var explicitClientRoles = CreateExplicitClientRoles(user);
+            context.Items["ClientRoles"] =
+                await BuildEffectiveClientRolesAsync(context, explicitClientRoles, tenantRoles, context.RequestAborted);
+            context.Items["TenantRoles"] = tenantRoles;
+            return AuthOutcome.Authenticated;
+        }
+
+        // Defense in depth: PATs are revoked when a user is disabled, so this should not
+        // normally fire, but reject explicitly if a live PAT ever outlives the account.
+        if (user is not null && !user.IsActive)
+        {
+            await WriteNotActiveAsync(context);
+            return AuthOutcome.Rejected;
+        }
+
+        return AuthOutcome.NotAttempted;
     }
 
     private static Task WriteNotActiveAsync(HttpContext context)
@@ -197,30 +244,40 @@ public sealed class AuthMiddleware(RequestDelegate next)
 
         foreach (var client in visibleClients)
         {
-            if (explicitClientRoles.TryGetValue(client.Id, out var explicitRole)
-                && (client.TenantId == Guid.Empty
-                    || TenantCatalog.IsSystemTenant(client.TenantId)
-                    || tenantRoles.ContainsKey(client.TenantId)))
-            {
-                effectiveRoles[client.Id] = explicitRole;
-            }
-
-            if (!tenantRoles.TryGetValue(client.TenantId, out var tenantRole))
-            {
-                continue;
-            }
-
-            var derivedRole = tenantRole >= TenantRole.TenantAdministrator
-                ? ClientRole.ClientAdministrator
-                : ClientRole.ClientUser;
-
-            if (!effectiveRoles.TryGetValue(client.Id, out var currentRole) || currentRole < derivedRole)
-            {
-                effectiveRoles[client.Id] = derivedRole;
-            }
+            ApplyEffectiveClientRole(effectiveRoles, client.Id, client.TenantId, explicitClientRoles, tenantRoles);
         }
 
         return effectiveRoles;
+    }
+
+    private static void ApplyEffectiveClientRole(
+        Dictionary<Guid, ClientRole> effectiveRoles,
+        Guid clientId,
+        Guid clientTenantId,
+        IReadOnlyDictionary<Guid, ClientRole> explicitClientRoles,
+        IReadOnlyDictionary<Guid, TenantRole> tenantRoles)
+    {
+        if (explicitClientRoles.TryGetValue(clientId, out var explicitRole)
+            && (clientTenantId == Guid.Empty
+                || TenantCatalog.IsSystemTenant(clientTenantId)
+                || tenantRoles.ContainsKey(clientTenantId)))
+        {
+            effectiveRoles[clientId] = explicitRole;
+        }
+
+        if (!tenantRoles.TryGetValue(clientTenantId, out var tenantRole))
+        {
+            return;
+        }
+
+        var derivedRole = tenantRole >= TenantRole.TenantAdministrator
+            ? ClientRole.ClientAdministrator
+            : ClientRole.ClientUser;
+
+        if (!effectiveRoles.TryGetValue(clientId, out var currentRole) || currentRole < derivedRole)
+        {
+            effectiveRoles[clientId] = derivedRole;
+        }
     }
 
     private static async Task<bool> IsCommunityEditionAsync(HttpContext context, CancellationToken ct)

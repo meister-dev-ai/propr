@@ -34,24 +34,18 @@ internal static class ProRVFocusedReviewGuidanceResolver
         string stageId,
         CancellationToken ct)
     {
+        var recording = new ProtocolRecordingHandle(protocolId, protocolRecorder);
+
         if (proRvPrefilter is null ||
             file.IsBinary ||
             file.ChangeType == ChangeType.Delete ||
             string.IsNullOrWhiteSpace(file.UnifiedDiff))
         {
-            var skipReason = proRvPrefilter is null
-                ? ProRVStageSkipReasons.NotConfigured
-                : file.IsBinary
-                    ? ProRVStageSkipReasons.BinaryFile
-                    : file.ChangeType == ChangeType.Delete
-                        ? ProRVStageSkipReasons.DeletedFile
-                        : ProRVStageSkipReasons.EmptyDiff;
+            var skipReason = ResolveSkipReason(proRvPrefilter, file);
             await RecordStageEventAsync(
-                protocolId,
-                protocolRecorder,
+                recording,
                 ReviewProtocolEventNames.ProRVPrefilterSkipped,
-                file.Path,
-                stageId,
+                new ProRVStageLocation(file.Path, stageId),
                 new { reason = skipReason },
                 null,
                 null,
@@ -62,11 +56,9 @@ internal static class ProRVFocusedReviewGuidanceResolver
         try
         {
             await RecordStageEventAsync(
-                protocolId,
-                protocolRecorder,
+                recording,
                 ReviewProtocolEventNames.ProRVPrefilterStarted,
-                file.Path,
-                stageId,
+                new ProRVStageLocation(file.Path, stageId),
                 null,
                 null,
                 null,
@@ -75,10 +67,7 @@ internal static class ProRVFocusedReviewGuidanceResolver
             var runtime = await ResolveRuntimeAsync(
                 job,
                 baseContext,
-                fallbackChatClient,
-                aiConnectionRepository,
-                aiClientFactory,
-                aiRuntimeResolver,
+                new ProRVRuntimeDependencies(fallbackChatClient, aiConnectionRepository, aiClientFactory, aiRuntimeResolver),
                 logger,
                 ct);
 
@@ -95,8 +84,7 @@ internal static class ProRVFocusedReviewGuidanceResolver
                 ct);
 
             await RecordProtocolUsageAsync(
-                protocolId,
-                protocolRecorder,
+                recording,
                 file.Path,
                 stageId,
                 runtime.RuntimeSource,
@@ -121,11 +109,9 @@ internal static class ProRVFocusedReviewGuidanceResolver
                 ? ReviewProtocolEventNames.ProRVPrefilterCompleted
                 : ReviewProtocolEventNames.ProRVPrefilterFailed;
             await RecordStageEventAsync(
-                protocolId,
-                protocolRecorder,
+                recording,
                 lifecycleEvent,
-                file.Path,
-                stageId,
+                new ProRVStageLocation(file.Path, stageId),
                 new
                 {
                     runtimeSource = runtime.RuntimeSource,
@@ -151,11 +137,9 @@ internal static class ProRVFocusedReviewGuidanceResolver
         {
             logger.LogWarning(ex, "ProRV prefilter failed for file {FilePath} in job {JobId}", file.Path, job.Id);
             await RecordStageEventAsync(
-                protocolId,
-                protocolRecorder,
+                recording,
                 ReviewProtocolEventNames.ProRVPrefilterFailed,
-                file.Path,
-                stageId,
+                new ProRVStageLocation(file.Path, stageId),
                 null,
                 ex.Message,
                 null,
@@ -167,18 +151,15 @@ internal static class ProRVFocusedReviewGuidanceResolver
     private static async Task<ProRVRuntimeSelection> ResolveRuntimeAsync(
         ReviewJob job,
         ReviewSystemContext baseContext,
-        IChatClient fallbackChatClient,
-        IAiConnectionRepository? aiConnectionRepository,
-        IAiChatClientFactory? aiClientFactory,
-        IAiRuntimeResolver? aiRuntimeResolver,
+        ProRVRuntimeDependencies dependencies,
         ILogger logger,
         CancellationToken ct)
     {
-        if (aiRuntimeResolver is not null)
+        if (dependencies.AiRuntimeResolver is not null)
         {
             try
             {
-                var runtime = await aiRuntimeResolver.ResolveChatRuntimeAsync(job.ClientId, AiPurpose.ProRVPrefilter, ct);
+                var runtime = await dependencies.AiRuntimeResolver.ResolveChatRuntimeAsync(job.ClientId, AiPurpose.ProRVPrefilter, ct);
                 return new ProRVRuntimeSelection(runtime.ChatClient, runtime.Model.RemoteModelId, ProRVRuntimeSources.DedicatedRuntime);
             }
             catch (Exception ex)
@@ -187,27 +168,26 @@ internal static class ProRVFocusedReviewGuidanceResolver
             }
         }
 
-        if (aiConnectionRepository is not null && aiClientFactory is not null)
+        if (dependencies.AiConnectionRepository is not null && dependencies.AiClientFactory is not null)
         {
-            var resolved = await aiConnectionRepository.GetActiveBindingForPurposeAsync(job.ClientId, AiPurpose.ProRVPrefilter, ct);
+            var resolved = await dependencies.AiConnectionRepository.GetActiveBindingForPurposeAsync(job.ClientId, AiPurpose.ProRVPrefilter, ct);
             if (resolved is not null)
             {
                 return new ProRVRuntimeSelection(
-                    aiClientFactory.CreateClient(resolved.Connection.BaseUrl, resolved.Connection.Secret),
+                    dependencies.AiClientFactory.CreateClient(resolved.Connection.BaseUrl, resolved.Connection.Secret),
                     resolved.Binding.RemoteModelId ?? resolved.Model.RemoteModelId,
                     ProRVRuntimeSources.PurposeBinding);
             }
         }
 
         return new ProRVRuntimeSelection(
-            fallbackChatClient,
+            dependencies.FallbackChatClient,
             baseContext.DefaultReviewModelId ?? baseContext.ModelId ?? job.AiModel,
             ProRVRuntimeSources.FallbackReviewRuntime);
     }
 
     private static async Task RecordProtocolUsageAsync(
-        Guid? protocolId,
-        IProtocolRecorder protocolRecorder,
+        ProtocolRecordingHandle recording,
         string filePath,
         string stageId,
         string runtimeSource,
@@ -215,13 +195,13 @@ internal static class ProRVFocusedReviewGuidanceResolver
         ProRVPrefilterResult result,
         CancellationToken ct)
     {
-        if (!protocolId.HasValue)
+        if (!recording.ProtocolId.HasValue)
         {
             return;
         }
 
-        await protocolRecorder.RecordAiCallAsync(
-            protocolId.Value,
+        await recording.Recorder.RecordAiCallAsync(
+            recording.ProtocolId.Value,
             0,
             result.InputTokens,
             result.OutputTokens,
@@ -239,8 +219,8 @@ internal static class ProRVFocusedReviewGuidanceResolver
 
         if (result.InputTokens.GetValueOrDefault() > 0 || result.OutputTokens.GetValueOrDefault() > 0)
         {
-            await protocolRecorder.AddTokensAsync(
-                protocolId.Value,
+            await recording.Recorder.AddTokensAsync(
+                recording.ProtocolId.Value,
                 result.InputTokens.GetValueOrDefault(),
                 result.OutputTokens.GetValueOrDefault(),
                 modelId: modelId,
@@ -249,17 +229,15 @@ internal static class ProRVFocusedReviewGuidanceResolver
     }
 
     private static async Task RecordStageEventAsync(
-        Guid? protocolId,
-        IProtocolRecorder protocolRecorder,
+        ProtocolRecordingHandle recording,
         string eventName,
-        string filePath,
-        string stageId,
+        ProRVStageLocation location,
         object? output,
         string? error,
         object? extraDetails,
         CancellationToken ct)
     {
-        if (!protocolId.HasValue)
+        if (!recording.ProtocolId.HasValue)
         {
             return;
         }
@@ -268,18 +246,35 @@ internal static class ProRVFocusedReviewGuidanceResolver
             new
             {
                 purpose = AiPurpose.ProRVPrefilter.ToString(),
-                filePath,
-                stageId,
+                filePath = location.FilePath,
+                stageId = location.StageId,
                 details = extraDetails,
             });
 
-        await protocolRecorder.RecordProRvEventAsync(
-            protocolId.Value,
+        await recording.Recorder.RecordProRvEventAsync(
+            recording.ProtocolId.Value,
             eventName,
             details,
             output is null ? null : JsonSerializer.Serialize(output),
             error,
             ct);
+    }
+
+    private static string ResolveSkipReason(IProRVPrefilter? proRvPrefilter, ChangedFile file)
+    {
+        if (proRvPrefilter is null)
+        {
+            return ProRVStageSkipReasons.NotConfigured;
+        }
+
+        if (file.IsBinary)
+        {
+            return ProRVStageSkipReasons.BinaryFile;
+        }
+
+        return file.ChangeType == ChangeType.Delete
+            ? ProRVStageSkipReasons.DeletedFile
+            : ProRVStageSkipReasons.EmptyDiff;
     }
 
     private static string? TryResolveExplicitLanguage(string filePath)
@@ -405,4 +400,14 @@ internal static class ProRVFocusedReviewGuidanceResolver
     }
 
     private sealed record ProRVRuntimeSelection(IChatClient ChatClient, string? ModelId, string RuntimeSource);
+
+    private sealed record ProRVRuntimeDependencies(
+        IChatClient FallbackChatClient,
+        IAiConnectionRepository? AiConnectionRepository,
+        IAiChatClientFactory? AiClientFactory,
+        IAiRuntimeResolver? AiRuntimeResolver);
+
+    private readonly record struct ProtocolRecordingHandle(Guid? ProtocolId, IProtocolRecorder Recorder);
+
+    private readonly record struct ProRVStageLocation(string FilePath, string StageId);
 }

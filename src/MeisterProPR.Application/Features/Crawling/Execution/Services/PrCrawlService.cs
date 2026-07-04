@@ -60,176 +60,199 @@ public sealed partial class PrCrawlService(
                 continue;
             }
 
-            foreach (var pr in assignedPrs)
-            {
-                if (pullRequestSynchronizationService is not null)
-                {
-                    await this.TrySynchronizeAsync(
-                        new PullRequestSynchronizationRequest
-                        {
-                            ActivationSource = PullRequestActivationSource.Crawl,
-                            SummaryLabel = "crawl discovery",
-                            ClientId = config.ClientId,
-                            ProviderScopePath = config.ProviderScopePath,
-                            ProviderProjectKey = config.ProviderProjectKey,
-                            RepositoryId = pr.Repository.ExternalRepositoryId,
-                            PullRequestId = pr.CodeReview.Number,
-                            PullRequestStatus = PrStatus.Active,
-                            Provider = pr.Host.Provider,
-                            Host = pr.Host,
-                            Repository = pr.Repository,
-                            CodeReview = pr.CodeReview,
-                            ReviewRevision = pr.ReviewRevision,
-                            RequestedReviewerIdentity = reviewerContext.ConfiguredTriggerReviewer,
-                            CandidateIterationId = pr.RevisionId,
-                            PrTitle = pr.ReviewTitle,
-                            RepositoryName = pr.RepositoryDisplayName,
-                            SourceBranch = pr.SourceBranch,
-                            TargetBranch = pr.TargetBranch,
-                            ProCursorSourceScopeMode = config.ProCursorSourceScopeMode,
-                            ProCursorSourceIds = config.ProCursorSourceIds ?? [],
-                            InvalidProCursorSourceIds = config.InvalidProCursorSourceIds ?? [],
-                            ReviewTemperature = config.ReviewTemperature,
-                        },
-                        cancellationToken);
-                    continue;
-                }
+            await this.ProcessDiscoveredPullRequestsAsync(config, assignedPrs, reviewerContext, cancellationToken);
+            await this.DetectAbandonedJobsAsync(config, assignedPrs, cancellationToken);
+            await this.RunThreadMemoryStateMachineForConfigAsync(config, assignedPrs, reviewerContext, cancellationToken);
+        }
+    }
 
-                if (!await this.ShouldEnqueueReviewAsync(
-                        config,
-                        pr,
-                        reviewerContext.EffectiveReviewerId,
-                        cancellationToken))
-                {
-                    continue;
-                }
-
-                var job = new ReviewJob(
-                    Guid.NewGuid(),
-                    config.ClientId,
-                    config.ProviderScopePath,
-                    config.ProviderProjectKey,
-                    pr.Repository.ExternalRepositoryId,
-                    pr.CodeReview.Number,
-                    pr.RevisionId);
-
-                job.SelectReviewStrategy(await this.ResolveStrategySelectionAsync(config.ClientId, cancellationToken));
-
-                if (config.ReviewTemperature.HasValue)
-                {
-                    job.SetAiConfig(job.AiConnectionId, job.AiModel, config.ReviewTemperature);
-                }
-
-                if (pr.ReviewRevision is not null)
-                {
-                    job.SetReviewRevision(pr.ReviewRevision);
-                }
-
-                if (!this.TryApplyProCursorSourceScope(config, job))
-                {
-                    continue;
-                }
-
-                await jobs.AddAsync(job, cancellationToken);
-
-                // Populate PR context snapshot from data already fetched by the crawler (no second ADO call needed).
-                if (pr.ReviewTitle is not null || pr.RepositoryDisplayName is not null)
-                {
-                    job.SetPrContext(pr.ReviewTitle, pr.RepositoryDisplayName, pr.SourceBranch, pr.TargetBranch);
-                    await jobs.UpdatePrContextAsync(
-                        job.Id,
-                        pr.ReviewTitle,
-                        pr.RepositoryDisplayName,
-                        pr.SourceBranch,
-                        pr.TargetBranch,
-                        cancellationToken);
-                }
-
-                LogJobCreated(logger, job.Id, pr.CodeReview.Number, pr.RevisionId);
-            }
-
-            // --- Abandonment detection second pass ---
-            // For any Pending/Processing job associated with this config that is no longer
-            // present in the discovered-PR list, check the live ADO status. If the PR is
-            // Abandoned, transition the job to Cancelled to stop further AI processing.
-            var activeJobs = await jobs.GetActiveJobsForConfigAsync(
-                config.ProviderScopePath,
-                config.ProviderProjectKey,
-                cancellationToken);
-            var discoveredPrIds = new HashSet<int>(assignedPrs.Select(p => p.CodeReview.Number));
-
-            foreach (var activeJob in activeJobs)
-            {
-                if (discoveredPrIds.Contains(activeJob.PullRequestId))
-                {
-                    continue;
-                }
-
-                LogAbandonmentCheckStarted(logger, activeJob.Id, activeJob.PullRequestId);
-
-                var status = await prStatusFetcher.GetStatusAsync(
-                    config.ProviderScopePath,
-                    config.ProviderProjectKey,
-                    activeJob.RepositoryId,
-                    activeJob.PullRequestId,
-                    config.ClientId,
-                    cancellationToken);
-
-                if (pullRequestSynchronizationService is not null)
-                {
-                    await this.TrySynchronizeAsync(
-                        new PullRequestSynchronizationRequest
-                        {
-                            ActivationSource = PullRequestActivationSource.Crawl,
-                            SummaryLabel = "crawl disappearance",
-                            ClientId = config.ClientId,
-                            ProviderScopePath = config.ProviderScopePath,
-                            ProviderProjectKey = config.ProviderProjectKey,
-                            RepositoryId = activeJob.RepositoryId,
-                            PullRequestId = activeJob.PullRequestId,
-                            PullRequestStatus = status,
-                            AllowReviewSubmission = false,
-                        },
-                        cancellationToken);
-                    continue;
-                }
-
-                if (status == PrStatus.Abandoned)
-                {
-                    LogJobCancelledForAbandonedPr(logger, activeJob.PullRequestId, activeJob.Id);
-                    await jobs.SetCancelledAsync(activeJob.Id, cancellationToken);
-                }
-            }
-
-            // --- Thread memory state machine ---
-            // Detects per-thread status transitions and dispatches domain events so that
-            // ThreadMemoryService can store/remove embeddings independently of review jobs.
+    private async Task ProcessDiscoveredPullRequestsAsync(
+        CrawlConfigurationDto config,
+        IReadOnlyList<AssignedCodeReviewRef> assignedPrs,
+        ResolvedReviewer reviewerContext,
+        CancellationToken cancellationToken)
+    {
+        foreach (var pr in assignedPrs)
+        {
             if (pullRequestSynchronizationService is not null)
+            {
+                await this.TrySynchronizeAsync(
+                    new PullRequestSynchronizationRequest
+                    {
+                        ActivationSource = PullRequestActivationSource.Crawl,
+                        SummaryLabel = "crawl discovery",
+                        ClientId = config.ClientId,
+                        ProviderScopePath = config.ProviderScopePath,
+                        ProviderProjectKey = config.ProviderProjectKey,
+                        RepositoryId = pr.Repository.ExternalRepositoryId,
+                        PullRequestId = pr.CodeReview.Number,
+                        PullRequestStatus = PrStatus.Active,
+                        Provider = pr.Host.Provider,
+                        Host = pr.Host,
+                        Repository = pr.Repository,
+                        CodeReview = pr.CodeReview,
+                        ReviewRevision = pr.ReviewRevision,
+                        RequestedReviewerIdentity = reviewerContext.ConfiguredTriggerReviewer,
+                        CandidateIterationId = pr.RevisionId,
+                        PrTitle = pr.ReviewTitle,
+                        RepositoryName = pr.RepositoryDisplayName,
+                        SourceBranch = pr.SourceBranch,
+                        TargetBranch = pr.TargetBranch,
+                        ProCursorSourceScopeMode = config.ProCursorSourceScopeMode,
+                        ProCursorSourceIds = config.ProCursorSourceIds ?? [],
+                        InvalidProCursorSourceIds = config.InvalidProCursorSourceIds ?? [],
+                        ReviewTemperature = config.ReviewTemperature,
+                    },
+                    cancellationToken);
+                continue;
+            }
+
+            if (!await this.ShouldEnqueueReviewAsync(
+                    config,
+                    pr,
+                    reviewerContext.EffectiveReviewerId,
+                    cancellationToken))
             {
                 continue;
             }
 
-            if (threadStatusFetcher is null || threadMemoryService is null || prScanRepository is null)
+            var job = new ReviewJob(
+                Guid.NewGuid(),
+                config.ClientId,
+                config.ProviderScopePath,
+                config.ProviderProjectKey,
+                pr.Repository.ExternalRepositoryId,
+                pr.CodeReview.Number,
+                pr.RevisionId);
+
+            job.SelectReviewStrategy(await this.ResolveStrategySelectionAsync(config.ClientId, cancellationToken));
+
+            if (config.ReviewTemperature.HasValue)
             {
-                LogStateMachineServicesUnavailable(
-                    logger,
-                    config.ProviderScopePath,
-                    config.ProviderProjectKey,
-                    threadStatusFetcher is null,
-                    threadMemoryService is null,
-                    prScanRepository is null);
+                job.SetAiConfig(job.AiConnectionId, job.AiModel, config.ReviewTemperature);
             }
-            else
+
+            if (pr.ReviewRevision is not null)
             {
-                foreach (var pr in assignedPrs)
-                {
-                    await this.RunThreadMemoryStateMachineAsync(
-                        config,
-                        pr,
-                        reviewerContext.EffectiveReviewerId,
-                        cancellationToken);
-                }
+                job.SetReviewRevision(pr.ReviewRevision);
             }
+
+            if (!this.TryApplyProCursorSourceScope(config, job))
+            {
+                continue;
+            }
+
+            await jobs.AddAsync(job, cancellationToken);
+
+            // Populate PR context snapshot from data already fetched by the crawler (no second ADO call needed).
+            if (pr.ReviewTitle is not null || pr.RepositoryDisplayName is not null)
+            {
+                job.SetPrContext(pr.ReviewTitle, pr.RepositoryDisplayName, pr.SourceBranch, pr.TargetBranch);
+                await jobs.UpdatePrContextAsync(
+                    job.Id,
+                    pr.ReviewTitle,
+                    pr.RepositoryDisplayName,
+                    pr.SourceBranch,
+                    pr.TargetBranch,
+                    cancellationToken);
+            }
+
+            LogJobCreated(logger, job.Id, pr.CodeReview.Number, pr.RevisionId);
+        }
+    }
+
+    // --- Abandonment detection second pass ---
+    // For any Pending/Processing job associated with this config that is no longer
+    // present in the discovered-PR list, check the live ADO status. If the PR is
+    // Abandoned, transition the job to Cancelled to stop further AI processing.
+    private async Task DetectAbandonedJobsAsync(
+        CrawlConfigurationDto config,
+        IReadOnlyList<AssignedCodeReviewRef> assignedPrs,
+        CancellationToken cancellationToken)
+    {
+        var activeJobs = await jobs.GetActiveJobsForConfigAsync(
+            config.ProviderScopePath,
+            config.ProviderProjectKey,
+            cancellationToken);
+        var discoveredPrIds = new HashSet<int>(assignedPrs.Select(p => p.CodeReview.Number));
+
+        foreach (var activeJob in activeJobs)
+        {
+            if (discoveredPrIds.Contains(activeJob.PullRequestId))
+            {
+                continue;
+            }
+
+            LogAbandonmentCheckStarted(logger, activeJob.Id, activeJob.PullRequestId);
+
+            var status = await prStatusFetcher.GetStatusAsync(
+                config.ProviderScopePath,
+                config.ProviderProjectKey,
+                activeJob.RepositoryId,
+                activeJob.PullRequestId,
+                config.ClientId,
+                cancellationToken);
+
+            if (pullRequestSynchronizationService is not null)
+            {
+                await this.TrySynchronizeAsync(
+                    new PullRequestSynchronizationRequest
+                    {
+                        ActivationSource = PullRequestActivationSource.Crawl,
+                        SummaryLabel = "crawl disappearance",
+                        ClientId = config.ClientId,
+                        ProviderScopePath = config.ProviderScopePath,
+                        ProviderProjectKey = config.ProviderProjectKey,
+                        RepositoryId = activeJob.RepositoryId,
+                        PullRequestId = activeJob.PullRequestId,
+                        PullRequestStatus = status,
+                        AllowReviewSubmission = false,
+                    },
+                    cancellationToken);
+                continue;
+            }
+
+            if (status == PrStatus.Abandoned)
+            {
+                LogJobCancelledForAbandonedPr(logger, activeJob.PullRequestId, activeJob.Id);
+                await jobs.SetCancelledAsync(activeJob.Id, cancellationToken);
+            }
+        }
+    }
+
+    // --- Thread memory state machine ---
+    // Detects per-thread status transitions and dispatches domain events so that
+    // ThreadMemoryService can store/remove embeddings independently of review jobs.
+    private async Task RunThreadMemoryStateMachineForConfigAsync(
+        CrawlConfigurationDto config,
+        IReadOnlyList<AssignedCodeReviewRef> assignedPrs,
+        ResolvedReviewer reviewerContext,
+        CancellationToken cancellationToken)
+    {
+        if (pullRequestSynchronizationService is not null)
+        {
+            return;
+        }
+
+        if (threadStatusFetcher is null || threadMemoryService is null || prScanRepository is null)
+        {
+            LogStateMachineServicesUnavailable(
+                logger,
+                config.ProviderScopePath,
+                config.ProviderProjectKey,
+                threadStatusFetcher is null,
+                threadMemoryService is null,
+                prScanRepository is null);
+            return;
+        }
+
+        foreach (var pr in assignedPrs)
+        {
+            await this.RunThreadMemoryStateMachineAsync(
+                config,
+                pr,
+                reviewerContext.EffectiveReviewerId,
+                cancellationToken);
         }
     }
 
@@ -574,7 +597,7 @@ public sealed partial class PrCrawlService(
             }
 
             // Persist updated LastSeenStatus values for all current threads.
-            await this.UpdateLastSeenStatusesAsync(scan, pr, currentThreads, ct);
+            await this.UpdateLastSeenStatusesAsync(scan, currentThreads, ct);
         }
         catch (Exception ex)
         {
@@ -584,7 +607,6 @@ public sealed partial class PrCrawlService(
 
     private async Task UpdateLastSeenStatusesAsync(
         ReviewPrScan existingScan,
-        AssignedCodeReviewRef pr,
         IReadOnlyList<PrThreadStatusEntry> currentThreads,
         CancellationToken ct)
     {

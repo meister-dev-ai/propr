@@ -12,6 +12,18 @@ internal sealed record CandidatePathResolution(
     IReadOnlyList<string> Paths,
     IReadOnlyList<RepositorySearchLimitation> Limitations);
 
+/// <summary>
+/// Bundles the branch/snapshot state and repository-access delegates that every search executor
+/// threads through to <see cref="RepositoryDiscoveryHelpers.ResolveCandidatePathsAsync"/> unchanged.
+/// </summary>
+internal sealed record RepositoryAccessContext(
+    string SourceBranch,
+    string? TargetBranch,
+    IReadOnlyList<ChangedPathSnapshot>? ChangedPathSnapshots,
+    Func<string, CancellationToken, Task<IReadOnlyList<string>>> LoadFileTreeAsync,
+    Func<string, string> NormalizeBranch,
+    Func<string, string> NormalizePath);
+
 internal static class RepositoryDiscoveryHelpers
 {
     public const int MaxReturnedMatches = 50;
@@ -20,17 +32,12 @@ internal static class RepositoryDiscoveryHelpers
         string branchSide,
         string pathScope,
         CodeSearchFilterSet? filters,
-        string sourceBranch,
-        string? targetBranch,
-        IReadOnlyList<ChangedPathSnapshot>? changedPathSnapshots,
-        Func<string, CancellationToken, Task<IReadOnlyList<string>>> loadFileTreeAsync,
-        Func<string, string> normalizeBranch,
-        Func<string, string> normalizePath,
+        RepositoryAccessContext access,
         CancellationToken ct)
     {
         var limitations = new List<RepositorySearchLimitation>();
         var normalizedFilters = NormalizeFilters(filters);
-        var branch = ResolveBranch(branchSide, sourceBranch, targetBranch, normalizeBranch);
+        var branch = ResolveBranch(branchSide, access.SourceBranch, access.TargetBranch, access.NormalizeBranch);
         if (branch is null)
         {
             limitations.Add(
@@ -49,7 +56,7 @@ internal static class RepositoryDiscoveryHelpers
                 rawPaths = await ToolTimingCollectorContext.RecordAsync(
                     ProtocolEventToolPhaseNames.ScmFileTreeFetch,
                     "SCM file tree fetch",
-                    () => loadFileTreeAsync(branch, ct),
+                    () => access.LoadFileTreeAsync(branch, ct),
                     paths => $"candidate_paths={paths.Count}");
             }
             catch (Exception ex)
@@ -59,7 +66,7 @@ internal static class RepositoryDiscoveryHelpers
             }
 
             rawPaths = rawPaths
-                .Select(path => NormalizeRepositoryPath(path, normalizePath))
+                .Select(path => NormalizeRepositoryPath(path, access.NormalizePath))
                 .Where(path => !string.IsNullOrWhiteSpace(path))
                 .Distinct(StringComparer.Ordinal)
                 .OrderBy(path => path, StringComparer.Ordinal)
@@ -68,7 +75,7 @@ internal static class RepositoryDiscoveryHelpers
         }
         else if (string.Equals(pathScope, RepositorySearchPathScopes.ChangedFiles, StringComparison.Ordinal))
         {
-            rawPaths = ResolveChangedScopeCandidates(branchSide, changedPathSnapshots, normalizePath, limitations);
+            rawPaths = ResolveChangedScopeCandidates(branchSide, access.ChangedPathSnapshots, access.NormalizePath, limitations);
         }
         else
         {

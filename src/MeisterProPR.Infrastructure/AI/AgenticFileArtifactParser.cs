@@ -84,70 +84,9 @@ internal static class AgenticFileArtifactParser
             using var doc = JsonDocument.Parse(StripMarkdownCodeFences(responseText));
             var root = doc.RootElement;
 
-            var evidence = new List<EvidenceItem>();
-            if (root.TryGetProperty("evidence", out var evidenceEl) && evidenceEl.ValueKind == JsonValueKind.Array)
-            {
-                foreach (var item in evidenceEl.EnumerateArray())
-                {
-                    var kind = GetString(item, "kind");
-                    var summary = GetString(item, "summary");
-                    if (string.IsNullOrWhiteSpace(kind) || string.IsNullOrWhiteSpace(summary))
-                    {
-                        continue;
-                    }
-
-                    evidence.Add(new EvidenceItem(kind, summary, GetString(item, "source_id")));
-                }
-            }
-
-            var findings = new List<AgenticFileCandidateFinding>();
-            if (root.TryGetProperty("candidate_findings", out var findingsEl) && findingsEl.ValueKind == JsonValueKind.Array)
-            {
-                foreach (var item in findingsEl.EnumerateArray())
-                {
-                    var id = GetString(item, "id");
-                    var message = GetString(item, "message");
-                    if (string.IsNullOrWhiteSpace(id) || string.IsNullOrWhiteSpace(message))
-                    {
-                        continue;
-                    }
-
-                    var supportingFiles = GetStringArray(item, "supporting_files");
-                    findings.Add(
-                        new AgenticFileCandidateFinding(
-                            id,
-                            message,
-                            GetString(item, "category") ?? CandidateReviewFinding.PerFileCommentCategory,
-                            ParseConfidence(item.TryGetProperty("confidence", out var confidenceEl) ? confidenceEl : default),
-                            new EvidenceReference(
-                                [],
-                                supportingFiles,
-                                supportingFiles.Count >= 2 ? EvidenceReference.ResolvedState : EvidenceReference.PartialState,
-                                "agentic_file_investigation"),
-                            supportingFiles.Count > 0 ? supportingFiles : task.SeedFilePaths,
-                            ParseSeverity(item),
-                            GetString(item, "file_path"),
-                            GetInt(item, "line_number"),
-                            GetString(item, "candidate_summary_text"),
-                            SupportSource: GetString(item, "support_source")));
-                }
-            }
-
-            var toolUsage = new List<AgenticFileToolUsage>();
-            if (root.TryGetProperty("tool_usage", out var toolUsageEl) && toolUsageEl.ValueKind == JsonValueKind.Array)
-            {
-                foreach (var item in toolUsageEl.EnumerateArray())
-                {
-                    var toolName = GetString(item, "tool_name");
-                    var status = GetString(item, "status");
-                    if (string.IsNullOrWhiteSpace(toolName) || string.IsNullOrWhiteSpace(status))
-                    {
-                        continue;
-                    }
-
-                    toolUsage.Add(new AgenticFileToolUsage(toolName, status, GetString(item, "target")));
-                }
-            }
+            var evidence = ParseEvidence(root);
+            var findings = ParseCandidateFindings(root, task);
+            var toolUsage = ParseToolUsage(root);
 
             result = new AgenticFileInvestigationResult(
                 GetString(root, "task_id") ?? task.TaskId,
@@ -166,6 +105,92 @@ internal static class AgenticFileArtifactParser
         {
             return false;
         }
+    }
+
+    private static List<EvidenceItem> ParseEvidence(JsonElement root)
+    {
+        var evidence = new List<EvidenceItem>();
+        if (!root.TryGetProperty("evidence", out var evidenceEl) || evidenceEl.ValueKind != JsonValueKind.Array)
+        {
+            return evidence;
+        }
+
+        foreach (var item in evidenceEl.EnumerateArray())
+        {
+            var kind = GetString(item, "kind");
+            var summary = GetString(item, "summary");
+            if (string.IsNullOrWhiteSpace(kind) || string.IsNullOrWhiteSpace(summary))
+            {
+                continue;
+            }
+
+            evidence.Add(new EvidenceItem(kind, summary, GetString(item, "source_id")));
+        }
+
+        return evidence;
+    }
+
+    private static List<AgenticFileCandidateFinding> ParseCandidateFindings(JsonElement root, AgenticFileInvestigationTask task)
+    {
+        var findings = new List<AgenticFileCandidateFinding>();
+        if (!root.TryGetProperty("candidate_findings", out var findingsEl) || findingsEl.ValueKind != JsonValueKind.Array)
+        {
+            return findings;
+        }
+
+        foreach (var item in findingsEl.EnumerateArray())
+        {
+            var id = GetString(item, "id");
+            var message = GetString(item, "message");
+            if (string.IsNullOrWhiteSpace(id) || string.IsNullOrWhiteSpace(message))
+            {
+                continue;
+            }
+
+            var supportingFiles = GetStringArray(item, "supporting_files");
+            findings.Add(
+                new AgenticFileCandidateFinding(
+                    id,
+                    message,
+                    GetString(item, "category") ?? CandidateReviewFinding.PerFileCommentCategory,
+                    ParseConfidence(item.TryGetProperty("confidence", out var confidenceEl) ? confidenceEl : default),
+                    new EvidenceReference(
+                        [],
+                        supportingFiles,
+                        supportingFiles.Count >= 2 ? EvidenceReference.ResolvedState : EvidenceReference.PartialState,
+                        "agentic_file_investigation"),
+                    supportingFiles.Count > 0 ? supportingFiles : task.SeedFilePaths,
+                    ParseSeverity(item),
+                    GetString(item, "file_path"),
+                    GetInt(item, "line_number"),
+                    GetString(item, "candidate_summary_text"),
+                    SupportSource: GetString(item, "support_source")));
+        }
+
+        return findings;
+    }
+
+    private static List<AgenticFileToolUsage> ParseToolUsage(JsonElement root)
+    {
+        var toolUsage = new List<AgenticFileToolUsage>();
+        if (!root.TryGetProperty("tool_usage", out var toolUsageEl) || toolUsageEl.ValueKind != JsonValueKind.Array)
+        {
+            return toolUsage;
+        }
+
+        foreach (var item in toolUsageEl.EnumerateArray())
+        {
+            var toolName = GetString(item, "tool_name");
+            var status = GetString(item, "status");
+            if (string.IsNullOrWhiteSpace(toolName) || string.IsNullOrWhiteSpace(status))
+            {
+                continue;
+            }
+
+            toolUsage.Add(new AgenticFileToolUsage(toolName, status, GetString(item, "target")));
+        }
+
+        return toolUsage;
     }
 
     private static ConfidenceScore ParseConfidence(JsonElement element)

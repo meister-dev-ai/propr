@@ -14,6 +14,7 @@ namespace MeisterProPR.Api.Features.ProCursor.Broker.Controllers;
 /// </summary>
 [ApiController]
 [Authorize(AuthenticationSchemes = ProCursorSharedKeyAuthenticationDefaults.Scheme)]
+[Route("internal/propr/procursor/runtime-config")]
 public sealed class ProCursorRuntimeConfigurationController(ProCursorRuntimeConfigurationProjectionService projectionService) : ControllerBase
 {
     /// <summary>
@@ -22,7 +23,7 @@ public sealed class ProCursorRuntimeConfigurationController(ProCursorRuntimeConf
     /// <param name="ct">Cancellation token for the request.</param>
     /// <returns>The enabled runtime-configuration projections.</returns>
     /// <response code="200">Enabled projections were returned.</response>
-    [HttpGet("/internal/propr/procursor/runtime-config/enabled")]
+    [HttpGet("enabled")]
     public async Task<IActionResult> ListEnabled(CancellationToken ct)
     {
         return this.Ok(await projectionService.ListEnabledAsync(ct));
@@ -38,7 +39,7 @@ public sealed class ProCursorRuntimeConfigurationController(ProCursorRuntimeConf
     /// <response code="200">The projection was refreshed.</response>
     /// <response code="404">The source was not found.</response>
     /// <response code="409">The source cannot currently be refreshed.</response>
-    [HttpPost("/internal/propr/procursor/runtime-config/sources/{sourceId:guid}/refresh")]
+    [HttpPost("sources/{sourceId:guid}/refresh")]
     public async Task<IActionResult> Refresh(
         Guid sourceId,
         [FromBody] ProCursorRuntimeConfigurationRefreshRequest request,

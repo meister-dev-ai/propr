@@ -225,13 +225,11 @@ internal sealed class ReviewSynthesisExecutor(
                     job.ClientId,
                     AiPurpose.ReviewHighEffort,
                     ct);
-                synthTierDto = synthesisRuntime.Connection;
                 effectiveClient = synthesisRuntime.ChatClient;
                 synthesisModelId = synthesisRuntime.Model.RemoteModelId;
             }
             catch
             {
-                synthTierDto = null;
                 synthesisModelId = null;
             }
         }
@@ -398,7 +396,7 @@ internal sealed class ReviewSynthesisExecutor(
         CancellationToken ct)
     {
         string finalSummary;
-        IReadOnlyList<CandidateReviewFinding> synthesizedFindings = [];
+        IReadOnlyList<CandidateReviewFinding> synthesizedFindings;
         string? synthesisInputSample = null;
         string? synthesisSystemPrompt = null;
 

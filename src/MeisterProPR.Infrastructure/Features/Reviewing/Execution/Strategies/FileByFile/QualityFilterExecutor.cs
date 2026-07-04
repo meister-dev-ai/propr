@@ -41,37 +41,11 @@ internal sealed class QualityFilterExecutor(
             var result = new List<ReviewComment>();
             foreach (var item in commentsEl.EnumerateArray())
             {
-                var message = item.TryGetProperty("message", out var msgEl) ? msgEl.GetString() : null;
-                if (string.IsNullOrWhiteSpace(message))
+                var comment = TryParseComment(item);
+                if (comment is not null)
                 {
-                    continue;
+                    result.Add(comment);
                 }
-
-                string? filePath = null;
-                if (item.TryGetProperty("file_path", out var fpEl) && fpEl.ValueKind == JsonValueKind.String)
-                {
-                    filePath = fpEl.GetString();
-                }
-
-                int? lineNumber = null;
-                if (item.TryGetProperty("line_number", out var lnEl) && lnEl.ValueKind == JsonValueKind.Number)
-                {
-                    lineNumber = FileByFileReviewOrchestrator.NormalizeLineNumber(lnEl.GetInt32());
-                }
-
-                var severity = CommentSeverity.Warning;
-                if (item.TryGetProperty("severity", out var sevEl))
-                {
-                    severity = sevEl.GetString()?.ToLowerInvariant() switch
-                    {
-                        "error" => CommentSeverity.Error,
-                        "suggestion" => CommentSeverity.Suggestion,
-                        "info" => CommentSeverity.Info,
-                        _ => CommentSeverity.Warning,
-                    };
-                }
-
-                result.Add(FileByFileReviewOrchestrator.CreateReviewComment(filePath, lineNumber, severity, message));
             }
 
             return result;
@@ -80,6 +54,41 @@ internal sealed class QualityFilterExecutor(
         {
             return [];
         }
+    }
+
+    private static ReviewComment? TryParseComment(JsonElement item)
+    {
+        var message = item.TryGetProperty("message", out var msgEl) ? msgEl.GetString() : null;
+        if (string.IsNullOrWhiteSpace(message))
+        {
+            return null;
+        }
+
+        string? filePath = null;
+        if (item.TryGetProperty("file_path", out var fpEl) && fpEl.ValueKind == JsonValueKind.String)
+        {
+            filePath = fpEl.GetString();
+        }
+
+        int? lineNumber = null;
+        if (item.TryGetProperty("line_number", out var lnEl) && lnEl.ValueKind == JsonValueKind.Number)
+        {
+            lineNumber = FileByFileReviewOrchestrator.NormalizeLineNumber(lnEl.GetInt32());
+        }
+
+        var severity = CommentSeverity.Warning;
+        if (item.TryGetProperty("severity", out var sevEl))
+        {
+            severity = sevEl.GetString()?.ToLowerInvariant() switch
+            {
+                "error" => CommentSeverity.Error,
+                "suggestion" => CommentSeverity.Suggestion,
+                "info" => CommentSeverity.Info,
+                _ => CommentSeverity.Warning,
+            };
+        }
+
+        return FileByFileReviewOrchestrator.CreateReviewComment(filePath, lineNumber, severity, message);
     }
 
     public async Task<List<ReviewComment>> ApplyAsync(

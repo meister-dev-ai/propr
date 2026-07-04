@@ -31,62 +31,92 @@ public static class ProviderRetentionPolicy
         var normalizedMessage = message.Trim().ToLowerInvariant();
         var stageFallback = NormalizeStageFallback(workflowStage);
 
-        if (normalizedMessage.Contains("signature", StringComparison.Ordinal)
-            || normalizedMessage.Contains("authorization header", StringComparison.Ordinal)
-            || normalizedMessage.Contains("secret", StringComparison.Ordinal)
-            || (normalizedMessage.Contains("webhook", StringComparison.Ordinal) &&
-                normalizedMessage.Contains("invalid", StringComparison.Ordinal)))
+        if (IsWebhookTrustFailure(normalizedMessage))
         {
             return "webhookTrust";
         }
 
-        if (normalizedMessage.Contains("token", StringComparison.Ordinal)
-            || normalizedMessage.Contains("credential", StringComparison.Ordinal)
-            || normalizedMessage.Contains("unauthorized", StringComparison.Ordinal)
-            || normalizedMessage.Contains("forbidden", StringComparison.Ordinal)
-            || normalizedMessage.Contains("permission", StringComparison.Ordinal)
-            || normalizedMessage.Contains("scope", StringComparison.Ordinal)
-            || normalizedMessage.Contains("auth", StringComparison.Ordinal))
+        if (IsAuthenticationFailure(normalizedMessage))
         {
             return "authentication";
         }
 
-        if (normalizedMessage.Contains("publish", StringComparison.Ordinal)
-            || normalizedMessage.Contains("comment", StringComparison.Ordinal)
-            || normalizedMessage.Contains("thread", StringComparison.Ordinal)
-            || normalizedMessage.Contains("reply", StringComparison.Ordinal))
+        if (IsPublicationFailure(normalizedMessage))
         {
             return "publication";
         }
 
-        if (normalizedMessage.Contains("review", StringComparison.Ordinal)
-            || normalizedMessage.Contains("pull request", StringComparison.Ordinal)
-            || normalizedMessage.Contains("merge request", StringComparison.Ordinal)
-            || normalizedMessage.Contains("revision", StringComparison.Ordinal))
+        if (IsReviewRetrievalFailure(normalizedMessage))
         {
             return "reviewRetrieval";
         }
 
-        if (normalizedMessage.Contains("discover", StringComparison.Ordinal)
-            || normalizedMessage.Contains("repository", StringComparison.Ordinal)
-            || normalizedMessage.Contains("group", StringComparison.Ordinal)
-            || normalizedMessage.Contains("organization", StringComparison.Ordinal)
-            || normalizedMessage.Contains("namespace", StringComparison.Ordinal))
+        if (IsDiscoveryFailure(normalizedMessage))
         {
             return "discovery";
         }
 
-        if (normalizedMessage.Contains("host", StringComparison.Ordinal)
-            || normalizedMessage.Contains("url", StringComparison.Ordinal)
-            || normalizedMessage.Contains("timeout", StringComparison.Ordinal)
-            || normalizedMessage.Contains("dns", StringComparison.Ordinal)
-            || normalizedMessage.Contains("connect", StringComparison.Ordinal)
-            || normalizedMessage.Contains("malformed", StringComparison.Ordinal))
+        if (IsConfigurationFailure(normalizedMessage))
         {
             return "configuration";
         }
 
         return stageFallback ?? "unknown";
+    }
+
+    private static bool IsWebhookTrustFailure(string normalizedMessage)
+    {
+        return normalizedMessage.Contains("signature", StringComparison.Ordinal)
+            || normalizedMessage.Contains("authorization header", StringComparison.Ordinal)
+            || normalizedMessage.Contains("secret", StringComparison.Ordinal)
+            || (normalizedMessage.Contains("webhook", StringComparison.Ordinal) &&
+                normalizedMessage.Contains("invalid", StringComparison.Ordinal));
+    }
+
+    private static bool IsAuthenticationFailure(string normalizedMessage)
+    {
+        return normalizedMessage.Contains("token", StringComparison.Ordinal)
+            || normalizedMessage.Contains("credential", StringComparison.Ordinal)
+            || normalizedMessage.Contains("unauthorized", StringComparison.Ordinal)
+            || normalizedMessage.Contains("forbidden", StringComparison.Ordinal)
+            || normalizedMessage.Contains("permission", StringComparison.Ordinal)
+            || normalizedMessage.Contains("scope", StringComparison.Ordinal)
+            || normalizedMessage.Contains("auth", StringComparison.Ordinal);
+    }
+
+    private static bool IsPublicationFailure(string normalizedMessage)
+    {
+        return normalizedMessage.Contains("publish", StringComparison.Ordinal)
+            || normalizedMessage.Contains("comment", StringComparison.Ordinal)
+            || normalizedMessage.Contains("thread", StringComparison.Ordinal)
+            || normalizedMessage.Contains("reply", StringComparison.Ordinal);
+    }
+
+    private static bool IsReviewRetrievalFailure(string normalizedMessage)
+    {
+        return normalizedMessage.Contains("review", StringComparison.Ordinal)
+            || normalizedMessage.Contains("pull request", StringComparison.Ordinal)
+            || normalizedMessage.Contains("merge request", StringComparison.Ordinal)
+            || normalizedMessage.Contains("revision", StringComparison.Ordinal);
+    }
+
+    private static bool IsDiscoveryFailure(string normalizedMessage)
+    {
+        return normalizedMessage.Contains("discover", StringComparison.Ordinal)
+            || normalizedMessage.Contains("repository", StringComparison.Ordinal)
+            || normalizedMessage.Contains("group", StringComparison.Ordinal)
+            || normalizedMessage.Contains("organization", StringComparison.Ordinal)
+            || normalizedMessage.Contains("namespace", StringComparison.Ordinal);
+    }
+
+    private static bool IsConfigurationFailure(string normalizedMessage)
+    {
+        return normalizedMessage.Contains("host", StringComparison.Ordinal)
+            || normalizedMessage.Contains("url", StringComparison.Ordinal)
+            || normalizedMessage.Contains("timeout", StringComparison.Ordinal)
+            || normalizedMessage.Contains("dns", StringComparison.Ordinal)
+            || normalizedMessage.Contains("connect", StringComparison.Ordinal)
+            || normalizedMessage.Contains("malformed", StringComparison.Ordinal);
     }
 
     public static string NormalizeStatus(string status, string fallback)

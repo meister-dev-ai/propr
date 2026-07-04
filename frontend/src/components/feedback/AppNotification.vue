@@ -3,14 +3,13 @@
 
 <template>
   <Transition name="notification">
-    <div
+    <output
       v-if="notification"
       :class="['app-notification', `app-notification--${notification.type}`]"
-      role="status"
     >
       {{ notification.message }}
       <button class="notification-dismiss" @click="dismiss" aria-label="Dismiss">×</button>
-    </div>
+    </output>
   </Transition>
 </template>
 

@@ -333,6 +333,7 @@ internal sealed class GitHubAuthenticationService
         }
         catch (JsonException)
         {
+            // Malformed JSON body: fall through and surface the raw response text instead.
         }
 
         var normalized = body.Trim();

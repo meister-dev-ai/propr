@@ -134,7 +134,6 @@ internal sealed class PrLevelReviewVerificationExecutor(
                 claim,
                 evidence,
                 updatedEvidence,
-                evidenceBackedWorkItem,
                 reviewContext,
                 prVerificationClient,
                 prVerificationModelId,
@@ -270,7 +269,6 @@ internal sealed class PrLevelReviewVerificationExecutor(
         ClaimDescriptor claim,
         EvidenceBundle evidence,
         EvidenceReference updatedEvidence,
-        VerificationWorkItem evidenceBackedWorkItem,
         ReviewSystemContext reviewContext,
         IChatClient? prVerificationClient,
         string? prVerificationModelId,
@@ -564,11 +562,15 @@ internal sealed class PrLevelReviewVerificationExecutor(
             _ => EvidenceReference.MissingState,
         };
 
+        var resolvedSupportingFiles = supportingFiles.Length > 0
+            ? supportingFiles
+            : finding.Evidence?.SupportingFiles ?? supportingFiles;
+
         return finding.Evidence is null
             ? new EvidenceReference([], supportingFiles, evidenceState, "review_context_tools")
             : new EvidenceReference(
                 finding.Evidence.SupportingFindingIds,
-                supportingFiles.Length > 0 ? supportingFiles : finding.Evidence.SupportingFiles,
+                resolvedSupportingFiles,
                 evidenceState,
                 finding.Evidence.EvidenceSource);
     }

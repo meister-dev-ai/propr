@@ -58,11 +58,6 @@ internal sealed class FileByFileImportanceRankingStage : IReviewPipelineStage<Pe
         return ScoreComment(comment);
     }
 
-    private static bool ContainsAny(string text, params string[] needles)
-    {
-        return needles.Any(needle => text.Contains(needle, StringComparison.OrdinalIgnoreCase));
-    }
-
     /// <summary>
     ///     Computes a deterministic 1-10 importance score for a comment based on severity and keyword signals.
     ///     Shared with <c>FileByFileSelfReflectionRankingStage</c> as a fallback and feature input.

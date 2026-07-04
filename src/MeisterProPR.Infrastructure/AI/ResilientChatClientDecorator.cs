@@ -56,9 +56,9 @@ public sealed partial class ResilientChatClientDecorator(
     }
 
     /// <inheritdoc />
-    public object? GetService(Type serviceType, object? key = null)
+    public object? GetService(Type serviceType, object? serviceKey = null)
     {
-        return inner.GetService(serviceType, key);
+        return inner.GetService(serviceType, serviceKey);
     }
 
     /// <inheritdoc />

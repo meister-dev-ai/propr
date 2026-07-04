@@ -22,7 +22,6 @@ resource kv 'Microsoft.KeyVault/vaults@2025-05-01' = {
       virtualNetworkRules: [
         { id: subnetId, ignoreMissingVnetServiceEndpoint: false }
       ]
-      ipRules: []
     }
   }
 }

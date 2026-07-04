@@ -22,8 +22,6 @@ public sealed class EvidenceBackedReviewVerifier : IReviewFindingVerifier
     private const int MaxAnchorChars = 8000;
     private const int MaxAnchorLines = 400;
 
-    private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
-
     public async Task<IReadOnlyList<VerificationOutcome>> VerifyAsync(
         IReadOnlyList<VerificationWorkItem> workItems,
         IReadOnlyList<InvariantFact> invariantFacts,

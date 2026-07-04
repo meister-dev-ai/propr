@@ -12,6 +12,7 @@ namespace MeisterProPR.Api.Controllers;
 
 /// <summary>Global admin endpoints for installation-wide provider-family activation policy.</summary>
 [ApiController]
+[Route("admin/providers")]
 public sealed class AdminProvidersController(IProviderActivationService? providerActivationService = null)
     : ControllerBase
 {
@@ -20,7 +21,7 @@ public sealed class AdminProvidersController(IProviderActivationService? provide
     /// <response code="200">Returns the activation status for all supported provider families.</response>
     /// <response code="401">The caller is not authenticated.</response>
     /// <response code="503">Provider activation services are unavailable.</response>
-    [HttpGet("/admin/providers")]
+    [HttpGet]
     [ProducesResponseType(typeof(IReadOnlyList<ProviderActivationStatusDto>), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     [ProducesResponseType(StatusCodes.Status503ServiceUnavailable)]
@@ -48,7 +49,7 @@ public sealed class AdminProvidersController(IProviderActivationService? provide
     /// <response code="401">The caller is not authenticated.</response>
     /// <response code="403">The caller is not a global administrator.</response>
     /// <response code="503">Provider activation services are unavailable.</response>
-    [HttpPatch("/admin/providers/{provider}")]
+    [HttpPatch("{provider}")]
     [ProducesResponseType(typeof(ProviderActivationStatusDto), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]

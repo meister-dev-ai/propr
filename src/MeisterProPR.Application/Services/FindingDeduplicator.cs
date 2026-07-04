@@ -71,57 +71,66 @@ public static class FindingDeduplicator
             }
 
             var anchor = fileLevelComments[i];
-            var group = new List<ReviewComment> { anchor };
+            var group = CollectCrossFileDuplicateGroup(fileLevelComments, i, anchor, consumed);
 
-            for (var j = i + 1; j < fileLevelComments.Count; j++)
-            {
-                if (consumed.Contains(j))
-                {
-                    continue;
-                }
-
-                var candidate = fileLevelComments[j];
-
-                // Never merge same-file comments or different-severity comments.
-                if (candidate.FilePath == anchor.FilePath || candidate.Severity != anchor.Severity)
-                {
-                    continue;
-                }
-
-                if (JaccardSimilarity(anchor.Message, candidate.Message) >= JaccardThreshold)
-                {
-                    group.Add(candidate);
-                    consumed.Add(j);
-                }
-            }
-
-            if (group.Count > 1)
-            {
-                // Build a consolidated PR-level comment listing all affected files.
-                var affectedFiles = group
-                    .Select(c => c.FilePath!)
-                    .OrderBy(p => p, StringComparer.OrdinalIgnoreCase)
-                    .ToList();
-
-                var fileList = string.Join(", ", affectedFiles);
-                var consolidatedMessage =
-                    $"[Cross-file] {anchor.Message} — Affected files: {fileList}";
-
-                merged.Add(new ReviewComment(null, null, anchor.Severity, consolidatedMessage));
-                consumed.Add(i);
-            }
-            else
-            {
-                // Unique finding — keep as-is.
-                merged.Add(anchor);
-                consumed.Add(i);
-            }
+            merged.Add(group.Count > 1 ? BuildConsolidatedComment(anchor, group) : anchor);
+            consumed.Add(i);
         }
 
         // Re-append PR-level pass-through comments at the end.
         merged.AddRange(prLevelComments);
 
         return merged.AsReadOnly();
+    }
+
+    // Scans the remaining not-yet-consumed comments for near-duplicates of the anchor (same
+    // severity, different file, message similarity over the cross-file threshold), marking each
+    // match consumed so it is not considered as its own group anchor later.
+    private static List<ReviewComment> CollectCrossFileDuplicateGroup(
+        IReadOnlyList<ReviewComment> fileLevelComments,
+        int anchorIndex,
+        ReviewComment anchor,
+        HashSet<int> consumed)
+    {
+        var group = new List<ReviewComment> { anchor };
+
+        for (var j = anchorIndex + 1; j < fileLevelComments.Count; j++)
+        {
+            if (consumed.Contains(j))
+            {
+                continue;
+            }
+
+            var candidate = fileLevelComments[j];
+
+            // Never merge same-file comments or different-severity comments.
+            if (candidate.FilePath == anchor.FilePath || candidate.Severity != anchor.Severity)
+            {
+                continue;
+            }
+
+            if (JaccardSimilarity(anchor.Message, candidate.Message) >= JaccardThreshold)
+            {
+                group.Add(candidate);
+                consumed.Add(j);
+            }
+        }
+
+        return group;
+    }
+
+    // Builds a consolidated PR-level comment listing all affected files.
+    private static ReviewComment BuildConsolidatedComment(ReviewComment anchor, List<ReviewComment> group)
+    {
+        var affectedFiles = group
+            .Select(c => c.FilePath!)
+            .OrderBy(p => p, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        var fileList = string.Join(", ", affectedFiles);
+        var consolidatedMessage = $"[Cross-file] {anchor.Message} — Affected files: {fileList}";
+
+        return new ReviewComment(null, null, anchor.Severity, consolidatedMessage);
     }
 
     /// <summary>

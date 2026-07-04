@@ -94,11 +94,12 @@ internal sealed class GitHubWebhookEventClassifier
             }
         }
 
-        return current.ValueKind == JsonValueKind.True
-            ? true
-            : current.ValueKind == JsonValueKind.False
-                ? false
-                : null;
+        return current.ValueKind switch
+        {
+            JsonValueKind.True => true,
+            JsonValueKind.False => false,
+            _ => null,
+        };
     }
 }
 

@@ -144,44 +144,53 @@ public static class ReviewDiffProcessor
 
         foreach (var diffLine in diffLines)
         {
-            if (diffLine.StartsWith("@@", StringComparison.Ordinal))
-            {
-                if (TryParseUnifiedDiffNewLineStart(diffLine, out var newLineStart))
-                {
-                    currentNewLine = newLineStart;
-                    hasHunkHeader = true;
-                }
-
-                continue;
-            }
-
-            if (!hasHunkHeader)
-            {
-                continue;
-            }
-
-            if (diffLine.StartsWith("+++", StringComparison.Ordinal) ||
-                diffLine.StartsWith("---", StringComparison.Ordinal))
-            {
-                continue;
-            }
-
-            if (diffLine.StartsWith("+", StringComparison.Ordinal))
-            {
-                insertedLines.Add(currentNewLine);
-                currentNewLine++;
-                continue;
-            }
-
-            if (diffLine.StartsWith("-", StringComparison.Ordinal))
-            {
-                continue;
-            }
-
-            currentNewLine++;
+            ProcessDiffLineForInsertedLines(diffLine, insertedLines, ref hasHunkHeader, ref currentNewLine);
         }
 
         return insertedLines;
+    }
+
+    private static void ProcessDiffLineForInsertedLines(
+        string diffLine,
+        HashSet<int> insertedLines,
+        ref bool hasHunkHeader,
+        ref int currentNewLine)
+    {
+        if (diffLine.StartsWith("@@", StringComparison.Ordinal))
+        {
+            if (TryParseUnifiedDiffNewLineStart(diffLine, out var newLineStart))
+            {
+                currentNewLine = newLineStart;
+                hasHunkHeader = true;
+            }
+
+            return;
+        }
+
+        if (!hasHunkHeader)
+        {
+            return;
+        }
+
+        if (diffLine.StartsWith("+++", StringComparison.Ordinal) ||
+            diffLine.StartsWith("---", StringComparison.Ordinal))
+        {
+            return;
+        }
+
+        if (diffLine.StartsWith("+", StringComparison.Ordinal))
+        {
+            insertedLines.Add(currentNewLine);
+            currentNewLine++;
+            return;
+        }
+
+        if (diffLine.StartsWith("-", StringComparison.Ordinal))
+        {
+            return;
+        }
+
+        currentNewLine++;
     }
 
     /// <summary>
@@ -196,6 +205,12 @@ public static class ReviewDiffProcessor
             return [];
         }
 
+        var rawRanges = BuildRawHunkRanges(unifiedDiff);
+        return rawRanges.Count == 0 ? [] : MergeAdjacentRanges(rawRanges);
+    }
+
+    private static List<(int Start, int End)> BuildRawHunkRanges(string unifiedDiff)
+    {
         var rawRanges = new List<(int Start, int End)>();
         var diffLines = unifiedDiff.Replace("\r\n", "\n", StringComparison.Ordinal).Split('\n');
         var hasHunkHeader = false;
@@ -205,65 +220,7 @@ public static class ReviewDiffProcessor
 
         foreach (var diffLine in diffLines)
         {
-            if (diffLine.StartsWith("@@", StringComparison.Ordinal))
-            {
-                // Flush previous hunk range
-                if (hunkStart.HasValue)
-                {
-                    rawRanges.Add((hunkStart.Value, Math.Max(hunkStart.Value, hunkEnd)));
-                }
-
-                hunkStart = null;
-                hunkEnd = 0;
-
-                if (TryParseUnifiedDiffNewLineStart(diffLine, out var newLineStart))
-                {
-                    currentNewLine = newLineStart;
-                    hunkStart = currentNewLine;
-                    hunkEnd = currentNewLine;
-                    hasHunkHeader = true;
-                }
-                else
-                {
-                    hasHunkHeader = false;
-                }
-
-                continue;
-            }
-
-            if (!hasHunkHeader)
-            {
-                continue;
-            }
-
-            if (diffLine.StartsWith("+++", StringComparison.Ordinal) ||
-                diffLine.StartsWith("---", StringComparison.Ordinal))
-            {
-                continue;
-            }
-
-            if (diffLine.StartsWith("+", StringComparison.Ordinal))
-            {
-                // Added line — advances new-file cursor
-                hunkEnd = currentNewLine;
-                currentNewLine++;
-                continue;
-            }
-
-            if (diffLine.StartsWith("-", StringComparison.Ordinal))
-            {
-                // Deleted line — does not advance new-file cursor; ensure range covers at least this position
-                if (hunkStart.HasValue && currentNewLine > 0)
-                {
-                    hunkEnd = Math.Max(hunkEnd, currentNewLine);
-                }
-
-                continue;
-            }
-
-            // Context line — advances cursor
-            hunkEnd = currentNewLine;
-            currentNewLine++;
+            ProcessDiffLineForHunkRanges(diffLine, rawRanges, ref hasHunkHeader, ref currentNewLine, ref hunkStart, ref hunkEnd);
         }
 
         // Flush last hunk
@@ -272,11 +229,80 @@ public static class ReviewDiffProcessor
             rawRanges.Add((hunkStart.Value, Math.Max(hunkStart.Value, hunkEnd)));
         }
 
-        if (rawRanges.Count == 0)
+        return rawRanges;
+    }
+
+    private static void ProcessDiffLineForHunkRanges(
+        string diffLine,
+        List<(int Start, int End)> rawRanges,
+        ref bool hasHunkHeader,
+        ref int currentNewLine,
+        ref int? hunkStart,
+        ref int hunkEnd)
+    {
+        if (diffLine.StartsWith("@@", StringComparison.Ordinal))
         {
-            return [];
+            // Flush previous hunk range
+            if (hunkStart.HasValue)
+            {
+                rawRanges.Add((hunkStart.Value, Math.Max(hunkStart.Value, hunkEnd)));
+            }
+
+            hunkStart = null;
+            hunkEnd = 0;
+
+            if (TryParseUnifiedDiffNewLineStart(diffLine, out var newLineStart))
+            {
+                currentNewLine = newLineStart;
+                hunkStart = currentNewLine;
+                hunkEnd = currentNewLine;
+                hasHunkHeader = true;
+            }
+            else
+            {
+                hasHunkHeader = false;
+            }
+
+            return;
         }
 
+        if (!hasHunkHeader)
+        {
+            return;
+        }
+
+        if (diffLine.StartsWith("+++", StringComparison.Ordinal) ||
+            diffLine.StartsWith("---", StringComparison.Ordinal))
+        {
+            return;
+        }
+
+        if (diffLine.StartsWith("+", StringComparison.Ordinal))
+        {
+            // Added line — advances new-file cursor
+            hunkEnd = currentNewLine;
+            currentNewLine++;
+            return;
+        }
+
+        if (diffLine.StartsWith("-", StringComparison.Ordinal))
+        {
+            // Deleted line — does not advance new-file cursor; ensure range covers at least this position
+            if (hunkStart.HasValue && currentNewLine > 0)
+            {
+                hunkEnd = Math.Max(hunkEnd, currentNewLine);
+            }
+
+            return;
+        }
+
+        // Context line — advances cursor
+        hunkEnd = currentNewLine;
+        currentNewLine++;
+    }
+
+    private static List<(int Start, int End)> MergeAdjacentRanges(List<(int Start, int End)> rawRanges)
+    {
         // Merge overlapping/adjacent ranges (sort by start first)
         rawRanges.Sort((a, b) => a.Start.CompareTo(b.Start));
         var merged = new List<(int Start, int End)>();

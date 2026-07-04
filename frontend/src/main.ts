@@ -18,50 +18,46 @@ const runtime = createRuntime()
 setActiveRuntime(runtime)
 provideRuntime(app, runtime)
 
-async function prepareApp() {
-  if (runtime.isMock) {
-    try {
-      const { startMockWorker } = await import('./mocks/browser')
-      await startMockWorker()
-    } catch (error) {
-      // The mock service worker needs a secure context (HTTPS or localhost). On a plain-HTTP
-      // LAN IP (e.g. a phone hitting the dev server) registration fails — don't let that
-      // white-screen the app; mount anyway so the failure is visible instead of blank.
-      console.error('Mock service worker failed to start; continuing without it.', error)
-    }
+if (runtime.isMock) {
+  try {
+    const { startMockWorker } = await import('./mocks/browser')
+    await startMockWorker()
+  } catch (error) {
+    // The mock service worker needs a secure context (HTTPS or localhost). On a plain-HTTP
+    // LAN IP (e.g. a phone hitting the dev server) registration fails — don't let that
+    // white-screen the app; mount anyway so the failure is visible instead of blank.
+    console.error('Mock service worker failed to start; continuing without it.', error)
   }
+}
 
-  const { setAccessToken, loadClientRoles, clearTokens } = useSession()
+const { setAccessToken, loadClientRoles, clearTokens } = useSession()
 
-  // When a refresh fails terminally (session expired/revoked), clear state and go to login.
-  setOnSessionExpired(() => {
+// When a refresh fails terminally (session expired/revoked), clear state and go to login.
+setOnSessionExpired(() => {
+  clearTokens()
+  if (router.currentRoute.value.name !== 'login') {
+    void router.replace({ name: 'login' })
+  }
+})
+
+// Another tab logged out → tear down this tab's session too.
+window.addEventListener('storage', (event) => {
+  if (event.key === LOGOUT_BROADCAST_KEY && event.newValue) {
     clearTokens()
     if (router.currentRoute.value.name !== 'login') {
       void router.replace({ name: 'login' })
     }
-  })
-
-  // Another tab logged out → tear down this tab's session too.
-  window.addEventListener('storage', (event) => {
-    if (event.key === LOGOUT_BROADCAST_KEY && event.newValue) {
-      clearTokens()
-      if (router.currentRoute.value.name !== 'login') {
-        void router.replace({ name: 'login' })
-      }
-    }
-  })
-
-  // Restore the session from the httpOnly refresh cookie (shared across tabs, survives reload)
-  // BEFORE installing the router, so its initial navigation sees the authenticated state and
-  // doesn't bounce a valid session to /login.
-  const accessToken = await refreshAccessToken()
-  if (accessToken) {
-    setAccessToken(accessToken)
-    await loadClientRoles()
   }
+})
 
-  app.use(router)
-  app.mount('#app')
+// Restore the session from the httpOnly refresh cookie (shared across tabs, survives reload)
+// BEFORE installing the router, so its initial navigation sees the authenticated state and
+// doesn't bounce a valid session to /login.
+const accessToken = await refreshAccessToken()
+if (accessToken) {
+  setAccessToken(accessToken)
+  await loadClientRoles()
 }
 
-prepareApp()
+app.use(router)
+app.mount('#app')

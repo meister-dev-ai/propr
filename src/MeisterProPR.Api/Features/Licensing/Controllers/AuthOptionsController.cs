@@ -11,13 +11,14 @@ namespace MeisterProPR.Api.Features.Licensing.Controllers;
 
 /// <summary>Public bootstrap endpoints for login-time licensing awareness.</summary>
 [ApiController]
+[Route("auth/options")]
 public sealed class AuthOptionsController(
     IConfiguration configuration,
     ILicensingCapabilityService? licensingCapabilityService = null)
     : ControllerBase
 {
     /// <summary>Returns public sign-in options and edition-aware capability messaging.</summary>
-    [HttpGet("/auth/options")]
+    [HttpGet]
     [ProducesResponseType(typeof(AuthOptionsDto), StatusCodes.Status200OK)]
     public async Task<IActionResult> GetAuthOptions(CancellationToken ct = default)
     {

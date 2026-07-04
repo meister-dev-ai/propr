@@ -67,8 +67,16 @@ export const protocolOptions = (purpose: AiPurpose): Array<{ value: AiProtocolMo
 
 export const providerLabel = (providerKind: AiProviderKind | undefined) => providerOptions.find((option) => option.value === providerKind)?.label ?? 'Unknown'
 
-export const authModeLabel = (authMode: AiAuthMode | undefined) =>
-  authMode === 'azureIdentity' ? 'Azure Identity' : authMode === 'apiKey' ? 'API Key' : 'Unknown'
+export const authModeLabel = (authMode: AiAuthMode | undefined) => {
+  switch (authMode) {
+    case 'azureIdentity':
+      return 'Azure Identity'
+    case 'apiKey':
+      return 'API Key'
+    default:
+      return 'Unknown'
+  }
+}
 
 export const verificationLabel = (status: AiVerificationStatus | undefined) => {
   switch (status) {
@@ -81,10 +89,21 @@ export const verificationLabel = (status: AiVerificationStatus | undefined) => {
   }
 }
 
+const verificationChipModifier = (status: AiVerificationStatus | undefined): string => {
+  switch (status) {
+    case 'verified':
+      return 'chip-success'
+    case 'failed':
+      return 'chip-danger'
+    default:
+      return 'chip-muted'
+  }
+}
+
 export const verificationChipClass = (status: AiVerificationStatus | undefined) => [
   'chip',
   'chip-sm',
-  status === 'verified' ? 'chip-success' : status === 'failed' ? 'chip-danger' : 'chip-muted',
+  verificationChipModifier(status),
 ]
 
 export const purposeLabel = (purpose: AiPurpose | undefined) => purposeOptions.find((option) => option.value === purpose)?.label ?? 'Unknown purpose'

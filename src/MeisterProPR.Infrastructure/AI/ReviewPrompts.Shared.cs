@@ -99,9 +99,7 @@ internal static partial class ReviewPrompts
                     file.IsBinary ? null : file.UnifiedDiff)).ToList(),
                 pr.ExistingThreads?.Count > 0,
                 pr.ExistingThreads?.Select(thread => new PromptTemplateModels.PromptThreadModel(
-                        thread.FilePath is not null
-                            ? $"{thread.FilePath}{(thread.LineNumber.HasValue ? $":L{thread.LineNumber}" : string.Empty)}"
-                            : "(PR-level)",
+                        FormatThreadLocation(thread),
                         thread.Comments.Select(comment => new PromptTemplateModels.PromptThreadCommentModel(comment.AuthorName, comment.Content)).ToList()))
                     .ToList() ?? []));
     }

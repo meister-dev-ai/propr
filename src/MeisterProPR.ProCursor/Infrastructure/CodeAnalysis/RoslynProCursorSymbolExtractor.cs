@@ -100,7 +100,7 @@ public sealed class RoslynProCursorSymbolExtractor(ILogger<RoslynProCursorSymbol
             var root = await syntaxTree.GetRootAsync(ct);
             var repositoryPath = repositoryPathByTree[syntaxTree];
 
-            this.CollectRelationships(snapshotId, semanticModel, root, repositoryPath, keyBySymbol, edgesByKey);
+            CollectRelationships(snapshotId, semanticModel, root, repositoryPath, keyBySymbol, edgesByKey);
         }
 
         logger.LogInformation(
@@ -152,7 +152,20 @@ public sealed class RoslynProCursorSymbolExtractor(ILogger<RoslynProCursorSymbol
         }
     }
 
-    private void CollectRelationships(
+    private static void CollectRelationships(
+        Guid snapshotId,
+        SemanticModel semanticModel,
+        SyntaxNode root,
+        string repositoryPath,
+        IReadOnlyDictionary<ISymbol, string> keyBySymbol,
+        IDictionary<string, ProCursorSymbolEdge> edgesByKey)
+    {
+        CollectBaseTypeEdges(snapshotId, semanticModel, root, repositoryPath, keyBySymbol, edgesByKey);
+        CollectInvocationEdges(snapshotId, semanticModel, root, repositoryPath, keyBySymbol, edgesByKey);
+        CollectReferenceEdges(snapshotId, semanticModel, root, repositoryPath, keyBySymbol, edgesByKey);
+    }
+
+    private static void CollectBaseTypeEdges(
         Guid snapshotId,
         SemanticModel semanticModel,
         SyntaxNode root,
@@ -188,7 +201,16 @@ public sealed class RoslynProCursorSymbolExtractor(ILogger<RoslynProCursorSymbol
                 baseType.GetLocation().GetLineSpan(),
                 edgesByKey);
         }
+    }
 
+    private static void CollectInvocationEdges(
+        Guid snapshotId,
+        SemanticModel semanticModel,
+        SyntaxNode root,
+        string repositoryPath,
+        IReadOnlyDictionary<ISymbol, string> keyBySymbol,
+        IDictionary<string, ProCursorSymbolEdge> edgesByKey)
+    {
         foreach (var invocation in root.DescendantNodes().OfType<InvocationExpressionSyntax>())
         {
             var fromSymbol = semanticModel.GetEnclosingSymbol(invocation.SpanStart);
@@ -208,7 +230,16 @@ public sealed class RoslynProCursorSymbolExtractor(ILogger<RoslynProCursorSymbol
                 invocation.GetLocation().GetLineSpan(),
                 edgesByKey);
         }
+    }
 
+    private static void CollectReferenceEdges(
+        Guid snapshotId,
+        SemanticModel semanticModel,
+        SyntaxNode root,
+        string repositoryPath,
+        IReadOnlyDictionary<ISymbol, string> keyBySymbol,
+        IDictionary<string, ProCursorSymbolEdge> edgesByKey)
+    {
         foreach (var referenceNode in root.DescendantNodes().Where(IsReferenceCandidate))
         {
             if (IsInvocationTarget(referenceNode))

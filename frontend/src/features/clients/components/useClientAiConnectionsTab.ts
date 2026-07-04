@@ -14,9 +14,11 @@ import {
 } from '@/services/aiConnectionsService'
 import type {
   AiAuthMode,
+  AiConfiguredModelDto,
   AiConfiguredModelRequest,
   AiConnectionDto,
   AiDiscoveryMode,
+  AiModelDiscoveryResultDto,
   AiProviderKind,
   AiPurpose,
   CreateAiConnectionRequest,
@@ -226,6 +228,58 @@ export function useClientAiConnectionsTab(props: { clientId: string }) {
     defaultQueryParams: parseMapText(editor.defaultQueryParamsText),
   })
 
+  const applyDiscoveredModel = (existing: EditableModel, discovered: AiConfiguredModelDto) => {
+    existing.displayName = discovered.displayName ?? existing.displayName
+    existing.kind = discovered.supportsEmbedding ? 'embedding' : 'chat'
+    existing.tokenizerName = discovered.tokenizerName ?? existing.tokenizerName
+    existing.maxInputTokens = discovered.maxInputTokens == null ? existing.maxInputTokens : String(discovered.maxInputTokens)
+    existing.embeddingDimensions = discovered.embeddingDimensions == null ? existing.embeddingDimensions : String(discovered.embeddingDimensions)
+    existing.supportsStructuredOutput = Boolean(discovered.supportsStructuredOutput)
+    existing.supportsToolUse = Boolean(discovered.supportsToolUse)
+  }
+
+  const buildDiscoveredModel = (discovered: AiConfiguredModelDto): EditableModel => ({
+    localId: discovered.id ?? crypto.randomUUID(),
+    existingId: discovered.id ?? null,
+    remoteModelId: discovered.remoteModelId ?? '',
+    displayName: discovered.displayName ?? discovered.remoteModelId ?? '',
+    kind: discovered.supportsEmbedding ? 'embedding' : 'chat',
+    tokenizerName: discovered.tokenizerName ?? '',
+    maxInputTokens: discovered.maxInputTokens == null ? '' : String(discovered.maxInputTokens),
+    embeddingDimensions: discovered.embeddingDimensions == null ? '' : String(discovered.embeddingDimensions),
+    supportsStructuredOutput: Boolean(discovered.supportsStructuredOutput),
+    supportsToolUse: Boolean(discovered.supportsToolUse),
+  })
+
+  const mergeDiscoveredModels = (discoveredModels: AiConfiguredModelDto[]) => {
+    const existingByRemoteId = new Map(editor.models.map((model) => [model.remoteModelId.toLowerCase(), model]))
+
+    for (const discovered of discoveredModels) {
+      const key = (discovered.remoteModelId ?? '').toLowerCase()
+      if (!key) {
+        continue
+      }
+
+      const existing = existingByRemoteId.get(key)
+      if (existing) {
+        applyDiscoveredModel(existing, discovered)
+        continue
+      }
+
+      editor.models.push(buildDiscoveredModel(discovered))
+    }
+  }
+
+  const pluralizeModels = (count: number): string => `model${count === 1 ? '' : 's'}`
+
+  const summarizeDiscovery = (response: AiModelDiscoveryResultDto, discoveredModels: AiConfiguredModelDto[]): string => {
+    if (response.discoveryStatus === 'failed') {
+      return (response.warnings ?? [])[0] ?? 'Model discovery returned no results.'
+    }
+
+    return `Discovered ${discoveredModels.length} ${pluralizeModels(discoveredModels.length)}.`
+  }
+
   const handleDiscoverModels = async () => {
     discovering.value = true
     discoveryMessage.value = ''
@@ -233,43 +287,8 @@ export function useClientAiConnectionsTab(props: { clientId: string }) {
     try {
       const response = await discoverAiModels(props.clientId, buildDiscoverRequest())
       const discoveredModels = response.models ?? []
-      const existingByRemoteId = new Map(editor.models.map((model) => [model.remoteModelId.toLowerCase(), model]))
-
-      for (const discovered of discoveredModels) {
-        const key = (discovered.remoteModelId ?? '').toLowerCase()
-        if (!key) {
-          continue
-        }
-
-        const existing = existingByRemoteId.get(key)
-        if (existing) {
-          existing.displayName = discovered.displayName ?? existing.displayName
-          existing.kind = discovered.supportsEmbedding ? 'embedding' : 'chat'
-          existing.tokenizerName = discovered.tokenizerName ?? existing.tokenizerName
-          existing.maxInputTokens = discovered.maxInputTokens == null ? existing.maxInputTokens : String(discovered.maxInputTokens)
-          existing.embeddingDimensions = discovered.embeddingDimensions == null ? existing.embeddingDimensions : String(discovered.embeddingDimensions)
-          existing.supportsStructuredOutput = Boolean(discovered.supportsStructuredOutput)
-          existing.supportsToolUse = Boolean(discovered.supportsToolUse)
-          continue
-        }
-
-        editor.models.push({
-          localId: discovered.id ?? crypto.randomUUID(),
-          existingId: discovered.id ?? null,
-          remoteModelId: discovered.remoteModelId ?? '',
-          displayName: discovered.displayName ?? discovered.remoteModelId ?? '',
-          kind: discovered.supportsEmbedding ? 'embedding' : 'chat',
-          tokenizerName: discovered.tokenizerName ?? '',
-          maxInputTokens: discovered.maxInputTokens == null ? '' : String(discovered.maxInputTokens),
-          embeddingDimensions: discovered.embeddingDimensions == null ? '' : String(discovered.embeddingDimensions),
-          supportsStructuredOutput: Boolean(discovered.supportsStructuredOutput),
-          supportsToolUse: Boolean(discovered.supportsToolUse),
-        })
-      }
-
-      discoveryMessage.value = response.discoveryStatus === 'failed'
-        ? (response.warnings ?? [])[0] ?? 'Model discovery returned no results.'
-        : `Discovered ${discoveredModels.length} model${discoveredModels.length === 1 ? '' : 's'}.`
+      mergeDiscoveredModels(discoveredModels)
+      discoveryMessage.value = summarizeDiscovery(response, discoveredModels)
     } catch (error) {
       saveError.value = error instanceof Error ? error.message : 'Failed to discover provider models.'
     } finally {

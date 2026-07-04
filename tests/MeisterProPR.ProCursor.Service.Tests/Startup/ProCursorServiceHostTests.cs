@@ -117,6 +117,11 @@ public sealed class ProCursorServiceHostTests
         using var factory = new NonStubManagedRemoteFactory();
 
         using var _ = factory.Server;
+
+        using var scope = factory.Services.CreateScope();
+        var options = scope.ServiceProvider.GetRequiredService<IOptions<ProCursorHostOptions>>().Value;
+
+        Assert.Equal("http://propr.internal:8080", options.ProPrBaseUrl);
     }
 
     [Fact]

@@ -56,6 +56,10 @@ export interface UseTenantMembersViewModelOptions {
   tenantId?: string
 }
 
+function formatRole(role: TenantRole): string {
+  return role === 'tenantAdministrator' ? 'Tenant Administrator' : 'Tenant User'
+}
+
 export function useTenantMembersViewModel(options: UseTenantMembersViewModelOptions = {}): TenantMembersViewModel {
   const route = useRoute()
   const router = useRouter()
@@ -156,10 +160,6 @@ export function useTenantMembersViewModel(options: UseTenantMembersViewModelOpti
     for (const membership of items) {
       editableRoles[membership.id] = membership.role
     }
-  }
-
-  function formatRole(role: TenantRole): string {
-    return role === 'tenantAdministrator' ? 'Tenant Administrator' : 'Tenant User'
   }
 
   if (autoLoad) {

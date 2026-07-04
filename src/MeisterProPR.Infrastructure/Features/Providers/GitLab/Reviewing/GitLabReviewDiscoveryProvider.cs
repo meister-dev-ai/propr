@@ -83,22 +83,27 @@ internal sealed class GitLabReviewDiscoveryProvider(
                                 ?? payload.Reviewers?.FirstOrDefault(candidate =>
                                     !string.IsNullOrWhiteSpace(candidate.Username));
 
+        ReviewerIdentity? mappedReviewer = null;
+        if (requestedReviewer is not null)
+        {
+            var displayName = string.IsNullOrWhiteSpace(requestedReviewer.Name)
+                ? requestedReviewer.Username!
+                : requestedReviewer.Name!;
+            mappedReviewer = new ReviewerIdentity(
+                repository.Host,
+                requestedReviewer.Id.ToString(CultureInfo.InvariantCulture),
+                requestedReviewer.Username!,
+                displayName,
+                requestedReviewer.Bot);
+        }
+
         return new ReviewDiscoveryItemDto(
             ScmProvider.GitLab,
             repository,
             review,
             GitLabCodeReviewQueryService.MapState(payload.State),
             GitLabCodeReviewQueryService.BuildRevision(payload),
-            requestedReviewer is null
-                ? null
-                : new ReviewerIdentity(
-                    repository.Host,
-                    requestedReviewer.Id.ToString(CultureInfo.InvariantCulture),
-                    requestedReviewer.Username!,
-                    string.IsNullOrWhiteSpace(requestedReviewer.Name)
-                        ? requestedReviewer.Username!
-                        : requestedReviewer.Name!,
-                    requestedReviewer.Bot),
+            mappedReviewer,
             payload.Title ?? $"Merge Request !{payload.Iid}",
             payload.WebUrl,
             payload.SourceBranch,

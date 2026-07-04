@@ -51,11 +51,7 @@ internal sealed class CommentRelevanceFilterExecutor(
         try
         {
             var result = await selectedFilter.FilterAsync(effectiveRequest, ct);
-            var eventName = result.DegradedComponents.Contains("comment_relevance_evaluator", StringComparer.Ordinal)
-                ? ReviewProtocolEventNames.CommentRelevanceEvaluatorDegraded
-                : result.DegradedComponents.Count > 0
-                    ? ReviewProtocolEventNames.CommentRelevanceFilterDegraded
-                    : ReviewProtocolEventNames.CommentRelevanceFilterOutput;
+            var eventName = ResolveRecordedEventName(result);
             await this.RecordProtocolAsync(effectiveRequest.ProtocolId, result, eventName, ct);
             await this.RecordAiUsageAsync(effectiveRequest.ProtocolId, result, ct);
             return result;
@@ -70,6 +66,18 @@ internal sealed class CommentRelevanceFilterExecutor(
             await this.RecordProtocolAsync(effectiveRequest.ProtocolId, fallback, ReviewProtocolEventNames.CommentRelevanceFilterDegraded, ct);
             return fallback;
         }
+    }
+
+    private static string ResolveRecordedEventName(CommentRelevanceFilterResult result)
+    {
+        if (result.DegradedComponents.Contains("comment_relevance_evaluator", StringComparer.Ordinal))
+        {
+            return ReviewProtocolEventNames.CommentRelevanceEvaluatorDegraded;
+        }
+
+        return result.DegradedComponents.Count > 0
+            ? ReviewProtocolEventNames.CommentRelevanceFilterDegraded
+            : ReviewProtocolEventNames.CommentRelevanceFilterOutput;
     }
 
     private static CommentRelevanceFilterResult BuildSelectionFallbackResult(CommentRelevanceFilterRequest request)

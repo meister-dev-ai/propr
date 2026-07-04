@@ -15,6 +15,7 @@ namespace MeisterProPR.ProCursor.Service.Controllers;
 /// </summary>
 [ApiController]
 [Authorize(AuthenticationSchemes = ProCursorSharedKeyAuthenticationDefaults.Scheme)]
+[Route("internal/procursor/clients/{clientId:guid}/sources")]
 public sealed class InternalProCursorSourcesController(IProCursorGateway gateway) : ControllerBase
 {
     /// <summary>
@@ -27,7 +28,7 @@ public sealed class InternalProCursorSourcesController(IProCursorGateway gateway
     /// <response code="404">The client was not found.</response>
     /// <response code="409">The request conflicts with current ProCursor state.</response>
     /// <response code="503">A required ProPR dependency is unavailable.</response>
-    [HttpGet("/internal/procursor/clients/{clientId:guid}/sources")]
+    [HttpGet]
     public async Task<IActionResult> ListSources(Guid clientId, CancellationToken ct)
     {
         try
@@ -59,7 +60,7 @@ public sealed class InternalProCursorSourcesController(IProCursorGateway gateway
     /// <response code="404">The client was not found.</response>
     /// <response code="409">The request conflicts with current ProCursor state.</response>
     /// <response code="503">A required ProPR dependency is unavailable.</response>
-    [HttpPost("/internal/procursor/clients/{clientId:guid}/sources")]
+    [HttpPost]
     public async Task<IActionResult> CreateSource(
         Guid clientId,
         [FromBody] ProCursorKnowledgeSourceRegistrationRequest request,
@@ -95,7 +96,7 @@ public sealed class InternalProCursorSourcesController(IProCursorGateway gateway
     /// <response code="404">The client or source was not found.</response>
     /// <response code="409">The request conflicts with current ProCursor state.</response>
     /// <response code="503">A required ProPR dependency is unavailable.</response>
-    [HttpPost("/internal/procursor/clients/{clientId:guid}/sources/{sourceId:guid}/refresh")]
+    [HttpPost("{sourceId:guid}/refresh")]
     public async Task<IActionResult> QueueRefresh(
         Guid clientId,
         Guid sourceId,
@@ -131,7 +132,7 @@ public sealed class InternalProCursorSourcesController(IProCursorGateway gateway
     /// <response code="404">The client or source was not found.</response>
     /// <response code="409">The request conflicts with current ProCursor state.</response>
     /// <response code="503">A required ProPR dependency is unavailable.</response>
-    [HttpGet("/internal/procursor/clients/{clientId:guid}/sources/{sourceId:guid}/branches")]
+    [HttpGet("{sourceId:guid}/branches")]
     public async Task<IActionResult> ListTrackedBranches(Guid clientId, Guid sourceId, CancellationToken ct)
     {
         try
@@ -164,7 +165,7 @@ public sealed class InternalProCursorSourcesController(IProCursorGateway gateway
     /// <response code="404">The client or source was not found.</response>
     /// <response code="409">The request conflicts with current ProCursor state.</response>
     /// <response code="503">A required ProPR dependency is unavailable.</response>
-    [HttpPost("/internal/procursor/clients/{clientId:guid}/sources/{sourceId:guid}/branches")]
+    [HttpPost("{sourceId:guid}/branches")]
     public async Task<IActionResult> AddTrackedBranch(
         Guid clientId,
         Guid sourceId,
@@ -202,7 +203,7 @@ public sealed class InternalProCursorSourcesController(IProCursorGateway gateway
     /// <response code="404">The client, source, or branch was not found.</response>
     /// <response code="409">The request conflicts with current ProCursor state.</response>
     /// <response code="503">A required ProPR dependency is unavailable.</response>
-    [HttpPut("/internal/procursor/clients/{clientId:guid}/sources/{sourceId:guid}/branches/{branchId:guid}")]
+    [HttpPut("{sourceId:guid}/branches/{branchId:guid}")]
     public async Task<IActionResult> UpdateTrackedBranch(
         Guid clientId,
         Guid sourceId,
@@ -241,7 +242,7 @@ public sealed class InternalProCursorSourcesController(IProCursorGateway gateway
     /// <response code="404">The client, source, or branch was not found.</response>
     /// <response code="409">The request conflicts with current ProCursor state.</response>
     /// <response code="503">A required ProPR dependency is unavailable.</response>
-    [HttpDelete("/internal/procursor/clients/{clientId:guid}/sources/{sourceId:guid}/branches/{branchId:guid}")]
+    [HttpDelete("{sourceId:guid}/branches/{branchId:guid}")]
     public async Task<IActionResult> RemoveTrackedBranch(
         Guid clientId,
         Guid sourceId,

@@ -100,6 +100,7 @@ public sealed class GetReviewJobStatusHandler(IReviewJobIntakeStore intakeStore)
         }
         catch (JsonException)
         {
+            // Malformed or unexpected JSON shape; fall through and report the property as unavailable.
         }
 
         return null;

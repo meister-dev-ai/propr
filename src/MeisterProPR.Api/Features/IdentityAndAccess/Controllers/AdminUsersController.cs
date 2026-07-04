@@ -12,6 +12,7 @@ namespace MeisterProPR.Api.Controllers;
 
 /// <summary>Admin endpoints for managing application users.</summary>
 [ApiController]
+[Route("admin")]
 public sealed class AdminUsersController(
     IUserRepository userRepository,
     IRefreshTokenRepository refreshTokenRepository,
@@ -20,8 +21,8 @@ public sealed class AdminUsersController(
     IUserAccountAuditLog auditLog) : ControllerBase
 {
     /// <summary>Returns all users.</summary>
-    [HttpGet("/admin/identity/users")]
-    [HttpGet("/admin/users")]
+    [HttpGet("identity/users")]
+    [HttpGet("users")]
     public async Task<IActionResult> ListUsers(CancellationToken ct)
     {
         var auth = AuthHelpers.RequireAdmin(this.HttpContext);
@@ -35,8 +36,8 @@ public sealed class AdminUsersController(
     }
 
     /// <summary>Creates a new application user.</summary>
-    [HttpPost("/admin/identity/users")]
-    [HttpPost("/admin/users")]
+    [HttpPost("identity/users")]
+    [HttpPost("users")]
     public async Task<IActionResult> CreateUser([FromBody] CreateUserRequest request, CancellationToken ct)
     {
         var auth = AuthHelpers.RequireAdmin(this.HttpContext);
@@ -80,8 +81,8 @@ public sealed class AdminUsersController(
     ///     active flag actually flips, all refresh tokens and PATs are revoked so the user must
     ///     re-authenticate. Disabling the last active global admin is refused with 409.
     /// </summary>
-    [HttpPatch("/admin/identity/users/{id:guid}")]
-    [HttpPatch("/admin/users/{id:guid}")]
+    [HttpPatch("identity/users/{id:guid}")]
+    [HttpPatch("users/{id:guid}")]
     public async Task<IActionResult> SetUserActive(
         Guid id,
         [FromBody] SetUserActiveRequest? request,
@@ -144,8 +145,8 @@ public sealed class AdminUsersController(
     ///     Permanently deletes a user and all their dependent records. Refuses to delete the last
     ///     active global administrator.
     /// </summary>
-    [HttpDelete("/admin/identity/users/{id:guid}/permanent")]
-    [HttpDelete("/admin/users/{id:guid}/permanent")]
+    [HttpDelete("identity/users/{id:guid}/permanent")]
+    [HttpDelete("users/{id:guid}/permanent")]
     public async Task<IActionResult> DeleteUserPermanent(Guid id, CancellationToken ct)
     {
         var auth = AuthHelpers.RequireAdmin(this.HttpContext);
@@ -180,8 +181,8 @@ public sealed class AdminUsersController(
     }
 
     /// <summary>Returns a single user with their client role assignments.</summary>
-    [HttpGet("/admin/identity/users/{id:guid}")]
-    [HttpGet("/admin/users/{id:guid}")]
+    [HttpGet("identity/users/{id:guid}")]
+    [HttpGet("users/{id:guid}")]
     public async Task<IActionResult> GetUser(Guid id, CancellationToken ct)
     {
         var auth = AuthHelpers.RequireAdmin(this.HttpContext);
@@ -200,8 +201,8 @@ public sealed class AdminUsersController(
     }
 
     /// <summary>Assigns a client role to a user.</summary>
-    [HttpPost("/admin/identity/users/{id:guid}/clients")]
-    [HttpPost("/admin/users/{id:guid}/clients")]
+    [HttpPost("identity/users/{id:guid}/clients")]
+    [HttpPost("users/{id:guid}/clients")]
     public async Task<IActionResult> AssignClientRole(
         Guid id,
         [FromBody] AssignClientRoleRequest request,
@@ -233,8 +234,8 @@ public sealed class AdminUsersController(
     }
 
     /// <summary>Removes a client role assignment from a user.</summary>
-    [HttpDelete("/admin/identity/users/{id:guid}/clients/{clientId:guid}")]
-    [HttpDelete("/admin/users/{id:guid}/clients/{clientId:guid}")]
+    [HttpDelete("identity/users/{id:guid}/clients/{clientId:guid}")]
+    [HttpDelete("users/{id:guid}/clients/{clientId:guid}")]
     public async Task<IActionResult> RemoveClientRole(Guid id, Guid clientId, CancellationToken ct)
     {
         var auth = AuthHelpers.RequireAdmin(this.HttpContext);

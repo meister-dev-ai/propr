@@ -118,8 +118,9 @@ public sealed class AdoPrCrawlerWorkerTests
         await worker.StartAsync(cts.Token);
         cts.Cancel();
 
-        // StopAsync should complete without throwing
-        await worker.StopAsync(CancellationToken.None);
+        var ex = await Record.ExceptionAsync(() => worker.StopAsync(CancellationToken.None));
+
+        Assert.Null(ex);
     }
 
     [Fact]

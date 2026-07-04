@@ -8,6 +8,7 @@ using MeisterProPR.Application.Exceptions;
 using MeisterProPR.Application.Interfaces;
 using MeisterProPR.Domain.Enums;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Mvc.ModelBinding;
 
 namespace MeisterProPR.Api.Features.ProCursor.Controllers;
 
@@ -15,6 +16,7 @@ namespace MeisterProPR.Api.Features.ProCursor.Controllers;
 ///     Client-scoped admin endpoints for managing ProCursor knowledge sources and tracked branches.
 /// </summary>
 [ApiController]
+[Route("admin/clients/{clientId:guid}/procursor/sources")]
 public sealed partial class ProCursorKnowledgeSourcesController(
     IClientAdminService clientAdminService,
     IScmProviderRegistry providerRegistry,
@@ -24,7 +26,7 @@ public sealed partial class ProCursorKnowledgeSourcesController(
     /// <summary>
     ///     Returns the ProCursor knowledge sources configured for the given client.
     /// </summary>
-    [HttpGet("/admin/clients/{clientId:guid}/procursor/sources")]
+    [HttpGet]
     [ProducesResponseType(typeof(IReadOnlyList<ProCursorKnowledgeSourceResponse>), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
@@ -61,7 +63,7 @@ public sealed partial class ProCursorKnowledgeSourcesController(
     /// <summary>
     ///     Creates a new ProCursor repository or git-backed wiki source for the given client.
     /// </summary>
-    [HttpPost("/admin/clients/{clientId:guid}/procursor/sources")]
+    [HttpPost]
     [ProducesResponseType(typeof(ProCursorKnowledgeSourceResponse), StatusCodes.Status201Created)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
@@ -119,7 +121,7 @@ public sealed partial class ProCursorKnowledgeSourcesController(
     /// <summary>
     ///     Queues a durable ProCursor index job for the selected tracked branch or the source default branch.
     /// </summary>
-    [HttpPost("/admin/clients/{clientId:guid}/procursor/sources/{sourceId:guid}/refresh")]
+    [HttpPost("{sourceId:guid}/refresh")]
     [ProducesResponseType(typeof(ProCursorRefreshResponse), StatusCodes.Status202Accepted)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
@@ -164,7 +166,7 @@ public sealed partial class ProCursorKnowledgeSourcesController(
     /// <summary>
     ///     Returns the tracked branches configured for the given ProCursor source.
     /// </summary>
-    [HttpGet("/admin/clients/{clientId:guid}/procursor/sources/{sourceId:guid}/branches")]
+    [HttpGet("{sourceId:guid}/branches")]
     [ProducesResponseType(typeof(IReadOnlyList<ProCursorTrackedBranchResponse>), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
@@ -196,7 +198,7 @@ public sealed partial class ProCursorKnowledgeSourcesController(
     /// <summary>
     ///     Adds a tracked branch to an existing ProCursor source.
     /// </summary>
-    [HttpPost("/admin/clients/{clientId:guid}/procursor/sources/{sourceId:guid}/branches")]
+    [HttpPost("{sourceId:guid}/branches")]
     [ProducesResponseType(typeof(ProCursorTrackedBranchResponse), StatusCodes.Status201Created)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
@@ -256,7 +258,7 @@ public sealed partial class ProCursorKnowledgeSourcesController(
     /// <summary>
     ///     Updates refresh behavior for one tracked branch.
     /// </summary>
-    [HttpPut("/admin/clients/{clientId:guid}/procursor/sources/{sourceId:guid}/branches/{branchId:guid}")]
+    [HttpPut("{sourceId:guid}/branches/{branchId:guid}")]
     [ProducesResponseType(typeof(ProCursorTrackedBranchResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
@@ -302,7 +304,7 @@ public sealed partial class ProCursorKnowledgeSourcesController(
     /// <summary>
     ///     Removes a tracked branch from a ProCursor source.
     /// </summary>
-    [HttpDelete("/admin/clients/{clientId:guid}/procursor/sources/{sourceId:guid}/branches/{branchId:guid}")]
+    [HttpDelete("{sourceId:guid}/branches/{branchId:guid}")]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
@@ -347,86 +349,102 @@ public sealed partial class ProCursorKnowledgeSourcesController(
             return this.ValidationProblem();
         }
 
+        ValidateRequiredFields(this.ModelState, request);
+        ValidateSourceSelection(this.ModelState, request);
+
+        return this.ModelState.ErrorCount == 0 ? null : this.ValidationProblem();
+    }
+
+    private static void ValidateRequiredFields(ModelStateDictionary modelState, ProCursorKnowledgeSourceRequest request)
+    {
         if (string.IsNullOrWhiteSpace(request.DisplayName))
         {
-            this.ModelState.AddModelError(nameof(request.DisplayName), "DisplayName is required.");
+            modelState.AddModelError(nameof(request.DisplayName), "DisplayName is required.");
         }
 
-        if (string.IsNullOrWhiteSpace(request.ProviderScopePath))
+        if (string.IsNullOrWhiteSpace(request.ProviderScopePath) && string.IsNullOrWhiteSpace(request.ProviderProjectKey))
         {
-            if (string.IsNullOrWhiteSpace(request.ProviderProjectKey))
-            {
-                this.ModelState.AddModelError(nameof(request.ProviderProjectKey), "ProviderProjectKey is required.");
-            }
+            modelState.AddModelError(nameof(request.ProviderProjectKey), "ProviderProjectKey is required.");
         }
 
         if (string.IsNullOrWhiteSpace(request.DefaultBranch))
         {
-            this.ModelState.AddModelError(nameof(request.DefaultBranch), "DefaultBranch is required.");
+            modelState.AddModelError(nameof(request.DefaultBranch), "DefaultBranch is required.");
         }
 
         if (request.TrackedBranches.Count == 0)
         {
-            this.ModelState.AddModelError(nameof(request.TrackedBranches), "At least one tracked branch is required.");
+            modelState.AddModelError(nameof(request.TrackedBranches), "At least one tracked branch is required.");
         }
+    }
 
+    private static void ValidateSourceSelection(ModelStateDictionary modelState, ProCursorKnowledgeSourceRequest request)
+    {
         var hasGuidedSelection = request.OrganizationScopeId.HasValue ||
                                  request.CanonicalSourceRef is not null ||
                                  !string.IsNullOrWhiteSpace(request.SourceDisplayName);
 
         if (hasGuidedSelection)
         {
-            if (!request.OrganizationScopeId.HasValue)
-            {
-                this.ModelState.AddModelError(
-                    nameof(request.OrganizationScopeId),
-                    "OrganizationScopeId is required for guided source selection.");
-            }
-
-            if (request.CanonicalSourceRef is null)
-            {
-                this.ModelState.AddModelError(
-                    nameof(request.CanonicalSourceRef),
-                    "CanonicalSourceRef is required for guided source selection.");
-            }
-            else
-            {
-                if (string.IsNullOrWhiteSpace(request.CanonicalSourceRef.Provider))
-                {
-                    this.ModelState.AddModelError(
-                        nameof(request.CanonicalSourceRef.Provider),
-                        "CanonicalSourceRef.Provider is required.");
-                }
-
-                if (string.IsNullOrWhiteSpace(request.CanonicalSourceRef.Value))
-                {
-                    this.ModelState.AddModelError(
-                        nameof(request.CanonicalSourceRef.Value),
-                        "CanonicalSourceRef.Value is required.");
-                }
-            }
-
-            if (string.IsNullOrWhiteSpace(request.SourceDisplayName))
-            {
-                this.ModelState.AddModelError(
-                    nameof(request.SourceDisplayName),
-                    "SourceDisplayName is required for guided source selection.");
-            }
+            ValidateGuidedSourceSelection(modelState, request);
         }
         else
         {
-            if (string.IsNullOrWhiteSpace(request.ProviderScopePath))
+            ValidateDirectSourceSelection(modelState, request);
+        }
+    }
+
+    private static void ValidateGuidedSourceSelection(ModelStateDictionary modelState, ProCursorKnowledgeSourceRequest request)
+    {
+        if (!request.OrganizationScopeId.HasValue)
+        {
+            modelState.AddModelError(
+                nameof(request.OrganizationScopeId),
+                "OrganizationScopeId is required for guided source selection.");
+        }
+
+        if (request.CanonicalSourceRef is null)
+        {
+            modelState.AddModelError(
+                nameof(request.CanonicalSourceRef),
+                "CanonicalSourceRef is required for guided source selection.");
+        }
+        else
+        {
+            if (string.IsNullOrWhiteSpace(request.CanonicalSourceRef.Provider))
             {
-                this.ModelState.AddModelError(nameof(request.ProviderScopePath), "ProviderScopePath is required.");
+                modelState.AddModelError(
+                    nameof(request.CanonicalSourceRef.Provider),
+                    "CanonicalSourceRef.Provider is required.");
             }
 
-            if (string.IsNullOrWhiteSpace(request.RepositoryId))
+            if (string.IsNullOrWhiteSpace(request.CanonicalSourceRef.Value))
             {
-                this.ModelState.AddModelError(nameof(request.RepositoryId), "RepositoryId is required.");
+                modelState.AddModelError(
+                    nameof(request.CanonicalSourceRef.Value),
+                    "CanonicalSourceRef.Value is required.");
             }
         }
 
-        return this.ModelState.ErrorCount == 0 ? null : this.ValidationProblem();
+        if (string.IsNullOrWhiteSpace(request.SourceDisplayName))
+        {
+            modelState.AddModelError(
+                nameof(request.SourceDisplayName),
+                "SourceDisplayName is required for guided source selection.");
+        }
+    }
+
+    private static void ValidateDirectSourceSelection(ModelStateDictionary modelState, ProCursorKnowledgeSourceRequest request)
+    {
+        if (string.IsNullOrWhiteSpace(request.ProviderScopePath))
+        {
+            modelState.AddModelError(nameof(request.ProviderScopePath), "ProviderScopePath is required.");
+        }
+
+        if (string.IsNullOrWhiteSpace(request.RepositoryId))
+        {
+            modelState.AddModelError(nameof(request.RepositoryId), "RepositoryId is required.");
+        }
     }
 
     private async Task<ProCursorKnowledgeSourceRegistrationRequest> ResolveRegistrationRequestAsync(

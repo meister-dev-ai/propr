@@ -442,7 +442,7 @@ export function useCrawlConfigForm(props: CrawlConfigFormProps, emit: CrawlConfi
       return
     }
 
-    const existingIndex = filter.targetBranchPatterns.findIndex((pattern) => pattern === branchPattern)
+    const existingIndex = filter.targetBranchPatterns.indexOf(branchPattern)
     if (existingIndex >= 0) {
       filter.targetBranchPatterns.splice(existingIndex, 1)
       return
@@ -537,76 +537,164 @@ export function useCrawlConfigForm(props: CrawlConfigFormProps, emit: CrawlConfi
     }
   }
 
+  function validateClientId(): string {
+    if (editMode.value || props.clientId) {
+      return ''
+    }
+    if (!clientId.value.trim()) {
+      return 'Client ID is required.'
+    }
+    return isValidUuid(clientId.value.trim()) ? '' : 'Client ID must be a valid UUID.'
+  }
+
+  function validateOrganizationScope(): string {
+    return !legacyModeWithoutScope.value && !organizationScopeId.value
+      ? 'Select an allowed Azure DevOps organization.'
+      : ''
+  }
+
+  function validateProject(): string {
+    return projectId.value.trim() ? '' : 'Project selection is required.'
+  }
+
+  function validateInterval(): string {
+    return !Number.isInteger(crawlIntervalSeconds.value) || crawlIntervalSeconds.value < 10
+      ? 'Interval must be an integer of at least 10 seconds.'
+      : ''
+  }
+
+  function validateReviewTemperature(): string {
+    const reviewTemperature = parseReviewTemperature()
+    if (reviewTemperature === undefined) {
+      return ''
+    }
+    if (!Number.isFinite(reviewTemperature)) {
+      return 'Review temperature must be a number between 0.0 and 2.0.'
+    }
+    return reviewTemperature < 0 || reviewTemperature > 2
+      ? 'Review temperature must be between 0.0 and 2.0.'
+      : ''
+  }
+
+  function validateRepoFilters(): string {
+    if (!canEditRepoFilters.value) {
+      return ''
+    }
+
+    const hasEmptyRepositoryRow = repoFilters.value.some((filter) => !filter.isLegacy && !filter.selectedFilterKey)
+    if (hasEmptyRepositoryRow) {
+      return 'Select a repository or remove the empty filter row.'
+    }
+
+    const hasBlankBranchPattern = repoFilters.value.some((filter) =>
+      filter.targetBranchPatterns.some((pattern) => normalizeText(pattern).length === 0),
+    )
+    return hasBlankBranchPattern ? 'Branch patterns cannot be blank.' : ''
+  }
+
+  function validateProCursorSourceScope(): string {
+    return usesSelectedProCursorSources.value && serializeProCursorSourceIds().length === 0
+      ? 'Select at least one enabled ProCursor source or switch to all client sources.'
+      : ''
+  }
+
   function validate(): boolean {
-    clientIdError.value = ''
-    organizationScopeIdError.value = ''
-    projectIdError.value = ''
-    intervalError.value = ''
-    reviewTemperatureError.value = ''
-    repoFiltersError.value = ''
-    proCursorSourceScopeError.value = ''
+    clientIdError.value = validateClientId()
+    organizationScopeIdError.value = validateOrganizationScope()
+    projectIdError.value = validateProject()
+    intervalError.value = validateInterval()
+    reviewTemperatureError.value = validateReviewTemperature()
+    repoFiltersError.value = validateRepoFilters()
+    proCursorSourceScopeError.value = validateProCursorSourceScope()
     formError.value = ''
 
-    let valid = true
+    return [
+      clientIdError.value,
+      organizationScopeIdError.value,
+      projectIdError.value,
+      intervalError.value,
+      reviewTemperatureError.value,
+      repoFiltersError.value,
+      proCursorSourceScopeError.value,
+    ].every((message) => message === '')
+  }
 
-    if (!editMode.value && !props.clientId) {
-      if (!clientId.value.trim()) {
-        clientIdError.value = 'Client ID is required.'
-        valid = false
-      } else if (!isValidUuid(clientId.value.trim())) {
-        clientIdError.value = 'Client ID must be a valid UUID.'
-        valid = false
-      }
-    }
-
-    if (!legacyModeWithoutScope.value && !organizationScopeId.value) {
-      organizationScopeIdError.value = 'Select an allowed Azure DevOps organization.'
-      valid = false
-    }
-
-    if (!projectId.value.trim()) {
-      projectIdError.value = 'Project selection is required.'
-      valid = false
-    }
-
-    if (!Number.isInteger(crawlIntervalSeconds.value) || crawlIntervalSeconds.value < 10) {
-      intervalError.value = 'Interval must be an integer of at least 10 seconds.'
-      valid = false
-    }
-
+  async function submitUpdate(configId: string): Promise<void> {
     const reviewTemperature = parseReviewTemperature()
-    if (reviewTemperature !== undefined) {
-      if (!Number.isFinite(reviewTemperature)) {
-        reviewTemperatureError.value = 'Review temperature must be a number between 0.0 and 2.0.'
-        valid = false
-      } else if (reviewTemperature < 0 || reviewTemperature > 2) {
-        reviewTemperatureError.value = 'Review temperature must be between 0.0 and 2.0.'
-        valid = false
-      }
+    const { data, error, response } = await createAdminClient().PATCH('/admin/crawl-configurations/{configId}', {
+      params: { path: { configId } },
+      body: {
+        crawlIntervalSeconds: crawlIntervalSeconds.value,
+        isActive: isActive.value,
+        repoFilters: canEditRepoFilters.value ? serializeRepoFilters() : undefined,
+        proCursorSourceScopeMode: proCursorSourceScopeMode.value,
+        proCursorSourceIds: serializeProCursorSourceIds(),
+        reviewTemperature,
+      },
+    })
+
+    if (response.status === 404) {
+      formError.value = 'Configuration no longer exists.'
+      return
     }
 
-    if (canEditRepoFilters.value) {
-      const hasEmptyRepositoryRow = repoFilters.value.some((filter) => !filter.isLegacy && !filter.selectedFilterKey)
-      if (hasEmptyRepositoryRow) {
-        repoFiltersError.value = 'Select a repository or remove the empty filter row.'
-        valid = false
-      }
-
-      const hasBlankBranchPattern = repoFilters.value.some((filter) =>
-        filter.targetBranchPatterns.some((pattern) => normalizeText(pattern).length === 0),
-      )
-      if (hasBlankBranchPattern) {
-        repoFiltersError.value = 'Branch patterns cannot be blank.'
-        valid = false
-      }
+    if (response.status === 403) {
+      formError.value = 'You do not have permission to edit this configuration.'
+      return
     }
 
-    if (usesSelectedProCursorSources.value && serializeProCursorSourceIds().length === 0) {
-      proCursorSourceScopeError.value = 'Select at least one enabled ProCursor source or switch to all client sources.'
-      valid = false
+    if (response.status === 409) {
+      formError.value = getApiErrorMessage(error, 'One or more guided selections are no longer available in Azure DevOps.')
+      return
     }
 
-    return valid
+    if (!response.ok) {
+      formError.value = getApiErrorMessage(error, 'Failed to update configuration.')
+      return
+    }
+
+    emit('config-saved', data as CrawlConfigResponse)
+  }
+
+  async function submitCreate(): Promise<void> {
+    const reviewTemperature = parseReviewTemperature()
+    const body: CreateAdminCrawlConfigRequest = {
+      clientId: effectiveClientId.value,
+      provider: provider.value,
+      organizationScopeId: organizationScopeId.value || undefined,
+      providerProjectKey: projectId.value.trim(),
+      crawlIntervalSeconds: crawlIntervalSeconds.value,
+      repoFilters: serializeRepoFilters(),
+      proCursorSourceScopeMode: proCursorSourceScopeMode.value,
+      proCursorSourceIds: serializeProCursorSourceIds(),
+      reviewTemperature,
+    }
+
+    const { data, error, response } = await createAdminClient().POST('/admin/crawl-configurations', {
+      body,
+    })
+
+    if (response.status === 403) {
+      formError.value = 'You do not have permission to create a configuration for this client.'
+      return
+    }
+
+    if (response.status === 404) {
+      formError.value = 'Client not found.'
+      return
+    }
+
+    if (response.status === 409) {
+      formError.value = getApiErrorMessage(error, 'A configuration for this organisation and project already exists for this client.')
+      return
+    }
+
+    if (!response.ok) {
+      formError.value = getApiErrorMessage(error, 'Failed to create configuration.')
+      return
+    }
+
+    emit('config-saved', data as CrawlConfigResponse)
   }
 
   async function handleSubmit(): Promise<void> {
@@ -618,81 +706,10 @@ export function useCrawlConfigForm(props: CrawlConfigFormProps, emit: CrawlConfi
 
     try {
       if (editMode.value && props.config?.id) {
-        const reviewTemperature = parseReviewTemperature()
-        const { data, error, response } = await createAdminClient().PATCH('/admin/crawl-configurations/{configId}', {
-          params: { path: { configId: props.config.id } },
-          body: {
-            crawlIntervalSeconds: crawlIntervalSeconds.value,
-            isActive: isActive.value,
-            repoFilters: canEditRepoFilters.value ? serializeRepoFilters() : undefined,
-            proCursorSourceScopeMode: proCursorSourceScopeMode.value,
-            proCursorSourceIds: serializeProCursorSourceIds(),
-            reviewTemperature,
-          },
-        })
-
-        if (response.status === 404) {
-          formError.value = 'Configuration no longer exists.'
-          return
-        }
-
-        if (response.status === 403) {
-          formError.value = 'You do not have permission to edit this configuration.'
-          return
-        }
-
-        if (response.status === 409) {
-          formError.value = getApiErrorMessage(error, 'One or more guided selections are no longer available in Azure DevOps.')
-          return
-        }
-
-        if (!response.ok) {
-          formError.value = getApiErrorMessage(error, 'Failed to update configuration.')
-          return
-        }
-
-        emit('config-saved', data as CrawlConfigResponse)
-        return
+        await submitUpdate(props.config.id)
+      } else {
+        await submitCreate()
       }
-
-      const reviewTemperature = parseReviewTemperature()
-      const body: CreateAdminCrawlConfigRequest = {
-        clientId: effectiveClientId.value,
-        provider: provider.value,
-        organizationScopeId: organizationScopeId.value || undefined,
-        providerProjectKey: projectId.value.trim(),
-        crawlIntervalSeconds: crawlIntervalSeconds.value,
-        repoFilters: serializeRepoFilters(),
-        proCursorSourceScopeMode: proCursorSourceScopeMode.value,
-        proCursorSourceIds: serializeProCursorSourceIds(),
-        reviewTemperature,
-      }
-
-      const { data, error, response } = await createAdminClient().POST('/admin/crawl-configurations', {
-        body,
-      })
-
-      if (response.status === 403) {
-        formError.value = 'You do not have permission to create a configuration for this client.'
-        return
-      }
-
-      if (response.status === 404) {
-        formError.value = 'Client not found.'
-        return
-      }
-
-      if (response.status === 409) {
-        formError.value = getApiErrorMessage(error, 'A configuration for this organisation and project already exists for this client.')
-        return
-      }
-
-      if (!response.ok) {
-        formError.value = getApiErrorMessage(error, 'Failed to create configuration.')
-        return
-      }
-
-      emit('config-saved', data as CrawlConfigResponse)
     } catch (error) {
       formError.value = error instanceof Error ? error.message : 'Connection error. Please try again.'
     } finally {

@@ -69,6 +69,10 @@ export interface UsePatsViewModelOptions {
   copyToClipboard?: (value: string) => Promise<void>
 }
 
+function formatDate(iso: string): string {
+  return new Date(iso).toLocaleString()
+}
+
 export function usePatsViewModel(options: UsePatsViewModelOptions = {}): PatsViewModel {
   const { getAccessToken } = useSession()
   const service = options.service ?? defaultService
@@ -142,10 +146,6 @@ export function usePatsViewModel(options: UsePatsViewModelOptions = {}): PatsVie
     if (generatedToken.value) {
       await copyFn(generatedToken.value)
     }
-  }
-
-  function formatDate(iso: string): string {
-    return new Date(iso).toLocaleString()
   }
 
   if (autoLoad) {

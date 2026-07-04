@@ -115,21 +115,21 @@ internal static class ToolTimingCollectorContext
             {
                 var result = await action();
                 this.AddPhase(
-                    name, displayName, occurrence, startedAt, DateTimeOffset.UtcNow, stopwatch.ElapsedMilliseconds, ProtocolEventTimingAvailabilities.Captured,
+                    name, displayName, occurrence, new PhaseTimingWindow(startedAt, DateTimeOffset.UtcNow, stopwatch.ElapsedMilliseconds),
                     ProtocolEventToolOutcomes.Succeeded, summaryFactory?.Invoke(result));
                 return result;
             }
             catch (OperationCanceledException ex)
             {
                 this.AddPhase(
-                    name, displayName, occurrence, startedAt, DateTimeOffset.UtcNow, stopwatch.ElapsedMilliseconds, ProtocolEventTimingAvailabilities.Captured,
+                    name, displayName, occurrence, new PhaseTimingWindow(startedAt, DateTimeOffset.UtcNow, stopwatch.ElapsedMilliseconds),
                     ProtocolEventToolOutcomes.Cancelled, ex.Message);
                 throw;
             }
             catch (Exception ex)
             {
                 this.AddPhase(
-                    name, displayName, occurrence, startedAt, DateTimeOffset.UtcNow, stopwatch.ElapsedMilliseconds, ProtocolEventTimingAvailabilities.Captured,
+                    name, displayName, occurrence, new PhaseTimingWindow(startedAt, DateTimeOffset.UtcNow, stopwatch.ElapsedMilliseconds),
                     ProtocolEventToolOutcomes.Failed, ex.Message);
                 throw;
             }
@@ -149,21 +149,21 @@ internal static class ToolTimingCollectorContext
             {
                 var result = action();
                 this.AddPhase(
-                    name, displayName, occurrence, startedAt, DateTimeOffset.UtcNow, stopwatch.ElapsedMilliseconds, ProtocolEventTimingAvailabilities.Captured,
+                    name, displayName, occurrence, new PhaseTimingWindow(startedAt, DateTimeOffset.UtcNow, stopwatch.ElapsedMilliseconds),
                     ProtocolEventToolOutcomes.Succeeded, summaryFactory?.Invoke(result));
                 return result;
             }
             catch (OperationCanceledException ex)
             {
                 this.AddPhase(
-                    name, displayName, occurrence, startedAt, DateTimeOffset.UtcNow, stopwatch.ElapsedMilliseconds, ProtocolEventTimingAvailabilities.Captured,
+                    name, displayName, occurrence, new PhaseTimingWindow(startedAt, DateTimeOffset.UtcNow, stopwatch.ElapsedMilliseconds),
                     ProtocolEventToolOutcomes.Cancelled, ex.Message);
                 throw;
             }
             catch (Exception ex)
             {
                 this.AddPhase(
-                    name, displayName, occurrence, startedAt, DateTimeOffset.UtcNow, stopwatch.ElapsedMilliseconds, ProtocolEventTimingAvailabilities.Captured,
+                    name, displayName, occurrence, new PhaseTimingWindow(startedAt, DateTimeOffset.UtcNow, stopwatch.ElapsedMilliseconds),
                     ProtocolEventToolOutcomes.Failed, ex.Message);
                 throw;
             }
@@ -191,10 +191,7 @@ internal static class ToolTimingCollectorContext
             string name,
             string displayName,
             int occurrence,
-            DateTimeOffset startedAt,
-            DateTimeOffset completedAt,
-            long durationMs,
-            string availability,
+            PhaseTimingWindow window,
             string outcome,
             string? summary)
         {
@@ -204,12 +201,14 @@ internal static class ToolTimingCollectorContext
                     displayName,
                     this._nextSequence++,
                     occurrence > 1 ? occurrence : null,
-                    startedAt,
-                    completedAt,
-                    durationMs,
-                    availability,
+                    window.StartedAt,
+                    window.CompletedAt,
+                    window.DurationMs,
+                    ProtocolEventTimingAvailabilities.Captured,
                     outcome,
                     summary));
         }
+
+        private readonly record struct PhaseTimingWindow(DateTimeOffset StartedAt, DateTimeOffset CompletedAt, long DurationMs);
     }
 }

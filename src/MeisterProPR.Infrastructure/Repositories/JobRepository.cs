@@ -867,7 +867,7 @@ public sealed partial class JobRepository(
             .Where(scope => jobs.Select(job => job.Id).Contains(scope.ReviewJobId))
             .OrderBy(scope => scope.CreatedAt)
             .AsNoTracking()
-            .ToList()
+            .AsEnumerable()
             .GroupBy(scope => scope.ReviewJobId)
             .ToDictionary(
                 group => group.Key,

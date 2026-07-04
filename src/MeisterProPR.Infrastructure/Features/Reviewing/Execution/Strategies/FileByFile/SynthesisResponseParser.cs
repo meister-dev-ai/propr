@@ -105,48 +105,11 @@ internal static class SynthesisResponseParser
             var result = new List<CandidateReviewFinding>();
             foreach (var item in concernsEl.EnumerateArray())
             {
-                var message = item.TryGetProperty("message", out var msgEl) ? msgEl.GetString() : null;
-                if (string.IsNullOrWhiteSpace(message))
+                var finding = TryParseCrossCuttingConcern(item, result.Count + 1);
+                if (finding is not null)
                 {
-                    continue;
+                    result.Add(finding);
                 }
-
-                var severity = CommentSeverity.Warning;
-                if (item.TryGetProperty("severity", out var sevEl))
-                {
-                    var sevStr = sevEl.GetString() ?? string.Empty;
-                    severity = sevStr.ToLowerInvariant() switch
-                    {
-                        "error" => CommentSeverity.Error,
-                        "info" => CommentSeverity.Info,
-                        "suggestion" => CommentSeverity.Suggestion,
-                        _ => CommentSeverity.Warning,
-                    };
-                }
-
-                var category = item.TryGetProperty("category", out var categoryEl)
-                    ? categoryEl.GetString()
-                    : null;
-                category = string.IsNullOrWhiteSpace(category)
-                    ? CandidateReviewFinding.CrossCuttingCategory
-                    : category;
-
-                var summaryText = item.TryGetProperty("candidateSummaryText", out var summaryEl)
-                    ? summaryEl.GetString()
-                    : null;
-                var evidence = ParseEvidenceReference(item);
-
-                result.Add(
-                    new CandidateReviewFinding(
-                        $"finding-cc-unassigned-{result.Count + 1:D3}",
-                        new CandidateFindingProvenance(
-                            CandidateFindingProvenance.SynthesizedCrossCuttingOrigin,
-                            "synthesis"),
-                        severity,
-                        message,
-                        category,
-                        evidence: evidence,
-                        candidateSummaryText: summaryText));
             }
 
             return result;
@@ -155,6 +118,51 @@ internal static class SynthesisResponseParser
         {
             return [];
         }
+    }
+
+    private static CandidateReviewFinding? TryParseCrossCuttingConcern(JsonElement item, int ordinal)
+    {
+        var message = item.TryGetProperty("message", out var msgEl) ? msgEl.GetString() : null;
+        if (string.IsNullOrWhiteSpace(message))
+        {
+            return null;
+        }
+
+        var severity = CommentSeverity.Warning;
+        if (item.TryGetProperty("severity", out var sevEl))
+        {
+            var sevStr = sevEl.GetString() ?? string.Empty;
+            severity = sevStr.ToLowerInvariant() switch
+            {
+                "error" => CommentSeverity.Error,
+                "info" => CommentSeverity.Info,
+                "suggestion" => CommentSeverity.Suggestion,
+                _ => CommentSeverity.Warning,
+            };
+        }
+
+        var category = item.TryGetProperty("category", out var categoryEl)
+            ? categoryEl.GetString()
+            : null;
+        category = string.IsNullOrWhiteSpace(category)
+            ? CandidateReviewFinding.CrossCuttingCategory
+            : category;
+
+        var summaryText = item.TryGetProperty("candidateSummaryText", out var summaryEl)
+            ? summaryEl.GetString()
+            : null;
+        var evidence = ParseEvidenceReference(item);
+
+        return new CandidateReviewFinding(
+            $"finding-cc-unassigned-{ordinal:D3}",
+            new CandidateFindingProvenance(
+                CandidateFindingProvenance.SynthesizedCrossCuttingOrigin,
+                "synthesis"),
+            severity,
+            message,
+            category,
+            evidence: evidence,
+            candidateSummaryText: summaryText);
     }
 
     private static EvidenceReference ParseEvidenceReference(JsonElement item)

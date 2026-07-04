@@ -637,10 +637,6 @@ const {
   align-items: center;
 }
 
-.ai-advanced-settings-body {
-  margin-top: 0.25rem;
-}
-
 .ai-model-row,
 .ai-binding-row {
   border: 1px solid var(--color-border);

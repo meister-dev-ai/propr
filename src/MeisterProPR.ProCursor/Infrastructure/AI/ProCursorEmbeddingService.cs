@@ -73,12 +73,7 @@ public sealed class ProCursorEmbeddingService(
         }
 
         var deployment = await embeddingBroker.GetDeploymentAsync(clientId, this._options.EmbeddingDimensions, ct);
-
-        var embeddings = new List<float[]>(inputs.Count);
-        var currentBatch = new List<string>();
-        var currentBatchContexts = new List<ProCursorTokenUsageInputContext?>();
-        var currentBatchTokenCount = 0;
-        var batchOrdinal = 0;
+        var state = new EmbeddingBatchState();
 
         for (var index = 0; index < inputs.Count; index++)
         {
@@ -91,75 +86,48 @@ public sealed class ProCursorEmbeddingService(
                     $"Embedding input exceeds the configured limit of {deployment.MaxInputTokens} tokens for deployment '{deployment.DeploymentName}'.");
             }
 
-            if (currentBatch.Count > 0 && currentBatchTokenCount + tokenCount > deployment.MaxInputTokens)
+            if (state.PendingInputs.Count > 0 && state.PendingTokenCount + tokenCount > deployment.MaxInputTokens)
             {
-                batchOrdinal = await AppendBatchEmbeddingsAsync(
-                    embeddingBroker,
-                    deployment,
-                    clientId,
-                    tokenUsageRecorder,
-                    usageContext,
-                    currentBatch,
-                    currentBatchContexts,
-                    currentBatchTokenCount,
-                    batchOrdinal,
-                    embeddings,
-                    ct);
-                currentBatchTokenCount = 0;
+                await AppendBatchEmbeddingsAsync(embeddingBroker, deployment, clientId, tokenUsageRecorder, usageContext, state, ct);
             }
 
-            currentBatch.Add(input);
-            currentBatchContexts.Add(
+            state.PendingInputs.Add(input);
+            state.PendingContexts.Add(
                 usageContext?.InputContexts is not null && usageContext.InputContexts.Count > index
                     ? usageContext.InputContexts[index]
                     : null);
-            currentBatchTokenCount += tokenCount;
+            state.PendingTokenCount += tokenCount;
         }
 
-        _ = await AppendBatchEmbeddingsAsync(
-            embeddingBroker,
-            deployment,
-            clientId,
-            tokenUsageRecorder,
-            usageContext,
-            currentBatch,
-            currentBatchContexts,
-            currentBatchTokenCount,
-            batchOrdinal,
-            embeddings,
-            ct);
-        return embeddings.AsReadOnly();
+        await AppendBatchEmbeddingsAsync(embeddingBroker, deployment, clientId, tokenUsageRecorder, usageContext, state, ct);
+        return state.Embeddings.AsReadOnly();
     }
 
-    private static async Task<int> AppendBatchEmbeddingsAsync(
+    private static async Task AppendBatchEmbeddingsAsync(
         IProCursorEmbeddingBroker embeddingBroker,
         ProCursorEmbeddingDeploymentDto deployment,
         Guid clientId,
         IProCursorTokenUsageRecorder? tokenUsageRecorder,
         ProCursorEmbeddingUsageContext? usageContext,
-        List<string> batch,
-        List<ProCursorTokenUsageInputContext?> batchContexts,
-        int promptTokenCount,
-        int batchOrdinal,
-        List<float[]> embeddings,
+        EmbeddingBatchState state,
         CancellationToken ct)
     {
-        if (batch.Count == 0)
+        if (state.PendingInputs.Count == 0)
         {
-            return batchOrdinal;
+            return;
         }
 
         var result = await embeddingBroker.GenerateEmbeddingsAsync(
             clientId,
-            batch.AsReadOnly(),
+            state.PendingInputs.AsReadOnly(),
             deployment.EmbeddingDimensions,
             ct);
-        if (result.Embeddings.Count != batch.Count)
+        if (result.Embeddings.Count != state.PendingInputs.Count)
         {
-            throw new InvalidOperationException($"Expected {batch.Count} embedding vectors but received {result.Embeddings.Count}.");
+            throw new InvalidOperationException($"Expected {state.PendingInputs.Count} embedding vectors but received {result.Embeddings.Count}.");
         }
 
-        embeddings.AddRange(result.Embeddings);
+        state.Embeddings.AddRange(result.Embeddings);
 
         if (tokenUsageRecorder is not null && usageContext is not null)
         {
@@ -167,14 +135,14 @@ public sealed class ProCursorEmbeddingService(
                 result.PromptTokens,
                 result.CompletionTokens,
                 result.TotalTokens,
-                promptTokenCount);
-            var firstContext = batchContexts.FirstOrDefault(context => context is not null);
+                state.PendingTokenCount);
+            var firstContext = state.PendingContexts.FirstOrDefault(context => context is not null);
             await tokenUsageRecorder.RecordAsync(
                 new ProCursorTokenUsageCaptureRequest(
                     clientId,
                     usageContext.ProCursorSourceId,
                     usageContext.SourceDisplayNameSnapshot,
-                    $"{usageContext.RequestIdPrefix}:{usageContext.CallType.ToString().ToLowerInvariant()}:{batchOrdinal}",
+                    $"{usageContext.RequestIdPrefix}:{usageContext.CallType.ToString().ToLowerInvariant()}:{state.BatchOrdinal}",
                     DateTimeOffset.UtcNow,
                     usageContext.CallType,
                     deployment.DeploymentName,
@@ -197,9 +165,27 @@ public sealed class ProCursorEmbeddingService(
                 ct);
         }
 
-        batch.Clear();
-        batchContexts.Clear();
-        return batchOrdinal + 1;
+        state.PendingInputs.Clear();
+        state.PendingContexts.Clear();
+        state.PendingTokenCount = 0;
+        state.BatchOrdinal++;
+    }
+
+    /// <summary>
+    ///     Mutable accumulator for the batch currently being assembled, and the embeddings produced by
+    ///     every batch flushed so far, for a single embedding-generation call.
+    /// </summary>
+    private sealed class EmbeddingBatchState
+    {
+        public List<string> PendingInputs { get; } = [];
+
+        public List<ProCursorTokenUsageInputContext?> PendingContexts { get; } = [];
+
+        public int PendingTokenCount { get; set; }
+
+        public int BatchOrdinal { get; set; }
+
+        public List<float[]> Embeddings { get; } = [];
     }
 
     private static CapturedUsage ResolveCapturedUsage(
@@ -256,32 +242,7 @@ public sealed class ProCursorEmbeddingService(
         var lines = normalizedContent.Split('\n');
         var newlineTokenCount = EmbeddingTokenizerRegistry.CountTokens(tokenizerName, "\n");
         var splitChunks = new List<ProCursorExtractedChunk>();
-        var currentLines = new List<string>();
-        var currentTokenCount = 0;
-        int? currentLineStart = null;
-        int? currentLineEnd = null;
-
-        void FlushCurrentChunk()
-        {
-            if (currentLines.Count == 0)
-            {
-                return;
-            }
-
-            var content = string.Join('\n', currentLines).Trim();
-            currentLines.Clear();
-            currentTokenCount = 0;
-            if (string.IsNullOrWhiteSpace(content))
-            {
-                currentLineStart = null;
-                currentLineEnd = null;
-                return;
-            }
-
-            splitChunks.Add(CreateChunk(chunk, currentLineStart, currentLineEnd, content));
-            currentLineStart = null;
-            currentLineEnd = null;
-        }
+        var accumulator = new LineChunkAccumulator();
 
         for (var index = 0; index < lines.Length; index++)
         {
@@ -289,40 +250,93 @@ public sealed class ProCursorEmbeddingService(
             var lineNumber = chunk.LineStart.HasValue
                 ? chunk.LineStart.Value + index
                 : (int?)null;
-            var lineTokenCount = EmbeddingTokenizerRegistry.CountTokens(tokenizerName, line);
 
-            if (lineTokenCount > maxInputTokens)
-            {
-                FlushCurrentChunk();
-
-                foreach (var segment in SplitOversizedText(line, tokenizerName, maxInputTokens))
-                {
-                    splitChunks.Add(CreateChunk(chunk, lineNumber, lineNumber, segment));
-                }
-
-                continue;
-            }
-
-            var additionalTokens = currentLines.Count == 0
-                ? lineTokenCount
-                : newlineTokenCount + lineTokenCount;
-            if (currentLines.Count > 0 && currentTokenCount + additionalTokens > maxInputTokens)
-            {
-                FlushCurrentChunk();
-            }
-
-            if (currentLines.Count == 0)
-            {
-                currentLineStart = lineNumber;
-            }
-
-            currentLines.Add(line);
-            currentTokenCount += currentLines.Count == 1 ? lineTokenCount : additionalTokens;
-            currentLineEnd = lineNumber;
+            AccumulateLineForChunkSplit(chunk, tokenizerName, maxInputTokens, newlineTokenCount, accumulator, splitChunks, line, lineNumber);
         }
 
-        FlushCurrentChunk();
+        FlushCurrentChunk(chunk, accumulator, splitChunks);
         return splitChunks.Count == 0 ? [chunk] : splitChunks.AsReadOnly();
+    }
+
+    private static void AccumulateLineForChunkSplit(
+        ProCursorExtractedChunk chunk,
+        string tokenizerName,
+        int maxInputTokens,
+        int newlineTokenCount,
+        LineChunkAccumulator accumulator,
+        List<ProCursorExtractedChunk> splitChunks,
+        string line,
+        int? lineNumber)
+    {
+        var lineTokenCount = EmbeddingTokenizerRegistry.CountTokens(tokenizerName, line);
+
+        if (lineTokenCount > maxInputTokens)
+        {
+            FlushCurrentChunk(chunk, accumulator, splitChunks);
+
+            foreach (var segment in SplitOversizedText(line, tokenizerName, maxInputTokens))
+            {
+                splitChunks.Add(CreateChunk(chunk, lineNumber, lineNumber, segment));
+            }
+
+            return;
+        }
+
+        var additionalTokens = accumulator.Lines.Count == 0
+            ? lineTokenCount
+            : newlineTokenCount + lineTokenCount;
+        if (accumulator.Lines.Count > 0 && accumulator.TokenCount + additionalTokens > maxInputTokens)
+        {
+            FlushCurrentChunk(chunk, accumulator, splitChunks);
+        }
+
+        if (accumulator.Lines.Count == 0)
+        {
+            accumulator.LineStart = lineNumber;
+        }
+
+        accumulator.Lines.Add(line);
+        accumulator.TokenCount += accumulator.Lines.Count == 1 ? lineTokenCount : additionalTokens;
+        accumulator.LineEnd = lineNumber;
+    }
+
+    private static void FlushCurrentChunk(
+        ProCursorExtractedChunk chunk,
+        LineChunkAccumulator accumulator,
+        List<ProCursorExtractedChunk> splitChunks)
+    {
+        if (accumulator.Lines.Count == 0)
+        {
+            return;
+        }
+
+        var content = string.Join('\n', accumulator.Lines).Trim();
+        accumulator.Lines.Clear();
+        accumulator.TokenCount = 0;
+        if (string.IsNullOrWhiteSpace(content))
+        {
+            accumulator.LineStart = null;
+            accumulator.LineEnd = null;
+            return;
+        }
+
+        splitChunks.Add(CreateChunk(chunk, accumulator.LineStart, accumulator.LineEnd, content));
+        accumulator.LineStart = null;
+        accumulator.LineEnd = null;
+    }
+
+    /// <summary>
+    ///     Mutable accumulator for the run of lines currently being assembled into the next split chunk.
+    /// </summary>
+    private sealed class LineChunkAccumulator
+    {
+        public List<string> Lines { get; } = [];
+
+        public int TokenCount { get; set; }
+
+        public int? LineStart { get; set; }
+
+        public int? LineEnd { get; set; }
     }
 
     private static IReadOnlyList<string> SplitOversizedText(string text, string tokenizerName, int maxInputTokens)

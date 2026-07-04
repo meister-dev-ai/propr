@@ -1,6 +1,7 @@
 # Build context: repository root (example/docker-compose sets context: ../..)
 # Stage 1: Build
-FROM node:26-alpine@sha256:a2dc166a387cc6ca1e62d0c8e265e49ca985d6e60abc9fe6e6c3d6ce8e63f606 AS builder
+# node:26-alpine
+FROM node@sha256:a2dc166a387cc6ca1e62d0c8e265e49ca985d6e60abc9fe6e6c3d6ce8e63f606 AS builder
 WORKDIR /app
 # Copy openapi.json from repo root for code generation
 COPY openapi.json ./openapi.json
@@ -16,7 +17,8 @@ RUN npx openapi-typescript ./openapi.json -o src/services/generated/openapi.ts
 RUN npm run build
 
 # Stage 2: Serve
-FROM docker.io/library/nginx:alpine@sha256:d565d19ef132a5834f5897f602831ad2e40a36c26c625f2f94f9b3fdf0ed292d
+# docker.io/library/nginx:alpine
+FROM docker.io/library/nginx@sha256:d565d19ef132a5834f5897f602831ad2e40a36c26c625f2f94f9b3fdf0ed292d
 COPY frontend/nginx.conf /etc/nginx/conf.d/default.conf
 COPY --from=builder /app/dist /usr/share/nginx/html
 EXPOSE 80

@@ -114,16 +114,15 @@ public sealed class RuntimeConfiguredKnowledgeSourceRepository(
 
     public Task AddAsync(ProCursorKnowledgeSource source, CancellationToken ct = default)
     {
-        ArgumentNullException.ThrowIfNull(source);
-        lock (this._lock)
-        {
-            this._sourcesById[source.Id] = new CacheEntry(Clone(source), Guid.NewGuid().ToString("N"), DateTimeOffset.UtcNow);
-        }
-
-        return Task.CompletedTask;
+        return this.UpsertAsync(source);
     }
 
     public Task UpdateAsync(ProCursorKnowledgeSource source, CancellationToken ct = default)
+    {
+        return this.UpsertAsync(source);
+    }
+
+    private Task UpsertAsync(ProCursorKnowledgeSource source)
     {
         ArgumentNullException.ThrowIfNull(source);
         lock (this._lock)

@@ -2,13 +2,14 @@
 <!-- Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms. -->
 
 <template>
-  <div class="state-card success-state" role="status">
+  <output class="state-card success-state">
     <slot>Saved successfully.</slot>
-  </div>
+  </output>
 </template>
 
 <style scoped>
 .success-state {
+  display: block;
   color: var(--color-success);
 }
 </style>

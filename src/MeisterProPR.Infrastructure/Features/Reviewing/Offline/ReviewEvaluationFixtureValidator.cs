@@ -33,6 +33,21 @@ public sealed class ReviewEvaluationFixtureValidator : IReviewEvaluationFixtureV
             .Select(file => file.Path)
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
 
+        ValidateChangedFilesExistInSnapshot(fixture, snapshotPaths);
+
+        var proRvExpectations = fixture.ProRVPrefilterExpectationsOrNull;
+        if (proRvExpectations is null)
+        {
+            return Task.CompletedTask;
+        }
+
+        ValidateProRvPositiveExamples(proRvExpectations, changedFilePaths);
+
+        return Task.CompletedTask;
+    }
+
+    private static void ValidateChangedFilesExistInSnapshot(ReviewEvaluationFixture fixture, HashSet<string> snapshotPaths)
+    {
         foreach (var changedFile in fixture.PullRequestSnapshot.ChangedFiles)
         {
             if (changedFile.ChangeType == ChangeType.Delete)
@@ -45,13 +60,10 @@ public sealed class ReviewEvaluationFixtureValidator : IReviewEvaluationFixtureV
                 throw new InvalidOperationException($"Fixture changed file '{changedFile.Path}' was not found in the repository snapshot.");
             }
         }
+    }
 
-        var proRvExpectations = fixture.ProRVPrefilterExpectationsOrNull;
-        if (proRvExpectations is null)
-        {
-            return Task.CompletedTask;
-        }
-
+    private static void ValidateProRvPositiveExamples(FixtureProRVPrefilterExpectations proRvExpectations, HashSet<string> changedFilePaths)
+    {
         foreach (var example in proRvExpectations.PositiveExamplesOrEmpty)
         {
             if (string.IsNullOrWhiteSpace(example.Key))
@@ -80,7 +92,5 @@ public sealed class ReviewEvaluationFixtureValidator : IReviewEvaluationFixtureV
                 throw new InvalidOperationException($"Fixture ProRV prefilter expectation '{example.Key}' must not contain empty expectedItemIds values.");
             }
         }
-
-        return Task.CompletedTask;
     }
 }

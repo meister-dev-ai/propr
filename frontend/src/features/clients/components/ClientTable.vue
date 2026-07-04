@@ -97,7 +97,7 @@ function clientDetailRoute(clientId: string) {
 }
 
 function openClient(clientId: string) {
-  void router.push(clientDetailRoute(clientId))
+  router.push(clientDetailRoute(clientId))
 }
 </script>
 

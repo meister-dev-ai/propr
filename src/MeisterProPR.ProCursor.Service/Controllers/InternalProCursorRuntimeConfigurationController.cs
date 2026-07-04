@@ -13,6 +13,7 @@ namespace MeisterProPR.ProCursor.Service.Controllers;
 /// </summary>
 [ApiController]
 [Authorize(AuthenticationSchemes = ProCursorSharedKeyAuthenticationDefaults.Scheme)]
+[Route("internal/procursor/runtime-config/sources/{sourceId:guid}")]
 public sealed class InternalProCursorRuntimeConfigurationController(IProCursorRuntimeConfigurationCache cache) : ControllerBase
 {
     /// <summary>
@@ -22,7 +23,7 @@ public sealed class InternalProCursorRuntimeConfigurationController(IProCursorRu
     /// <param name="ct">Cancellation token for the request.</param>
     /// <returns>An acknowledgement that invalidation completed.</returns>
     /// <response code="200">The runtime configuration cache entry was invalidated.</response>
-    [HttpPost("/internal/procursor/runtime-config/sources/{sourceId:guid}/invalidate")]
+    [HttpPost("invalidate")]
     public async Task<IActionResult> Invalidate(Guid sourceId, CancellationToken ct)
     {
         await cache.InvalidateAsync(sourceId, ct);

@@ -222,8 +222,8 @@ internal sealed partial class ToolAwareAiReviewCore(
                         outputSample,
                         cancellationToken,
                         cachedInputTokens: cachedInputTokens,
-                        cacheStatus: ResolveCacheStatus(systemContext, inputTokens, cachedInputTokens, messagesToSend),
-                        cacheMissCategory: ResolveCacheMissCategory(systemContext, inputTokens, cachedInputTokens, messagesToSend),
+                        cacheStatus: ResolveCacheStatus(systemContext, cachedInputTokens, messagesToSend),
+                        cacheMissCategory: ResolveCacheMissCategory(systemContext, cachedInputTokens, messagesToSend),
                         prefixEligibility: ResolvePrefixEligibility(systemContext, messagesToSend));
                     await RecordSessionBindingEventIfNeededAsync(systemContext, state, cancellationToken);
                     await RecordSessionTurnEventAsync(systemContext, state, inputSample, outputSample, cancellationToken);
@@ -381,9 +381,9 @@ internal sealed partial class ToolAwareAiReviewCore(
                         "ai_call_forced_final",
                         cachedInputTokens: finalCachedInputTokens,
                         cacheStatus: ResolveCacheStatus(
-                            systemContext, finalResponse.Usage?.InputTokenCount, finalCachedInputTokens, BuildMessagesForForcedFinalTurn(state)),
+                            systemContext, finalCachedInputTokens, BuildMessagesForForcedFinalTurn(state)),
                         cacheMissCategory: ResolveCacheMissCategory(
-                            systemContext, finalResponse.Usage?.InputTokenCount, finalCachedInputTokens, BuildMessagesForForcedFinalTurn(state)),
+                            systemContext, finalCachedInputTokens, BuildMessagesForForcedFinalTurn(state)),
                         prefixEligibility: ResolvePrefixEligibility(systemContext, BuildMessagesForForcedFinalTurn(state)),
                         finalizationAttemptKind: "ForcedFinal",
                         finalizationReason: "iteration_limit_reached",
@@ -498,9 +498,9 @@ internal sealed partial class ToolAwareAiReviewCore(
                 cancellationToken,
                 "ai_call_schema_repair",
                 cachedInputTokens: correctionCachedInputTokens,
-                cacheStatus: ResolveCacheStatus(systemContext, correctionResponse.Usage?.InputTokenCount, correctionCachedInputTokens, state.Messages),
+                cacheStatus: ResolveCacheStatus(systemContext, correctionCachedInputTokens, state.Messages),
                 cacheMissCategory: ResolveCacheMissCategory(
-                    systemContext, correctionResponse.Usage?.InputTokenCount, correctionCachedInputTokens, state.Messages),
+                    systemContext, correctionCachedInputTokens, state.Messages),
                 prefixEligibility: ResolvePrefixEligibility(systemContext, state.Messages),
                 finalizationAttemptKind: "SchemaRepair",
                 finalizationReason: "malformed_or_incomplete_final_response",
@@ -514,11 +514,14 @@ internal sealed partial class ToolAwareAiReviewCore(
 
     private static AgentReviewSessionMode ResolveInitialSessionMode(ReviewSystemContext systemContext)
     {
-        return systemContext.PerFileHint is not null && systemContext.RuntimeCapabilities.SupportsManagedRemoteConversation
+        if (systemContext.PerFileHint is null)
+        {
+            return AgentReviewSessionMode.StatelessReplay;
+        }
+
+        return systemContext.RuntimeCapabilities.SupportsManagedRemoteConversation
             ? AgentReviewSessionMode.ProviderManagedSession
-            : systemContext.PerFileHint is not null
-                ? AgentReviewSessionMode.LocalManagedSession
-                : AgentReviewSessionMode.StatelessReplay;
+            : AgentReviewSessionMode.LocalManagedSession;
     }
 
     private static int ResolveMaxOutputTokens(AiReviewOptions opts, FileComplexityTier? tier)
@@ -533,7 +536,6 @@ internal sealed partial class ToolAwareAiReviewCore(
 
     private static CacheCallStatus ResolveCacheStatus(
         ReviewSystemContext systemContext,
-        long? inputTokens,
         long? cachedInputTokens,
         IList<ChatMessage> messages)
     {
@@ -565,11 +567,10 @@ internal sealed partial class ToolAwareAiReviewCore(
 
     private static string? ResolveCacheMissCategory(
         ReviewSystemContext systemContext,
-        long? inputTokens,
         long? cachedInputTokens,
         IList<ChatMessage> messages)
     {
-        var status = ResolveCacheStatus(systemContext, inputTokens, cachedInputTokens, messages);
+        var status = ResolveCacheStatus(systemContext, cachedInputTokens, messages);
         return status switch
         {
             CacheCallStatus.Unsupported => "provider_unsupported",

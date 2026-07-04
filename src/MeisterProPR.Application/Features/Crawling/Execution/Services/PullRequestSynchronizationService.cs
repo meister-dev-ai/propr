@@ -91,42 +91,17 @@ public sealed class PullRequestSynchronizationService(
             await this.RunThreadMemoryStateMachineAsync(request, reviewerId, ct);
             await this.IngestRetainedThreadsAsync(request, reviewerIdentity, reviewerId, ct);
 
-            var iterationId = request.CandidateIterationId;
-            if (!iterationId.HasValue)
-            {
-                iterationId = TryCreateSyntheticIterationId(request.ReviewRevision);
-            }
-
-            if (!iterationId.HasValue)
-            {
-                if (iterationResolver is null)
-                {
-                    throw new InvalidOperationException("No pull-request iteration resolver is registered for shared synchronization.");
-                }
-
-                iterationId = await iterationResolver.GetLatestIterationIdAsync(
-                    request.ClientId,
-                    request.ProviderScopePath,
-                    request.ProviderProjectKey,
-                    request.RepositoryId,
-                    request.PullRequestId,
-                    ct);
-            }
-
-            activity?.SetTag("pull_request.iteration_id", iterationId.Value);
+            var iterationId = await this.ResolveIterationIdAsync(request, ct);
+            activity?.SetTag("pull_request.iteration_id", iterationId);
 
             var currentRevisionKey = ReviewRevisionKeys.TryGetStoredKey(request.ReviewRevision);
-            var activeJobReconciliation = await this.ReconcileActiveJobsAsync(
-                request,
-                iterationId.Value,
-                currentRevisionKey,
-                ct);
+            var activeJobReconciliation = await this.ReconcileActiveJobsAsync(request, currentRevisionKey, ct);
             if (activeJobReconciliation.DuplicateOutcome is not null)
             {
                 return CompleteOutcome(activity, startedAt, request, activeJobReconciliation.DuplicateOutcome);
             }
 
-            var reviewDecision = await this.EvaluateReviewDecisionAsync(request, reviewerId, iterationId.Value, ct);
+            var reviewDecision = await this.EvaluateReviewDecisionAsync(request, reviewerId, iterationId, ct);
             if (reviewDecision is not null)
             {
                 return CompleteOutcome(
@@ -136,97 +111,13 @@ public sealed class PullRequestSynchronizationService(
                     MergeOutcome(activeJobReconciliation, reviewDecision));
             }
 
-            var job = new ReviewJob(
-                Guid.NewGuid(),
-                request.ClientId,
-                request.ProviderScopePath,
-                request.ProviderProjectKey,
-                request.RepositoryId,
-                request.PullRequestId,
-                iterationId.Value);
-
-            job.SelectReviewStrategy(await this.ResolveStrategySelectionAsync(request, ct));
-
-            if (request.ReviewTemperature.HasValue)
-            {
-                job.SetAiConfig(job.AiConnectionId, job.AiModel, request.ReviewTemperature);
-            }
-
-            if (request.CodeReview is not null)
-            {
-                job.SetProviderReviewContext(request.CodeReview);
-            }
-
-            if (request.ReviewRevision is not null)
-            {
-                job.SetReviewRevision(request.ReviewRevision);
-            }
-
-            var scopeOutcome = this.TryApplyProCursorSourceScope(request, job);
-            if (scopeOutcome is not null)
-            {
-                return CompleteOutcome(
-                    activity,
-                    startedAt,
-                    request,
-                    MergeOutcome(activeJobReconciliation, scopeOutcome));
-            }
-
-            var addResult = await jobs.TryAddIfNoActiveDuplicateAsync(job, ct);
-            if (!addResult.WasAdded)
-            {
-                var duplicateRevisionKey = ReviewRevisionKeys.TryGetStoredKey(job.ReviewRevisionReference);
-                var duplicateActionSummary = !string.IsNullOrWhiteSpace(duplicateRevisionKey)
-                    ? $"Skipped duplicate active job for PR #{request.PullRequestId} at revision {duplicateRevisionKey} via {request.SummaryLabel}."
-                    : $"Skipped duplicate active job for PR #{request.PullRequestId} at iteration {iterationId.Value} via {request.SummaryLabel}.";
-
-                outcome = new PullRequestSynchronizationOutcome(
-                    PullRequestSynchronizationReviewDecision.DuplicateActiveJob,
-                    activeJobReconciliation.LifecycleDecision,
-                    [
-                        ..activeJobReconciliation.ActionSummaries,
-                        duplicateActionSummary,
-                    ]);
-                return CompleteOutcome(activity, startedAt, request, outcome);
-            }
-
-            if (addResult.CancelledSupersededJobCount > 0
-                && !activeJobReconciliation.ActionSummaries.Any(summary => summary.Contains(
-                    "Cancelled ",
-                    StringComparison.OrdinalIgnoreCase)))
-            {
-                activeJobReconciliation = new ActiveJobReconciliationResult(
-                    activeJobReconciliation.DuplicateOutcome,
-                    PullRequestSynchronizationLifecycleDecision.CancelledActiveJobs,
-                    [
-                        ..activeJobReconciliation.ActionSummaries,
-                        $"Cancelled {addResult.CancelledSupersededJobCount} superseded active review job(s) for PR #{request.PullRequestId} before evaluating revision {currentRevisionKey} via {request.SummaryLabel}.",
-                    ]);
-            }
-
-            activity?.SetTag("pull_request.job_id", job.Id);
-
-            if (request.PrTitle is not null || request.RepositoryName is not null || request.SourceBranch is not null ||
-                request.TargetBranch is not null)
-            {
-                job.SetPrContext(request.PrTitle, request.RepositoryName, request.SourceBranch, request.TargetBranch);
-                await jobs.UpdatePrContextAsync(
-                    job.Id,
-                    request.PrTitle,
-                    request.RepositoryName,
-                    request.SourceBranch,
-                    request.TargetBranch,
-                    ct);
-            }
-
-            outcome = new PullRequestSynchronizationOutcome(
-                PullRequestSynchronizationReviewDecision.Submitted,
-                activeJobReconciliation.LifecycleDecision,
-                [
-                    ..activeJobReconciliation.ActionSummaries,
-                    $"Submitted review intake job for PR #{request.PullRequestId} at iteration {iterationId.Value} via {request.SummaryLabel}.",
-                ]);
-
+            outcome = await this.SubmitReviewJobAsync(
+                request,
+                iterationId,
+                currentRevisionKey,
+                activeJobReconciliation,
+                activity,
+                ct);
             return CompleteOutcome(activity, startedAt, request, outcome);
         }
         catch (Exception ex) when (!ct.IsCancellationRequested)
@@ -235,6 +126,123 @@ public sealed class PullRequestSynchronizationService(
             activity?.SetTag("pull_request.error_type", ex.GetType().FullName ?? ex.GetType().Name);
             throw;
         }
+    }
+
+    private async Task<int> ResolveIterationIdAsync(PullRequestSynchronizationRequest request, CancellationToken ct)
+    {
+        var iterationId = request.CandidateIterationId ?? TryCreateSyntheticIterationId(request.ReviewRevision);
+        if (iterationId.HasValue)
+        {
+            return iterationId.Value;
+        }
+
+        if (iterationResolver is null)
+        {
+            throw new InvalidOperationException("No pull-request iteration resolver is registered for shared synchronization.");
+        }
+
+        return await iterationResolver.GetLatestIterationIdAsync(
+            request.ClientId,
+            request.ProviderScopePath,
+            request.ProviderProjectKey,
+            request.RepositoryId,
+            request.PullRequestId,
+            ct);
+    }
+
+    private async Task<PullRequestSynchronizationOutcome> SubmitReviewJobAsync(
+        PullRequestSynchronizationRequest request,
+        int iterationId,
+        string? currentRevisionKey,
+        ActiveJobReconciliationResult activeJobReconciliation,
+        Activity? activity,
+        CancellationToken ct)
+    {
+        var job = new ReviewJob(
+            Guid.NewGuid(),
+            request.ClientId,
+            request.ProviderScopePath,
+            request.ProviderProjectKey,
+            request.RepositoryId,
+            request.PullRequestId,
+            iterationId);
+
+        job.SelectReviewStrategy(await this.ResolveStrategySelectionAsync(request, ct));
+
+        if (request.ReviewTemperature.HasValue)
+        {
+            job.SetAiConfig(job.AiConnectionId, job.AiModel, request.ReviewTemperature);
+        }
+
+        if (request.CodeReview is not null)
+        {
+            job.SetProviderReviewContext(request.CodeReview);
+        }
+
+        if (request.ReviewRevision is not null)
+        {
+            job.SetReviewRevision(request.ReviewRevision);
+        }
+
+        var scopeOutcome = this.TryApplyProCursorSourceScope(request, job);
+        if (scopeOutcome is not null)
+        {
+            return MergeOutcome(activeJobReconciliation, scopeOutcome);
+        }
+
+        var addResult = await jobs.TryAddIfNoActiveDuplicateAsync(job, ct);
+        if (!addResult.WasAdded)
+        {
+            var duplicateRevisionKey = ReviewRevisionKeys.TryGetStoredKey(job.ReviewRevisionReference);
+            var duplicateActionSummary = !string.IsNullOrWhiteSpace(duplicateRevisionKey)
+                ? $"Skipped duplicate active job for PR #{request.PullRequestId} at revision {duplicateRevisionKey} via {request.SummaryLabel}."
+                : $"Skipped duplicate active job for PR #{request.PullRequestId} at iteration {iterationId} via {request.SummaryLabel}.";
+
+            return new PullRequestSynchronizationOutcome(
+                PullRequestSynchronizationReviewDecision.DuplicateActiveJob,
+                activeJobReconciliation.LifecycleDecision,
+                [
+                    ..activeJobReconciliation.ActionSummaries,
+                    duplicateActionSummary,
+                ]);
+        }
+
+        if (addResult.CancelledSupersededJobCount > 0
+            && !activeJobReconciliation.ActionSummaries.Any(summary => summary.Contains(
+                "Cancelled ",
+                StringComparison.OrdinalIgnoreCase)))
+        {
+            activeJobReconciliation = new ActiveJobReconciliationResult(
+                activeJobReconciliation.DuplicateOutcome,
+                PullRequestSynchronizationLifecycleDecision.CancelledActiveJobs,
+                [
+                    ..activeJobReconciliation.ActionSummaries,
+                    $"Cancelled {addResult.CancelledSupersededJobCount} superseded active review job(s) for PR #{request.PullRequestId} before evaluating revision {currentRevisionKey} via {request.SummaryLabel}.",
+                ]);
+        }
+
+        activity?.SetTag("pull_request.job_id", job.Id);
+
+        if (request.PrTitle is not null || request.RepositoryName is not null || request.SourceBranch is not null ||
+            request.TargetBranch is not null)
+        {
+            job.SetPrContext(request.PrTitle, request.RepositoryName, request.SourceBranch, request.TargetBranch);
+            await jobs.UpdatePrContextAsync(
+                job.Id,
+                request.PrTitle,
+                request.RepositoryName,
+                request.SourceBranch,
+                request.TargetBranch,
+                ct);
+        }
+
+        return new PullRequestSynchronizationOutcome(
+            PullRequestSynchronizationReviewDecision.Submitted,
+            activeJobReconciliation.LifecycleDecision,
+            [
+                ..activeJobReconciliation.ActionSummaries,
+                $"Submitted review intake job for PR #{request.PullRequestId} at iteration {iterationId} via {request.SummaryLabel}.",
+            ]);
     }
 
     private static PullRequestSynchronizationOutcome CompleteOutcome(
@@ -407,7 +415,6 @@ public sealed class PullRequestSynchronizationService(
 
     private async Task<ActiveJobReconciliationResult> ReconcileActiveJobsAsync(
         PullRequestSynchronizationRequest request,
-        int iterationId,
         string? currentRevisionKey,
         CancellationToken ct)
     {

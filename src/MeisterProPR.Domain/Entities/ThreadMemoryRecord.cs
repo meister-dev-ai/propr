@@ -69,32 +69,32 @@ public sealed class ThreadMemoryRecord
     {
         if (this.ClientId == Guid.Empty)
         {
-            throw new ArgumentException("ClientId must not be Guid.Empty.", nameof(this.ClientId));
+            throw new ArgumentException("ClientId must not be Guid.Empty.");
         }
 
         if (this.ThreadId <= 0)
         {
-            throw new ArgumentException("ThreadId must be > 0.", nameof(this.ThreadId));
+            throw new ArgumentException("ThreadId must be > 0.");
         }
 
         if (string.IsNullOrWhiteSpace(this.RepositoryId))
         {
-            throw new ArgumentException("RepositoryId must not be null or whitespace.", nameof(this.RepositoryId));
+            throw new ArgumentException("RepositoryId must not be null or whitespace.");
         }
 
         if (this.PullRequestId <= 0)
         {
-            throw new ArgumentException("PullRequestId must be > 0.", nameof(this.PullRequestId));
+            throw new ArgumentException("PullRequestId must be > 0.");
         }
 
         if (string.IsNullOrEmpty(this.ResolutionSummary))
         {
-            throw new ArgumentException("ResolutionSummary must not be null or empty.", nameof(this.ResolutionSummary));
+            throw new ArgumentException("ResolutionSummary must not be null or empty.");
         }
 
         if (this.EmbeddingVector is null || this.EmbeddingVector.Length == 0)
         {
-            throw new ArgumentException("EmbeddingVector must not be null or empty.", nameof(this.EmbeddingVector));
+            throw new ArgumentException("EmbeddingVector must not be null or empty.");
         }
     }
 }

@@ -7,7 +7,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 namespace MeisterProPR.CodeAnalysis.TreeSitter.Tests;
 
 /// <summary>
-///     T028 — fail-soft startup verification for <see cref="TreeSitterNativeProbe" /> (C8).
+///     Fail-soft startup verification for <see cref="TreeSitterNativeProbe" />.
 ///     When native libs are available (the normal case on Linux x64/arm64), the probe
 ///     reports <c>IsAvailable=true</c>. When they are absent, the probe reports
 ///     <c>IsAvailable=false</c> and review proceeds on the heuristic — no crash.
@@ -40,9 +40,9 @@ public sealed class TreeSitterNativeProbeTests
     public void Probe_DoesNotThrowOnConstruction()
     {
         // The probe must never throw during construction, even if all native libs fail.
-        var probe = new TreeSitterNativeProbe(NullLogger<TreeSitterNativeProbe>.Instance);
-        // If we got here, the probe didn't throw. IsAvailable may be true or false.
-        _ = probe.IsAvailable;
+        var ex = Record.Exception(() => new TreeSitterNativeProbe(NullLogger<TreeSitterNativeProbe>.Instance));
+
+        Assert.Null(ex);
     }
 
     [Fact]

@@ -574,6 +574,216 @@ export interface paths {
         };
         trace?: never;
     };
+    "/admin/review-profiles": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Lists the selectable file-by-file review aggressiveness profiles. */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Published review profiles returned. */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ReviewProfileCatalogResponse"];
+                        "application/json": components["schemas"]["ReviewProfileCatalogResponse"];
+                        "text/json": components["schemas"]["ReviewProfileCatalogResponse"];
+                    };
+                };
+                /** @description Missing or invalid credentials. */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Caller lacks administrator access. */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/clients/{clientId}/review-profile": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Gets the current default review aggressiveness profile for one client. */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    /** @description Client identifier. */
+                    clientId: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Client review profile returned. */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ClientReviewProfileResponse"];
+                        "application/json": components["schemas"]["ClientReviewProfileResponse"];
+                        "text/json": components["schemas"]["ClientReviewProfileResponse"];
+                    };
+                };
+                /** @description Missing or invalid credentials. */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Caller lacks administrator access to the client. */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Client not found. */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+            };
+        };
+        /** Sets or clears the default review aggressiveness profile for one client. */
+        put: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    /** @description Client identifier. */
+                    clientId: string;
+                };
+                cookie?: never;
+            };
+            /** @description Requested review profile selection; null clears the client override. */
+            requestBody?: {
+                content: {
+                    "application/json": components["schemas"]["PutClientReviewProfileRequest"];
+                    "text/json": components["schemas"]["PutClientReviewProfileRequest"];
+                    "application/*+json": components["schemas"]["PutClientReviewProfileRequest"];
+                };
+            };
+            responses: {
+                /** @description Client review profile updated. */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ClientReviewProfileResponse"];
+                        "application/json": components["schemas"]["ClientReviewProfileResponse"];
+                        "text/json": components["schemas"]["ClientReviewProfileResponse"];
+                    };
+                };
+                /** @description Unknown profile id. */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Missing or invalid credentials. */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Caller lacks administrator access to the client. */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Client not found. */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+            };
+        };
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/admin/identity/users": {
         parameters: {
             query?: never;
@@ -4242,216 +4452,6 @@ export interface paths {
         };
         trace?: never;
     };
-    "/admin/review-profiles": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** Lists the selectable file-by-file review aggressiveness profiles. */
-        get: {
-            parameters: {
-                query?: never;
-                header?: never;
-                path?: never;
-                cookie?: never;
-            };
-            requestBody?: never;
-            responses: {
-                /** @description Published review profiles returned. */
-                200: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "text/plain": components["schemas"]["ReviewProfileCatalogResponse"];
-                        "application/json": components["schemas"]["ReviewProfileCatalogResponse"];
-                        "text/json": components["schemas"]["ReviewProfileCatalogResponse"];
-                    };
-                };
-                /** @description Missing or invalid credentials. */
-                401: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "text/plain": components["schemas"]["ProblemDetails"];
-                        "application/json": components["schemas"]["ProblemDetails"];
-                        "text/json": components["schemas"]["ProblemDetails"];
-                    };
-                };
-                /** @description Caller lacks administrator access. */
-                403: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "text/plain": components["schemas"]["ProblemDetails"];
-                        "application/json": components["schemas"]["ProblemDetails"];
-                        "text/json": components["schemas"]["ProblemDetails"];
-                    };
-                };
-            };
-        };
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/admin/clients/{clientId}/review-profile": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** Gets the current default review aggressiveness profile for one client. */
-        get: {
-            parameters: {
-                query?: never;
-                header?: never;
-                path: {
-                    /** @description Client identifier. */
-                    clientId: string;
-                };
-                cookie?: never;
-            };
-            requestBody?: never;
-            responses: {
-                /** @description Client review profile returned. */
-                200: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "text/plain": components["schemas"]["ClientReviewProfileResponse"];
-                        "application/json": components["schemas"]["ClientReviewProfileResponse"];
-                        "text/json": components["schemas"]["ClientReviewProfileResponse"];
-                    };
-                };
-                /** @description Missing or invalid credentials. */
-                401: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "text/plain": components["schemas"]["ProblemDetails"];
-                        "application/json": components["schemas"]["ProblemDetails"];
-                        "text/json": components["schemas"]["ProblemDetails"];
-                    };
-                };
-                /** @description Caller lacks administrator access to the client. */
-                403: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "text/plain": components["schemas"]["ProblemDetails"];
-                        "application/json": components["schemas"]["ProblemDetails"];
-                        "text/json": components["schemas"]["ProblemDetails"];
-                    };
-                };
-                /** @description Client not found. */
-                404: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "text/plain": components["schemas"]["ProblemDetails"];
-                        "application/json": components["schemas"]["ProblemDetails"];
-                        "text/json": components["schemas"]["ProblemDetails"];
-                    };
-                };
-            };
-        };
-        /** Sets or clears the default review aggressiveness profile for one client. */
-        put: {
-            parameters: {
-                query?: never;
-                header?: never;
-                path: {
-                    /** @description Client identifier. */
-                    clientId: string;
-                };
-                cookie?: never;
-            };
-            /** @description Requested review profile selection; null clears the client override. */
-            requestBody?: {
-                content: {
-                    "application/json": components["schemas"]["PutClientReviewProfileRequest"];
-                    "text/json": components["schemas"]["PutClientReviewProfileRequest"];
-                    "application/*+json": components["schemas"]["PutClientReviewProfileRequest"];
-                };
-            };
-            responses: {
-                /** @description Client review profile updated. */
-                200: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "text/plain": components["schemas"]["ClientReviewProfileResponse"];
-                        "application/json": components["schemas"]["ClientReviewProfileResponse"];
-                        "text/json": components["schemas"]["ClientReviewProfileResponse"];
-                    };
-                };
-                /** @description Unknown profile id. */
-                400: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "text/plain": components["schemas"]["ProblemDetails"];
-                        "application/json": components["schemas"]["ProblemDetails"];
-                        "text/json": components["schemas"]["ProblemDetails"];
-                    };
-                };
-                /** @description Missing or invalid credentials. */
-                401: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "text/plain": components["schemas"]["ProblemDetails"];
-                        "application/json": components["schemas"]["ProblemDetails"];
-                        "text/json": components["schemas"]["ProblemDetails"];
-                    };
-                };
-                /** @description Caller lacks administrator access to the client. */
-                403: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "text/plain": components["schemas"]["ProblemDetails"];
-                        "application/json": components["schemas"]["ProblemDetails"];
-                        "text/json": components["schemas"]["ProblemDetails"];
-                    };
-                };
-                /** @description Client not found. */
-                404: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "text/plain": components["schemas"]["ProblemDetails"];
-                        "application/json": components["schemas"]["ProblemDetails"];
-                        "text/json": components["schemas"]["ProblemDetails"];
-                    };
-                };
-            };
-        };
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/admin/clients/{clientId}/token-usage": {
         parameters: {
             query?: never;
@@ -4525,6 +4525,152 @@ export interface paths {
         };
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/clients/{clientId}/reviewing/dismiss-finding": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Dismisses a finding by storing it as an admin-dismissed memory record.
+         *     Future reviews will suppress similar findings via the memory reconsideration pipeline.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    /** @description Client identifier. */
+                    clientId: string;
+                };
+                cookie?: never;
+            };
+            /** @description Dismiss request with the finding message and optional label. */
+            requestBody?: {
+                content: {
+                    "application/json": components["schemas"]["DismissFindingRequest"];
+                    "text/json": components["schemas"]["DismissFindingRequest"];
+                    "application/*+json": components["schemas"]["DismissFindingRequest"];
+                };
+            };
+            responses: {
+                /** @description Finding dismissed and memory record created. */
+                201: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ThreadMemoryRecordDto"];
+                        "application/json": components["schemas"]["ThreadMemoryRecordDto"];
+                        "text/json": components["schemas"]["ThreadMemoryRecordDto"];
+                    };
+                };
+                /** @description Validation failure. */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Caller is not an admin. */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/clients/{clientId}/dismiss-finding": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Dismisses a finding by storing it as an admin-dismissed memory record.
+         *     Future reviews will suppress similar findings via the memory reconsideration pipeline.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    /** @description Client identifier. */
+                    clientId: string;
+                };
+                cookie?: never;
+            };
+            /** @description Dismiss request with the finding message and optional label. */
+            requestBody?: {
+                content: {
+                    "application/json": components["schemas"]["DismissFindingRequest"];
+                    "text/json": components["schemas"]["DismissFindingRequest"];
+                    "application/*+json": components["schemas"]["DismissFindingRequest"];
+                };
+            };
+            responses: {
+                /** @description Finding dismissed and memory record created. */
+                201: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ThreadMemoryRecordDto"];
+                        "application/json": components["schemas"]["ThreadMemoryRecordDto"];
+                        "text/json": components["schemas"]["ThreadMemoryRecordDto"];
+                    };
+                };
+                /** @description Validation failure. */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Caller is not an admin. */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+            };
+        };
         delete?: never;
         options?: never;
         head?: never;
@@ -4627,7 +4773,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/reviewing/jobs": {
+    "/jobs": {
         parameters: {
             query?: never;
             header?: never;
@@ -4691,7 +4837,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/jobs": {
+    "/reviewing/jobs": {
         parameters: {
             query?: never;
             header?: never;
@@ -5399,288 +5545,6 @@ export interface paths {
         };
         put?: never;
         post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/clients/{clientId}/reviewing/pr-view": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Returns an aggregated view of all review jobs, token breakdowns, and memory records for a specific pull request.
-         *     Requires valid user authentication and access to the specified client.
-         */
-        get: {
-            parameters: {
-                query?: {
-                    /** @description Provider scope path or host-qualified namespace for the repository. */
-                    providerScopePath?: string;
-                    /** @description Provider project, owner, or namespace key for the repository. */
-                    providerProjectKey?: string;
-                    /** @description ADO repository identifier. */
-                    repositoryId?: string;
-                    /** @description Pull request number. */
-                    pullRequestId?: number;
-                    /** @description Page number (1-based, default 1). */
-                    page?: number;
-                    /** @description Page size (default 20, max 100). */
-                    pageSize?: number;
-                };
-                header?: never;
-                path: {
-                    /** @description Owning client identifier. */
-                    clientId: string;
-                };
-                cookie?: never;
-            };
-            requestBody?: never;
-            responses: {
-                /** @description PR view returned (empty DTO with zero jobs when the PR has no review jobs). */
-                200: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "text/plain": components["schemas"]["PrReviewViewDto"];
-                        "application/json": components["schemas"]["PrReviewViewDto"];
-                        "text/json": components["schemas"]["PrReviewViewDto"];
-                    };
-                };
-                /** @description Missing or invalid parameters. */
-                400: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "text/plain": components["schemas"]["ProblemDetails"];
-                        "application/json": components["schemas"]["ProblemDetails"];
-                        "text/json": components["schemas"]["ProblemDetails"];
-                    };
-                };
-                /** @description Missing or invalid credentials. */
-                401: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "text/plain": components["schemas"]["ProblemDetails"];
-                        "application/json": components["schemas"]["ProblemDetails"];
-                        "text/json": components["schemas"]["ProblemDetails"];
-                    };
-                };
-            };
-        };
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/clients/{clientId}/pr-view": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Returns an aggregated view of all review jobs, token breakdowns, and memory records for a specific pull request.
-         *     Requires valid user authentication and access to the specified client.
-         */
-        get: {
-            parameters: {
-                query?: {
-                    /** @description Provider scope path or host-qualified namespace for the repository. */
-                    providerScopePath?: string;
-                    /** @description Provider project, owner, or namespace key for the repository. */
-                    providerProjectKey?: string;
-                    /** @description ADO repository identifier. */
-                    repositoryId?: string;
-                    /** @description Pull request number. */
-                    pullRequestId?: number;
-                    /** @description Page number (1-based, default 1). */
-                    page?: number;
-                    /** @description Page size (default 20, max 100). */
-                    pageSize?: number;
-                };
-                header?: never;
-                path: {
-                    /** @description Owning client identifier. */
-                    clientId: string;
-                };
-                cookie?: never;
-            };
-            requestBody?: never;
-            responses: {
-                /** @description PR view returned (empty DTO with zero jobs when the PR has no review jobs). */
-                200: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "text/plain": components["schemas"]["PrReviewViewDto"];
-                        "application/json": components["schemas"]["PrReviewViewDto"];
-                        "text/json": components["schemas"]["PrReviewViewDto"];
-                    };
-                };
-                /** @description Missing or invalid parameters. */
-                400: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "text/plain": components["schemas"]["ProblemDetails"];
-                        "application/json": components["schemas"]["ProblemDetails"];
-                        "text/json": components["schemas"]["ProblemDetails"];
-                    };
-                };
-                /** @description Missing or invalid credentials. */
-                401: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "text/plain": components["schemas"]["ProblemDetails"];
-                        "application/json": components["schemas"]["ProblemDetails"];
-                        "text/json": components["schemas"]["ProblemDetails"];
-                    };
-                };
-            };
-        };
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/internal/propr/procursor/broker/scm/materialize": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** Materializes repository content for a tracked ProCursor branch. */
-        post: {
-            parameters: {
-                query?: never;
-                header?: never;
-                path?: never;
-                cookie?: never;
-            };
-            /** @description SCM materialization request payload. */
-            requestBody?: {
-                content: {
-                    "application/json": components["schemas"]["ProCursorScmMaterializationRequest"];
-                    "text/json": components["schemas"]["ProCursorScmMaterializationRequest"];
-                    "application/*+json": components["schemas"]["ProCursorScmMaterializationRequest"];
-                };
-            };
-            responses: {
-                /** @description The repository content was materialized. */
-                200: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content?: never;
-                };
-                /** @description The source or branch was not found. */
-                404: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content?: never;
-                };
-                /** @description The request conflicts with the current source state. */
-                409: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content?: never;
-                };
-                /** @description The upstream ProCursor dependency is unavailable. */
-                503: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content?: never;
-                };
-            };
-        };
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/internal/propr/procursor/broker/scm/branch-head": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** Resolves the latest commit SHA for a tracked ProCursor branch. */
-        post: {
-            parameters: {
-                query?: never;
-                header?: never;
-                path?: never;
-                cookie?: never;
-            };
-            /** @description Tracked-branch head request payload. */
-            requestBody?: {
-                content: {
-                    "application/json": components["schemas"]["ProCursorTrackedBranchHeadRequest"];
-                    "text/json": components["schemas"]["ProCursorTrackedBranchHeadRequest"];
-                    "application/*+json": components["schemas"]["ProCursorTrackedBranchHeadRequest"];
-                };
-            };
-            responses: {
-                /** @description The latest branch head was resolved. */
-                200: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content?: never;
-                };
-                /** @description The source or branch was not found. */
-                404: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content?: never;
-                };
-                /** @description The request conflicts with the current source state. */
-                409: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content?: never;
-                };
-                /** @description The upstream ProCursor dependency is unavailable. */
-                503: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content?: never;
-                };
-            };
-        };
         delete?: never;
         options?: never;
         head?: never;
@@ -6495,6 +6359,130 @@ export interface paths {
                 };
                 /** @description The source cannot currently be refreshed. */
                 409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/internal/propr/procursor/broker/scm/materialize": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Materializes repository content for a tracked ProCursor branch. */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            /** @description SCM materialization request payload. */
+            requestBody?: {
+                content: {
+                    "application/json": components["schemas"]["ProCursorScmMaterializationRequest"];
+                    "text/json": components["schemas"]["ProCursorScmMaterializationRequest"];
+                    "application/*+json": components["schemas"]["ProCursorScmMaterializationRequest"];
+                };
+            };
+            responses: {
+                /** @description The repository content was materialized. */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description The source or branch was not found. */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description The request conflicts with the current source state. */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description The upstream ProCursor dependency is unavailable. */
+                503: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/internal/propr/procursor/broker/scm/branch-head": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Resolves the latest commit SHA for a tracked ProCursor branch. */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            /** @description Tracked-branch head request payload. */
+            requestBody?: {
+                content: {
+                    "application/json": components["schemas"]["ProCursorTrackedBranchHeadRequest"];
+                    "text/json": components["schemas"]["ProCursorTrackedBranchHeadRequest"];
+                    "application/*+json": components["schemas"]["ProCursorTrackedBranchHeadRequest"];
+                };
+            };
+            responses: {
+                /** @description The latest branch head was resolved. */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description The source or branch was not found. */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description The request conflicts with the current source state. */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description The upstream ProCursor dependency is unavailable. */
+                503: {
                     headers: {
                         [name: string]: unknown;
                     };
@@ -7445,6 +7433,164 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/clients/{clientId}/reviewing/pr-view": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Returns an aggregated view of all review jobs, token breakdowns, and memory records for a specific pull request.
+         *     Requires valid user authentication and access to the specified client.
+         */
+        get: {
+            parameters: {
+                query?: {
+                    /** @description Provider scope path or host-qualified namespace for the repository. */
+                    providerScopePath?: string;
+                    /** @description Provider project, owner, or namespace key for the repository. */
+                    providerProjectKey?: string;
+                    /** @description ADO repository identifier. */
+                    repositoryId?: string;
+                    /** @description Pull request number. */
+                    pullRequestId?: number;
+                    /** @description Page number (1-based, default 1). */
+                    page?: number;
+                    /** @description Page size (default 20, max 100). */
+                    pageSize?: number;
+                };
+                header?: never;
+                path: {
+                    /** @description Owning client identifier. */
+                    clientId: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description PR view returned (empty DTO with zero jobs when the PR has no review jobs). */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["PrReviewViewDto"];
+                        "application/json": components["schemas"]["PrReviewViewDto"];
+                        "text/json": components["schemas"]["PrReviewViewDto"];
+                    };
+                };
+                /** @description Missing or invalid parameters. */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Missing or invalid credentials. */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/clients/{clientId}/pr-view": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Returns an aggregated view of all review jobs, token breakdowns, and memory records for a specific pull request.
+         *     Requires valid user authentication and access to the specified client.
+         */
+        get: {
+            parameters: {
+                query?: {
+                    /** @description Provider scope path or host-qualified namespace for the repository. */
+                    providerScopePath?: string;
+                    /** @description Provider project, owner, or namespace key for the repository. */
+                    providerProjectKey?: string;
+                    /** @description ADO repository identifier. */
+                    repositoryId?: string;
+                    /** @description Pull request number. */
+                    pullRequestId?: number;
+                    /** @description Page number (1-based, default 1). */
+                    page?: number;
+                    /** @description Page size (default 20, max 100). */
+                    pageSize?: number;
+                };
+                header?: never;
+                path: {
+                    /** @description Owning client identifier. */
+                    clientId: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description PR view returned (empty DTO with zero jobs when the PR has no review jobs). */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["PrReviewViewDto"];
+                        "application/json": components["schemas"]["PrReviewViewDto"];
+                        "text/json": components["schemas"]["PrReviewViewDto"];
+                    };
+                };
+                /** @description Missing or invalid parameters. */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Missing or invalid credentials. */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/clients/{clientId}/review-archive/pull-requests/threads": {
         parameters: {
             query?: never;
@@ -7507,7 +7653,7 @@ export interface paths {
                         "text/json": components["schemas"]["ProblemDetails"];
                     };
                 };
-                /** @description Caller is not an admin. */
+                /** @description Caller lacks read access to the client. */
                 403: {
                     headers: {
                         [name: string]: unknown;
@@ -7590,7 +7736,7 @@ export interface paths {
                         "text/json": components["schemas"]["ProblemDetails"];
                     };
                 };
-                /** @description Caller is not an admin. */
+                /** @description Caller lacks read access to the client. */
                 403: {
                     headers: {
                         [name: string]: unknown;
@@ -7676,7 +7822,7 @@ export interface paths {
                         "text/json": components["schemas"]["ProblemDetails"];
                     };
                 };
-                /** @description Caller is not an admin. */
+                /** @description Caller lacks read access to the client. */
                 403: {
                     headers: {
                         [name: string]: unknown;
@@ -9543,7 +9689,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/admin/reviewing/thread-memory": {
+    "/admin/thread-memory": {
         parameters: {
             query?: never;
             header?: never;
@@ -9615,7 +9761,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/admin/thread-memory": {
+    "/admin/reviewing/thread-memory": {
         parameters: {
             query?: never;
             header?: never;
@@ -9794,152 +9940,6 @@ export interface paths {
                 };
             };
         };
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/clients/{clientId}/reviewing/dismiss-finding": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Dismisses a finding by storing it as an admin-dismissed memory record.
-         *     Future reviews will suppress similar findings via the memory reconsideration pipeline.
-         */
-        post: {
-            parameters: {
-                query?: never;
-                header?: never;
-                path: {
-                    /** @description Client identifier. */
-                    clientId: string;
-                };
-                cookie?: never;
-            };
-            /** @description Dismiss request with the finding message and optional label. */
-            requestBody?: {
-                content: {
-                    "application/json": components["schemas"]["DismissFindingRequest"];
-                    "text/json": components["schemas"]["DismissFindingRequest"];
-                    "application/*+json": components["schemas"]["DismissFindingRequest"];
-                };
-            };
-            responses: {
-                /** @description Finding dismissed and memory record created. */
-                201: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "text/plain": components["schemas"]["ThreadMemoryRecordDto"];
-                        "application/json": components["schemas"]["ThreadMemoryRecordDto"];
-                        "text/json": components["schemas"]["ThreadMemoryRecordDto"];
-                    };
-                };
-                /** @description Validation failure. */
-                400: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "text/plain": components["schemas"]["ProblemDetails"];
-                        "application/json": components["schemas"]["ProblemDetails"];
-                        "text/json": components["schemas"]["ProblemDetails"];
-                    };
-                };
-                /** @description Caller is not an admin. */
-                403: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "text/plain": components["schemas"]["ProblemDetails"];
-                        "application/json": components["schemas"]["ProblemDetails"];
-                        "text/json": components["schemas"]["ProblemDetails"];
-                    };
-                };
-            };
-        };
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/clients/{clientId}/dismiss-finding": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Dismisses a finding by storing it as an admin-dismissed memory record.
-         *     Future reviews will suppress similar findings via the memory reconsideration pipeline.
-         */
-        post: {
-            parameters: {
-                query?: never;
-                header?: never;
-                path: {
-                    /** @description Client identifier. */
-                    clientId: string;
-                };
-                cookie?: never;
-            };
-            /** @description Dismiss request with the finding message and optional label. */
-            requestBody?: {
-                content: {
-                    "application/json": components["schemas"]["DismissFindingRequest"];
-                    "text/json": components["schemas"]["DismissFindingRequest"];
-                    "application/*+json": components["schemas"]["DismissFindingRequest"];
-                };
-            };
-            responses: {
-                /** @description Finding dismissed and memory record created. */
-                201: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "text/plain": components["schemas"]["ThreadMemoryRecordDto"];
-                        "application/json": components["schemas"]["ThreadMemoryRecordDto"];
-                        "text/json": components["schemas"]["ThreadMemoryRecordDto"];
-                    };
-                };
-                /** @description Validation failure. */
-                400: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "text/plain": components["schemas"]["ProblemDetails"];
-                        "application/json": components["schemas"]["ProblemDetails"];
-                        "text/json": components["schemas"]["ProblemDetails"];
-                    };
-                };
-                /** @description Caller is not an admin. */
-                403: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "text/plain": components["schemas"]["ProblemDetails"];
-                        "application/json": components["schemas"]["ProblemDetails"];
-                        "text/json": components["schemas"]["ProblemDetails"];
-                    };
-                };
-            };
-        };
-        delete?: never;
         options?: never;
         head?: never;
         patch?: never;
@@ -10392,7 +10392,7 @@ export interface components {
         AiConfiguredModelSource: "discovered" | "manual" | "knownCatalog";
         /** @description Authentication settings for one AI connection profile request. */
         AiConnectionAuthRequest: {
-            mode?: components["schemas"]["AiAuthMode"];
+            mode: components["schemas"]["AiAuthMode"];
             apiKey?: string | null;
         };
         /** @description Data transfer object for a provider-neutral AI connection profile. */
@@ -10499,7 +10499,7 @@ export interface components {
         AiPurposeBindingRequest: {
             /** Format: uuid */
             id?: string | null;
-            purpose?: components["schemas"]["AiPurpose"];
+            purpose: components["schemas"]["AiPurpose"];
             /** Format: uuid */
             configuredModelId?: string | null;
             remoteModelId?: string | null;
@@ -10537,8 +10537,8 @@ export interface components {
         /** @description Assign-client-role request. */
         AssignClientRoleRequest: {
             /** Format: uuid */
-            clientId?: string;
-            role?: components["schemas"]["ClientRole"];
+            clientId: string;
+            role: components["schemas"]["ClientRole"];
         };
         /** @description Public authentication bootstrap information for the current installation edition. */
         AuthOptionsDto: {
@@ -10784,7 +10784,7 @@ export interface components {
         /** @description Request body for creating an admin-managed crawl configuration. */
         CreateAdminCrawlConfigRequest: {
             /** Format: uuid */
-            clientId?: string;
+            clientId: string;
             providerProjectKey?: string | null;
             provider?: components["schemas"]["ScmProvider"];
             /** Format: uuid */
@@ -10801,7 +10801,7 @@ export interface components {
         /** @description Request body for creating an admin-managed webhook configuration. */
         CreateAdminWebhookConfigRequest: {
             /** Format: uuid */
-            clientId?: string;
+            clientId: string;
             provider?: components["schemas"]["WebhookProviderType"];
             /** Format: uuid */
             organizationScopeId?: string | null;
@@ -10815,7 +10815,7 @@ export interface components {
         /** @description Request body for creating a provider-neutral AI connection profile. */
         CreateAiConnectionRequest: {
             displayName?: string | null;
-            providerKind?: components["schemas"]["AiProviderKind"];
+            providerKind: components["schemas"]["AiProviderKind"];
             baseUrl?: string | null;
             auth?: components["schemas"]["AiConnectionAuthRequest"];
             discoveryMode?: components["schemas"]["AiDiscoveryMode"];
@@ -10830,9 +10830,9 @@ export interface components {
         };
         /** @description Request body for creating a client-scoped provider connection. */
         CreateClientProviderConnectionRequest: {
-            providerFamily?: components["schemas"]["ScmProvider"];
+            providerFamily: components["schemas"]["ScmProvider"];
             hostBaseUrl?: string | null;
-            authenticationKind?: components["schemas"]["ScmAuthenticationKind"];
+            authenticationKind: components["schemas"]["ScmAuthenticationKind"];
             userName?: string | null;
             oAuthTenantId?: string | null;
             oAuthClientId?: string | null;
@@ -10898,8 +10898,8 @@ export interface components {
             clientSecret?: string | null;
             scopes?: string[] | null;
             allowedEmailDomains?: string[] | null;
-            isEnabled?: boolean;
-            autoCreateUsers?: boolean;
+            isEnabled: boolean;
+            autoCreateUsers: boolean;
         };
         /** @description Create-user request. */
         CreateUserRequest: {
@@ -10909,7 +10909,7 @@ export interface components {
         };
         /** @description Request body for model discovery against a provider without persisting a profile. */
         DiscoverModelsRequest: {
-            providerKind?: components["schemas"]["AiProviderKind"];
+            providerKind: components["schemas"]["AiProviderKind"];
             baseUrl?: string | null;
             auth?: components["schemas"]["AiConnectionAuthRequest"];
             defaultHeaders?: {
@@ -11135,13 +11135,13 @@ export interface components {
         };
         /** @description Patch payload for installation licensing updates. */
         PatchAdminLicensingRequest: {
-            edition?: components["schemas"]["InstallationEdition"];
+            edition: components["schemas"]["InstallationEdition"];
             capabilityOverrides?: components["schemas"]["PatchPremiumCapabilityOverrideRequest"][] | null;
         };
         /** @description Request body for updating one provider family's activation state. */
         PatchAdminProviderRequest: {
             /** @description Whether the provider family should be enabled installation-wide. */
-            isEnabled?: boolean;
+            isEnabled: boolean;
         };
         /**
          * @description Request body for patching an admin-managed webhook configuration.
@@ -12111,10 +12111,10 @@ export interface components {
         };
         /** @description Provider-neutral code review identity supplied by review intake clients. */
         ReviewCodeReviewRefDto: {
-            platform?: components["schemas"]["CodeReviewPlatformKind"];
+            platform: components["schemas"]["CodeReviewPlatformKind"];
             externalReviewId?: string | null;
             /** Format: int32 */
-            number?: number;
+            number: number;
         };
         /** @description DTO for a single review comment. */
         ReviewCommentDto: {
@@ -12354,7 +12354,7 @@ export interface components {
             externalUserId?: string | null;
             login?: string | null;
             displayName?: string | null;
-            isBot?: boolean;
+            isBot: boolean;
         };
         /** @description Provider-neutral review revision identity supplied by review intake clients. */
         ReviewRevisionRefDto: {
@@ -12434,11 +12434,11 @@ export interface components {
             externalUserId?: string | null;
             login?: string | null;
             displayName?: string | null;
-            isBot?: boolean;
+            isBot: boolean;
         };
         /** @description Enable/disable request for a user. */
         SetUserActiveRequest: {
-            isActive?: boolean;
+            isActive: boolean;
         };
         /** @description Request payload for provider-neutral review intake. */
         SubmitReviewRequest: {
@@ -12657,8 +12657,8 @@ export interface components {
             clientSecret?: string | null;
             scopes?: string[] | null;
             allowedEmailDomains?: string[] | null;
-            isEnabled?: boolean;
-            autoCreateUsers?: boolean;
+            isEnabled: boolean;
+            autoCreateUsers: boolean;
         };
         /** @description Response payload for one webhook configuration. */
         WebhookConfigurationResponse: {

@@ -347,44 +347,59 @@ export function useWebhookConfigForm(props: WebhookConfigFormProps, emit: Webhoo
     return parsed
   }
 
-  function validateForm(): boolean {
-    organizationScopeIdError.value = ''
-    projectIdError.value = ''
-    enabledEventsError.value = ''
-    repoFiltersError.value = ''
-    reviewTemperatureError.value = ''
-    formError.value = ''
-
+  function validateOrganizationScope(): string {
     if (isAzureDevOpsProvider.value && !organizationScopeId.value) {
-      organizationScopeIdError.value = 'Select an organization scope.'
+      return 'Select an organization scope.'
     }
-
     if (!isAzureDevOpsProvider.value && !manualOrganizationUrl.value.trim()) {
-      organizationScopeIdError.value = 'Enter a host URL for the selected provider.'
+      return 'Enter a host URL for the selected provider.'
     }
+    return ''
+  }
 
-    if (!projectId.value) {
-      projectIdError.value = isAzureDevOpsProvider.value ? 'Select a project.' : 'Enter an owner, group, or namespace.'
+  function validateProject(): string {
+    if (projectId.value) {
+      return ''
     }
+    return isAzureDevOpsProvider.value ? 'Select a project.' : 'Enter an owner, group, or namespace.'
+  }
 
-    if (buildEnabledEvents().length === 0) {
-      enabledEventsError.value = 'Select at least one enabled event.'
+  function validateEnabledEvents(): string {
+    return buildEnabledEvents().length === 0 ? 'Select at least one enabled event.' : ''
+  }
+
+  function validateRepoFilters(): string {
+    const hasUnresolvedFilter = repoFilters.value.some(
+      (filter) => !filter.repositoryName.trim() && !filter.displayName.trim() && !filter.canonicalSourceRef,
+    )
+    if (!hasUnresolvedFilter) {
+      return ''
     }
+    return isAzureDevOpsProvider.value
+      ? 'Each repository filter must resolve to a discovered repository.'
+      : 'Each repository filter must include a repository name.'
+  }
 
-    if (repoFilters.value.some((filter) => !filter.repositoryName.trim() && !filter.displayName.trim() && !filter.canonicalSourceRef)) {
-      repoFiltersError.value = isAzureDevOpsProvider.value
-        ? 'Each repository filter must resolve to a discovered repository.'
-        : 'Each repository filter must include a repository name.'
-    }
-
+  function validateReviewTemperature(): string {
     const reviewTemperature = parseReviewTemperature()
-    if (reviewTemperature !== undefined) {
-      if (!Number.isFinite(reviewTemperature)) {
-        reviewTemperatureError.value = 'Review temperature must be a number between 0.0 and 2.0.'
-      } else if (reviewTemperature < 0 || reviewTemperature > 2) {
-        reviewTemperatureError.value = 'Review temperature must be between 0.0 and 2.0.'
-      }
+    if (reviewTemperature === undefined) {
+      return ''
     }
+    if (!Number.isFinite(reviewTemperature)) {
+      return 'Review temperature must be a number between 0.0 and 2.0.'
+    }
+    return reviewTemperature < 0 || reviewTemperature > 2
+      ? 'Review temperature must be between 0.0 and 2.0.'
+      : ''
+  }
+
+  function validateForm(): boolean {
+    organizationScopeIdError.value = validateOrganizationScope()
+    projectIdError.value = validateProject()
+    enabledEventsError.value = validateEnabledEvents()
+    repoFiltersError.value = validateRepoFilters()
+    reviewTemperatureError.value = validateReviewTemperature()
+    formError.value = ''
 
     return !organizationScopeIdError.value
       && !projectIdError.value

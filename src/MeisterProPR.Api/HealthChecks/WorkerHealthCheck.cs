@@ -27,38 +27,73 @@ public sealed class WorkerHealthCheck(
         var providerRegistry = serviceProvider.GetService<IScmProviderRegistry>();
         var readinessProfileCatalog = serviceProvider.GetService<IProviderReadinessProfileCatalog>();
         var providerActivationService = serviceProvider.GetService<IProviderActivationService>();
-        var activationStatuses = databaseConfigured && providerActivationService is not null
-            ? (await providerActivationService.ListAsync(cancellationToken))
-            .ToDictionary(status => status.ProviderFamily)
-            : null;
+        var activationStatuses = await ResolveActivationStatusesAsync(
+            databaseConfigured,
+            providerActivationService,
+            cancellationToken);
+
         var providerStatuses = Enum.GetValues<ScmProvider>()
-            .Select(provider =>
-            {
-                ProviderActivationStatusDto? activationStatus = null;
-                if (activationStatuses is not null)
-                {
-                    activationStatuses.TryGetValue(provider, out activationStatus);
-                }
-
-                var baselineAdapterSetRegistered =
-                    databaseConfigured && providerRegistry?.IsRegistered(provider) == true;
-
-                return new ProviderRegistrySnapshot(
-                    GetProviderKey(provider),
-                    baselineAdapterSetRegistered,
-                    activationStatus?.IsEnabled ?? true,
-                    baselineAdapterSetRegistered && (activationStatus?.IsEnabled ?? true),
-                    databaseConfigured && providerRegistry is not null
-                        ? providerRegistry.GetRegisteredCapabilities(provider)
-                        : [],
-                    activationStatus?.SupportClaimReadiness ??
-                    ResolveSupportClaimReadiness(readinessProfileCatalog, provider),
-                    activationStatus?.SupportClaimReason ??
-                    ResolveSupportClaimReason(readinessProfileCatalog, provider),
-                    activationStatus?.UpdatedAt);
-            })
+            .Select(provider => BuildProviderSnapshot(
+                provider,
+                databaseConfigured,
+                providerRegistry,
+                readinessProfileCatalog,
+                activationStatuses))
             .ToArray();
 
+        var data = BuildHealthData(worker, databaseConfigured, providerRegistry, providerActivationService, providerStatuses);
+
+        return DetermineResult(worker, databaseConfigured, providerRegistry, providerStatuses, data);
+    }
+
+    private static async Task<Dictionary<ScmProvider, ProviderActivationStatusDto>?> ResolveActivationStatusesAsync(
+        bool databaseConfigured,
+        IProviderActivationService? providerActivationService,
+        CancellationToken cancellationToken)
+    {
+        if (!databaseConfigured || providerActivationService is null)
+        {
+            return null;
+        }
+
+        var statuses = await providerActivationService.ListAsync(cancellationToken);
+        return statuses.ToDictionary(status => status.ProviderFamily);
+    }
+
+    private static ProviderRegistrySnapshot BuildProviderSnapshot(
+        ScmProvider provider,
+        bool databaseConfigured,
+        IScmProviderRegistry? providerRegistry,
+        IProviderReadinessProfileCatalog? readinessProfileCatalog,
+        IReadOnlyDictionary<ScmProvider, ProviderActivationStatusDto>? activationStatuses)
+    {
+        ProviderActivationStatusDto? activationStatus = null;
+        activationStatuses?.TryGetValue(provider, out activationStatus);
+
+        var baselineAdapterSetRegistered = databaseConfigured && providerRegistry?.IsRegistered(provider) == true;
+
+        return new ProviderRegistrySnapshot(
+            GetProviderKey(provider),
+            baselineAdapterSetRegistered,
+            activationStatus?.IsEnabled ?? true,
+            baselineAdapterSetRegistered && (activationStatus?.IsEnabled ?? true),
+            databaseConfigured && providerRegistry is not null
+                ? providerRegistry.GetRegisteredCapabilities(provider)
+                : [],
+            activationStatus?.SupportClaimReadiness ??
+            ResolveSupportClaimReadiness(readinessProfileCatalog, provider),
+            activationStatus?.SupportClaimReason ??
+            ResolveSupportClaimReason(readinessProfileCatalog, provider),
+            activationStatus?.UpdatedAt);
+    }
+
+    private static Dictionary<string, object> BuildHealthData(
+        ReviewJobWorker worker,
+        bool databaseConfigured,
+        IScmProviderRegistry? providerRegistry,
+        IProviderActivationService? providerActivationService,
+        IReadOnlyList<ProviderRegistrySnapshot> providerStatuses)
+    {
         var data = new Dictionary<string, object>
         {
             ["reviewJobWorkerRunning"] = worker.IsRunning,
@@ -86,6 +121,16 @@ public sealed class WorkerHealthCheck(
             }
         }
 
+        return data;
+    }
+
+    private static HealthCheckResult DetermineResult(
+        ReviewJobWorker worker,
+        bool databaseConfigured,
+        IScmProviderRegistry? providerRegistry,
+        IReadOnlyList<ProviderRegistrySnapshot> providerStatuses,
+        Dictionary<string, object> data)
+    {
         if (!worker.IsRunning)
         {
             return HealthCheckResult.Unhealthy("Worker is not running.", data: data);

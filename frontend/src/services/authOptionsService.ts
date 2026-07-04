@@ -20,7 +20,7 @@ export interface AuthOptions {
 }
 
 export function supportsTenantSignIn(options: AuthOptions | null | undefined): boolean {
-  if (!options || options.edition !== 'commercial' || !options.availableSignInMethods.includes('sso')) {
+  if (options?.edition !== 'commercial' || !options?.availableSignInMethods.includes('sso')) {
     return false
   }
 

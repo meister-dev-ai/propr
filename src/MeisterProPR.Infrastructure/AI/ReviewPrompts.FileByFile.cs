@@ -135,15 +135,29 @@ internal static partial class ReviewPrompts
         sb.AppendLine($"Plan ID: {plan.PlanId}");
         sb.AppendLine($"Anchor file: {plan.AnchorFilePath}");
 
-        if (plan.Concerns.Count > 0)
+        AppendConcerns(sb, plan.Concerns);
+        AppendInvestigationTasksOrReason(sb, plan);
+        AppendInvestigationResults(sb, hint.AgenticInvestigations);
+
+        return sb.ToString().TrimEnd();
+    }
+
+    private static void AppendConcerns(StringBuilder sb, IReadOnlyList<string> concerns)
+    {
+        if (concerns.Count == 0)
         {
-            sb.AppendLine("Concerns:");
-            foreach (var concern in plan.Concerns)
-            {
-                sb.AppendLine($"- {concern}");
-            }
+            return;
         }
 
+        sb.AppendLine("Concerns:");
+        foreach (var concern in concerns)
+        {
+            sb.AppendLine($"- {concern}");
+        }
+    }
+
+    private static void AppendInvestigationTasksOrReason(StringBuilder sb, AgenticFileReviewPlan plan)
+    {
         if (plan.InvestigationTasks.Count > 0)
         {
             sb.AppendLine("Investigation tasks:");
@@ -152,41 +166,59 @@ internal static partial class ReviewPrompts
                 sb.AppendLine(
                     $"- {task.TaskId}: {task.Concern} [{task.TaskType}] (tools: {string.Join(", ", task.AllowedTools)}, budget: {task.MaxToolCalls})");
             }
+
+            return;
         }
-        else if (!string.IsNullOrWhiteSpace(plan.NoInvestigationReason))
+
+        if (!string.IsNullOrWhiteSpace(plan.NoInvestigationReason))
         {
             sb.AppendLine($"No-investigation reason: {plan.NoInvestigationReason}");
         }
+    }
 
-        if (hint.AgenticInvestigations.Count > 0)
+    private static void AppendInvestigationResults(StringBuilder sb, IReadOnlyList<AgenticFileInvestigationResult> investigations)
+    {
+        if (investigations.Count == 0)
         {
-            sb.AppendLine();
-            sb.AppendLine("## Agentic Investigation Results");
-            foreach (var investigation in hint.AgenticInvestigations)
-            {
-                sb.AppendLine($"### {investigation.TaskId} [{investigation.Status}]");
-
-                if (investigation.Evidence.Count > 0)
-                {
-                    sb.AppendLine("Evidence:");
-                    foreach (var evidence in investigation.Evidence)
-                    {
-                        sb.AppendLine($"- {evidence.Kind}: {evidence.Summary} ({evidence.SourceId ?? "no-source"})");
-                    }
-                }
-
-                if (investigation.CandidateFindings.Count > 0)
-                {
-                    sb.AppendLine("Candidate findings:");
-                    foreach (var finding in investigation.CandidateFindings)
-                    {
-                        sb.AppendLine($"- {finding.Id}: {finding.Message}");
-                    }
-                }
-            }
+            return;
         }
 
-        return sb.ToString().TrimEnd();
+        sb.AppendLine();
+        sb.AppendLine("## Agentic Investigation Results");
+        foreach (var investigation in investigations)
+        {
+            sb.AppendLine($"### {investigation.TaskId} [{investigation.Status}]");
+            AppendEvidence(sb, investigation.Evidence);
+            AppendCandidateFindings(sb, investigation.CandidateFindings);
+        }
+    }
+
+    private static void AppendEvidence(StringBuilder sb, IReadOnlyList<EvidenceItem> evidence)
+    {
+        if (evidence.Count == 0)
+        {
+            return;
+        }
+
+        sb.AppendLine("Evidence:");
+        foreach (var item in evidence)
+        {
+            sb.AppendLine($"- {item.Kind}: {item.Summary} ({item.SourceId ?? "no-source"})");
+        }
+    }
+
+    private static void AppendCandidateFindings(StringBuilder sb, IReadOnlyList<AgenticFileCandidateFinding> findings)
+    {
+        if (findings.Count == 0)
+        {
+            return;
+        }
+
+        sb.AppendLine("Candidate findings:");
+        foreach (var finding in findings)
+        {
+            sb.AppendLine($"- {finding.Id}: {finding.Message}");
+        }
     }
 
     private static string? BuildSecurityChecklistSection(FileRiskMarkers? riskMarkers, string? filePath)
@@ -261,13 +293,23 @@ internal static partial class ReviewPrompts
                 file.UnifiedDiff,
                 relevantThreads.Count > 0,
                 relevantThreads.Select(thread => new PromptTemplateModels.PromptThreadModel(
-                        thread.FilePath is not null
-                            ? $"{thread.FilePath}{(thread.LineNumber.HasValue ? $":L{thread.LineNumber}" : string.Empty)}"
-                            : "(PR-level)",
+                        FormatThreadLocation(thread),
                         thread.Comments.Select(comment => new PromptTemplateModels.PromptThreadCommentModel(comment.AuthorName, comment.Content)).ToList()))
                     .ToList()));
 
         return ComposePrompt(context, PromptStageKeys.PerFileUser, PromptStageRole.User, defaultText);
+    }
+
+    private static string FormatThreadLocation(PrCommentThread thread)
+    {
+        if (thread.FilePath is null)
+        {
+            return "(PR-level)";
+        }
+
+        return thread.LineNumber.HasValue
+            ? $"{thread.FilePath}:L{thread.LineNumber}"
+            : thread.FilePath;
     }
 
     private static IReadOnlyList<ChangedFileSummary> BuildBoundedManifest(string currentPath, IReadOnlyList<ChangedFileSummary> manifest)

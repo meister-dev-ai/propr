@@ -113,34 +113,7 @@ public sealed partial class ProCursorIndexCoordinator(
                 return true;
             }
 
-            var extractedChunks = await chunkExtractor.ExtractAsync(source, materializedSource, ct);
-            var normalizedChunks = extractedChunks.Count == 0
-                ? []
-                : await embeddingService.NormalizeChunksAsync(source.ClientId, extractedChunks, ct);
-            var embeddingUsageContext = normalizedChunks.Count == 0
-                ? null
-                : new ProCursorEmbeddingUsageContext(
-                    source.Id,
-                    source.DisplayName,
-                    $"pcidx:{job.Id:N}",
-                    ProCursorTokenUsageCallType.Embedding,
-                    job.Id,
-                    normalizedChunks
-                        .Select(chunk => new ProCursorTokenUsageInputContext(chunk.SourcePath))
-                        .ToList()
-                        .AsReadOnly());
-            var embeddings = normalizedChunks.Count == 0
-                ? []
-                : await embeddingService.GenerateEmbeddingsAsync(
-                    source.ClientId,
-                    normalizedChunks.Select(chunk => chunk.ContentText).ToList().AsReadOnly(),
-                    embeddingUsageContext,
-                    ct);
-
-            if (embeddings.Count != normalizedChunks.Count)
-            {
-                throw new InvalidOperationException($"Expected {normalizedChunks.Count} ProCursor embeddings but received {embeddings.Count}.");
-            }
+            var (normalizedChunks, embeddings) = await this.ExtractAndEmbedChunksAsync(source, materializedSource, job.Id, ct);
 
             snapshot = new ProCursorIndexSnapshot(
                 Guid.NewGuid(),
@@ -182,32 +155,92 @@ public sealed partial class ProCursorIndexCoordinator(
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
-            if (snapshot is not null && string.Equals(snapshot.Status, "building", StringComparison.Ordinal))
-            {
-                snapshot.MarkFailed(ex.Message);
-                await snapshotRepository.UpdateAsync(snapshot, ct);
-            }
-
-            if (job.AttemptCount < MaxRetryAttempts)
-            {
-                job.MarkPendingForRetry(ex.Message);
-            }
-            else
-            {
-                job.MarkFailed(ex.Message);
-            }
-
-            await indexJobRepository.UpdateAsync(job, ct);
-
-            LogJobFailed(logger, job.Id, ex);
+            await this.HandleJobFailureAsync(job, snapshot, ex, ct);
             return true;
         }
         finally
         {
-            if (!string.IsNullOrWhiteSpace(materializedRootDirectory) && Directory.Exists(materializedRootDirectory))
-            {
-                Directory.Delete(materializedRootDirectory, true);
-            }
+            CleanupMaterializedDirectory(materializedRootDirectory);
+        }
+    }
+
+    /// <summary>
+    ///     Extracts source chunks, normalizes them, and generates embeddings for a materialized source,
+    ///     validating that every normalized chunk received a corresponding embedding.
+    /// </summary>
+    private async Task<(IReadOnlyList<ProCursorExtractedChunk> NormalizedChunks, IReadOnlyList<float[]> Embeddings)> ExtractAndEmbedChunksAsync(
+        ProCursorKnowledgeSource source,
+        ProCursorMaterializedSource materializedSource,
+        Guid jobId,
+        CancellationToken ct)
+    {
+        var extractedChunks = await chunkExtractor.ExtractAsync(source, materializedSource, ct);
+        var normalizedChunks = extractedChunks.Count == 0
+            ? []
+            : await embeddingService.NormalizeChunksAsync(source.ClientId, extractedChunks, ct);
+        var embeddingUsageContext = normalizedChunks.Count == 0
+            ? null
+            : new ProCursorEmbeddingUsageContext(
+                source.Id,
+                source.DisplayName,
+                $"pcidx:{jobId:N}",
+                ProCursorTokenUsageCallType.Embedding,
+                jobId,
+                normalizedChunks
+                    .Select(chunk => new ProCursorTokenUsageInputContext(chunk.SourcePath))
+                    .ToList()
+                    .AsReadOnly());
+        var embeddings = normalizedChunks.Count == 0
+            ? []
+            : await embeddingService.GenerateEmbeddingsAsync(
+                source.ClientId,
+                normalizedChunks.Select(chunk => chunk.ContentText).ToList().AsReadOnly(),
+                embeddingUsageContext,
+                ct);
+
+        if (embeddings.Count != normalizedChunks.Count)
+        {
+            throw new InvalidOperationException($"Expected {normalizedChunks.Count} ProCursor embeddings but received {embeddings.Count}.");
+        }
+
+        return (normalizedChunks, embeddings);
+    }
+
+    /// <summary>
+    ///     Records a failed job execution: marks any in-progress snapshot as failed, schedules a retry
+    ///     or terminal failure for the job depending on the attempt count, and logs the failure.
+    /// </summary>
+    private async Task HandleJobFailureAsync(
+        ProCursorIndexJob job,
+        ProCursorIndexSnapshot? snapshot,
+        Exception ex,
+        CancellationToken ct)
+    {
+        if (snapshot is not null && string.Equals(snapshot.Status, "building", StringComparison.Ordinal))
+        {
+            snapshot.MarkFailed(ex.Message);
+            await snapshotRepository.UpdateAsync(snapshot, ct);
+        }
+
+        if (job.AttemptCount < MaxRetryAttempts)
+        {
+            job.MarkPendingForRetry(ex.Message);
+        }
+        else
+        {
+            job.MarkFailed(ex.Message);
+        }
+
+        await indexJobRepository.UpdateAsync(job, ct);
+
+        LogJobFailed(logger, job.Id, ex);
+    }
+
+    private static void CleanupMaterializedDirectory(string? materializedRootDirectory)
+    {
+        if (!string.IsNullOrWhiteSpace(materializedRootDirectory) && Directory.Exists(materializedRootDirectory))
+        {
+            Directory.Delete(materializedRootDirectory, true);
         }
     }
 

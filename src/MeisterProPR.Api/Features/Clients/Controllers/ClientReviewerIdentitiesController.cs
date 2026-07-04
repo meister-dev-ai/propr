@@ -15,6 +15,7 @@ namespace MeisterProPR.Api.Features.Clients.Controllers;
 
 /// <summary>Manages configured provider reviewer-trigger identities for one client provider connection.</summary>
 [ApiController]
+[Route("clients/{clientId:guid}/provider-connections/{connectionId:guid}")]
 public sealed partial class ClientReviewerIdentitiesController(
     IClientScmConnectionRepository connectionRepository,
     IClientReviewerIdentityRepository reviewerIdentityRepository,
@@ -62,7 +63,7 @@ public sealed partial class ClientReviewerIdentitiesController(
     /// <response code="403">Caller lacks required client access.</response>
     /// <response code="404">Client provider connection not found.</response>
     /// <response code="409">The provider onboarding identity capability is not registered.</response>
-    [HttpGet("clients/{clientId:guid}/provider-connections/{connectionId:guid}/reviewer-identities/resolve")]
+    [HttpGet("reviewer-identities/resolve")]
     [ProducesResponseType(typeof(IReadOnlyList<ResolvedReviewerIdentityResponse>), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
@@ -130,7 +131,7 @@ public sealed partial class ClientReviewerIdentitiesController(
     /// <response code="401">Missing or invalid credentials.</response>
     /// <response code="403">Caller lacks required client access.</response>
     /// <response code="404">Client provider connection or reviewer-trigger identity not found.</response>
-    [HttpGet("clients/{clientId:guid}/provider-connections/{connectionId:guid}/reviewer-identity")]
+    [HttpGet("reviewer-identity")]
     [ProducesResponseType(typeof(ClientReviewerIdentityDto), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
@@ -167,7 +168,7 @@ public sealed partial class ClientReviewerIdentitiesController(
     /// <response code="401">Missing or invalid credentials.</response>
     /// <response code="403">Caller lacks required client access.</response>
     /// <response code="404">Client provider connection not found.</response>
-    [HttpPut("clients/{clientId:guid}/provider-connections/{connectionId:guid}/reviewer-identity")]
+    [HttpPut("reviewer-identity")]
     [ProducesResponseType(typeof(ClientReviewerIdentityDto), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
@@ -219,7 +220,7 @@ public sealed partial class ClientReviewerIdentitiesController(
     /// <response code="401">Missing or invalid credentials.</response>
     /// <response code="403">Caller lacks required client access.</response>
     /// <response code="404">Client provider connection not found.</response>
-    [HttpDelete("clients/{clientId:guid}/provider-connections/{connectionId:guid}/reviewer-identity")]
+    [HttpDelete("reviewer-identity")]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]

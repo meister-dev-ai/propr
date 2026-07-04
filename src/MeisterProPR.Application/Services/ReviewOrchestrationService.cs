@@ -761,35 +761,10 @@ public sealed partial class ReviewOrchestrationService(
         CancellationToken ct)
     {
         var changedFilePaths = pr.ChangedFiles.Select(f => f.Path).ToList();
-        var carriedForwardPaths = new List<string>();
         var changedPathsSet = new HashSet<string>(changedFilePaths, StringComparer.OrdinalIgnoreCase);
 
-        if (baselineJob is not null)
-        {
-            foreach (var priorResult in baselineJob.FileReviewResults
-                         .Where(fr => fr.IsComplete && !fr.IsFailed && !fr.IsExcluded && !fr.IsCarriedForward))
-            {
-                if (!changedPathsSet.Contains(priorResult.FilePath))
-                {
-                    var carried = ReviewFileResult.CreateCarriedForward(job.Id, priorResult);
-                    await jobs.AddFileResultAsync(carried, ct);
-                    carriedForwardPaths.Add(priorResult.FilePath);
-                }
-            }
-        }
-
-        if (resumeJob is not null)
-        {
-            foreach (var priorResult in resumeJob.FileReviewResults
-                         .Where(fr => fr.IsComplete && !fr.IsFailed && !fr.IsExcluded && !fr.IsCarriedForward))
-            {
-                if (changedPathsSet.Contains(priorResult.FilePath))
-                {
-                    var resumed = ReviewFileResult.CreateResumed(job.Id, priorResult);
-                    await jobs.AddFileResultAsync(resumed, ct);
-                }
-            }
-        }
+        var carriedForwardPaths = await this.CarryForwardBaselineResultsAsync(job, baselineJob, changedPathsSet, ct);
+        await this.ResumePriorFileResultsAsync(job, resumeJob, changedPathsSet, ct);
 
         if (changedFilePaths.Count == 0 && (carriedForwardPaths.Count > 0 || resumeJob is not null))
         {
@@ -825,8 +800,8 @@ public sealed partial class ReviewOrchestrationService(
                 Workspace: workspacePreparation.Workspace,
                 WorkspaceLease: workspacePreparation.Workspace?.Lease,
                 WorkspaceFailure: workspacePreparation.Failure));
-        IReadOnlyList<RepositoryInstruction> relevantInstructions = [];
-        var exclusionRules = ReviewExclusionRules.Default;
+        IReadOnlyList<RepositoryInstruction> relevantInstructions;
+        ReviewExclusionRules exclusionRules;
 
         var fetchedInstructions = await instructionFetcher.FetchAsync(
             job.OrganizationUrl,
@@ -874,6 +849,58 @@ public sealed partial class ReviewOrchestrationService(
         };
 
         return (systemContext, carriedForwardPaths);
+    }
+
+    // Carries forward file results from the prior baseline job for files that are no longer
+    // part of the current change set, persisting a carried-forward copy under the current job.
+    private async Task<List<string>> CarryForwardBaselineResultsAsync(
+        ReviewJob job,
+        ReviewJob? baselineJob,
+        HashSet<string> changedPathsSet,
+        CancellationToken ct)
+    {
+        var carriedForwardPaths = new List<string>();
+        if (baselineJob is null)
+        {
+            return carriedForwardPaths;
+        }
+
+        foreach (var priorResult in baselineJob.FileReviewResults
+                     .Where(fr => fr.IsComplete && !fr.IsFailed && !fr.IsExcluded && !fr.IsCarriedForward))
+        {
+            if (!changedPathsSet.Contains(priorResult.FilePath))
+            {
+                var carried = ReviewFileResult.CreateCarriedForward(job.Id, priorResult);
+                await jobs.AddFileResultAsync(carried, ct);
+                carriedForwardPaths.Add(priorResult.FilePath);
+            }
+        }
+
+        return carriedForwardPaths;
+    }
+
+    // Resumes file results from a prior job targeting the same review revision for files that
+    // are still part of the current change set, so completed work is not redone.
+    private async Task ResumePriorFileResultsAsync(
+        ReviewJob job,
+        ReviewJob? resumeJob,
+        HashSet<string> changedPathsSet,
+        CancellationToken ct)
+    {
+        if (resumeJob is null)
+        {
+            return;
+        }
+
+        foreach (var priorResult in resumeJob.FileReviewResults
+                     .Where(fr => fr.IsComplete && !fr.IsFailed && !fr.IsExcluded && !fr.IsCarriedForward))
+        {
+            if (changedPathsSet.Contains(priorResult.FilePath))
+            {
+                var resumed = ReviewFileResult.CreateResumed(job.Id, priorResult);
+                await jobs.AddFileResultAsync(resumed, ct);
+            }
+        }
     }
 
     private async Task RecordWorkspaceProtocolAsync(
@@ -1078,20 +1105,18 @@ public sealed partial class ReviewOrchestrationService(
 
         foreach (var comment in result.Comments)
         {
-            if (!CanUseGitLabInlineAnchor(comment, insertedLinesByPath))
+            if (!CanUseGitLabInlineAnchor(comment, insertedLinesByPath) &&
+                !string.IsNullOrWhiteSpace(comment.FilePath) && comment.LineNumber.HasValue &&
+                comment.LineNumber.Value > 0)
             {
-                if (!string.IsNullOrWhiteSpace(comment.FilePath) && comment.LineNumber.HasValue &&
-                    comment.LineNumber.Value > 0)
-                {
-                    downgradedCount++;
-                    normalizedComments.Add(
-                        new ReviewComment(
-                            null,
-                            null,
-                            comment.Severity,
-                            $"{NormalizeReviewPath(comment.FilePath)}:L{comment.LineNumber.Value}: {comment.Message}"));
-                    continue;
-                }
+                downgradedCount++;
+                normalizedComments.Add(
+                    new ReviewComment(
+                        null,
+                        null,
+                        comment.Severity,
+                        $"{NormalizeReviewPath(comment.FilePath)}:L{comment.LineNumber.Value}: {comment.Message}"));
+                continue;
             }
 
             normalizedComments.Add(comment);
@@ -1154,44 +1179,7 @@ public sealed partial class ReviewOrchestrationService(
 
         foreach (var diffLine in diffLines)
         {
-            if (diffLine.StartsWith("@@", StringComparison.Ordinal))
-            {
-                if (TryParseUnifiedDiffNewLineStart(diffLine, out var newLineStart))
-                {
-                    currentNewLine = newLineStart;
-                    hasHunkHeader = true;
-                }
-
-                continue;
-            }
-
-            if (!hasHunkHeader)
-            {
-                continue;
-            }
-
-            if (diffLine.StartsWith("+++", StringComparison.Ordinal) ||
-                diffLine.StartsWith("---", StringComparison.Ordinal))
-            {
-                continue;
-            }
-
-            if (diffLine.StartsWith("+", StringComparison.Ordinal))
-            {
-                insertedLines.Add(currentNewLine);
-                currentNewLine++;
-                continue;
-            }
-
-            if (diffLine.StartsWith("-", StringComparison.Ordinal))
-            {
-                continue;
-            }
-
-            if (diffLine.StartsWith(" ", StringComparison.Ordinal))
-            {
-                currentNewLine++;
-            }
+            ProcessUnifiedDiffLine(diffLine, insertedLines, ref currentNewLine, ref hasHunkHeader);
         }
 
         if (!hasHunkHeader && changedFile.ChangeType == ChangeType.Add)
@@ -1204,6 +1192,53 @@ public sealed partial class ReviewOrchestrationService(
         }
 
         return insertedLines;
+    }
+
+    // Classifies a single unified-diff line and updates the running new-file line cursor.
+    private static void ProcessUnifiedDiffLine(
+        string diffLine,
+        HashSet<int> insertedLines,
+        ref int currentNewLine,
+        ref bool hasHunkHeader)
+    {
+        if (diffLine.StartsWith("@@", StringComparison.Ordinal))
+        {
+            if (TryParseUnifiedDiffNewLineStart(diffLine, out var newLineStart))
+            {
+                currentNewLine = newLineStart;
+                hasHunkHeader = true;
+            }
+
+            return;
+        }
+
+        if (!hasHunkHeader)
+        {
+            return;
+        }
+
+        if (diffLine.StartsWith("+++", StringComparison.Ordinal) ||
+            diffLine.StartsWith("---", StringComparison.Ordinal))
+        {
+            return;
+        }
+
+        if (diffLine.StartsWith("+", StringComparison.Ordinal))
+        {
+            insertedLines.Add(currentNewLine);
+            currentNewLine++;
+            return;
+        }
+
+        if (diffLine.StartsWith("-", StringComparison.Ordinal))
+        {
+            return;
+        }
+
+        if (diffLine.StartsWith(" ", StringComparison.Ordinal))
+        {
+            currentNewLine++;
+        }
     }
 
     private static bool TryParseUnifiedDiffNewLineStart(string diffLine, out int newLineStart)
@@ -1346,10 +1381,7 @@ public sealed partial class ReviewOrchestrationService(
             var stored = scan?.Threads.FirstOrDefault(t => t.ThreadId == thread.ThreadId);
 
             // Skip threads that ADO already reports as resolved — no AI call needed.
-            if (string.Equals(thread.Status, "Fixed", StringComparison.OrdinalIgnoreCase) ||
-                string.Equals(thread.Status, "Closed", StringComparison.OrdinalIgnoreCase) ||
-                string.Equals(thread.Status, "WontFix", StringComparison.OrdinalIgnoreCase) ||
-                string.Equals(thread.Status, "ByDesign", StringComparison.OrdinalIgnoreCase))
+            if (IsResolvedStatus(thread.Status))
             {
                 continue;
             }
@@ -1613,16 +1645,6 @@ public sealed partial class ReviewOrchestrationService(
             reviewerId,
             authorizedIdentityId,
             authorizedIdentityName));
-    }
-
-    private static string BuildCommentHistory(PrCommentThread thread)
-    {
-        if (thread.Comments.Count == 0)
-        {
-            return "(no comments)";
-        }
-
-        return string.Join("\n", thread.Comments.Select(c => $"{c.AuthorName}: {c.Content}"));
     }
 
     private static ReviewThreadRef CreateReviewThreadRef(ReviewJob job, PrCommentThread thread)

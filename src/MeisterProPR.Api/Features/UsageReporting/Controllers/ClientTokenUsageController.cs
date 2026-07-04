@@ -1,6 +1,7 @@
 // Copyright (c) Andreas Rain.
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
+using System.Globalization;
 using MeisterProPR.Api.Extensions;
 using MeisterProPR.Application.DTOs;
 using MeisterProPR.Application.Interfaces;
@@ -11,6 +12,7 @@ namespace MeisterProPR.Api.Controllers;
 
 /// <summary>Exposes daily token consumption aggregates for a client.</summary>
 [ApiController]
+[Route("admin/clients/{clientId:guid}/token-usage")]
 public sealed partial class ClientTokenUsageController(
     IClientTokenUsageRepository tokenUsageRepository,
     ILogger<ClientTokenUsageController> logger) : ControllerBase
@@ -29,7 +31,7 @@ public sealed partial class ClientTokenUsageController(
     /// <response code="400">Date parameters are missing or invalid.</response>
     /// <response code="401">Missing or invalid credentials.</response>
     /// <response code="403">Caller does not have access to this client.</response>
-    [HttpGet("admin/clients/{clientId:guid}/token-usage")]
+    [HttpGet]
     [ProducesResponseType(typeof(ClientTokenUsageDto), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
@@ -46,12 +48,12 @@ public sealed partial class ClientTokenUsageController(
             return roleCheck;
         }
 
-        if (!DateOnly.TryParse(from, out var fromDate))
+        if (!DateOnly.TryParse(from, CultureInfo.InvariantCulture, out var fromDate))
         {
             return this.BadRequest(new { error = "Query parameter 'from' is required and must be a valid date (YYYY-MM-DD)." });
         }
 
-        if (!DateOnly.TryParse(to, out var toDate))
+        if (!DateOnly.TryParse(to, CultureInfo.InvariantCulture, out var toDate))
         {
             return this.BadRequest(new { error = "Query parameter 'to' is required and must be a valid date (YYYY-MM-DD)." });
         }

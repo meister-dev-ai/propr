@@ -118,19 +118,12 @@ public sealed class ClientAdminService(
         if (customSystemMessage is not null)
         {
             // Empty string clears the stored value; any other non-null value sets it.
-            client.CustomSystemMessage = string.IsNullOrEmpty(customSystemMessage)
-                ? null
-                : customSystemMessage;
+            client.CustomSystemMessage = NormalizeToNullIfEmpty(customSystemMessage);
         }
 
         if (defaultReviewPipelineProfileId is not null)
         {
-            client.DefaultReviewPipelineProfileId = string.IsNullOrWhiteSpace(defaultReviewPipelineProfileId)
-                ? null
-                : defaultReviewPipelineProfileId;
-            client.DefaultReviewPipelineProfileUpdatedAtUtc = client.DefaultReviewPipelineProfileId is null
-                ? null
-                : DateTimeOffset.UtcNow;
+            ApplyDefaultReviewPipelineProfile(client, defaultReviewPipelineProfileId);
         }
 
         if (scmCommentPostingEnabled.HasValue)
@@ -150,6 +143,21 @@ public sealed class ClientAdminService(
 
         await dbContext.SaveChangesAsync(ct);
         return await this.GetByIdAsync(clientId, ct);
+    }
+
+    private static string? NormalizeToNullIfEmpty(string value)
+    {
+        return string.IsNullOrEmpty(value) ? null : value;
+    }
+
+    private static void ApplyDefaultReviewPipelineProfile(ClientRecord client, string defaultReviewPipelineProfileId)
+    {
+        client.DefaultReviewPipelineProfileId = string.IsNullOrWhiteSpace(defaultReviewPipelineProfileId)
+            ? null
+            : defaultReviewPipelineProfileId;
+        client.DefaultReviewPipelineProfileUpdatedAtUtc = client.DefaultReviewPipelineProfileId is null
+            ? null
+            : DateTimeOffset.UtcNow;
     }
 
     /// <inheritdoc />

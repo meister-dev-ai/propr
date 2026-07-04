@@ -16,6 +16,7 @@ namespace MeisterProPR.Api.Controllers;
 
 /// <summary>Handles username/password login and JWT refresh.</summary>
 [ApiController]
+[Route("auth")]
 public sealed class AuthController(
     IUserRepository userRepository,
     IRefreshTokenRepository refreshTokenRepository,
@@ -24,7 +25,7 @@ public sealed class AuthController(
     ILicensingCapabilityService? licensingCapabilityService = null) : ControllerBase
 {
     /// <summary>Authenticate with username and password; returns a JWT access token and refresh token.</summary>
-    [HttpPost("/auth/login")]
+    [HttpPost("login")]
     public async Task<IActionResult> Login([FromBody] LoginRequest request, CancellationToken ct)
     {
         if (string.IsNullOrWhiteSpace(request.Username) || string.IsNullOrWhiteSpace(request.Password))
@@ -69,7 +70,7 @@ public sealed class AuthController(
     }
 
     /// <summary>Exchange the refresh-token cookie (or body, for legacy callers) for a new JWT access token.</summary>
-    [HttpPost("/auth/refresh")]
+    [HttpPost("refresh")]
     public async Task<IActionResult> Refresh([FromBody] RefreshRequest? request = null, CancellationToken ct = default)
     {
         var rawRefreshToken = RefreshTokenCookie.Read(this.Request) ?? request?.RefreshToken;
@@ -103,7 +104,7 @@ public sealed class AuthController(
     }
 
     /// <summary>Revokes the caller's refresh tokens and clears the session cookie.</summary>
-    [HttpPost("/auth/logout")]
+    [HttpPost("logout")]
     public async Task<IActionResult> Logout(CancellationToken ct = default)
     {
         var rawRefreshToken = RefreshTokenCookie.Read(this.Request);
@@ -121,7 +122,7 @@ public sealed class AuthController(
     }
 
     /// <summary>Returns the current user's global role and per-client roles. Requires authentication.</summary>
-    [HttpGet("/auth/me")]
+    [HttpGet("me")]
     [ProducesResponseType(typeof(AuthenticatedSessionDto), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     public async Task<ActionResult<AuthenticatedSessionDto>> GetMe(CancellationToken ct = default)

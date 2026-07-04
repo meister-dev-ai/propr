@@ -253,11 +253,19 @@ internal static class AdoProviderAdapterHelpers
             return null;
         }
 
-        var login = !string.IsNullOrWhiteSpace(reviewer.UniqueName)
-            ? reviewer.UniqueName!
-            : !string.IsNullOrWhiteSpace(reviewer.DisplayName)
-                ? reviewer.DisplayName!
-                : reviewer.Id;
+        string login;
+        if (!string.IsNullOrWhiteSpace(reviewer.UniqueName))
+        {
+            login = reviewer.UniqueName!;
+        }
+        else if (!string.IsNullOrWhiteSpace(reviewer.DisplayName))
+        {
+            login = reviewer.DisplayName!;
+        }
+        else
+        {
+            login = reviewer.Id;
+        }
 
         return new ReviewerIdentity(
             host,

@@ -109,11 +109,14 @@ export function useClientsViewModel(options: UseClientsViewModelOptions = {}): C
         showCreateForm.value = true
       }
 
-      state.value = loadedClients.length === 0
-        ? empty(canCreateClients.value
-            ? 'No clients yet.'
-            : 'No clients are visible to your current tenant or client memberships.')
-        : ready({ clients: loadedClients, visibleTenants: tenants })
+      if (loadedClients.length === 0) {
+        const emptyMessage = canCreateClients.value
+          ? 'No clients yet.'
+          : 'No clients are visible to your current tenant or client memberships.'
+        state.value = empty(emptyMessage)
+      } else {
+        state.value = ready({ clients: loadedClients, visibleTenants: tenants })
+      }
     } catch (err) {
       if (err instanceof UnauthorizedError) {
         await router.push({ name: 'login' })

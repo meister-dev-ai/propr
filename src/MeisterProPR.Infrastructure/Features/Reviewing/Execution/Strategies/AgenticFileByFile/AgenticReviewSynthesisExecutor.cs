@@ -231,13 +231,11 @@ internal sealed class AgenticReviewSynthesisExecutor(
                     job.ClientId,
                     AiPurpose.ReviewHighEffort,
                     ct);
-                synthTierDto = synthesisRuntime.Connection;
                 effectiveClient = synthesisRuntime.ChatClient;
                 synthesisModelId = synthesisRuntime.Model.RemoteModelId;
             }
             catch
             {
-                synthTierDto = null;
                 synthesisModelId = null;
             }
         }
@@ -459,7 +457,7 @@ internal sealed class AgenticReviewSynthesisExecutor(
         CancellationToken ct)
     {
         string finalSummary;
-        IReadOnlyList<CandidateReviewFinding> synthesizedFindings = [];
+        IReadOnlyList<CandidateReviewFinding> synthesizedFindings;
         string? synthesisInputSample = null;
         string? synthesisSystemPrompt = null;
 
@@ -773,30 +771,43 @@ internal sealed class AgenticReviewSynthesisExecutor(
             lines.Add(string.Empty);
         }
 
-        if (publishCount > 0)
-        {
-            lines.Add($"Verification retained {publishCount} publishable finding{(publishCount == 1 ? string.Empty : "s")}.");
-
-            if (outsideChangeCount > 0)
-            {
-                lines.Add($"{outsideChangeCount} of these {(outsideChangeCount == 1 ? "is" : "are")} in pre-existing code outside this change.");
-            }
-        }
-
-        if (summaryOnlyItems.Count > 0)
-        {
-            if (publishCount == 0)
-            {
-                lines.Add("No publishable findings remained after verification.");
-            }
-
-            lines.Add(string.Empty);
-            lines.Add("Summary-only findings:");
-            lines.AddRange(summaryOnlyItems.Select(item => $"- {item}"));
-        }
+        AppendPublishedFindingsSection(lines, publishCount, outsideChangeCount);
+        AppendSummaryOnlyFindingsSection(lines, publishCount, summaryOnlyItems);
 
         return string.Join(
             Environment.NewLine, lines.Where((line, index) => index == 0 || !(string.IsNullOrEmpty(line) && string.IsNullOrEmpty(lines[index - 1]))));
+    }
+
+    private static void AppendPublishedFindingsSection(List<string> lines, int publishCount, int outsideChangeCount)
+    {
+        if (publishCount == 0)
+        {
+            return;
+        }
+
+        lines.Add($"Verification retained {publishCount} publishable finding{(publishCount == 1 ? string.Empty : "s")}.");
+
+        if (outsideChangeCount > 0)
+        {
+            lines.Add($"{outsideChangeCount} of these {(outsideChangeCount == 1 ? "is" : "are")} in pre-existing code outside this change.");
+        }
+    }
+
+    private static void AppendSummaryOnlyFindingsSection(List<string> lines, int publishCount, IReadOnlyList<string> summaryOnlyItems)
+    {
+        if (summaryOnlyItems.Count == 0)
+        {
+            return;
+        }
+
+        if (publishCount == 0)
+        {
+            lines.Add("No publishable findings remained after verification.");
+        }
+
+        lines.Add(string.Empty);
+        lines.Add("Summary-only findings:");
+        lines.AddRange(summaryOnlyItems.Select(item => $"- {item}"));
     }
 
     private static string? ExtractGroundedOverview(string summary)

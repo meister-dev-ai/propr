@@ -68,15 +68,17 @@ internal sealed class GitHubCodeReviewQueryService(
         var payload = await response.Content.ReadFromJsonAsync<GitHubPullRequestResponse>(ct)
                       ?? throw new InvalidOperationException("GitHub review query returned an empty payload.");
         var latestRevision = BuildRevision(payload);
-        var requestedReviewer = payload.RequestedReviewers?
-            .FirstOrDefault(reviewer => !string.IsNullOrWhiteSpace(reviewer.Login)) is { } reviewer
-            ? new ReviewerIdentity(
+        ReviewerIdentity? requestedReviewer = null;
+        if (payload.RequestedReviewers?.FirstOrDefault(reviewer => !string.IsNullOrWhiteSpace(reviewer.Login)) is { } reviewer)
+        {
+            var displayName = string.IsNullOrWhiteSpace(reviewer.Name) ? reviewer.Login! : reviewer.Name!;
+            requestedReviewer = new ReviewerIdentity(
                 review.Repository.Host,
                 reviewer.Id.ToString(CultureInfo.InvariantCulture),
                 reviewer.Login!,
-                string.IsNullOrWhiteSpace(reviewer.Name) ? reviewer.Login! : reviewer.Name!,
-                IsBot(reviewer))
-            : null;
+                displayName,
+                IsBot(reviewer));
+        }
 
         return new ReviewDiscoveryItemDto(
             ScmProvider.GitHub,
@@ -167,6 +169,7 @@ internal sealed class GitHubCodeReviewQueryService(
         }
         catch (JsonException)
         {
+            // Malformed JSON body: fall through and surface the raw response text instead.
         }
 
         return body.Trim();

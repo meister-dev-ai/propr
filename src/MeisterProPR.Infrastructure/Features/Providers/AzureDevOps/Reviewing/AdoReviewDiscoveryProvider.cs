@@ -84,6 +84,7 @@ internal sealed class AdoReviewDiscoveryProvider(
             }
             catch when (!ct.IsCancellationRequested)
             {
+                // This organization is unreachable or rejected the query; try the next candidate organization URL.
             }
         }
 

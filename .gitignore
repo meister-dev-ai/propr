@@ -101,3 +101,4 @@ frontend/.env.*.local
 frontend/openapi.json
 frontend/src/services/generated/
 .vscode/mcp.json
+.zed/settings.json

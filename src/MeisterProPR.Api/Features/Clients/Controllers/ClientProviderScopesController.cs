@@ -13,6 +13,7 @@ namespace MeisterProPR.Api.Features.Clients.Controllers;
 
 /// <summary>Manages client-scoped SCM provider scope selections.</summary>
 [ApiController]
+[Route("clients/{clientId:guid}/provider-connections/{connectionId:guid}/scopes")]
 public sealed partial class ClientProviderScopesController(
     IClientScmConnectionRepository connectionRepository,
     IClientScmScopeRepository scopeRepository,
@@ -55,7 +56,7 @@ public sealed partial class ClientProviderScopesController(
     /// <response code="401">Missing or invalid credentials.</response>
     /// <response code="403">Caller lacks required client access.</response>
     /// <response code="404">Client provider connection not found.</response>
-    [HttpGet("clients/{clientId:guid}/provider-connections/{connectionId:guid}/scopes")]
+    [HttpGet]
     [ProducesResponseType(typeof(IReadOnlyList<ClientScmScopeDto>), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
@@ -87,7 +88,7 @@ public sealed partial class ClientProviderScopesController(
     /// <response code="401">Missing or invalid credentials.</response>
     /// <response code="403">Caller lacks required client access.</response>
     /// <response code="404">Client provider connection or scope not found.</response>
-    [HttpGet("clients/{clientId:guid}/provider-connections/{connectionId:guid}/scopes/{scopeId:guid}")]
+    [HttpGet("{scopeId:guid}")]
     [ProducesResponseType(typeof(ClientScmScopeDto), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
@@ -126,7 +127,7 @@ public sealed partial class ClientProviderScopesController(
     /// <response code="403">Caller lacks required client access.</response>
     /// <response code="404">Client provider connection not found.</response>
     /// <response code="409">A provider scope already exists for the same external scope in this connection.</response>
-    [HttpPost("clients/{clientId:guid}/provider-connections/{connectionId:guid}/scopes")]
+    [HttpPost]
     [ProducesResponseType(typeof(ClientScmScopeDto), StatusCodes.Status201Created)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
@@ -198,7 +199,7 @@ public sealed partial class ClientProviderScopesController(
     /// <response code="401">Missing or invalid credentials.</response>
     /// <response code="403">Caller lacks required client access.</response>
     /// <response code="404">Client provider connection or scope not found.</response>
-    [HttpPatch("clients/{clientId:guid}/provider-connections/{connectionId:guid}/scopes/{scopeId:guid}")]
+    [HttpPatch("{scopeId:guid}")]
     [ProducesResponseType(typeof(ClientScmScopeDto), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
@@ -250,7 +251,7 @@ public sealed partial class ClientProviderScopesController(
     /// <response code="401">Missing or invalid credentials.</response>
     /// <response code="403">Caller lacks required client access.</response>
     /// <response code="404">Client provider connection or scope not found.</response>
-    [HttpDelete("clients/{clientId:guid}/provider-connections/{connectionId:guid}/scopes/{scopeId:guid}")]
+    [HttpDelete("{scopeId:guid}")]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]

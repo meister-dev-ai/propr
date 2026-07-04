@@ -17,6 +17,7 @@ namespace MeisterProPR.Api.Controllers;
 ///     degrade gracefully.
 /// </summary>
 [ApiController]
+[Route("clients/{clientId:guid}/review-archive/pull-requests")]
 public sealed class RetainedPullRequestDataController(IReviewArchiveStore reviewArchiveStore) : ControllerBase
 {
     /// <summary>
@@ -32,7 +33,7 @@ public sealed class RetainedPullRequestDataController(IReviewArchiveStore review
     /// <response code="400">Missing or invalid parameters.</response>
     /// <response code="401">Missing or invalid credentials.</response>
     /// <response code="403">Caller lacks read access to the client.</response>
-    [HttpGet("/clients/{clientId:guid}/review-archive/pull-requests/threads")]
+    [HttpGet("threads")]
     [ProducesResponseType(typeof(IReadOnlyList<RetainedThreadDto>), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
@@ -86,7 +87,7 @@ public sealed class RetainedPullRequestDataController(IReviewArchiveStore review
     /// <response code="400">Missing or invalid parameters.</response>
     /// <response code="401">Missing or invalid credentials.</response>
     /// <response code="403">Caller lacks read access to the client.</response>
-    [HttpGet("/clients/{clientId:guid}/review-archive/pull-requests/files")]
+    [HttpGet("files")]
     [ProducesResponseType(typeof(IReadOnlyList<RetainedFileDto>), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
@@ -132,7 +133,7 @@ public sealed class RetainedPullRequestDataController(IReviewArchiveStore review
     /// <response code="401">Missing or invalid credentials.</response>
     /// <response code="403">Caller lacks read access to the client.</response>
     /// <response code="404">No diff is retained for the file.</response>
-    [HttpGet("/clients/{clientId:guid}/review-archive/pull-requests/file-diff")]
+    [HttpGet("file-diff")]
     [ProducesResponseType(typeof(RetainedFileDiffDto), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]

@@ -66,15 +66,17 @@ internal sealed class GitHubReviewDiscoveryProvider(
             payload.Id.ToString(CultureInfo.InvariantCulture),
             payload.Number);
         var latestRevision = BuildRevision(payload);
-        var requestedReviewer = payload.RequestedReviewers?
-            .FirstOrDefault(candidate => !string.IsNullOrWhiteSpace(candidate.Login)) is { } reviewer
-            ? new ReviewerIdentity(
+        ReviewerIdentity? requestedReviewer = null;
+        if (payload.RequestedReviewers?.FirstOrDefault(candidate => !string.IsNullOrWhiteSpace(candidate.Login)) is { } reviewer)
+        {
+            var displayName = string.IsNullOrWhiteSpace(reviewer.Name) ? reviewer.Login! : reviewer.Name!;
+            requestedReviewer = new ReviewerIdentity(
                 repository.Host,
                 reviewer.Id.ToString(CultureInfo.InvariantCulture),
                 reviewer.Login!,
-                string.IsNullOrWhiteSpace(reviewer.Name) ? reviewer.Login! : reviewer.Name!,
-                IsBot(reviewer))
-            : null;
+                displayName,
+                IsBot(reviewer));
+        }
 
         return new ReviewDiscoveryItemDto(
             ScmProvider.GitHub,

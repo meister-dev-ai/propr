@@ -2,6 +2,7 @@
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
 import { createRouter, createWebHistory } from 'vue-router'
+import type { RouteLocationNormalizedGeneric, RouteLocationRaw } from 'vue-router'
 import { useSession } from '@/composables/useSession'
 
 const router = createRouter({
@@ -150,51 +151,92 @@ const router = createRouter({
   ],
 })
 
+const ACCESS_DENIED: RouteLocationRaw = { name: 'access-denied' }
+
+function resolveTenantDirectoryGuard(
+  to: RouteLocationNormalizedGeneric,
+  isAdmin: boolean,
+  tenantRoles: Record<string, number>,
+): RouteLocationRaw | undefined {
+  if (!to.meta.requiresTenantDirectoryAccess || isAdmin) {
+    return undefined
+  }
+  const hasAnyTenantAdminRole = Object.values(tenantRoles).some((role) => role >= 1)
+  return hasAnyTenantAdminRole ? undefined : ACCESS_DENIED
+}
+
+function resolveTenantAdminGuard(
+  to: RouteLocationNormalizedGeneric,
+  isAdmin: boolean,
+  hasTenantRole: (tenantId: string, minRole: 0 | 1) => boolean,
+): RouteLocationRaw | undefined {
+  if (!to.meta.requiresTenantAdmin || isAdmin) {
+    return undefined
+  }
+  const routeTenantId = typeof to.params.tenantId === 'string' ? to.params.tenantId : undefined
+  return routeTenantId && hasTenantRole(routeTenantId, 1) ? undefined : ACCESS_DENIED
+}
+
+function resolveRequiredClientRole(to: RouteLocationNormalizedGeneric): 0 | 1 | null {
+  if (to.meta.requiresClientAdmin) {
+    return 1
+  }
+  return to.meta.requiresClientAccess ? 0 : null
+}
+
+function resolveRouteClientId(to: RouteLocationNormalizedGeneric): string | undefined {
+  if (typeof to.query.clientId === 'string') {
+    return to.query.clientId
+  }
+  return typeof to.params.id === 'string' ? to.params.id : undefined
+}
+
+function resolveClientAccessGuard(
+  to: RouteLocationNormalizedGeneric,
+  isAdmin: boolean,
+  hasClientRole: (clientId: string, minRole: 0 | 1) => boolean,
+  clientRoles: Record<string, number>,
+): RouteLocationRaw | undefined {
+  const requiredClientRole = resolveRequiredClientRole(to)
+  if (requiredClientRole === null || isAdmin) {
+    return undefined
+  }
+
+  const routeClientId = resolveRouteClientId(to)
+  if (routeClientId) {
+    return hasClientRole(routeClientId, requiredClientRole) ? undefined : ACCESS_DENIED
+  }
+
+  const hasAnyMatchingRole = Object.values(clientRoles).some((role) => role >= requiredClientRole)
+  return hasAnyMatchingRole ? undefined : ACCESS_DENIED
+}
+
+function resolveLoginRedirectGuard(
+  to: RouteLocationNormalizedGeneric,
+  isAuthenticated: boolean,
+): RouteLocationRaw | undefined {
+  return (to.name === 'login' || to.name === 'tenant-login') && isAuthenticated ? { name: 'home' } : undefined
+}
+
 router.beforeEach((to) => {
   const { isAuthenticated, isAdmin, hasClientRole, hasTenantRole, clientRoles, tenantRoles, edition } = useSession()
+
   if (to.meta.requiresAuth && !isAuthenticated.value) {
     return { name: 'login' }
   }
   if (to.meta.requiresAdmin && !isAdmin.value) {
-    return { name: 'access-denied' }
+    return ACCESS_DENIED
   }
   if ((to.meta.requiresTenantDirectoryAccess || to.meta.requiresTenantAdmin) && edition.value === 'community') {
-    return { name: 'access-denied' }
+    return ACCESS_DENIED
   }
-  if (to.meta.requiresTenantDirectoryAccess && !isAdmin.value) {
-    const hasAnyTenantAdminRole = Object.values(tenantRoles.value).some((role) => role >= 1)
-    if (!hasAnyTenantAdminRole) {
-      return { name: 'access-denied' }
-    }
-  }
-  if (to.meta.requiresTenantAdmin && !isAdmin.value) {
-    const routeTenantId = typeof to.params.tenantId === 'string' ? to.params.tenantId : undefined
-    if (!routeTenantId || !hasTenantRole(routeTenantId, 1)) {
-      return { name: 'access-denied' }
-    }
-  }
-  const requiredClientRole = to.meta.requiresClientAdmin ? 1 : to.meta.requiresClientAccess ? 0 : null
-  if (requiredClientRole !== null && !isAdmin.value) {
-    const routeClientId = typeof to.query.clientId === 'string'
-      ? to.query.clientId
-      : typeof to.params.id === 'string'
-        ? to.params.id
-        : undefined
 
-    if (routeClientId) {
-      if (!hasClientRole(routeClientId, requiredClientRole as 0 | 1)) {
-        return { name: 'access-denied' }
-      }
-    } else {
-      const hasAnyMatchingRole = Object.values(clientRoles.value).some((role) => role >= requiredClientRole)
-      if (!hasAnyMatchingRole) {
-        return { name: 'access-denied' }
-      }
-    }
-  }
-  if ((to.name === 'login' || to.name === 'tenant-login') && isAuthenticated.value) {
-    return { name: 'home' }
-  }
+  return (
+    resolveTenantDirectoryGuard(to, isAdmin.value, tenantRoles.value) ??
+    resolveTenantAdminGuard(to, isAdmin.value, hasTenantRole) ??
+    resolveClientAccessGuard(to, isAdmin.value, hasClientRole, clientRoles.value) ??
+    resolveLoginRedirectGuard(to, isAuthenticated.value)
+  )
 })
 
 export default router

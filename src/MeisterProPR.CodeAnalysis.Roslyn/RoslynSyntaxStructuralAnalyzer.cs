@@ -80,30 +80,7 @@ public sealed class RoslynSyntaxStructuralAnalyzer : IStructuralCodeAnalyzer
                     continue;
                 }
 
-                // 1-based inclusive overlap.
-                var overlapping = declarations
-                    .Where(d => d.StartLine <= range.End && d.EndLine >= range.Start)
-                    .ToList();
-
-                // Keep only the innermost: drop any declaration that strictly contains another overlapping one.
-                foreach (var candidate in overlapping)
-                {
-                    var isOuter = overlapping.Any(other =>
-                        !ReferenceEquals(other.Node, candidate.Node)
-                        && other.StartLine >= candidate.StartLine
-                        && other.EndLine <= candidate.EndLine
-                        && (other.StartLine != candidate.StartLine || other.EndLine != candidate.EndLine));
-
-                    if (isOuter)
-                    {
-                        continue;
-                    }
-
-                    if (seen.Add((candidate.StartLine, candidate.EndLine, candidate.Name)))
-                    {
-                        enclosing.Add(new EnclosingDefinition(candidate.Kind, candidate.Name, candidate.StartLine, candidate.EndLine, totalLines));
-                    }
-                }
+                CollectEnclosingForRange(range, declarations, totalLines, seen, enclosing);
             }
 
             enclosing.Sort(static (a, b) =>
@@ -254,6 +231,42 @@ public sealed class RoslynSyntaxStructuralAnalyzer : IStructuralCodeAnalyzer
             this.LogFault(request.Path, ex);
             return Task.FromResult(string.Empty);
         }
+    }
+
+    private static void CollectEnclosingForRange(
+        ChangedLineRange range,
+        List<DeclarationInfo> declarations,
+        int totalLines,
+        HashSet<(int, int, string?)> seen,
+        List<EnclosingDefinition> enclosing)
+    {
+        // 1-based inclusive overlap.
+        var overlapping = declarations
+            .Where(d => d.StartLine <= range.End && d.EndLine >= range.Start)
+            .ToList();
+
+        // Keep only the innermost: drop any declaration that strictly contains another overlapping one.
+        foreach (var candidate in overlapping)
+        {
+            if (IsStrictlyOuterDeclaration(candidate, overlapping))
+            {
+                continue;
+            }
+
+            if (seen.Add((candidate.StartLine, candidate.EndLine, candidate.Name)))
+            {
+                enclosing.Add(new EnclosingDefinition(candidate.Kind, candidate.Name, candidate.StartLine, candidate.EndLine, totalLines));
+            }
+        }
+    }
+
+    private static bool IsStrictlyOuterDeclaration(DeclarationInfo candidate, List<DeclarationInfo> overlapping)
+    {
+        return overlapping.Any(other =>
+            !ReferenceEquals(other.Node, candidate.Node)
+            && other.StartLine >= candidate.StartLine
+            && other.EndLine <= candidate.EndLine
+            && (other.StartLine != candidate.StartLine || other.EndLine != candidate.EndLine));
     }
 
     private static void BlankSpan(char[] chars, TextSpan span)

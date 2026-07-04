@@ -27,6 +27,104 @@ export interface TraceChipViewModel {
     isDisabled: boolean
 }
 
+function normalizeTraceFilterValue(value: unknown): string {
+    if (typeof value === 'string') {
+        return value
+    }
+
+    if (typeof value === 'number') {
+        return String(value)
+    }
+
+    if (Array.isArray(value)) {
+        return normalizeTraceFilterValue(value[0])
+    }
+
+    return ''
+}
+
+function traceAutocompleteValue(value: string): string | null {
+    return value.trim().length > 0 ? value : null
+}
+
+function normalizeTraceCategory(kind: string | null | undefined, name: string | null | undefined, eventCategory?: string | null): string {
+    const normalizedCategory = (eventCategory ?? '').trim().toLowerCase()
+    if (normalizedCategory) return normalizedCategory
+
+    const normalizedKind = (kind ?? '').trim().toLowerCase()
+    const normalizedName = (name ?? '').trim().toLowerCase()
+
+    if (normalizedKind === 'memoryoperation') return 'memory'
+    if (normalizedName.startsWith('dedup_')) return 'duplicate-suppression'
+    if (normalizedName.includes('comment_relevance')) return 'comment-relevance'
+    if (normalizedName.includes('verification')) return 'verification'
+    if (normalizedName.includes('review_finding_gate') || normalizedName.includes('summary_reconciliation') || normalizedName.includes('repeated_judgment')) return 'review-finding-gate'
+    if (normalizedName.includes('prorv')) return 'prorv-prefilter'
+    if (normalizedName.includes('pr_wide')) return 'pr-wide-review'
+    if (normalizedName.includes('review_strategy') || normalizedName.includes('agentic_file') || normalizedName.includes('review_agent_session') || normalizedName.includes('prompt_stage_evidence') || normalizedName.includes('review_step_skipped')) return 'review-strategy'
+    if (normalizedKind === 'aicall') return 'ai-call'
+    if (normalizedKind === 'toolcall') return 'tool-call'
+    return 'operational'
+}
+
+function buildTraceSnippet(value: string | null | undefined, queryText: string): string | null {
+    const normalized = value?.trim()
+    if (!normalized) {
+        return null
+    }
+
+    const maxLength = 220
+    if (!queryText) {
+        return normalized.length <= maxLength ? normalized : `${normalized.slice(0, maxLength).trim()}...`
+    }
+
+    const index = normalized.toLowerCase().indexOf(queryText)
+    if (index < 0) {
+        return null
+    }
+
+    const start = Math.max(0, index - 80)
+    const end = Math.min(normalized.length, start + maxLength)
+    let snippet = normalized.slice(start, end).trim()
+    if (start > 0) snippet = `...${snippet}`
+    if (end < normalized.length) snippet = `${snippet}...`
+    return snippet
+}
+
+function firstTraceValue(...values: Array<string | null | undefined>): string | null {
+    return values.find(value => !!value && value.trim().length > 0)?.trim() ?? null
+}
+
+function detectTraceRedaction(...values: Array<string | null | undefined>): boolean {
+    const markers = ['[REDACTED]', '***REDACTED***', '<redacted>']
+    return values.some(value => !!value && markers.some(marker => value.includes(marker)))
+}
+
+/**
+ * Per-chip match counting for one event, shared by the `traceChipCounts`
+ * computed below. Extracted so the computed itself stays a flat two-level
+ * loop instead of nesting a third conditional loop inline.
+ */
+function accumulateChipCounts(
+    protocol: ReviewProtocolPass,
+    event: ProtocolEventDto,
+    counts: Record<TraceChipId, number>,
+    remaining: Set<TraceChipId>,
+): void {
+    for (const definition of traceChipDefinitions) {
+        if (!remaining.has(definition.id)) {
+            continue
+        }
+
+        if (definition.matches(protocol, event)) {
+            counts[definition.id] += 1
+            if (counts[definition.id] >= TRACE_CHIP_COUNT_CAP) {
+                remaining.delete(definition.id)
+            }
+        }
+    }
+}
+
 /**
  * Owns the trace-tab search/filter state and the row-matching logic. The
  * orchestrator reuses `matchesTraceFilters` / `buildTraceSearchableRow` when it
@@ -64,81 +162,8 @@ export function useTraceSearch(protocols: Ref<ReviewProtocolPass[]>) {
     const traceSearchToggleLabel = computed(() => (isTraceSearchCollapsed.value ? 'Show filters' : 'Hide filters'))
     const traceSearchToggleIcon = computed(() => (isTraceSearchCollapsed.value ? 'mdi-chevron-down' : 'mdi-chevron-up'))
 
-    function normalizeTraceFilterValue(value: unknown): string {
-        if (typeof value === 'string') {
-            return value
-        }
-
-        if (typeof value === 'number') {
-            return String(value)
-        }
-
-        if (Array.isArray(value)) {
-            return normalizeTraceFilterValue(value[0])
-        }
-
-        return ''
-    }
-
-    function traceAutocompleteValue(value: string): string | null {
-        return value.trim().length > 0 ? value : null
-    }
-
     function setTraceFilterValue(key: TraceFilterKey, value: unknown): void {
         traceFilters.value[key] = normalizeTraceFilterValue(value)
-    }
-
-    function normalizeTraceCategory(kind: string | null | undefined, name: string | null | undefined, eventCategory?: string | null): string {
-        const normalizedCategory = (eventCategory ?? '').trim().toLowerCase()
-        if (normalizedCategory) return normalizedCategory
-
-        const normalizedKind = (kind ?? '').trim().toLowerCase()
-        const normalizedName = (name ?? '').trim().toLowerCase()
-
-        if (normalizedKind === 'memoryoperation') return 'memory'
-        if (normalizedName.startsWith('dedup_')) return 'duplicate-suppression'
-        if (normalizedName.includes('comment_relevance')) return 'comment-relevance'
-        if (normalizedName.includes('verification')) return 'verification'
-        if (normalizedName.includes('review_finding_gate') || normalizedName.includes('summary_reconciliation') || normalizedName.includes('repeated_judgment')) return 'review-finding-gate'
-        if (normalizedName.includes('prorv')) return 'prorv-prefilter'
-        if (normalizedName.includes('pr_wide')) return 'pr-wide-review'
-        if (normalizedName.includes('review_strategy') || normalizedName.includes('agentic_file') || normalizedName.includes('review_agent_session') || normalizedName.includes('prompt_stage_evidence') || normalizedName.includes('review_step_skipped')) return 'review-strategy'
-        if (normalizedKind === 'aicall') return 'ai-call'
-        if (normalizedKind === 'toolcall') return 'tool-call'
-        return 'operational'
-    }
-
-    function buildTraceSnippet(value: string | null | undefined, queryText: string): string | null {
-        const normalized = value?.trim()
-        if (!normalized) {
-            return null
-        }
-
-        const maxLength = 220
-        if (!queryText) {
-            return normalized.length <= maxLength ? normalized : `${normalized.slice(0, maxLength).trim()}...`
-        }
-
-        const index = normalized.toLowerCase().indexOf(queryText)
-        if (index < 0) {
-            return null
-        }
-
-        const start = Math.max(0, index - 80)
-        const end = Math.min(normalized.length, start + maxLength)
-        let snippet = normalized.slice(start, end).trim()
-        if (start > 0) snippet = `...${snippet}`
-        if (end < normalized.length) snippet = `${snippet}...`
-        return snippet
-    }
-
-    function firstTraceValue(...values: Array<string | null | undefined>): string | null {
-        return values.find(value => !!value && value.trim().length > 0)?.trim() ?? null
-    }
-
-    function detectTraceRedaction(...values: Array<string | null | undefined>): boolean {
-        const markers = ['[REDACTED]', '***REDACTED***', '<redacted>']
-        return values.some(value => !!value && markers.some(marker => value.includes(marker)))
     }
 
     // Memoize per event so the trace-tab computeds (which walk every event of every
@@ -180,15 +205,19 @@ export function useTraceSearch(protocols: Ref<ReviewProtocolPass[]>) {
 
         const matchedField = matchingField?.field ?? null
         const matchSnippet = buildTraceSnippet(matchingField?.value, filters.queryText)
-        const contextSource = matchedField === 'inputTextSample'
-            ? firstTraceValue(event.outputSummary, event.systemPrompt, event.error)
-            : matchedField === 'systemPrompt'
-                ? firstTraceValue(event.inputTextSample, event.outputSummary, event.error)
-                : matchedField === 'outputSummary'
-                    ? firstTraceValue(event.inputTextSample, event.systemPrompt, event.error)
-                    : matchedField === 'error'
-                        ? firstTraceValue(event.outputSummary, event.inputTextSample, event.systemPrompt)
-                        : firstTraceValue(event.outputSummary, event.inputTextSample, event.systemPrompt, event.error)
+
+        let contextSource: string | null
+        if (matchedField === 'inputTextSample') {
+            contextSource = firstTraceValue(event.outputSummary, event.systemPrompt, event.error)
+        } else if (matchedField === 'systemPrompt') {
+            contextSource = firstTraceValue(event.inputTextSample, event.outputSummary, event.error)
+        } else if (matchedField === 'outputSummary') {
+            contextSource = firstTraceValue(event.inputTextSample, event.systemPrompt, event.error)
+        } else if (matchedField === 'error') {
+            contextSource = firstTraceValue(event.outputSummary, event.inputTextSample, event.systemPrompt)
+        } else {
+            contextSource = firstTraceValue(event.outputSummary, event.inputTextSample, event.systemPrompt, event.error)
+        }
 
         const row: TraceSearchableRow = {
             filePath: protocol.fileOutcome?.filePath ?? protocol.label ?? null,
@@ -266,18 +295,7 @@ export function useTraceSearch(protocols: Ref<ReviewProtocolPass[]>) {
                     continue
                 }
 
-                for (const definition of traceChipDefinitions) {
-                    if (!remaining.has(definition.id)) {
-                        continue
-                    }
-
-                    if (definition.matches(protocol, event)) {
-                        counts[definition.id] += 1
-                        if (counts[definition.id] >= TRACE_CHIP_COUNT_CAP) {
-                            remaining.delete(definition.id)
-                        }
-                    }
-                }
+                accumulateChipCounts(protocol, event, counts, remaining)
 
                 if (remaining.size === 0) {
                     return counts

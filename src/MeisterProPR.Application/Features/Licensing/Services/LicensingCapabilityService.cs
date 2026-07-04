@@ -141,11 +141,19 @@ public sealed class LicensingCapabilityService(
             };
         }
 
-        var message = isAvailable
-            ? null
-            : !isCommercial && definition.RequiresCommercial
-                ? definition.CommercialRequiredMessage
-                : definition.CommercialDisabledMessage;
+        string? message;
+        if (isAvailable)
+        {
+            message = null;
+        }
+        else if (!isCommercial && definition.RequiresCommercial)
+        {
+            message = definition.CommercialRequiredMessage;
+        }
+        else
+        {
+            message = definition.CommercialDisabledMessage;
+        }
 
         return new CapabilitySnapshot(
             definition.Key,

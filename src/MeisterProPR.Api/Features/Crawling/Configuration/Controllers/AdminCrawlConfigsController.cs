@@ -19,6 +19,7 @@ namespace MeisterProPR.Api.Controllers;
 
 /// <summary>Admin endpoints for managing crawl configurations across all clients.</summary>
 [ApiController]
+[Route("admin/crawl-configurations")]
 public sealed partial class AdminCrawlConfigsController(
     ICrawlConfigurationRepository crawlConfigRepo,
     IUserRepository userRepository,
@@ -99,6 +100,17 @@ public sealed partial class AdminCrawlConfigsController(
             ct);
 
         return capability is null ? null : new PremiumFeatureUnavailableResult(capability);
+    }
+
+    /// <summary>Authorizes a non-Admin caller against their client role, or confirms the target client exists for an Admin.</summary>
+    private async Task<IActionResult?> AuthorizeCrawlConfigWriteAsync(bool isAdmin, Guid clientId, CancellationToken ct)
+    {
+        if (!isAdmin)
+        {
+            return AuthHelpers.RequireClientRole(this.HttpContext, clientId, ClientRole.ClientAdministrator);
+        }
+
+        return await clientAdminService.ExistsAsync(clientId, ct) ? null : this.NotFound();
     }
 
     private static IReadOnlyList<string> NormalizeBranchPatterns(IReadOnlyList<string>? targetBranchPatterns)
@@ -273,7 +285,7 @@ public sealed partial class AdminCrawlConfigsController(
     /// <param name="ct">Cancellation token.</param>
     /// <response code="200">List of crawl configurations.</response>
     /// <response code="401">No valid credentials provided.</response>
-    [HttpGet("/admin/crawl-configurations")]
+    [HttpGet]
     [ProducesResponseType(typeof(IReadOnlyList<CrawlConfigResponse>), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     public async Task<IActionResult> GetCrawlConfigurations(CancellationToken ct = default)
@@ -320,7 +332,7 @@ public sealed partial class AdminCrawlConfigsController(
     /// <response code="403">Non-Admin caller does not own the specified client.</response>
     /// <response code="404">Client not found.</response>
     /// <response code="409">Config for this org/project already exists for the client.</response>
-    [HttpPost("/admin/crawl-configurations")]
+    [HttpPost]
     [ProducesResponseType(typeof(CrawlConfigResponse), StatusCodes.Status201Created)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
@@ -350,25 +362,10 @@ public sealed partial class AdminCrawlConfigsController(
             return capability;
         }
 
-        if (!isAdmin)
+        var authorization = await this.AuthorizeCrawlConfigWriteAsync(isAdmin, request.ClientId, ct);
+        if (authorization is not null)
         {
-            // Non-Admin: require ClientAdministrator role for the target client
-            var roleCheck = AuthHelpers.RequireClientRole(
-                this.HttpContext,
-                request.ClientId,
-                ClientRole.ClientAdministrator);
-            if (roleCheck is not null)
-            {
-                return roleCheck;
-            }
-        }
-        else
-        {
-            // Admin: verify the client exists
-            if (!await clientAdminService.ExistsAsync(request.ClientId, ct))
-            {
-                return this.NotFound();
-            }
+            return authorization;
         }
 
         if (!await this.IsProviderEnabledAsync(request.Provider, ct))
@@ -471,7 +468,7 @@ public sealed partial class AdminCrawlConfigsController(
     /// <response code="401">No valid credentials provided.</response>
     /// <response code="403">Non-Admin caller does not own this config's client.</response>
     /// <response code="404">Configuration not found.</response>
-    [HttpPatch("/admin/crawl-configurations/{configId:guid}")]
+    [HttpPatch("{configId:guid}")]
     [ProducesResponseType(typeof(CrawlConfigResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
@@ -550,24 +547,7 @@ public sealed partial class AdminCrawlConfigsController(
                 await crawlConfigRepo.UpdateRepoFiltersAsync(configId, filterDtos, ct);
             }
 
-            if (request.ProCursorSourceScopeMode.HasValue || request.ProCursorSourceIds is not null)
-            {
-                var effectiveScopeMode = request.ProCursorSourceScopeMode
-                                         ?? (request.ProCursorSourceIds is not null
-                                             ? ProCursorSourceScopeMode.SelectedSources
-                                             : existing.ProCursorSourceScopeMode);
-                var validatedSourceIds = await this.ValidateSelectedProCursorSourcesAsync(
-                    existing.ClientId,
-                    effectiveScopeMode,
-                    request.ProCursorSourceIds ?? existing.ProCursorSourceIds,
-                    ct);
-
-                await crawlConfigRepo.UpdateSourceScopeAsync(
-                    configId,
-                    effectiveScopeMode,
-                    validatedSourceIds,
-                    ct);
-            }
+            await this.UpdateProCursorSourceScopeIfRequestedAsync(configId, request, existing, ct);
 
             var refreshed = await crawlConfigRepo.GetByIdAsync(configId, ct);
             if (refreshed is null)
@@ -584,6 +564,35 @@ public sealed partial class AdminCrawlConfigsController(
         }
     }
 
+    /// <summary>Applies a ProCursor source-scope update when the patch request explicitly targets it.</summary>
+    private async Task UpdateProCursorSourceScopeIfRequestedAsync(
+        Guid configId,
+        PatchAdminCrawlConfigRequest request,
+        CrawlConfigurationDto existing,
+        CancellationToken ct)
+    {
+        if (!request.ProCursorSourceScopeMode.HasValue && request.ProCursorSourceIds is null)
+        {
+            return;
+        }
+
+        var effectiveScopeMode = request.ProCursorSourceScopeMode
+                                 ?? (request.ProCursorSourceIds is not null
+                                     ? ProCursorSourceScopeMode.SelectedSources
+                                     : existing.ProCursorSourceScopeMode);
+        var validatedSourceIds = await this.ValidateSelectedProCursorSourcesAsync(
+            existing.ClientId,
+            effectiveScopeMode,
+            request.ProCursorSourceIds ?? existing.ProCursorSourceIds,
+            ct);
+
+        await crawlConfigRepo.UpdateSourceScopeAsync(
+            configId,
+            effectiveScopeMode,
+            validatedSourceIds,
+            ct);
+    }
+
     /// <summary>
     ///     Deletes a crawl configuration.
     ///     Admins may delete any config; non-Admin users may only delete configs for their clients.
@@ -594,7 +603,7 @@ public sealed partial class AdminCrawlConfigsController(
     /// <response code="401">No valid credentials provided.</response>
     /// <response code="403">Non-Admin caller does not own this config's client.</response>
     /// <response code="404">Configuration not found.</response>
-    [HttpDelete("/admin/crawl-configurations/{configId:guid}")]
+    [HttpDelete("{configId:guid}")]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]

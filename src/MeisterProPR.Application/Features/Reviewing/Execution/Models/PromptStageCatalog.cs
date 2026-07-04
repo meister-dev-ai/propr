@@ -61,10 +61,12 @@ public static class PromptStageCatalog
                 "ReviewPrompts.BuildPrWideSynthesisUserMessage"),
         };
 
+    private static readonly IReadOnlyList<PromptStageDefinition> AllDefinitions = Definitions.Values.ToArray();
+
     /// <summary>
     ///     Gets all prompt stage definitions in the catalog.
     /// </summary>
-    public static IReadOnlyList<PromptStageDefinition> All => Definitions.Values.ToArray();
+    public static IReadOnlyList<PromptStageDefinition> All => AllDefinitions;
 
     /// <summary>
     ///     Try to get the prompt stage definition for a given stage key. Returns true if a definition is found for the specified stage key, false otherwise.

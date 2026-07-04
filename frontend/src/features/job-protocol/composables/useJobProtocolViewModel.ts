@@ -105,6 +105,36 @@ import {
     statusIconClass,
 } from '../utils/formatters'
 
+function commentKey(comment: CommentGroupComment): string {
+    return `${comment.filePath ?? comment.file_path ?? ''}:${comment.lineNumber ?? comment.line_number ?? 0}:${String(comment.message ?? '').slice(0, 80)}`
+}
+
+function parseFilePath(label: string | null | undefined) {
+    if (!label) return { filename: 'Pass', directory: '' }
+    const path = label.replace(/\\/g, '/')
+    const parts = path.split('/')
+    const filename = parts.pop() || path
+    const directory = parts.join('/') || ''
+    return { filename, directory }
+}
+
+function commentOriginLabel(comment: { originPassKind?: string | null }): string | null {
+    return originLabel(comment.originPassKind)
+}
+
+function parentIterationLabel(name: string): string {
+    const match = /^ai_call_iter_(\d+)$/.exec(name)
+    if (!match) {
+        return 'Child of AI turn'
+    }
+
+    return `AI ${match[1]}`
+}
+
+function phaseGroupKey(phase: ProtocolEventPhaseTimingDto): string {
+    return (phase.name ?? phase.displayName ?? 'unnamed-phase').trim().toLowerCase() || 'unnamed-phase'
+}
+
 export function useJobProtocolViewModel() {
     const route = useRoute()
     const router = useRouter()
@@ -207,10 +237,6 @@ export function useJobProtocolViewModel() {
 
     const dismissingIds = ref<Set<string>>(new Set())
     const dismissToast = ref<{ message: string; isError: boolean } | null>(null)
-
-    function commentKey(comment: CommentGroupComment): string {
-        return `${comment.filePath ?? comment.file_path ?? ''}:${comment.lineNumber ?? comment.line_number ?? 0}:${String(comment.message ?? '').slice(0, 80)}`
-    }
 
     async function dismissComment(comment: CommentGroupComment) {
         const clientId = routeClientId.value
@@ -331,15 +357,6 @@ export function useJobProtocolViewModel() {
         }
 
         expandedEventParents.value = next
-    }
-
-    function parseFilePath(label: string | null | undefined) {
-        if (!label) return { filename: 'Pass', directory: '' }
-        const path = label.replace(/\\/g, '/')
-        const parts = path.split('/')
-        const filename = parts.pop() || path
-        const directory = parts.join('/') || ''
-        return { filename, directory }
     }
 
     function protocolHasFinalFindings(protocol: ReviewProtocolPass): boolean {
@@ -743,10 +760,6 @@ export function useJobProtocolViewModel() {
         }))
     })
 
-    function commentOriginLabel(comment: { originPassKind?: string | null }): string | null {
-        return originLabel(comment.originPassKind)
-    }
-
     // Deep-link from an aggregate-view origin badge to the (file, pass) trace
     // that produced the finding. Finding provenance is COARSE — only "Baseline"
     // or "ProRVAugmentation". Match on the passKind FAMILY, not the rendered
@@ -845,15 +858,6 @@ export function useJobProtocolViewModel() {
             && /^ai_call_iter_\d+$/.test(event.name)
     }
 
-    function parentIterationLabel(name: string): string {
-        const match = /^ai_call_iter_(\d+)$/.exec(name)
-        if (!match) {
-            return 'Child of AI turn'
-        }
-
-        return `AI ${match[1]}`
-    }
-
     function isMergedEventProcessing(event: MergedEvent | null | undefined): boolean {
         return !event?.resultDetails
     }
@@ -887,10 +891,6 @@ export function useJobProtocolViewModel() {
         return `${summaries.length} distinct summaries recorded`
     }
 
-    function phaseGroupKey(phase: ProtocolEventPhaseTimingDto): string {
-        return (phase.name ?? phase.displayName ?? 'unnamed-phase').trim().toLowerCase() || 'unnamed-phase'
-    }
-
     // Number of distinct phase groups without materializing groups or their
     // (expensive) shared-value summaries. Used by hot callers that only need the count.
     function countToolPhaseGroups(phases: ProtocolEventPhaseTimingDto[]): number {
@@ -901,6 +901,38 @@ export function useJobProtocolViewModel() {
         return keys.size
     }
 
+    function mergeIntoPhaseGroup(existing: ToolPhaseGroup, phase: ProtocolEventPhaseTimingDto): void {
+        existing.count += 1
+        existing.phases.push(phase)
+        const durationMs = getPhaseTimingDurationMs(phase)
+        if (durationMs != null) {
+            existing.totalDurationMs = (existing.totalDurationMs ?? 0) + durationMs
+        }
+
+        if (!existing.startedAt || (phase.startedAt && new Date(phase.startedAt).getTime() < new Date(existing.startedAt).getTime())) {
+            existing.startedAt = phase.startedAt ?? existing.startedAt
+        }
+
+        if (!existing.completedAt || (phase.completedAt && new Date(phase.completedAt).getTime() > new Date(existing.completedAt).getTime())) {
+            existing.completedAt = phase.completedAt ?? existing.completedAt
+        }
+    }
+
+    function createPhaseGroup(key: string, phase: ProtocolEventPhaseTimingDto): ToolPhaseGroup {
+        return {
+            key,
+            title: phase.displayName ?? phase.name ?? 'Unnamed phase',
+            count: 1,
+            totalDurationMs: getPhaseTimingDurationMs(phase),
+            availability: phase.availability ?? null,
+            outcome: phase.outcome ?? null,
+            startedAt: phase.startedAt ?? null,
+            completedAt: phase.completedAt ?? null,
+            summary: phase.summary?.trim() ?? null,
+            phases: [phase],
+        }
+    }
+
     function buildToolPhaseGroups(phases: ProtocolEventPhaseTimingDto[]): ToolPhaseGroup[] {
         const groups = new Map<string, ToolPhaseGroup>()
 
@@ -909,37 +941,11 @@ export function useJobProtocolViewModel() {
             const existing = groups.get(key)
 
             if (existing) {
-                existing.count += 1
-                existing.phases.push(phase)
-                const durationMs = getPhaseTimingDurationMs(phase)
-                if (durationMs != null) {
-                    existing.totalDurationMs = (existing.totalDurationMs ?? 0) + durationMs
-                }
-
-                if (!existing.startedAt || (phase.startedAt && new Date(phase.startedAt).getTime() < new Date(existing.startedAt).getTime())) {
-                    existing.startedAt = phase.startedAt ?? existing.startedAt
-                }
-
-                if (!existing.completedAt || (phase.completedAt && new Date(phase.completedAt).getTime() > new Date(existing.completedAt).getTime())) {
-                    existing.completedAt = phase.completedAt ?? existing.completedAt
-                }
-
+                mergeIntoPhaseGroup(existing, phase)
                 continue
             }
 
-            const durationMs = getPhaseTimingDurationMs(phase)
-            groups.set(key, {
-                key,
-                title: phase.displayName ?? phase.name ?? 'Unnamed phase',
-                count: 1,
-                totalDurationMs: durationMs,
-                availability: phase.availability ?? null,
-                outcome: phase.outcome ?? null,
-                startedAt: phase.startedAt ?? null,
-                completedAt: phase.completedAt ?? null,
-                summary: phase.summary?.trim() ?? null,
-                phases: [phase],
-            })
+            groups.set(key, createPhaseGroup(key, phase))
         }
 
         // Compute the shared-value summaries once per group after all phases are
@@ -956,6 +962,36 @@ export function useJobProtocolViewModel() {
         }
 
         return [...groups.values()]
+    }
+
+    function computeEventTimingSummary(event: ProtocolEventDto): string | null {
+        if (event.durationMs != null) {
+            return formatDurationWithMs(event.durationMs)
+        }
+
+        if (event.startedAt && event.completedAt) {
+            const duration = new Date(event.completedAt).getTime() - new Date(event.startedAt).getTime()
+            return !Number.isNaN(duration) && duration >= 0 ? formatDurationWithMs(duration) : 'Timing recorded'
+        }
+
+        return hasToolTiming(event) ? 'Timing recorded' : null
+    }
+
+    function computeEventTimingDetailParts(event: ProtocolEventDto, phaseTimings: ProtocolEventPhaseTimingDto[], phaseGroupCount: number): string[] {
+        const parts: string[] = []
+        if (event.activeDurationMs != null) {
+            parts.push(`Active ${formatDurationWithMs(event.activeDurationMs)}`)
+        }
+
+        if (event.waitDurationMs != null) {
+            parts.push(`Wait ${formatDurationWithMs(event.waitDurationMs)}`)
+        }
+
+        if (phaseTimings.length > 0) {
+            parts.push(formatPhaseCountSummary(phaseTimings.length, phaseGroupCount))
+        }
+
+        return parts
     }
 
     function getEventTimingPresentation(event: ProtocolEventDto | null | undefined): EventTimingPresentation {
@@ -975,29 +1011,8 @@ export function useJobProtocolViewModel() {
 
         const phaseTimings = getPhaseTimings(event)
         const phaseGroupCount = phaseTimings.length > 0 ? countToolPhaseGroups(phaseTimings) : 0
-
-        let summary: string | null
-        if (event.durationMs != null) {
-            summary = formatDurationWithMs(event.durationMs)
-        } else if (event.startedAt && event.completedAt) {
-            const duration = new Date(event.completedAt).getTime() - new Date(event.startedAt).getTime()
-            summary = !Number.isNaN(duration) && duration >= 0 ? formatDurationWithMs(duration) : 'Timing recorded'
-        } else {
-            summary = hasToolTiming(event) ? 'Timing recorded' : null
-        }
-
-        const parts: string[] = []
-        if (event.activeDurationMs != null) {
-            parts.push(`Active ${formatDurationWithMs(event.activeDurationMs)}`)
-        }
-
-        if (event.waitDurationMs != null) {
-            parts.push(`Wait ${formatDurationWithMs(event.waitDurationMs)}`)
-        }
-
-        if (phaseTimings.length > 0) {
-            parts.push(formatPhaseCountSummary(phaseTimings.length, phaseGroupCount))
-        }
+        const summary = computeEventTimingSummary(event)
+        const parts = computeEventTimingDetailParts(event, phaseTimings, phaseGroupCount)
 
         const presentation: EventTimingPresentation = {
             phaseTimings,
@@ -1018,12 +1033,66 @@ export function useJobProtocolViewModel() {
         return `${JSON.stringify(normalizedTraceFilters.value)}|${serializeTraceChips(activeTraceChipIds.value) ?? ''}`
     }
 
+    // Groups tool-call events under the primary AI-turn event they belong to. A
+    // run of tool calls with no primary AI-turn event yet (or one that trails the
+    // rest of the log with none following) has nothing to attach to and is
+    // dropped from the grouping — those calls still render, just as standalone
+    // rows via the childEventIds membership check in buildEventRows.
+    function groupToolCallsByAiTurn(mergedEvents: MergedEvent[]): { childEventsByParentId: Map<string, MergedEvent[]>; childEventIds: Set<string> } {
+        let activeAiTurnParentId: string | null = null
+        let pendingToolRows: PendingToolRow[] = []
+        const childEventsByParentId = new Map<string, MergedEvent[]>()
+
+        for (const merged of mergedEvents) {
+            const isToolCall = (merged.callDetails.kind ?? '').toLowerCase() === 'toolcall'
+
+            if (isPrimaryAiTurnEvent(merged)) {
+                activeAiTurnParentId = merged.id
+
+                if (pendingToolRows.length > 0) {
+                    childEventsByParentId.set(
+                        merged.id,
+                        pendingToolRows.map(pendingToolRow => pendingToolRow.merged),
+                    )
+                }
+
+                pendingToolRows = []
+                continue
+            }
+
+            const parentId = isToolCall ? activeAiTurnParentId : null
+
+            if (isToolCall && !parentId) {
+                pendingToolRows.push({ merged })
+                continue
+            }
+
+            if (isToolCall && parentId) {
+                const existingChildren = childEventsByParentId.get(parentId) ?? []
+                existingChildren.push(merged)
+                childEventsByParentId.set(parentId, existingChildren)
+                continue
+            }
+
+            pendingToolRows = []
+        }
+
+        const childEventIds = new Set<string>()
+        for (const children of childEventsByParentId.values()) {
+            for (const child of children) {
+                childEventIds.add(child.id)
+            }
+        }
+
+        return { childEventsByParentId, childEventIds }
+    }
+
     function buildEventRows(protocol: ReviewProtocolPass | null | undefined): EventDisplayRow[] {
         if (protocol) {
             const expanded = expandedEventParents.value
             const filterKey = traceFilterCacheKey()
             const cached = eventRowsCache.get(protocol)
-            if (cached && cached.collapseKey === expanded && cached.filterKey === filterKey) {
+            if (cached?.collapseKey === expanded && cached?.filterKey === filterKey) {
                 return cached.rows
             }
         }
@@ -1032,10 +1101,7 @@ export function useJobProtocolViewModel() {
             ? mergedEvents.filter(merged => matchesTraceFilters(protocol, merged.callDetails))
             : mergedEvents
         const rows: EventDisplayRow[] = []
-        let activeAiTurnParentId: string | null = null
-        let pendingToolRows: PendingToolRow[] = []
-        const childEventsByParentId = new Map<string, MergedEvent[]>()
-        const standaloneEvents: MergedEvent[] = []
+        const { childEventsByParentId, childEventIds } = groupToolCallsByAiTurn(filteredMergedEvents)
 
         const createDisplayRow = (
             merged: MergedEvent,
@@ -1074,60 +1140,6 @@ export function useJobProtocolViewModel() {
 
         const appendStandaloneRow = (merged: MergedEvent) => {
             rows.push(createDisplayRow(merged, 0, null, null, false, 0, false))
-        }
-
-        const flushPendingToolRows = () => {
-            for (const pendingToolRow of pendingToolRows) {
-                standaloneEvents.push(pendingToolRow.merged)
-            }
-
-            pendingToolRows = []
-        }
-
-        for (const merged of filteredMergedEvents) {
-            const isToolCall = (merged.callDetails.kind ?? '').toLowerCase() === 'toolcall'
-
-            if (isPrimaryAiTurnEvent(merged)) {
-                activeAiTurnParentId = merged.id
-
-                if (pendingToolRows.length > 0) {
-                    childEventsByParentId.set(
-                        merged.id,
-                        pendingToolRows.map(pendingToolRow => pendingToolRow.merged),
-                    )
-                }
-
-                pendingToolRows = []
-                continue
-            }
-
-            const parentId = isToolCall ? activeAiTurnParentId : null
-
-            if (isToolCall && !parentId) {
-                pendingToolRows.push({ merged })
-                continue
-            }
-
-            if (isToolCall && parentId) {
-                const existingChildren = childEventsByParentId.get(parentId) ?? []
-                existingChildren.push(merged)
-                childEventsByParentId.set(parentId, existingChildren)
-                continue
-            }
-
-            if (!isToolCall) {
-                flushPendingToolRows()
-                standaloneEvents.push(merged)
-            }
-        }
-
-        flushPendingToolRows()
-
-        const childEventIds = new Set<string>()
-        for (const children of childEventsByParentId.values()) {
-            for (const child of children) {
-                childEventIds.add(child.id)
-            }
         }
 
         for (const merged of filteredMergedEvents) {
@@ -1488,6 +1500,107 @@ export function useJobProtocolViewModel() {
         }
     }
 
+    // Incremental refresh: a completed pass's events are immutable, so keep the
+    // already-loaded body (reusing the same object so eventRowsCache stays warm)
+    // instead of dropping it and re-downloading the full pass on every poll.
+    // Passes that are still processing are dropped from the loaded set so the
+    // active one keeps re-fetching and shows newly recorded events.
+    function reconcileProtocolOverview(
+        sortedOverview: ReviewProtocolPass[],
+        existingById: Map<string, ReviewProtocolPass>,
+        previouslyLoadedIds: Set<string>,
+    ): { normalizedProtocols: ReviewProtocolPass[]; nextLoaded: Set<string> } {
+        const nextLoaded = new Set<string>()
+        const normalizedProtocols = sortedOverview.map(overview => {
+            const existing = overview.id ? existingById.get(overview.id) : undefined
+            const wasLoaded = !!overview.id && previouslyLoadedIds.has(overview.id)
+            // Preserve the loaded body only while BOTH the cached copy and the fresh
+            // overview agree the pass is complete (a restart can re-open a completed id).
+            if (existing && wasLoaded && existing.completedAt && overview.completedAt) {
+                nextLoaded.add(overview.id as string)
+                // Refresh pass-level scalars (outcome, token totals, finalComments, …)
+                // from the overview while keeping the immutable loaded event bodies, and
+                // keep the same object instance so eventRowsCache stays warm.
+                const loadedEvents = existing.events
+                Object.assign(existing, overview)
+                existing.events = loadedEvents
+                return existing
+            }
+            return overview
+        })
+
+        return { normalizedProtocols, nextLoaded }
+    }
+
+    // Resolve the active pass from the URL. `pass` (the new param) wins, then the
+    // legacy `protocolId`, then `file` (first pass of the named file), then the
+    // current/first pass. Invalid ids fall back without crashing.
+    function resolveProtocolIdToLoad(
+        normalizedProtocols: ReviewProtocolPass[],
+        routeSelection: { routePassId: string | null; routeProtocolId: string | null; routeFile: string | null },
+        currentActivePassId: string | null,
+    ): string | undefined {
+        const { routePassId, routeProtocolId, routeFile } = routeSelection
+        const passFromFile = routeFile
+            ? normalizedProtocols.find(protocol => fileKeyForPass(protocol) === routeFile)?.id ?? null
+            : null
+
+        if (routePassId && normalizedProtocols.some(protocol => protocol.id === routePassId)) {
+            return routePassId
+        }
+
+        if (routeProtocolId && normalizedProtocols.some(protocol => protocol.id === routeProtocolId)) {
+            return routeProtocolId
+        }
+
+        if (passFromFile) {
+            return passFromFile
+        }
+
+        if (currentActivePassId && normalizedProtocols.some(protocol => protocol.id === currentActivePassId)) {
+            return currentActivePassId
+        }
+
+        return normalizedProtocols[0]?.id
+    }
+
+    async function activateProtocolPass(protocolIdToLoad: string | undefined): Promise<void> {
+        if (!protocolIdToLoad) {
+            return
+        }
+
+        if (activePassId.value !== protocolIdToLoad) {
+            activePassId.value = protocolIdToLoad
+        }
+
+        await ensureProtocolPassLoaded(protocolIdToLoad)
+        await focusRouteEventIfRequested()
+    }
+
+    // Drive the poll off the JOB's lifecycle status, not per-protocol completedAt.
+    // A 'pending' state must keep polling because startup recovery flips
+    // Processing→Pending→Processing, and once reconcile stamps orphaned protocols the old
+    // `.some(!completedAt)` heuristic would wrongly stop an active job (or run forever on a
+    // completed job that still carries a dangling protocol). The job status is authoritative.
+    // Arm while non-terminal; tear down ONLY on a CONFIRMED terminal status — an
+    // undefined/error status (e.g. a transient job-detail fetch miss on a poll tick, since
+    // the client returns { data: undefined } rather than throwing) must NOT stop an active
+    // poll, or one network blip would permanently freeze the live view.
+    function updatePollingLifecycle(jobLifecycleStatus: string | null | undefined): void {
+        const isProcessing = jobLifecycleStatus === 'processing' || jobLifecycleStatus === 'pending'
+        const isTerminal = jobLifecycleStatus === 'completed'
+            || jobLifecycleStatus === 'failed'
+            || jobLifecycleStatus === 'cancelled'
+        if (isProcessing && !pollInterval) {
+            pollInterval = setInterval(() => {
+                void loadProtocol(false)
+            }, 3000)
+        } else if (isTerminal && pollInterval) {
+            clearInterval(pollInterval)
+            pollInterval = null
+        }
+    }
+
     async function loadProtocol(showLoading = false) {
         // Skip a background POLL tick if a load is already running (on a heavy review the fetch can take
         // longer than the 3 s cadence, so unguarded ticks stack). Explicit loads (showLoading=true: mount,
@@ -1509,116 +1622,57 @@ export function useJobProtocolViewModel() {
 
             if (fetchError) {
                 if (showLoading) error.value = 'Protocol not found for this job.'
-            } else if (Array.isArray(data)) {
-                const sortedOverview = [...data].sort(compareProtocols)
-                // Incremental refresh: a completed pass's events are immutable, so keep the
-                // already-loaded body (reusing the same object so eventRowsCache stays warm)
-                // instead of dropping it and re-downloading the full pass on every poll.
-                // Passes that are still processing are dropped from the loaded set so the
-                // active one keeps re-fetching and shows newly recorded events.
-                const existingById = new Map(
-                    protocols.value
-                        .filter((pass): pass is ReviewProtocolPass & { id: string } => !!pass.id)
-                        .map(pass => [pass.id, pass] as const),
-                )
-                const nextLoaded = new Set<string>()
-                const normalizedProtocols = sortedOverview.map(overview => {
-                    const existing = overview.id ? existingById.get(overview.id) : undefined
-                    const wasLoaded = !!overview.id && loadedProtocolIds.value.has(overview.id)
-                    // Preserve the loaded body only while BOTH the cached copy and the fresh
-                    // overview agree the pass is complete (a restart can re-open a completed id).
-                    if (existing && wasLoaded && existing.completedAt && overview.completedAt) {
-                        nextLoaded.add(overview.id as string)
-                        // Refresh pass-level scalars (outcome, token totals, finalComments, …)
-                        // from the overview while keeping the immutable loaded event bodies, and
-                        // keep the same object instance so eventRowsCache stays warm.
-                        const loadedEvents = existing.events
-                        Object.assign(existing, overview)
-                        existing.events = loadedEvents
-                        return existing
-                    }
-                    return overview
-                })
-                protocols.value = normalizedProtocols
-                loadedProtocolIds.value = nextLoaded
-                if (resultRes.data) {
-                    reviewStatus.value = resultRes.data
-                }
-                if (detailRes.data) {
-                    const detail = detailRes.data
-                    jobStatus.value = detail.status ?? null
-                    jobDetail.value = {
-                        aiModel: detail.aiModel ?? null,
-                        reviewTemperature: detail.reviewTemperature ?? null,
-                        tokenBreakdown: detail.tokenBreakdown ?? [],
-                        breakdownConsistent: detail.breakdownConsistent ?? null,
-                        submittedAt: detail.submittedAt ?? null,
-                        processingStartedAt: detail.processingStartedAt ?? null,
-                        completedAt: detail.completedAt ?? null,
-                    }
-                }
-                if (!activePassId.value && normalizedProtocols.length > 0 && normalizedProtocols[0].id) {
-                    activePassId.value = normalizedProtocols[0].id
-                }
+                return
+            }
 
-                // Restore the active view (Findings / Execution trace / Tokens)
-                // from the URL before resolving the pass selection.
-                const routeView = typeof route.query.view === 'string' ? route.query.view : null
-                if (routeView === 'summary' || routeView === 'traces' || routeView === 'tokens') {
-                    activeTab.value = routeView
-                }
+            if (!Array.isArray(data)) {
+                return
+            }
 
-                // Resolve the active pass from the URL. `pass` (the new param)
-                // wins, then the legacy `protocolId`, then `file` (first pass of
-                // the named file), then the current/first pass. Invalid ids fall
-                // back without crashing.
-                const routePassId = typeof route.query.pass === 'string' ? route.query.pass : null
-                const routeProtocolId = typeof route.query.protocolId === 'string' ? route.query.protocolId : null
-                const routeFile = typeof route.query.file === 'string' ? route.query.file : null
-                const passFromFile = routeFile
-                    ? normalizedProtocols.find(protocol => fileKeyForPass(protocol) === routeFile)?.id ?? null
-                    : null
-                const protocolIdToLoad = routePassId && normalizedProtocols.some(protocol => protocol.id === routePassId)
-                    ? routePassId
-                    : routeProtocolId && normalizedProtocols.some(protocol => protocol.id === routeProtocolId)
-                        ? routeProtocolId
-                        : passFromFile
-                            ? passFromFile
-                            : activePassId.value && normalizedProtocols.some(protocol => protocol.id === activePassId.value)
-                                ? activePassId.value
-                                : normalizedProtocols[0]?.id
-
-                if (protocolIdToLoad) {
-                    if (activePassId.value !== protocolIdToLoad) {
-                        activePassId.value = protocolIdToLoad
-                    }
-
-                    await ensureProtocolPassLoaded(protocolIdToLoad)
-                    await focusRouteEventIfRequested()
-                }
-                // Drive the poll off the JOB's lifecycle status, not per-protocol completedAt.
-                // A 'pending' state must keep polling because startup recovery flips
-                // Processing→Pending→Processing, and once reconcile stamps orphaned protocols the old
-                // `.some(!completedAt)` heuristic would wrongly stop an active job (or run forever on a
-                // completed job that still carries a dangling protocol). The job status is authoritative.
-                // Arm while non-terminal; tear down ONLY on a CONFIRMED terminal status — an
-                // undefined/error status (e.g. a transient job-detail fetch miss on a poll tick, since
-                // the client returns { data: undefined } rather than throwing) must NOT stop an active
-                // poll, or one network blip would permanently freeze the live view.
-                const jobLifecycleStatus = detailRes.data?.status
-                const isProcessing = jobLifecycleStatus === 'processing' || jobLifecycleStatus === 'pending'
-                const isTerminal = jobLifecycleStatus === 'completed'
-                    || jobLifecycleStatus === 'failed'
-                    || jobLifecycleStatus === 'cancelled'
-                if (isProcessing && !pollInterval) {
-                    pollInterval = setInterval(() => {
-                        void loadProtocol(false)
-                    }, 3000)
-                } else if (isTerminal && pollInterval) {
-                    clearInterval(pollInterval)
-                    pollInterval = null
+            const sortedOverview = [...data].sort(compareProtocols)
+            const existingById = new Map(
+                protocols.value
+                    .filter((pass): pass is ReviewProtocolPass & { id: string } => !!pass.id)
+                    .map(pass => [pass.id, pass] as const),
+            )
+            const { normalizedProtocols, nextLoaded } = reconcileProtocolOverview(sortedOverview, existingById, loadedProtocolIds.value)
+            protocols.value = normalizedProtocols
+            loadedProtocolIds.value = nextLoaded
+            if (resultRes.data) {
+                reviewStatus.value = resultRes.data
+            }
+            if (detailRes.data) {
+                const detail = detailRes.data
+                jobStatus.value = detail.status ?? null
+                jobDetail.value = {
+                    aiModel: detail.aiModel ?? null,
+                    reviewTemperature: detail.reviewTemperature ?? null,
+                    tokenBreakdown: detail.tokenBreakdown ?? [],
+                    breakdownConsistent: detail.breakdownConsistent ?? null,
+                    submittedAt: detail.submittedAt ?? null,
+                    processingStartedAt: detail.processingStartedAt ?? null,
+                    completedAt: detail.completedAt ?? null,
                 }
             }
+            if (!activePassId.value && normalizedProtocols.length > 0 && normalizedProtocols[0].id) {
+                activePassId.value = normalizedProtocols[0].id
+            }
+
+            // Restore the active view (Findings / Execution trace / Tokens)
+            // from the URL before resolving the pass selection.
+            const routeView = typeof route.query.view === 'string' ? route.query.view : null
+            if (routeView === 'summary' || routeView === 'traces' || routeView === 'tokens') {
+                activeTab.value = routeView
+            }
+
+            const protocolIdToLoad = resolveProtocolIdToLoad(normalizedProtocols, {
+                routePassId: typeof route.query.pass === 'string' ? route.query.pass : null,
+                routeProtocolId: typeof route.query.protocolId === 'string' ? route.query.protocolId : null,
+                routeFile: typeof route.query.file === 'string' ? route.query.file : null,
+            }, activePassId.value)
+
+            await activateProtocolPass(protocolIdToLoad)
+            updatePollingLifecycle(detailRes.data?.status)
         } catch {
             if (showLoading) error.value = 'Failed to load protocol.'
         } finally {

@@ -29,7 +29,7 @@ internal sealed class ForgejoCodeReviewPublicationService(
         CodeReviewRef review,
         ReviewRevision revision,
         ReviewResult result,
-        ReviewerIdentity author,
+        ReviewerIdentity reviewer,
         CancellationToken ct = default,
         ReviewPublicationContext? publicationContext = null)
     {
@@ -39,11 +39,11 @@ internal sealed class ForgejoCodeReviewPublicationService(
         activity?.SetTag("scm.provider", ScmProvider.Forgejo.ToString());
         activity?.SetTag("provider.host", review.Repository.Host.HostBaseUrl);
         activity?.SetTag("review.number", review.Number);
-        activity?.SetTag("publication.author.login", author.Login);
+        activity?.SetTag("publication.author.login", reviewer.Login);
 
         var context = await connectionVerifier.VerifyAsync(clientId, review.Repository.Host, ct);
-        await this.DeletePendingReviewsAsync(review, author, context.Connection.Secret, ct);
-        var payload = BuildPayload(revision, result, author);
+        await this.DeletePendingReviewsAsync(review, reviewer, context.Connection.Secret, ct);
+        var payload = BuildPayload(revision, result, reviewer);
         using var request = ForgejoConnectionVerifier.CreateAuthenticatedRequest(
             ForgejoConnectionVerifier.BuildApiUri(
                 review.Repository.Host,

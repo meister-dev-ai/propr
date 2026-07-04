@@ -142,11 +142,19 @@ internal sealed class ForgejoPullRequestFetcher(
             return null;
         }
 
-        var changeType = baseContent is null
-            ? ChangeType.Add
-            : headContent is null
-                ? ChangeType.Delete
-                : ChangeType.Edit;
+        ChangeType changeType;
+        if (baseContent is null)
+        {
+            changeType = ChangeType.Add;
+        }
+        else if (headContent is null)
+        {
+            changeType = ChangeType.Delete;
+        }
+        else
+        {
+            changeType = ChangeType.Edit;
+        }
 
         var diff = UnifiedDiffBuilder.Build(baseContent ?? string.Empty, headContent ?? string.Empty, path);
 
@@ -357,44 +365,68 @@ internal sealed class ForgejoPullRequestFetcher(
 
         foreach (var file in files)
         {
-            var path = NormalizePath(file.FileName);
-            if (string.IsNullOrWhiteSpace(path))
+            var changedFile = await this.BuildChangedFileAsync(context, host, repositoryPath, file, headSha, baseSha, ct);
+            if (changedFile is not null)
             {
-                continue;
+                changedFiles.Add(changedFile);
             }
-
-            var changeType = MapChangeType(file.Status);
-            var originalPath = changeType == ChangeType.Rename ? NormalizePath(file.PreviousFileName) : null;
-            var isBinary = BinaryFileDetector.IsBinary(path);
-
-            var headContent = string.Empty;
-            var baseContent = string.Empty;
-            if (!isBinary)
-            {
-                if (changeType != ChangeType.Delete)
-                {
-                    headContent = await this.TryReadFileAsync(context, host, repositoryPath, path, headSha, ct) ??
-                                  string.Empty;
-                }
-
-                if (changeType != ChangeType.Add)
-                {
-                    var basePath = originalPath ?? path;
-                    baseContent = await this.TryReadFileAsync(context, host, repositoryPath, basePath, baseSha, ct) ??
-                                  string.Empty;
-                }
-            }
-
-            var diff = isBinary
-                ? string.Empty
-                : string.IsNullOrWhiteSpace(file.Patch)
-                    ? UnifiedDiffBuilder.Build(baseContent, headContent, path)
-                    : file.Patch!;
-
-            changedFiles.Add(new ChangedFile(path, changeType, headContent, diff, isBinary, originalPath));
         }
 
         return changedFiles;
+    }
+
+    private async Task<ChangedFile?> BuildChangedFileAsync(
+        ForgejoConnectionVerifier.ForgejoConnectionContext context,
+        ProviderHostRef host,
+        string repositoryPath,
+        ForgejoPullRequestFileResponse file,
+        string headSha,
+        string baseSha,
+        CancellationToken ct)
+    {
+        var path = NormalizePath(file.FileName);
+        if (string.IsNullOrWhiteSpace(path))
+        {
+            return null;
+        }
+
+        var changeType = MapChangeType(file.Status);
+        var originalPath = changeType == ChangeType.Rename ? NormalizePath(file.PreviousFileName) : null;
+        var isBinary = BinaryFileDetector.IsBinary(path);
+
+        var headContent = string.Empty;
+        var baseContent = string.Empty;
+        if (!isBinary)
+        {
+            if (changeType != ChangeType.Delete)
+            {
+                headContent = await this.TryReadFileAsync(context, host, repositoryPath, path, headSha, ct) ??
+                              string.Empty;
+            }
+
+            if (changeType != ChangeType.Add)
+            {
+                var basePath = originalPath ?? path;
+                baseContent = await this.TryReadFileAsync(context, host, repositoryPath, basePath, baseSha, ct) ??
+                              string.Empty;
+            }
+        }
+
+        string diff;
+        if (isBinary)
+        {
+            diff = string.Empty;
+        }
+        else if (string.IsNullOrWhiteSpace(file.Patch))
+        {
+            diff = UnifiedDiffBuilder.Build(baseContent, headContent, path);
+        }
+        else
+        {
+            diff = file.Patch!;
+        }
+
+        return new ChangedFile(path, changeType, headContent, diff, isBinary, originalPath);
     }
 
     private async Task<string?> TryReadFileAsync(

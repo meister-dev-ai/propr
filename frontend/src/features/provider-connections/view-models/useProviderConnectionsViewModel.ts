@@ -50,6 +50,16 @@ import {
   verificationChipClass,
 } from '../utils/formatters'
 
+function editSecretRequirementMessage(providerFamily: ScmProviderFamily, authenticationKind: ScmAuthenticationKind): string {
+  if (providerFamily !== 'github') {
+    return 'A replacement secret is required when switching Azure DevOps authentication modes.'
+  }
+
+  return authenticationKind === 'appInstallation'
+    ? 'A GitHub App private key is required when switching to GitHub App authentication.'
+    : 'A personal access token is required when switching away from GitHub App authentication.'
+}
+
 export interface ProviderConnectionsService {
   listProviderActivationStatuses: () => Promise<ProviderActivationStatusDto[]>
   listProviderConnections: (clientId: string) => Promise<ClientScmConnectionDto[]>
@@ -664,19 +674,14 @@ export function useProviderConnectionsViewModel(
     }
 
     if (editSecretRequired.value && !editForm.secret.trim()) {
-      editError.value = editForm.providerFamily === 'github'
-        ? editForm.authenticationKind === 'appInstallation'
-          ? 'A GitHub App private key is required when switching to GitHub App authentication.'
-          : 'A personal access token is required when switching away from GitHub App authentication.'
-        : 'A replacement secret is required when switching Azure DevOps authentication modes.'
+      editError.value = editSecretRequirementMessage(editForm.providerFamily, editForm.authenticationKind)
       return
     }
 
-    if (editForm.authenticationKind === 'appInstallation') {
-      if (!parseOptionalPositiveNumber(editForm.gitHubAppId) || !parseOptionalPositiveNumber(editForm.gitHubAppInstallationId)) {
-        editError.value = 'GitHub App ID and Installation ID are required for GitHub App connections.'
-        return
-      }
+    if (editForm.authenticationKind === 'appInstallation'
+      && (!parseOptionalPositiveNumber(editForm.gitHubAppId) || !parseOptionalPositiveNumber(editForm.gitHubAppInstallationId))) {
+      editError.value = 'GitHub App ID and Installation ID are required for GitHub App connections.'
+      return
     }
 
     if (!isRetentionDaysValid(editForm.retentionDays)) {

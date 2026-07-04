@@ -218,11 +218,12 @@ internal sealed class GitLabWebhookEventClassifier
             return null;
         }
 
-        return property.ValueKind == JsonValueKind.True
-            ? true
-            : property.ValueKind == JsonValueKind.False
-                ? false
-                : null;
+        return property.ValueKind switch
+        {
+            JsonValueKind.True => true,
+            JsonValueKind.False => false,
+            _ => null,
+        };
     }
 
     private static bool TryGetPropertyPath(JsonElement payload, out JsonElement property, params string[] path)

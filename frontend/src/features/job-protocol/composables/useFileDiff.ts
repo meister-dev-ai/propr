@@ -6,6 +6,10 @@ import { useSession } from '@/composables/useSession'
 import { getActiveRuntime } from '@/app/runtime/runtimeContext'
 import type { FileDiffDto } from '../types'
 
+function buildDiffCacheKey(jobId: string, fileResultId: string): string {
+    return `${jobId}::${fileResultId}`
+}
+
 /**
  * Owns the lazily-fetched file diff shown in the trace detail panel: the loaded
  * payload, its loading/error flags, and an in-memory cache keyed by job + file.
@@ -16,10 +20,6 @@ export function useFileDiff() {
     const diffLoading = ref(false)
     const diffError = ref<string | null>(null)
     const diffCache = new Map<string, FileDiffDto>()
-
-    function buildDiffCacheKey(jobId: string, fileResultId: string): string {
-        return `${jobId}::${fileResultId}`
-    }
 
     async function loadFileDiff(jobId: string, fileResultId: string): Promise<void> {
         if (!jobId || !fileResultId) {

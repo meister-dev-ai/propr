@@ -139,109 +139,28 @@ public sealed partial class MentionScanService(
         }
 
         var threads = pullRequest.ExistingThreads ?? [];
-        var latestCommentTimestamp = prScan?.LastCommentSeenAt ?? DateTimeOffset.MinValue;
+        var latestCommentTimestamp = ComputeLatestCommentTimestamp(
+            threads,
+            prScan?.LastCommentSeenAt ?? DateTimeOffset.MinValue);
         var newMentionsEnqueued = 0;
 
         foreach (var thread in threads)
         {
             foreach (var comment in thread.Comments)
             {
-                // Advance the watermark to the latest comment we've seen.
-                if (comment.PublishedAt.HasValue && comment.PublishedAt.Value > latestCommentTimestamp)
+                if (await this.ProcessCommentForMentionAsync(
+                        config,
+                        reviewer,
+                        repositoryId,
+                        pullRequestId,
+                        pullRequest,
+                        thread,
+                        comment,
+                        prScan,
+                        ct))
                 {
-                    latestCommentTimestamp = comment.PublishedAt.Value;
+                    newMentionsEnqueued++;
                 }
-
-                // Skip comments without a valid ID (shouldn't happen with real ADO data).
-                if (comment.CommentId <= 0)
-                {
-                    continue;
-                }
-
-                // Skip comments we've already processed (published before or at last seen time).
-                if (comment.PublishedAt.HasValue &&
-                    prScan is not null &&
-                    comment.PublishedAt.Value <= prScan.LastCommentSeenAt)
-                {
-                    continue;
-                }
-
-                // Log the raw content so we can see what ADO actually stores (helps detect format changes).
-                LogCommentContent(logger, thread.ThreadId, comment.CommentId, comment.Content);
-
-                if (!MentionDetector.IsMentioned(comment.Content, reviewer))
-                {
-                    continue;
-                }
-
-                // Check for duplicate — unique constraint is the authoritative guard.
-                var alreadyExists = await jobRepository.ExistsForCommentAsync(
-                    config.ClientId,
-                    repositoryId,
-                    pullRequestId,
-                    thread.ThreadId,
-                    comment.CommentId,
-                    ct);
-
-                if (alreadyExists)
-                {
-                    LogDuplicateMentionSkipped(logger, pullRequestId, thread.ThreadId, comment.CommentId);
-                    continue;
-                }
-
-                var job = new MentionReplyJob(
-                    Guid.NewGuid(),
-                    config.ClientId,
-                    config.ProviderScopePath,
-                    config.ProviderProjectKey,
-                    repositoryId,
-                    pullRequestId,
-                    thread.ThreadId,
-                    comment.CommentId,
-                    comment.Content,
-                    thread.FilePath,
-                    thread.LineNumber,
-                    comment.AuthorId,
-                    comment.AuthorName,
-                    comment.PublishedAt);
-
-                var host = new ProviderHostRef(config.Provider, config.ProviderScopePath);
-                var repository = new RepositoryRef(
-                    host,
-                    repositoryId,
-                    config.ProviderProjectKey,
-                    ResolveRepositoryProjectPath(config, repositoryId, pullRequest));
-                var review = new CodeReviewRef(
-                    repository,
-                    CodeReviewPlatformKind.PullRequest,
-                    pullRequestId.ToString(),
-                    pullRequestId);
-                var threadRef = new ReviewThreadRef(
-                    review,
-                    thread.ThreadId.ToString(),
-                    thread.FilePath,
-                    thread.LineNumber,
-                    false);
-                var commentAuthorExternalUserId = comment.AuthorId?.ToString("D") ?? comment.AuthorName;
-                var commentRef = new ReviewCommentRef(
-                    threadRef,
-                    comment.CommentId.ToString(),
-                    new ReviewerIdentity(
-                        host,
-                        commentAuthorExternalUserId ?? reviewer.ExternalUserId,
-                        comment.AuthorName,
-                        comment.AuthorName,
-                        false),
-                    comment.PublishedAt);
-
-                job.SetProviderReviewContext(review);
-                job.SetReviewThreadContext(threadRef);
-                job.SetReviewCommentContext(commentRef);
-
-                await jobRepository.AddAsync(job, ct);
-                await channelWriter.WriteAsync(job, ct);
-                newMentionsEnqueued++;
-                LogMentionEnqueued(logger, pullRequestId, thread.ThreadId, comment.CommentId);
             }
         }
 
@@ -267,6 +186,134 @@ public sealed partial class MentionScanService(
         {
             LogPrScanCompletedWithMentions(logger, pullRequestId, newMentionsEnqueued);
         }
+    }
+
+    private static DateTimeOffset ComputeLatestCommentTimestamp(
+        IReadOnlyList<PrCommentThread> threads,
+        DateTimeOffset seed)
+    {
+        var latest = seed;
+        foreach (var thread in threads)
+        {
+            foreach (var comment in thread.Comments)
+            {
+                // Advance the watermark to the latest comment we've seen.
+                if (comment.PublishedAt.HasValue && comment.PublishedAt.Value > latest)
+                {
+                    latest = comment.PublishedAt.Value;
+                }
+            }
+        }
+
+        return latest;
+    }
+
+    private static bool ShouldProcessComment(PrThreadComment comment, MentionPrScan? prScan)
+    {
+        // Skip comments without a valid ID (shouldn't happen with real ADO data).
+        if (comment.CommentId <= 0)
+        {
+            return false;
+        }
+
+        // Skip comments we've already processed (published before or at last seen time).
+        return !comment.PublishedAt.HasValue ||
+               prScan is null ||
+               comment.PublishedAt.Value > prScan.LastCommentSeenAt;
+    }
+
+    private async Task<bool> ProcessCommentForMentionAsync(
+        CrawlConfigurationDto config,
+        ReviewerIdentity reviewer,
+        string repositoryId,
+        int pullRequestId,
+        PullRequest pullRequest,
+        PrCommentThread thread,
+        PrThreadComment comment,
+        MentionPrScan? prScan,
+        CancellationToken ct)
+    {
+        if (!ShouldProcessComment(comment, prScan))
+        {
+            return false;
+        }
+
+        // Log the raw content so we can see what ADO actually stores (helps detect format changes).
+        LogCommentContent(logger, thread.ThreadId, comment.CommentId, comment.Content);
+
+        if (!MentionDetector.IsMentioned(comment.Content, reviewer))
+        {
+            return false;
+        }
+
+        // Check for duplicate — unique constraint is the authoritative guard.
+        var alreadyExists = await jobRepository.ExistsForCommentAsync(
+            config.ClientId,
+            repositoryId,
+            pullRequestId,
+            thread.ThreadId,
+            comment.CommentId,
+            ct);
+
+        if (alreadyExists)
+        {
+            LogDuplicateMentionSkipped(logger, pullRequestId, thread.ThreadId, comment.CommentId);
+            return false;
+        }
+
+        var job = new MentionReplyJob(
+            Guid.NewGuid(),
+            config.ClientId,
+            config.ProviderScopePath,
+            config.ProviderProjectKey,
+            repositoryId,
+            pullRequestId,
+            thread.ThreadId,
+            comment.CommentId,
+            comment.Content,
+            thread.FilePath,
+            thread.LineNumber,
+            comment.AuthorId,
+            comment.AuthorName,
+            comment.PublishedAt);
+
+        var host = new ProviderHostRef(config.Provider, config.ProviderScopePath);
+        var repository = new RepositoryRef(
+            host,
+            repositoryId,
+            config.ProviderProjectKey,
+            ResolveRepositoryProjectPath(config, repositoryId, pullRequest));
+        var review = new CodeReviewRef(
+            repository,
+            CodeReviewPlatformKind.PullRequest,
+            pullRequestId.ToString(),
+            pullRequestId);
+        var threadRef = new ReviewThreadRef(
+            review,
+            thread.ThreadId.ToString(),
+            thread.FilePath,
+            thread.LineNumber,
+            false);
+        var commentAuthorExternalUserId = comment.AuthorId?.ToString("D") ?? comment.AuthorName;
+        var commentRef = new ReviewCommentRef(
+            threadRef,
+            comment.CommentId.ToString(),
+            new ReviewerIdentity(
+                host,
+                commentAuthorExternalUserId ?? reviewer.ExternalUserId,
+                comment.AuthorName,
+                comment.AuthorName,
+                false),
+            comment.PublishedAt);
+
+        job.SetProviderReviewContext(review);
+        job.SetReviewThreadContext(threadRef);
+        job.SetReviewCommentContext(commentRef);
+
+        await jobRepository.AddAsync(job, ct);
+        await channelWriter.WriteAsync(job, ct);
+        LogMentionEnqueued(logger, pullRequestId, thread.ThreadId, comment.CommentId);
+        return true;
     }
 
     private async Task<ReviewerIdentity?> ResolveReviewerIdentityAsync(

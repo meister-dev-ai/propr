@@ -11,13 +11,12 @@ using Microsoft.AspNetCore.Mvc;
 namespace MeisterProPR.ProCursor.Service.Controllers;
 
 /// <summary>
-///     Internal token-usage reporting and rebuild endpoints for the extracted ProCursor host.
+///     Internal token-usage reporting endpoints for the extracted ProCursor host.
 /// </summary>
 [ApiController]
 [Authorize(AuthenticationSchemes = ProCursorSharedKeyAuthenticationDefaults.Scheme)]
-public sealed class InternalProCursorTokenUsageController(
-    IProCursorTokenUsageReadRepository readRepository,
-    IProCursorTokenUsageRebuildService rebuildService) : ControllerBase
+[Route("internal/procursor/clients/{clientId:guid}")]
+public sealed class InternalProCursorTokenUsageController(IProCursorTokenUsageReadRepository readRepository) : ControllerBase
 {
     /// <summary>
     ///     Returns token-usage totals and series for a client.
@@ -30,7 +29,7 @@ public sealed class InternalProCursorTokenUsageController(
     /// <param name="ct">Cancellation token for the request.</param>
     /// <returns>The token-usage response for the client.</returns>
     /// <response code="200">The client token-usage report was returned.</response>
-    [HttpGet("/internal/procursor/clients/{clientId:guid}/token-usage")]
+    [HttpGet("token-usage")]
     public async Task<ActionResult<ProCursorTokenUsageResponse>> GetClientUsage(
         Guid clientId,
         [FromQuery] DateOnly from,
@@ -52,7 +51,7 @@ public sealed class InternalProCursorTokenUsageController(
     /// <param name="ct">Cancellation token for the request.</param>
     /// <returns>The top token-usage sources.</returns>
     /// <response code="200">The top sources were returned.</response>
-    [HttpGet("/internal/procursor/clients/{clientId:guid}/token-usage/top-sources")]
+    [HttpGet("token-usage/top-sources")]
     public async Task<ActionResult<IReadOnlyList<ProCursorTopSourceUsageDto>>> GetTopSources(
         Guid clientId,
         [FromQuery] DateOnly from,
@@ -75,7 +74,7 @@ public sealed class InternalProCursorTokenUsageController(
     /// <returns>The token-usage response for the source.</returns>
     /// <response code="200">The source token-usage report was returned.</response>
     /// <response code="404">The source was not found for the client.</response>
-    [HttpGet("/internal/procursor/clients/{clientId:guid}/sources/{sourceId:guid}/token-usage")]
+    [HttpGet("sources/{sourceId:guid}/token-usage")]
     public async Task<ActionResult<ProCursorSourceTokenUsageResponse>> GetSourceUsage(
         Guid clientId,
         Guid sourceId,
@@ -98,7 +97,7 @@ public sealed class InternalProCursorTokenUsageController(
     /// <returns>The recent token-usage events.</returns>
     /// <response code="200">The recent events were returned.</response>
     /// <response code="404">The source was not found for the client.</response>
-    [HttpGet("/internal/procursor/clients/{clientId:guid}/sources/{sourceId:guid}/token-usage/events")]
+    [HttpGet("sources/{sourceId:guid}/token-usage/events")]
     public async Task<ActionResult<ProCursorTokenUsageEventsResponse>> GetRecentEvents(
         Guid clientId,
         Guid sourceId,
@@ -119,7 +118,7 @@ public sealed class InternalProCursorTokenUsageController(
     /// <param name="ct">Cancellation token for the request.</param>
     /// <returns>The exported token-usage rows.</returns>
     /// <response code="200">The export rows were returned.</response>
-    [HttpGet("/internal/procursor/clients/{clientId:guid}/token-usage/export")]
+    [HttpGet("token-usage/export")]
     public async Task<ActionResult<IReadOnlyList<ProCursorTokenUsageExportRowDto>>> Export(
         Guid clientId,
         [FromQuery] DateOnly from,
@@ -137,28 +136,11 @@ public sealed class InternalProCursorTokenUsageController(
     /// <param name="ct">Cancellation token for the request.</param>
     /// <returns>The token-usage freshness response.</returns>
     /// <response code="200">The freshness response was returned.</response>
-    [HttpGet("/internal/procursor/clients/{clientId:guid}/token-usage/freshness")]
+    [HttpGet("token-usage/freshness")]
     public async Task<ActionResult<ProCursorTokenUsageFreshnessResponse>> GetFreshness(
         Guid clientId,
         CancellationToken ct = default)
     {
         return this.Ok(await readRepository.GetFreshnessAsync(clientId, ct));
-    }
-
-    /// <summary>
-    ///     Rebuilds token-usage rollups for a client and time range.
-    /// </summary>
-    /// <param name="clientId">Client identifier.</param>
-    /// <param name="request">Rebuild request payload.</param>
-    /// <param name="ct">Cancellation token for the request.</param>
-    /// <returns>The rebuild result.</returns>
-    /// <response code="200">The token-usage rollups were rebuilt.</response>
-    [HttpPost("/internal/procursor/clients/{clientId:guid}/token-usage/rebuild")]
-    public async Task<ActionResult<ProCursorTokenUsageRebuildResponse>> Rebuild(
-        Guid clientId,
-        [FromBody] ProCursorTokenUsageRebuildRequest request,
-        CancellationToken ct = default)
-    {
-        return this.Ok(await rebuildService.RebuildAsync(clientId, request, ct));
     }
 }

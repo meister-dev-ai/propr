@@ -3,6 +3,7 @@
 
 using MeisterProPR.Application.DTOs.ProCursor;
 using MeisterProPR.Application.Interfaces;
+using MeisterProPR.Domain.Entities;
 using MeisterProPR.Domain.Enums;
 using Microsoft.Extensions.Logging;
 
@@ -27,53 +28,71 @@ public sealed partial class ProCursorRefreshScheduler(
 
         foreach (var source in sources)
         {
-            foreach (var trackedBranch in source.TrackedBranches
-                         .Where(branch =>
-                             branch.IsEnabled && branch.RefreshTriggerMode == ProCursorRefreshTriggerMode.BranchUpdate)
-                         .OrderBy(branch => branch.BranchName, StringComparer.OrdinalIgnoreCase))
+            var branchesToPoll = source.TrackedBranches
+                .Where(branch => branch.IsEnabled && branch.RefreshTriggerMode == ProCursorRefreshTriggerMode.BranchUpdate)
+                .OrderBy(branch => branch.BranchName, StringComparer.OrdinalIgnoreCase);
+
+            foreach (var trackedBranch in branchesToPoll)
             {
-                try
+                if (await this.TryScheduleRefreshAsync(source, trackedBranch, ct))
                 {
-                    var latestCommitSha = await changeDetector.GetLatestCommitShaAsync(source, trackedBranch, ct);
-                    if (string.IsNullOrWhiteSpace(latestCommitSha))
-                    {
-                        continue;
-                    }
-
-                    var normalizedCommitSha = latestCommitSha.Trim();
-                    if (string.Equals(
-                            trackedBranch.LastIndexedCommitSha,
-                            normalizedCommitSha,
-                            StringComparison.OrdinalIgnoreCase))
-                    {
-                        continue;
-                    }
-
-                    if (!string.Equals(
-                            trackedBranch.LastSeenCommitSha,
-                            normalizedCommitSha,
-                            StringComparison.OrdinalIgnoreCase))
-                    {
-                        trackedBranch.RecordSeenCommit(normalizedCommitSha);
-                        await knowledgeSourceRepository.UpdateAsync(source, ct);
-                    }
-
-                    await indexCoordinator.QueueRefreshAsync(
-                        source.ClientId,
-                        source.Id,
-                        new ProCursorRefreshRequest(
-                            trackedBranch.Id,
-                            normalizedCommitSha),
-                        ct);
                     queuedCount++;
-                }
-                catch (Exception ex) when (ex is not OperationCanceledException)
-                {
-                    LogRefreshPollFailed(logger, source.Id, trackedBranch.Id, trackedBranch.BranchName, ex);
                 }
             }
         }
 
         return queuedCount;
+    }
+
+    /// <summary>
+    ///     Detects whether the tracked branch's head has advanced and, if so, records the seen
+    ///     commit and queues a refresh job for it.
+    /// </summary>
+    /// <returns><see langword="true"/> when a refresh job was queued.</returns>
+    private async Task<bool> TryScheduleRefreshAsync(
+        ProCursorKnowledgeSource source,
+        ProCursorTrackedBranch trackedBranch,
+        CancellationToken ct)
+    {
+        try
+        {
+            var latestCommitSha = await changeDetector.GetLatestCommitShaAsync(source, trackedBranch, ct);
+            if (string.IsNullOrWhiteSpace(latestCommitSha))
+            {
+                return false;
+            }
+
+            var normalizedCommitSha = latestCommitSha.Trim();
+            if (string.Equals(
+                    trackedBranch.LastIndexedCommitSha,
+                    normalizedCommitSha,
+                    StringComparison.OrdinalIgnoreCase))
+            {
+                return false;
+            }
+
+            if (!string.Equals(
+                    trackedBranch.LastSeenCommitSha,
+                    normalizedCommitSha,
+                    StringComparison.OrdinalIgnoreCase))
+            {
+                trackedBranch.RecordSeenCommit(normalizedCommitSha);
+                await knowledgeSourceRepository.UpdateAsync(source, ct);
+            }
+
+            await indexCoordinator.QueueRefreshAsync(
+                source.ClientId,
+                source.Id,
+                new ProCursorRefreshRequest(
+                    trackedBranch.Id,
+                    normalizedCommitSha),
+                ct);
+            return true;
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            LogRefreshPollFailed(logger, source.Id, trackedBranch.Id, trackedBranch.BranchName, ex);
+            return false;
+        }
     }
 }

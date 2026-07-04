@@ -11,6 +11,7 @@ namespace MeisterProPR.Api.Controllers;
 
 /// <summary>Resolves Azure DevOps identities for use in crawl configuration.</summary>
 [ApiController]
+[Route("identities")]
 public sealed class IdentitiesController(IScmProviderRegistry providerRegistry) : ControllerBase
 {
     /// <summary>
@@ -30,7 +31,7 @@ public sealed class IdentitiesController(IScmProviderRegistry providerRegistry) 
     /// <response code="401">Missing or invalid credentials.</response>
     /// <response code="403">Caller is authenticated but lacks <c>ClientAdministrator</c> access for the requested client.</response>
     /// <response code="404">No identity found with that display name.</response>
-    [HttpGet("identities/resolve")]
+    [HttpGet("resolve")]
     [ProducesResponseType(typeof(IReadOnlyList<IdentityResponse>), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]

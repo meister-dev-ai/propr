@@ -4,7 +4,7 @@
 import { loadEnv } from 'vite'
 import vue from '@vitejs/plugin-vue'
 import vuetify from 'vite-plugin-vuetify'
-import path from 'path'
+import path from 'node:path'
 // defineConfig from vitest/config augments Vite's UserConfig with the `test` key.
 import { defineConfig, configDefaults } from 'vitest/config'
 

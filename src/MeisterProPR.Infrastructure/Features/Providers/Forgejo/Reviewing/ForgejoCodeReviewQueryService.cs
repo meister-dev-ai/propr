@@ -45,14 +45,17 @@ internal sealed class ForgejoCodeReviewQueryService(
         var payload = await response.Content.ReadFromJsonAsync<ForgejoPullRequestResponse>(ct)
                       ?? throw new InvalidOperationException("Forgejo review query returned an empty payload.");
         var latestRevision = BuildRevision(payload);
-        var requestedReviewer = SelectAssignedReviewer(payload) is { } reviewer
-            ? new ReviewerIdentity(
+        ReviewerIdentity? requestedReviewer = null;
+        if (SelectAssignedReviewer(payload) is { } reviewer)
+        {
+            var displayName = string.IsNullOrWhiteSpace(reviewer.FullName) ? reviewer.Login! : reviewer.FullName!;
+            requestedReviewer = new ReviewerIdentity(
                 review.Repository.Host,
                 reviewer.Id.ToString(CultureInfo.InvariantCulture),
                 reviewer.Login!,
-                string.IsNullOrWhiteSpace(reviewer.FullName) ? reviewer.Login! : reviewer.FullName!,
-                LooksLikeBot(reviewer.Login))
-            : null;
+                displayName,
+                LooksLikeBot(reviewer.Login));
+        }
 
         return new ReviewDiscoveryItemDto(
             ScmProvider.Forgejo,

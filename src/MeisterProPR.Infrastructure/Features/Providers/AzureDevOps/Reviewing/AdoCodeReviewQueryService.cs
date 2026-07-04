@@ -63,6 +63,7 @@ internal sealed class AdoCodeReviewQueryService(
             }
             catch when (!ct.IsCancellationRequested)
             {
+                // This organization doesn't have the pull request; try the next candidate organization URL.
             }
         }
 

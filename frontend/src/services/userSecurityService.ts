@@ -19,36 +19,40 @@ export class ApiRequestError extends Error {
   }
 }
 
-function getErrorMessage(error: unknown, fallback: string): string {
-  if (error && typeof error === 'object') {
-    const apiError = error as {
-      error?: string
-      detail?: string
-      title?: string
-      errors?: Record<string, string[]>
-    }
+function readStringField(value: unknown): string | null {
+  return typeof value === 'string' && value ? value : null
+}
 
-    if (typeof apiError.error === 'string' && apiError.error) {
-      return sanitizeSensitiveText(apiError.error)
-    }
-
-    if (typeof apiError.detail === 'string' && apiError.detail) {
-      return sanitizeSensitiveText(apiError.detail)
-    }
-
-    if (typeof apiError.title === 'string' && apiError.title) {
-      return sanitizeSensitiveText(apiError.title)
-    }
-
-    if (apiError.errors && typeof apiError.errors === 'object') {
-      const firstError = Object.values(apiError.errors).flat()[0]
-      if (firstError) {
-        return sanitizeSensitiveText(firstError)
-      }
-    }
+function readFirstFieldError(errors: unknown): string | null {
+  if (!errors || typeof errors !== 'object') {
+    return null
   }
 
-  return sanitizeSensitiveText(fallback)
+  return Object.values(errors as Record<string, string[]>).flat()[0] ?? null
+}
+
+function extractApiErrorMessage(error: unknown): string | null {
+  if (!error || typeof error !== 'object') {
+    return null
+  }
+
+  const apiError = error as {
+    error?: string
+    detail?: string
+    title?: string
+    errors?: Record<string, string[]>
+  }
+
+  return (
+    readStringField(apiError.error) ??
+    readStringField(apiError.detail) ??
+    readStringField(apiError.title) ??
+    readFirstFieldError(apiError.errors)
+  )
+}
+
+function getErrorMessage(error: unknown, fallback: string): string {
+  return sanitizeSensitiveText(extractApiErrorMessage(error) ?? fallback)
 }
 
 async function changeMyPasswordInternal(request: ChangePasswordRequest): Promise<void> {

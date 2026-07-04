@@ -122,12 +122,7 @@ export function useTenantSettingsViewModel(options: UseTenantSettingsViewModelOp
     return origin ? new URL(callbackPath, origin).toString() : callbackPath
   })
 
-  async function loadSettings(): Promise<void> {
-    state.value = loadingState('Loading tenant settings...')
-    policyError.value = ''
-    providerError.value = ''
-    ssoUnavailableOverrideMessage.value = ''
-
+  async function loadTenantAndAuthOptions(): Promise<boolean> {
     try {
       const [loadedTenant, authOptions] = await Promise.all([
         getTenantFn(tenantId),
@@ -136,16 +131,19 @@ export function useTenantSettingsViewModel(options: UseTenantSettingsViewModelOp
 
       tenant.value = loadedTenant
       publicBaseUrl.value = authOptions?.publicBaseUrl ?? null
+      return true
     } catch (err) {
       if (err instanceof UnauthorizedError) {
         await router.push({ name: 'login' })
-        return
+        return false
       }
       policyError.value = err instanceof ApiRequestError ? err.message : 'Failed to load tenant settings.'
       state.value = errorState(policyError.value)
-      return
+      return false
     }
+  }
 
+  async function loadProviders(): Promise<void> {
     try {
       if (isTenantSsoAvailable.value) {
         providers.value = await listTenantSsoProvidersFn(tenantId)
@@ -167,6 +165,19 @@ export function useTenantSettingsViewModel(options: UseTenantSettingsViewModelOp
         state.value = errorState(providerError.value)
       }
     }
+  }
+
+  async function loadSettings(): Promise<void> {
+    state.value = loadingState('Loading tenant settings...')
+    policyError.value = ''
+    providerError.value = ''
+    ssoUnavailableOverrideMessage.value = ''
+
+    if (!(await loadTenantAndAuthOptions())) {
+      return
+    }
+
+    await loadProviders()
   }
 
   async function createProvider(request: TenantSsoProviderInput): Promise<void> {

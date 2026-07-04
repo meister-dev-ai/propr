@@ -237,11 +237,8 @@ public sealed partial class AdoPrFetcher(
             return null;
         }
 
-        var changeType = string.IsNullOrEmpty(baseContent)
-            ? ChangeType.Add
-            : string.IsNullOrEmpty(headContent)
-                ? ChangeType.Delete
-                : ChangeType.Edit;
+        var fallbackChangeType = string.IsNullOrEmpty(headContent) ? ChangeType.Delete : ChangeType.Edit;
+        var changeType = string.IsNullOrEmpty(baseContent) ? ChangeType.Add : fallbackChangeType;
 
         var diff = BuildUnifiedDiff(baseContent, headContent, repoRelativePath);
 

@@ -13,12 +13,13 @@ namespace MeisterProPR.Api.Features.Licensing.Controllers;
 
 /// <summary>Administrative endpoints for installation-wide edition and premium capability state.</summary>
 [ApiController]
+[Route("admin/licensing")]
 public sealed class AdminLicensingController(
     GetLicensingSummaryHandler? getLicensingSummaryHandler = null,
     UpdateLicensingHandler? updateLicensingHandler = null) : ControllerBase
 {
     /// <summary>Returns the current installation edition and premium capability state.</summary>
-    [HttpGet("/admin/licensing")]
+    [HttpGet]
     [ProducesResponseType(typeof(LicensingSummaryDto), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
@@ -40,7 +41,7 @@ public sealed class AdminLicensingController(
     }
 
     /// <summary>Updates the installation edition and optional per-capability overrides.</summary>
-    [HttpPatch("/admin/licensing")]
+    [HttpPatch]
     [ProducesResponseType(typeof(LicensingSummaryDto), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]

@@ -72,18 +72,25 @@ public sealed class MentionReplyWorkerTests
             NullLogger<MentionReplyWorker>.Instance);
 
         await worker.StartAsync(CancellationToken.None);
-        await channel.Writer.WriteAsync(
-            new MentionReplyJob(
-                Guid.NewGuid(),
-                Guid.NewGuid(),
-                "https://dev.azure.com/org",
-                "proj",
-                "repo",
-                7,
-                3,
-                11,
-                "@bot please help"));
-        await processingAttempted.Task.WaitAsync(TimeSpan.FromSeconds(1));
+
+        var ex = await Record.ExceptionAsync(async () =>
+        {
+            await channel.Writer.WriteAsync(
+                new MentionReplyJob(
+                    Guid.NewGuid(),
+                    Guid.NewGuid(),
+                    "https://dev.azure.com/org",
+                    "proj",
+                    "repo",
+                    7,
+                    3,
+                    11,
+                    "@bot please help"));
+            await processingAttempted.Task.WaitAsync(TimeSpan.FromSeconds(1));
+        });
+
+        Assert.Null(ex);
+        Assert.True(scopeCreationCount >= 2, "the worker should have continued to the next polling cycle after skipping the job");
         await worker.StopAsync(CancellationToken.None);
     }
 }

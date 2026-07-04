@@ -519,6 +519,7 @@ public sealed class EfReviewDiagnosticsReader(
         }
         catch (JsonException)
         {
+            // Malformed JSON: fall through and report the property as absent.
         }
 
         return null;
@@ -784,50 +785,72 @@ public sealed class EfReviewDiagnosticsReader(
             return null;
         }
 
-        var used = false;
-        var completedSuccessfully = false;
-        var dependencyRecorded = false;
-        string? triggerFamily = null;
-
+        var accumulator = new FollowUpAccumulator();
         foreach (var evt in protocol.Events)
         {
-            if (string.Equals(evt.Name, ReviewProtocolEventNames.AgenticFilePlanCreated, StringComparison.Ordinal)
-                && TryGetTriggerFamilyFromPlan(evt.OutputSummary, out var planTriggerFamily))
-            {
-                used = true;
-                triggerFamily ??= planTriggerFamily;
-            }
+            ApplyFollowUpEvent(evt, accumulator);
+        }
+
+        return accumulator.Used || accumulator.DependencyRecorded
+            ? new ProtocolFollowUpDto(accumulator.Used, accumulator.TriggerFamily, accumulator.CompletedSuccessfully, accumulator.DependencyRecorded)
+            : null;
+    }
+
+    private static void ApplyFollowUpEvent(ProtocolEvent evt, FollowUpAccumulator accumulator)
+    {
+        if (string.Equals(evt.Name, ReviewProtocolEventNames.AgenticFilePlanCreated, StringComparison.Ordinal)
+            && TryGetTriggerFamilyFromPlan(evt.OutputSummary, out var planTriggerFamily))
+        {
+            accumulator.Used = true;
+            accumulator.TriggerFamily ??= planTriggerFamily;
+        }
+
+        if (IsFollowUpUsageEvent(evt.Name))
+        {
+            accumulator.Used = true;
 
             if (string.Equals(evt.Name, ReviewProtocolEventNames.AgenticFileInvestigationResult, StringComparison.Ordinal)
-                || string.Equals(evt.Name, ReviewProtocolEventNames.AgenticFileDegraded, StringComparison.Ordinal)
-                || string.Equals(evt.Name, ReviewProtocolEventNames.AgenticFileFollowUpDiagnosticsOnly, StringComparison.Ordinal))
+                && IsInvestigationCompletedSuccessfully(evt))
             {
-                used = true;
-
-                if (string.Equals(evt.Name, ReviewProtocolEventNames.AgenticFileInvestigationResult, StringComparison.Ordinal)
-                    && TryGetString(evt.OutputSummary, "status", out var status)
-                    && string.Equals(status, "completed", StringComparison.OrdinalIgnoreCase)
-                    && (!TryGetBoolean(evt.OutputSummary, "degraded", out var degraded) || !degraded)
-                    && (!TryGetBoolean(evt.OutputSummary, "diagnosticsOnly", out var diagnosticsOnly) || !diagnosticsOnly))
-                {
-                    completedSuccessfully = true;
-                }
-            }
-
-            if (string.Equals(evt.Name, ReviewProtocolEventNames.AgenticFileFollowUpDependencyRecorded, StringComparison.Ordinal))
-            {
-                used = true;
-                dependencyRecorded = true;
-                if (TryGetString(evt.InputTextSample, "triggerFamily", out var dependencyTriggerFamily))
-                {
-                    triggerFamily ??= dependencyTriggerFamily;
-                }
+                accumulator.CompletedSuccessfully = true;
             }
         }
 
-        return used || dependencyRecorded
-            ? new ProtocolFollowUpDto(used, triggerFamily, completedSuccessfully, dependencyRecorded)
-            : null;
+        if (string.Equals(evt.Name, ReviewProtocolEventNames.AgenticFileFollowUpDependencyRecorded, StringComparison.Ordinal))
+        {
+            accumulator.Used = true;
+            accumulator.DependencyRecorded = true;
+            if (TryGetString(evt.InputTextSample, "triggerFamily", out var dependencyTriggerFamily))
+            {
+                accumulator.TriggerFamily ??= dependencyTriggerFamily;
+            }
+        }
+    }
+
+    private static bool IsFollowUpUsageEvent(string? name)
+    {
+        return string.Equals(name, ReviewProtocolEventNames.AgenticFileInvestigationResult, StringComparison.Ordinal)
+            || string.Equals(name, ReviewProtocolEventNames.AgenticFileDegraded, StringComparison.Ordinal)
+            || string.Equals(name, ReviewProtocolEventNames.AgenticFileFollowUpDiagnosticsOnly, StringComparison.Ordinal);
+    }
+
+    private static bool IsInvestigationCompletedSuccessfully(ProtocolEvent evt)
+    {
+        return TryGetString(evt.OutputSummary, "status", out var status)
+            && string.Equals(status, "completed", StringComparison.OrdinalIgnoreCase)
+            && (!TryGetBoolean(evt.OutputSummary, "degraded", out var degraded) || !degraded)
+            && (!TryGetBoolean(evt.OutputSummary, "diagnosticsOnly", out var diagnosticsOnly) || !diagnosticsOnly);
+    }
+
+    private sealed class FollowUpAccumulator
+    {
+        public bool Used { get; set; }
+
+        public bool CompletedSuccessfully { get; set; }
+
+        public bool DependencyRecorded { get; set; }
+
+        public string? TriggerFamily { get; set; }
     }
 
     private static ProtocolRepeatedJudgmentDto? ResolveRepeatedJudgment(ReviewJobProtocol protocol)
@@ -867,253 +890,320 @@ public sealed class EfReviewDiagnosticsReader(
 
     private static ProtocolProRvPrefilterDto? ResolveProRvPrefilter(ReviewJobProtocol protocol)
     {
-        const string notSelected = "not_selected";
-        const string skipped = "skipped";
-        const string completed = "completed";
-        const string failed = "failed";
-
-        var executionState = notSelected;
-        string? stageId = null;
-        string? reason = null;
-        string? runtimeSource = null;
-        string? modelId = null;
-        string? language = null;
-        string? prefilterStatus = null;
-        var guidanceCount = 0;
-        var selected = false;
-        var aiCallRecorded = false;
-        var guidanceApplied = false;
-        string? appliedPromptKind = null;
-        IReadOnlyList<string> appliedGuidanceIds = [];
+        var accumulator = new ProRvPrefilterAccumulator();
 
         foreach (var evt in protocol.Events)
         {
-            if (string.Equals(evt.Name, ReviewProtocolEventNames.ReviewPipelineProfileApplied, StringComparison.Ordinal))
-            {
-                if (GetStringArray(evt.OutputSummary, "dispatchStageIds").Contains(FileByFileProRvPrefilterStage.StageIdConstant, StringComparer.Ordinal) ||
-                    GetStringArray(evt.OutputSummary, "dispatchStageIds").Contains(AgenticProRvPrefilterStage.StageIdConstant, StringComparer.Ordinal))
-                {
-                    selected = true;
-                }
-            }
-
-            if (string.Equals(evt.Name, ReviewProtocolEventNames.ProRVPrefilterAiCall, StringComparison.Ordinal))
-            {
-                aiCallRecorded = true;
-                if (TryGetString(evt.SystemPrompt, "modelId", out var aiCallModelId) && !string.IsNullOrWhiteSpace(aiCallModelId))
-                {
-                    modelId ??= aiCallModelId;
-                }
-
-                if (TryGetString(evt.SystemPrompt, "runtimeSource", out var aiCallRuntimeSource) && !string.IsNullOrWhiteSpace(aiCallRuntimeSource))
-                {
-                    runtimeSource ??= aiCallRuntimeSource;
-                }
-
-                if (TryGetString(evt.InputTextSample, "status", out var aiCallStatus) && !string.IsNullOrWhiteSpace(aiCallStatus))
-                {
-                    prefilterStatus ??= aiCallStatus;
-                }
-
-                if (TryGetString(evt.InputTextSample, "language", out var aiCallLanguage) && !string.IsNullOrWhiteSpace(aiCallLanguage))
-                {
-                    language ??= aiCallLanguage;
-                }
-
-                if (TryGetString(evt.InputTextSample, "stageId", out var aiCallStageId) && !string.IsNullOrWhiteSpace(aiCallStageId))
-                {
-                    stageId ??= aiCallStageId;
-                }
-
-                if (!string.IsNullOrWhiteSpace(evt.Error))
-                {
-                    reason ??= evt.Error;
-                }
-            }
-
-            if (string.Equals(evt.Name, ReviewProtocolEventNames.ProRVFocusedGuidanceApplied, StringComparison.Ordinal))
-            {
-                if (TryGetBoolean(evt.InputTextSample, "applied", out var applied))
-                {
-                    guidanceApplied = applied;
-                }
-
-                if (TryGetString(evt.InputTextSample, "promptKind", out var promptKind) && !string.IsNullOrWhiteSpace(promptKind))
-                {
-                    appliedPromptKind = promptKind;
-                }
-
-                var ids = GetStringArray(evt.OutputSummary, "guidanceIds");
-                if (ids.Count > 0)
-                {
-                    appliedGuidanceIds = ids;
-                }
-            }
-
-            if (!string.Equals(evt.Name, ReviewProtocolEventNames.ProRVPrefilterStarted, StringComparison.Ordinal) &&
-                !string.Equals(evt.Name, ReviewProtocolEventNames.ProRVPrefilterSkipped, StringComparison.Ordinal) &&
-                !string.Equals(evt.Name, ReviewProtocolEventNames.ProRVPrefilterCompleted, StringComparison.Ordinal) &&
-                !string.Equals(evt.Name, ReviewProtocolEventNames.ProRVPrefilterFailed, StringComparison.Ordinal))
-            {
-                continue;
-            }
-
-            selected = true;
-            if (TryGetString(evt.InputTextSample, "stageId", out var eventStageId) && !string.IsNullOrWhiteSpace(eventStageId))
-            {
-                stageId = eventStageId;
-            }
-
-            if (TryGetString(evt.OutputSummary, "runtimeSource", out var eventRuntimeSource) && !string.IsNullOrWhiteSpace(eventRuntimeSource))
-            {
-                runtimeSource = eventRuntimeSource;
-            }
-
-            if (TryGetString(evt.OutputSummary, "modelId", out var eventModelId) && !string.IsNullOrWhiteSpace(eventModelId))
-            {
-                modelId = eventModelId;
-            }
-
-            if (TryGetString(evt.OutputSummary, "language", out var eventLanguage) && !string.IsNullOrWhiteSpace(eventLanguage))
-            {
-                language = eventLanguage;
-            }
-
-            if (TryGetString(evt.OutputSummary, "proRvStatus", out var eventPrefilterStatus) && !string.IsNullOrWhiteSpace(eventPrefilterStatus))
-            {
-                prefilterStatus = eventPrefilterStatus;
-            }
-
-            if (TryGetInt32(evt.OutputSummary, "guidanceCount", out var parsedGuidanceCount))
-            {
-                guidanceCount = parsedGuidanceCount;
-            }
-
-            if (!string.IsNullOrWhiteSpace(evt.Error))
-            {
-                reason = evt.Error;
-            }
-
-            if (string.Equals(evt.Name, ReviewProtocolEventNames.ProRVPrefilterSkipped, StringComparison.Ordinal))
-            {
-                executionState = skipped;
-                if (TryGetString(evt.OutputSummary, "reason", out var skipReason) && !string.IsNullOrWhiteSpace(skipReason))
-                {
-                    reason = skipReason;
-                }
-            }
-            else if (string.Equals(evt.Name, ReviewProtocolEventNames.ProRVPrefilterCompleted, StringComparison.Ordinal))
-            {
-                executionState = completed;
-            }
-            else if (string.Equals(evt.Name, ReviewProtocolEventNames.ProRVPrefilterFailed, StringComparison.Ordinal))
-            {
-                executionState = failed;
-            }
+            ApplyProRvProfileAppliedEvent(evt, accumulator);
+            ApplyProRvAiCallEvent(evt, accumulator);
+            ApplyProRvGuidanceAppliedEvent(evt, accumulator);
+            ApplyProRvStageLifecycleEvent(evt, accumulator);
         }
 
-        return selected || aiCallRecorded
+        return accumulator.Selected || accumulator.AiCallRecorded
             ? new ProtocolProRvPrefilterDto(
-                selected,
-                executionState,
-                stageId,
-                reason,
-                runtimeSource,
-                modelId,
-                language,
-                prefilterStatus,
-                guidanceCount,
-                aiCallRecorded,
-                guidanceApplied,
-                appliedPromptKind,
-                appliedGuidanceIds)
+                accumulator.Selected,
+                accumulator.ExecutionState,
+                accumulator.StageId,
+                accumulator.Reason,
+                accumulator.RuntimeSource,
+                accumulator.ModelId,
+                accumulator.Language,
+                accumulator.PrefilterStatus,
+                accumulator.GuidanceCount,
+                accumulator.AiCallRecorded,
+                accumulator.GuidanceApplied,
+                accumulator.AppliedPromptKind,
+                accumulator.AppliedGuidanceIds)
             : null;
+    }
+
+    private static void ApplyProRvProfileAppliedEvent(ProtocolEvent evt, ProRvPrefilterAccumulator accumulator)
+    {
+        if (string.Equals(evt.Name, ReviewProtocolEventNames.ReviewPipelineProfileApplied, StringComparison.Ordinal) &&
+            (GetStringArray(evt.OutputSummary, "dispatchStageIds").Contains(FileByFileProRvPrefilterStage.StageIdConstant, StringComparer.Ordinal) ||
+             GetStringArray(evt.OutputSummary, "dispatchStageIds").Contains(AgenticProRvPrefilterStage.StageIdConstant, StringComparer.Ordinal)))
+        {
+            accumulator.Selected = true;
+        }
+    }
+
+    private static void ApplyProRvAiCallEvent(ProtocolEvent evt, ProRvPrefilterAccumulator accumulator)
+    {
+        if (!string.Equals(evt.Name, ReviewProtocolEventNames.ProRVPrefilterAiCall, StringComparison.Ordinal))
+        {
+            return;
+        }
+
+        accumulator.AiCallRecorded = true;
+        if (TryGetString(evt.SystemPrompt, "modelId", out var aiCallModelId) && !string.IsNullOrWhiteSpace(aiCallModelId))
+        {
+            accumulator.ModelId ??= aiCallModelId;
+        }
+
+        if (TryGetString(evt.SystemPrompt, "runtimeSource", out var aiCallRuntimeSource) && !string.IsNullOrWhiteSpace(aiCallRuntimeSource))
+        {
+            accumulator.RuntimeSource ??= aiCallRuntimeSource;
+        }
+
+        if (TryGetString(evt.InputTextSample, "status", out var aiCallStatus) && !string.IsNullOrWhiteSpace(aiCallStatus))
+        {
+            accumulator.PrefilterStatus ??= aiCallStatus;
+        }
+
+        if (TryGetString(evt.InputTextSample, "language", out var aiCallLanguage) && !string.IsNullOrWhiteSpace(aiCallLanguage))
+        {
+            accumulator.Language ??= aiCallLanguage;
+        }
+
+        if (TryGetString(evt.InputTextSample, "stageId", out var aiCallStageId) && !string.IsNullOrWhiteSpace(aiCallStageId))
+        {
+            accumulator.StageId ??= aiCallStageId;
+        }
+
+        if (!string.IsNullOrWhiteSpace(evt.Error))
+        {
+            accumulator.Reason ??= evt.Error;
+        }
+    }
+
+    private static void ApplyProRvGuidanceAppliedEvent(ProtocolEvent evt, ProRvPrefilterAccumulator accumulator)
+    {
+        if (!string.Equals(evt.Name, ReviewProtocolEventNames.ProRVFocusedGuidanceApplied, StringComparison.Ordinal))
+        {
+            return;
+        }
+
+        if (TryGetBoolean(evt.InputTextSample, "applied", out var applied))
+        {
+            accumulator.GuidanceApplied = applied;
+        }
+
+        if (TryGetString(evt.InputTextSample, "promptKind", out var promptKind) && !string.IsNullOrWhiteSpace(promptKind))
+        {
+            accumulator.AppliedPromptKind = promptKind;
+        }
+
+        var ids = GetStringArray(evt.OutputSummary, "guidanceIds");
+        if (ids.Count > 0)
+        {
+            accumulator.AppliedGuidanceIds = ids;
+        }
+    }
+
+    private static void ApplyProRvStageLifecycleEvent(ProtocolEvent evt, ProRvPrefilterAccumulator accumulator)
+    {
+        if (!string.Equals(evt.Name, ReviewProtocolEventNames.ProRVPrefilterStarted, StringComparison.Ordinal) &&
+            !string.Equals(evt.Name, ReviewProtocolEventNames.ProRVPrefilterSkipped, StringComparison.Ordinal) &&
+            !string.Equals(evt.Name, ReviewProtocolEventNames.ProRVPrefilterCompleted, StringComparison.Ordinal) &&
+            !string.Equals(evt.Name, ReviewProtocolEventNames.ProRVPrefilterFailed, StringComparison.Ordinal))
+        {
+            return;
+        }
+
+        accumulator.Selected = true;
+        if (TryGetString(evt.InputTextSample, "stageId", out var eventStageId) && !string.IsNullOrWhiteSpace(eventStageId))
+        {
+            accumulator.StageId = eventStageId;
+        }
+
+        if (TryGetString(evt.OutputSummary, "runtimeSource", out var eventRuntimeSource) && !string.IsNullOrWhiteSpace(eventRuntimeSource))
+        {
+            accumulator.RuntimeSource = eventRuntimeSource;
+        }
+
+        if (TryGetString(evt.OutputSummary, "modelId", out var eventModelId) && !string.IsNullOrWhiteSpace(eventModelId))
+        {
+            accumulator.ModelId = eventModelId;
+        }
+
+        if (TryGetString(evt.OutputSummary, "language", out var eventLanguage) && !string.IsNullOrWhiteSpace(eventLanguage))
+        {
+            accumulator.Language = eventLanguage;
+        }
+
+        if (TryGetString(evt.OutputSummary, "proRvStatus", out var eventPrefilterStatus) && !string.IsNullOrWhiteSpace(eventPrefilterStatus))
+        {
+            accumulator.PrefilterStatus = eventPrefilterStatus;
+        }
+
+        if (TryGetInt32(evt.OutputSummary, "guidanceCount", out var parsedGuidanceCount))
+        {
+            accumulator.GuidanceCount = parsedGuidanceCount;
+        }
+
+        if (!string.IsNullOrWhiteSpace(evt.Error))
+        {
+            accumulator.Reason = evt.Error;
+        }
+
+        if (string.Equals(evt.Name, ReviewProtocolEventNames.ProRVPrefilterSkipped, StringComparison.Ordinal))
+        {
+            accumulator.ExecutionState = ProRvPrefilterAccumulator.SkippedState;
+            if (TryGetString(evt.OutputSummary, "reason", out var skipReason) && !string.IsNullOrWhiteSpace(skipReason))
+            {
+                accumulator.Reason = skipReason;
+            }
+        }
+        else if (string.Equals(evt.Name, ReviewProtocolEventNames.ProRVPrefilterCompleted, StringComparison.Ordinal))
+        {
+            accumulator.ExecutionState = ProRvPrefilterAccumulator.CompletedState;
+        }
+        else if (string.Equals(evt.Name, ReviewProtocolEventNames.ProRVPrefilterFailed, StringComparison.Ordinal))
+        {
+            accumulator.ExecutionState = ProRvPrefilterAccumulator.FailedState;
+        }
+    }
+
+    private sealed class ProRvPrefilterAccumulator
+    {
+        public const string NotSelectedState = "not_selected";
+        public const string SkippedState = "skipped";
+        public const string CompletedState = "completed";
+        public const string FailedState = "failed";
+
+        public string ExecutionState { get; set; } = NotSelectedState;
+
+        public string? StageId { get; set; }
+
+        public string? Reason { get; set; }
+
+        public string? RuntimeSource { get; set; }
+
+        public string? ModelId { get; set; }
+
+        public string? Language { get; set; }
+
+        public string? PrefilterStatus { get; set; }
+
+        public int GuidanceCount { get; set; }
+
+        public bool Selected { get; set; }
+
+        public bool AiCallRecorded { get; set; }
+
+        public bool GuidanceApplied { get; set; }
+
+        public string? AppliedPromptKind { get; set; }
+
+        public IReadOnlyList<string> AppliedGuidanceIds { get; set; } = [];
     }
 
     private static ProtocolAgentSessionDto? ResolveAgentSession(ReviewJobProtocol protocol)
     {
-        string? remoteConversationId = null;
-        string? bindingMethod = null;
-        string? bindingOutcome = null;
-        string? promptMode = null;
-        string? fallbackReason = null;
-        var usedManagedRemoteConversation = false;
-        var usedLocalReplay = false;
+        var accumulator = new AgentSessionAccumulator();
 
         foreach (var evt in protocol.Events)
         {
-            if (string.Equals(evt.Name, ReviewProtocolEventNames.ReviewAgentSessionBinding, StringComparison.Ordinal))
-            {
-                if (TryGetString(evt.InputTextSample, "remoteConversationId", out var bindingConversationId))
-                {
-                    remoteConversationId ??= bindingConversationId;
-                }
-
-                if (TryGetString(evt.InputTextSample, "bindingMethod", out var parsedBindingMethod))
-                {
-                    bindingMethod ??= parsedBindingMethod;
-                }
-
-                if (TryGetString(evt.InputTextSample, "bindingOutcome", out var parsedBindingOutcome))
-                {
-                    bindingOutcome ??= parsedBindingOutcome;
-                }
-
-                if (TryGetString(evt.InputTextSample, "promptMode", out var parsedPromptMode))
-                {
-                    promptMode ??= parsedPromptMode;
-                }
-
-                usedManagedRemoteConversation = true;
-                continue;
-            }
-
-            if (string.Equals(evt.Name, ReviewProtocolEventNames.ReviewAgentSessionTurn, StringComparison.Ordinal))
-            {
-                if (TryGetString(evt.InputTextSample, "remoteConversationId", out var turnConversationId))
-                {
-                    remoteConversationId ??= turnConversationId;
-                }
-
-                if (TryGetString(evt.InputTextSample, "promptMode", out var parsedTurnPromptMode))
-                {
-                    promptMode ??= parsedTurnPromptMode;
-                }
-
-                if (TryGetBoolean(evt.InputTextSample, "usedRemoteConversation", out var parsedUsedRemoteConversation))
-                {
-                    usedManagedRemoteConversation |= parsedUsedRemoteConversation;
-                }
-
-                if (TryGetBoolean(evt.InputTextSample, "usedLocalReplay", out var parsedUsedLocalReplay))
-                {
-                    usedLocalReplay |= parsedUsedLocalReplay;
-                }
-
-                continue;
-            }
-
-            if (string.Equals(evt.Name, ReviewProtocolEventNames.ReviewAgentSessionFallback, StringComparison.Ordinal))
-            {
-                if (TryGetString(evt.InputTextSample, "reason", out var parsedFallbackReason))
-                {
-                    fallbackReason ??= parsedFallbackReason;
-                }
-
-                usedLocalReplay = true;
-            }
+            ApplyAgentSessionBindingEvent(evt, accumulator);
+            ApplyAgentSessionTurnEvent(evt, accumulator);
+            ApplyAgentSessionFallbackEvent(evt, accumulator);
         }
 
-        return remoteConversationId is not null || bindingMethod is not null || fallbackReason is not null || usedManagedRemoteConversation || usedLocalReplay
+        return accumulator.RemoteConversationId is not null
+            || accumulator.BindingMethod is not null
+            || accumulator.FallbackReason is not null
+            || accumulator.UsedManagedRemoteConversation
+            || accumulator.UsedLocalReplay
             ? new ProtocolAgentSessionDto(
-                usedManagedRemoteConversation,
-                remoteConversationId,
-                bindingMethod,
-                bindingOutcome,
-                promptMode,
-                usedLocalReplay,
-                fallbackReason)
+                accumulator.UsedManagedRemoteConversation,
+                accumulator.RemoteConversationId,
+                accumulator.BindingMethod,
+                accumulator.BindingOutcome,
+                accumulator.PromptMode,
+                accumulator.UsedLocalReplay,
+                accumulator.FallbackReason)
             : null;
+    }
+
+    private static void ApplyAgentSessionBindingEvent(ProtocolEvent evt, AgentSessionAccumulator accumulator)
+    {
+        if (!string.Equals(evt.Name, ReviewProtocolEventNames.ReviewAgentSessionBinding, StringComparison.Ordinal))
+        {
+            return;
+        }
+
+        if (TryGetString(evt.InputTextSample, "remoteConversationId", out var bindingConversationId))
+        {
+            accumulator.RemoteConversationId ??= bindingConversationId;
+        }
+
+        if (TryGetString(evt.InputTextSample, "bindingMethod", out var parsedBindingMethod))
+        {
+            accumulator.BindingMethod ??= parsedBindingMethod;
+        }
+
+        if (TryGetString(evt.InputTextSample, "bindingOutcome", out var parsedBindingOutcome))
+        {
+            accumulator.BindingOutcome ??= parsedBindingOutcome;
+        }
+
+        if (TryGetString(evt.InputTextSample, "promptMode", out var parsedPromptMode))
+        {
+            accumulator.PromptMode ??= parsedPromptMode;
+        }
+
+        accumulator.UsedManagedRemoteConversation = true;
+    }
+
+    private static void ApplyAgentSessionTurnEvent(ProtocolEvent evt, AgentSessionAccumulator accumulator)
+    {
+        if (!string.Equals(evt.Name, ReviewProtocolEventNames.ReviewAgentSessionTurn, StringComparison.Ordinal))
+        {
+            return;
+        }
+
+        if (TryGetString(evt.InputTextSample, "remoteConversationId", out var turnConversationId))
+        {
+            accumulator.RemoteConversationId ??= turnConversationId;
+        }
+
+        if (TryGetString(evt.InputTextSample, "promptMode", out var parsedTurnPromptMode))
+        {
+            accumulator.PromptMode ??= parsedTurnPromptMode;
+        }
+
+        if (TryGetBoolean(evt.InputTextSample, "usedRemoteConversation", out var parsedUsedRemoteConversation))
+        {
+            accumulator.UsedManagedRemoteConversation |= parsedUsedRemoteConversation;
+        }
+
+        if (TryGetBoolean(evt.InputTextSample, "usedLocalReplay", out var parsedUsedLocalReplay))
+        {
+            accumulator.UsedLocalReplay |= parsedUsedLocalReplay;
+        }
+    }
+
+    private static void ApplyAgentSessionFallbackEvent(ProtocolEvent evt, AgentSessionAccumulator accumulator)
+    {
+        if (!string.Equals(evt.Name, ReviewProtocolEventNames.ReviewAgentSessionFallback, StringComparison.Ordinal))
+        {
+            return;
+        }
+
+        if (TryGetString(evt.InputTextSample, "reason", out var parsedFallbackReason))
+        {
+            accumulator.FallbackReason ??= parsedFallbackReason;
+        }
+
+        accumulator.UsedLocalReplay = true;
+    }
+
+    private sealed class AgentSessionAccumulator
+    {
+        public string? RemoteConversationId { get; set; }
+
+        public string? BindingMethod { get; set; }
+
+        public string? BindingOutcome { get; set; }
+
+        public string? PromptMode { get; set; }
+
+        public string? FallbackReason { get; set; }
+
+        public bool UsedManagedRemoteConversation { get; set; }
+
+        public bool UsedLocalReplay { get; set; }
     }
 
     private static bool TryGetTriggerFamilyFromPlan(string? json, out string? triggerFamily)
@@ -1146,6 +1236,7 @@ public sealed class EfReviewDiagnosticsReader(
         }
         catch (JsonException)
         {
+            // Malformed JSON: fall through and report no trigger family.
         }
 
         return false;
@@ -1171,6 +1262,7 @@ public sealed class EfReviewDiagnosticsReader(
         }
         catch (JsonException)
         {
+            // Malformed JSON: fall through and report the property as absent.
         }
 
         return false;
@@ -1196,6 +1288,7 @@ public sealed class EfReviewDiagnosticsReader(
         }
         catch (JsonException)
         {
+            // Malformed JSON: fall through and report the property as absent.
         }
 
         return false;

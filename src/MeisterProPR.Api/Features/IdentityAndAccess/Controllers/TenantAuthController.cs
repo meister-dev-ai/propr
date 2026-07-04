@@ -17,6 +17,7 @@ namespace MeisterProPR.Api.Controllers;
 
 /// <summary>Tenant-scoped login discovery and sign-in endpoints.</summary>
 [ApiController]
+[Route("auth")]
 public sealed class TenantAuthController(
     ITenantAuthService tenantAuthService,
     ISessionFactory sessionFactory,
@@ -39,7 +40,7 @@ public sealed class TenantAuthController(
     }
 
     /// <summary>Returns the visible login options for one tenant sign-in route.</summary>
-    [HttpGet("/auth/tenants/{tenantSlug}/providers")]
+    [HttpGet("tenants/{tenantSlug}/providers")]
     [ProducesResponseType(typeof(TenantLoginOptionsDto), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> GetProviders(string tenantSlug, CancellationToken ct)
@@ -60,7 +61,7 @@ public sealed class TenantAuthController(
     }
 
     /// <summary>Signs a tenant user in with local credentials when tenant policy allows it.</summary>
-    [HttpPost("/auth/tenants/{tenantSlug}/local-login")]
+    [HttpPost("tenants/{tenantSlug}/local-login")]
     [ProducesResponseType(typeof(TenantAuthSessionDto), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
@@ -92,7 +93,7 @@ public sealed class TenantAuthController(
     }
 
     /// <summary>Starts the tenant-scoped external sign-in flow for the selected provider.</summary>
-    [HttpGet("/auth/external/challenge/{tenantSlug}/{providerId:guid}")]
+    [HttpGet("external/challenge/{tenantSlug}/{providerId:guid}")]
     [ProducesResponseType(StatusCodes.Status302Found)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     [ProducesResponseType(typeof(PremiumFeatureUnavailablePayload), StatusCodes.Status409Conflict)]
@@ -133,7 +134,7 @@ public sealed class TenantAuthController(
     }
 
     /// <summary>Completes tenant-scoped external sign-in and returns the shared application session payload.</summary>
-    [HttpGet("/auth/external/callback/{tenantSlug}")]
+    [HttpGet("external/callback/{tenantSlug}")]
     [ProducesResponseType(typeof(TenantAuthSessionDto), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     [ProducesResponseType(typeof(PremiumFeatureUnavailablePayload), StatusCodes.Status409Conflict)]

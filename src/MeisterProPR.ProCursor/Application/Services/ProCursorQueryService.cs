@@ -487,6 +487,55 @@ public sealed partial class ProCursorQueryService(
         var normalizedTitle = chunk.Title?.ToLowerInvariant() ?? string.Empty;
         var normalizedContent = chunk.ContentText.ToLowerInvariant();
 
+        var (tokenMatches, titleMatches, pathMatches) = CountTokenMatches(
+            questionTokens,
+            normalizedContent,
+            normalizedTitle,
+            normalizedPath);
+
+        var lexicalScore = tokenMatches + titleMatches * 0.8d + pathMatches * 0.5d;
+        var semanticScore = ComputeSemanticScore(queryEmbedding, chunk.EmbeddingVector);
+
+        if (lexicalScore <= 0 && semanticScore <= 0)
+        {
+            return new ChunkScore(0, "keyword");
+        }
+
+        var score = lexicalScore + semanticScore * 1.2d;
+        if (RepositoryContextMatches(source, repositoryContext))
+        {
+            score += 1.5d;
+
+            if (trackedBranch is not null &&
+                string.Equals(trackedBranch.BranchName, repositoryContext?.Branch, StringComparison.OrdinalIgnoreCase))
+            {
+                score += 0.5d;
+            }
+        }
+
+        string matchKind;
+        if (lexicalScore > 0 && semanticScore > 0)
+        {
+            matchKind = "hybrid";
+        }
+        else if (semanticScore > 0)
+        {
+            matchKind = "semantic";
+        }
+        else
+        {
+            matchKind = "keyword";
+        }
+
+        return new ChunkScore(score / Math.Max(1, questionTokens.Count), matchKind);
+    }
+
+    private static (int TokenMatches, int TitleMatches, int PathMatches) CountTokenMatches(
+        IReadOnlyList<string> questionTokens,
+        string normalizedContent,
+        string normalizedTitle,
+        string normalizedPath)
+    {
         var tokenMatches = 0;
         var titleMatches = 0;
         var pathMatches = 0;
@@ -509,33 +558,7 @@ public sealed partial class ProCursorQueryService(
             }
         }
 
-        var lexicalScore = tokenMatches + titleMatches * 0.8d + pathMatches * 0.5d;
-        var semanticScore = ComputeSemanticScore(queryEmbedding, chunk.EmbeddingVector);
-
-        if (lexicalScore <= 0 && semanticScore <= 0)
-        {
-            return new ChunkScore(0, "keyword");
-        }
-
-        var score = lexicalScore + semanticScore * 1.2d;
-        if (RepositoryContextMatches(source, repositoryContext))
-        {
-            score += 1.5d;
-
-            if (trackedBranch is not null &&
-                string.Equals(trackedBranch.BranchName, repositoryContext?.Branch, StringComparison.OrdinalIgnoreCase))
-            {
-                score += 0.5d;
-            }
-        }
-
-        var matchKind = lexicalScore > 0 && semanticScore > 0
-            ? "hybrid"
-            : semanticScore > 0
-                ? "semantic"
-                : "keyword";
-
-        return new ChunkScore(score / Math.Max(1, questionTokens.Count), matchKind);
+        return (tokenMatches, titleMatches, pathMatches);
     }
 
     private static bool RepositoryContextMatches(

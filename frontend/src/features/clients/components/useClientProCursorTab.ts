@@ -670,18 +670,7 @@ export function useClientProCursorTab(props: { clientId: string }) {
   }
 
   function handleCreateSourceKindChange() {
-    createSourceModal.error = ''
-    clearCreateSourceSources()
-
-    if (!createSourceModal.organizationScopeId || !createSourceModal.projectId) {
-      return
-    }
-
-    void loadCreateSourceOptions(
-      createSourceModal.organizationScopeId,
-      createSourceModal.projectId,
-      createSourceModal.sourceKind,
-    )
+    handleCreateSourceProjectChange()
   }
 
   function handleCreateSourceSelectionChange() {

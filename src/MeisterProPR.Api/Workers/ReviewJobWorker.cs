@@ -60,6 +60,7 @@ public sealed partial class ReviewJobWorker(
         }
         catch (OperationCanceledException)
         {
+            // Expected when the host cancels the stopping token during shutdown; the finally block below drains in-flight work.
         }
         finally
         {

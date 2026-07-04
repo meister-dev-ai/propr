@@ -806,6 +806,318 @@
         }
       }
     },
+    "/admin/review-profiles": {
+      "get": {
+        "tags": [
+          "AdminReviewProfiles"
+        ],
+        "summary": "Lists the selectable file-by-file review aggressiveness profiles.",
+        "responses": {
+          "200": {
+            "description": "Published review profiles returned.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReviewProfileCatalogResponse"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReviewProfileCatalogResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReviewProfileCatalogResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid credentials.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Caller lacks administrator access.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/admin/clients/{clientId}/review-profile": {
+      "get": {
+        "tags": [
+          "AdminReviewProfiles"
+        ],
+        "summary": "Gets the current default review aggressiveness profile for one client.",
+        "parameters": [
+          {
+            "name": "clientId",
+            "in": "path",
+            "description": "Client identifier.",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Client review profile returned.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClientReviewProfileResponse"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClientReviewProfileResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClientReviewProfileResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid credentials.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Caller lacks administrator access to the client.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Client not found.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "AdminReviewProfiles"
+        ],
+        "summary": "Sets or clears the default review aggressiveness profile for one client.",
+        "parameters": [
+          {
+            "name": "clientId",
+            "in": "path",
+            "description": "Client identifier.",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "description": "Requested review profile selection; null clears the client override.",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PutClientReviewProfileRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PutClientReviewProfileRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/PutClientReviewProfileRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Client review profile updated.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClientReviewProfileResponse"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClientReviewProfileResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClientReviewProfileResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Unknown profile id.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid credentials.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Caller lacks administrator access to the client.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Client not found.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/admin/identity/users": {
       "get": {
         "tags": [
@@ -6206,318 +6518,6 @@
         }
       }
     },
-    "/admin/review-profiles": {
-      "get": {
-        "tags": [
-          "Clients"
-        ],
-        "summary": "Lists the selectable file-by-file review aggressiveness profiles.",
-        "responses": {
-          "200": {
-            "description": "Published review profiles returned.",
-            "content": {
-              "text/plain": {
-                "schema": {
-                  "$ref": "#/components/schemas/ReviewProfileCatalogResponse"
-                }
-              },
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ReviewProfileCatalogResponse"
-                }
-              },
-              "text/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ReviewProfileCatalogResponse"
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "Missing or invalid credentials.",
-            "content": {
-              "text/plain": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              },
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              },
-              "text/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "Caller lacks administrator access.",
-            "content": {
-              "text/plain": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              },
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              },
-              "text/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/admin/clients/{clientId}/review-profile": {
-      "get": {
-        "tags": [
-          "Clients"
-        ],
-        "summary": "Gets the current default review aggressiveness profile for one client.",
-        "parameters": [
-          {
-            "name": "clientId",
-            "in": "path",
-            "description": "Client identifier.",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "format": "uuid"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Client review profile returned.",
-            "content": {
-              "text/plain": {
-                "schema": {
-                  "$ref": "#/components/schemas/ClientReviewProfileResponse"
-                }
-              },
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ClientReviewProfileResponse"
-                }
-              },
-              "text/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ClientReviewProfileResponse"
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "Missing or invalid credentials.",
-            "content": {
-              "text/plain": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              },
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              },
-              "text/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "Caller lacks administrator access to the client.",
-            "content": {
-              "text/plain": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              },
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              },
-              "text/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "Client not found.",
-            "content": {
-              "text/plain": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              },
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              },
-              "text/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            }
-          }
-        }
-      },
-      "put": {
-        "tags": [
-          "Clients"
-        ],
-        "summary": "Sets or clears the default review aggressiveness profile for one client.",
-        "parameters": [
-          {
-            "name": "clientId",
-            "in": "path",
-            "description": "Client identifier.",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "format": "uuid"
-            }
-          }
-        ],
-        "requestBody": {
-          "description": "Requested review profile selection; null clears the client override.",
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/PutClientReviewProfileRequest"
-              }
-            },
-            "text/json": {
-              "schema": {
-                "$ref": "#/components/schemas/PutClientReviewProfileRequest"
-              }
-            },
-            "application/*+json": {
-              "schema": {
-                "$ref": "#/components/schemas/PutClientReviewProfileRequest"
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "description": "Client review profile updated.",
-            "content": {
-              "text/plain": {
-                "schema": {
-                  "$ref": "#/components/schemas/ClientReviewProfileResponse"
-                }
-              },
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ClientReviewProfileResponse"
-                }
-              },
-              "text/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ClientReviewProfileResponse"
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "Unknown profile id.",
-            "content": {
-              "text/plain": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              },
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              },
-              "text/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "Missing or invalid credentials.",
-            "content": {
-              "text/plain": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              },
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              },
-              "text/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "Caller lacks administrator access to the client.",
-            "content": {
-              "text/plain": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              },
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              },
-              "text/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "Client not found.",
-            "content": {
-              "text/plain": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              },
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              },
-              "text/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
     "/admin/clients/{clientId}/token-usage": {
       "get": {
         "tags": [
@@ -6615,6 +6615,210 @@
           },
           "403": {
             "description": "Caller does not have access to this client.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/clients/{clientId}/reviewing/dismiss-finding": {
+      "post": {
+        "tags": [
+          "FindingDismissal"
+        ],
+        "summary": "Dismisses a finding by storing it as an admin-dismissed memory record.\nFuture reviews will suppress similar findings via the memory reconsideration pipeline.",
+        "parameters": [
+          {
+            "name": "clientId",
+            "in": "path",
+            "description": "Client identifier.",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "description": "Dismiss request with the finding message and optional label.",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DismissFindingRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DismissFindingRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/DismissFindingRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Finding dismissed and memory record created.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ThreadMemoryRecordDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ThreadMemoryRecordDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ThreadMemoryRecordDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation failure.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Caller is not an admin.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/clients/{clientId}/dismiss-finding": {
+      "post": {
+        "tags": [
+          "FindingDismissal"
+        ],
+        "summary": "Dismisses a finding by storing it as an admin-dismissed memory record.\nFuture reviews will suppress similar findings via the memory reconsideration pipeline.",
+        "parameters": [
+          {
+            "name": "clientId",
+            "in": "path",
+            "description": "Client identifier.",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "description": "Dismiss request with the finding message and optional label.",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DismissFindingRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DismissFindingRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/DismissFindingRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Finding dismissed and memory record created.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ThreadMemoryRecordDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ThreadMemoryRecordDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ThreadMemoryRecordDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation failure.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Caller is not an admin.",
             "content": {
               "text/plain": {
                 "schema": {
@@ -6782,7 +6986,7 @@
         }
       }
     },
-    "/reviewing/jobs": {
+    "/jobs": {
       "get": {
         "tags": [
           "Jobs"
@@ -6880,7 +7084,7 @@
         }
       }
     },
-    "/jobs": {
+    "/reviewing/jobs": {
       "get": {
         "tags": [
           "Jobs"
@@ -7874,364 +8078,10 @@
         }
       }
     },
-    "/clients/{clientId}/reviewing/pr-view": {
-      "get": {
-        "tags": [
-          "Jobs"
-        ],
-        "summary": "Returns an aggregated view of all review jobs, token breakdowns, and memory records for a specific pull request.\nRequires valid user authentication and access to the specified client.",
-        "parameters": [
-          {
-            "name": "clientId",
-            "in": "path",
-            "description": "Owning client identifier.",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "format": "uuid"
-            }
-          },
-          {
-            "name": "providerScopePath",
-            "in": "query",
-            "description": "Provider scope path or host-qualified namespace for the repository.",
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "providerProjectKey",
-            "in": "query",
-            "description": "Provider project, owner, or namespace key for the repository.",
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "repositoryId",
-            "in": "query",
-            "description": "ADO repository identifier.",
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "pullRequestId",
-            "in": "query",
-            "description": "Pull request number.",
-            "schema": {
-              "type": "integer",
-              "format": "int32"
-            }
-          },
-          {
-            "name": "page",
-            "in": "query",
-            "description": "Page number (1-based, default 1).",
-            "schema": {
-              "type": "integer",
-              "format": "int32",
-              "default": 1
-            }
-          },
-          {
-            "name": "pageSize",
-            "in": "query",
-            "description": "Page size (default 20, max 100).",
-            "schema": {
-              "type": "integer",
-              "format": "int32",
-              "default": 20
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "PR view returned (empty DTO with zero jobs when the PR has no review jobs).",
-            "content": {
-              "text/plain": {
-                "schema": {
-                  "$ref": "#/components/schemas/PrReviewViewDto"
-                }
-              },
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/PrReviewViewDto"
-                }
-              },
-              "text/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/PrReviewViewDto"
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "Missing or invalid parameters.",
-            "content": {
-              "text/plain": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              },
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              },
-              "text/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "Missing or invalid credentials.",
-            "content": {
-              "text/plain": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              },
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              },
-              "text/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/clients/{clientId}/pr-view": {
-      "get": {
-        "tags": [
-          "Jobs"
-        ],
-        "summary": "Returns an aggregated view of all review jobs, token breakdowns, and memory records for a specific pull request.\nRequires valid user authentication and access to the specified client.",
-        "parameters": [
-          {
-            "name": "clientId",
-            "in": "path",
-            "description": "Owning client identifier.",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "format": "uuid"
-            }
-          },
-          {
-            "name": "providerScopePath",
-            "in": "query",
-            "description": "Provider scope path or host-qualified namespace for the repository.",
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "providerProjectKey",
-            "in": "query",
-            "description": "Provider project, owner, or namespace key for the repository.",
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "repositoryId",
-            "in": "query",
-            "description": "ADO repository identifier.",
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "pullRequestId",
-            "in": "query",
-            "description": "Pull request number.",
-            "schema": {
-              "type": "integer",
-              "format": "int32"
-            }
-          },
-          {
-            "name": "page",
-            "in": "query",
-            "description": "Page number (1-based, default 1).",
-            "schema": {
-              "type": "integer",
-              "format": "int32",
-              "default": 1
-            }
-          },
-          {
-            "name": "pageSize",
-            "in": "query",
-            "description": "Page size (default 20, max 100).",
-            "schema": {
-              "type": "integer",
-              "format": "int32",
-              "default": 20
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "PR view returned (empty DTO with zero jobs when the PR has no review jobs).",
-            "content": {
-              "text/plain": {
-                "schema": {
-                  "$ref": "#/components/schemas/PrReviewViewDto"
-                }
-              },
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/PrReviewViewDto"
-                }
-              },
-              "text/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/PrReviewViewDto"
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "Missing or invalid parameters.",
-            "content": {
-              "text/plain": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              },
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              },
-              "text/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "Missing or invalid credentials.",
-            "content": {
-              "text/plain": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              },
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              },
-              "text/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/internal/propr/procursor/broker/scm/materialize": {
-      "post": {
-        "tags": [
-          "ProCursorBroker"
-        ],
-        "summary": "Materializes repository content for a tracked ProCursor branch.",
-        "requestBody": {
-          "description": "SCM materialization request payload.",
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/ProCursorScmMaterializationRequest"
-              }
-            },
-            "text/json": {
-              "schema": {
-                "$ref": "#/components/schemas/ProCursorScmMaterializationRequest"
-              }
-            },
-            "application/*+json": {
-              "schema": {
-                "$ref": "#/components/schemas/ProCursorScmMaterializationRequest"
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "description": "The repository content was materialized."
-          },
-          "404": {
-            "description": "The source or branch was not found."
-          },
-          "409": {
-            "description": "The request conflicts with the current source state."
-          },
-          "503": {
-            "description": "The upstream ProCursor dependency is unavailable."
-          }
-        }
-      }
-    },
-    "/internal/propr/procursor/broker/scm/branch-head": {
-      "post": {
-        "tags": [
-          "ProCursorBroker"
-        ],
-        "summary": "Resolves the latest commit SHA for a tracked ProCursor branch.",
-        "requestBody": {
-          "description": "Tracked-branch head request payload.",
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/ProCursorTrackedBranchHeadRequest"
-              }
-            },
-            "text/json": {
-              "schema": {
-                "$ref": "#/components/schemas/ProCursorTrackedBranchHeadRequest"
-              }
-            },
-            "application/*+json": {
-              "schema": {
-                "$ref": "#/components/schemas/ProCursorTrackedBranchHeadRequest"
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "description": "The latest branch head was resolved."
-          },
-          "404": {
-            "description": "The source or branch was not found."
-          },
-          "409": {
-            "description": "The request conflicts with the current source state."
-          },
-          "503": {
-            "description": "The upstream ProCursor dependency is unavailable."
-          }
-        }
-      }
-    },
     "/internal/propr/procursor/broker/embeddings/deployment": {
       "post": {
         "tags": [
-          "ProCursorBroker"
+          "ProCursorEmbeddingBroker"
         ],
         "summary": "Resolves the embedding deployment configuration for a client.",
         "requestBody": {
@@ -8273,7 +8123,7 @@
     "/internal/propr/procursor/broker/embeddings/generate": {
       "post": {
         "tags": [
-          "ProCursorBroker"
+          "ProCursorEmbeddingBroker"
         ],
         "summary": "Generates embeddings for a batch of inputs through the ProPR broker.",
         "requestBody": {
@@ -9358,6 +9208,90 @@
         }
       }
     },
+    "/internal/propr/procursor/broker/scm/materialize": {
+      "post": {
+        "tags": [
+          "ProCursorScmBroker"
+        ],
+        "summary": "Materializes repository content for a tracked ProCursor branch.",
+        "requestBody": {
+          "description": "SCM materialization request payload.",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProCursorScmMaterializationRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProCursorScmMaterializationRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProCursorScmMaterializationRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The repository content was materialized."
+          },
+          "404": {
+            "description": "The source or branch was not found."
+          },
+          "409": {
+            "description": "The request conflicts with the current source state."
+          },
+          "503": {
+            "description": "The upstream ProCursor dependency is unavailable."
+          }
+        }
+      }
+    },
+    "/internal/propr/procursor/broker/scm/branch-head": {
+      "post": {
+        "tags": [
+          "ProCursorScmBroker"
+        ],
+        "summary": "Resolves the latest commit SHA for a tracked ProCursor branch.",
+        "requestBody": {
+          "description": "Tracked-branch head request payload.",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProCursorTrackedBranchHeadRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProCursorTrackedBranchHeadRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProCursorTrackedBranchHeadRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The latest branch head was resolved."
+          },
+          "404": {
+            "description": "The source or branch was not found."
+          },
+          "409": {
+            "description": "The request conflicts with the current source state."
+          },
+          "503": {
+            "description": "The upstream ProCursor dependency is unavailable."
+          }
+        }
+      }
+    },
     "/admin/clients/{clientId}/procursor/token-usage": {
       "get": {
         "tags": [
@@ -10093,7 +10027,7 @@
     "/admin/clients/{clientId}/procursor/token-usage/rebuild": {
       "post": {
         "tags": [
-          "ProCursorTokenUsage"
+          "ProCursorTokenUsageRebuild"
         ],
         "summary": "Rebuilds ProCursor token usage rollups for the selected captured interval.",
         "parameters": [
@@ -10812,6 +10746,276 @@
         }
       }
     },
+    "/clients/{clientId}/reviewing/pr-view": {
+      "get": {
+        "tags": [
+          "PrReviewView"
+        ],
+        "summary": "Returns an aggregated view of all review jobs, token breakdowns, and memory records for a specific pull request.\nRequires valid user authentication and access to the specified client.",
+        "parameters": [
+          {
+            "name": "clientId",
+            "in": "path",
+            "description": "Owning client identifier.",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "providerScopePath",
+            "in": "query",
+            "description": "Provider scope path or host-qualified namespace for the repository.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "providerProjectKey",
+            "in": "query",
+            "description": "Provider project, owner, or namespace key for the repository.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "repositoryId",
+            "in": "query",
+            "description": "ADO repository identifier.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "pullRequestId",
+            "in": "query",
+            "description": "Pull request number.",
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "description": "Page number (1-based, default 1).",
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "default": 1
+            }
+          },
+          {
+            "name": "pageSize",
+            "in": "query",
+            "description": "Page size (default 20, max 100).",
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "default": 20
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "PR view returned (empty DTO with zero jobs when the PR has no review jobs).",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/PrReviewViewDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PrReviewViewDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PrReviewViewDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Missing or invalid parameters.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid credentials.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/clients/{clientId}/pr-view": {
+      "get": {
+        "tags": [
+          "PrReviewView"
+        ],
+        "summary": "Returns an aggregated view of all review jobs, token breakdowns, and memory records for a specific pull request.\nRequires valid user authentication and access to the specified client.",
+        "parameters": [
+          {
+            "name": "clientId",
+            "in": "path",
+            "description": "Owning client identifier.",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "providerScopePath",
+            "in": "query",
+            "description": "Provider scope path or host-qualified namespace for the repository.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "providerProjectKey",
+            "in": "query",
+            "description": "Provider project, owner, or namespace key for the repository.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "repositoryId",
+            "in": "query",
+            "description": "ADO repository identifier.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "pullRequestId",
+            "in": "query",
+            "description": "Pull request number.",
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "description": "Page number (1-based, default 1).",
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "default": 1
+            }
+          },
+          {
+            "name": "pageSize",
+            "in": "query",
+            "description": "Page size (default 20, max 100).",
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "default": 20
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "PR view returned (empty DTO with zero jobs when the PR has no review jobs).",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/PrReviewViewDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PrReviewViewDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PrReviewViewDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Missing or invalid parameters.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid credentials.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/clients/{clientId}/review-archive/pull-requests/threads": {
       "get": {
         "tags": [
@@ -10918,7 +11122,7 @@
             }
           },
           "403": {
-            "description": "Caller is not an admin.",
+            "description": "Caller lacks read access to the client.",
             "content": {
               "text/plain": {
                 "schema": {
@@ -11046,7 +11250,7 @@
             }
           },
           "403": {
-            "description": "Caller is not an admin.",
+            "description": "Caller lacks read access to the client.",
             "content": {
               "text/plain": {
                 "schema": {
@@ -11181,7 +11385,7 @@
             }
           },
           "403": {
-            "description": "Caller is not an admin.",
+            "description": "Caller lacks read access to the client.",
             "content": {
               "text/plain": {
                 "schema": {
@@ -14120,7 +14324,7 @@
         }
       }
     },
-    "/admin/reviewing/thread-memory": {
+    "/admin/thread-memory": {
       "get": {
         "tags": [
           "ThreadMemory"
@@ -14229,7 +14433,7 @@
         }
       }
     },
-    "/admin/thread-memory": {
+    "/admin/reviewing/thread-memory": {
       "get": {
         "tags": [
           "ThreadMemory"
@@ -14422,210 +14626,6 @@
         "responses": {
           "204": {
             "description": "Record deleted (or did not exist)."
-          },
-          "403": {
-            "description": "Caller is not an admin.",
-            "content": {
-              "text/plain": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              },
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              },
-              "text/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/clients/{clientId}/reviewing/dismiss-finding": {
-      "post": {
-        "tags": [
-          "ThreadMemory"
-        ],
-        "summary": "Dismisses a finding by storing it as an admin-dismissed memory record.\nFuture reviews will suppress similar findings via the memory reconsideration pipeline.",
-        "parameters": [
-          {
-            "name": "clientId",
-            "in": "path",
-            "description": "Client identifier.",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "format": "uuid"
-            }
-          }
-        ],
-        "requestBody": {
-          "description": "Dismiss request with the finding message and optional label.",
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/DismissFindingRequest"
-              }
-            },
-            "text/json": {
-              "schema": {
-                "$ref": "#/components/schemas/DismissFindingRequest"
-              }
-            },
-            "application/*+json": {
-              "schema": {
-                "$ref": "#/components/schemas/DismissFindingRequest"
-              }
-            }
-          }
-        },
-        "responses": {
-          "201": {
-            "description": "Finding dismissed and memory record created.",
-            "content": {
-              "text/plain": {
-                "schema": {
-                  "$ref": "#/components/schemas/ThreadMemoryRecordDto"
-                }
-              },
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ThreadMemoryRecordDto"
-                }
-              },
-              "text/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ThreadMemoryRecordDto"
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "Validation failure.",
-            "content": {
-              "text/plain": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              },
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              },
-              "text/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "Caller is not an admin.",
-            "content": {
-              "text/plain": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              },
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              },
-              "text/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/clients/{clientId}/dismiss-finding": {
-      "post": {
-        "tags": [
-          "ThreadMemory"
-        ],
-        "summary": "Dismisses a finding by storing it as an admin-dismissed memory record.\nFuture reviews will suppress similar findings via the memory reconsideration pipeline.",
-        "parameters": [
-          {
-            "name": "clientId",
-            "in": "path",
-            "description": "Client identifier.",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "format": "uuid"
-            }
-          }
-        ],
-        "requestBody": {
-          "description": "Dismiss request with the finding message and optional label.",
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/DismissFindingRequest"
-              }
-            },
-            "text/json": {
-              "schema": {
-                "$ref": "#/components/schemas/DismissFindingRequest"
-              }
-            },
-            "application/*+json": {
-              "schema": {
-                "$ref": "#/components/schemas/DismissFindingRequest"
-              }
-            }
-          }
-        },
-        "responses": {
-          "201": {
-            "description": "Finding dismissed and memory record created.",
-            "content": {
-              "text/plain": {
-                "schema": {
-                  "$ref": "#/components/schemas/ThreadMemoryRecordDto"
-                }
-              },
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ThreadMemoryRecordDto"
-                }
-              },
-              "text/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ThreadMemoryRecordDto"
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "Validation failure.",
-            "content": {
-              "text/plain": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              },
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              },
-              "text/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            }
           },
           "403": {
             "description": "Caller is not an admin.",
@@ -15379,6 +15379,9 @@
         "description": "Origin of a configured model entry."
       },
       "AiConnectionAuthRequest": {
+        "required": [
+          "mode"
+        ],
         "type": "object",
         "properties": {
           "mode": {
@@ -15607,6 +15610,9 @@
         "description": "One configured AI purpose binding for an AI connection profile."
       },
       "AiPurposeBindingRequest": {
+        "required": [
+          "purpose"
+        ],
         "type": "object",
         "properties": {
           "id": {
@@ -15706,6 +15712,10 @@
         "description": "Global role assigned directly to an application user."
       },
       "AssignClientRoleRequest": {
+        "required": [
+          "clientId",
+          "role"
+        ],
         "type": "object",
         "properties": {
           "clientId": {
@@ -16391,6 +16401,9 @@
         "description": "A single repo filter entry in a crawl config response."
       },
       "CreateAdminCrawlConfigRequest": {
+        "required": [
+          "clientId"
+        ],
         "type": "object",
         "properties": {
           "clientId": {
@@ -16445,6 +16458,9 @@
         "description": "Request body for creating an admin-managed crawl configuration."
       },
       "CreateAdminWebhookConfigRequest": {
+        "required": [
+          "clientId"
+        ],
         "type": "object",
         "properties": {
           "clientId": {
@@ -16491,6 +16507,9 @@
         "description": "Request body for creating an admin-managed webhook configuration."
       },
       "CreateAiConnectionRequest": {
+        "required": [
+          "providerKind"
+        ],
         "type": "object",
         "properties": {
           "displayName": {
@@ -16543,6 +16562,10 @@
         "description": "Request body for creating a provider-neutral AI connection profile."
       },
       "CreateClientProviderConnectionRequest": {
+        "required": [
+          "authenticationKind",
+          "providerFamily"
+        ],
         "type": "object",
         "properties": {
           "providerFamily": {
@@ -16707,6 +16730,10 @@
         "description": "Create-tenant request payload."
       },
       "CreateTenantSsoProviderRequest": {
+        "required": [
+          "autoCreateUsers",
+          "isEnabled"
+        ],
         "type": "object",
         "properties": {
           "displayName": {
@@ -16776,6 +16803,9 @@
         "description": "Create-user request."
       },
       "DiscoverModelsRequest": {
+        "required": [
+          "providerKind"
+        ],
         "type": "object",
         "properties": {
           "providerKind": {
@@ -17263,6 +17293,9 @@
         "description": "Request body for patching an admin-managed crawl configuration.\nOmit a field to leave it unchanged. Set `reviewTemperature` to null to clear the override."
       },
       "PatchAdminLicensingRequest": {
+        "required": [
+          "edition"
+        ],
         "type": "object",
         "properties": {
           "edition": {
@@ -17280,6 +17313,9 @@
         "description": "Patch payload for installation licensing updates."
       },
       "PatchAdminProviderRequest": {
+        "required": [
+          "isEnabled"
+        ],
         "type": "object",
         "properties": {
           "isEnabled": {
@@ -19745,6 +19781,10 @@
         "description": "A retained discussion thread for a pull request, with its comments, for the in-app PR view."
       },
       "ReviewCodeReviewRefDto": {
+        "required": [
+          "number",
+          "platform"
+        ],
         "type": "object",
         "properties": {
           "platform": {
@@ -20240,6 +20280,9 @@
         "description": "DTO representing the textual review result and comments."
       },
       "ReviewReviewerIdentityDto": {
+        "required": [
+          "isBot"
+        ],
         "type": "object",
         "properties": {
           "externalUserId": {
@@ -20448,6 +20491,9 @@
         "description": "Supported source-control provider families."
       },
       "SetClientReviewerIdentityRequest": {
+        "required": [
+          "isBot"
+        ],
         "type": "object",
         "properties": {
           "externalUserId": {
@@ -20470,6 +20516,9 @@
         "description": "Request body for setting a client-scoped provider reviewer-trigger identity."
       },
       "SetUserActiveRequest": {
+        "required": [
+          "isActive"
+        ],
         "type": "object",
         "properties": {
           "isActive": {
@@ -20975,6 +21024,10 @@
         "description": "Patch-tenant request payload."
       },
       "UpdateTenantSsoProviderRequest": {
+        "required": [
+          "autoCreateUsers",
+          "isEnabled"
+        ],
         "type": "object",
         "properties": {
           "displayName": {
@@ -21273,6 +21326,9 @@
       "name": "AdminProviders"
     },
     {
+      "name": "AdminReviewProfiles"
+    },
+    {
       "name": "AdminUsers"
     },
     {
@@ -21306,13 +21362,16 @@
       "name": "ClientTokenUsage"
     },
     {
+      "name": "FindingDismissal"
+    },
+    {
       "name": "Identities"
     },
     {
       "name": "Jobs"
     },
     {
-      "name": "ProCursorBroker"
+      "name": "ProCursorEmbeddingBroker"
     },
     {
       "name": "ProCursorKnowledgeSources"
@@ -21321,13 +21380,22 @@
       "name": "ProCursorRuntimeConfiguration"
     },
     {
+      "name": "ProCursorScmBroker"
+    },
+    {
       "name": "ProCursorTokenUsage"
+    },
+    {
+      "name": "ProCursorTokenUsageRebuild"
     },
     {
       "name": "PromptOverrides"
     },
     {
       "name": "ProviderWebhookReceiver"
+    },
+    {
+      "name": "PrReviewView"
     },
     {
       "name": "RetainedPullRequestData"

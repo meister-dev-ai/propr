@@ -30,47 +30,56 @@ public sealed class ReviewPromptExperimentValidator : IReviewPromptExperimentVal
                 throw new InvalidOperationException($"Prompt experiment variant '{run.VariantName}' must be unique within batch '{batch.BatchId}'.");
             }
 
-            var stageRolePairs = new HashSet<(string StageKey, PromptStageRole PromptRole)>();
-            foreach (var variant in run.StageVariantsOrEmpty)
-            {
-                if (!PromptStageCatalog.TryGet(variant.StageKey, out var definition) || definition is null)
-                {
-                    throw new InvalidOperationException($"Prompt experiment stage '{variant.StageKey}' is not supported.");
-                }
-
-                if (definition.PromptRole != variant.PromptRole)
-                {
-                    throw new InvalidOperationException(
-                        $"Prompt experiment stage '{variant.StageKey}' requires prompt role '{definition.PromptRole}', but '{variant.PromptRole}' was provided.");
-                }
-
-                if (variant.CompositionMode == PromptCompositionMode.Default)
-                {
-                    throw new InvalidOperationException($"Prompt experiment stage '{variant.StageKey}' must use replace, prepend, or append composition.");
-                }
-
-                if (string.IsNullOrWhiteSpace(variant.Content))
-                {
-                    throw new InvalidOperationException($"Prompt experiment stage '{variant.StageKey}' must provide non-empty content.");
-                }
-
-                if (!stageRolePairs.Add((variant.StageKey, variant.PromptRole)))
-                {
-                    throw new InvalidOperationException(
-                        $"Prompt experiment run '{run.RunId}' contains a duplicate stage/role combination for '{variant.StageKey}'.");
-                }
-            }
-
-            var skippedStepIds = new HashSet<string>(StringComparer.Ordinal);
-            foreach (var skippedStepId in run.SkippedStepIdsOrEmpty)
-            {
-                if (!skippedStepIds.Add(skippedStepId))
-                {
-                    throw new InvalidOperationException($"Prompt experiment run '{run.RunId}' contains duplicate skipped step '{skippedStepId}'.");
-                }
-            }
+            ValidateStageVariants(run);
+            ValidateSkippedStepIds(run);
         }
 
         return Task.CompletedTask;
+    }
+
+    private static void ValidateStageVariants(PromptExperimentRunRequest run)
+    {
+        var stageRolePairs = new HashSet<(string StageKey, PromptStageRole PromptRole)>();
+        foreach (var variant in run.StageVariantsOrEmpty)
+        {
+            if (!PromptStageCatalog.TryGet(variant.StageKey, out var definition) || definition is null)
+            {
+                throw new InvalidOperationException($"Prompt experiment stage '{variant.StageKey}' is not supported.");
+            }
+
+            if (definition.PromptRole != variant.PromptRole)
+            {
+                throw new InvalidOperationException(
+                    $"Prompt experiment stage '{variant.StageKey}' requires prompt role '{definition.PromptRole}', but '{variant.PromptRole}' was provided.");
+            }
+
+            if (variant.CompositionMode == PromptCompositionMode.Default)
+            {
+                throw new InvalidOperationException($"Prompt experiment stage '{variant.StageKey}' must use replace, prepend, or append composition.");
+            }
+
+            if (string.IsNullOrWhiteSpace(variant.Content))
+            {
+                throw new InvalidOperationException($"Prompt experiment stage '{variant.StageKey}' must provide non-empty content.");
+            }
+
+            if (!stageRolePairs.Add((variant.StageKey, variant.PromptRole)))
+            {
+                throw new InvalidOperationException(
+                    $"Prompt experiment run '{run.RunId}' contains a duplicate stage/role combination for '{variant.StageKey}'.");
+            }
+        }
+    }
+
+    private static void ValidateSkippedStepIds(PromptExperimentRunRequest run)
+    {
+        var skippedStepIds = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var skippedStepId in run.SkippedStepIdsOrEmpty)
+        {
+            if (!skippedStepIds.Add(skippedStepId))
+            {
+                throw new InvalidOperationException($"Prompt experiment run '{run.RunId}' contains duplicate skipped step '{skippedStepId}'.");
+            }
+        }
     }
 }

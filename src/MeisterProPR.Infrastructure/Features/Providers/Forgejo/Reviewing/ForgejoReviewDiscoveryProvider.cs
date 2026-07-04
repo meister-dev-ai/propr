@@ -67,22 +67,27 @@ internal sealed class ForgejoReviewDiscoveryProvider(
             payload.Number);
         var requestedReviewer = ForgejoCodeReviewQueryService.SelectAssignedReviewer(payload, requestedReviewerFilter);
 
+        ReviewerIdentity? mappedReviewer = null;
+        if (requestedReviewer is not null)
+        {
+            var displayName = string.IsNullOrWhiteSpace(requestedReviewer.FullName)
+                ? requestedReviewer.Login!
+                : requestedReviewer.FullName!;
+            mappedReviewer = new ReviewerIdentity(
+                repository.Host,
+                requestedReviewer.Id.ToString(CultureInfo.InvariantCulture),
+                requestedReviewer.Login!,
+                displayName,
+                IsBot(requestedReviewer.Login));
+        }
+
         return new ReviewDiscoveryItemDto(
             ScmProvider.Forgejo,
             repository,
             review,
             ForgejoCodeReviewQueryService.MapState(payload),
             ForgejoCodeReviewQueryService.BuildRevision(payload),
-            requestedReviewer is null
-                ? null
-                : new ReviewerIdentity(
-                    repository.Host,
-                    requestedReviewer.Id.ToString(CultureInfo.InvariantCulture),
-                    requestedReviewer.Login!,
-                    string.IsNullOrWhiteSpace(requestedReviewer.FullName)
-                        ? requestedReviewer.Login!
-                        : requestedReviewer.FullName!,
-                    IsBot(requestedReviewer.Login)),
+            mappedReviewer,
             payload.Title ?? $"Pull Request #{payload.Number}",
             payload.HtmlUrl,
             payload.Head?.Ref,

@@ -108,15 +108,19 @@ const tenantRoles = ref<Record<string, number>>(readStoredJsonObject(TENANT_ROLE
 
 const hasLocalPassword = ref(sessionStorage.getItem(LOCAL_PASSWORD_KEY) === 'true')
 
+function getSessionApiBaseUrl(): string {
+  return getActiveRuntime().apiBaseUrl
+}
+
+function getAccessToken(): string | null {
+  return accessToken.value
+}
+
+function setAccessToken(token: string): void {
+  accessToken.value = token
+}
+
 export function useSession() {
-  function getSessionApiBaseUrl(): string {
-    return getActiveRuntime().apiBaseUrl
-  }
-
-  function getAccessToken(): string | null {
-    return accessToken.value
-  }
-
   function clearTokens(): void {
     sessionStorage.removeItem(CLIENT_ROLES_KEY)
     sessionStorage.removeItem(EDITION_KEY)
@@ -129,10 +133,6 @@ export function useSession() {
     hasLocalPassword.value = false
     edition.value = 'community'
     capabilities.value = []
-  }
-
-  function setAccessToken(token: string): void {
-    accessToken.value = token
   }
 
   // The refresh token is handled by the httpOnly cookie; only the access token is passed in.

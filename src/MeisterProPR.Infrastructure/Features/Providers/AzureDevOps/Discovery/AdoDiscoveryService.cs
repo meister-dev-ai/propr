@@ -39,15 +39,15 @@ public class AdoDiscoveryService(
 
     public async Task<IReadOnlyList<AdoProjectOptionDto>> ListProjectsAsync(
         Guid clientId,
-        Guid organizationScopeId,
+        Guid scopeId,
         CancellationToken ct = default)
     {
-        var (_, _, connection) = await this.ResolveScopeAsync(clientId, organizationScopeId, ct);
+        var (_, _, connection) = await this.ResolveScopeAsync(clientId, scopeId, ct);
         var projects = await this.GetProjectsAsync(connection, ct);
 
         return projects
             .Select(project => new AdoProjectOptionDto(
-                organizationScopeId,
+                scopeId,
                 project.Id.ToString(),
                 string.IsNullOrWhiteSpace(project.Name) ? project.Id.ToString() : project.Name))
             .OrderBy(project => project.ProjectName, StringComparer.OrdinalIgnoreCase)
@@ -57,14 +57,14 @@ public class AdoDiscoveryService(
 
     public async Task<IReadOnlyList<AdoSourceOptionDto>> ListSourcesAsync(
         Guid clientId,
-        Guid organizationScopeId,
+        Guid scopeId,
         string projectId,
         ProCursorSourceKind sourceKind,
         CancellationToken ct = default)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(projectId);
 
-        var (_, _, connection) = await this.ResolveScopeAsync(clientId, organizationScopeId, ct);
+        var (_, _, connection) = await this.ResolveScopeAsync(clientId, scopeId, ct);
         return sourceKind switch
         {
             ProCursorSourceKind.Repository => await this.ListRepositoriesAsync(connection, projectId, ct),
@@ -75,7 +75,7 @@ public class AdoDiscoveryService(
 
     public async Task<IReadOnlyList<AdoBranchOptionDto>> ListBranchesAsync(
         Guid clientId,
-        Guid organizationScopeId,
+        Guid scopeId,
         string projectId,
         ProCursorSourceKind sourceKind,
         CanonicalSourceReferenceDto canonicalSourceRef,
@@ -84,7 +84,7 @@ public class AdoDiscoveryService(
         ArgumentException.ThrowIfNullOrWhiteSpace(projectId);
         ArgumentNullException.ThrowIfNull(canonicalSourceRef);
 
-        var (_, _, connection) = await this.ResolveScopeAsync(clientId, organizationScopeId, ct);
+        var (_, _, connection) = await this.ResolveScopeAsync(clientId, scopeId, ct);
         var repositoryId = await this.ResolveRepositoryIdAsync(
             connection,
             projectId,
@@ -114,13 +114,13 @@ public class AdoDiscoveryService(
 
     public async Task<IReadOnlyList<AdoCrawlFilterOptionDto>> ListCrawlFiltersAsync(
         Guid clientId,
-        Guid organizationScopeId,
+        Guid scopeId,
         string projectId,
         CancellationToken ct = default)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(projectId);
 
-        var (_, _, connection) = await this.ResolveScopeAsync(clientId, organizationScopeId, ct);
+        var (_, _, connection) = await this.ResolveScopeAsync(clientId, scopeId, ct);
         var repositories = await this.GetRepositoriesAsync(connection, projectId, ct);
 
         return repositories

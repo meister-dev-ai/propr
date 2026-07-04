@@ -47,11 +47,7 @@ internal sealed class HybridCommentRelevanceFilter(ICommentRelevanceAmbiguityEva
             var fallbackChecks = evaluation.FallbackChecks.Count > 0
                 ? evaluation.FallbackChecks
                 : ["ambiguous_survivors_left_unchanged"];
-            var degradedCause = !string.IsNullOrWhiteSpace(evaluation.DegradedCause)
-                ? evaluation.DegradedCause
-                : evaluation.Decisions.Count != ambiguousIndexes.Length
-                    ? "Comment relevance evaluator returned an incomplete decision set."
-                    : "Comment relevance evaluator was not trustworthy; ambiguous survivors were kept unchanged.";
+            var degradedCause = ResolveDegradedCause(evaluation, ambiguousIndexes.Length);
 
             var fallbackDecisions = decisions.ToArray();
             foreach (var index in ambiguousIndexes)
@@ -94,5 +90,17 @@ internal sealed class HybridCommentRelevanceFilter(ICommentRelevanceAmbiguityEva
             evaluation.FallbackChecks,
             evaluation.DegradedCause,
             evaluation.AiTokenUsage);
+    }
+
+    private static string ResolveDegradedCause(CommentRelevanceAmbiguityEvaluationResult evaluation, int ambiguousCount)
+    {
+        if (!string.IsNullOrWhiteSpace(evaluation.DegradedCause))
+        {
+            return evaluation.DegradedCause;
+        }
+
+        return evaluation.Decisions.Count != ambiguousCount
+            ? "Comment relevance evaluator returned an incomplete decision set."
+            : "Comment relevance evaluator was not trustworthy; ambiguous survivors were kept unchanged.";
     }
 }

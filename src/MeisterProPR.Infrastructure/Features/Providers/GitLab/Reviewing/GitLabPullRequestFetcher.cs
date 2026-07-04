@@ -138,11 +138,19 @@ internal sealed class GitLabPullRequestFetcher(
             return null;
         }
 
-        var changeType = baseContent is null
-            ? ChangeType.Add
-            : headContent is null
-                ? ChangeType.Delete
-                : ChangeType.Edit;
+        ChangeType changeType;
+        if (baseContent is null)
+        {
+            changeType = ChangeType.Add;
+        }
+        else if (headContent is null)
+        {
+            changeType = ChangeType.Delete;
+        }
+        else
+        {
+            changeType = ChangeType.Edit;
+        }
 
         var diff = UnifiedDiffBuilder.Build(baseContent ?? string.Empty, headContent ?? string.Empty, path);
 
@@ -308,50 +316,73 @@ internal sealed class GitLabPullRequestFetcher(
 
         foreach (var change in changes)
         {
-            var path = NormalizePath(change.NewPath ?? change.OldPath);
-            if (string.IsNullOrWhiteSpace(path))
+            var changedFile = await this.BuildChangedFileAsync(context, host, repositoryId, change, revision, ct);
+            if (changedFile is not null)
             {
-                continue;
+                changedFiles.Add(changedFile);
             }
-
-            var changeType = MapChangeType(change);
-            var originalPath = changeType == ChangeType.Rename ? NormalizePath(change.OldPath) : null;
-            var isBinary = BinaryFileDetector.IsBinary(path);
-
-            var headContent = string.Empty;
-            var baseContent = string.Empty;
-            if (!isBinary)
-            {
-                if (changeType != ChangeType.Delete)
-                {
-                    headContent =
-                        await this.TryReadFileAsync(context, host, repositoryId, path, revision.HeadSha, ct) ??
-                        string.Empty;
-                }
-
-                if (changeType != ChangeType.Add)
-                {
-                    var basePath = originalPath ?? path;
-                    baseContent = await this.TryReadFileAsync(
-                        context,
-                        host,
-                        repositoryId,
-                        basePath,
-                        revision.BaseSha,
-                        ct) ?? string.Empty;
-                }
-            }
-
-            var diff = isBinary
-                ? string.Empty
-                : string.IsNullOrWhiteSpace(change.Diff)
-                    ? UnifiedDiffBuilder.Build(baseContent, headContent, path)
-                    : change.Diff!;
-
-            changedFiles.Add(new ChangedFile(path, changeType, headContent, diff, isBinary, originalPath));
         }
 
         return changedFiles;
+    }
+
+    private async Task<ChangedFile?> BuildChangedFileAsync(
+        GitLabConnectionVerifier.GitLabConnectionContext context,
+        ProviderHostRef host,
+        string repositoryId,
+        GitLabMergeRequestChangeResponse change,
+        ReviewRevision revision,
+        CancellationToken ct)
+    {
+        var path = NormalizePath(change.NewPath ?? change.OldPath);
+        if (string.IsNullOrWhiteSpace(path))
+        {
+            return null;
+        }
+
+        var changeType = MapChangeType(change);
+        var originalPath = changeType == ChangeType.Rename ? NormalizePath(change.OldPath) : null;
+        var isBinary = BinaryFileDetector.IsBinary(path);
+
+        var headContent = string.Empty;
+        var baseContent = string.Empty;
+        if (!isBinary)
+        {
+            if (changeType != ChangeType.Delete)
+            {
+                headContent =
+                    await this.TryReadFileAsync(context, host, repositoryId, path, revision.HeadSha, ct) ??
+                    string.Empty;
+            }
+
+            if (changeType != ChangeType.Add)
+            {
+                var basePath = originalPath ?? path;
+                baseContent = await this.TryReadFileAsync(
+                    context,
+                    host,
+                    repositoryId,
+                    basePath,
+                    revision.BaseSha,
+                    ct) ?? string.Empty;
+            }
+        }
+
+        string diff;
+        if (isBinary)
+        {
+            diff = string.Empty;
+        }
+        else if (string.IsNullOrWhiteSpace(change.Diff))
+        {
+            diff = UnifiedDiffBuilder.Build(baseContent, headContent, path);
+        }
+        else
+        {
+            diff = change.Diff!;
+        }
+
+        return new ChangedFile(path, changeType, headContent, diff, isBinary, originalPath);
     }
 
     private async Task<string?> TryReadFileAsync(

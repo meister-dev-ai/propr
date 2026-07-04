@@ -100,143 +100,7 @@ public static class InfrastructureServiceExtensions
 
         // AiReviewOptions — bound from individual env vars (not a config section)
         services.AddOptions<AiReviewOptions>()
-            .Configure(opts =>
-            {
-                if (int.TryParse(configuration["AI_MAX_REVIEW_ITERATIONS"], out var maxIter))
-                {
-                    opts.MaxIterations = maxIter;
-                }
-
-                if (int.TryParse(configuration["AI_FILE_BATCH_LINES"], out var batchLines))
-                {
-                    opts.FileBatchLines = batchLines;
-                }
-
-                if (int.TryParse(configuration["AI_CONFIDENCE_THRESHOLD"], out var threshold))
-                {
-                    opts.ConfidenceThreshold = threshold;
-                }
-
-                if (int.TryParse(configuration["AI_MAX_FILE_SIZE_BYTES"], out var maxSize))
-                {
-                    opts.MaxFileSizeBytes = maxSize;
-                }
-
-                if (int.TryParse(configuration["AI_MAX_FILE_REVIEW_CONCURRENCY"], out var concurrency))
-                {
-                    opts.MaxFileReviewConcurrency = concurrency;
-                }
-
-                if (int.TryParse(configuration["AI_MAX_FILE_REVIEW_RETRIES"], out var retries))
-                {
-                    opts.MaxFileReviewRetries = retries;
-                }
-
-                if (int.TryParse(configuration["AI_MAX_RATE_LIMIT_RETRIES"], out var rateLimitRetries))
-                {
-                    opts.MaxRateLimitRetries = rateLimitRetries;
-                }
-
-                if (int.TryParse(configuration["AI_MAX_BACKOFF_SECONDS"], out var backoff))
-                {
-                    opts.MaxBackoffSeconds = backoff;
-                }
-
-                if (int.TryParse(configuration["AI_MAX_ITERATIONS_LOW"], out var maxIterLow))
-                {
-                    opts.MaxIterationsLow = maxIterLow;
-                }
-
-                if (int.TryParse(configuration["AI_MAX_ITERATIONS_MEDIUM"], out var maxIterMedium))
-                {
-                    opts.MaxIterationsMedium = maxIterMedium;
-                }
-
-                if (int.TryParse(configuration["AI_MAX_ITERATIONS_HIGH"], out var maxIterHigh))
-                {
-                    opts.MaxIterationsHigh = maxIterHigh;
-                }
-
-                if (int.TryParse(configuration["AI_CONFIDENCE_FLOOR_ERROR"], out var confidenceFloorError))
-                {
-                    opts.ConfidenceFloorError = confidenceFloorError;
-                }
-
-                if (int.TryParse(configuration["AI_CONFIDENCE_FLOOR_WARNING"], out var confidenceFloorWarning))
-                {
-                    opts.ConfidenceFloorWarning = confidenceFloorWarning;
-                }
-
-                if (int.TryParse(configuration["AI_QUALITY_FILTER_THRESHOLD"], out var qualityFilterThreshold))
-                {
-                    opts.QualityFilterThreshold = qualityFilterThreshold;
-                }
-
-                if (int.TryParse(configuration["AI_MEMORY_TOP_N"], out var memTopN))
-                {
-                    opts.MemoryTopN = memTopN;
-                }
-
-                if (float.TryParse(
-                        configuration["AI_MEMORY_MIN_SIMILARITY"],
-                        NumberStyles.Float,
-                        CultureInfo.InvariantCulture,
-                        out var memMinSim))
-                {
-                    opts.MemoryMinSimilarity = memMinSim;
-                }
-
-                if (int.TryParse(configuration["AI_MEMORY_EMBEDDING_DIMENSIONS"], out var memDims))
-                {
-                    opts.MemoryEmbeddingDimensions = memDims;
-                }
-
-                // Structural boundary resolution (feature 070).
-                if (bool.TryParse(
-                        configuration["AI_ENABLE_STRUCTURAL_BOUNDARY_RESOLUTION"],
-                        out var enableStructural))
-                {
-                    opts.EnableStructuralBoundaryResolution = enableStructural;
-                }
-
-                if (int.TryParse(configuration["AI_STRUCTURAL_PARSE_TIMEOUT_MS"], out var structuralTimeout))
-                {
-                    opts.StructuralParseTimeoutMs = structuralTimeout;
-                }
-
-                if (int.TryParse(configuration["AI_MAX_STRUCTURAL_PARSE_BYTES"], out var maxStructuralBytes))
-                {
-                    opts.MaxStructuralParseBytes = maxStructuralBytes;
-                }
-
-                // Cross-file structural reference surface.
-                if (bool.TryParse(
-                        configuration["AI_ENABLE_STRUCTURAL_REFERENCE_TOOLS"],
-                        out var enableReferenceTools))
-                {
-                    opts.EnableStructuralReferenceTools = enableReferenceTools;
-                }
-
-                if (int.TryParse(configuration["AI_MAX_REFERENCE_CANDIDATE_FILES"], out var maxReferenceCandidateFiles))
-                {
-                    opts.MaxReferenceCandidateFiles = maxReferenceCandidateFiles;
-                }
-
-                if (int.TryParse(configuration["AI_MAX_REFERENCE_RESULTS"], out var maxReferenceResults))
-                {
-                    opts.MaxReferenceResults = maxReferenceResults;
-                }
-
-                if (int.TryParse(configuration["AI_MAX_REFERENCE_RESULT_CHARS"], out var maxReferenceResultChars))
-                {
-                    opts.MaxReferenceResultChars = maxReferenceResultChars;
-                }
-
-                if (int.TryParse(configuration["AI_REFERENCE_RESOLUTION_TIMEOUT_MS"], out var referenceResolutionTimeoutMs))
-                {
-                    opts.ReferenceResolutionTimeoutMs = referenceResolutionTimeoutMs;
-                }
-            });
+            .Configure(opts => ConfigureAiReviewOptions(opts, configuration));
 
         // Some singleton review executors consume a snapshot of the configured values directly
         // instead of the options wrapper, so expose the bound instance as a concrete service too.
@@ -300,6 +164,147 @@ public static class InfrastructureServiceExtensions
         services.AddSingleton<IAiChatClientFactory, AiChatClientFactory>();
 
         return services;
+    }
+
+    /// <summary>
+    ///     Binds <see cref="AiReviewOptions" /> fields from individual environment variables.
+    /// </summary>
+    private static void ConfigureAiReviewOptions(AiReviewOptions opts, IConfiguration configuration)
+    {
+        if (int.TryParse(configuration["AI_MAX_REVIEW_ITERATIONS"], out var maxIter))
+        {
+            opts.MaxIterations = maxIter;
+        }
+
+        if (int.TryParse(configuration["AI_FILE_BATCH_LINES"], out var batchLines))
+        {
+            opts.FileBatchLines = batchLines;
+        }
+
+        if (int.TryParse(configuration["AI_CONFIDENCE_THRESHOLD"], out var threshold))
+        {
+            opts.ConfidenceThreshold = threshold;
+        }
+
+        if (int.TryParse(configuration["AI_MAX_FILE_SIZE_BYTES"], out var maxSize))
+        {
+            opts.MaxFileSizeBytes = maxSize;
+        }
+
+        if (int.TryParse(configuration["AI_MAX_FILE_REVIEW_CONCURRENCY"], out var concurrency))
+        {
+            opts.MaxFileReviewConcurrency = concurrency;
+        }
+
+        if (int.TryParse(configuration["AI_MAX_FILE_REVIEW_RETRIES"], out var retries))
+        {
+            opts.MaxFileReviewRetries = retries;
+        }
+
+        if (int.TryParse(configuration["AI_MAX_RATE_LIMIT_RETRIES"], out var rateLimitRetries))
+        {
+            opts.MaxRateLimitRetries = rateLimitRetries;
+        }
+
+        if (int.TryParse(configuration["AI_MAX_BACKOFF_SECONDS"], out var backoff))
+        {
+            opts.MaxBackoffSeconds = backoff;
+        }
+
+        if (int.TryParse(configuration["AI_MAX_ITERATIONS_LOW"], out var maxIterLow))
+        {
+            opts.MaxIterationsLow = maxIterLow;
+        }
+
+        if (int.TryParse(configuration["AI_MAX_ITERATIONS_MEDIUM"], out var maxIterMedium))
+        {
+            opts.MaxIterationsMedium = maxIterMedium;
+        }
+
+        if (int.TryParse(configuration["AI_MAX_ITERATIONS_HIGH"], out var maxIterHigh))
+        {
+            opts.MaxIterationsHigh = maxIterHigh;
+        }
+
+        if (int.TryParse(configuration["AI_CONFIDENCE_FLOOR_ERROR"], out var confidenceFloorError))
+        {
+            opts.ConfidenceFloorError = confidenceFloorError;
+        }
+
+        if (int.TryParse(configuration["AI_CONFIDENCE_FLOOR_WARNING"], out var confidenceFloorWarning))
+        {
+            opts.ConfidenceFloorWarning = confidenceFloorWarning;
+        }
+
+        if (int.TryParse(configuration["AI_QUALITY_FILTER_THRESHOLD"], out var qualityFilterThreshold))
+        {
+            opts.QualityFilterThreshold = qualityFilterThreshold;
+        }
+
+        if (int.TryParse(configuration["AI_MEMORY_TOP_N"], out var memTopN))
+        {
+            opts.MemoryTopN = memTopN;
+        }
+
+        if (float.TryParse(
+                configuration["AI_MEMORY_MIN_SIMILARITY"],
+                NumberStyles.Float,
+                CultureInfo.InvariantCulture,
+                out var memMinSim))
+        {
+            opts.MemoryMinSimilarity = memMinSim;
+        }
+
+        if (int.TryParse(configuration["AI_MEMORY_EMBEDDING_DIMENSIONS"], out var memDims))
+        {
+            opts.MemoryEmbeddingDimensions = memDims;
+        }
+
+        // Structural boundary resolution (feature 070).
+        if (bool.TryParse(
+                configuration["AI_ENABLE_STRUCTURAL_BOUNDARY_RESOLUTION"],
+                out var enableStructural))
+        {
+            opts.EnableStructuralBoundaryResolution = enableStructural;
+        }
+
+        if (int.TryParse(configuration["AI_STRUCTURAL_PARSE_TIMEOUT_MS"], out var structuralTimeout))
+        {
+            opts.StructuralParseTimeoutMs = structuralTimeout;
+        }
+
+        if (int.TryParse(configuration["AI_MAX_STRUCTURAL_PARSE_BYTES"], out var maxStructuralBytes))
+        {
+            opts.MaxStructuralParseBytes = maxStructuralBytes;
+        }
+
+        // Cross-file structural reference surface.
+        if (bool.TryParse(
+                configuration["AI_ENABLE_STRUCTURAL_REFERENCE_TOOLS"],
+                out var enableReferenceTools))
+        {
+            opts.EnableStructuralReferenceTools = enableReferenceTools;
+        }
+
+        if (int.TryParse(configuration["AI_MAX_REFERENCE_CANDIDATE_FILES"], out var maxReferenceCandidateFiles))
+        {
+            opts.MaxReferenceCandidateFiles = maxReferenceCandidateFiles;
+        }
+
+        if (int.TryParse(configuration["AI_MAX_REFERENCE_RESULTS"], out var maxReferenceResults))
+        {
+            opts.MaxReferenceResults = maxReferenceResults;
+        }
+
+        if (int.TryParse(configuration["AI_MAX_REFERENCE_RESULT_CHARS"], out var maxReferenceResultChars))
+        {
+            opts.MaxReferenceResultChars = maxReferenceResultChars;
+        }
+
+        if (int.TryParse(configuration["AI_REFERENCE_RESOLUTION_TIMEOUT_MS"], out var referenceResolutionTimeoutMs))
+        {
+            opts.ReferenceResolutionTimeoutMs = referenceResolutionTimeoutMs;
+        }
     }
 
     /// <summary>

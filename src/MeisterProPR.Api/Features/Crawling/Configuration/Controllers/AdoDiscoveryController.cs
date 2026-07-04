@@ -15,6 +15,7 @@ namespace MeisterProPR.Api.Controllers;
 
 /// <summary>Provides client-scoped Azure DevOps discovery data for guided admin configuration flows.</summary>
 [ApiController]
+[Route("admin/clients/{clientId:guid}/ado/discovery")]
 public sealed partial class AdoDiscoveryController(
     IScmProviderRegistry providerRegistry,
     ILogger<AdoDiscoveryController> logger,
@@ -62,7 +63,7 @@ public sealed partial class AdoDiscoveryController(
     /// <response code="403">Caller lacks required client access.</response>
     /// <response code="404">The organization scope was not found.</response>
     /// <response code="409">The requested premium capability is unavailable.</response>
-    [HttpGet("/admin/clients/{clientId:guid}/ado/discovery/projects")]
+    [HttpGet("projects")]
     [ProducesResponseType(typeof(IReadOnlyList<AdoProjectOptionDto>), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
@@ -127,7 +128,7 @@ public sealed partial class AdoDiscoveryController(
     /// <response code="403">Caller lacks required client access.</response>
     /// <response code="404">The organization scope was not found.</response>
     /// <response code="409">The requested premium capability is unavailable.</response>
-    [HttpGet("/admin/clients/{clientId:guid}/ado/discovery/sources")]
+    [HttpGet("sources")]
     [ProducesResponseType(typeof(IReadOnlyList<AdoSourceOptionDto>), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
@@ -195,7 +196,7 @@ public sealed partial class AdoDiscoveryController(
     /// <response code="403">Caller lacks required client access.</response>
     /// <response code="404">The organization scope was not found.</response>
     /// <response code="409">The requested premium capability is unavailable.</response>
-    [HttpGet("/admin/clients/{clientId:guid}/ado/discovery/branches")]
+    [HttpGet("branches")]
     [ProducesResponseType(typeof(IReadOnlyList<AdoBranchOptionDto>), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
@@ -284,7 +285,7 @@ public sealed partial class AdoDiscoveryController(
     /// <response code="403">Caller lacks required client access.</response>
     /// <response code="404">The organization scope was not found.</response>
     /// <response code="409">The requested premium capability is unavailable.</response>
-    [HttpGet("/admin/clients/{clientId:guid}/ado/discovery/crawl-filters")]
+    [HttpGet("crawl-filters")]
     [ProducesResponseType(typeof(IReadOnlyList<AdoCrawlFilterOptionDto>), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]

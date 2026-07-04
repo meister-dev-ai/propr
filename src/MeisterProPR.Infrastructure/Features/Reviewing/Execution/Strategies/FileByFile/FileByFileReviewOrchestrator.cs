@@ -44,8 +44,6 @@ internal sealed partial class FileByFileReviewOrchestrator(
     IReviewClaimExtractor? reviewClaimExtractor = null,
     ISummaryReconciliationService? summaryReconciliationService = null) : IFileByFileReviewOrchestrator
 {
-    private static readonly JsonSerializerOptions FinalGateJsonOptions = new(JsonSerializerDefaults.Web);
-
     /// <summary>
     ///     Phrases indicating the reviewer is guessing rather than confirming a finding.
     ///     A comment containing any of these is speculative and must be discarded.
@@ -110,8 +108,7 @@ internal sealed partial class FileByFileReviewOrchestrator(
                     proRvPrefilter,
                     aiConnectionRepository,
                     aiClientFactory,
-                    aiRuntimeResolver,
-                    logger),
+                    aiRuntimeResolver),
                 aiConnectionRepository,
                 aiClientFactory,
                 memoryService,
@@ -177,8 +174,7 @@ internal sealed partial class FileByFileReviewOrchestrator(
         IProRVPrefilter? proRvPrefilter,
         IAiConnectionRepository? aiConnectionRepository,
         IAiChatClientFactory? aiClientFactory,
-        IAiRuntimeResolver? aiRuntimeResolver,
-        ILogger<FileByFileReviewOrchestrator> logger)
+        IAiRuntimeResolver? aiRuntimeResolver)
     {
         return new ReviewPipelineRunner<PerFileReviewContext>(
         [

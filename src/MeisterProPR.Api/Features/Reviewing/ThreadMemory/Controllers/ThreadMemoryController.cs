@@ -12,6 +12,7 @@ namespace MeisterProPR.Api.Controllers;
 
 /// <summary>Admin endpoints for managing thread memory embeddings and the memory activity log.</summary>
 [ApiController]
+[Route("admin/reviewing/thread-memory")]
 public sealed partial class ThreadMemoryController(
     IThreadMemoryRepository memoryRepository,
     IReviewPrScanRepository scanRepository,
@@ -35,7 +36,7 @@ public sealed partial class ThreadMemoryController(
     /// <response code="200">Paginated list of stored embeddings.</response>
     /// <response code="400">Missing or invalid parameters.</response>
     /// <response code="403">Caller is not an admin.</response>
-    [HttpGet("/admin/reviewing/thread-memory")]
+    [HttpGet]
     [HttpGet("/admin/thread-memory")]
     [ProducesResponseType(typeof(PagedResult<ThreadMemoryRecordDto>), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
@@ -77,7 +78,7 @@ public sealed partial class ThreadMemoryController(
     /// <param name="ct">Cancellation token.</param>
     /// <response code="204">Record deleted (or did not exist).</response>
     /// <response code="403">Caller is not an admin.</response>
-    [HttpDelete("/admin/reviewing/thread-memory/{id:guid}")]
+    [HttpDelete("{id:guid}")]
     [HttpDelete("/admin/thread-memory/{id:guid}")]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
@@ -134,51 +135,6 @@ public sealed partial class ThreadMemoryController(
     }
 
     /// <summary>
-    ///     Dismisses a finding by storing it as an admin-dismissed memory record.
-    ///     Future reviews will suppress similar findings via the memory reconsideration pipeline.
-    /// </summary>
-    /// <param name="clientId">Client identifier.</param>
-    /// <param name="request">Dismiss request with the finding message and optional label.</param>
-    /// <param name="memoryService">Service used to persist the dismissal as thread memory.</param>
-    /// <param name="ct">Cancellation token.</param>
-    /// <response code="201">Finding dismissed and memory record created.</response>
-    /// <response code="400">Validation failure.</response>
-    /// <response code="403">Caller is not an admin.</response>
-    [HttpPost("/clients/{clientId:guid}/reviewing/dismiss-finding")]
-    [HttpPost("/clients/{clientId:guid}/dismiss-finding")]
-    [ProducesResponseType(typeof(ThreadMemoryRecordDto), StatusCodes.Status201Created)]
-    [ProducesResponseType(StatusCodes.Status400BadRequest)]
-    [ProducesResponseType(StatusCodes.Status403Forbidden)]
-    public async Task<IActionResult> DismissFinding(
-        Guid clientId,
-        [FromBody] DismissFindingRequest request,
-        [FromServices] IThreadMemoryService memoryService,
-        CancellationToken ct = default)
-    {
-        var auth = this.RequireAdmin();
-        if (auth is not null)
-        {
-            return auth;
-        }
-
-        if (string.IsNullOrWhiteSpace(request.FindingMessage))
-        {
-            return this.BadRequest(new { error = "findingMessage is required." });
-        }
-
-        var record = await memoryService.DismissFindingAsync(
-            clientId,
-            request.FilePath,
-            request.FindingMessage,
-            request.Label,
-            ct);
-
-        LogDismissalCreated(logger, record.Id, clientId);
-
-        return this.StatusCode(201, ToDto(record));
-    }
-
-    /// <summary>
     ///     Returns a paginated list of memory activity log entries for the given client.
     /// </summary>
     /// <param name="clientId">Owning client ID. Required.</param>
@@ -193,7 +149,7 @@ public sealed partial class ThreadMemoryController(
     /// <param name="ct">Cancellation token.</param>
     /// <response code="200">Paginated list of activity log entries.</response>
     /// <response code="403">Caller is not an admin.</response>
-    [HttpGet("/admin/reviewing/thread-memory/activity-log")]
+    [HttpGet("activity-log")]
     [HttpGet("/admin/thread-memory/activity-log")]
     [ProducesResponseType(typeof(PagedResult<MemoryActivityLogEntry>), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
@@ -303,11 +259,6 @@ public sealed partial class ThreadMemoryController(
     private static partial void LogEmbeddingDeleted(ILogger logger, Guid id, Guid clientId);
 
     [LoggerMessage(
-        Level = LogLevel.Information,
-        Message = "Finding dismissal memory record {Id} created for client {ClientId}")]
-    private static partial void LogDismissalCreated(ILogger logger, Guid id, Guid clientId);
-
-    [LoggerMessage(
         Level = LogLevel.Warning,
         Message = "Failed to reset last_seen_status for thread {ThreadId} after admin deletion")]
     private static partial void LogResetLastSeenStatusFailed(ILogger logger, long threadId, Exception ex);
@@ -333,9 +284,3 @@ public sealed record ThreadMemoryRecordDto(
     string ResolutionSummary,
     DateTimeOffset CreatedAt,
     DateTimeOffset UpdatedAt);
-
-/// <summary>Request to dismiss a finding and store it as an admin-dismissed memory record.</summary>
-/// <param name="FindingMessage">The original finding message to dismiss.</param>
-/// <param name="FilePath">Optional file path to scope the dismissal.</param>
-/// <param name="Label">Optional human-readable label for the dismissal.</param>
-public sealed record DismissFindingRequest(string FindingMessage, string? FilePath = null, string? Label = null);

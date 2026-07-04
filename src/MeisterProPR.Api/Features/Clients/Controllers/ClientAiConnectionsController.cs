@@ -13,6 +13,7 @@ namespace MeisterProPR.Api.Controllers;
 
 /// <summary>Manages provider-neutral AI connection profiles for a client.</summary>
 [ApiController]
+[Route("clients/{clientId:guid}/ai-connections")]
 public sealed partial class ClientAiConnectionsController(
     IAiConnectionRepository aiConnections,
     IAiProviderDriverRegistry providerDrivers,
@@ -51,7 +52,7 @@ public sealed partial class ClientAiConnectionsController(
     }
 
     /// <summary>Lists all AI connection profiles for the specified client.</summary>
-    [HttpGet("clients/{clientId:guid}/ai-connections")]
+    [HttpGet]
     [ProducesResponseType(typeof(IReadOnlyList<AiConnectionDto>), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
@@ -67,7 +68,7 @@ public sealed partial class ClientAiConnectionsController(
     }
 
     /// <summary>Creates a new AI connection profile for the specified client.</summary>
-    [HttpPost("clients/{clientId:guid}/ai-connections")]
+    [HttpPost]
     [ProducesResponseType(typeof(AiConnectionDto), StatusCodes.Status201Created)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
@@ -95,7 +96,7 @@ public sealed partial class ClientAiConnectionsController(
     }
 
     /// <summary>Updates an existing AI connection profile for the specified client.</summary>
-    [HttpPatch("clients/{clientId:guid}/ai-connections/{connectionId:guid}")]
+    [HttpPatch("{connectionId:guid}")]
     [ProducesResponseType(typeof(AiConnectionDto), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
@@ -136,7 +137,7 @@ public sealed partial class ClientAiConnectionsController(
     }
 
     /// <summary>Deletes an AI connection profile.</summary>
-    [HttpDelete("clients/{clientId:guid}/ai-connections/{connectionId:guid}")]
+    [HttpDelete("{connectionId:guid}")]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
@@ -161,7 +162,7 @@ public sealed partial class ClientAiConnectionsController(
     }
 
     /// <summary>Activates a verified AI connection profile after validating the minimum runtime bindings.</summary>
-    [HttpPost("clients/{clientId:guid}/ai-connections/{connectionId:guid}/activate")]
+    [HttpPost("{connectionId:guid}/activate")]
     [ProducesResponseType(typeof(AiConnectionDto), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
@@ -197,7 +198,7 @@ public sealed partial class ClientAiConnectionsController(
     }
 
     /// <summary>Deactivates an AI connection profile.</summary>
-    [HttpPost("clients/{clientId:guid}/ai-connections/{connectionId:guid}/deactivate")]
+    [HttpPost("{connectionId:guid}/deactivate")]
     [ProducesResponseType(typeof(AiConnectionDto), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
@@ -223,7 +224,7 @@ public sealed partial class ClientAiConnectionsController(
     }
 
     /// <summary>Verifies the saved provider profile and updates its verification snapshot.</summary>
-    [HttpPost("clients/{clientId:guid}/ai-connections/{connectionId:guid}/verify")]
+    [HttpPost("{connectionId:guid}/verify")]
     [ProducesResponseType(typeof(AiVerificationResultDto), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
@@ -267,7 +268,7 @@ public sealed partial class ClientAiConnectionsController(
     }
 
     /// <summary>Discovers provider models using the supplied unsaved profile settings.</summary>
-    [HttpPost("clients/{clientId:guid}/ai-connections/discover-models")]
+    [HttpPost("discover-models")]
     [ProducesResponseType(typeof(AiModelDiscoveryResultDto), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
@@ -308,47 +309,52 @@ public sealed partial class ClientAiConnectionsController(
     {
         foreach (var purpose in RequiredPurposes)
         {
-            var binding = FindBinding(connection, purpose);
-            if (binding is null)
+            var error = ValidateRequiredBinding(connection, purpose);
+            if (error is not null)
             {
-                return $"Required binding '{purpose}' is missing or disabled.";
-            }
-
-            var model = connection.ConfiguredModels.FirstOrDefault(candidate => candidate.Id == binding.ConfiguredModelId)
-                        ?? connection.ConfiguredModels.FirstOrDefault(candidate =>
-                            string.Equals(candidate.RemoteModelId, binding.RemoteModelId, StringComparison.OrdinalIgnoreCase));
-            if (model is null)
-            {
-                return $"Required binding '{purpose}' references an unknown configured model.";
-            }
-
-            if (purpose == AiPurpose.EmbeddingDefault)
-            {
-                if (!model.SupportsEmbedding || string.IsNullOrWhiteSpace(model.TokenizerName) || !model.EmbeddingDimensions.HasValue)
-                {
-                    return $"Binding '{purpose}' must target a model with embedding capability metadata.";
-                }
-
-                if (binding.ProtocolMode is not AiProtocolMode.Auto and not AiProtocolMode.Embeddings)
-                {
-                    return $"Binding '{purpose}' must use the embeddings protocol or automatic mode.";
-                }
-
-                continue;
-            }
-
-            if (!model.SupportsChat)
-            {
-                return $"Binding '{purpose}' must target a chat-capable model.";
-            }
-
-            if (binding.ProtocolMode != AiProtocolMode.Auto && !model.SupportedProtocolModes.Contains(binding.ProtocolMode))
-            {
-                return $"Binding '{purpose}' uses protocol '{binding.ProtocolMode}' which is not supported by model '{model.RemoteModelId}'.";
+                return error;
             }
         }
 
         return null;
+    }
+
+    private static string? ValidateRequiredBinding(AiConnectionDto connection, AiPurpose purpose)
+    {
+        var binding = FindBinding(connection, purpose);
+        if (binding is null)
+        {
+            return $"Required binding '{purpose}' is missing or disabled.";
+        }
+
+        var model = connection.ConfiguredModels.FirstOrDefault(candidate => candidate.Id == binding.ConfiguredModelId)
+                    ?? connection.ConfiguredModels.FirstOrDefault(candidate =>
+                        string.Equals(candidate.RemoteModelId, binding.RemoteModelId, StringComparison.OrdinalIgnoreCase));
+        if (model is null)
+        {
+            return $"Required binding '{purpose}' references an unknown configured model.";
+        }
+
+        if (purpose == AiPurpose.EmbeddingDefault)
+        {
+            if (!model.SupportsEmbedding || string.IsNullOrWhiteSpace(model.TokenizerName) || !model.EmbeddingDimensions.HasValue)
+            {
+                return $"Binding '{purpose}' must target a model with embedding capability metadata.";
+            }
+
+            return binding.ProtocolMode is not AiProtocolMode.Auto and not AiProtocolMode.Embeddings
+                ? $"Binding '{purpose}' must use the embeddings protocol or automatic mode."
+                : null;
+        }
+
+        if (!model.SupportsChat)
+        {
+            return $"Binding '{purpose}' must target a chat-capable model.";
+        }
+
+        return binding.ProtocolMode != AiProtocolMode.Auto && !model.SupportedProtocolModes.Contains(binding.ProtocolMode)
+            ? $"Binding '{purpose}' uses protocol '{binding.ProtocolMode}' which is not supported by model '{model.RemoteModelId}'."
+            : null;
     }
 
     private static AiPurposeBindingDto? FindBinding(AiConnectionDto connection, AiPurpose purpose)
@@ -414,11 +420,12 @@ public sealed partial class ClientAiConnectionsController(
     private AiConnectionWriteRequestDto? TryBuildWriteRequest(AiConnectionDto existing, UpdateAiConnectionRequest request)
     {
         var providerKind = request.ProviderKind ?? existing.ProviderKind;
+        var effectiveApiKey = request.Auth is null || string.IsNullOrWhiteSpace(request.Auth.ApiKey)
+            ? existing.Secret
+            : request.Auth.ApiKey;
         var auth = request.Auth is null
             ? new AiConnectionAuthRequest(existing.AuthMode, existing.Secret)
-            : new AiConnectionAuthRequest(
-                request.Auth.Mode,
-                string.IsNullOrWhiteSpace(request.Auth.ApiKey) ? existing.Secret : request.Auth.ApiKey);
+            : new AiConnectionAuthRequest(request.Auth.Mode, effectiveApiKey);
         var baseUrl = request.BaseUrl ?? existing.BaseUrl;
         var defaultHeaders = request.DefaultHeaders ?? existing.DefaultHeaders;
         var defaultQueryParams = request.DefaultQueryParams ?? existing.DefaultQueryParams;
@@ -537,84 +544,102 @@ public sealed partial class ClientAiConnectionsController(
 
         foreach (var requestModel in requestModels)
         {
-            if (string.IsNullOrWhiteSpace(requestModel.RemoteModelId))
+            var normalizedModel = this.NormalizeConfiguredModel(requestModel, seen);
+            if (normalizedModel is not null)
             {
-                this.ModelState.AddModelError(nameof(requestModels), "Each configured model requires remoteModelId.");
-                continue;
+                models.Add(normalizedModel);
             }
-
-            var remoteModelId = requestModel.RemoteModelId.Trim();
-            if (!seen.Add(remoteModelId))
-            {
-                this.ModelState.AddModelError(nameof(requestModels), $"Configured model '{remoteModelId}' is duplicated.");
-                continue;
-            }
-
-            var inferredEmbedding = IsEmbeddingModel(remoteModelId, requestModel);
-            var operationKinds = requestModel.OperationKinds is { Count: > 0 }
-                ? requestModel.OperationKinds.Distinct().ToList().AsReadOnly()
-                : inferredEmbedding
-                    ? new List<AiOperationKind> { AiOperationKind.Embedding }.AsReadOnly()
-                    : new List<AiOperationKind> { AiOperationKind.Chat }.AsReadOnly();
-
-            var protocolModes = requestModel.SupportedProtocolModes is { Count: > 0 }
-                ? requestModel.SupportedProtocolModes.Distinct().ToList().AsReadOnly()
-                : operationKinds.Contains(AiOperationKind.Embedding) && !operationKinds.Contains(AiOperationKind.Chat)
-                    ? new List<AiProtocolMode> { AiProtocolMode.Auto, AiProtocolMode.Embeddings }.AsReadOnly()
-                    : new List<AiProtocolMode> { AiProtocolMode.Auto, AiProtocolMode.Responses, AiProtocolMode.ChatCompletions }.AsReadOnly();
-
-            if (operationKinds.Contains(AiOperationKind.Embedding))
-            {
-                if (string.IsNullOrWhiteSpace(requestModel.TokenizerName))
-                {
-                    this.ModelState.AddModelError(nameof(requestModels), $"Embedding model '{remoteModelId}' requires tokenizerName.");
-                }
-
-                if (!requestModel.MaxInputTokens.HasValue || requestModel.MaxInputTokens.Value <= 0)
-                {
-                    this.ModelState.AddModelError(nameof(requestModels), $"Embedding model '{remoteModelId}' requires maxInputTokens greater than zero.");
-                }
-
-                if (!requestModel.EmbeddingDimensions.HasValue || requestModel.EmbeddingDimensions.Value is < 64 or > 4096)
-                {
-                    this.ModelState.AddModelError(
-                        nameof(requestModels),
-                        $"Embedding model '{remoteModelId}' requires embeddingDimensions between 64 and 4096.");
-                }
-            }
-
-            if (protocolModes.Contains(AiProtocolMode.Embeddings) && !operationKinds.Contains(AiOperationKind.Embedding))
-            {
-                this.ModelState.AddModelError(
-                    nameof(requestModels),
-                    $"Model '{remoteModelId}' cannot declare the embeddings protocol without embedding capability.");
-            }
-
-            if ((protocolModes.Contains(AiProtocolMode.ChatCompletions) || protocolModes.Contains(AiProtocolMode.Responses)) &&
-                !operationKinds.Contains(AiOperationKind.Chat))
-            {
-                this.ModelState.AddModelError(nameof(requestModels), $"Model '{remoteModelId}' cannot declare chat protocols without chat capability.");
-            }
-
-            models.Add(
-                new AiConfiguredModelDto(
-                    requestModel.Id ?? Guid.Empty,
-                    remoteModelId,
-                    string.IsNullOrWhiteSpace(requestModel.DisplayName) ? remoteModelId : requestModel.DisplayName.Trim(),
-                    operationKinds,
-                    protocolModes,
-                    string.IsNullOrWhiteSpace(requestModel.TokenizerName) ? null : requestModel.TokenizerName.Trim(),
-                    requestModel.MaxInputTokens,
-                    requestModel.EmbeddingDimensions,
-                    requestModel.SupportsStructuredOutput,
-                    requestModel.SupportsToolUse,
-                    requestModel.Source ?? AiConfiguredModelSource.Manual,
-                    requestModel.LastSeenAt,
-                    requestModel.InputCostPer1MUsd,
-                    requestModel.OutputCostPer1MUsd));
         }
 
         return models.AsReadOnly();
+    }
+
+    private AiConfiguredModelDto? NormalizeConfiguredModel(AiConfiguredModelRequest requestModel, HashSet<string> seen)
+    {
+        const string RequestModelsPropertyName = "requestModels";
+
+        if (string.IsNullOrWhiteSpace(requestModel.RemoteModelId))
+        {
+            this.ModelState.AddModelError(RequestModelsPropertyName, "Each configured model requires remoteModelId.");
+            return null;
+        }
+
+        var remoteModelId = requestModel.RemoteModelId.Trim();
+        if (!seen.Add(remoteModelId))
+        {
+            this.ModelState.AddModelError(RequestModelsPropertyName, $"Configured model '{remoteModelId}' is duplicated.");
+            return null;
+        }
+
+        var inferredEmbedding = IsEmbeddingModel(remoteModelId, requestModel);
+        var defaultOperationKinds = inferredEmbedding
+            ? new List<AiOperationKind> { AiOperationKind.Embedding }.AsReadOnly()
+            : new List<AiOperationKind> { AiOperationKind.Chat }.AsReadOnly();
+        var operationKinds = requestModel.OperationKinds is { Count: > 0 }
+            ? requestModel.OperationKinds.Distinct().ToList().AsReadOnly()
+            : defaultOperationKinds;
+
+        var isEmbeddingOnly = operationKinds.Contains(AiOperationKind.Embedding) && !operationKinds.Contains(AiOperationKind.Chat);
+        var defaultProtocolModes = isEmbeddingOnly
+            ? new List<AiProtocolMode> { AiProtocolMode.Auto, AiProtocolMode.Embeddings }.AsReadOnly()
+            : new List<AiProtocolMode> { AiProtocolMode.Auto, AiProtocolMode.Responses, AiProtocolMode.ChatCompletions }.AsReadOnly();
+        var protocolModes = requestModel.SupportedProtocolModes is { Count: > 0 }
+            ? requestModel.SupportedProtocolModes.Distinct().ToList().AsReadOnly()
+            : defaultProtocolModes;
+
+        if (operationKinds.Contains(AiOperationKind.Embedding))
+        {
+            this.AddEmbeddingModelErrors(requestModel, remoteModelId);
+        }
+
+        if (protocolModes.Contains(AiProtocolMode.Embeddings) && !operationKinds.Contains(AiOperationKind.Embedding))
+        {
+            this.ModelState.AddModelError(
+                RequestModelsPropertyName,
+                $"Model '{remoteModelId}' cannot declare the embeddings protocol without embedding capability.");
+        }
+
+        if ((protocolModes.Contains(AiProtocolMode.ChatCompletions) || protocolModes.Contains(AiProtocolMode.Responses)) &&
+            !operationKinds.Contains(AiOperationKind.Chat))
+        {
+            this.ModelState.AddModelError(RequestModelsPropertyName, $"Model '{remoteModelId}' cannot declare chat protocols without chat capability.");
+        }
+
+        return new AiConfiguredModelDto(
+            requestModel.Id ?? Guid.Empty,
+            remoteModelId,
+            string.IsNullOrWhiteSpace(requestModel.DisplayName) ? remoteModelId : requestModel.DisplayName.Trim(),
+            operationKinds,
+            protocolModes,
+            string.IsNullOrWhiteSpace(requestModel.TokenizerName) ? null : requestModel.TokenizerName.Trim(),
+            requestModel.MaxInputTokens,
+            requestModel.EmbeddingDimensions,
+            requestModel.SupportsStructuredOutput,
+            requestModel.SupportsToolUse,
+            requestModel.Source ?? AiConfiguredModelSource.Manual,
+            requestModel.LastSeenAt,
+            requestModel.InputCostPer1MUsd,
+            requestModel.OutputCostPer1MUsd);
+    }
+
+    private void AddEmbeddingModelErrors(AiConfiguredModelRequest requestModel, string remoteModelId)
+    {
+        if (string.IsNullOrWhiteSpace(requestModel.TokenizerName))
+        {
+            this.ModelState.AddModelError("requestModels", $"Embedding model '{remoteModelId}' requires tokenizerName.");
+        }
+
+        if (!requestModel.MaxInputTokens.HasValue || requestModel.MaxInputTokens.Value <= 0)
+        {
+            this.ModelState.AddModelError("requestModels", $"Embedding model '{remoteModelId}' requires maxInputTokens greater than zero.");
+        }
+
+        if (!requestModel.EmbeddingDimensions.HasValue || requestModel.EmbeddingDimensions.Value is < 64 or > 4096)
+        {
+            this.ModelState.AddModelError(
+                "requestModels",
+                $"Embedding model '{remoteModelId}' requires embeddingDimensions between 64 and 4096.");
+        }
     }
 
     private IReadOnlyList<AiPurposeBindingDto> NormalizePurposeBindings(
@@ -636,76 +661,106 @@ public sealed partial class ClientAiConnectionsController(
 
         foreach (var requestBinding in requestBindings)
         {
-            if (!seenPurposes.Add(requestBinding.Purpose))
+            var binding = this.NormalizePurposeBinding(requestBinding, modelsById, modelsByRemoteModelId, seenPurposes);
+            if (binding is not null)
             {
-                this.ModelState.AddModelError(nameof(requestBindings), $"Purpose '{requestBinding.Purpose}' is duplicated.");
-                continue;
+                bindings.Add(binding);
             }
-
-            if (!requestBinding.IsEnabled &&
-                (!requestBinding.ConfiguredModelId.HasValue || requestBinding.ConfiguredModelId.Value == Guid.Empty) &&
-                string.IsNullOrWhiteSpace(requestBinding.RemoteModelId))
-            {
-                continue;
-            }
-
-            AiConfiguredModelDto? model = null;
-            if (requestBinding.ConfiguredModelId.HasValue && requestBinding.ConfiguredModelId.Value != Guid.Empty)
-            {
-                modelsById.TryGetValue(requestBinding.ConfiguredModelId.Value, out model);
-            }
-
-            if (model is null && !string.IsNullOrWhiteSpace(requestBinding.RemoteModelId))
-            {
-                modelsByRemoteModelId.TryGetValue(requestBinding.RemoteModelId.Trim(), out model);
-            }
-
-            if (model is null)
-            {
-                this.ModelState.AddModelError(nameof(requestBindings), $"Purpose '{requestBinding.Purpose}' references an unknown configured model.");
-                continue;
-            }
-
-            if (requestBinding.Purpose == AiPurpose.EmbeddingDefault)
-            {
-                if (!model.SupportsEmbedding)
-                {
-                    this.ModelState.AddModelError(nameof(requestBindings), $"Purpose '{requestBinding.Purpose}' requires an embedding-capable model.");
-                }
-
-                if (requestBinding.ProtocolMode is not AiProtocolMode.Auto and not AiProtocolMode.Embeddings)
-                {
-                    this.ModelState.AddModelError(
-                        nameof(requestBindings),
-                        $"Purpose '{requestBinding.Purpose}' must use the embeddings protocol or automatic mode.");
-                }
-            }
-            else
-            {
-                if (!model.SupportsChat)
-                {
-                    this.ModelState.AddModelError(nameof(requestBindings), $"Purpose '{requestBinding.Purpose}' requires a chat-capable model.");
-                }
-
-                if (requestBinding.ProtocolMode != AiProtocolMode.Auto && !model.SupportedProtocolModes.Contains(requestBinding.ProtocolMode))
-                {
-                    this.ModelState.AddModelError(
-                        nameof(requestBindings),
-                        $"Model '{model.RemoteModelId}' does not support protocol '{requestBinding.ProtocolMode}'.");
-                }
-            }
-
-            bindings.Add(
-                new AiPurposeBindingDto(
-                    requestBinding.Id ?? Guid.Empty,
-                    requestBinding.Purpose,
-                    model.Id == Guid.Empty ? null : model.Id,
-                    model.RemoteModelId,
-                    requestBinding.ProtocolMode,
-                    requestBinding.IsEnabled));
         }
 
         return bindings.AsReadOnly();
+    }
+
+    private AiPurposeBindingDto? NormalizePurposeBinding(
+        AiPurposeBindingRequest requestBinding,
+        IReadOnlyDictionary<Guid, AiConfiguredModelDto> modelsById,
+        IReadOnlyDictionary<string, AiConfiguredModelDto> modelsByRemoteModelId,
+        HashSet<AiPurpose> seenPurposes)
+    {
+        const string RequestBindingsPropertyName = "requestBindings";
+
+        if (!seenPurposes.Add(requestBinding.Purpose))
+        {
+            this.ModelState.AddModelError(RequestBindingsPropertyName, $"Purpose '{requestBinding.Purpose}' is duplicated.");
+            return null;
+        }
+
+        if (!requestBinding.IsEnabled &&
+            (!requestBinding.ConfiguredModelId.HasValue || requestBinding.ConfiguredModelId.Value == Guid.Empty) &&
+            string.IsNullOrWhiteSpace(requestBinding.RemoteModelId))
+        {
+            return null;
+        }
+
+        var model = ResolveConfiguredModel(requestBinding, modelsById, modelsByRemoteModelId);
+        if (model is null)
+        {
+            this.ModelState.AddModelError(RequestBindingsPropertyName, $"Purpose '{requestBinding.Purpose}' references an unknown configured model.");
+            return null;
+        }
+
+        this.AddPurposeBindingCapabilityErrors(requestBinding, model);
+
+        return new AiPurposeBindingDto(
+            requestBinding.Id ?? Guid.Empty,
+            requestBinding.Purpose,
+            model.Id == Guid.Empty ? null : model.Id,
+            model.RemoteModelId,
+            requestBinding.ProtocolMode,
+            requestBinding.IsEnabled);
+    }
+
+    private static AiConfiguredModelDto? ResolveConfiguredModel(
+        AiPurposeBindingRequest requestBinding,
+        IReadOnlyDictionary<Guid, AiConfiguredModelDto> modelsById,
+        IReadOnlyDictionary<string, AiConfiguredModelDto> modelsByRemoteModelId)
+    {
+        AiConfiguredModelDto? model = null;
+        if (requestBinding.ConfiguredModelId.HasValue && requestBinding.ConfiguredModelId.Value != Guid.Empty)
+        {
+            modelsById.TryGetValue(requestBinding.ConfiguredModelId.Value, out model);
+        }
+
+        if (model is null && !string.IsNullOrWhiteSpace(requestBinding.RemoteModelId))
+        {
+            modelsByRemoteModelId.TryGetValue(requestBinding.RemoteModelId.Trim(), out model);
+        }
+
+        return model;
+    }
+
+    private void AddPurposeBindingCapabilityErrors(AiPurposeBindingRequest requestBinding, AiConfiguredModelDto model)
+    {
+        const string RequestBindingsPropertyName = "requestBindings";
+
+        if (requestBinding.Purpose == AiPurpose.EmbeddingDefault)
+        {
+            if (!model.SupportsEmbedding)
+            {
+                this.ModelState.AddModelError(RequestBindingsPropertyName, $"Purpose '{requestBinding.Purpose}' requires an embedding-capable model.");
+            }
+
+            if (requestBinding.ProtocolMode is not AiProtocolMode.Auto and not AiProtocolMode.Embeddings)
+            {
+                this.ModelState.AddModelError(
+                    RequestBindingsPropertyName,
+                    $"Purpose '{requestBinding.Purpose}' must use the embeddings protocol or automatic mode.");
+            }
+
+            return;
+        }
+
+        if (!model.SupportsChat)
+        {
+            this.ModelState.AddModelError(RequestBindingsPropertyName, $"Purpose '{requestBinding.Purpose}' requires a chat-capable model.");
+        }
+
+        if (requestBinding.ProtocolMode != AiProtocolMode.Auto && !model.SupportedProtocolModes.Contains(requestBinding.ProtocolMode))
+        {
+            this.ModelState.AddModelError(
+                RequestBindingsPropertyName,
+                $"Model '{model.RemoteModelId}' does not support protocol '{requestBinding.ProtocolMode}'.");
+        }
     }
 
     private static bool IsEmbeddingModel(string remoteModelId, AiConfiguredModelRequest requestModel)

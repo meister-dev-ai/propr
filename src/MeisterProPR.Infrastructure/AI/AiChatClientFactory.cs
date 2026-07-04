@@ -100,8 +100,4 @@ public sealed partial class AiChatClientFactory(ILogger<AiChatClientFactory> log
 
     [LoggerMessage(Level = LogLevel.Debug, Message = "AiChatClientFactory: probing deployments at {RequestUri}")]
     private static partial void LogProbingDeploymentList(ILogger logger, string requestUri);
-
-    private sealed record DeploymentsListResponse(DeploymentItem[]? Value);
-
-    private sealed record DeploymentItem(string Id);
 }

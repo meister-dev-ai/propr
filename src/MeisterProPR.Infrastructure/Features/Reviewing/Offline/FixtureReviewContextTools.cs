@@ -315,22 +315,40 @@ public sealed class FixtureReviewContextTools(
             }
 
             scanned++;
-            var request = new StructuralParseRequest(file.Path, language, file.Content, []);
-            var lines = await structuralAnalyzer.ConfirmReferenceLinesAsync(request, query.Symbol, ct);
-
-            foreach (var line in lines)
+            bool fileTruncated;
+            (fileTruncated, usedChars) = await this.AppendReferenceSitesForFileAsync(file, language, query.Symbol, sites, usedChars, ct);
+            if (fileTruncated)
             {
-                if (sites.Count >= this._options.MaxReferenceResults || usedChars > this._options.MaxReferenceResultChars)
-                {
-                    return new ReferenceLookupResult(sites, scanned, true, false);
-                }
-
-                sites.Add(new ReferenceSite(file.Path, line, null, null, OccurrenceKind.Reference, ResolutionMode.NameBased));
-                usedChars += file.Path.Length + 16;
+                return new ReferenceLookupResult(sites, scanned, true, false);
             }
         }
 
         return new ReferenceLookupResult(sites, scanned, truncated, false);
+    }
+
+    private async Task<(bool Truncated, int UsedChars)> AppendReferenceSitesForFileAsync(
+        RepositoryFileEntry file,
+        SupportedLanguage language,
+        string symbol,
+        List<ReferenceSite> sites,
+        int usedChars,
+        CancellationToken ct)
+    {
+        var request = new StructuralParseRequest(file.Path, language, file.Content, []);
+        var lines = await structuralAnalyzer!.ConfirmReferenceLinesAsync(request, symbol, ct);
+
+        foreach (var line in lines)
+        {
+            if (sites.Count >= this._options.MaxReferenceResults || usedChars > this._options.MaxReferenceResultChars)
+            {
+                return (true, usedChars);
+            }
+
+            sites.Add(new ReferenceSite(file.Path, line, null, null, OccurrenceKind.Reference, ResolutionMode.NameBased));
+            usedChars += file.Path.Length + 16;
+        }
+
+        return (false, usedChars);
     }
 
     /// <inheritdoc />

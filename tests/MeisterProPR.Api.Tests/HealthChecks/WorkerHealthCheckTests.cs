@@ -91,10 +91,10 @@ public sealed class WorkerHealthCheckTests
 
         Assert.Equal("installationWideAdminPolicy", result.Data["providerActivationSemantics"]);
         Assert.Equal("leastReadyHostVariantSupportClaim", result.Data["providerReadinessSemantics"]);
-        Assert.Equal(true, result.Data["provider.azureDevOps.enabled"]);
-        Assert.Equal(true, result.Data["provider.azureDevOps.effectiveAvailable"]);
-        Assert.Equal(false, result.Data["provider.github.enabled"]);
-        Assert.Equal(false, result.Data["provider.github.effectiveAvailable"]);
+        Assert.True((bool)result.Data["provider.azureDevOps.enabled"]);
+        Assert.True((bool)result.Data["provider.azureDevOps.effectiveAvailable"]);
+        Assert.False((bool)result.Data["provider.github.enabled"]);
+        Assert.False((bool)result.Data["provider.github.effectiveAvailable"]);
         Assert.Equal("workflowComplete", result.Data["provider.azureDevOps.supportClaimReadiness"]);
         Assert.Equal("onboardingReady", result.Data["provider.github.supportClaimReadiness"]);
         Assert.Equal("onboardingReady", result.Data["provider.gitLab.supportClaimReadiness"]);

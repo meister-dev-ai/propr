@@ -14,41 +14,39 @@ export class UnauthorizedError extends Error {
   }
 }
 
-export function getApiErrorMessage(error: unknown, fallback: string): string {
-  if (error && typeof error === 'object') {
-    const apiError = error as {
-      message?: string
-      error?: string
-      detail?: string
-      title?: string
-      errors?: Record<string, string[]>
-    }
+function readStringField(value: unknown): string | null {
+  return typeof value === 'string' && value ? value : null
+}
 
-    if (typeof apiError.message === 'string' && apiError.message) {
-      return apiError.message
-    }
-
-    if (typeof apiError.error === 'string' && apiError.error) {
-      return apiError.error
-    }
-
-    if (typeof apiError.detail === 'string' && apiError.detail) {
-      return apiError.detail
-    }
-
-    if (typeof apiError.title === 'string' && apiError.title) {
-      return apiError.title
-    }
-
-    if (apiError.errors && typeof apiError.errors === 'object') {
-      const firstError = Object.values(apiError.errors).flat()[0]
-      if (firstError) {
-        return firstError
-      }
-    }
+function readFirstFieldError(errors: unknown): string | null {
+  if (!errors || typeof errors !== 'object') {
+    return null
   }
 
-  return fallback
+  return Object.values(errors as Record<string, string[]>).flat()[0] ?? null
+}
+
+export function getApiErrorMessage(error: unknown, fallback: string): string {
+  if (!error || typeof error !== 'object') {
+    return fallback
+  }
+
+  const apiError = error as {
+    message?: string
+    error?: string
+    detail?: string
+    title?: string
+    errors?: Record<string, string[]>
+  }
+
+  return (
+    readStringField(apiError.message) ??
+    readStringField(apiError.error) ??
+    readStringField(apiError.detail) ??
+    readStringField(apiError.title) ??
+    readFirstFieldError(apiError.errors) ??
+    fallback
+  )
 }
 
 /**

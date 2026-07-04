@@ -434,65 +434,6 @@ internal sealed partial class AgenticFileReviewer(
             : result with { Comments = mergedComments };
     }
 
-    private static IReadOnlyList<CandidateReviewFinding> BuildSurvivingAgenticCandidateFindings(
-        ReviewFileResult fileResult,
-        IReadOnlyList<ReviewComment> finalComments,
-        IReadOnlyList<AgenticFileCandidateFinding> originalAgenticCandidateFindings)
-    {
-        if (finalComments.Count == 0 || originalAgenticCandidateFindings.Count == 0)
-        {
-            return [];
-        }
-
-        var candidatesByKey = new Dictionary<string, Queue<AgenticFileCandidateFinding>>(StringComparer.Ordinal);
-        foreach (var candidate in originalAgenticCandidateFindings)
-        {
-            var key = CreateAgenticCommentMatchKey(candidate.FilePath, candidate.LineNumber, candidate.Message);
-            if (!candidatesByKey.TryGetValue(key, out var queue))
-            {
-                queue = new Queue<AgenticFileCandidateFinding>();
-                candidatesByKey[key] = queue;
-            }
-
-            queue.Enqueue(candidate);
-        }
-
-        var surviving = new List<CandidateReviewFinding>();
-        for (var index = 0; index < finalComments.Count; index++)
-        {
-            var comment = finalComments[index];
-            var key = CreateAgenticCommentMatchKey(comment);
-            if (!candidatesByKey.TryGetValue(key, out var queue) || queue.Count == 0)
-            {
-                continue;
-            }
-
-            var candidate = queue.Dequeue();
-            surviving.Add(
-                new CandidateReviewFinding(
-                    AgenticFileByFileReviewOrchestrator.BuildPerFileFindingId(fileResult, index + 1),
-                    new CandidateFindingProvenance(
-                        CandidateFindingProvenance.DeeperFollowUpOrigin,
-                        "agentic_file_investigation",
-                        fileResult.FilePath,
-                        fileResult.Id,
-                        index + 1,
-                        candidate.EvidenceReference.EvidenceSource,
-                        true,
-                        candidate.Id),
-                    comment.Severity,
-                    comment.Message,
-                    candidate.Category,
-                    comment.FilePath,
-                    AgenticFileByFileReviewOrchestrator.NormalizeLineNumber(comment.LineNumber),
-                    candidate.EvidenceReference,
-                    candidate.CandidateSummaryText,
-                    candidate.InvariantCheckContext));
-        }
-
-        return surviving;
-    }
-
     private static string CreateAgenticCommentMatchKey(ReviewComment comment)
     {
         return CreateAgenticCommentMatchKey(comment.FilePath, comment.LineNumber, comment.Message);
@@ -682,30 +623,7 @@ internal sealed partial class AgenticFileReviewer(
                 $"evidence-{task.TaskId}");
         }
 
-        var evidence = new List<EvidenceItem>();
-        var canPrefetchSeedContent = task.AllowedTools.Any(tool => string.Equals(
-            tool,
-            BoundedReviewContextTools.GetFileContentToolName,
-            StringComparison.Ordinal));
-        if (canPrefetchSeedContent)
-        {
-            foreach (var filePath in task.SeedFilePaths)
-            {
-                try
-                {
-                    var content = await reviewTools.GetFileContentAsync(filePath, filePr.SourceBranch, 1, options.FileBatchLines, ct);
-                    if (!string.IsNullOrWhiteSpace(content))
-                    {
-                        evidence.Add(new EvidenceItem("file_content", $"Captured bounded context for {filePath}.", filePath));
-                    }
-                }
-                catch (Exception ex)
-                {
-                    LogAgenticStageFallback(logger, "investigation_seed_fetch", plan.AnchorFilePath, Guid.Empty, ex.Message);
-                }
-            }
-        }
-
+        var evidence = await this.PrefetchSeedEvidenceAsync(reviewTools, filePr, plan, task, ct);
         var boundedTools = new BoundedReviewContextTools(reviewTools, task.AllowedTools, task.MaxToolCalls, task.SeedFilePaths);
 
         try
@@ -746,6 +664,42 @@ internal sealed partial class AgenticFileReviewer(
             $"evidence-{task.TaskId}");
 
         return ApplyAuthoritativeToolUsage(fallback, boundedTools.Attempts);
+    }
+
+    private async Task<List<EvidenceItem>> PrefetchSeedEvidenceAsync(
+        IReviewContextTools reviewTools,
+        PullRequest filePr,
+        AgenticFileReviewPlan plan,
+        AgenticFileInvestigationTask task,
+        CancellationToken ct)
+    {
+        var evidence = new List<EvidenceItem>();
+        var canPrefetchSeedContent = task.AllowedTools.Any(tool => string.Equals(
+            tool,
+            BoundedReviewContextTools.GetFileContentToolName,
+            StringComparison.Ordinal));
+        if (!canPrefetchSeedContent)
+        {
+            return evidence;
+        }
+
+        foreach (var filePath in task.SeedFilePaths)
+        {
+            try
+            {
+                var content = await reviewTools.GetFileContentAsync(filePath, filePr.SourceBranch, 1, options.FileBatchLines, ct);
+                if (!string.IsNullOrWhiteSpace(content))
+                {
+                    evidence.Add(new EvidenceItem("file_content", $"Captured bounded context for {filePath}.", filePath));
+                }
+            }
+            catch (Exception ex)
+            {
+                LogAgenticStageFallback(logger, "investigation_seed_fetch", plan.AnchorFilePath, Guid.Empty, ex.Message);
+            }
+        }
+
+        return evidence;
     }
 
     private async Task<string> RunBoundedInvestigationLoopAsync(

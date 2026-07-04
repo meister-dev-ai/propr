@@ -9,6 +9,7 @@ namespace MeisterProPR.Api.Controllers;
 
 /// <summary>Authenticated user security endpoints.</summary>
 [ApiController]
+[Route("identity/users/me")]
 public sealed class UserSecurityController(
     IUserRepository userRepository,
     IRefreshTokenRepository refreshTokenRepository,
@@ -20,7 +21,7 @@ public sealed class UserSecurityController(
     /// <response code="204">Password changed successfully.</response>
     /// <response code="400">The request is invalid or the new password does not meet policy.</response>
     /// <response code="401">Authentication is missing, invalid, or the current password is incorrect.</response>
-    [HttpPost("/identity/users/me/password")]
+    [HttpPost("password")]
     [HttpPost("/users/me/password")]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]

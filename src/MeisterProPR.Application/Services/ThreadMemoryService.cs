@@ -238,59 +238,23 @@ public sealed partial class ThreadMemoryService(
         var fallbackChecks = new HashSet<string>(StringComparer.Ordinal);
         var normalizedFilePath = NormalizeFilePathForLookup(filePath);
 
-        float[]? queryVector = null;
-        if (!this._embeddingLookupFailuresByClient.ContainsKey(clientId))
-        {
-            try
-            {
-                var queryText = BuildDuplicateSuppressionQueryText(normalizedFilePath, findingMessage);
-                queryVector = await embedder.GenerateEmbeddingAsync(queryText, clientId, ct);
-            }
-            catch (Exception ex)
-            {
-                this._embeddingLookupFailuresByClient.TryAdd(clientId, 0);
-                degradedComponents.Add(EmbeddingDegradedComponent);
-                LogDuplicateSuppressionEmbeddingFailed(logger, normalizedFilePath, clientId, ex);
-            }
-        }
-        else
-        {
-            degradedComponents.Add(EmbeddingDegradedComponent);
-        }
+        var queryVector = await this.TryGetDuplicateSuppressionQueryVectorAsync(
+            clientId, normalizedFilePath, findingMessage, degradedComponents, ct);
 
         if (queryVector is not null)
         {
-            try
+            var semanticMatch = await this.TryFindSemanticDuplicateMatchAsync(
+                clientId, repositoryId, pullRequestId, queryVector, degradedComponents, ct);
+            if (semanticMatch is not null)
             {
-                var semanticMatches = await repository.FindSimilarInPullRequestAsync(
-                    clientId,
-                    repositoryId,
-                    pullRequestId,
-                    queryVector,
-                    this._opts.MemoryTopN,
-                    this._opts.MemoryMinSimilarity,
-                    ct);
-
-                var semanticMatch = semanticMatches
-                    .OrderByDescending(match => match.SimilarityScore)
-                    .FirstOrDefault();
-
-                if (semanticMatch is not null)
-                {
-                    return HistoricalDuplicateSuppressionMatchDto.Match(
-                        "historical_similarity_match",
-                        semanticMatch.ThreadId,
-                        semanticMatch.MemoryRecordId,
-                        semanticMatch.SimilarityScore,
-                        degradedComponents.ToList().AsReadOnly(),
-                        BuildDuplicateSuppressionDegradedCause(degradedComponents),
-                        fallbackChecks.ToList().AsReadOnly());
-                }
-            }
-            catch (Exception ex)
-            {
-                degradedComponents.Add(RepositoryDegradedComponent);
-                LogDuplicateSuppressionLookupFailed(logger, repositoryId, pullRequestId, clientId, ex);
+                return HistoricalDuplicateSuppressionMatchDto.Match(
+                    "historical_similarity_match",
+                    semanticMatch.ThreadId,
+                    semanticMatch.MemoryRecordId,
+                    semanticMatch.SimilarityScore,
+                    degradedComponents.ToList().AsReadOnly(),
+                    BuildDuplicateSuppressionDegradedCause(degradedComponents),
+                    fallbackChecks.ToList().AsReadOnly());
             }
         }
 
@@ -302,6 +266,97 @@ public sealed partial class ThreadMemoryService(
                 fallbackChecks.ToList().AsReadOnly());
         }
 
+        var fallbackMatch = await this.TryFindFilePathFallbackMatchAsync(
+            clientId, repositoryId, pullRequestId, normalizedFilePath, findingMessage, degradedComponents, fallbackChecks, ct);
+        if (fallbackMatch is not null)
+        {
+            return HistoricalDuplicateSuppressionMatchDto.Match(
+                "historical_similarity_match",
+                fallbackMatch.Match.ThreadId,
+                fallbackMatch.Match.MemoryRecordId,
+                (float)fallbackMatch.Score,
+                degradedComponents.ToList().AsReadOnly(),
+                BuildDuplicateSuppressionDegradedCause(degradedComponents),
+                fallbackChecks.ToList().AsReadOnly());
+        }
+
+        return HistoricalDuplicateSuppressionMatchDto.NoMatch(
+            degradedComponents.ToList().AsReadOnly(),
+            BuildDuplicateSuppressionDegradedCause(degradedComponents),
+            fallbackChecks.ToList().AsReadOnly());
+    }
+
+    // Resolves the query embedding used for semantic duplicate-suppression lookup, marking the
+    // embedding component degraded (and short-circuiting future calls for this client for the
+    // remainder of the process) on failure.
+    private async Task<float[]?> TryGetDuplicateSuppressionQueryVectorAsync(
+        Guid clientId,
+        string? normalizedFilePath,
+        string findingMessage,
+        HashSet<string> degradedComponents,
+        CancellationToken ct)
+    {
+        if (this._embeddingLookupFailuresByClient.ContainsKey(clientId))
+        {
+            degradedComponents.Add(EmbeddingDegradedComponent);
+            return null;
+        }
+
+        try
+        {
+            var queryText = BuildDuplicateSuppressionQueryText(normalizedFilePath, findingMessage);
+            return await embedder.GenerateEmbeddingAsync(queryText, clientId, ct);
+        }
+        catch (Exception ex)
+        {
+            this._embeddingLookupFailuresByClient.TryAdd(clientId, 0);
+            degradedComponents.Add(EmbeddingDegradedComponent);
+            LogDuplicateSuppressionEmbeddingFailed(logger, normalizedFilePath, clientId, ex);
+            return null;
+        }
+    }
+
+    private async Task<ThreadMemoryMatchDto?> TryFindSemanticDuplicateMatchAsync(
+        Guid clientId,
+        string repositoryId,
+        int pullRequestId,
+        float[] queryVector,
+        HashSet<string> degradedComponents,
+        CancellationToken ct)
+    {
+        try
+        {
+            var semanticMatches = await repository.FindSimilarInPullRequestAsync(
+                clientId,
+                repositoryId,
+                pullRequestId,
+                queryVector,
+                this._opts.MemoryTopN,
+                this._opts.MemoryMinSimilarity,
+                ct);
+
+            return semanticMatches
+                .OrderByDescending(match => match.SimilarityScore)
+                .FirstOrDefault();
+        }
+        catch (Exception ex)
+        {
+            degradedComponents.Add(RepositoryDegradedComponent);
+            LogDuplicateSuppressionLookupFailed(logger, repositoryId, pullRequestId, clientId, ex);
+            return null;
+        }
+    }
+
+    private async Task<TextSimilarityMatch?> TryFindFilePathFallbackMatchAsync(
+        Guid clientId,
+        string repositoryId,
+        int pullRequestId,
+        string normalizedFilePath,
+        string findingMessage,
+        HashSet<string> degradedComponents,
+        HashSet<string> fallbackChecks,
+        CancellationToken ct)
+    {
         try
         {
             var filePathMatches = await repository.FindByPullRequestFilePathAsync(
@@ -317,39 +372,21 @@ public sealed partial class ThreadMemoryService(
                 fallbackChecks.Add(FilePathFallbackCheck);
             }
 
-            var bestFallbackMatch = filePathMatches
-                .Select(match => new
-                {
-                    Match = match,
-                    Score = CalculateTextSimilarity(findingMessage, match.ResolutionSummary),
-                })
+            return filePathMatches
+                .Select(match => new TextSimilarityMatch(match, CalculateTextSimilarity(findingMessage, match.ResolutionSummary)))
                 .Where(candidate => candidate.Score >= HistoricalTextFallbackThreshold)
                 .OrderByDescending(candidate => candidate.Score)
                 .FirstOrDefault();
-
-            if (bestFallbackMatch is not null)
-            {
-                return HistoricalDuplicateSuppressionMatchDto.Match(
-                    "historical_similarity_match",
-                    bestFallbackMatch.Match.ThreadId,
-                    bestFallbackMatch.Match.MemoryRecordId,
-                    (float)bestFallbackMatch.Score,
-                    degradedComponents.ToList().AsReadOnly(),
-                    BuildDuplicateSuppressionDegradedCause(degradedComponents),
-                    fallbackChecks.ToList().AsReadOnly());
-            }
         }
         catch (Exception ex)
         {
             degradedComponents.Add(RepositoryDegradedComponent);
             LogDuplicateSuppressionLookupFailed(logger, repositoryId, pullRequestId, clientId, ex);
+            return null;
         }
-
-        return HistoricalDuplicateSuppressionMatchDto.NoMatch(
-            degradedComponents.ToList().AsReadOnly(),
-            BuildDuplicateSuppressionDegradedCause(degradedComponents),
-            fallbackChecks.ToList().AsReadOnly());
     }
+
+    private sealed record TextSimilarityMatch(ThreadMemoryMatchDto Match, double Score);
 
     /// <inheritdoc />
     public async Task<ReviewResult> RetrieveAndReconsiderAsync(
@@ -747,18 +784,7 @@ public sealed partial class ThreadMemoryService(
             {
                 foreach (var commentEl in commentsEl.EnumerateArray())
                 {
-                    var filePath = commentEl.TryGetProperty("file_path", out var fp) ? fp.GetString() : null;
-                    int? lineNumber = commentEl.TryGetProperty("line_number", out var ln) &&
-                                      ln.ValueKind == JsonValueKind.Number
-                        ? ln.GetInt32()
-                        : null;
-                    var severityStr = commentEl.TryGetProperty("severity", out var sv) ? sv.GetString() : "warning";
-                    var message = commentEl.TryGetProperty("message", out var msg) ? msg.GetString() ?? "" : "";
-                    var severity = Enum.TryParse<CommentSeverity>(severityStr, true, out var parsed)
-                        ? parsed
-                        : CommentSeverity.Warning;
-
-                    comments.Add(new ReviewComment(filePath, lineNumber, severity, message));
+                    comments.Add(ParseReconsideredComment(commentEl));
                 }
             }
 
@@ -768,6 +794,22 @@ public sealed partial class ThreadMemoryService(
         {
             return null;
         }
+    }
+
+    private static ReviewComment ParseReconsideredComment(JsonElement commentEl)
+    {
+        var filePath = commentEl.TryGetProperty("file_path", out var fp) ? fp.GetString() : null;
+        int? lineNumber = commentEl.TryGetProperty("line_number", out var ln) &&
+                          ln.ValueKind == JsonValueKind.Number
+            ? ln.GetInt32()
+            : null;
+        var severityStr = commentEl.TryGetProperty("severity", out var sv) ? sv.GetString() : "warning";
+        var message = commentEl.TryGetProperty("message", out var msg) ? msg.GetString() ?? "" : "";
+        var severity = Enum.TryParse<CommentSeverity>(severityStr, true, out var parsed)
+            ? parsed
+            : CommentSeverity.Warning;
+
+        return new ReviewComment(filePath, lineNumber, severity, message);
     }
 
     private static string BuildCompositeText(

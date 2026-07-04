@@ -12,6 +12,7 @@ namespace MeisterProPR.Api.Controllers;
 
 /// <summary>Manages AI pull request review jobs.</summary>
 [ApiController]
+[Route("clients/{clientId:guid}")]
 public sealed class ReviewsController(IJobRepository jobRepository) : ControllerBase
 {
     private static ReviewListItem MapToListItem(ReviewJob job)
@@ -54,8 +55,8 @@ public sealed class ReviewsController(IJobRepository jobRepository) : Controller
     /// <response code="200">List of review jobs, newest first.</response>
     /// <response code="401">Missing or invalid credentials.</response>
     /// <response code="403">Caller lacks the required role for this client.</response>
-    [HttpGet("/clients/{clientId:guid}/reviewing/jobs")]
-    [HttpGet("/clients/{clientId:guid}/reviews")]
+    [HttpGet("reviewing/jobs")]
+    [HttpGet("reviews")]
     [ProducesResponseType(typeof(ReviewListItem[]), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]

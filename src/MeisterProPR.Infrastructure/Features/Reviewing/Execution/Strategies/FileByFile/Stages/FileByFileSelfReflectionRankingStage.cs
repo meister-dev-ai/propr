@@ -85,27 +85,7 @@ internal sealed class FileByFileSelfReflectionRankingStage(
 
             // Build a lookup: index → (importance, keep)
             var scoreByIndex = scores.ToDictionary(s => s.Index);
-
-            var ranked = new List<(ReviewComment Comment, int Importance)>();
-            for (var i = 0; i < comments.Count; i++)
-            {
-                if (scoreByIndex.TryGetValue(i, out var score))
-                {
-                    if (score.Keep && score.Importance >= this._options.ImportanceRankingMinScore)
-                    {
-                        ranked.Add((comments[i], score.Importance));
-                    }
-                }
-                else
-                {
-                    // LLM didn't score this entry — include it with deterministic score
-                    var detScore = FileByFileImportanceRankingStage.ScoreComment(comments[i]);
-                    if (detScore >= this._options.ImportanceRankingMinScore)
-                    {
-                        ranked.Add((comments[i], detScore));
-                    }
-                }
-            }
+            var ranked = this.BuildRankedComments(comments, scoreByIndex);
 
             var finalComments = ranked
                 .OrderByDescending(e => e.Importance)
@@ -128,6 +108,34 @@ internal sealed class FileByFileSelfReflectionRankingStage(
             await this.RecordEventAsync(context, candidateCount, 0, false, cancellationToken);
             return this.ApplyDeterministicRanking(context);
         }
+    }
+
+    private List<(ReviewComment Comment, int Importance)> BuildRankedComments(
+        List<ReviewComment> comments,
+        Dictionary<int, RankingScore> scoreByIndex)
+    {
+        var ranked = new List<(ReviewComment Comment, int Importance)>();
+        for (var i = 0; i < comments.Count; i++)
+        {
+            if (scoreByIndex.TryGetValue(i, out var score))
+            {
+                if (score.Keep && score.Importance >= this._options.ImportanceRankingMinScore)
+                {
+                    ranked.Add((comments[i], score.Importance));
+                }
+
+                continue;
+            }
+
+            // LLM didn't score this entry — include it with deterministic score
+            var detScore = FileByFileImportanceRankingStage.ScoreComment(comments[i]);
+            if (detScore >= this._options.ImportanceRankingMinScore)
+            {
+                ranked.Add((comments[i], detScore));
+            }
+        }
+
+        return ranked;
     }
 
     private PerFileReviewContext ApplyDeterministicRanking(PerFileReviewContext context)

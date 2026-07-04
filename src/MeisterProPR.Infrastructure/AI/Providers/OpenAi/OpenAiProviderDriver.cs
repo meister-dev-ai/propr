@@ -49,11 +49,15 @@ public sealed class OpenAiProviderDriver(OpenAiCompatibleTransport transport) : 
         CancellationToken ct = default)
     {
         var result = await transport.DiscoverModelsAsync(options, ct);
-        return (int)result.StatusCode >= 400
-            ? DriverFailureMapper.Failed(result.StatusCode, result.ErrorMessage)
-            : DriverFailureMapper.Verified(
-                $"Verified OpenAI connectivity for '{options.BaseUrl}'.",
-                result.Models.Count == 0 ? ["No models were discovered from the provider. Manual model entry remains available."] : []);
+        if ((int)result.StatusCode >= 400)
+        {
+            return DriverFailureMapper.Failed(result.StatusCode, result.ErrorMessage);
+        }
+
+        List<string> warnings = result.Models.Count == 0
+            ? ["No models were discovered from the provider. Manual model entry remains available."]
+            : [];
+        return DriverFailureMapper.Verified($"Verified OpenAI connectivity for '{options.BaseUrl}'.", warnings);
     }
 
     public IChatClient CreateChatClient(

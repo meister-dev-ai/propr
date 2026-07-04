@@ -761,10 +761,11 @@ public sealed partial class PrWideAgenticReviewOrchestrator(
 
     private static string? GetInputSample(IReadOnlyList<ChatMessage> messages)
     {
-        return string.Join("\n\n", messages.SelectMany(message => message.Contents).Select(RenderContent).Where(text => !string.IsNullOrWhiteSpace(text)))
-            is { Length: > 0 } combined
-            ? combined.Length <= 4000 ? combined : combined[..4000]
-            : null;
+        var combined = string.Join(
+            "\n\n",
+            messages.SelectMany(message => message.Contents).Select(RenderContent).Where(text => !string.IsNullOrWhiteSpace(text)));
+
+        return combined.Length > 0 ? TrimToSampleLength(combined) : null;
     }
 
     private static string? GetSystemPrompt(IReadOnlyList<ChatMessage> messages)
@@ -773,7 +774,12 @@ public sealed partial class PrWideAgenticReviewOrchestrator(
             "\n\n",
             messages.Where(message => message.Role == ChatRole.System).SelectMany(message => message.Contents).Select(RenderContent)
                 .Where(text => !string.IsNullOrWhiteSpace(text)));
-        return prompt.Length == 0 ? null : prompt.Length <= 4000 ? prompt : prompt[..4000];
+        return prompt.Length == 0 ? null : TrimToSampleLength(prompt);
+    }
+
+    private static string TrimToSampleLength(string text)
+    {
+        return text.Length <= 4000 ? text : text[..4000];
     }
 
     private static string? RenderContent(AIContent content)
@@ -879,274 +885,295 @@ public sealed partial class PrWideAgenticReviewOrchestrator(
 
         foreach (var finding in screenedFindings)
         {
-            if (finding.VerificationOutcome is not null)
-            {
-                verified.Add(finding);
-                continue;
-            }
+            verified.Add(await this.VerifySingleFindingAsync(finding, baseContext, pr, prLevelVerifier, ct));
+        }
 
-            IReadOnlyList<ClaimDescriptor> claims;
-            try
-            {
-                claims = this._reviewClaimExtractor.ExtractClaims(finding);
-            }
-            catch (Exception ex) when (!ct.IsCancellationRequested)
-            {
-                if (baseContext.ActiveProtocolId.HasValue && baseContext.ProtocolRecorder is not null)
-                {
-                    await baseContext.ProtocolRecorder.RecordVerificationEventAsync(
-                        baseContext.ActiveProtocolId.Value,
-                        ReviewProtocolEventNames.VerificationDegraded,
-                        JsonSerializer.Serialize(
-                            new
-                            {
-                                findingId = finding.FindingId,
-                                stage = DetermineVerificationStage(finding),
-                                degradedComponent = "claim_extraction",
-                            }),
-                        null,
-                        ex.Message,
-                        ct);
-                }
+        return verified;
+    }
 
-                verified.Add(
-                    WithVerificationOutcome(
-                        finding,
-                        VerificationOutcome.DegradedUnresolved(
-                            finding.FindingId,
-                            VerificationOutcome.DeterministicRulesEvaluator,
-                            ReviewFindingGateReasonCodes.VerificationDegraded,
-                            $"PR-wide claim extraction degraded: {ex.Message}")));
-                continue;
-            }
+    private async Task<CandidateReviewFinding> VerifySingleFindingAsync(
+        CandidateReviewFinding finding,
+        ReviewSystemContext baseContext,
+        PullRequest pr,
+        AiMicroReviewFindingVerifier prLevelVerifier,
+        CancellationToken ct)
+    {
+        if (finding.VerificationOutcome is not null)
+        {
+            return finding;
+        }
 
-            if (claims.Count == 0)
-            {
-                verified.Add(
-                    WithVerificationOutcome(
-                        finding,
-                        CreateNoClaimsVerificationOutcome(finding)));
-                continue;
-            }
-
+        IReadOnlyList<ClaimDescriptor> claims;
+        try
+        {
+            claims = this._reviewClaimExtractor!.ExtractClaims(finding);
+        }
+        catch (Exception ex) when (!ct.IsCancellationRequested)
+        {
             if (baseContext.ActiveProtocolId.HasValue && baseContext.ProtocolRecorder is not null)
             {
                 await baseContext.ProtocolRecorder.RecordVerificationEventAsync(
                     baseContext.ActiveProtocolId.Value,
-                    ReviewProtocolEventNames.VerificationClaimsExtracted,
+                    ReviewProtocolEventNames.VerificationDegraded,
                     JsonSerializer.Serialize(
                         new
                         {
                             findingId = finding.FindingId,
-                            filePath = finding.FilePath,
-                            claimCount = claims.Count,
+                            stage = DetermineVerificationStage(finding),
+                            degradedComponent = "claim_extraction",
                         }),
-                    JsonSerializer.Serialize(claims, FinalGateJsonOptions),
                     null,
+                    ex.Message,
                     ct);
             }
 
-            var claim = claims[0];
-            if (string.Equals(claim.Stage, ClaimDescriptor.LocalStage, StringComparison.Ordinal))
-            {
-                var workItems = claims
-                    .Select(currentClaim => new VerificationWorkItem(
-                        currentClaim,
-                        finding.Provenance,
-                        currentClaim.Stage,
-                        VerificationWorkItem.AnchorOnlyScope,
-                        false,
-                        finding.Evidence))
-                    .ToList();
+            return WithVerificationOutcome(
+                finding,
+                VerificationOutcome.DegradedUnresolved(
+                    finding.FindingId,
+                    VerificationOutcome.DeterministicRulesEvaluator,
+                    ReviewFindingGateReasonCodes.VerificationDegraded,
+                    $"PR-wide claim extraction degraded: {ex.Message}"));
+        }
 
-                IReadOnlyList<VerificationOutcome> outcomes;
-                try
-                {
-                    outcomes = await this._reviewFindingVerifier!.VerifyAsync(workItems, this._reviewInvariantFacts, null, ct);
-                }
-                catch (Exception ex) when (!ct.IsCancellationRequested)
-                {
-                    if (baseContext.ActiveProtocolId.HasValue && baseContext.ProtocolRecorder is not null)
+        if (claims.Count == 0)
+        {
+            return WithVerificationOutcome(finding, CreateNoClaimsVerificationOutcome(finding));
+        }
+
+        if (baseContext.ActiveProtocolId.HasValue && baseContext.ProtocolRecorder is not null)
+        {
+            await baseContext.ProtocolRecorder.RecordVerificationEventAsync(
+                baseContext.ActiveProtocolId.Value,
+                ReviewProtocolEventNames.VerificationClaimsExtracted,
+                JsonSerializer.Serialize(
+                    new
                     {
-                        await baseContext.ProtocolRecorder.RecordVerificationEventAsync(
-                            baseContext.ActiveProtocolId.Value,
-                            ReviewProtocolEventNames.VerificationDegraded,
-                            JsonSerializer.Serialize(
-                                new
-                                {
-                                    findingId = finding.FindingId,
-                                    stage = ClaimDescriptor.LocalStage,
-                                    degradedComponent = "local_verification",
-                                }),
-                            null,
-                            ex.Message,
-                            ct);
-                    }
+                        findingId = finding.FindingId,
+                        filePath = finding.FilePath,
+                        claimCount = claims.Count,
+                    }),
+                JsonSerializer.Serialize(claims, FinalGateJsonOptions),
+                null,
+                ct);
+        }
 
-                    verified.Add(
-                        WithVerificationOutcome(
-                            finding,
-                            VerificationOutcome.DegradedUnresolved(
-                                finding.FindingId,
-                                VerificationOutcome.DeterministicRulesEvaluator,
-                                ReviewFindingGateReasonCodes.VerificationDegraded,
-                                $"PR-wide local verification degraded: {ex.Message}",
-                                claim.ClaimId)));
-                    continue;
-                }
+        var claim = claims[0];
+        if (string.Equals(claim.Stage, ClaimDescriptor.LocalStage, StringComparison.Ordinal))
+        {
+            return await this.VerifyLocalClaimAsync(finding, claims, claim, baseContext, ct);
+        }
 
-                if (baseContext.ActiveProtocolId.HasValue && baseContext.ProtocolRecorder is not null)
-                {
-                    foreach (var localOutcome in outcomes)
-                    {
-                        await baseContext.ProtocolRecorder.RecordVerificationEventAsync(
-                            baseContext.ActiveProtocolId.Value,
-                            ReviewProtocolEventNames.VerificationLocalDecision,
-                            JsonSerializer.Serialize(
-                                new
-                                {
-                                    findingId = localOutcome.FindingId,
-                                    claimId = localOutcome.ClaimId,
-                                }),
-                            JsonSerializer.Serialize(localOutcome, FinalGateJsonOptions),
-                            null,
-                            ct);
-                    }
-                }
+        if (this._reviewEvidenceCollector is null)
+        {
+            return finding;
+        }
 
-                verified.Add(WithVerificationOutcome(finding, SelectPrimaryOutcome(outcomes, finding.FindingId)));
-                continue;
-            }
+        return await this.VerifyCrossFileClaimAsync(finding, claim, baseContext, pr, prLevelVerifier, ct);
+    }
 
-            if (this._reviewEvidenceCollector is null)
-            {
-                verified.Add(finding);
-                continue;
-            }
-
-            var workItem = new VerificationWorkItem(
-                claim,
+    private async Task<CandidateReviewFinding> VerifyLocalClaimAsync(
+        CandidateReviewFinding finding,
+        IReadOnlyList<ClaimDescriptor> claims,
+        ClaimDescriptor claim,
+        ReviewSystemContext baseContext,
+        CancellationToken ct)
+    {
+        var workItems = claims
+            .Select(currentClaim => new VerificationWorkItem(
+                currentClaim,
                 finding.Provenance,
-                claim.Stage,
-                VerificationWorkItem.CrossFileScope,
-                true,
-                finding.Evidence);
+                currentClaim.Stage,
+                VerificationWorkItem.AnchorOnlyScope,
+                false,
+                finding.Evidence))
+            .ToList();
 
-            EvidenceBundle evidence;
-            try
-            {
-                evidence = await this._reviewEvidenceCollector.CollectEvidenceAsync(workItem, baseContext.ReviewTools, pr.SourceBranch, ct);
-            }
-            catch (Exception ex) when (!ct.IsCancellationRequested)
-            {
-                if (baseContext.ActiveProtocolId.HasValue && baseContext.ProtocolRecorder is not null)
-                {
-                    await baseContext.ProtocolRecorder.RecordVerificationEventAsync(
-                        baseContext.ActiveProtocolId.Value,
-                        ReviewProtocolEventNames.VerificationDegraded,
-                        JsonSerializer.Serialize(
-                            new
-                            {
-                                findingId = finding.FindingId,
-                                claimId = claim.ClaimId,
-                                stage = ClaimDescriptor.PrLevelStage,
-                                degradedComponent = "evidence_collection",
-                            }),
-                        null,
-                        ex.Message,
-                        ct);
-                }
-
-                verified.Add(
-                    WithVerificationOutcome(
-                        finding,
-                        VerificationOutcome.DegradedUnresolved(
-                            claim,
-                            VerificationOutcome.AiMicroVerifierEvaluator,
-                            ReviewFindingGateReasonCodes.VerificationDegraded,
-                            $"PR-wide evidence collection degraded: {ex.Message}")));
-                continue;
-            }
-
+        IReadOnlyList<VerificationOutcome> outcomes;
+        try
+        {
+            outcomes = await this._reviewFindingVerifier!.VerifyAsync(workItems, this._reviewInvariantFacts, null, ct);
+        }
+        catch (Exception ex) when (!ct.IsCancellationRequested)
+        {
             if (baseContext.ActiveProtocolId.HasValue && baseContext.ProtocolRecorder is not null)
             {
                 await baseContext.ProtocolRecorder.RecordVerificationEventAsync(
                     baseContext.ActiveProtocolId.Value,
-                    ReviewProtocolEventNames.VerificationEvidenceCollected,
+                    ReviewProtocolEventNames.VerificationDegraded,
+                    JsonSerializer.Serialize(
+                        new
+                        {
+                            findingId = finding.FindingId,
+                            stage = ClaimDescriptor.LocalStage,
+                            degradedComponent = "local_verification",
+                        }),
+                    null,
+                    ex.Message,
+                    ct);
+            }
+
+            return WithVerificationOutcome(
+                finding,
+                VerificationOutcome.DegradedUnresolved(
+                    finding.FindingId,
+                    VerificationOutcome.DeterministicRulesEvaluator,
+                    ReviewFindingGateReasonCodes.VerificationDegraded,
+                    $"PR-wide local verification degraded: {ex.Message}",
+                    claim.ClaimId));
+        }
+
+        if (baseContext.ActiveProtocolId.HasValue && baseContext.ProtocolRecorder is not null)
+        {
+            foreach (var localOutcome in outcomes)
+            {
+                await baseContext.ProtocolRecorder.RecordVerificationEventAsync(
+                    baseContext.ActiveProtocolId.Value,
+                    ReviewProtocolEventNames.VerificationLocalDecision,
+                    JsonSerializer.Serialize(
+                        new
+                        {
+                            findingId = localOutcome.FindingId,
+                            claimId = localOutcome.ClaimId,
+                        }),
+                    JsonSerializer.Serialize(localOutcome, FinalGateJsonOptions),
+                    null,
+                    ct);
+            }
+        }
+
+        return WithVerificationOutcome(finding, SelectPrimaryOutcome(outcomes, finding.FindingId));
+    }
+
+    private async Task<CandidateReviewFinding> VerifyCrossFileClaimAsync(
+        CandidateReviewFinding finding,
+        ClaimDescriptor claim,
+        ReviewSystemContext baseContext,
+        PullRequest pr,
+        AiMicroReviewFindingVerifier prLevelVerifier,
+        CancellationToken ct)
+    {
+        var workItem = new VerificationWorkItem(
+            claim,
+            finding.Provenance,
+            claim.Stage,
+            VerificationWorkItem.CrossFileScope,
+            true,
+            finding.Evidence);
+
+        EvidenceBundle evidence;
+        try
+        {
+            evidence = await this._reviewEvidenceCollector!.CollectEvidenceAsync(workItem, baseContext.ReviewTools, pr.SourceBranch, ct);
+        }
+        catch (Exception ex) when (!ct.IsCancellationRequested)
+        {
+            if (baseContext.ActiveProtocolId.HasValue && baseContext.ProtocolRecorder is not null)
+            {
+                await baseContext.ProtocolRecorder.RecordVerificationEventAsync(
+                    baseContext.ActiveProtocolId.Value,
+                    ReviewProtocolEventNames.VerificationDegraded,
                     JsonSerializer.Serialize(
                         new
                         {
                             findingId = finding.FindingId,
                             claimId = claim.ClaimId,
-                            coverageState = evidence.CoverageState,
+                            stage = ClaimDescriptor.PrLevelStage,
+                            degradedComponent = "evidence_collection",
                         }),
-                    JsonSerializer.Serialize(evidence, FinalGateJsonOptions),
                     null,
+                    ex.Message,
                     ct);
             }
 
-            var supportingFiles = evidence.EvidenceItems
-                .Select(item => item.SourceId)
-                .Where(sourceId => !string.IsNullOrWhiteSpace(sourceId))
-                .Cast<string>()
-                .Distinct(StringComparer.OrdinalIgnoreCase)
-                .ToArray();
-            var evidenceState = evidence.CoverageState switch
-            {
-                EvidenceBundle.CompleteCoverage => EvidenceReference.ResolvedState,
-                EvidenceBundle.PartialCoverage => EvidenceReference.PartialState,
-                _ => EvidenceReference.MissingState,
-            };
-
-            var updatedEvidence = finding.Evidence is null
-                ? new EvidenceReference([], supportingFiles, evidenceState, "review_context_tools")
-                : new EvidenceReference(
-                    finding.Evidence.SupportingFindingIds,
-                    supportingFiles.Length > 0 ? supportingFiles : finding.Evidence.SupportingFiles,
-                    evidenceState,
-                    finding.Evidence.EvidenceSource);
-
-            var evidenceBackedWorkItem = new VerificationWorkItem(
-                claim,
-                finding.Provenance,
-                claim.Stage,
-                VerificationWorkItem.CrossFileScope,
-                true,
-                updatedEvidence);
-            var outcome = (await prLevelVerifier.VerifyAsync([evidenceBackedWorkItem], [], null, ct))[0];
-
-            if (baseContext.ActiveProtocolId.HasValue && baseContext.ProtocolRecorder is not null)
-            {
-                await baseContext.ProtocolRecorder.RecordVerificationEventAsync(
-                    baseContext.ActiveProtocolId.Value,
-                    ReviewProtocolEventNames.VerificationPrDecision,
-                    JsonSerializer.Serialize(
-                        new
-                        {
-                            findingId = outcome.FindingId,
-                            claimId = outcome.ClaimId,
-                        }),
-                    JsonSerializer.Serialize(outcome, FinalGateJsonOptions),
-                    null,
-                    ct);
-            }
-
-            verified.Add(
-                new CandidateReviewFinding(
-                    finding.FindingId,
-                    finding.Provenance,
-                    finding.Severity,
-                    finding.Message,
-                    finding.Category,
-                    finding.FilePath,
-                    finding.LineNumber,
-                    updatedEvidence,
-                    finding.CandidateSummaryText,
-                    finding.InvariantCheckContext,
-                    outcome));
+            return WithVerificationOutcome(
+                finding,
+                VerificationOutcome.DegradedUnresolved(
+                    claim,
+                    VerificationOutcome.AiMicroVerifierEvaluator,
+                    ReviewFindingGateReasonCodes.VerificationDegraded,
+                    $"PR-wide evidence collection degraded: {ex.Message}"));
         }
 
-        return verified;
+        if (baseContext.ActiveProtocolId.HasValue && baseContext.ProtocolRecorder is not null)
+        {
+            await baseContext.ProtocolRecorder.RecordVerificationEventAsync(
+                baseContext.ActiveProtocolId.Value,
+                ReviewProtocolEventNames.VerificationEvidenceCollected,
+                JsonSerializer.Serialize(
+                    new
+                    {
+                        findingId = finding.FindingId,
+                        claimId = claim.ClaimId,
+                        coverageState = evidence.CoverageState,
+                    }),
+                JsonSerializer.Serialize(evidence, FinalGateJsonOptions),
+                null,
+                ct);
+        }
+
+        var supportingFiles = evidence.EvidenceItems
+            .Select(item => item.SourceId)
+            .Where(sourceId => !string.IsNullOrWhiteSpace(sourceId))
+            .Cast<string>()
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+        var evidenceState = evidence.CoverageState switch
+        {
+            EvidenceBundle.CompleteCoverage => EvidenceReference.ResolvedState,
+            EvidenceBundle.PartialCoverage => EvidenceReference.PartialState,
+            _ => EvidenceReference.MissingState,
+        };
+
+        var resolvedSupportingFiles = supportingFiles.Length > 0
+            ? supportingFiles
+            : finding.Evidence?.SupportingFiles ?? supportingFiles;
+
+        var updatedEvidence = finding.Evidence is null
+            ? new EvidenceReference([], supportingFiles, evidenceState, "review_context_tools")
+            : new EvidenceReference(
+                finding.Evidence.SupportingFindingIds,
+                resolvedSupportingFiles,
+                evidenceState,
+                finding.Evidence.EvidenceSource);
+
+        var evidenceBackedWorkItem = new VerificationWorkItem(
+            claim,
+            finding.Provenance,
+            claim.Stage,
+            VerificationWorkItem.CrossFileScope,
+            true,
+            updatedEvidence);
+        var outcome = (await prLevelVerifier.VerifyAsync([evidenceBackedWorkItem], [], null, ct))[0];
+
+        if (baseContext.ActiveProtocolId.HasValue && baseContext.ProtocolRecorder is not null)
+        {
+            await baseContext.ProtocolRecorder.RecordVerificationEventAsync(
+                baseContext.ActiveProtocolId.Value,
+                ReviewProtocolEventNames.VerificationPrDecision,
+                JsonSerializer.Serialize(
+                    new
+                    {
+                        findingId = outcome.FindingId,
+                        claimId = outcome.ClaimId,
+                    }),
+                JsonSerializer.Serialize(outcome, FinalGateJsonOptions),
+                null,
+                ct);
+        }
+
+        return new CandidateReviewFinding(
+            finding.FindingId,
+            finding.Provenance,
+            finding.Severity,
+            finding.Message,
+            finding.Category,
+            finding.FilePath,
+            finding.LineNumber,
+            updatedEvidence,
+            finding.CandidateSummaryText,
+            finding.InvariantCheckContext,
+            outcome);
     }
 
     private List<CandidateReviewFinding> ApplyDeterministicScreening(
@@ -1164,6 +1191,19 @@ public sealed partial class PrWideAgenticReviewOrchestrator(
             .ToList();
         var fallbackFile = pr.ChangedFiles.FirstOrDefault()
                            ?? new ChangedFile("__pr_wide__", ChangeType.Edit, string.Empty, string.Empty);
+
+        var decisions = this.BuildRelevanceDecisions(normalizedFindings, pr, baseContext, fallbackFile);
+        HeuristicCommentRelevanceFilter.ApplyDuplicateLocalPattern(decisions);
+
+        return BuildScreenedFindings(normalizedFindings, decisions);
+    }
+
+    private List<CommentRelevanceFilterDecision> BuildRelevanceDecisions(
+        List<CandidateReviewFinding> normalizedFindings,
+        PullRequest pr,
+        ReviewSystemContext baseContext,
+        ChangedFile fallbackFile)
+    {
         var decisions = new List<CommentRelevanceFilterDecision>(normalizedFindings.Count);
 
         foreach (var finding in normalizedFindings)
@@ -1203,8 +1243,13 @@ public sealed partial class PrWideAgenticReviewOrchestrator(
             decisions.Add(EvaluatePrWideCommentRelevance(request, finding, comment, screeningClaims));
         }
 
-        HeuristicCommentRelevanceFilter.ApplyDuplicateLocalPattern(decisions);
+        return decisions;
+    }
 
+    private static List<CandidateReviewFinding> BuildScreenedFindings(
+        List<CandidateReviewFinding> normalizedFindings,
+        List<CommentRelevanceFilterDecision> decisions)
+    {
         var screenedFindings = new List<CandidateReviewFinding>(normalizedFindings.Count);
         for (var index = 0; index < normalizedFindings.Count; index++)
         {

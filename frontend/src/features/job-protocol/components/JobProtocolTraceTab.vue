@@ -37,10 +37,9 @@
                     </button>
                 </div>
             </div>
-            <div
+            <fieldset
                 v-show="!vm.isTraceSearchCollapsed"
                 class="trace-chip-row"
-                role="group"
                 aria-label="Quick filters"
                 data-testid="trace-chip-row"
             >
@@ -67,7 +66,7 @@
                         </div>
                     </div>
                 </template>
-            </div>
+            </fieldset>
             <div v-show="!vm.isTraceSearchCollapsed" class="trace-filter-grid" data-testid="trace-search-panel">
                 <v-text-field
                     v-model="vm.traceFilters.queryText"
@@ -457,7 +456,7 @@ function selectDiffTab() {
     }
     const jobId = pass.jobId ?? ''
     if (!jobId) return
-    void props.vm.loadFileDiff(jobId, fileResultId)
+    props.vm.loadFileDiff(jobId, fileResultId)
 }
 
 function retryFileDiff() {
@@ -466,7 +465,7 @@ function retryFileDiff() {
     const fileResultId = pass.fileResultId
     const jobId = pass.jobId ?? ''
     if (!jobId || !fileResultId) return
-    void props.vm.loadFileDiff(jobId, fileResultId)
+    props.vm.loadFileDiff(jobId, fileResultId)
 }
 </script>
 
@@ -604,6 +603,10 @@ function retryFileDiff() {
     flex-wrap: wrap;
     gap: 0.65rem;
     row-gap: 0.5rem;
+    margin: 0;
+    padding: 0;
+    border: none;
+    min-width: 0;
 }
 
 .trace-chip-divider {
@@ -697,10 +700,6 @@ function retryFileDiff() {
     margin: 0;
 }
 
-.protocol-content {
-    min-width: 0;
-}
-
 @media (max-width: 1024px) {
     .events-section {
         overflow-x: visible;
@@ -716,6 +715,7 @@ function retryFileDiff() {
 }
 
 .protocol-content {
+    min-width: 0;
     background: var(--color-surface);
     border-radius: var(--radius-lg);
     padding: 0;

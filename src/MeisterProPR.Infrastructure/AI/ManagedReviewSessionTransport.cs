@@ -143,9 +143,9 @@ internal sealed class RunObservingChatClient(IChatClient inner) : IChatClient
         return inner.GetStreamingResponseAsync(messages, options, cancellationToken);
     }
 
-    public object? GetService(Type serviceType, object? key = null)
+    public object? GetService(Type serviceType, object? serviceKey = null)
     {
-        return inner.GetService(serviceType, key);
+        return inner.GetService(serviceType, serviceKey);
     }
 
     public void Dispose()

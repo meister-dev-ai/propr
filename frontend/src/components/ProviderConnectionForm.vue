@@ -172,21 +172,29 @@ const defaultProviderOptions: ProviderOption[] = [
 const isCreateMode = computed(() => props.mode === 'create')
 const shellClass = computed(() => isCreateMode.value ? 'section-card-body provider-form-shell' : 'provider-edit-shell')
 const availableProviderOptions = computed(() => props.providerOptions?.length ? props.providerOptions : defaultProviderOptions)
-const authenticationOptions = computed(() =>
-  props.form.providerFamily === 'azureDevOps'
-    ? isHostedAzureDevOpsHost(props.form.hostBaseUrl)
-      ? [{ value: 'oauthClientCredentials', label: 'OAuth Client Credentials' }]
-      : [
-          { value: 'personalAccessToken', label: 'Personal Access Token' },
-          { value: 'windowsUserAccount', label: 'Windows User Account' },
-        ]
-    : props.form.providerFamily === 'github'
-      ? [
-          { value: 'personalAccessToken', label: 'Personal Access Token' },
-          { value: 'appInstallation', label: 'GitHub App Installation' },
-        ]
-      : [{ value: 'personalAccessToken', label: 'Personal Access Token' }],
-)
+
+function resolveAuthenticationOptions(providerFamily: ScmProviderFamily | undefined, hostBaseUrl: string) {
+  if (providerFamily === 'azureDevOps') {
+    if (isHostedAzureDevOpsHost(hostBaseUrl)) {
+      return [{ value: 'oauthClientCredentials', label: 'OAuth Client Credentials' }]
+    }
+    return [
+      { value: 'personalAccessToken', label: 'Personal Access Token' },
+      { value: 'windowsUserAccount', label: 'Windows User Account' },
+    ]
+  }
+
+  if (providerFamily === 'github') {
+    return [
+      { value: 'personalAccessToken', label: 'Personal Access Token' },
+      { value: 'appInstallation', label: 'GitHub App Installation' },
+    ]
+  }
+
+  return [{ value: 'personalAccessToken', label: 'Personal Access Token' }]
+}
+
+const authenticationOptions = computed(() => resolveAuthenticationOptions(props.form.providerFamily, props.form.hostBaseUrl))
 const showAzureOAuthFields = computed(
   () => props.form.providerFamily === 'azureDevOps' && props.form.authenticationKind === 'oauthClientCredentials',
 )

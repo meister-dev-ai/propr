@@ -69,24 +69,56 @@ internal sealed class AgenticFileReviewDispatchPlanner(
         var fileIndexByPath = allChangedFiles
             .Select((f, i) => (f.Path, Index: i + 1))
             .ToDictionary(x => x.Path, x => x.Index);
+        var totalChangedFileCount = allChangedFiles.Count;
+
+        async Task ReviewFileAsync(ChangedFile file)
+        {
+            await semaphore.WaitAsync(ct);
+            try
+            {
+                var fileIndex = fileIndexByPath.GetValueOrDefault(file.Path, 1);
+                var existingResult = existingResults.GetValueOrDefault(file.Path);
+                var fileAgenticCandidateFindings = await fileReviewer.ReviewAsync(
+                    job,
+                    pr,
+                    file,
+                    fileIndex,
+                    totalChangedFileCount,
+                    executionContext,
+                    existingResult,
+                    effectiveClient,
+                    ct);
+
+                if (fileAgenticCandidateFindings.Count > 0)
+                {
+                    lock (survivingAgenticCandidateFindings)
+                    {
+                        survivingAgenticCandidateFindings.AddRange(fileAgenticCandidateFindings);
+                    }
+                }
+            }
+            catch (OperationCanceledException)
+            {
+                throw;
+            }
+            catch (Exception ex)
+            {
+                logger.LogWarning(ex, "Failed review for file {FilePath} in job {JobId}", file.Path, job.Id);
+                lock (exceptions)
+                {
+                    exceptions.Add(ex);
+                }
+            }
+            finally
+            {
+                semaphore.Release();
+            }
+        }
 
         var tasks = new List<Task>(filesToReview.Count);
         foreach (var file in filesToReview)
         {
-            tasks.Add(
-                this.ReviewFileAsync(
-                    file,
-                    semaphore,
-                    job,
-                    pr,
-                    executionContext,
-                    effectiveClient,
-                    allChangedFiles.Count,
-                    fileIndexByPath,
-                    existingResults,
-                    survivingAgenticCandidateFindings,
-                    exceptions,
-                    ct));
+            tasks.Add(ReviewFileAsync(file));
         }
 
         try
@@ -129,62 +161,6 @@ internal sealed class AgenticFileReviewDispatchPlanner(
             PromptExperiment = baseContext.PromptExperiment,
             SkippedSteps = baseContext.SkippedSteps,
         };
-    }
-
-    private async Task ReviewFileAsync(
-        ChangedFile file,
-        SemaphoreSlim semaphore,
-        ReviewJob job,
-        PullRequest pr,
-        ReviewSystemContext executionContext,
-        IChatClient effectiveClient,
-        int totalChangedFileCount,
-        IReadOnlyDictionary<string, int> fileIndexByPath,
-        IReadOnlyDictionary<string, ReviewFileResult> existingResults,
-        List<CandidateReviewFinding> survivingAgenticCandidateFindings,
-        List<Exception> exceptions,
-        CancellationToken ct)
-    {
-        await semaphore.WaitAsync(ct);
-        try
-        {
-            var fileIndex = fileIndexByPath.GetValueOrDefault(file.Path, 1);
-            var existingResult = existingResults.GetValueOrDefault(file.Path);
-            var fileAgenticCandidateFindings = await fileReviewer.ReviewAsync(
-                job,
-                pr,
-                file,
-                fileIndex,
-                totalChangedFileCount,
-                executionContext,
-                existingResult,
-                effectiveClient,
-                ct);
-
-            if (fileAgenticCandidateFindings.Count > 0)
-            {
-                lock (survivingAgenticCandidateFindings)
-                {
-                    survivingAgenticCandidateFindings.AddRange(fileAgenticCandidateFindings);
-                }
-            }
-        }
-        catch (OperationCanceledException)
-        {
-            throw;
-        }
-        catch (Exception ex)
-        {
-            logger.LogWarning(ex, "Failed review for file {FilePath} in job {JobId}", file.Path, job.Id);
-            lock (exceptions)
-            {
-                exceptions.Add(ex);
-            }
-        }
-        finally
-        {
-            semaphore.Release();
-        }
     }
 
     private async Task MarkFileExcludedAsync(

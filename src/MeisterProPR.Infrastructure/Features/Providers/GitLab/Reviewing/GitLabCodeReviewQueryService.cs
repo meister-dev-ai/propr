@@ -45,15 +45,17 @@ internal sealed class GitLabCodeReviewQueryService(
         var payload = await response.Content.ReadFromJsonAsync<GitLabMergeRequestResponse>(ct)
                       ?? throw new InvalidOperationException("GitLab review query returned an empty payload.");
         var latestRevision = BuildRevision(payload);
-        var requestedReviewer = payload.Reviewers?
-            .FirstOrDefault(reviewer => !string.IsNullOrWhiteSpace(reviewer.Username)) is { } reviewer
-            ? new ReviewerIdentity(
+        ReviewerIdentity? requestedReviewer = null;
+        if (payload.Reviewers?.FirstOrDefault(reviewer => !string.IsNullOrWhiteSpace(reviewer.Username)) is { } reviewer)
+        {
+            var displayName = string.IsNullOrWhiteSpace(reviewer.Name) ? reviewer.Username! : reviewer.Name!;
+            requestedReviewer = new ReviewerIdentity(
                 review.Repository.Host,
                 reviewer.Id.ToString(CultureInfo.InvariantCulture),
                 reviewer.Username!,
-                string.IsNullOrWhiteSpace(reviewer.Name) ? reviewer.Username! : reviewer.Name!,
-                reviewer.Bot)
-            : null;
+                displayName,
+                reviewer.Bot);
+        }
 
         return new ReviewDiscoveryItemDto(
             ScmProvider.GitLab,

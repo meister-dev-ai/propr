@@ -15,9 +15,9 @@ namespace MeisterProPR.Api.Controllers;
 ///     Read-only admin endpoints for ProCursor token usage reporting.
 /// </summary>
 [ApiController]
+[Route("admin/clients/{clientId:guid}/procursor")]
 public sealed class ProCursorTokenUsageController(
-    IProCursorTokenUsageReadRepository readRepository,
-    IProCursorTokenUsageRebuildService rebuildService) : ControllerBase
+    IProCursorTokenUsageReadRepository readRepository) : ControllerBase
 {
     private const int MaxTopSourcesLimit = 1000;
 
@@ -34,7 +34,7 @@ public sealed class ProCursorTokenUsageController(
     /// <response code="400">The query parameters were invalid.</response>
     /// <response code="401">Missing or invalid credentials.</response>
     /// <response code="403">Caller does not have administrator access to the client.</response>
-    [HttpGet("/admin/clients/{clientId:guid}/procursor/token-usage")]
+    [HttpGet("token-usage")]
     [ProducesResponseType(typeof(ProCursorTokenUsageResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
@@ -94,7 +94,7 @@ public sealed class ProCursorTokenUsageController(
     /// <response code="400">The period or limit was invalid.</response>
     /// <response code="401">Missing or invalid credentials.</response>
     /// <response code="403">Caller does not have administrator access to the client.</response>
-    [HttpGet("/admin/clients/{clientId:guid}/procursor/token-usage/top-sources")]
+    [HttpGet("token-usage/top-sources")]
     [ProducesResponseType(typeof(ProCursorTopSourcesResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
@@ -148,7 +148,7 @@ public sealed class ProCursorTokenUsageController(
     /// <response code="401">Missing or invalid credentials.</response>
     /// <response code="403">Caller does not have administrator access to the client.</response>
     /// <response code="404">The requested source was not found for the client.</response>
-    [HttpGet("/admin/clients/{clientId:guid}/procursor/sources/{sourceId:guid}/token-usage")]
+    [HttpGet("sources/{sourceId:guid}/token-usage")]
     [ProducesResponseType(typeof(ProCursorSourceTokenUsageResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
@@ -203,7 +203,7 @@ public sealed class ProCursorTokenUsageController(
     /// <response code="401">Missing or invalid credentials.</response>
     /// <response code="403">Caller does not have administrator access to the client.</response>
     /// <response code="404">The requested source was not found for the client.</response>
-    [HttpGet("/admin/clients/{clientId:guid}/procursor/sources/{sourceId:guid}/token-usage/events")]
+    [HttpGet("sources/{sourceId:guid}/token-usage/events")]
     [ProducesResponseType(typeof(ProCursorTokenUsageEventsResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
@@ -243,7 +243,7 @@ public sealed class ProCursorTokenUsageController(
     /// <response code="400">The query parameters were invalid.</response>
     /// <response code="401">Missing or invalid credentials.</response>
     /// <response code="403">Caller does not have administrator access to the client.</response>
-    [HttpGet("/admin/clients/{clientId:guid}/procursor/token-usage/export")]
+    [HttpGet("token-usage/export")]
     [Produces("text/csv")]
     [ProducesResponseType(typeof(FileContentResult), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
@@ -284,7 +284,7 @@ public sealed class ProCursorTokenUsageController(
     /// <response code="200">Freshness metadata returned.</response>
     /// <response code="401">Missing or invalid credentials.</response>
     /// <response code="403">Caller does not have administrator access to the client.</response>
-    [HttpGet("/admin/clients/{clientId:guid}/procursor/token-usage/freshness")]
+    [HttpGet("token-usage/freshness")]
     [ProducesResponseType(typeof(ProCursorTokenUsageFreshnessResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
@@ -297,41 +297,6 @@ public sealed class ProCursorTokenUsageController(
         }
 
         return this.Ok(await readRepository.GetFreshnessAsync(clientId, ct));
-    }
-
-    /// <summary>
-    ///     Rebuilds ProCursor token usage rollups for the selected captured interval.
-    /// </summary>
-    /// <param name="clientId">Client identifier.</param>
-    /// <param name="request">Rebuild request payload.</param>
-    /// <param name="ct">Cancellation token.</param>
-    /// <response code="200">Rollups rebuilt successfully.</response>
-    /// <response code="400">The request payload was invalid.</response>
-    /// <response code="401">Missing or invalid credentials.</response>
-    /// <response code="403">Caller does not have administrator access to the client.</response>
-    [HttpPost("/admin/clients/{clientId:guid}/procursor/token-usage/rebuild")]
-    [ProducesResponseType(typeof(ProCursorTokenUsageRebuildResponse), StatusCodes.Status200OK)]
-    [ProducesResponseType(StatusCodes.Status400BadRequest)]
-    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
-    [ProducesResponseType(StatusCodes.Status403Forbidden)]
-    public async Task<IActionResult> Rebuild(
-        Guid clientId,
-        [FromBody] ProCursorTokenUsageRebuildRequest request,
-        CancellationToken ct = default)
-    {
-        var auth = AuthHelpers.RequireClientRole(this.HttpContext, clientId, ClientRole.ClientAdministrator);
-        if (auth is not null)
-        {
-            return auth;
-        }
-
-        if (request.To < request.From)
-        {
-            this.ModelState.AddModelError(nameof(request.To), "to must be greater than or equal to from.");
-            return this.ValidationProblem();
-        }
-
-        return this.Ok(await rebuildService.RebuildAsync(clientId, request, ct));
     }
 
     private static bool TryResolveRange(

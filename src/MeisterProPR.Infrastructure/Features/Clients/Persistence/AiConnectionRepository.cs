@@ -464,11 +464,10 @@ public sealed class AiConnectionRepository(
             .Select(group => group.First())
             .Select(model =>
             {
-                var recordId = model.Id != Guid.Empty
-                    ? model.Id
-                    : existingByRemoteModelId.TryGetValue(model.RemoteModelId, out var existingRecord)
-                        ? existingRecord.Id
-                        : Guid.NewGuid();
+                var fallbackRecordId = existingByRemoteModelId.TryGetValue(model.RemoteModelId, out var existingRecord)
+                    ? existingRecord.Id
+                    : Guid.NewGuid();
+                var recordId = model.Id != Guid.Empty ? model.Id : fallbackRecordId;
 
                 return new AiConfiguredModelRecord
                 {
@@ -506,11 +505,12 @@ public sealed class AiConnectionRepository(
             .Select(group => group.First())
             .Select(binding =>
             {
+                var fallbackModelId = binding.RemoteModelId is not null && modelsByRemoteModelId.TryGetValue(binding.RemoteModelId, out var remoteModel)
+                    ? remoteModel.Id
+                    : Guid.Empty;
                 var modelId = binding.ConfiguredModelId.HasValue && binding.ConfiguredModelId.Value != Guid.Empty
                     ? binding.ConfiguredModelId.Value
-                    : binding.RemoteModelId is not null && modelsByRemoteModelId.TryGetValue(binding.RemoteModelId, out var remoteModel)
-                        ? remoteModel.Id
-                        : Guid.Empty;
+                    : fallbackModelId;
 
                 if (!modelsById.ContainsKey(modelId))
                 {

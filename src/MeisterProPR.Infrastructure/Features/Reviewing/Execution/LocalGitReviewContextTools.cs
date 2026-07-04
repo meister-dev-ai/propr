@@ -34,8 +34,6 @@ internal sealed class LocalGitReviewContextTools(
         request.ChangedPathSnapshots,
         structuralAnalyzer), IAsyncDisposable
 {
-    private readonly string _normalizedSourceBranch = NormalizeBranchName(request.SourceBranch);
-
     private readonly string? _normalizedTargetBranch = string.IsNullOrWhiteSpace(request.TargetBranch)
         ? null
         : NormalizeBranchName(request.TargetBranch!);

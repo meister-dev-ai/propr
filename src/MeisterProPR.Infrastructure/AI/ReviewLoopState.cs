@@ -243,13 +243,22 @@ internal sealed class ReviewLoopState
     {
         var usedRemoteConversation = this.Session.Mode == AgentReviewSessionMode.ProviderManagedSession &&
                                      !string.IsNullOrWhiteSpace(this.Session.RemoteConversationId);
-        var promptMode = usedRemoteConversation
-            ? this.Iteration == 1
+        AgentReviewPromptMode promptMode;
+        if (usedRemoteConversation)
+        {
+            promptMode = this.Iteration == 1
                 ? AgentReviewPromptMode.InitialBind
-                : AgentReviewPromptMode.CurrentPromptOnly
-            : this.Session.Mode == AgentReviewSessionMode.StatelessReplay
-                ? AgentReviewPromptMode.FullReplayFallback
-                : this.Session.ActivePromptMode;
+                : AgentReviewPromptMode.CurrentPromptOnly;
+        }
+        else if (this.Session.Mode == AgentReviewSessionMode.StatelessReplay)
+        {
+            promptMode = AgentReviewPromptMode.FullReplayFallback;
+        }
+        else
+        {
+            promptMode = this.Session.ActivePromptMode;
+        }
+
         var turn = new TurnContextSubmission(
             this.Iteration,
             strategy,

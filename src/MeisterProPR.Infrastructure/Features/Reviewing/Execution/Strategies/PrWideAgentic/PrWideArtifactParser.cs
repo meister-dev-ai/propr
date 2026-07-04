@@ -79,52 +79,8 @@ internal static class PrWideArtifactParser
             using var doc = JsonDocument.Parse(StripMarkdownCodeFences(responseText));
             var root = doc.RootElement;
 
-            var evidence = new List<EvidenceItem>();
-            if (root.TryGetProperty("evidence", out var evidenceEl) && evidenceEl.ValueKind == JsonValueKind.Array)
-            {
-                foreach (var item in evidenceEl.EnumerateArray())
-                {
-                    var kind = GetString(item, "kind");
-                    var summary = GetString(item, "summary");
-                    if (string.IsNullOrWhiteSpace(kind) || string.IsNullOrWhiteSpace(summary))
-                    {
-                        continue;
-                    }
-
-                    evidence.Add(
-                        new EvidenceItem(
-                            kind,
-                            summary,
-                            GetString(item, "source_id")));
-                }
-            }
-
-            var candidates = new List<PrWideCandidateFinding>();
-            if (root.TryGetProperty("candidate_findings", out var candidatesEl) && candidatesEl.ValueKind == JsonValueKind.Array)
-            {
-                foreach (var item in candidatesEl.EnumerateArray())
-                {
-                    var id = GetString(item, "id");
-                    var message = GetString(item, "message");
-                    if (string.IsNullOrWhiteSpace(id) || string.IsNullOrWhiteSpace(message))
-                    {
-                        continue;
-                    }
-
-                    var confidence = ParseConfidence(item.TryGetProperty("confidence", out var confEl) ? confEl : default);
-                    var supportingFiles = GetStringArray(item, "supporting_files");
-                    candidates.Add(
-                        new PrWideCandidateFinding(
-                            id,
-                            message,
-                            GetString(item, "category") ?? CandidateReviewFinding.CrossCuttingCategory,
-                            confidence,
-                            new EvidenceReference(
-                                [], supportingFiles, supportingFiles.Count >= 2 ? EvidenceReference.ResolvedState : EvidenceReference.PartialState,
-                                "pr_wide_investigation"),
-                            supportingFiles.Count > 0 ? supportingFiles : task.SeedFilePaths));
-                }
-            }
+            var evidence = ParseEvidenceItems(root);
+            var candidates = ParseCandidateFindings(root, task);
 
             result = new PrWideInvestigationResult(
                 task.Id,
@@ -140,6 +96,67 @@ internal static class PrWideArtifactParser
         {
             return false;
         }
+    }
+
+    private static List<EvidenceItem> ParseEvidenceItems(JsonElement root)
+    {
+        var evidence = new List<EvidenceItem>();
+        if (!root.TryGetProperty("evidence", out var evidenceEl) || evidenceEl.ValueKind != JsonValueKind.Array)
+        {
+            return evidence;
+        }
+
+        foreach (var item in evidenceEl.EnumerateArray())
+        {
+            var kind = GetString(item, "kind");
+            var summary = GetString(item, "summary");
+            if (string.IsNullOrWhiteSpace(kind) || string.IsNullOrWhiteSpace(summary))
+            {
+                continue;
+            }
+
+            evidence.Add(
+                new EvidenceItem(
+                    kind,
+                    summary,
+                    GetString(item, "source_id")));
+        }
+
+        return evidence;
+    }
+
+    private static List<PrWideCandidateFinding> ParseCandidateFindings(JsonElement root, PrWideInvestigationTask task)
+    {
+        var candidates = new List<PrWideCandidateFinding>();
+        if (!root.TryGetProperty("candidate_findings", out var candidatesEl) || candidatesEl.ValueKind != JsonValueKind.Array)
+        {
+            return candidates;
+        }
+
+        foreach (var item in candidatesEl.EnumerateArray())
+        {
+            var id = GetString(item, "id");
+            var message = GetString(item, "message");
+            if (string.IsNullOrWhiteSpace(id) || string.IsNullOrWhiteSpace(message))
+            {
+                continue;
+            }
+
+            var confidence = ParseConfidence(item.TryGetProperty("confidence", out var confEl) ? confEl : default);
+            var supportingFiles = GetStringArray(item, "supporting_files");
+            candidates.Add(
+                new PrWideCandidateFinding(
+                    id,
+                    message,
+                    GetString(item, "category") ?? CandidateReviewFinding.CrossCuttingCategory,
+                    confidence,
+                    new EvidenceReference(
+                        [], supportingFiles, supportingFiles.Count >= 2 ? EvidenceReference.ResolvedState : EvidenceReference.PartialState,
+                        "pr_wide_investigation"),
+                    supportingFiles.Count > 0 ? supportingFiles : task.SeedFilePaths));
+        }
+
+        return candidates;
     }
 
     internal static bool TryParseSynthesizedCandidates(

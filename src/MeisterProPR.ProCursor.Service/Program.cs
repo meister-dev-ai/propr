@@ -58,45 +58,7 @@ try
             "PROCURSOR_PROPR_BASE_URL, PROCURSOR_SHARED_KEY, and PROCURSOR_DB_CONNECTION_STRING are required for the extracted ProCursor host.");
     }
 
-    builder.Host.UseSerilog((context, services, configuration) =>
-    {
-        static string? RedactSecret(string? value)
-        {
-            return string.IsNullOrWhiteSpace(value) ? value : "[REDACTED]";
-        }
-
-        configuration
-            .ReadFrom.Configuration(context.Configuration)
-            .ReadFrom.Services(services)
-            .Enrich.FromLogContext()
-            .Enrich.WithProperty("Application", "Meister DEV ProCursor")
-            .Enrich.WithProperty("ServiceBoundary", "ProCursor")
-            .Destructure.ByTransforming<HttpRequest>(request => new
-            {
-                request.Method,
-                request.Path,
-                HasProCursorSharedKey = request.Headers.ContainsKey(ProCursorSharedKeyAuthenticationDefaults.HeaderName),
-            })
-            .Destructure.ByTransforming<ProCursorHostOptions>(options => new
-            {
-                options.ProPrBaseUrl,
-                SharedKey = RedactSecret(options.SharedKey),
-            })
-            ;
-
-        if (!context.HostingEnvironment.IsDevelopment())
-        {
-            configuration.WriteTo.Console(new JsonFormatter());
-        }
-
-        var lokiUrl = context.Configuration["LOKI_URL"];
-        if (!string.IsNullOrWhiteSpace(lokiUrl))
-        {
-            configuration.WriteTo.GrafanaLoki(
-                lokiUrl,
-                [new LokiLabel { Key = "app", Value = "meister-dev-procursor" }]);
-        }
-    });
+    builder.Host.UseSerilog(ConfigureSerilog);
 
     builder.Services.AddProCursorModule(builder.Configuration, builder.Environment);
 
@@ -236,6 +198,15 @@ public partial class Program
         Timeout = TimeSpan.FromSeconds(5),
     };
 
+    /// <summary>
+    ///     Prevents direct instantiation. This class exists only as the entry-point marker type
+    ///     (e.g. for <c>WebApplicationFactory&lt;Program&gt;</c> in integration tests) and to host
+    ///     the static helpers below.
+    /// </summary>
+    protected Program()
+    {
+    }
+
     internal static async Task<bool> TryRunHealthCheckAsync(string[] args)
     {
         if (args.Length != 2 || !string.Equals(args[0], "--healthcheck", StringComparison.OrdinalIgnoreCase))
@@ -261,5 +232,44 @@ public partial class Program
         return db.Database.ProviderName?.Contains("InMemory", StringComparison.OrdinalIgnoreCase) == true
             ? Task.CompletedTask
             : db.Database.MigrateAsync();
+    }
+
+    internal static void ConfigureSerilog(HostBuilderContext context, IServiceProvider services, LoggerConfiguration configuration)
+    {
+        static string? RedactSecret(string? value)
+        {
+            return string.IsNullOrWhiteSpace(value) ? value : "[REDACTED]";
+        }
+
+        configuration
+            .ReadFrom.Configuration(context.Configuration)
+            .ReadFrom.Services(services)
+            .Enrich.FromLogContext()
+            .Enrich.WithProperty("Application", "Meister DEV ProCursor")
+            .Enrich.WithProperty("ServiceBoundary", "ProCursor")
+            .Destructure.ByTransforming<HttpRequest>(request => new
+            {
+                request.Method,
+                request.Path,
+                HasProCursorSharedKey = request.Headers.ContainsKey(ProCursorSharedKeyAuthenticationDefaults.HeaderName),
+            })
+            .Destructure.ByTransforming<ProCursorHostOptions>(options => new
+            {
+                options.ProPrBaseUrl,
+                SharedKey = RedactSecret(options.SharedKey),
+            });
+
+        if (!context.HostingEnvironment.IsDevelopment())
+        {
+            configuration.WriteTo.Console(new JsonFormatter());
+        }
+
+        var lokiUrl = context.Configuration["LOKI_URL"];
+        if (!string.IsNullOrWhiteSpace(lokiUrl))
+        {
+            configuration.WriteTo.GrafanaLoki(
+                lokiUrl,
+                [new LokiLabel { Key = "app", Value = "meister-dev-procursor" }]);
+        }
     }
 }

@@ -88,11 +88,12 @@ export function sourceOptionKey(sourceOption: AdoSourceOptionDto): string {
 export function formatOrganizationScopeLabel(scope: ClientAdoOrganizationScopeDto): string {
   const displayName = scope.displayName?.trim()
   const organizationUrl = scope.organizationUrl?.trim() || 'Unnamed organization'
-  return displayName && !displayName.localeCompare(organizationUrl, undefined, { sensitivity: 'base' })
-    ? displayName
-    : displayName
-      ? `${displayName} (${organizationUrl})`
-      : organizationUrl
+
+  if (displayName && !displayName.localeCompare(organizationUrl, undefined, { sensitivity: 'base' })) {
+    return displayName
+  }
+
+  return displayName ? `${displayName} (${organizationUrl})` : organizationUrl
 }
 
 export function formatBranchOptionLabel(branch: AdoBranchOptionDto): string {

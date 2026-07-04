@@ -13,6 +13,7 @@ namespace MeisterProPR.Api.Controllers;
 ///     handler.
 /// </summary>
 [ApiController]
+[Route("webhooks/v1/providers/{provider}/{pathKey}")]
 public sealed partial class ProviderWebhookReceiverController(
     HandleProviderWebhookDeliveryHandler providerDeliveryHandler,
     ILogger<ProviderWebhookReceiverController> logger) : ControllerBase
@@ -26,7 +27,7 @@ public sealed partial class ProviderWebhookReceiverController(
     /// <response code="400">Payload was malformed or missing required fields.</response>
     /// <response code="401">Provider verification material was missing or invalid.</response>
     /// <response code="404">The provider segment or path key was unknown.</response>
-    [HttpPost("/webhooks/v1/providers/{provider}/{pathKey}")]
+    [HttpPost]
     [ProducesResponseType(typeof(WebhookDeliveryResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]

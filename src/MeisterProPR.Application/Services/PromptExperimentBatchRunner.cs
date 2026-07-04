@@ -418,10 +418,5 @@ public sealed class PromptExperimentBatchRunner(
         {
             throw new InvalidOperationException("No evaluation AI connection was configured for this prompt experiment run.");
         }
-
-        public async ValueTask DisposeAsync()
-        {
-            await ValueTask.CompletedTask;
-        }
     }
 }

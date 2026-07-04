@@ -10,10 +10,11 @@ namespace MeisterProPR.Api.Controllers;
 
 /// <summary>Personal access token management for the authenticated user.</summary>
 [ApiController]
+[Route("users/me/pats")]
 public sealed class UserPatsController(IUserPatRepository userPatRepository) : ControllerBase
 {
     /// <summary>Generates a new PAT for the current user. Returns the plaintext token once.</summary>
-    [HttpPost("/users/me/pats")]
+    [HttpPost]
     public async Task<IActionResult> CreatePat([FromBody] CreatePatRequest request, CancellationToken ct)
     {
         var userId = this.GetCurrentUserId();
@@ -54,7 +55,7 @@ public sealed class UserPatsController(IUserPatRepository userPatRepository) : C
     }
 
     /// <summary>Lists PATs for the current user (hashes are never returned).</summary>
-    [HttpGet("/users/me/pats")]
+    [HttpGet]
     public async Task<IActionResult> ListPats(CancellationToken ct)
     {
         var userId = this.GetCurrentUserId();
@@ -77,7 +78,7 @@ public sealed class UserPatsController(IUserPatRepository userPatRepository) : C
     }
 
     /// <summary>Revokes a PAT by id.</summary>
-    [HttpDelete("/users/me/pats/{id:guid}")]
+    [HttpDelete("{id:guid}")]
     public async Task<IActionResult> RevokePat(Guid id, CancellationToken ct)
     {
         var userId = this.GetCurrentUserId();

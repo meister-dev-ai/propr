@@ -15,6 +15,7 @@ namespace MeisterProPR.ProCursor.Service.Controllers;
 /// </summary>
 [ApiController]
 [Authorize(AuthenticationSchemes = ProCursorSharedKeyAuthenticationDefaults.Scheme)]
+[Route("internal/procursor/queries")]
 public sealed class InternalProCursorQueriesController(IProCursorGateway gateway) : ControllerBase
 {
     /// <summary>
@@ -26,7 +27,7 @@ public sealed class InternalProCursorQueriesController(IProCursorGateway gateway
     /// <response code="200">The knowledge query completed successfully.</response>
     /// <response code="409">The request conflicts with current ProCursor state.</response>
     /// <response code="503">A required ProPR dependency is unavailable.</response>
-    [HttpPost("/internal/procursor/queries/knowledge")]
+    [HttpPost("knowledge")]
     public async Task<IActionResult> AskKnowledge(
         [FromBody] ProCursorKnowledgeQueryRequest request,
         CancellationToken ct)
@@ -54,7 +55,7 @@ public sealed class InternalProCursorQueriesController(IProCursorGateway gateway
     /// <response code="200">The symbol insight was returned.</response>
     /// <response code="409">The request conflicts with current ProCursor state.</response>
     /// <response code="503">A required ProPR dependency is unavailable.</response>
-    [HttpPost("/internal/procursor/queries/symbols")]
+    [HttpPost("symbols")]
     public async Task<IActionResult> GetSymbolInsight(
         [FromBody] ProCursorSymbolQueryRequest request,
         CancellationToken ct)

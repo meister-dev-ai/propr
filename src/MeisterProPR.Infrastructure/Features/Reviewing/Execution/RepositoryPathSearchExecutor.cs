@@ -59,12 +59,7 @@ internal static class RepositoryPathSearchExecutor
             request.BranchSide,
             request.PathScope,
             filters,
-            sourceBranch,
-            targetBranch,
-            changedPathSnapshots,
-            loadFileTreeAsync,
-            normalizeBranch,
-            normalizePath,
+            new RepositoryAccessContext(sourceBranch, targetBranch, changedPathSnapshots, loadFileTreeAsync, normalizeBranch, normalizePath),
             ct);
 
         if (candidateResolution.Branch is null)
@@ -100,11 +95,7 @@ internal static class RepositoryPathSearchExecutor
                     $"Only the first {RepositoryDiscoveryHelpers.MaxReturnedMatches} matching paths were returned."));
         }
 
-        var status = matchingPaths.Count > 0
-            ? limitations.Count > 0 || truncated ? RepositorySearchStatuses.Partial : RepositorySearchStatuses.Success
-            : limitations.Count > 0
-                ? RepositorySearchStatuses.Partial
-                : RepositorySearchStatuses.NoMatch;
+        var status = ResolveStatus(matchingPaths.Count, limitations.Count, truncated);
 
         return new PathSearchResult(
             status,
@@ -116,6 +107,20 @@ internal static class RepositoryPathSearchExecutor
             limitations.AsReadOnly(),
             truncated,
             ToolTimingCollectorContext.CaptureSnapshot());
+    }
+
+    private static string ResolveStatus(int matchCount, int limitationCount, bool truncated)
+    {
+        if (matchCount > 0)
+        {
+            return limitationCount > 0 || truncated
+                ? RepositorySearchStatuses.Partial
+                : RepositorySearchStatuses.Success;
+        }
+
+        return limitationCount > 0
+            ? RepositorySearchStatuses.Partial
+            : RepositorySearchStatuses.NoMatch;
     }
 
     private static string NormalizeMatchMode(string? matchMode)

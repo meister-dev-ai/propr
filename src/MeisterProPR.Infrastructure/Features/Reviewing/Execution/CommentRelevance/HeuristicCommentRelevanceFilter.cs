@@ -125,9 +125,7 @@ internal sealed partial class HeuristicCommentRelevanceFilter : ICommentRelevanc
             reasonCodes.Add(CommentRelevanceReasonCodes.MissingConcreteObservable);
         }
 
-        if (comment.Severity is CommentSeverity.Error or CommentSeverity.Warning &&
-            ContainsAny(message, SevereClaimTerms) &&
-            (missingConcreteObservable || hasCrossFileClaim))
+        if (IsSeverityOverstated(comment, missingConcreteObservable, hasCrossFileClaim))
         {
             reasonCodes.Add(CommentRelevanceReasonCodes.SeverityOverstated);
         }
@@ -137,10 +135,7 @@ internal sealed partial class HeuristicCommentRelevanceFilter : ICommentRelevanc
             return Keep(comment);
         }
 
-        if (allowAmbiguous &&
-            reasonCodes.All(code => code is CommentRelevanceReasonCodes.UnverifiableCrossFileClaim
-                or CommentRelevanceReasonCodes.SeverityOverstated
-                or CommentRelevanceReasonCodes.MissingConcreteObservable))
+        if (allowAmbiguous && IsAmbiguousReasonSet(reasonCodes))
         {
             return new CommentRelevanceFilterDecision(
                 CommentRelevanceFilterDecision.KeepDecision,
@@ -150,6 +145,20 @@ internal sealed partial class HeuristicCommentRelevanceFilter : ICommentRelevanc
         }
 
         return Discard(comment, reasonCodes);
+    }
+
+    private static bool IsSeverityOverstated(ReviewComment comment, bool missingConcreteObservable, bool hasCrossFileClaim)
+    {
+        return comment.Severity is CommentSeverity.Error or CommentSeverity.Warning &&
+               ContainsAny(comment.Message, SevereClaimTerms) &&
+               (missingConcreteObservable || hasCrossFileClaim);
+    }
+
+    private static bool IsAmbiguousReasonSet(IEnumerable<string> reasonCodes)
+    {
+        return reasonCodes.All(code => code is CommentRelevanceReasonCodes.UnverifiableCrossFileClaim
+            or CommentRelevanceReasonCodes.SeverityOverstated
+            or CommentRelevanceReasonCodes.MissingConcreteObservable);
     }
 
     internal static void ApplyDuplicateLocalPattern(IList<CommentRelevanceFilterDecision> decisions)
@@ -168,32 +177,34 @@ internal sealed partial class HeuristicCommentRelevanceFilter : ICommentRelevanc
                     continue;
                 }
 
-                var left = decisions[i].OriginalComment;
-                var right = decisions[j].OriginalComment;
-                if (!string.Equals(left.FilePath, right.FilePath, StringComparison.OrdinalIgnoreCase))
-                {
-                    continue;
-                }
-
-                if (CalculateSimilarity(left.Message, right.Message) < 0.72d)
-                {
-                    continue;
-                }
-
-                var leftScore = GetStrengthScore(left);
-                var rightScore = GetStrengthScore(right);
-                var discardIndex = leftScore >= rightScore ? j : i;
-                var keepIndex = discardIndex == i ? j : i;
-                var discardedComment = decisions[discardIndex].OriginalComment;
-                decisions[discardIndex] = new CommentRelevanceFilterDecision(
-                    CommentRelevanceFilterDecision.DiscardDecision,
-                    discardedComment,
-                    [CommentRelevanceReasonCodes.DuplicateLocalPattern],
-                    CommentRelevanceFilterDecision.DeterministicScreeningSource);
-
-                i = Math.Min(i, keepIndex);
+                DiscardIfDuplicate(decisions, i, j);
             }
         }
+    }
+
+    private static void DiscardIfDuplicate(IList<CommentRelevanceFilterDecision> decisions, int i, int j)
+    {
+        var left = decisions[i].OriginalComment;
+        var right = decisions[j].OriginalComment;
+        if (!string.Equals(left.FilePath, right.FilePath, StringComparison.OrdinalIgnoreCase))
+        {
+            return;
+        }
+
+        if (CalculateSimilarity(left.Message, right.Message) < 0.72d)
+        {
+            return;
+        }
+
+        var leftScore = GetStrengthScore(left);
+        var rightScore = GetStrengthScore(right);
+        var discardIndex = leftScore >= rightScore ? j : i;
+        var discardedComment = decisions[discardIndex].OriginalComment;
+        decisions[discardIndex] = new CommentRelevanceFilterDecision(
+            CommentRelevanceFilterDecision.DiscardDecision,
+            discardedComment,
+            [CommentRelevanceReasonCodes.DuplicateLocalPattern],
+            CommentRelevanceFilterDecision.DeterministicScreeningSource);
     }
 
     private static CommentRelevanceFilterDecision Keep(ReviewComment comment)

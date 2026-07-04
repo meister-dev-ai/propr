@@ -13,6 +13,7 @@ namespace MeisterProPR.Api.Features.PromptCustomization.Controllers;
 
 /// <summary>Manages per-client and per-crawl-config AI review prompt overrides.</summary>
 [ApiController]
+[Route("clients/{clientId:guid}/prompt-overrides")]
 public sealed partial class PromptOverridesController(
     IPromptOverrideService promptOverrideService,
     ILogger<PromptOverridesController> logger) : ControllerBase
@@ -40,7 +41,7 @@ public sealed partial class PromptOverridesController(
     /// <response code="200">List of prompt overrides.</response>
     /// <response code="401">Missing or invalid credentials.</response>
     /// <response code="403">Caller is not a global admin or client administrator for this client.</response>
-    [HttpGet("clients/{clientId:guid}/prompt-overrides")]
+    [HttpGet]
     [ProducesResponseType(typeof(IReadOnlyList<PromptOverrideDto>), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
@@ -65,7 +66,7 @@ public sealed partial class PromptOverridesController(
     /// <response code="401">Missing or invalid credentials.</response>
     /// <response code="403">Caller is not a global admin or client administrator for this client.</response>
     /// <response code="409">An override with the same scope and prompt key already exists for this client / crawl config.</response>
-    [HttpPost("clients/{clientId:guid}/prompt-overrides")]
+    [HttpPost]
     [ProducesResponseType(typeof(PromptOverrideDto), StatusCodes.Status201Created)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
@@ -143,7 +144,7 @@ public sealed partial class PromptOverridesController(
     /// <response code="401">Missing or invalid credentials.</response>
     /// <response code="403">Caller is not a global admin or client administrator for this client.</response>
     /// <response code="404">Override not found.</response>
-    [HttpPut("clients/{clientId:guid}/prompt-overrides/{id:guid}")]
+    [HttpPut("{id:guid}")]
     [ProducesResponseType(typeof(PromptOverrideDto), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
@@ -185,7 +186,7 @@ public sealed partial class PromptOverridesController(
     /// <response code="401">Missing or invalid credentials.</response>
     /// <response code="403">Caller is not a global admin or client administrator for this client.</response>
     /// <response code="404">Override not found.</response>
-    [HttpDelete("clients/{clientId:guid}/prompt-overrides/{id:guid}")]
+    [HttpDelete("{id:guid}")]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]

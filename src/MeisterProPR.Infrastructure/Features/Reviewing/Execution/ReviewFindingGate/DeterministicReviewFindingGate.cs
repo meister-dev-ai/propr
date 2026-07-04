@@ -80,82 +80,12 @@ public sealed class DeterministicReviewFindingGate : IDeterministicReviewFinding
 
         if (finding.VerificationOutcome is not null)
         {
-            if (string.Equals(finding.VerificationOutcome.RecommendedDisposition, FinalGateDecision.PublishDisposition, StringComparison.Ordinal))
-            {
-                if (finding.Provenance.RequiresExplicitSupport)
-                {
-                    return new FinalGateDecision(
-                        finding.FindingId,
-                        FinalGateDecision.PublishDisposition,
-                        [ReviewFindingGateReasonCodes.VerifiedBoundedClaimSupport],
-                        "investigation_verified_support_rules",
-                        finding.VerificationOutcome.BlockedInvariantIds,
-                        finding.Evidence,
-                        null);
-                }
-
-                return new FinalGateDecision(
-                    finding.FindingId,
-                    FinalGateDecision.PublishDisposition,
-                    finding.VerificationOutcome.ReasonCodes,
-                    "verification_outcome_rules",
-                    finding.VerificationOutcome.BlockedInvariantIds,
-                    finding.Evidence,
-                    null);
-            }
-
-            return new FinalGateDecision(
-                finding.FindingId,
-                finding.Provenance.RequiresExplicitSupport ? FinalGateDecision.DropDisposition : FinalGateDecision.SummaryOnlyDisposition,
-                finding.Provenance.RequiresExplicitSupport
-                    ? [ReviewFindingGateReasonCodes.InvestigationOriginMissingExplicitSupport]
-                    : finding.VerificationOutcome.ReasonCodes,
-                finding.Provenance.RequiresExplicitSupport ? "investigation_missing_support_rules" : "verification_outcome_rules",
-                finding.VerificationOutcome.BlockedInvariantIds,
-                finding.Evidence,
-                finding.Provenance.RequiresExplicitSupport
-                    ? null
-                    : finding.CandidateSummaryText ??
-                      "Potential cross-cutting concern noted, but the available evidence did not support publication as a review thread.");
+            return EvaluateVerifiedFinding(finding);
         }
 
         if (finding.Provenance.RequiresExplicitSupport)
         {
-            if (string.Equals(finding.Provenance.OriginKind, CandidateFindingProvenance.RepeatedJudgmentOrigin, StringComparison.Ordinal))
-            {
-                if (finding.InvariantCheckContext.TryGetValue(CandidateReviewFinding.RepeatedJudgmentAgreementStateContextKey, out var agreementState)
-                    && string.Equals(agreementState, "Agreed", StringComparison.Ordinal)
-                    && finding.InvariantCheckContext.TryGetValue(CandidateReviewFinding.RepeatedJudgmentUsedSameEvidenceSetContextKey, out var sameEvidence)
-                    && string.Equals(sameEvidence, bool.TrueString, StringComparison.OrdinalIgnoreCase))
-                {
-                    return new FinalGateDecision(
-                        finding.FindingId,
-                        FinalGateDecision.PublishDisposition,
-                        [ReviewFindingGateReasonCodes.VerifiedBoundedClaimSupport],
-                        "repeated_judgment_agreement_rules",
-                        [],
-                        finding.Evidence,
-                        null);
-                }
-
-                return new FinalGateDecision(
-                    finding.FindingId,
-                    FinalGateDecision.DropDisposition,
-                    [ReviewFindingGateReasonCodes.RepeatedJudgmentDisagreement],
-                    "repeated_judgment_disagreement_rules",
-                    [],
-                    finding.Evidence,
-                    null);
-            }
-
-            return new FinalGateDecision(
-                finding.FindingId,
-                FinalGateDecision.DropDisposition,
-                [ReviewFindingGateReasonCodes.InvestigationOriginMissingExplicitSupport],
-                "investigation_missing_support_rules",
-                [],
-                finding.Evidence,
-                null);
+            return EvaluateFindingRequiringExplicitSupport(finding);
         }
 
         if (string.Equals(finding.Category, CandidateReviewFinding.CrossCuttingCategory, StringComparison.Ordinal))
@@ -207,6 +137,87 @@ public sealed class DeterministicReviewFindingGate : IDeterministicReviewFinding
             FinalGateDecision.PublishDisposition,
             [ReviewFindingGateReasonCodes.DefaultPublish],
             "default_publish_rules",
+            [],
+            finding.Evidence,
+            null);
+    }
+
+    private static FinalGateDecision EvaluateVerifiedFinding(CandidateReviewFinding finding)
+    {
+        var verificationOutcome = finding.VerificationOutcome!;
+        if (string.Equals(verificationOutcome.RecommendedDisposition, FinalGateDecision.PublishDisposition, StringComparison.Ordinal))
+        {
+            if (finding.Provenance.RequiresExplicitSupport)
+            {
+                return new FinalGateDecision(
+                    finding.FindingId,
+                    FinalGateDecision.PublishDisposition,
+                    [ReviewFindingGateReasonCodes.VerifiedBoundedClaimSupport],
+                    "investigation_verified_support_rules",
+                    verificationOutcome.BlockedInvariantIds,
+                    finding.Evidence,
+                    null);
+            }
+
+            return new FinalGateDecision(
+                finding.FindingId,
+                FinalGateDecision.PublishDisposition,
+                verificationOutcome.ReasonCodes,
+                "verification_outcome_rules",
+                verificationOutcome.BlockedInvariantIds,
+                finding.Evidence,
+                null);
+        }
+
+        return new FinalGateDecision(
+            finding.FindingId,
+            finding.Provenance.RequiresExplicitSupport ? FinalGateDecision.DropDisposition : FinalGateDecision.SummaryOnlyDisposition,
+            finding.Provenance.RequiresExplicitSupport
+                ? [ReviewFindingGateReasonCodes.InvestigationOriginMissingExplicitSupport]
+                : verificationOutcome.ReasonCodes,
+            finding.Provenance.RequiresExplicitSupport ? "investigation_missing_support_rules" : "verification_outcome_rules",
+            verificationOutcome.BlockedInvariantIds,
+            finding.Evidence,
+            finding.Provenance.RequiresExplicitSupport
+                ? null
+                : finding.CandidateSummaryText ??
+                  "Potential cross-cutting concern noted, but the available evidence did not support publication as a review thread.");
+    }
+
+    private static FinalGateDecision EvaluateFindingRequiringExplicitSupport(CandidateReviewFinding finding)
+    {
+        if (string.Equals(finding.Provenance.OriginKind, CandidateFindingProvenance.RepeatedJudgmentOrigin, StringComparison.Ordinal))
+        {
+            if (finding.InvariantCheckContext.TryGetValue(CandidateReviewFinding.RepeatedJudgmentAgreementStateContextKey, out var agreementState)
+                && string.Equals(agreementState, "Agreed", StringComparison.Ordinal)
+                && finding.InvariantCheckContext.TryGetValue(CandidateReviewFinding.RepeatedJudgmentUsedSameEvidenceSetContextKey, out var sameEvidence)
+                && string.Equals(sameEvidence, bool.TrueString, StringComparison.OrdinalIgnoreCase))
+            {
+                return new FinalGateDecision(
+                    finding.FindingId,
+                    FinalGateDecision.PublishDisposition,
+                    [ReviewFindingGateReasonCodes.VerifiedBoundedClaimSupport],
+                    "repeated_judgment_agreement_rules",
+                    [],
+                    finding.Evidence,
+                    null);
+            }
+
+            return new FinalGateDecision(
+                finding.FindingId,
+                FinalGateDecision.DropDisposition,
+                [ReviewFindingGateReasonCodes.RepeatedJudgmentDisagreement],
+                "repeated_judgment_disagreement_rules",
+                [],
+                finding.Evidence,
+                null);
+        }
+
+        return new FinalGateDecision(
+            finding.FindingId,
+            FinalGateDecision.DropDisposition,
+            [ReviewFindingGateReasonCodes.InvestigationOriginMissingExplicitSupport],
+            "investigation_missing_support_rules",
             [],
             finding.Evidence,
             null);

@@ -210,6 +210,7 @@ public sealed class InMemoryReviewDiagnosticsReader(InMemoryReviewJobRepository 
         }
         catch (JsonException)
         {
+            // Malformed diagnostics JSON is treated as absent rather than surfaced as an error.
         }
 
         return null;
@@ -440,43 +441,58 @@ public sealed class InMemoryReviewDiagnosticsReader(InMemoryReviewJobRepository 
 
         foreach (var evt in protocol.Events)
         {
-            if (string.Equals(evt.Name, ReviewProtocolEventNames.AgenticFilePlanCreated, StringComparison.Ordinal)
-                && TryGetTriggerFamilyFromPlan(evt.OutputSummary, out var planTriggerFamily))
-            {
-                used = true;
-                triggerFamily ??= planTriggerFamily;
-            }
-
-            if (string.Equals(evt.Name, ReviewProtocolEventNames.AgenticFileInvestigationResult, StringComparison.Ordinal)
-                || string.Equals(evt.Name, ReviewProtocolEventNames.AgenticFileDegraded, StringComparison.Ordinal)
-                || string.Equals(evt.Name, ReviewProtocolEventNames.AgenticFileFollowUpDiagnosticsOnly, StringComparison.Ordinal))
-            {
-                used = true;
-
-                if (string.Equals(evt.Name, ReviewProtocolEventNames.AgenticFileInvestigationResult, StringComparison.Ordinal)
-                    && TryGetString(evt.OutputSummary, "status", out var status)
-                    && string.Equals(status, "completed", StringComparison.OrdinalIgnoreCase)
-                    && (!TryGetBoolean(evt.OutputSummary, "degraded", out var degraded) || !degraded)
-                    && (!TryGetBoolean(evt.OutputSummary, "diagnosticsOnly", out var diagnosticsOnly) || !diagnosticsOnly))
-                {
-                    completedSuccessfully = true;
-                }
-            }
-
-            if (string.Equals(evt.Name, ReviewProtocolEventNames.AgenticFileFollowUpDependencyRecorded, StringComparison.Ordinal))
-            {
-                used = true;
-                dependencyRecorded = true;
-                if (TryGetString(evt.InputTextSample, "triggerFamily", out var dependencyTriggerFamily))
-                {
-                    triggerFamily ??= dependencyTriggerFamily;
-                }
-            }
+            ApplyFollowUpEvent(evt, ref used, ref completedSuccessfully, ref dependencyRecorded, ref triggerFamily);
         }
 
         return used || dependencyRecorded
             ? new ProtocolFollowUpDto(used, triggerFamily, completedSuccessfully, dependencyRecorded)
             : null;
+    }
+
+    private static void ApplyFollowUpEvent(
+        ProtocolEvent evt,
+        ref bool used,
+        ref bool completedSuccessfully,
+        ref bool dependencyRecorded,
+        ref string? triggerFamily)
+    {
+        if (string.Equals(evt.Name, ReviewProtocolEventNames.AgenticFilePlanCreated, StringComparison.Ordinal)
+            && TryGetTriggerFamilyFromPlan(evt.OutputSummary, out var planTriggerFamily))
+        {
+            used = true;
+            triggerFamily ??= planTriggerFamily;
+        }
+
+        if (string.Equals(evt.Name, ReviewProtocolEventNames.AgenticFileInvestigationResult, StringComparison.Ordinal)
+            || string.Equals(evt.Name, ReviewProtocolEventNames.AgenticFileDegraded, StringComparison.Ordinal)
+            || string.Equals(evt.Name, ReviewProtocolEventNames.AgenticFileFollowUpDiagnosticsOnly, StringComparison.Ordinal))
+        {
+            used = true;
+
+            if (IsCompletedInvestigationResult(evt))
+            {
+                completedSuccessfully = true;
+            }
+        }
+
+        if (string.Equals(evt.Name, ReviewProtocolEventNames.AgenticFileFollowUpDependencyRecorded, StringComparison.Ordinal))
+        {
+            used = true;
+            dependencyRecorded = true;
+            if (TryGetString(evt.InputTextSample, "triggerFamily", out var dependencyTriggerFamily))
+            {
+                triggerFamily ??= dependencyTriggerFamily;
+            }
+        }
+    }
+
+    private static bool IsCompletedInvestigationResult(ProtocolEvent evt)
+    {
+        return string.Equals(evt.Name, ReviewProtocolEventNames.AgenticFileInvestigationResult, StringComparison.Ordinal)
+               && TryGetString(evt.OutputSummary, "status", out var status)
+               && string.Equals(status, "completed", StringComparison.OrdinalIgnoreCase)
+               && (!TryGetBoolean(evt.OutputSummary, "degraded", out var degraded) || !degraded)
+               && (!TryGetBoolean(evt.OutputSummary, "diagnosticsOnly", out var diagnosticsOnly) || !diagnosticsOnly);
     }
 
     private static ProtocolRepeatedJudgmentDto? ResolveRepeatedJudgment(ReviewJobProtocol protocol)
@@ -544,6 +560,7 @@ public sealed class InMemoryReviewDiagnosticsReader(InMemoryReviewJobRepository 
         }
         catch (JsonException)
         {
+            // Malformed diagnostics JSON is treated as absent rather than surfaced as an error.
         }
 
         return false;
@@ -569,6 +586,7 @@ public sealed class InMemoryReviewDiagnosticsReader(InMemoryReviewJobRepository 
         }
         catch (JsonException)
         {
+            // Malformed diagnostics JSON is treated as absent rather than surfaced as an error.
         }
 
         return false;
@@ -623,6 +641,7 @@ public sealed class InMemoryReviewDiagnosticsReader(InMemoryReviewJobRepository 
         }
         catch (JsonException)
         {
+            // Malformed diagnostics JSON is treated as absent rather than surfaced as an error.
         }
 
         return false;

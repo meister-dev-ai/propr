@@ -50,6 +50,16 @@ export interface UseTenantDirectoryViewModelOptions {
   autoLoad?: boolean
 }
 
+function buildClientBootstrapRoute(tenantId: string) {
+  return {
+    name: 'clients' as const,
+    query: {
+      create: 'true' as const,
+      tenantId,
+    },
+  }
+}
+
 export function useTenantDirectoryViewModel(options: UseTenantDirectoryViewModelOptions = {}): TenantDirectoryViewModel {
   const router = useRouter()
   const { notify } = useNotification()
@@ -110,16 +120,6 @@ export function useTenantDirectoryViewModel(options: UseTenantDirectoryViewModel
       state.value = errorState(createError.value)
     } finally {
       creating.value = false
-    }
-  }
-
-  function buildClientBootstrapRoute(tenantId: string) {
-    return {
-      name: 'clients' as const,
-      query: {
-        create: 'true' as const,
-        tenantId,
-      },
     }
   }
 

@@ -408,40 +408,9 @@ internal sealed class TreeSitterStructuralCodeAnalyzer : IStructuralCodeAnalyzer
         using var query = tsLanguage.CreateQuery(tagsSource);
         using var cursor = query.Execute(tree.RootNode);
 
-        var results = new List<DefinitionSummary>();
-        var seenIds = new HashSet<IntPtr>();
-
-        foreach (var match in cursor.Matches)
-        {
-            TS.Node? defNode = null;
-            string? defCaptureName = null;
-            TS.Node? nameNode = null;
-
-            foreach (var capture in match.Captures)
-            {
-                if (capture.Name.StartsWith("definition.", StringComparison.Ordinal))
-                {
-                    defNode = capture.Node;
-                    defCaptureName = capture.Name;
-                }
-                else if (capture.Name == "name")
-                {
-                    nameNode = capture.Node;
-                }
-            }
-
-            if (defNode is null || !seenIds.Add(defNode.Id))
-            {
-                continue;
-            }
-
-            var kind = CaptureNameToKind(defCaptureName);
-            var name = nameNode?.Text;
-            var startLine = defNode.StartPosition.Row + 1;
-            var endLine = defNode.EndPosition.Row + 1;
-
-            results.Add(new DefinitionSummary(kind, name, startLine, endLine));
-        }
+        var results = ExtractDefinitions(cursor)
+            .Select(d => new DefinitionSummary(d.Kind, d.Name, d.StartLine, d.EndLine))
+            .ToList();
 
         results.Sort((a, b) =>
         {
@@ -452,30 +421,13 @@ internal sealed class TreeSitterStructuralCodeAnalyzer : IStructuralCodeAnalyzer
         return results;
     }
 
-    private IReadOnlyList<EnclosingDefinition> ResolveEnclosingDefinitions(
-        SupportedLanguage language,
-        StructuralParseRequest request,
-        TS.Tree tree)
+    /// <summary>
+    ///     Runs the tags query's matches into deduplicated definition entries (one per distinct
+    ///     definition node, keeping the first capture in document order).
+    /// </summary>
+    private static List<(TS.Node Node, string? Name, DefinitionKind Kind, int StartLine, int EndLine)> ExtractDefinitions(
+        TS.QueryCursor cursor)
     {
-        var tagsSource = LanguageRegistry.TryGetTagsQuerySource(language);
-        if (string.IsNullOrWhiteSpace(tagsSource))
-        {
-            return Array.Empty<EnclosingDefinition>();
-        }
-
-        var tsLanguage = LanguageRegistry.TryGetLanguage(language);
-        if (tsLanguage is null)
-        {
-            return Array.Empty<EnclosingDefinition>();
-        }
-
-        // Capture all definitions once via the tags query, then for each changed range find
-        // the definitions whose line span overlaps the range. For a change fully inside one
-        // definition, only that definition overlaps. For a change spanning adjacent definitions,
-        // each spans-into definition overlaps.
-        using var query = tsLanguage.CreateQuery(tagsSource);
-        using var cursor = query.Execute(tree.RootNode);
-
         var definitions = new List<(TS.Node Node, string? Name, DefinitionKind Kind, int StartLine, int EndLine)>();
         var seenIds = new HashSet<IntPtr>();
 
@@ -510,6 +462,34 @@ internal sealed class TreeSitterStructuralCodeAnalyzer : IStructuralCodeAnalyzer
             definitions.Add((defNode, name, kind, startLine, endLine));
         }
 
+        return definitions;
+    }
+
+    private IReadOnlyList<EnclosingDefinition> ResolveEnclosingDefinitions(
+        SupportedLanguage language,
+        StructuralParseRequest request,
+        TS.Tree tree)
+    {
+        var tagsSource = LanguageRegistry.TryGetTagsQuerySource(language);
+        if (string.IsNullOrWhiteSpace(tagsSource))
+        {
+            return Array.Empty<EnclosingDefinition>();
+        }
+
+        var tsLanguage = LanguageRegistry.TryGetLanguage(language);
+        if (tsLanguage is null)
+        {
+            return Array.Empty<EnclosingDefinition>();
+        }
+
+        // Capture all definitions once via the tags query, then for each changed range find
+        // the definitions whose line span overlaps the range. For a change fully inside one
+        // definition, only that definition overlaps. For a change spanning adjacent definitions,
+        // each spans-into definition overlaps.
+        using var query = tsLanguage.CreateQuery(tagsSource);
+        using var cursor = query.Execute(tree.RootNode);
+
+        var definitions = ExtractDefinitions(cursor);
         if (definitions.Count == 0)
         {
             return Array.Empty<EnclosingDefinition>();
@@ -526,58 +506,7 @@ internal sealed class TreeSitterStructuralCodeAnalyzer : IStructuralCodeAnalyzer
                 continue;
             }
 
-            // 1-based inclusive overlap: def.Start <= range.End && def.End >= range.Start.
-            var overlapping = new List<(TS.Node Node, string? Name, DefinitionKind Kind, int StartLine, int EndLine)>();
-            foreach (var entry in definitions)
-            {
-                if (entry.StartLine > range.End || entry.EndLine < range.Start)
-                {
-                    continue;
-                }
-
-                overlapping.Add(entry);
-            }
-
-            // Innermost filter: when multiple definitions overlap a single range, drop
-            // any that strictly contain another overlapping definition. This keeps the
-            // tightest enclosing scope (a method, not its containing class) while still
-            // returning sibling definitions when a change spans two adjacent functions.
-            var keep = new List<(TS.Node Node, string? Name, DefinitionKind Kind, int StartLine, int EndLine)>();
-            foreach (var candidate in overlapping)
-            {
-                var isOuter = false;
-                foreach (var other in overlapping)
-                {
-                    if (other.Node.Id == candidate.Node.Id)
-                    {
-                        continue;
-                    }
-
-                    // `other` is strictly inside `candidate`?
-                    if (other.StartLine >= candidate.StartLine
-                        && other.EndLine <= candidate.EndLine
-                        && (other.StartLine != candidate.StartLine || other.EndLine != candidate.EndLine))
-                    {
-                        isOuter = true;
-                        break;
-                    }
-                }
-
-                if (!isOuter)
-                {
-                    keep.Add(candidate);
-                }
-            }
-
-            foreach (var entry in keep)
-            {
-                if (!enclosedSeen.Add(entry.Node.Id))
-                {
-                    continue;
-                }
-
-                enclosing.Add(new EnclosingDefinition(entry.Kind, entry.Name, entry.StartLine, entry.EndLine, totalLines));
-            }
+            CollectEnclosingForRange(range, definitions, totalLines, enclosedSeen, enclosing);
         }
 
         enclosing.Sort((a, b) =>
@@ -587,6 +516,68 @@ internal sealed class TreeSitterStructuralCodeAnalyzer : IStructuralCodeAnalyzer
         });
 
         return enclosing;
+    }
+
+    private static void CollectEnclosingForRange(
+        ChangedLineRange range,
+        List<(TS.Node Node, string? Name, DefinitionKind Kind, int StartLine, int EndLine)> definitions,
+        int totalLines,
+        HashSet<IntPtr> enclosedSeen,
+        List<EnclosingDefinition> enclosing)
+    {
+        // 1-based inclusive overlap: def.Start <= range.End && def.End >= range.Start.
+        var overlapping = new List<(TS.Node Node, string? Name, DefinitionKind Kind, int StartLine, int EndLine)>();
+        foreach (var entry in definitions)
+        {
+            if (entry.StartLine > range.End || entry.EndLine < range.Start)
+            {
+                continue;
+            }
+
+            overlapping.Add(entry);
+        }
+
+        // Innermost filter: when multiple definitions overlap a single range, drop
+        // any that strictly contain another overlapping definition. This keeps the
+        // tightest enclosing scope (a method, not its containing class) while still
+        // returning sibling definitions when a change spans two adjacent functions.
+        foreach (var candidate in overlapping)
+        {
+            if (IsStrictlyOuterDefinition(candidate, overlapping))
+            {
+                continue;
+            }
+
+            if (!enclosedSeen.Add(candidate.Node.Id))
+            {
+                continue;
+            }
+
+            enclosing.Add(new EnclosingDefinition(candidate.Kind, candidate.Name, candidate.StartLine, candidate.EndLine, totalLines));
+        }
+    }
+
+    private static bool IsStrictlyOuterDefinition(
+        (TS.Node Node, string? Name, DefinitionKind Kind, int StartLine, int EndLine) candidate,
+        List<(TS.Node Node, string? Name, DefinitionKind Kind, int StartLine, int EndLine)> overlapping)
+    {
+        foreach (var other in overlapping)
+        {
+            if (other.Node.Id == candidate.Node.Id)
+            {
+                continue;
+            }
+
+            // `other` is strictly inside `candidate`?
+            if (other.StartLine >= candidate.StartLine
+                && other.EndLine <= candidate.EndLine
+                && (other.StartLine != candidate.StartLine || other.EndLine != candidate.EndLine))
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private static DefinitionKind CaptureNameToKind(string? captureName)

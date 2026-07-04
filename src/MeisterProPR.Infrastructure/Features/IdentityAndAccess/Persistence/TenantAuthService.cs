@@ -83,7 +83,7 @@ public sealed class TenantAuthService(
                 "TenantLocalLoginDenied TenantSlug={TenantSlug} Username={Username} Reason={Reason}",
                 safeTenantSlug,
                 safeUsername,
-                tenant is null ? "tenant_not_found" : !tenant.IsActive ? "tenant_inactive" : "local_login_disabled");
+                DetermineTenantLoginDenialReason(tenant));
             return null;
         }
 
@@ -94,7 +94,7 @@ public sealed class TenantAuthService(
                 "TenantLocalLoginDenied TenantSlug={TenantSlug} Username={Username} Reason={Reason}",
                 safeTenantSlug,
                 safeUsername,
-                user is null ? "user_not_found" : !user.IsActive ? "user_inactive" : "missing_password_hash");
+                DetermineUserLoginDenialReason(user));
             return null;
         }
 
@@ -124,6 +124,26 @@ public sealed class TenantAuthService(
             safeTenantSlug,
             user.Id);
         return user;
+    }
+
+    private static string DetermineTenantLoginDenialReason(TenantRecord? tenant)
+    {
+        if (tenant is null)
+        {
+            return "tenant_not_found";
+        }
+
+        return !tenant.IsActive ? "tenant_inactive" : "local_login_disabled";
+    }
+
+    private static string DetermineUserLoginDenialReason(AppUser? user)
+    {
+        if (user is null)
+        {
+            return "user_not_found";
+        }
+
+        return !user.IsActive ? "user_inactive" : "missing_password_hash";
     }
 
     public async Task<TenantExternalChallengeResult?> BuildExternalChallengeAsync(
@@ -654,11 +674,8 @@ public sealed class TenantAuthService(
             return null;
         }
 
-        var displayName = TryGetString(userDocument.RootElement, "name", out var nameValue)
-            ? nameValue
-            : TryGetString(userDocument.RootElement, "login", out var loginValue)
-                ? loginValue
-                : null;
+        var fallbackDisplayName = TryGetString(userDocument.RootElement, "login", out var loginValue) ? loginValue : null;
+        var displayName = TryGetString(userDocument.RootElement, "name", out var nameValue) ? nameValue : fallbackDisplayName;
 
         var (email, emailVerified) = await this.ResolveGitHubEmailAsync(configuration.EmailsEndpoint!, accessToken, ct);
         return new TenantExternalIdentityPayload(configuration.Issuer, subject, email, emailVerified, displayName);

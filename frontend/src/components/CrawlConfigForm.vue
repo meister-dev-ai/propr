@@ -39,10 +39,10 @@
         </div>
 
         <div class="form-group">
-          <label for="crawlOrganizationScope">Azure DevOps Organization</label>
+          <label :for="legacyModeWithoutScope ? 'crawlOrganizationScopeReadonly' : 'crawlOrganizationScope'">Azure DevOps Organization</label>
           <div v-if="legacyModeWithoutScope" class="input-wrapper">
             <input
-              id="crawlOrganizationScope"
+              id="crawlOrganizationScopeReadonly"
               :value="props.config?.providerScopePath ?? ''"
               type="text"
               readonly
@@ -86,10 +86,10 @@
         </div>
 
         <div class="form-group">
-          <label for="crawlProjectId">Azure DevOps Project</label>
+          <label :for="legacyModeWithoutScope ? 'crawlProjectIdReadonly' : 'crawlProjectId'">Azure DevOps Project</label>
           <div v-if="legacyModeWithoutScope" class="input-wrapper">
             <input
-              id="crawlProjectId"
+              id="crawlProjectIdReadonly"
               :value="projectId"
               type="text"
               readonly

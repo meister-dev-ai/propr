@@ -365,31 +365,16 @@ internal abstract class ProviderReviewContextToolsBase(
                     break;
                 }
 
-                if (!this._structuralAnalyzer.CanAnalyze(file) || LanguagePaths.TryResolve(file) is not { } language)
+                var step = await this.ScanFileForReferencesAsync(file, branchName, query.Symbol, sites, usedChars, token);
+                usedChars = step.UsedChars;
+                if (step.Analyzed)
                 {
-                    continue;
+                    scanned++;
                 }
 
-                scanned++;
-                var content = await this.TryFetchAsync(file, branchName, token);
-                if (string.IsNullOrEmpty(content))
+                if (step.Truncated)
                 {
-                    continue;
-                }
-
-                var request = new StructuralParseRequest(file, language, content, []);
-                var lines = await this._structuralAnalyzer.ConfirmReferenceLinesAsync(request, query.Symbol, token);
-
-                foreach (var line in lines)
-                {
-                    if (sites.Count >= this._options.MaxReferenceResults || usedChars > this._options.MaxReferenceResultChars)
-                    {
-                        truncated = true;
-                        return new ReferenceLookupResult(sites, scanned, truncated, false);
-                    }
-
-                    sites.Add(new ReferenceSite(file, line, null, null, OccurrenceKind.Reference, ResolutionMode.NameBased));
-                    usedChars += file.Length + 16;
+                    return new ReferenceLookupResult(sites, scanned, true, false);
                 }
             }
         }
@@ -410,6 +395,44 @@ internal abstract class ProviderReviewContextToolsBase(
 
         return new ReferenceLookupResult(sites, scanned, truncated, false);
     }
+
+    private async Task<ReferenceScanStep> ScanFileForReferencesAsync(
+        string file,
+        string branchName,
+        string symbol,
+        List<ReferenceSite> sites,
+        int usedChars,
+        CancellationToken token)
+    {
+        if (!this._structuralAnalyzer!.CanAnalyze(file) || LanguagePaths.TryResolve(file) is not { } language)
+        {
+            return new ReferenceScanStep(false, false, usedChars);
+        }
+
+        var content = await this.TryFetchAsync(file, branchName, token);
+        if (string.IsNullOrEmpty(content))
+        {
+            return new ReferenceScanStep(true, false, usedChars);
+        }
+
+        var parseRequest = new StructuralParseRequest(file, language, content, []);
+        var lines = await this._structuralAnalyzer.ConfirmReferenceLinesAsync(parseRequest, symbol, token);
+
+        foreach (var line in lines)
+        {
+            if (sites.Count >= this._options.MaxReferenceResults || usedChars > this._options.MaxReferenceResultChars)
+            {
+                return new ReferenceScanStep(true, true, usedChars);
+            }
+
+            sites.Add(new ReferenceSite(file, line, null, null, OccurrenceKind.Reference, ResolutionMode.NameBased));
+            usedChars += file.Length + 16;
+        }
+
+        return new ReferenceScanStep(true, false, usedChars);
+    }
+
+    private readonly record struct ReferenceScanStep(bool Analyzed, bool Truncated, int UsedChars);
 
     /// <inheritdoc />
     public async Task<DefinitionLookupResult> GetDefinitionAsync(SymbolReferenceQuery query, CancellationToken ct)
@@ -450,35 +473,16 @@ internal abstract class ProviderReviewContextToolsBase(
                     break;
                 }
 
-                if (!this._structuralAnalyzer.CanAnalyze(file) || LanguagePaths.TryResolve(file) is not { } language)
+                var (analyzed, hitLimit) = await this.ScanFileForDefinitionsAsync(file, branchName, query.Symbol, definitions, token);
+                if (analyzed)
                 {
-                    continue;
+                    scanned++;
                 }
 
-                scanned++;
-                var content = await this.TryFetchAsync(file, branchName, token);
-                if (string.IsNullOrEmpty(content))
+                if (hitLimit)
                 {
-                    continue;
-                }
-
-                var request = new StructuralParseRequest(file, language, content, []);
-                var defs = await this._structuralAnalyzer.GetDefinitionsAsync(request, token);
-
-                foreach (var def in defs)
-                {
-                    if (!string.Equals(def.Name, query.Symbol, StringComparison.Ordinal))
-                    {
-                        continue;
-                    }
-
-                    if (definitions.Count >= this._options.MaxReferenceResults)
-                    {
-                        truncated = true;
-                        return new DefinitionLookupResult(definitions, scanned, truncated, false);
-                    }
-
-                    definitions.Add(new DefinitionLookupSite(file, def.Kind, def.Name, def.StartLine, def.EndLine, ResolutionMode.NameBased));
+                    truncated = true;
+                    return new DefinitionLookupResult(definitions, scanned, truncated, false);
                 }
             }
         }
@@ -497,6 +501,45 @@ internal abstract class ProviderReviewContextToolsBase(
         }
 
         return new DefinitionLookupResult(definitions, scanned, truncated, false);
+    }
+
+    private async Task<(bool Analyzed, bool HitLimit)> ScanFileForDefinitionsAsync(
+        string file,
+        string branchName,
+        string symbol,
+        List<DefinitionLookupSite> definitions,
+        CancellationToken token)
+    {
+        if (!this._structuralAnalyzer!.CanAnalyze(file) || LanguagePaths.TryResolve(file) is not { } language)
+        {
+            return (false, false);
+        }
+
+        var content = await this.TryFetchAsync(file, branchName, token);
+        if (string.IsNullOrEmpty(content))
+        {
+            return (true, false);
+        }
+
+        var parseRequest = new StructuralParseRequest(file, language, content, []);
+        var defs = await this._structuralAnalyzer.GetDefinitionsAsync(parseRequest, token);
+
+        foreach (var def in defs)
+        {
+            if (!string.Equals(def.Name, symbol, StringComparison.Ordinal))
+            {
+                continue;
+            }
+
+            if (definitions.Count >= this._options.MaxReferenceResults)
+            {
+                return (true, true);
+            }
+
+            definitions.Add(new DefinitionLookupSite(file, def.Kind, def.Name, def.StartLine, def.EndLine, ResolutionMode.NameBased));
+        }
+
+        return (true, false);
     }
 
     private async Task<ProCursorKnowledgeAnswerDto> ExecuteKnowledgeQueryAsync(string question, CancellationToken ct)

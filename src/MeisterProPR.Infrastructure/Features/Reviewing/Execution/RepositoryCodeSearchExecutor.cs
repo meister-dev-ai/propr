@@ -76,12 +76,7 @@ internal static class RepositoryCodeSearchExecutor
             request.BranchSide,
             request.PathScope,
             filters,
-            sourceBranch,
-            targetBranch,
-            changedPathSnapshots,
-            loadFileTreeAsync,
-            normalizeBranch,
-            normalizePath,
+            new RepositoryAccessContext(sourceBranch, targetBranch, changedPathSnapshots, loadFileTreeAsync, normalizeBranch, normalizePath),
             ct);
 
         if (candidateResolution.Branch is null)

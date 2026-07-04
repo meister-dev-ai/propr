@@ -31,7 +31,7 @@ internal sealed class GitLabCodeReviewPublicationService(
         CodeReviewRef review,
         ReviewRevision revision,
         ReviewResult result,
-        ReviewerIdentity author,
+        ReviewerIdentity reviewer,
         CancellationToken ct = default,
         ReviewPublicationContext? publicationContext = null)
     {
@@ -41,7 +41,7 @@ internal sealed class GitLabCodeReviewPublicationService(
         activity?.SetTag("scm.provider", ScmProvider.GitLab.ToString());
         activity?.SetTag("provider.host", review.Repository.Host.HostBaseUrl);
         activity?.SetTag("review.number", review.Number);
-        activity?.SetTag("publication.author.login", author.Login);
+        activity?.SetTag("publication.author.login", reviewer.Login);
 
         var context = await connectionVerifier.VerifyAsync(clientId, review.Repository.Host, ct);
         var discussionUri = GitLabConnectionVerifier.BuildApiUri(
@@ -49,7 +49,7 @@ internal sealed class GitLabCodeReviewPublicationService(
             $"/projects/{Uri.EscapeDataString(review.Repository.ExternalRepositoryId)}/merge_requests/{review.Number}/discussions");
         var client = httpClientFactory.CreateClient("GitLabProvider");
 
-        var summaryBody = BuildSummaryBody(result, author);
+        var summaryBody = BuildSummaryBody(result, reviewer);
         var inlineComments = result.Comments.Where(IsInlineComment).ToList();
         var inlineRevision = inlineComments.Count > 0
             ? await GetLatestInlineRevisionAsync(client, context.Connection.Secret, review, ct)
@@ -61,14 +61,15 @@ internal sealed class GitLabCodeReviewPublicationService(
         if (!string.IsNullOrWhiteSpace(summaryBody))
         {
             var captured = await PostDiscussionAsync(
-                client,
-                context.Connection.Secret,
-                discussionUri,
-                new GitLabDiscussionRequest(summaryBody, null),
-                GitLabDiscussionTarget.Overview(1, totalDiscussions),
-                successfulDiscussionCount,
-                null,
-                null,
+                new GitLabDiscussionPostRequest(
+                    client,
+                    context.Connection.Secret,
+                    discussionUri,
+                    new GitLabDiscussionRequest(summaryBody, null),
+                    GitLabDiscussionTarget.Overview(1, totalDiscussions),
+                    successfulDiscussionCount,
+                    null,
+                    null),
                 ct);
             if (captured is not null)
             {
@@ -82,27 +83,28 @@ internal sealed class GitLabCodeReviewPublicationService(
         {
             var normalizedPath = NormalizePath(comment.FilePath!);
             var captured = await PostDiscussionAsync(
-                client,
-                context.Connection.Secret,
-                discussionUri,
-                new GitLabDiscussionRequest(
-                    $"{FormatSeverity(comment.Severity)}: {comment.Message}",
-                    new GitLabDiscussionPosition(
-                        "text",
-                        inlineRevision!.BaseSha,
-                        inlineRevision.HeadSha,
-                        inlineRevision.StartSha,
+                new GitLabDiscussionPostRequest(
+                    client,
+                    context.Connection.Secret,
+                    discussionUri,
+                    new GitLabDiscussionRequest(
+                        $"{FormatSeverity(comment.Severity)}: {comment.Message}",
+                        new GitLabDiscussionPosition(
+                            "text",
+                            inlineRevision!.BaseSha,
+                            inlineRevision.HeadSha,
+                            inlineRevision.StartSha,
+                            normalizedPath,
+                            normalizedPath,
+                            comment.LineNumber)),
+                    GitLabDiscussionTarget.Inline(
+                        successfulDiscussionCount + 1,
+                        totalDiscussions,
                         normalizedPath,
-                        normalizedPath,
-                        comment.LineNumber)),
-                GitLabDiscussionTarget.Inline(
-                    successfulDiscussionCount + 1,
-                    totalDiscussions,
+                        comment.LineNumber!.Value),
+                    successfulDiscussionCount,
                     normalizedPath,
-                    comment.LineNumber!.Value),
-                successfulDiscussionCount,
-                normalizedPath,
-                comment.LineNumber,
+                    comment.LineNumber),
                 ct);
             if (captured is not null)
             {
@@ -124,24 +126,15 @@ internal sealed class GitLabCodeReviewPublicationService(
     // Posts a single discussion. On success, best-effort parses the created discussion's first note id —
     // the value the thread crawler reports as the comment id — and returns it as provenance. Parsing never
     // affects posting: an unparseable response simply yields a null ref and publishing continues unchanged.
-    private static async Task<PostedReviewCommentRef?> PostDiscussionAsync(
-        HttpClient client,
-        string token,
-        Uri discussionUri,
-        GitLabDiscussionRequest payload,
-        GitLabDiscussionTarget target,
-        int successfulDiscussionCount,
-        string? filePath,
-        int? line,
-        CancellationToken ct)
+    private static async Task<PostedReviewCommentRef?> PostDiscussionAsync(GitLabDiscussionPostRequest post, CancellationToken ct)
     {
-        using var request = GitLabConnectionVerifier.CreateAuthenticatedRequest(discussionUri, token, HttpMethod.Post);
-        request.Content = BuildDiscussionContent(payload);
+        using var httpRequest = GitLabConnectionVerifier.CreateAuthenticatedRequest(post.DiscussionUri, post.Token, HttpMethod.Post);
+        httpRequest.Content = BuildDiscussionContent(post.Payload);
 
-        using var response = await client.SendAsync(request, ct);
+        using var response = await post.Client.SendAsync(httpRequest, ct);
         if (response.IsSuccessStatusCode)
         {
-            return await TryCaptureDiscussionRefAsync(response, filePath, line, ct);
+            return await TryCaptureDiscussionRefAsync(response, post.FilePath, post.Line, ct);
         }
 
         var responseBody = await ReadFailureDetailAsync(response, ct);
@@ -149,7 +142,7 @@ internal sealed class GitLabCodeReviewPublicationService(
         {
             throw new InvalidOperationException(
                 BuildFailureMessage(
-                    $"GitLab review publication authentication failed while posting {target.Describe(successfulDiscussionCount)}.",
+                    $"GitLab review publication authentication failed while posting {post.Target.Describe(post.SuccessfulDiscussionCount)}.",
                     responseBody));
         }
 
@@ -157,15 +150,25 @@ internal sealed class GitLabCodeReviewPublicationService(
         {
             throw new InvalidOperationException(
                 BuildFailureMessage(
-                    $"GitLab review publication was forbidden while posting {target.Describe(successfulDiscussionCount)}. Ensure the configured GitLab token can create merge request discussions and has the required api scope.",
+                    $"GitLab review publication was forbidden while posting {post.Target.Describe(post.SuccessfulDiscussionCount)}. Ensure the configured GitLab token can create merge request discussions and has the required api scope.",
                     responseBody));
         }
 
         throw new InvalidOperationException(
             BuildFailureMessage(
-                $"GitLab review publication failed while posting {target.Describe(successfulDiscussionCount)} with status {(int)response.StatusCode}.",
+                $"GitLab review publication failed while posting {post.Target.Describe(post.SuccessfulDiscussionCount)} with status {(int)response.StatusCode}.",
                 responseBody));
     }
+
+    private sealed record GitLabDiscussionPostRequest(
+        HttpClient Client,
+        string Token,
+        Uri DiscussionUri,
+        GitLabDiscussionRequest Payload,
+        GitLabDiscussionTarget Target,
+        int SuccessfulDiscussionCount,
+        string? FilePath,
+        int? Line);
 
     private static async Task<PostedReviewCommentRef?> TryCaptureDiscussionRefAsync(
         HttpResponseMessage response,

@@ -166,15 +166,25 @@ public sealed class AgentAiCommentResolutionCore : IAiCommentResolutionCore
 
     private static void AppendThread(StringBuilder sb, PrCommentThread thread)
     {
-        var location = thread.FilePath is not null
-            ? $"{thread.FilePath}{(thread.LineNumber.HasValue ? $":L{thread.LineNumber}" : "")}"
-            : "(PR-level)";
+        var location = FormatThreadLocation(thread);
 
         sb.AppendLine($"Thread at {location}:");
         foreach (var comment in thread.Comments)
         {
             sb.AppendLine($"  [{comment.AuthorName}]: {comment.Content}");
         }
+    }
+
+    private static string FormatThreadLocation(PrCommentThread thread)
+    {
+        if (thread.FilePath is null)
+        {
+            return "(PR-level)";
+        }
+
+        return thread.LineNumber.HasValue
+            ? $"{thread.FilePath}:L{thread.LineNumber}"
+            : thread.FilePath;
     }
 
     private static ThreadResolutionResult ParseResult(

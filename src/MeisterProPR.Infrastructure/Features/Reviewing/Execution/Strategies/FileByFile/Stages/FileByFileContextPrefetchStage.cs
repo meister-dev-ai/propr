@@ -70,22 +70,7 @@ internal sealed class FileByFileContextPrefetchStage(
                     surrounding.Truncated));
         }
 
-        var callerBudget = Math.Max(0, this._options.MaxPrefetchCallerSites);
-        var fanOut = FanOutSignal.Unavailable;
-        if (callerBudget > 0)
-        {
-            if (this._options.EnableStructuralReferenceTools && this._analyzer is not null)
-            {
-                // Deterministic caller-evidence feed driven by the CHANGED definitions in the changed
-                // file. Independent of whether the model invokes a tool. Also yields the blast-radius signal.
-                fanOut = await this.AppendChangedSymbolCallerEvidenceAsync(context, reviewTools, evidence, callerBudget, cancellationToken);
-            }
-            else
-            {
-                // Fallback: path-keyed related_symbol caller evidence (kill-switch off).
-                await AppendRelatedSymbolCallerEvidenceAsync(context, reviewTools, evidence, callerBudget, this._options, cancellationToken);
-            }
-        }
+        var fanOut = await this.CollectCallerEvidenceAsync(context, reviewTools, evidence, cancellationToken);
 
         // Persist the fan-out signal regardless of caller evidence; the triage decision reads it later.
         context.FileReviewContext.PerFileHint = fileHint with
@@ -99,50 +84,85 @@ internal sealed class FileByFileContextPrefetchStage(
             return context;
         }
 
-        var recorder = this._protocolRecorder ?? context.FileReviewContext.ProtocolRecorder;
-        if (context.ProtocolId.HasValue && recorder is not null)
-        {
-            // T030 — bump the boundary-outcome counter so operators can see the
-            // tree-sitter vs heuristic distribution across reviews (Principle V).
-            var outcomeTag = surrounding.BoundaryResolved
-                ? "tree-sitter"
-                : surrounding.FallbackReason?.ToTraceString() ?? "heuristic";
-            BoundaryOutcomeCounter.Add(
-                1,
-                new KeyValuePair<string, object?>("outcome", outcomeTag),
-                new KeyValuePair<string, object?>("language", ResolveSupportedLanguage(context.ChangedFile.Path)?.ToString() ?? "unknown"));
-
-            await recorder.RecordReviewStrategyEventAsync(
-                context.ProtocolId.Value,
-                ReviewProtocolEventNames.ContextPrefetchApplied,
-                JsonSerializer.Serialize(
-                    new
-                    {
-                        filePath = context.ChangedFile.Path,
-                        evidenceCount = evidence.Count,
-                        callerSiteCount = evidence.Count(item => string.Equals(item.Kind, "supported_caller_site", StringComparison.Ordinal)),
-                        windowCount = surrounding.WindowCount,
-                        firstWindowStartLine = surrounding.FirstWindowStartLine,
-                        windowedInjection = surrounding.BoundaryResolved || surrounding.WindowCount > 0,
-                        // Extended fields (feature 070, contracts/trace-event.md):
-                        boundaryResolver = surrounding.BoundaryResolved ? "tree-sitter" : "heuristic",
-                        enclosingSymbol = surrounding.EnclosingSymbol,
-                        enclosingKind = surrounding.EnclosingKind?.ToTraceString(),
-                        fallbackReason = surrounding.FallbackReason?.ToTraceString(),
-                    }),
-                JsonSerializer.Serialize(
-                    evidence.Select(item => new
-                    {
-                        item.Kind,
-                        item.Title,
-                        item.SourceId,
-                        item.Truncated,
-                    })),
-                null,
-                cancellationToken);
-        }
+        await this.RecordContextPrefetchTraceAsync(context, evidence, surrounding, cancellationToken);
 
         return context;
+    }
+
+    private async Task<FanOutSignal> CollectCallerEvidenceAsync(
+        PerFileReviewContext context,
+        IReviewContextTools reviewTools,
+        List<PrefetchedContextEvidenceItem> evidence,
+        CancellationToken cancellationToken)
+    {
+        var callerBudget = Math.Max(0, this._options.MaxPrefetchCallerSites);
+        if (callerBudget <= 0)
+        {
+            return FanOutSignal.Unavailable;
+        }
+
+        if (this._options.EnableStructuralReferenceTools && this._analyzer is not null)
+        {
+            // Deterministic caller-evidence feed driven by the CHANGED definitions in the changed
+            // file. Independent of whether the model invokes a tool. Also yields the blast-radius signal.
+            return await this.AppendChangedSymbolCallerEvidenceAsync(context, reviewTools, evidence, callerBudget, cancellationToken);
+        }
+
+        // Fallback: path-keyed related_symbol caller evidence (kill-switch off).
+        await AppendRelatedSymbolCallerEvidenceAsync(context, reviewTools, evidence, callerBudget, this._options, cancellationToken);
+        return FanOutSignal.Unavailable;
+    }
+
+    private async Task RecordContextPrefetchTraceAsync(
+        PerFileReviewContext context,
+        List<PrefetchedContextEvidenceItem> evidence,
+        StructuralContextResult surrounding,
+        CancellationToken cancellationToken)
+    {
+        var recorder = this._protocolRecorder ?? context.FileReviewContext.ProtocolRecorder;
+        if (!context.ProtocolId.HasValue || recorder is null)
+        {
+            return;
+        }
+
+        // Bump the boundary-outcome counter so operators can see the tree-sitter vs
+        // heuristic distribution across reviews.
+        var outcomeTag = surrounding.BoundaryResolved
+            ? "tree-sitter"
+            : surrounding.FallbackReason?.ToTraceString() ?? "heuristic";
+        BoundaryOutcomeCounter.Add(
+            1,
+            new KeyValuePair<string, object?>("outcome", outcomeTag),
+            new KeyValuePair<string, object?>("language", ResolveSupportedLanguage(context.ChangedFile.Path)?.ToString() ?? "unknown"));
+
+        await recorder.RecordReviewStrategyEventAsync(
+            context.ProtocolId.Value,
+            ReviewProtocolEventNames.ContextPrefetchApplied,
+            JsonSerializer.Serialize(
+                new
+                {
+                    filePath = context.ChangedFile.Path,
+                    evidenceCount = evidence.Count,
+                    callerSiteCount = evidence.Count(item => string.Equals(item.Kind, "supported_caller_site", StringComparison.Ordinal)),
+                    windowCount = surrounding.WindowCount,
+                    firstWindowStartLine = surrounding.FirstWindowStartLine,
+                    windowedInjection = surrounding.BoundaryResolved || surrounding.WindowCount > 0,
+                    // Structural-boundary trace fields:
+                    boundaryResolver = surrounding.BoundaryResolved ? "tree-sitter" : "heuristic",
+                    enclosingSymbol = surrounding.EnclosingSymbol,
+                    enclosingKind = surrounding.EnclosingKind?.ToTraceString(),
+                    fallbackReason = surrounding.FallbackReason?.ToTraceString(),
+                }),
+            JsonSerializer.Serialize(
+                evidence.Select(item => new
+                {
+                    item.Kind,
+                    item.Title,
+                    item.SourceId,
+                    item.Truncated,
+                })),
+            null,
+            cancellationToken);
     }
 
     /// <summary>
@@ -219,50 +239,24 @@ internal sealed class FileByFileContextPrefetchStage(
 
         foreach (var symbol in changedSymbols)
         {
-            ReferenceLookupResult references;
-            try
-            {
-                references = await reviewTools.FindReferencesAsync(
-                    new SymbolReferenceQuery(symbol!),
-                    ct).ConfigureAwait(false);
-            }
-            catch (OperationCanceledException)
-            {
-                throw;
-            }
-            catch
+            var outcome = await CollectCallerSitesForSymbolAsync(
+                symbol!,
+                path,
+                reviewTools,
+                evidence,
+                seen,
+                injected,
+                callerBudget,
+                ct).ConfigureAwait(false);
+            if (outcome is null)
             {
                 continue;
             }
 
-            if (!references.Unavailable)
-            {
-                gotData = true;
-                totalReferences += references.Sites.Count;
-                anyTruncated |= references.Truncated;
-            }
-
-            foreach (var site in references.Sites.Where(s => !string.Equals(s.FilePath, path, StringComparison.Ordinal)))
-            {
-                if (injected >= callerBudget)
-                {
-                    break;
-                }
-
-                var key = $"{site.FilePath}:{site.Line}";
-                if (!seen.Add(key))
-                {
-                    continue;
-                }
-
-                evidence.Add(
-                    new PrefetchedContextEvidenceItem(
-                        "supported_caller_site",
-                        $"Confirmed caller of {symbol}: {site.FilePath}",
-                        $"{site.FilePath}:L{site.Line}",
-                        $"Confirmed cross-file caller of `{symbol}` at {site.FilePath}:{site.Line} (structural; comment/string occurrences excluded)."));
-                injected++;
-            }
+            gotData = true;
+            totalReferences += outcome.Value.ReferenceCount;
+            anyTruncated |= outcome.Value.Truncated;
+            injected = outcome.Value.Injected;
         }
 
         if (!gotData)
@@ -271,6 +265,66 @@ internal sealed class FileByFileContextPrefetchStage(
         }
 
         return anyTruncated ? FanOutSignal.Truncated(totalReferences) : FanOutSignal.Measured(totalReferences);
+    }
+
+    /// <summary>
+    ///     Looks up confirmed cross-file callers for a single changed symbol and injects up to the
+    ///     remaining caller budget as evidence. Returns <see langword="null" /> when the lookup itself
+    ///     produced no usable data (unavailable or cancelled-and-swallowed failure), so the caller can
+    ///     tell "no data" apart from "zero references found".
+    /// </summary>
+    private static async Task<(int ReferenceCount, bool Truncated, int Injected)?> CollectCallerSitesForSymbolAsync(
+        string symbol,
+        string path,
+        IReviewContextTools reviewTools,
+        List<PrefetchedContextEvidenceItem> evidence,
+        HashSet<string> seen,
+        int injected,
+        int callerBudget,
+        CancellationToken ct)
+    {
+        ReferenceLookupResult references;
+        try
+        {
+            references = await reviewTools.FindReferencesAsync(new SymbolReferenceQuery(symbol), ct).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch
+        {
+            return null;
+        }
+
+        if (references.Unavailable)
+        {
+            return null;
+        }
+
+        foreach (var site in references.Sites.Where(s => !string.Equals(s.FilePath, path, StringComparison.Ordinal)))
+        {
+            if (injected >= callerBudget)
+            {
+                break;
+            }
+
+            var key = $"{site.FilePath}:{site.Line}";
+            if (!seen.Add(key))
+            {
+                continue;
+            }
+
+            evidence.Add(
+                new PrefetchedContextEvidenceItem(
+                    "supported_caller_site",
+                    $"Confirmed caller of {symbol}: {site.FilePath}",
+                    $"{site.FilePath}:L{site.Line}",
+                    $"Confirmed cross-file caller of `{symbol}` at {site.FilePath}:{site.Line} (structural; comment/string occurrences excluded)."));
+            injected++;
+        }
+
+        return (references.Sites.Count, references.Truncated, injected);
     }
 
     /// <summary>
