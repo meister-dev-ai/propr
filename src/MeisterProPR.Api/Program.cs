@@ -543,8 +543,11 @@ public partial class Program
         Timeout = TimeSpan.FromSeconds(5),
     };
 
-    // Not meant to be instantiated directly; WebApplicationFactory<Program> only uses this type
-    // as a generic marker to locate the assembly, so it can't be made static.
+    /// <summary>
+    ///     Prevents direct instantiation. This class exists only as the entry-point marker type
+    ///     (e.g. for <c>WebApplicationFactory&lt;Program&gt;</c> in integration tests) and to host
+    ///     the static helpers below.
+    /// </summary>
     protected Program()
     {
     }

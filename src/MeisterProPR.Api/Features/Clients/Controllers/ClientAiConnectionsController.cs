@@ -19,6 +19,8 @@ public sealed partial class ClientAiConnectionsController(
     IAiProviderDriverRegistry providerDrivers,
     ILogger<ClientAiConnectionsController> logger) : ControllerBase
 {
+    private const string RequestModelsPropertyName = "requestModels";
+
     private static readonly StringComparer ModelNameComparer = StringComparer.OrdinalIgnoreCase;
 
     private static readonly AiPurpose[] RequiredPurposes =
@@ -556,8 +558,6 @@ public sealed partial class ClientAiConnectionsController(
 
     private AiConfiguredModelDto? NormalizeConfiguredModel(AiConfiguredModelRequest requestModel, HashSet<string> seen)
     {
-        const string RequestModelsPropertyName = "requestModels";
-
         if (string.IsNullOrWhiteSpace(requestModel.RemoteModelId))
         {
             this.ModelState.AddModelError(RequestModelsPropertyName, "Each configured model requires remoteModelId.");
@@ -626,18 +626,18 @@ public sealed partial class ClientAiConnectionsController(
     {
         if (string.IsNullOrWhiteSpace(requestModel.TokenizerName))
         {
-            this.ModelState.AddModelError("requestModels", $"Embedding model '{remoteModelId}' requires tokenizerName.");
+            this.ModelState.AddModelError(RequestModelsPropertyName, $"Embedding model '{remoteModelId}' requires tokenizerName.");
         }
 
         if (!requestModel.MaxInputTokens.HasValue || requestModel.MaxInputTokens.Value <= 0)
         {
-            this.ModelState.AddModelError("requestModels", $"Embedding model '{remoteModelId}' requires maxInputTokens greater than zero.");
+            this.ModelState.AddModelError(RequestModelsPropertyName, $"Embedding model '{remoteModelId}' requires maxInputTokens greater than zero.");
         }
 
         if (!requestModel.EmbeddingDimensions.HasValue || requestModel.EmbeddingDimensions.Value is < 64 or > 4096)
         {
             this.ModelState.AddModelError(
-                "requestModels",
+                RequestModelsPropertyName,
                 $"Embedding model '{remoteModelId}' requires embeddingDimensions between 64 and 4096.");
         }
     }

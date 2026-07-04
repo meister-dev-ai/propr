@@ -33,6 +33,22 @@ public sealed class FileReviewerMultiPassUnionTests
         new("Program.cs", 90, CommentSeverity.Warning, "Unchecked cast can throw at runtime."),
     ];
 
+    private static readonly string[] NullRefLeakOffByOneMessages =
+    [
+        "Null reference risk when config is missing.",
+        "Resource leak: the stream is never disposed.",
+        "Off-by-one error in the loop bound.",
+    ];
+
+    private static readonly string?[] TierThenGpt54ThenGpt54Mini =
+        ["gpt-5.3-codex", "gpt-5.4", "gpt-5.4-mini"];
+
+    private static readonly string?[] Gpt54ThenCodexTwice =
+        ["gpt-5.4", "gpt-5.3-codex", "gpt-5.3-codex"];
+
+    private static readonly string?[] CodexThenGpt54Twice =
+        ["gpt-5.3-codex", "gpt-5.4", "gpt-5.4"];
+
     private readonly IAiReviewCore _aiCore = Substitute.For<IAiReviewCore>();
     private readonly IJobRepository _jobRepository = Substitute.For<IJobRepository>();
 
@@ -122,7 +138,7 @@ public sealed class FileReviewerMultiPassUnionTests
         return (job, pr);
     }
 
-    private ReviewSystemContext MultiPassContext(int passCount)
+    private static ReviewSystemContext MultiPassContext(int passCount)
     {
         return new ReviewSystemContext(null, [], null)
         {
@@ -167,7 +183,7 @@ public sealed class FileReviewerMultiPassUnionTests
         var file = FileForTier(FileComplexityTier.Low);
         var (job, pr) = Fixture(file);
 
-        await reviewer.ReviewAsync(job, pr, file, 1, 1, this.MultiPassContext(3), null, Substitute.For<IChatClient>(), CancellationToken.None);
+        await reviewer.ReviewAsync(job, pr, file, 1, 1, FileReviewerMultiPassUnionTests.MultiPassContext(3), null, Substitute.For<IChatClient>(), CancellationToken.None);
 
         // Tier binding: multi-pass union runs only for Medium/High tiers; a Low-tier file gets exactly one pass.
         await this._aiCore.Received(1).ReviewAsync(Arg.Any<PullRequest>(), Arg.Any<ReviewSystemContext>(), Arg.Any<CancellationToken>());
@@ -185,7 +201,7 @@ public sealed class FileReviewerMultiPassUnionTests
         var file = FileForTier(tier);
         var (job, pr) = Fixture(file);
 
-        await reviewer.ReviewAsync(job, pr, file, 1, 1, this.MultiPassContext(3), null, Substitute.For<IChatClient>(), CancellationToken.None);
+        await reviewer.ReviewAsync(job, pr, file, 1, 1, FileReviewerMultiPassUnionTests.MultiPassContext(3), null, Substitute.For<IChatClient>(), CancellationToken.None);
 
         // k=3 fan-out: the baseline pass plus two resamples.
         await this._aiCore.Received(3).ReviewAsync(Arg.Any<PullRequest>(), Arg.Any<ReviewSystemContext>(), Arg.Any<CancellationToken>());
@@ -194,14 +210,7 @@ public sealed class FileReviewerMultiPassUnionTests
         Assert.NotNull(this._persistedResult);
         var comments = this._persistedResult!.Comments!;
         Assert.Equal(3, comments.Count);
-        Assert.Equal(
-            new[]
-            {
-                "Null reference risk when config is missing.",
-                "Resource leak: the stream is never disposed.",
-                "Off-by-one error in the loop bound.",
-            },
-            comments.Select(c => c.Message).ToArray());
+        Assert.Equal(NullRefLeakOffByOneMessages, comments.Select(c => c.Message).ToArray());
     }
 
     [Fact]
@@ -211,7 +220,7 @@ public sealed class FileReviewerMultiPassUnionTests
         var file = FileForTier(FileComplexityTier.High);
         var (job, pr) = Fixture(file);
 
-        await reviewer.ReviewAsync(job, pr, file, 1, 1, this.MultiPassContext(3), null, Substitute.For<IChatClient>(), CancellationToken.None);
+        await reviewer.ReviewAsync(job, pr, file, 1, 1, FileReviewerMultiPassUnionTests.MultiPassContext(3), null, Substitute.For<IChatClient>(), CancellationToken.None);
 
         Assert.NotNull(this._persistedResult);
         var comments = this._persistedResult!.Comments!;
@@ -303,7 +312,7 @@ public sealed class FileReviewerMultiPassUnionTests
         await reviewer.ReviewAsync(job, pr, file, 1, 1, baseContext, null, Substitute.For<IChatClient>(), CancellationToken.None);
 
         // The baseline pass stays on the file's tier model; the resample passes span the declared arm models.
-        Assert.Equal(new[] { "gpt-5.3-codex", "gpt-5.4", "gpt-5.4-mini" }, this._observedModelIds.ToArray());
+        Assert.Equal(TierThenGpt54ThenGpt54Mini, this._observedModelIds.ToArray());
     }
 
     [Fact]
@@ -327,7 +336,7 @@ public sealed class FileReviewerMultiPassUnionTests
 
         await reviewer.ReviewAsync(job, pr, file, 1, 1, baseContext, null, Substitute.For<IChatClient>(), CancellationToken.None);
 
-        Assert.Equal(new[] { "gpt-5.4", "gpt-5.3-codex", "gpt-5.3-codex" }, this._observedModelIds.ToArray());
+        Assert.Equal(Gpt54ThenCodexTwice, this._observedModelIds.ToArray());
     }
 
     [Fact]
@@ -349,6 +358,6 @@ public sealed class FileReviewerMultiPassUnionTests
 
         await reviewer.ReviewAsync(job, pr, file, 1, 1, baseContext, null, Substitute.For<IChatClient>(), CancellationToken.None);
 
-        Assert.Equal(new[] { "gpt-5.3-codex", "gpt-5.4", "gpt-5.4" }, this._observedModelIds.ToArray());
+        Assert.Equal(CodexThenGpt54Twice, this._observedModelIds.ToArray());
     }
 }

@@ -58,7 +58,7 @@ public sealed partial class ClientProviderConnectionsController(
         return AuthHelpers.RequireClientRole(this.HttpContext, clientId, minimumRole);
     }
 
-    private IActionResult? ValidateSupportedAuthenticationConfiguration(AuthenticationConfigurationCandidate candidate)
+    private ActionResult? ValidateSupportedAuthenticationConfiguration(AuthenticationConfigurationCandidate candidate)
     {
         foreach (var (propertyName, message) in GetAuthenticationConfigurationErrors(candidate))
         {

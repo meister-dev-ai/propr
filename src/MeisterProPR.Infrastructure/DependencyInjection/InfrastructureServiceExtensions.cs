@@ -171,140 +171,52 @@ public static class InfrastructureServiceExtensions
     /// </summary>
     private static void ConfigureAiReviewOptions(AiReviewOptions opts, IConfiguration configuration)
     {
-        if (int.TryParse(configuration["AI_MAX_REVIEW_ITERATIONS"], out var maxIter))
-        {
-            opts.MaxIterations = maxIter;
-        }
-
-        if (int.TryParse(configuration["AI_FILE_BATCH_LINES"], out var batchLines))
-        {
-            opts.FileBatchLines = batchLines;
-        }
-
-        if (int.TryParse(configuration["AI_CONFIDENCE_THRESHOLD"], out var threshold))
-        {
-            opts.ConfidenceThreshold = threshold;
-        }
-
-        if (int.TryParse(configuration["AI_MAX_FILE_SIZE_BYTES"], out var maxSize))
-        {
-            opts.MaxFileSizeBytes = maxSize;
-        }
-
-        if (int.TryParse(configuration["AI_MAX_FILE_REVIEW_CONCURRENCY"], out var concurrency))
-        {
-            opts.MaxFileReviewConcurrency = concurrency;
-        }
-
-        if (int.TryParse(configuration["AI_MAX_FILE_REVIEW_RETRIES"], out var retries))
-        {
-            opts.MaxFileReviewRetries = retries;
-        }
-
-        if (int.TryParse(configuration["AI_MAX_RATE_LIMIT_RETRIES"], out var rateLimitRetries))
-        {
-            opts.MaxRateLimitRetries = rateLimitRetries;
-        }
-
-        if (int.TryParse(configuration["AI_MAX_BACKOFF_SECONDS"], out var backoff))
-        {
-            opts.MaxBackoffSeconds = backoff;
-        }
-
-        if (int.TryParse(configuration["AI_MAX_ITERATIONS_LOW"], out var maxIterLow))
-        {
-            opts.MaxIterationsLow = maxIterLow;
-        }
-
-        if (int.TryParse(configuration["AI_MAX_ITERATIONS_MEDIUM"], out var maxIterMedium))
-        {
-            opts.MaxIterationsMedium = maxIterMedium;
-        }
-
-        if (int.TryParse(configuration["AI_MAX_ITERATIONS_HIGH"], out var maxIterHigh))
-        {
-            opts.MaxIterationsHigh = maxIterHigh;
-        }
-
-        if (int.TryParse(configuration["AI_CONFIDENCE_FLOOR_ERROR"], out var confidenceFloorError))
-        {
-            opts.ConfidenceFloorError = confidenceFloorError;
-        }
-
-        if (int.TryParse(configuration["AI_CONFIDENCE_FLOOR_WARNING"], out var confidenceFloorWarning))
-        {
-            opts.ConfidenceFloorWarning = confidenceFloorWarning;
-        }
-
-        if (int.TryParse(configuration["AI_QUALITY_FILTER_THRESHOLD"], out var qualityFilterThreshold))
-        {
-            opts.QualityFilterThreshold = qualityFilterThreshold;
-        }
-
-        if (int.TryParse(configuration["AI_MEMORY_TOP_N"], out var memTopN))
-        {
-            opts.MemoryTopN = memTopN;
-        }
-
-        if (float.TryParse(
-                configuration["AI_MEMORY_MIN_SIMILARITY"],
-                NumberStyles.Float,
-                CultureInfo.InvariantCulture,
-                out var memMinSim))
-        {
-            opts.MemoryMinSimilarity = memMinSim;
-        }
-
-        if (int.TryParse(configuration["AI_MEMORY_EMBEDDING_DIMENSIONS"], out var memDims))
-        {
-            opts.MemoryEmbeddingDimensions = memDims;
-        }
+        opts.MaxIterations = TryGetInt(configuration, "AI_MAX_REVIEW_ITERATIONS") ?? opts.MaxIterations;
+        opts.FileBatchLines = TryGetInt(configuration, "AI_FILE_BATCH_LINES") ?? opts.FileBatchLines;
+        opts.ConfidenceThreshold = TryGetInt(configuration, "AI_CONFIDENCE_THRESHOLD") ?? opts.ConfidenceThreshold;
+        opts.MaxFileSizeBytes = TryGetInt(configuration, "AI_MAX_FILE_SIZE_BYTES") ?? opts.MaxFileSizeBytes;
+        opts.MaxFileReviewConcurrency = TryGetInt(configuration, "AI_MAX_FILE_REVIEW_CONCURRENCY") ?? opts.MaxFileReviewConcurrency;
+        opts.MaxFileReviewRetries = TryGetInt(configuration, "AI_MAX_FILE_REVIEW_RETRIES") ?? opts.MaxFileReviewRetries;
+        opts.MaxRateLimitRetries = TryGetInt(configuration, "AI_MAX_RATE_LIMIT_RETRIES") ?? opts.MaxRateLimitRetries;
+        opts.MaxBackoffSeconds = TryGetInt(configuration, "AI_MAX_BACKOFF_SECONDS") ?? opts.MaxBackoffSeconds;
+        opts.MaxIterationsLow = TryGetInt(configuration, "AI_MAX_ITERATIONS_LOW") ?? opts.MaxIterationsLow;
+        opts.MaxIterationsMedium = TryGetInt(configuration, "AI_MAX_ITERATIONS_MEDIUM") ?? opts.MaxIterationsMedium;
+        opts.MaxIterationsHigh = TryGetInt(configuration, "AI_MAX_ITERATIONS_HIGH") ?? opts.MaxIterationsHigh;
+        opts.ConfidenceFloorError = TryGetInt(configuration, "AI_CONFIDENCE_FLOOR_ERROR") ?? opts.ConfidenceFloorError;
+        opts.ConfidenceFloorWarning = TryGetInt(configuration, "AI_CONFIDENCE_FLOOR_WARNING") ?? opts.ConfidenceFloorWarning;
+        opts.QualityFilterThreshold = TryGetInt(configuration, "AI_QUALITY_FILTER_THRESHOLD") ?? opts.QualityFilterThreshold;
+        opts.MemoryTopN = TryGetInt(configuration, "AI_MEMORY_TOP_N") ?? opts.MemoryTopN;
+        opts.MemoryMinSimilarity = TryGetFloat(configuration, "AI_MEMORY_MIN_SIMILARITY") ?? opts.MemoryMinSimilarity;
+        opts.MemoryEmbeddingDimensions = TryGetInt(configuration, "AI_MEMORY_EMBEDDING_DIMENSIONS") ?? opts.MemoryEmbeddingDimensions;
 
         // Structural boundary resolution (feature 070).
-        if (bool.TryParse(
-                configuration["AI_ENABLE_STRUCTURAL_BOUNDARY_RESOLUTION"],
-                out var enableStructural))
-        {
-            opts.EnableStructuralBoundaryResolution = enableStructural;
-        }
-
-        if (int.TryParse(configuration["AI_STRUCTURAL_PARSE_TIMEOUT_MS"], out var structuralTimeout))
-        {
-            opts.StructuralParseTimeoutMs = structuralTimeout;
-        }
-
-        if (int.TryParse(configuration["AI_MAX_STRUCTURAL_PARSE_BYTES"], out var maxStructuralBytes))
-        {
-            opts.MaxStructuralParseBytes = maxStructuralBytes;
-        }
+        opts.EnableStructuralBoundaryResolution =
+            TryGetBool(configuration, "AI_ENABLE_STRUCTURAL_BOUNDARY_RESOLUTION") ?? opts.EnableStructuralBoundaryResolution;
+        opts.StructuralParseTimeoutMs = TryGetInt(configuration, "AI_STRUCTURAL_PARSE_TIMEOUT_MS") ?? opts.StructuralParseTimeoutMs;
+        opts.MaxStructuralParseBytes = TryGetInt(configuration, "AI_MAX_STRUCTURAL_PARSE_BYTES") ?? opts.MaxStructuralParseBytes;
 
         // Cross-file structural reference surface.
-        if (bool.TryParse(
-                configuration["AI_ENABLE_STRUCTURAL_REFERENCE_TOOLS"],
-                out var enableReferenceTools))
-        {
-            opts.EnableStructuralReferenceTools = enableReferenceTools;
-        }
+        opts.EnableStructuralReferenceTools =
+            TryGetBool(configuration, "AI_ENABLE_STRUCTURAL_REFERENCE_TOOLS") ?? opts.EnableStructuralReferenceTools;
+        opts.MaxReferenceCandidateFiles = TryGetInt(configuration, "AI_MAX_REFERENCE_CANDIDATE_FILES") ?? opts.MaxReferenceCandidateFiles;
+        opts.MaxReferenceResults = TryGetInt(configuration, "AI_MAX_REFERENCE_RESULTS") ?? opts.MaxReferenceResults;
+        opts.MaxReferenceResultChars = TryGetInt(configuration, "AI_MAX_REFERENCE_RESULT_CHARS") ?? opts.MaxReferenceResultChars;
+        opts.ReferenceResolutionTimeoutMs = TryGetInt(configuration, "AI_REFERENCE_RESOLUTION_TIMEOUT_MS") ?? opts.ReferenceResolutionTimeoutMs;
+    }
 
-        if (int.TryParse(configuration["AI_MAX_REFERENCE_CANDIDATE_FILES"], out var maxReferenceCandidateFiles))
-        {
-            opts.MaxReferenceCandidateFiles = maxReferenceCandidateFiles;
-        }
+    private static int? TryGetInt(IConfiguration configuration, string key)
+    {
+        return int.TryParse(configuration[key], out var value) ? value : null;
+    }
 
-        if (int.TryParse(configuration["AI_MAX_REFERENCE_RESULTS"], out var maxReferenceResults))
-        {
-            opts.MaxReferenceResults = maxReferenceResults;
-        }
+    private static float? TryGetFloat(IConfiguration configuration, string key)
+    {
+        return float.TryParse(configuration[key], NumberStyles.Float, CultureInfo.InvariantCulture, out var value) ? value : null;
+    }
 
-        if (int.TryParse(configuration["AI_MAX_REFERENCE_RESULT_CHARS"], out var maxReferenceResultChars))
-        {
-            opts.MaxReferenceResultChars = maxReferenceResultChars;
-        }
-
-        if (int.TryParse(configuration["AI_REFERENCE_RESOLUTION_TIMEOUT_MS"], out var referenceResolutionTimeoutMs))
-        {
-            opts.ReferenceResolutionTimeoutMs = referenceResolutionTimeoutMs;
-        }
+    private static bool? TryGetBool(IConfiguration configuration, string key)
+    {
+        return bool.TryParse(configuration[key], out var value) ? value : null;
     }
 
     /// <summary>

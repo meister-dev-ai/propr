@@ -7,9 +7,6 @@ namespace MeisterProPR.Infrastructure.Features.Providers.Common;
 
 internal static class UnifiedDiffBuilder
 {
-    // Unchanged context lines emitted on each side of every change — the git diff default.
-    private const int ContextLines = 3;
-
     public static string Build(string oldContent, string newContent, string filePath)
     {
         var name = string.IsNullOrEmpty(filePath) ? "file" : filePath;

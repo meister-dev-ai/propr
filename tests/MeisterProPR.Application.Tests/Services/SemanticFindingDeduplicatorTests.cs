@@ -37,7 +37,7 @@ public sealed class SemanticFindingDeduplicatorTests
 
     private static int _sequence;
 
-    public static IEnumerable<object[]> CorpusCaseNames => Corpus.Keys.Select(name => new object[] { name });
+    public static TheoryData<string> CorpusCaseNames { get; } = [.. Corpus.Keys];
 
     [Theory]
     [MemberData(nameof(CorpusCaseNames))]

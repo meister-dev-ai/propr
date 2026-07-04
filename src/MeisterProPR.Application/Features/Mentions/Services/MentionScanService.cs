@@ -192,20 +192,14 @@ public sealed partial class MentionScanService(
         IReadOnlyList<PrCommentThread> threads,
         DateTimeOffset seed)
     {
-        var latest = seed;
-        foreach (var thread in threads)
-        {
-            foreach (var comment in thread.Comments)
-            {
-                // Advance the watermark to the latest comment we've seen.
-                if (comment.PublishedAt.HasValue && comment.PublishedAt.Value > latest)
-                {
-                    latest = comment.PublishedAt.Value;
-                }
-            }
-        }
-
-        return latest;
+        // Advance the watermark to the latest comment we've seen.
+        return threads
+            .SelectMany(thread => thread.Comments)
+            .Select(comment => comment.PublishedAt)
+            .Where(publishedAt => publishedAt.HasValue)
+            .Select(publishedAt => publishedAt!.Value)
+            .DefaultIfEmpty(seed)
+            .Max();
     }
 
     private static bool ShouldProcessComment(PrThreadComment comment, MentionPrScan? prScan)

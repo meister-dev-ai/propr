@@ -982,40 +982,17 @@ public sealed class EfReviewDiagnosticsReader(
 
     private static void ApplyProRvStageLifecycleEvent(ProtocolEvent evt, ProRvPrefilterAccumulator accumulator)
     {
-        if (!string.Equals(evt.Name, ReviewProtocolEventNames.ProRVPrefilterStarted, StringComparison.Ordinal) &&
-            !string.Equals(evt.Name, ReviewProtocolEventNames.ProRVPrefilterSkipped, StringComparison.Ordinal) &&
-            !string.Equals(evt.Name, ReviewProtocolEventNames.ProRVPrefilterCompleted, StringComparison.Ordinal) &&
-            !string.Equals(evt.Name, ReviewProtocolEventNames.ProRVPrefilterFailed, StringComparison.Ordinal))
+        if (!IsProRvStageLifecycleEvent(evt.Name))
         {
             return;
         }
 
         accumulator.Selected = true;
-        if (TryGetString(evt.InputTextSample, "stageId", out var eventStageId) && !string.IsNullOrWhiteSpace(eventStageId))
-        {
-            accumulator.StageId = eventStageId;
-        }
-
-        if (TryGetString(evt.OutputSummary, "runtimeSource", out var eventRuntimeSource) && !string.IsNullOrWhiteSpace(eventRuntimeSource))
-        {
-            accumulator.RuntimeSource = eventRuntimeSource;
-        }
-
-        if (TryGetString(evt.OutputSummary, "modelId", out var eventModelId) && !string.IsNullOrWhiteSpace(eventModelId))
-        {
-            accumulator.ModelId = eventModelId;
-        }
-
-        if (TryGetString(evt.OutputSummary, "language", out var eventLanguage) && !string.IsNullOrWhiteSpace(eventLanguage))
-        {
-            accumulator.Language = eventLanguage;
-        }
-
-        if (TryGetString(evt.OutputSummary, "proRvStatus", out var eventPrefilterStatus) && !string.IsNullOrWhiteSpace(eventPrefilterStatus))
-        {
-            accumulator.PrefilterStatus = eventPrefilterStatus;
-        }
-
+        accumulator.StageId = GetNonEmptyString(evt.InputTextSample, "stageId") ?? accumulator.StageId;
+        accumulator.RuntimeSource = GetNonEmptyString(evt.OutputSummary, "runtimeSource") ?? accumulator.RuntimeSource;
+        accumulator.ModelId = GetNonEmptyString(evt.OutputSummary, "modelId") ?? accumulator.ModelId;
+        accumulator.Language = GetNonEmptyString(evt.OutputSummary, "language") ?? accumulator.Language;
+        accumulator.PrefilterStatus = GetNonEmptyString(evt.OutputSummary, "proRvStatus") ?? accumulator.PrefilterStatus;
         if (TryGetInt32(evt.OutputSummary, "guidanceCount", out var parsedGuidanceCount))
         {
             accumulator.GuidanceCount = parsedGuidanceCount;
@@ -1026,22 +1003,34 @@ public sealed class EfReviewDiagnosticsReader(
             accumulator.Reason = evt.Error;
         }
 
+        accumulator.ExecutionState = evt.Name switch
+        {
+            ReviewProtocolEventNames.ProRVPrefilterSkipped => ProRvPrefilterAccumulator.SkippedState,
+            ReviewProtocolEventNames.ProRVPrefilterCompleted => ProRvPrefilterAccumulator.CompletedState,
+            ReviewProtocolEventNames.ProRVPrefilterFailed => ProRvPrefilterAccumulator.FailedState,
+            _ => accumulator.ExecutionState,
+        };
+
         if (string.Equals(evt.Name, ReviewProtocolEventNames.ProRVPrefilterSkipped, StringComparison.Ordinal))
         {
-            accumulator.ExecutionState = ProRvPrefilterAccumulator.SkippedState;
-            if (TryGetString(evt.OutputSummary, "reason", out var skipReason) && !string.IsNullOrWhiteSpace(skipReason))
-            {
-                accumulator.Reason = skipReason;
-            }
+            accumulator.Reason = GetNonEmptyString(evt.OutputSummary, "reason") ?? accumulator.Reason;
         }
-        else if (string.Equals(evt.Name, ReviewProtocolEventNames.ProRVPrefilterCompleted, StringComparison.Ordinal))
+    }
+
+    private static bool IsProRvStageLifecycleEvent(string? eventName)
+    {
+        return new[]
         {
-            accumulator.ExecutionState = ProRvPrefilterAccumulator.CompletedState;
-        }
-        else if (string.Equals(evt.Name, ReviewProtocolEventNames.ProRVPrefilterFailed, StringComparison.Ordinal))
-        {
-            accumulator.ExecutionState = ProRvPrefilterAccumulator.FailedState;
-        }
+            ReviewProtocolEventNames.ProRVPrefilterStarted,
+            ReviewProtocolEventNames.ProRVPrefilterSkipped,
+            ReviewProtocolEventNames.ProRVPrefilterCompleted,
+            ReviewProtocolEventNames.ProRVPrefilterFailed,
+        }.Any(name => string.Equals(eventName, name, StringComparison.Ordinal));
+    }
+
+    private static string? GetNonEmptyString(string? source, string propertyName)
+    {
+        return TryGetString(source, propertyName, out var value) && !string.IsNullOrWhiteSpace(value) ? value : null;
     }
 
     private static ProtocolAgentSessionDto? ResolveAgentSession(ReviewJobProtocol protocol)

@@ -493,8 +493,8 @@ internal sealed partial class FileReviewer(
         var diversity = fileContext.MultiPassDiversity ?? MultiPassDiversity.Default;
         var armLabel = diversity.ResolveArmLabel();
 
-        // Plan the resample passes (2..k). Resampling routes every resample to the diversity default model;
-        // cross-model spreads them across the declared arm models. The baseline pass keeps the tier model.
+        // Plan the resample passes (passes 2 through k). Resampling routes every resample to the diversity default
+        // model; cross-model spreads them across the declared arm models. The baseline pass keeps the tier model.
         var resamplePlan = diversity.ResolveResamplePasses(passCount - 1, tierModelId);
 
         // The baseline pass is union pass 1; additional resamples are passes 2..k.

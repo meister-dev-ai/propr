@@ -15,6 +15,20 @@ namespace MeisterProPR.Application.Tests.Features.Reviewing.Execution.Models;
 /// </summary>
 public sealed class MultiPassDiversityTests
 {
+    private static readonly string[] Gpt54AndGpt54MiniModelIds = ["gpt-5.4", "gpt-5.4-mini"];
+    private static readonly string[] Gpt54AndMiniLabels = ["gpt-5.4", "mini"];
+    private static readonly string[] Gpt54TwiceCodexThenGpt54ModelIds = ["gpt-5.4", "gpt-5.4", "gpt-5.3-codex", "gpt-5.4"];
+    private static readonly string[] Gpt54AndGpt53CodexModelIds = ["gpt-5.4", "gpt-5.3-codex"];
+
+    private static readonly JsonSerializerOptions EvalConfigJsonOptions = BuildEvalConfigJsonOptions();
+
+    private static JsonSerializerOptions BuildEvalConfigJsonOptions()
+    {
+        var options = new JsonSerializerOptions(JsonSerializerDefaults.Web) { PropertyNameCaseInsensitive = true };
+        options.Converters.Add(new JsonStringEnumConverter(JsonNamingPolicy.CamelCase));
+        return options;
+    }
+
     [Fact]
     public void Resampling_RoutesEveryResampleToDefaultModel()
     {
@@ -50,8 +64,8 @@ public sealed class MultiPassDiversityTests
 
         var plan = diversity.ResolveResamplePasses(2, "gpt-5.3-codex");
 
-        Assert.Equal(new[] { "gpt-5.4", "gpt-5.4-mini" }, plan.Select(arm => arm.ModelId).ToArray());
-        Assert.Equal(new[] { "gpt-5.4", "mini" }, plan.Select(arm => arm.Label).ToArray());
+        Assert.Equal(Gpt54AndGpt54MiniModelIds, plan.Select(arm => arm.ModelId).ToArray());
+        Assert.Equal(Gpt54AndMiniLabels, plan.Select(arm => arm.Label).ToArray());
     }
 
     [Fact]
@@ -68,9 +82,7 @@ public sealed class MultiPassDiversityTests
         // Four resample passes over a three-entry expanded plan (gpt-5.4, gpt-5.4, codex) cycle back to the first.
         var plan = diversity.ResolveResamplePasses(4, "tier-model");
 
-        Assert.Equal(
-            new[] { "gpt-5.4", "gpt-5.4", "gpt-5.3-codex", "gpt-5.4" },
-            plan.Select(arm => arm.ModelId).ToArray());
+        Assert.Equal(Gpt54TwiceCodexThenGpt54ModelIds, plan.Select(arm => arm.ModelId).ToArray());
     }
 
     [Fact]
@@ -130,8 +142,7 @@ public sealed class MultiPassDiversityTests
                             }
                             """;
 
-        var options = new JsonSerializerOptions(JsonSerializerDefaults.Web) { PropertyNameCaseInsensitive = true };
-        options.Converters.Add(new JsonStringEnumConverter(JsonNamingPolicy.CamelCase));
+        var options = EvalConfigJsonOptions;
 
         var config = JsonSerializer.Deserialize<EvaluationConfiguration>(json, options);
 
@@ -144,6 +155,6 @@ public sealed class MultiPassDiversityTests
 
         // The parsed arms drive the runtime routing: two resample passes span the two declared models.
         var plan = diversity.ResolveResamplePasses(2, "gpt-5.3-codex");
-        Assert.Equal(new[] { "gpt-5.4", "gpt-5.3-codex" }, plan.Select(arm => arm.ModelId).ToArray());
+        Assert.Equal(Gpt54AndGpt53CodexModelIds, plan.Select(arm => arm.ModelId).ToArray());
     }
 }

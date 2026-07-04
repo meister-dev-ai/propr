@@ -147,6 +147,9 @@ public sealed record PutClientReviewProfileRequest(string? DefaultReviewPipeline
 /// <summary>Indicates whether the effective review profile comes from the client or the system default.</summary>
 public enum ReviewProfileSource
 {
+    /// <summary>The client has no override, so the catalog's system default profile is in effect.</summary>
     SystemDefault,
+
+    /// <summary>The client has its own <see cref="ClientDto.DefaultReviewPipelineProfileId" /> set.</summary>
     ClientDefault,
 }
