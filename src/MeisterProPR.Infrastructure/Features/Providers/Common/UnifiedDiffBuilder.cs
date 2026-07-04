@@ -13,14 +13,13 @@ internal static class UnifiedDiffBuilder
     public static string Build(string oldContent, string newContent, string filePath)
     {
         var name = string.IsNullOrEmpty(filePath) ? "file" : filePath;
-        var renderer = new UnidiffRenderer(null, ContextLines);
+        var renderer = new UnidiffRenderer();
 
         return renderer.Generate(
             TrimSingleTrailingNewline(oldContent ?? string.Empty),
             TrimSingleTrailingNewline(newContent ?? string.Empty),
             $"a/{name}",
             $"b/{name}",
-            false,
             false);
     }
 

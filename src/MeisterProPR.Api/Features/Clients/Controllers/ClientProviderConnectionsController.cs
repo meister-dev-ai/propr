@@ -58,18 +58,6 @@ public sealed partial class ClientProviderConnectionsController(
         return AuthHelpers.RequireClientRole(this.HttpContext, clientId, minimumRole);
     }
 
-    /// <summary>The candidate authentication settings evaluated by <see cref="GetAuthenticationConfigurationErrors"/>.</summary>
-    private readonly record struct AuthenticationConfigurationCandidate(
-        ScmProvider ProviderFamily,
-        string HostBaseUrl,
-        ScmAuthenticationKind AuthenticationKind,
-        string? UserName,
-        string? OAuthTenantId,
-        string? OAuthClientId,
-        long? GitHubAppId = null,
-        long? GitHubAppInstallationId = null,
-        bool HasCompatibleSecretMaterial = true);
-
     private IActionResult? ValidateSupportedAuthenticationConfiguration(AuthenticationConfigurationCandidate candidate)
     {
         foreach (var (propertyName, message) in GetAuthenticationConfigurationErrors(candidate))
@@ -92,8 +80,7 @@ public sealed partial class ClientProviderConnectionsController(
         }
     }
 
-    private static IReadOnlyList<(string PropertyName, string Message)> GetAuthenticationConfigurationErrors(
-        AuthenticationConfigurationCandidate candidate)
+    private static IReadOnlyList<(string PropertyName, string Message)> GetAuthenticationConfigurationErrors(AuthenticationConfigurationCandidate candidate)
     {
         var errors = new List<(string PropertyName, string Message)>();
 
@@ -717,18 +704,6 @@ public sealed partial class ClientProviderConnectionsController(
         }
     }
 
-    /// <summary>The resolved authentication settings a PATCH request would apply, merging the request over the existing connection.</summary>
-    private readonly record struct EffectivePatchAuthentication(
-        ScmAuthenticationKind AuthenticationKind,
-        string? UserName,
-        string? OAuthTenantId,
-        string? OAuthClientId,
-        bool HasCompatibleSecretMaterial,
-        long? GitHubAppId,
-        long? GitHubAppInstallationId,
-        long? PersistedGitHubAppId,
-        long? PersistedGitHubAppInstallationId);
-
     private static EffectivePatchAuthentication ResolveEffectivePatchAuthentication(
         PatchClientProviderConnectionRequest request,
         ClientScmConnectionDto existing)
@@ -899,6 +874,30 @@ public sealed partial class ClientProviderConnectionsController(
 
         return updated is null ? this.NotFound() : this.Ok(await this.EnrichConnectionAsync(clientId, updated, ct));
     }
+
+    /// <summary>The candidate authentication settings evaluated by <see cref="GetAuthenticationConfigurationErrors" />.</summary>
+    private readonly record struct AuthenticationConfigurationCandidate(
+        ScmProvider ProviderFamily,
+        string HostBaseUrl,
+        ScmAuthenticationKind AuthenticationKind,
+        string? UserName,
+        string? OAuthTenantId,
+        string? OAuthClientId,
+        long? GitHubAppId = null,
+        long? GitHubAppInstallationId = null,
+        bool HasCompatibleSecretMaterial = true);
+
+    /// <summary>The resolved authentication settings a PATCH request would apply, merging the request over the existing connection.</summary>
+    private readonly record struct EffectivePatchAuthentication(
+        ScmAuthenticationKind AuthenticationKind,
+        string? UserName,
+        string? OAuthTenantId,
+        string? OAuthClientId,
+        bool HasCompatibleSecretMaterial,
+        long? GitHubAppId,
+        long? GitHubAppInstallationId,
+        long? PersistedGitHubAppId,
+        long? PersistedGitHubAppInstallationId);
 }
 
 /// <summary>Request body for creating a client-scoped provider connection.</summary>

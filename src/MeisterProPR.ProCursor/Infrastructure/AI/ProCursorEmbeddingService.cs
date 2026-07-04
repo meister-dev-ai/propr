@@ -171,23 +171,6 @@ public sealed class ProCursorEmbeddingService(
         state.BatchOrdinal++;
     }
 
-    /// <summary>
-    ///     Mutable accumulator for the batch currently being assembled, and the embeddings produced by
-    ///     every batch flushed so far, for a single embedding-generation call.
-    /// </summary>
-    private sealed class EmbeddingBatchState
-    {
-        public List<string> PendingInputs { get; } = [];
-
-        public List<ProCursorTokenUsageInputContext?> PendingContexts { get; } = [];
-
-        public int PendingTokenCount { get; set; }
-
-        public int BatchOrdinal { get; set; }
-
-        public List<float[]> Embeddings { get; } = [];
-    }
-
     private static CapturedUsage ResolveCapturedUsage(
         long? promptTokens,
         long? completionTokens,
@@ -325,20 +308,6 @@ public sealed class ProCursorEmbeddingService(
         accumulator.LineEnd = null;
     }
 
-    /// <summary>
-    ///     Mutable accumulator for the run of lines currently being assembled into the next split chunk.
-    /// </summary>
-    private sealed class LineChunkAccumulator
-    {
-        public List<string> Lines { get; } = [];
-
-        public int TokenCount { get; set; }
-
-        public int? LineStart { get; set; }
-
-        public int? LineEnd { get; set; }
-    }
-
     private static IReadOnlyList<string> SplitOversizedText(string text, string tokenizerName, int maxInputTokens)
     {
         var remaining = text.Trim();
@@ -438,6 +407,37 @@ public sealed class ProCursorEmbeddingService(
     {
         var bytes = SHA256.HashData(Encoding.UTF8.GetBytes(value));
         return Convert.ToHexString(bytes).ToLowerInvariant();
+    }
+
+    /// <summary>
+    ///     Mutable accumulator for the batch currently being assembled, and the embeddings produced by
+    ///     every batch flushed so far, for a single embedding-generation call.
+    /// </summary>
+    private sealed class EmbeddingBatchState
+    {
+        public List<string> PendingInputs { get; } = [];
+
+        public List<ProCursorTokenUsageInputContext?> PendingContexts { get; } = [];
+
+        public int PendingTokenCount { get; set; }
+
+        public int BatchOrdinal { get; set; }
+
+        public List<float[]> Embeddings { get; } = [];
+    }
+
+    /// <summary>
+    ///     Mutable accumulator for the run of lines currently being assembled into the next split chunk.
+    /// </summary>
+    private sealed class LineChunkAccumulator
+    {
+        public List<string> Lines { get; } = [];
+
+        public int TokenCount { get; set; }
+
+        public int? LineStart { get; set; }
+
+        public int? LineEnd { get; set; }
     }
 
     private readonly record struct CapturedUsage(

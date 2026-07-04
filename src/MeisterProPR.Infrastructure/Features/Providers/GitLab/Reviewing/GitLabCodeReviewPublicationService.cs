@@ -160,16 +160,6 @@ internal sealed class GitLabCodeReviewPublicationService(
                 responseBody));
     }
 
-    private sealed record GitLabDiscussionPostRequest(
-        HttpClient Client,
-        string Token,
-        Uri DiscussionUri,
-        GitLabDiscussionRequest Payload,
-        GitLabDiscussionTarget Target,
-        int SuccessfulDiscussionCount,
-        string? FilePath,
-        int? Line);
-
     private static async Task<PostedReviewCommentRef?> TryCaptureDiscussionRefAsync(
         HttpResponseMessage response,
         string? filePath,
@@ -324,6 +314,16 @@ internal sealed class GitLabCodeReviewPublicationService(
             _ => "Info",
         };
     }
+
+    private sealed record GitLabDiscussionPostRequest(
+        HttpClient Client,
+        string Token,
+        Uri DiscussionUri,
+        GitLabDiscussionRequest Payload,
+        GitLabDiscussionTarget Target,
+        int SuccessfulDiscussionCount,
+        string? FilePath,
+        int? Line);
 
     private sealed record GitLabCreatedDiscussionResponse(
         [property: JsonPropertyName("id")] string? Id,

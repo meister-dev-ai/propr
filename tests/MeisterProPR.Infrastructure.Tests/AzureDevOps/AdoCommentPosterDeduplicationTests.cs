@@ -3,7 +3,6 @@
 
 using MeisterProPR.Domain.Enums;
 using MeisterProPR.Domain.ValueObjects;
-using MeisterProPR.Infrastructure.Features.Providers.AzureDevOps.Reviewing;
 using Microsoft.TeamFoundation.SourceControl.WebApi;
 
 namespace MeisterProPR.Infrastructure.Tests.AzureDevOps;

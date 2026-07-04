@@ -48,7 +48,7 @@ public sealed partial class ProCursorRefreshScheduler(
     ///     Detects whether the tracked branch's head has advanced and, if so, records the seen
     ///     commit and queues a refresh job for it.
     /// </summary>
-    /// <returns><see langword="true"/> when a refresh job was queued.</returns>
+    /// <returns><see langword="true" /> when a refresh job was queued.</returns>
     private async Task<bool> TryScheduleRefreshAsync(
         ProCursorKnowledgeSource source,
         ProCursorTrackedBranch trackedBranch,

@@ -538,16 +538,16 @@ finally
 /// <summary>Entry point for the API application used by tests and host.</summary>
 public partial class Program
 {
+    private static readonly HttpClient HealthCheckHttpClient = new()
+    {
+        Timeout = TimeSpan.FromSeconds(5),
+    };
+
     // Not meant to be instantiated directly; WebApplicationFactory<Program> only uses this type
     // as a generic marker to locate the assembly, so it can't be made static.
     protected Program()
     {
     }
-
-    private static readonly HttpClient HealthCheckHttpClient = new()
-    {
-        Timeout = TimeSpan.FromSeconds(5),
-    };
 
     internal static async Task<bool> TryRunHealthCheckAsync(string[] args)
     {

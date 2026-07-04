@@ -14,8 +14,7 @@ namespace MeisterProPR.Api.Controllers;
 /// </summary>
 [ApiController]
 [Route("admin/clients/{clientId:guid}/procursor/token-usage")]
-public sealed class ProCursorTokenUsageRebuildController(
-    IProCursorTokenUsageRebuildService rebuildService) : ControllerBase
+public sealed class ProCursorTokenUsageRebuildController(IProCursorTokenUsageRebuildService rebuildService) : ControllerBase
 {
     /// <summary>
     ///     Rebuilds ProCursor token usage rollups for the selected captured interval.

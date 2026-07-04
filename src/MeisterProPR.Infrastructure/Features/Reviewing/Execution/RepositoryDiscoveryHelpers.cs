@@ -13,8 +13,8 @@ internal sealed record CandidatePathResolution(
     IReadOnlyList<RepositorySearchLimitation> Limitations);
 
 /// <summary>
-/// Bundles the branch/snapshot state and repository-access delegates that every search executor
-/// threads through to <see cref="RepositoryDiscoveryHelpers.ResolveCandidatePathsAsync"/> unchanged.
+///     Bundles the branch/snapshot state and repository-access delegates that every search executor
+///     threads through to <see cref="RepositoryDiscoveryHelpers.ResolveCandidatePathsAsync" /> unchanged.
 /// </summary>
 internal sealed record RepositoryAccessContext(
     string SourceBranch,

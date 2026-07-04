@@ -326,31 +326,6 @@ public sealed class FixtureReviewContextTools(
         return new ReferenceLookupResult(sites, scanned, truncated, false);
     }
 
-    private async Task<(bool Truncated, int UsedChars)> AppendReferenceSitesForFileAsync(
-        RepositoryFileEntry file,
-        SupportedLanguage language,
-        string symbol,
-        List<ReferenceSite> sites,
-        int usedChars,
-        CancellationToken ct)
-    {
-        var request = new StructuralParseRequest(file.Path, language, file.Content, []);
-        var lines = await structuralAnalyzer!.ConfirmReferenceLinesAsync(request, symbol, ct);
-
-        foreach (var line in lines)
-        {
-            if (sites.Count >= this._options.MaxReferenceResults || usedChars > this._options.MaxReferenceResultChars)
-            {
-                return (true, usedChars);
-            }
-
-            sites.Add(new ReferenceSite(file.Path, line, null, null, OccurrenceKind.Reference, ResolutionMode.NameBased));
-            usedChars += file.Path.Length + 16;
-        }
-
-        return (false, usedChars);
-    }
-
     /// <inheritdoc />
     public async Task<DefinitionLookupResult> GetDefinitionAsync(SymbolReferenceQuery query, CancellationToken ct)
     {
@@ -398,6 +373,31 @@ public sealed class FixtureReviewContextTools(
         }
 
         return new DefinitionLookupResult(definitions, scanned, truncated, false);
+    }
+
+    private async Task<(bool Truncated, int UsedChars)> AppendReferenceSitesForFileAsync(
+        RepositoryFileEntry file,
+        SupportedLanguage language,
+        string symbol,
+        List<ReferenceSite> sites,
+        int usedChars,
+        CancellationToken ct)
+    {
+        var request = new StructuralParseRequest(file.Path, language, file.Content, []);
+        var lines = await structuralAnalyzer!.ConfirmReferenceLinesAsync(request, symbol, ct);
+
+        foreach (var line in lines)
+        {
+            if (sites.Count >= this._options.MaxReferenceResults || usedChars > this._options.MaxReferenceResultChars)
+            {
+                return (true, usedChars);
+            }
+
+            sites.Add(new ReferenceSite(file.Path, line, null, null, OccurrenceKind.Reference, ResolutionMode.NameBased));
+            usedChars += file.Path.Length + 16;
+        }
+
+        return (false, usedChars);
     }
 
     private string ResolveBranchName(string branchSide)

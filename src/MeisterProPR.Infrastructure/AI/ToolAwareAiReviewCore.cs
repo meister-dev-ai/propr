@@ -380,10 +380,8 @@ internal sealed partial class ToolAwareAiReviewCore(
                         cancellationToken,
                         "ai_call_forced_final",
                         cachedInputTokens: finalCachedInputTokens,
-                        cacheStatus: ResolveCacheStatus(
-                            systemContext, finalCachedInputTokens, BuildMessagesForForcedFinalTurn(state)),
-                        cacheMissCategory: ResolveCacheMissCategory(
-                            systemContext, finalCachedInputTokens, BuildMessagesForForcedFinalTurn(state)),
+                        cacheStatus: ResolveCacheStatus(systemContext, finalCachedInputTokens, BuildMessagesForForcedFinalTurn(state)),
+                        cacheMissCategory: ResolveCacheMissCategory(systemContext, finalCachedInputTokens, BuildMessagesForForcedFinalTurn(state)),
                         prefixEligibility: ResolvePrefixEligibility(systemContext, BuildMessagesForForcedFinalTurn(state)),
                         finalizationAttemptKind: "ForcedFinal",
                         finalizationReason: "iteration_limit_reached",
@@ -499,8 +497,7 @@ internal sealed partial class ToolAwareAiReviewCore(
                 "ai_call_schema_repair",
                 cachedInputTokens: correctionCachedInputTokens,
                 cacheStatus: ResolveCacheStatus(systemContext, correctionCachedInputTokens, state.Messages),
-                cacheMissCategory: ResolveCacheMissCategory(
-                    systemContext, correctionCachedInputTokens, state.Messages),
+                cacheMissCategory: ResolveCacheMissCategory(systemContext, correctionCachedInputTokens, state.Messages),
                 prefixEligibility: ResolvePrefixEligibility(systemContext, state.Messages),
                 finalizationAttemptKind: "SchemaRepair",
                 finalizationReason: "malformed_or_incomplete_final_response",

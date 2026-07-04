@@ -122,17 +122,6 @@ public sealed class RuntimeConfiguredKnowledgeSourceRepository(
         return this.UpsertAsync(source);
     }
 
-    private Task UpsertAsync(ProCursorKnowledgeSource source)
-    {
-        ArgumentNullException.ThrowIfNull(source);
-        lock (this._lock)
-        {
-            this._sourcesById[source.Id] = new CacheEntry(Clone(source), Guid.NewGuid().ToString("N"), DateTimeOffset.UtcNow);
-        }
-
-        return Task.CompletedTask;
-    }
-
     public Task<bool> DeleteTrackedBranchAsync(
         Guid clientId,
         Guid sourceId,
@@ -183,6 +172,17 @@ public sealed class RuntimeConfiguredKnowledgeSourceRepository(
         {
             this._sourcesById.Remove(sourceId);
             this._lastFullRefreshAtUtc = null;
+        }
+
+        return Task.CompletedTask;
+    }
+
+    private Task UpsertAsync(ProCursorKnowledgeSource source)
+    {
+        ArgumentNullException.ThrowIfNull(source);
+        lock (this._lock)
+        {
+            this._sourcesById[source.Id] = new CacheEntry(Clone(source), Guid.NewGuid().ToString("N"), DateTimeOffset.UtcNow);
         }
 
         return Task.CompletedTask;

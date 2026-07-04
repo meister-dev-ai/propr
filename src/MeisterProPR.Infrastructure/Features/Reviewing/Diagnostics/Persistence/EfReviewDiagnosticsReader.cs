@@ -830,27 +830,16 @@ public sealed class EfReviewDiagnosticsReader(
     private static bool IsFollowUpUsageEvent(string? name)
     {
         return string.Equals(name, ReviewProtocolEventNames.AgenticFileInvestigationResult, StringComparison.Ordinal)
-            || string.Equals(name, ReviewProtocolEventNames.AgenticFileDegraded, StringComparison.Ordinal)
-            || string.Equals(name, ReviewProtocolEventNames.AgenticFileFollowUpDiagnosticsOnly, StringComparison.Ordinal);
+               || string.Equals(name, ReviewProtocolEventNames.AgenticFileDegraded, StringComparison.Ordinal)
+               || string.Equals(name, ReviewProtocolEventNames.AgenticFileFollowUpDiagnosticsOnly, StringComparison.Ordinal);
     }
 
     private static bool IsInvestigationCompletedSuccessfully(ProtocolEvent evt)
     {
         return TryGetString(evt.OutputSummary, "status", out var status)
-            && string.Equals(status, "completed", StringComparison.OrdinalIgnoreCase)
-            && (!TryGetBoolean(evt.OutputSummary, "degraded", out var degraded) || !degraded)
-            && (!TryGetBoolean(evt.OutputSummary, "diagnosticsOnly", out var diagnosticsOnly) || !diagnosticsOnly);
-    }
-
-    private sealed class FollowUpAccumulator
-    {
-        public bool Used { get; set; }
-
-        public bool CompletedSuccessfully { get; set; }
-
-        public bool DependencyRecorded { get; set; }
-
-        public string? TriggerFamily { get; set; }
+               && string.Equals(status, "completed", StringComparison.OrdinalIgnoreCase)
+               && (!TryGetBoolean(evt.OutputSummary, "degraded", out var degraded) || !degraded)
+               && (!TryGetBoolean(evt.OutputSummary, "diagnosticsOnly", out var diagnosticsOnly) || !diagnosticsOnly);
     }
 
     private static ProtocolRepeatedJudgmentDto? ResolveRepeatedJudgment(ReviewJobProtocol protocol)
@@ -1055,40 +1044,6 @@ public sealed class EfReviewDiagnosticsReader(
         }
     }
 
-    private sealed class ProRvPrefilterAccumulator
-    {
-        public const string NotSelectedState = "not_selected";
-        public const string SkippedState = "skipped";
-        public const string CompletedState = "completed";
-        public const string FailedState = "failed";
-
-        public string ExecutionState { get; set; } = NotSelectedState;
-
-        public string? StageId { get; set; }
-
-        public string? Reason { get; set; }
-
-        public string? RuntimeSource { get; set; }
-
-        public string? ModelId { get; set; }
-
-        public string? Language { get; set; }
-
-        public string? PrefilterStatus { get; set; }
-
-        public int GuidanceCount { get; set; }
-
-        public bool Selected { get; set; }
-
-        public bool AiCallRecorded { get; set; }
-
-        public bool GuidanceApplied { get; set; }
-
-        public string? AppliedPromptKind { get; set; }
-
-        public IReadOnlyList<string> AppliedGuidanceIds { get; set; } = [];
-    }
-
     private static ProtocolAgentSessionDto? ResolveAgentSession(ReviewJobProtocol protocol)
     {
         var accumulator = new AgentSessionAccumulator();
@@ -1101,10 +1056,10 @@ public sealed class EfReviewDiagnosticsReader(
         }
 
         return accumulator.RemoteConversationId is not null
-            || accumulator.BindingMethod is not null
-            || accumulator.FallbackReason is not null
-            || accumulator.UsedManagedRemoteConversation
-            || accumulator.UsedLocalReplay
+               || accumulator.BindingMethod is not null
+               || accumulator.FallbackReason is not null
+               || accumulator.UsedManagedRemoteConversation
+               || accumulator.UsedLocalReplay
             ? new ProtocolAgentSessionDto(
                 accumulator.UsedManagedRemoteConversation,
                 accumulator.RemoteConversationId,
@@ -1187,23 +1142,6 @@ public sealed class EfReviewDiagnosticsReader(
         }
 
         accumulator.UsedLocalReplay = true;
-    }
-
-    private sealed class AgentSessionAccumulator
-    {
-        public string? RemoteConversationId { get; set; }
-
-        public string? BindingMethod { get; set; }
-
-        public string? BindingOutcome { get; set; }
-
-        public string? PromptMode { get; set; }
-
-        public string? FallbackReason { get; set; }
-
-        public bool UsedManagedRemoteConversation { get; set; }
-
-        public bool UsedLocalReplay { get; set; }
     }
 
     private static bool TryGetTriggerFamilyFromPlan(string? json, out string? triggerFamily)
@@ -1345,5 +1283,67 @@ public sealed class EfReviewDiagnosticsReader(
         {
             return false;
         }
+    }
+
+    private sealed class FollowUpAccumulator
+    {
+        public bool Used { get; set; }
+
+        public bool CompletedSuccessfully { get; set; }
+
+        public bool DependencyRecorded { get; set; }
+
+        public string? TriggerFamily { get; set; }
+    }
+
+    private sealed class ProRvPrefilterAccumulator
+    {
+        public const string NotSelectedState = "not_selected";
+        public const string SkippedState = "skipped";
+        public const string CompletedState = "completed";
+        public const string FailedState = "failed";
+
+        public string ExecutionState { get; set; } = NotSelectedState;
+
+        public string? StageId { get; set; }
+
+        public string? Reason { get; set; }
+
+        public string? RuntimeSource { get; set; }
+
+        public string? ModelId { get; set; }
+
+        public string? Language { get; set; }
+
+        public string? PrefilterStatus { get; set; }
+
+        public int GuidanceCount { get; set; }
+
+        public bool Selected { get; set; }
+
+        public bool AiCallRecorded { get; set; }
+
+        public bool GuidanceApplied { get; set; }
+
+        public string? AppliedPromptKind { get; set; }
+
+        public IReadOnlyList<string> AppliedGuidanceIds { get; set; } = [];
+    }
+
+    private sealed class AgentSessionAccumulator
+    {
+        public string? RemoteConversationId { get; set; }
+
+        public string? BindingMethod { get; set; }
+
+        public string? BindingOutcome { get; set; }
+
+        public string? PromptMode { get; set; }
+
+        public string? FallbackReason { get; set; }
+
+        public bool UsedManagedRemoteConversation { get; set; }
+
+        public bool UsedLocalReplay { get; set; }
     }
 }

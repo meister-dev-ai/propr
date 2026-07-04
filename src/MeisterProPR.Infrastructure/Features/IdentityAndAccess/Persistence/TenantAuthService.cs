@@ -126,26 +126,6 @@ public sealed class TenantAuthService(
         return user;
     }
 
-    private static string DetermineTenantLoginDenialReason(TenantRecord? tenant)
-    {
-        if (tenant is null)
-        {
-            return "tenant_not_found";
-        }
-
-        return !tenant.IsActive ? "tenant_inactive" : "local_login_disabled";
-    }
-
-    private static string DetermineUserLoginDenialReason(AppUser? user)
-    {
-        if (user is null)
-        {
-            return "user_not_found";
-        }
-
-        return !user.IsActive ? "user_inactive" : "missing_password_hash";
-    }
-
     public async Task<TenantExternalChallengeResult?> BuildExternalChallengeAsync(
         string tenantSlug,
         Guid providerId,
@@ -295,6 +275,26 @@ public sealed class TenantAuthService(
         {
             return Failure(exception.FailureCode, exception.Message, frontendReturnUrl);
         }
+    }
+
+    private static string DetermineTenantLoginDenialReason(TenantRecord? tenant)
+    {
+        if (tenant is null)
+        {
+            return "tenant_not_found";
+        }
+
+        return !tenant.IsActive ? "tenant_inactive" : "local_login_disabled";
+    }
+
+    private static string DetermineUserLoginDenialReason(AppUser? user)
+    {
+        if (user is null)
+        {
+            return "user_not_found";
+        }
+
+        return !user.IsActive ? "user_inactive" : "missing_password_hash";
     }
 
     private async Task<AppUser?> CompleteExternalSignInAsync(

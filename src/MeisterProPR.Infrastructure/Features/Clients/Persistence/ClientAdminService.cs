@@ -145,21 +145,6 @@ public sealed class ClientAdminService(
         return await this.GetByIdAsync(clientId, ct);
     }
 
-    private static string? NormalizeToNullIfEmpty(string value)
-    {
-        return string.IsNullOrEmpty(value) ? null : value;
-    }
-
-    private static void ApplyDefaultReviewPipelineProfile(ClientRecord client, string defaultReviewPipelineProfileId)
-    {
-        client.DefaultReviewPipelineProfileId = string.IsNullOrWhiteSpace(defaultReviewPipelineProfileId)
-            ? null
-            : defaultReviewPipelineProfileId;
-        client.DefaultReviewPipelineProfileUpdatedAtUtc = client.DefaultReviewPipelineProfileId is null
-            ? null
-            : DateTimeOffset.UtcNow;
-    }
-
     /// <inheritdoc />
     public async Task<bool> DeleteAsync(Guid clientId, CancellationToken ct = default)
     {
@@ -261,6 +246,21 @@ public sealed class ClientAdminService(
             .AsReadOnly();
 
         return Task.FromResult<IReadOnlyList<ReviewPipelineProfile>>(profiles);
+    }
+
+    private static string? NormalizeToNullIfEmpty(string value)
+    {
+        return string.IsNullOrEmpty(value) ? null : value;
+    }
+
+    private static void ApplyDefaultReviewPipelineProfile(ClientRecord client, string defaultReviewPipelineProfileId)
+    {
+        client.DefaultReviewPipelineProfileId = string.IsNullOrWhiteSpace(defaultReviewPipelineProfileId)
+            ? null
+            : defaultReviewPipelineProfileId;
+        client.DefaultReviewPipelineProfileUpdatedAtUtc = client.DefaultReviewPipelineProfileId is null
+            ? null
+            : DateTimeOffset.UtcNow;
     }
 
     private IQueryable<ClientRecord> ClientsWithTenantQuery(bool isCommunityEdition)

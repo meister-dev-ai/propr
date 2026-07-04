@@ -425,8 +425,7 @@ internal sealed class TreeSitterStructuralCodeAnalyzer : IStructuralCodeAnalyzer
     ///     Runs the tags query's matches into deduplicated definition entries (one per distinct
     ///     definition node, keeping the first capture in document order).
     /// </summary>
-    private static List<(TS.Node Node, string? Name, DefinitionKind Kind, int StartLine, int EndLine)> ExtractDefinitions(
-        TS.QueryCursor cursor)
+    private static List<(TS.Node Node, string? Name, DefinitionKind Kind, int StartLine, int EndLine)> ExtractDefinitions(TS.QueryCursor cursor)
     {
         var definitions = new List<(TS.Node Node, string? Name, DefinitionKind Kind, int StartLine, int EndLine)>();
         var seenIds = new HashSet<IntPtr>();

@@ -396,44 +396,6 @@ internal abstract class ProviderReviewContextToolsBase(
         return new ReferenceLookupResult(sites, scanned, truncated, false);
     }
 
-    private async Task<ReferenceScanStep> ScanFileForReferencesAsync(
-        string file,
-        string branchName,
-        string symbol,
-        List<ReferenceSite> sites,
-        int usedChars,
-        CancellationToken token)
-    {
-        if (!this._structuralAnalyzer!.CanAnalyze(file) || LanguagePaths.TryResolve(file) is not { } language)
-        {
-            return new ReferenceScanStep(false, false, usedChars);
-        }
-
-        var content = await this.TryFetchAsync(file, branchName, token);
-        if (string.IsNullOrEmpty(content))
-        {
-            return new ReferenceScanStep(true, false, usedChars);
-        }
-
-        var parseRequest = new StructuralParseRequest(file, language, content, []);
-        var lines = await this._structuralAnalyzer.ConfirmReferenceLinesAsync(parseRequest, symbol, token);
-
-        foreach (var line in lines)
-        {
-            if (sites.Count >= this._options.MaxReferenceResults || usedChars > this._options.MaxReferenceResultChars)
-            {
-                return new ReferenceScanStep(true, true, usedChars);
-            }
-
-            sites.Add(new ReferenceSite(file, line, null, null, OccurrenceKind.Reference, ResolutionMode.NameBased));
-            usedChars += file.Length + 16;
-        }
-
-        return new ReferenceScanStep(true, false, usedChars);
-    }
-
-    private readonly record struct ReferenceScanStep(bool Analyzed, bool Truncated, int UsedChars);
-
     /// <inheritdoc />
     public async Task<DefinitionLookupResult> GetDefinitionAsync(SymbolReferenceQuery query, CancellationToken ct)
     {
@@ -501,6 +463,42 @@ internal abstract class ProviderReviewContextToolsBase(
         }
 
         return new DefinitionLookupResult(definitions, scanned, truncated, false);
+    }
+
+    private async Task<ReferenceScanStep> ScanFileForReferencesAsync(
+        string file,
+        string branchName,
+        string symbol,
+        List<ReferenceSite> sites,
+        int usedChars,
+        CancellationToken token)
+    {
+        if (!this._structuralAnalyzer!.CanAnalyze(file) || LanguagePaths.TryResolve(file) is not { } language)
+        {
+            return new ReferenceScanStep(false, false, usedChars);
+        }
+
+        var content = await this.TryFetchAsync(file, branchName, token);
+        if (string.IsNullOrEmpty(content))
+        {
+            return new ReferenceScanStep(true, false, usedChars);
+        }
+
+        var parseRequest = new StructuralParseRequest(file, language, content, []);
+        var lines = await this._structuralAnalyzer.ConfirmReferenceLinesAsync(parseRequest, symbol, token);
+
+        foreach (var line in lines)
+        {
+            if (sites.Count >= this._options.MaxReferenceResults || usedChars > this._options.MaxReferenceResultChars)
+            {
+                return new ReferenceScanStep(true, true, usedChars);
+            }
+
+            sites.Add(new ReferenceSite(file, line, null, null, OccurrenceKind.Reference, ResolutionMode.NameBased));
+            usedChars += file.Length + 16;
+        }
+
+        return new ReferenceScanStep(true, false, usedChars);
     }
 
     private async Task<(bool Analyzed, bool HitLimit)> ScanFileForDefinitionsAsync(
@@ -682,4 +680,6 @@ internal abstract class ProviderReviewContextToolsBase(
             ? RepositorySearchBranchSides.Target
             : RepositorySearchBranchSides.Source;
     }
+
+    private readonly record struct ReferenceScanStep(bool Analyzed, bool Truncated, int UsedChars);
 }

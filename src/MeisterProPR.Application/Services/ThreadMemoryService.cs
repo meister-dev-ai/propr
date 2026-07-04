@@ -238,13 +238,11 @@ public sealed partial class ThreadMemoryService(
         var fallbackChecks = new HashSet<string>(StringComparer.Ordinal);
         var normalizedFilePath = NormalizeFilePathForLookup(filePath);
 
-        var queryVector = await this.TryGetDuplicateSuppressionQueryVectorAsync(
-            clientId, normalizedFilePath, findingMessage, degradedComponents, ct);
+        var queryVector = await this.TryGetDuplicateSuppressionQueryVectorAsync(clientId, normalizedFilePath, findingMessage, degradedComponents, ct);
 
         if (queryVector is not null)
         {
-            var semanticMatch = await this.TryFindSemanticDuplicateMatchAsync(
-                clientId, repositoryId, pullRequestId, queryVector, degradedComponents, ct);
+            var semanticMatch = await this.TryFindSemanticDuplicateMatchAsync(clientId, repositoryId, pullRequestId, queryVector, degradedComponents, ct);
             if (semanticMatch is not null)
             {
                 return HistoricalDuplicateSuppressionMatchDto.Match(
@@ -285,108 +283,6 @@ public sealed partial class ThreadMemoryService(
             BuildDuplicateSuppressionDegradedCause(degradedComponents),
             fallbackChecks.ToList().AsReadOnly());
     }
-
-    // Resolves the query embedding used for semantic duplicate-suppression lookup, marking the
-    // embedding component degraded (and short-circuiting future calls for this client for the
-    // remainder of the process) on failure.
-    private async Task<float[]?> TryGetDuplicateSuppressionQueryVectorAsync(
-        Guid clientId,
-        string? normalizedFilePath,
-        string findingMessage,
-        HashSet<string> degradedComponents,
-        CancellationToken ct)
-    {
-        if (this._embeddingLookupFailuresByClient.ContainsKey(clientId))
-        {
-            degradedComponents.Add(EmbeddingDegradedComponent);
-            return null;
-        }
-
-        try
-        {
-            var queryText = BuildDuplicateSuppressionQueryText(normalizedFilePath, findingMessage);
-            return await embedder.GenerateEmbeddingAsync(queryText, clientId, ct);
-        }
-        catch (Exception ex)
-        {
-            this._embeddingLookupFailuresByClient.TryAdd(clientId, 0);
-            degradedComponents.Add(EmbeddingDegradedComponent);
-            LogDuplicateSuppressionEmbeddingFailed(logger, normalizedFilePath, clientId, ex);
-            return null;
-        }
-    }
-
-    private async Task<ThreadMemoryMatchDto?> TryFindSemanticDuplicateMatchAsync(
-        Guid clientId,
-        string repositoryId,
-        int pullRequestId,
-        float[] queryVector,
-        HashSet<string> degradedComponents,
-        CancellationToken ct)
-    {
-        try
-        {
-            var semanticMatches = await repository.FindSimilarInPullRequestAsync(
-                clientId,
-                repositoryId,
-                pullRequestId,
-                queryVector,
-                this._opts.MemoryTopN,
-                this._opts.MemoryMinSimilarity,
-                ct);
-
-            return semanticMatches
-                .OrderByDescending(match => match.SimilarityScore)
-                .FirstOrDefault();
-        }
-        catch (Exception ex)
-        {
-            degradedComponents.Add(RepositoryDegradedComponent);
-            LogDuplicateSuppressionLookupFailed(logger, repositoryId, pullRequestId, clientId, ex);
-            return null;
-        }
-    }
-
-    private async Task<TextSimilarityMatch?> TryFindFilePathFallbackMatchAsync(
-        Guid clientId,
-        string repositoryId,
-        int pullRequestId,
-        string normalizedFilePath,
-        string findingMessage,
-        HashSet<string> degradedComponents,
-        HashSet<string> fallbackChecks,
-        CancellationToken ct)
-    {
-        try
-        {
-            var filePathMatches = await repository.FindByPullRequestFilePathAsync(
-                clientId,
-                repositoryId,
-                pullRequestId,
-                normalizedFilePath,
-                this._opts.MemoryTopN,
-                ct);
-
-            if (degradedComponents.Count > 0)
-            {
-                fallbackChecks.Add(FilePathFallbackCheck);
-            }
-
-            return filePathMatches
-                .Select(match => new TextSimilarityMatch(match, CalculateTextSimilarity(findingMessage, match.ResolutionSummary)))
-                .Where(candidate => candidate.Score >= HistoricalTextFallbackThreshold)
-                .OrderByDescending(candidate => candidate.Score)
-                .FirstOrDefault();
-        }
-        catch (Exception ex)
-        {
-            degradedComponents.Add(RepositoryDegradedComponent);
-            LogDuplicateSuppressionLookupFailed(logger, repositoryId, pullRequestId, clientId, ex);
-            return null;
-        }
-    }
-
-    private sealed record TextSimilarityMatch(ThreadMemoryMatchDto Match, double Score);
 
     /// <inheritdoc />
     public async Task<ReviewResult> RetrieveAndReconsiderAsync(
@@ -587,6 +483,106 @@ public sealed partial class ThreadMemoryService(
             }
 
             return draftResult;
+        }
+    }
+
+    // Resolves the query embedding used for semantic duplicate-suppression lookup, marking the
+    // embedding component degraded (and short-circuiting future calls for this client for the
+    // remainder of the process) on failure.
+    private async Task<float[]?> TryGetDuplicateSuppressionQueryVectorAsync(
+        Guid clientId,
+        string? normalizedFilePath,
+        string findingMessage,
+        HashSet<string> degradedComponents,
+        CancellationToken ct)
+    {
+        if (this._embeddingLookupFailuresByClient.ContainsKey(clientId))
+        {
+            degradedComponents.Add(EmbeddingDegradedComponent);
+            return null;
+        }
+
+        try
+        {
+            var queryText = BuildDuplicateSuppressionQueryText(normalizedFilePath, findingMessage);
+            return await embedder.GenerateEmbeddingAsync(queryText, clientId, ct);
+        }
+        catch (Exception ex)
+        {
+            this._embeddingLookupFailuresByClient.TryAdd(clientId, 0);
+            degradedComponents.Add(EmbeddingDegradedComponent);
+            LogDuplicateSuppressionEmbeddingFailed(logger, normalizedFilePath, clientId, ex);
+            return null;
+        }
+    }
+
+    private async Task<ThreadMemoryMatchDto?> TryFindSemanticDuplicateMatchAsync(
+        Guid clientId,
+        string repositoryId,
+        int pullRequestId,
+        float[] queryVector,
+        HashSet<string> degradedComponents,
+        CancellationToken ct)
+    {
+        try
+        {
+            var semanticMatches = await repository.FindSimilarInPullRequestAsync(
+                clientId,
+                repositoryId,
+                pullRequestId,
+                queryVector,
+                this._opts.MemoryTopN,
+                this._opts.MemoryMinSimilarity,
+                ct);
+
+            return semanticMatches
+                .OrderByDescending(match => match.SimilarityScore)
+                .FirstOrDefault();
+        }
+        catch (Exception ex)
+        {
+            degradedComponents.Add(RepositoryDegradedComponent);
+            LogDuplicateSuppressionLookupFailed(logger, repositoryId, pullRequestId, clientId, ex);
+            return null;
+        }
+    }
+
+    private async Task<TextSimilarityMatch?> TryFindFilePathFallbackMatchAsync(
+        Guid clientId,
+        string repositoryId,
+        int pullRequestId,
+        string normalizedFilePath,
+        string findingMessage,
+        HashSet<string> degradedComponents,
+        HashSet<string> fallbackChecks,
+        CancellationToken ct)
+    {
+        try
+        {
+            var filePathMatches = await repository.FindByPullRequestFilePathAsync(
+                clientId,
+                repositoryId,
+                pullRequestId,
+                normalizedFilePath,
+                this._opts.MemoryTopN,
+                ct);
+
+            if (degradedComponents.Count > 0)
+            {
+                fallbackChecks.Add(FilePathFallbackCheck);
+            }
+
+            return filePathMatches
+                .Select(match => new TextSimilarityMatch(match, CalculateTextSimilarity(findingMessage, match.ResolutionSummary)))
+                .Where(candidate => candidate.Score >= HistoricalTextFallbackThreshold)
+                .OrderByDescending(candidate => candidate.Score)
+                .FirstOrDefault();
+        }
+        catch (Exception ex)
+        {
+            degradedComponents.Add(RepositoryDegradedComponent);
+            LogDuplicateSuppressionLookupFailed(logger, repositoryId, pullRequestId, clientId, ex);
+            return null;
         }
     }
 
@@ -921,4 +917,6 @@ public sealed partial class ThreadMemoryService(
 
         return text.Length > maxLength ? text[..maxLength] : text;
     }
+
+    private sealed record TextSimilarityMatch(ThreadMemoryMatchDto Match, double Score);
 }

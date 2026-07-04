@@ -159,7 +159,6 @@ public sealed class PrReviewViewController(
                     catch (JsonException)
                     {
                         // The captured event body is a best-effort diagnostic sample; skip it if it isn't valid JSON.
-                        continue;
                     }
                 }
             }

@@ -16,8 +16,7 @@ namespace MeisterProPR.Api.Controllers;
 /// </summary>
 [ApiController]
 [Route("admin/clients/{clientId:guid}/procursor")]
-public sealed class ProCursorTokenUsageController(
-    IProCursorTokenUsageReadRepository readRepository) : ControllerBase
+public sealed class ProCursorTokenUsageController(IProCursorTokenUsageReadRepository readRepository) : ControllerBase
 {
     private const int MaxTopSourcesLimit = 1000;
 

@@ -30,13 +30,6 @@ public sealed class AuthMiddleware(RequestDelegate next)
 {
     private const string PatHeader = "X-User-Pat";
 
-    private enum AuthOutcome
-    {
-        NotAttempted,
-        Authenticated,
-        Rejected,
-    }
-
     /// <inheritdoc cref="IMiddleware.InvokeAsync" />
     public async Task InvokeAsync(HttpContext context)
     {
@@ -296,5 +289,12 @@ public sealed class AuthMiddleware(RequestDelegate next)
 
         var summary = await summaryTask;
         return summary?.Edition == InstallationEdition.Community;
+    }
+
+    private enum AuthOutcome
+    {
+        NotAttempted,
+        Authenticated,
+        Rejected,
     }
 }
