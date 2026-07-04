@@ -360,6 +360,7 @@ public sealed class FixtureReviewContextTools(
             scanned++;
             var request = new StructuralParseRequest(file.Path, language, file.Content, []);
             var defs = await structuralAnalyzer.GetDefinitionsAsync(request, ct);
+            var contentLines = ReferenceSnippetEnricher.SplitLines(file.Content);
 
             foreach (var def in defs.Where(d => string.Equals(d.Name, query.Symbol, StringComparison.Ordinal)))
             {
@@ -368,7 +369,8 @@ public sealed class FixtureReviewContextTools(
                     return new DefinitionLookupResult(definitions, scanned, true, false);
                 }
 
-                definitions.Add(new DefinitionLookupSite(file.Path, def.Kind, def.Name, def.StartLine, def.EndLine, ResolutionMode.NameBased));
+                var snippet = ReferenceSnippetEnricher.ExtractSnippet(contentLines, def.StartLine);
+                definitions.Add(new DefinitionLookupSite(file.Path, def.Kind, def.Name, def.StartLine, def.EndLine, ResolutionMode.NameBased, snippet));
             }
         }
 
@@ -386,6 +388,17 @@ public sealed class FixtureReviewContextTools(
         var request = new StructuralParseRequest(file.Path, language, file.Content, []);
         var lines = await structuralAnalyzer!.ConfirmReferenceLinesAsync(request, symbol, ct);
 
+        // The file content is already in hand, so the matched-line snippet and enclosing symbol are free:
+        // extract them here rather than forcing a follow-up fetch of every site.
+        var contentLines = ReferenceSnippetEnricher.SplitLines(file.Content);
+        var enclosingByLine = await ReferenceSnippetEnricher.ResolveEnclosingByLineAsync(
+            structuralAnalyzer,
+            file.Path,
+            language,
+            file.Content,
+            lines,
+            ct);
+
         foreach (var line in lines)
         {
             if (sites.Count >= this._options.MaxReferenceResults || usedChars > this._options.MaxReferenceResultChars)
@@ -393,8 +406,18 @@ public sealed class FixtureReviewContextTools(
                 return (true, usedChars);
             }
 
-            sites.Add(new ReferenceSite(file.Path, line, null, null, OccurrenceKind.Reference, ResolutionMode.NameBased));
-            usedChars += file.Path.Length + 16;
+            var snippet = ReferenceSnippetEnricher.ExtractSnippet(contentLines, line);
+            enclosingByLine.TryGetValue(line, out var enclosing);
+            sites.Add(
+                new ReferenceSite(
+                    file.Path,
+                    line,
+                    enclosing?.Name,
+                    enclosing?.Kind,
+                    OccurrenceKind.Reference,
+                    ResolutionMode.NameBased,
+                    snippet));
+            usedChars += file.Path.Length + 16 + snippet.Length;
         }
 
         return (false, usedChars);

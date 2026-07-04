@@ -3,6 +3,7 @@
 
 using MeisterProPR.Application.Features.Reviewing.Execution.Models;
 using MeisterProPR.CodeAnalysis;
+using MeisterProPR.Infrastructure.Features.Reviewing.Execution;
 
 namespace MeisterProPR.Infrastructure.Tests.AI;
 
@@ -130,5 +131,67 @@ public sealed class FindReferencesToolTests
         Assert.DoesNotContain(result.Sites, s => s.Line == 6); // comment excluded
         Assert.DoesNotContain(result.Sites, s => s.Line == 7); // string excluded
         Assert.All(result.Sites, s => Assert.Equal(ResolutionMode.NameBased, s.ResolutionMode));
+    }
+
+    // Each confirmed site carries the matched line snippet and the enclosing symbol, so the caller
+    // does not have to re-fetch the file to see the occurrence.
+    [Fact]
+    public async Task FindReferences_SiteCarriesSnippetAndEnclosingSymbol()
+    {
+        var files = new Dictionary<string, string>(StringComparer.Ordinal)
+        {
+            ["Calc.cs"] =
+                "namespace N;\n" +
+                "public class Calc\n" +
+                "{\n" +
+                "    public int CalcTotal(int[] items) => items.Length;\n" +
+                "}\n",
+            ["User.cs"] =
+                "namespace N;\n" +
+                "public class User\n" +
+                "{\n" +
+                "    public int Run(Calc c) => c.CalcTotal(new[] { 1 });\n" + // line 4 - caller
+                "}\n",
+        };
+
+        var tools = StructuralReferenceToolTestHarness.CreateTools(files);
+        var result = await tools.FindReferencesAsync(new SymbolReferenceQuery("CalcTotal"), CancellationToken.None);
+
+        Assert.False(result.Unavailable);
+
+        var callerSite = result.Sites.Single(s => s.FilePath == "User.cs");
+        Assert.Equal(4, callerSite.Line);
+        Assert.Equal("Run", callerSite.EnclosingName);
+        Assert.False(string.IsNullOrWhiteSpace(callerSite.LineSnippet));
+        Assert.Contains("CalcTotal", callerSite.LineSnippet!, StringComparison.Ordinal);
+        Assert.All(result.Sites, s => Assert.True((s.LineSnippet?.Length ?? 0) <= ReferenceSnippetEnricher.MaxSnippetChars));
+    }
+
+    // A very long matched line is bounded to the snippet cap (with an ellipsis marker), never overflowing it.
+    [Fact]
+    public async Task FindReferences_LongMatchedLine_SnippetBoundedToCap()
+    {
+        var longArgs = string.Join(", ", Enumerable.Range(0, 80).Select(i => $"int veryLongArgumentName{i}"));
+        var files = new Dictionary<string, string>(StringComparer.Ordinal)
+        {
+            ["Big.cs"] =
+                "namespace N;\n" +
+                "public class Big\n" +
+                "{\n" +
+                $"    public int Target({longArgs}) => 1;\n" + // line 4 - very long declaration line
+                "    public int Use() => this.Target(" + string.Join(", ", Enumerable.Range(0, 80).Select(_ => "0")) + ");\n" +
+                "}\n",
+        };
+
+        var tools = StructuralReferenceToolTestHarness.CreateTools(files);
+        var result = await tools.FindReferencesAsync(new SymbolReferenceQuery("Target"), CancellationToken.None);
+
+        Assert.False(result.Unavailable);
+        Assert.NotEmpty(result.Sites);
+        Assert.All(result.Sites, s => Assert.True((s.LineSnippet?.Length ?? 0) <= ReferenceSnippetEnricher.MaxSnippetChars));
+        Assert.Contains(
+            result.Sites,
+            s => s.LineSnippet is { Length: ReferenceSnippetEnricher.MaxSnippetChars }
+                 && s.LineSnippet.EndsWith("…", StringComparison.Ordinal));
     }
 }

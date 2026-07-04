@@ -315,12 +315,22 @@ internal sealed class FileByFileContextPrefetchStage(
                 continue;
             }
 
+            // Carry the snippet + enclosing symbol the reference lookup already resolved, so the reviewer
+            // sees the caller line and its enclosing definition without re-fetching the file.
+            var enclosing = string.IsNullOrWhiteSpace(site.EnclosingName) ? null : site.EnclosingName;
+            var snippet = string.IsNullOrWhiteSpace(site.LineSnippet) ? null : site.LineSnippet;
+            var enclosingClause = enclosing is null ? string.Empty : $" in `{enclosing}`";
+            var snippetClause = snippet is null ? string.Empty : $"\n    {snippet}";
+
             evidence.Add(
                 new PrefetchedContextEvidenceItem(
                     "supported_caller_site",
                     $"Confirmed caller of {symbol}: {site.FilePath}",
                     $"{site.FilePath}:L{site.Line}",
-                    $"Confirmed cross-file caller of `{symbol}` at {site.FilePath}:{site.Line} (structural; comment/string occurrences excluded)."));
+                    $"Confirmed cross-file caller of `{symbol}` at {site.FilePath}:{site.Line}{enclosingClause} (structural; comment/string occurrences excluded).{snippetClause}",
+                    false,
+                    snippet,
+                    enclosing));
             injected++;
         }
 

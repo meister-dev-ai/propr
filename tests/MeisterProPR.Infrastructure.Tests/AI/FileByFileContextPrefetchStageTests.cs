@@ -13,6 +13,7 @@ using MeisterProPR.CodeAnalysis.TreeSitter.Startup;
 using MeisterProPR.Domain.Entities;
 using MeisterProPR.Domain.Enums;
 using MeisterProPR.Domain.ValueObjects;
+using MeisterProPR.Infrastructure.Features.Reviewing.Execution;
 using Microsoft.Extensions.Logging.Abstractions;
 using NSubstitute;
 using TreeSitterAnalyzer = MeisterProPR.CodeAnalysis.TreeSitter.TreeSitterStructuralCodeAnalyzer;
@@ -679,6 +680,34 @@ public sealed class FileByFileContextPrefetchStageUs4Tests
             evidence,
             e => string.Equals(e.Kind, "supported_caller_site", StringComparison.Ordinal)
                  && e.SourceId.Contains("User.cs", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task ChangedDefinitionWithCrossFileCaller_CallerSiteCarriesSnippetAndEnclosingSymbol()
+    {
+        var files = new Dictionary<string, string>(StringComparer.Ordinal)
+        {
+            ["Calc.cs"] = CalcSource,
+            ["User.cs"] = UserSource,
+        };
+
+        var (stage, context) = BuildScenario(files);
+        await stage.ExecuteAsync(context, CancellationToken.None);
+
+        var callerSite = Assert.Single(
+            context.FileReviewContext.PerFileHint!.PrefetchedContextEvidence,
+            e => string.Equals(e.Kind, "supported_caller_site", StringComparison.Ordinal)
+                 && e.SourceId.Contains("User.cs", StringComparison.Ordinal));
+
+        // The feed item carries the enclosing symbol and the matched line snippet as structured fields...
+        Assert.Equal("Run", callerSite.EnclosingSymbol);
+        Assert.False(string.IsNullOrWhiteSpace(callerSite.MatchedSnippet));
+        Assert.Contains("CalcTotal", callerSite.MatchedSnippet!, StringComparison.Ordinal);
+        Assert.True(callerSite.MatchedSnippet!.Length <= ReferenceSnippetEnricher.MaxSnippetChars);
+
+        // ...and both are embedded in the rendered content the reviewer sees.
+        Assert.Contains("in `Run`", callerSite.Content, StringComparison.Ordinal);
+        Assert.Contains(callerSite.MatchedSnippet, callerSite.Content, StringComparison.Ordinal);
     }
 
     [Fact]

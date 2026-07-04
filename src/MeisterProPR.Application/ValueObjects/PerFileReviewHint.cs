@@ -98,12 +98,22 @@ public sealed record PerFileReviewHint(
 /// <param name="SourceId">Stable source identifier such as a path or symbol key.</param>
 /// <param name="Content">Bounded evidence content rendered into the prompt.</param>
 /// <param name="Truncated">Whether the content was trimmed to stay within the budget.</param>
+/// <param name="MatchedSnippet">
+///     The matched source line for a confirmed caller site, whitespace-collapsed and bounded, so the
+///     reviewer sees the occurrence without re-fetching the file. <c>null</c> when not applicable.
+/// </param>
+/// <param name="EnclosingSymbol">
+///     The name of the definition enclosing the matched line, when the analyzer can resolve it;
+///     <c>null</c> otherwise.
+/// </param>
 public sealed record PrefetchedContextEvidenceItem(
     string Kind,
     string Title,
     string SourceId,
     string Content,
-    bool Truncated = false);
+    bool Truncated = false,
+    string? MatchedSnippet = null,
+    string? EnclosingSymbol = null);
 
 /// <summary>
 ///     Deterministic risk markers extracted from a changed file diff.

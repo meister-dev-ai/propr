@@ -487,6 +487,17 @@ internal abstract class ProviderReviewContextToolsBase(
         var parseRequest = new StructuralParseRequest(file, language, content, []);
         var lines = await this._structuralAnalyzer.ConfirmReferenceLinesAsync(parseRequest, symbol, token);
 
+        // The file content is already in hand, so the matched-line snippet and enclosing symbol are free:
+        // extract them here rather than forcing a follow-up fetch of every site.
+        var contentLines = ReferenceSnippetEnricher.SplitLines(content);
+        var enclosingByLine = await ReferenceSnippetEnricher.ResolveEnclosingByLineAsync(
+            this._structuralAnalyzer,
+            file,
+            language,
+            content,
+            lines,
+            token);
+
         foreach (var line in lines)
         {
             if (sites.Count >= this._options.MaxReferenceResults || usedChars > this._options.MaxReferenceResultChars)
@@ -494,8 +505,18 @@ internal abstract class ProviderReviewContextToolsBase(
                 return new ReferenceScanStep(true, true, usedChars);
             }
 
-            sites.Add(new ReferenceSite(file, line, null, null, OccurrenceKind.Reference, ResolutionMode.NameBased));
-            usedChars += file.Length + 16;
+            var snippet = ReferenceSnippetEnricher.ExtractSnippet(contentLines, line);
+            enclosingByLine.TryGetValue(line, out var enclosing);
+            sites.Add(
+                new ReferenceSite(
+                    file,
+                    line,
+                    enclosing?.Name,
+                    enclosing?.Kind,
+                    OccurrenceKind.Reference,
+                    ResolutionMode.NameBased,
+                    snippet));
+            usedChars += file.Length + 16 + snippet.Length;
         }
 
         return new ReferenceScanStep(true, false, usedChars);
@@ -522,6 +543,8 @@ internal abstract class ProviderReviewContextToolsBase(
         var parseRequest = new StructuralParseRequest(file, language, content, []);
         var defs = await this._structuralAnalyzer.GetDefinitionsAsync(parseRequest, token);
 
+        var contentLines = ReferenceSnippetEnricher.SplitLines(content);
+
         foreach (var def in defs)
         {
             if (!string.Equals(def.Name, symbol, StringComparison.Ordinal))
@@ -534,7 +557,8 @@ internal abstract class ProviderReviewContextToolsBase(
                 return (true, true);
             }
 
-            definitions.Add(new DefinitionLookupSite(file, def.Kind, def.Name, def.StartLine, def.EndLine, ResolutionMode.NameBased));
+            var snippet = ReferenceSnippetEnricher.ExtractSnippet(contentLines, def.StartLine);
+            definitions.Add(new DefinitionLookupSite(file, def.Kind, def.Name, def.StartLine, def.EndLine, ResolutionMode.NameBased, snippet));
         }
 
         return (true, false);

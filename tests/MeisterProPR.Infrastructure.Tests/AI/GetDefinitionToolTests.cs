@@ -3,6 +3,7 @@
 
 using MeisterProPR.Application.Features.Reviewing.Execution.Models;
 using MeisterProPR.CodeAnalysis;
+using MeisterProPR.Infrastructure.Features.Reviewing.Execution;
 
 namespace MeisterProPR.Infrastructure.Tests.AI;
 
@@ -63,6 +64,25 @@ public sealed class GetDefinitionToolTests
 
         Assert.False(result.Unavailable);
         Assert.Empty(result.Definitions);
+    }
+
+    // The definition site carries the declaration-line snippet, bounded to the cap, so the caller sees the
+    // signature without re-fetching the file.
+    [Fact]
+    public async Task GetDefinition_SiteCarriesBoundedDeclarationSnippet()
+    {
+        var files = new Dictionary<string, string>(StringComparer.Ordinal)
+        {
+            ["Calc.cs"] = "namespace N;\npublic class Calc\n{\n    public int CalcTotal(int[] items) => items.Length;\n}\n",
+        };
+
+        var tools = StructuralReferenceToolTestHarness.CreateTools(files);
+        var result = await tools.GetDefinitionAsync(new SymbolReferenceQuery("CalcTotal"), CancellationToken.None);
+
+        var definition = result.Definitions.Single(d => d.Name == "CalcTotal");
+        Assert.False(string.IsNullOrWhiteSpace(definition.LineSnippet));
+        Assert.Contains("CalcTotal", definition.LineSnippet!, StringComparison.Ordinal);
+        Assert.All(result.Definitions, d => Assert.True((d.LineSnippet?.Length ?? 0) <= ReferenceSnippetEnricher.MaxSnippetChars));
     }
 
     [Fact]

@@ -25,10 +25,15 @@ public enum OccurrenceKind
 /// <param name="EnclosingKind">Kind of the enclosing definition, when resolvable.</param>
 /// <param name="OccurrenceKind">Whether this is a call or a plain reference.</param>
 /// <param name="ResolutionMode">Whether the match is name-based or semantically resolved.</param>
+/// <param name="LineSnippet">
+///     The matched source line, whitespace-collapsed to a single line and bounded to a small cap, so the
+///     caller can see the occurrence without re-fetching the file. <c>null</c> when unavailable.
+/// </param>
 public sealed record ReferenceSite(
     string FilePath,
     int Line,
     string? EnclosingName,
     DefinitionKind? EnclosingKind,
     OccurrenceKind OccurrenceKind,
-    ResolutionMode ResolutionMode);
+    ResolutionMode ResolutionMode,
+    string? LineSnippet = null);
