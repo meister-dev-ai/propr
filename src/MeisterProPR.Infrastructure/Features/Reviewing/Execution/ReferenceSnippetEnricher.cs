@@ -71,12 +71,27 @@ internal static class ReferenceSnippetEnricher
             return EmptyMap;
         }
 
-        var ranges = lines.Select(static line => new ChangedLineRange(line, line)).ToList();
+        var definitions = await TryResolveDefinitionsAsync(analyzer, path, language, content, lines, ct);
+        if (definitions is null || definitions.Count == 0)
+        {
+            return EmptyMap;
+        }
 
-        IReadOnlyList<EnclosingDefinition> definitions;
+        return BuildEnclosingByLineMap(lines, definitions);
+    }
+
+    private static async Task<IReadOnlyList<EnclosingDefinition>?> TryResolveDefinitionsAsync(
+        IStructuralCodeAnalyzer analyzer,
+        string path,
+        SupportedLanguage language,
+        string content,
+        IReadOnlyList<int> lines,
+        CancellationToken ct)
+    {
+        var ranges = lines.Select(static line => new ChangedLineRange(line, line)).ToList();
         try
         {
-            definitions = await analyzer
+            return await analyzer
                 .ResolveEnclosingDefinitionsAsync(new StructuralParseRequest(path, language, content, ranges), ct)
                 .ConfigureAwait(false);
         }
@@ -86,14 +101,14 @@ internal static class ReferenceSnippetEnricher
         }
         catch
         {
-            return EmptyMap;
+            return null;
         }
+    }
 
-        if (definitions.Count == 0)
-        {
-            return EmptyMap;
-        }
-
+    private static IReadOnlyDictionary<int, EnclosingDefinition> BuildEnclosingByLineMap(
+        IReadOnlyList<int> lines,
+        IReadOnlyList<EnclosingDefinition> definitions)
+    {
         var map = new Dictionary<int, EnclosingDefinition>();
         foreach (var line in lines)
         {
@@ -104,20 +119,7 @@ internal static class ReferenceSnippetEnricher
 
             // Pick the tightest span that contains the line: the analyzer keeps only the innermost
             // definition per range, but several ranges can each contribute one candidate here.
-            EnclosingDefinition? best = null;
-            foreach (var def in definitions)
-            {
-                if (line < def.StartLine || line > def.EndLine)
-                {
-                    continue;
-                }
-
-                if (best is null || def.EndLine - def.StartLine < best.EndLine - best.StartLine)
-                {
-                    best = def;
-                }
-            }
-
+            var best = FindTightestDefinition(line, definitions);
             if (best is not null)
             {
                 map[line] = best;
@@ -125,6 +127,27 @@ internal static class ReferenceSnippetEnricher
         }
 
         return map;
+    }
+
+    private static EnclosingDefinition? FindTightestDefinition(
+        int line,
+        IReadOnlyList<EnclosingDefinition> definitions)
+    {
+        EnclosingDefinition? best = null;
+        foreach (var def in definitions)
+        {
+            if (line < def.StartLine || line > def.EndLine)
+            {
+                continue;
+            }
+
+            if (best is null || def.EndLine - def.StartLine < best.EndLine - best.StartLine)
+            {
+                best = def;
+            }
+        }
+
+        return best;
     }
 
     private static string CollapseWhitespace(string raw)

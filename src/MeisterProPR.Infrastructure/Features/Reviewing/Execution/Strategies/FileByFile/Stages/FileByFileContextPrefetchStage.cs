@@ -283,21 +283,8 @@ internal sealed class FileByFileContextPrefetchStage(
         int callerBudget,
         CancellationToken ct)
     {
-        ReferenceLookupResult references;
-        try
-        {
-            references = await reviewTools.FindReferencesAsync(new SymbolReferenceQuery(symbol), ct).ConfigureAwait(false);
-        }
-        catch (OperationCanceledException)
-        {
-            throw;
-        }
-        catch
-        {
-            return null;
-        }
-
-        if (references.Unavailable)
+        var references = await TryGetReferencesAsync(reviewTools, symbol, ct);
+        if (references is null || references.Unavailable)
         {
             return null;
         }
@@ -309,32 +296,62 @@ internal sealed class FileByFileContextPrefetchStage(
                 break;
             }
 
-            var key = $"{site.FilePath}:{site.Line}";
-            if (!seen.Add(key))
-            {
-                continue;
-            }
-
-            // Carry the snippet + enclosing symbol the reference lookup already resolved, so the reviewer
-            // sees the caller line and its enclosing definition without re-fetching the file.
-            var enclosing = string.IsNullOrWhiteSpace(site.EnclosingName) ? null : site.EnclosingName;
-            var snippet = string.IsNullOrWhiteSpace(site.LineSnippet) ? null : site.LineSnippet;
-            var enclosingClause = enclosing is null ? string.Empty : $" in `{enclosing}`";
-            var snippetClause = snippet is null ? string.Empty : $"\n    {snippet}";
-
-            evidence.Add(
-                new PrefetchedContextEvidenceItem(
-                    "supported_caller_site",
-                    $"Confirmed caller of {symbol}: {site.FilePath}",
-                    $"{site.FilePath}:L{site.Line}",
-                    $"Confirmed cross-file caller of `{symbol}` at {site.FilePath}:{site.Line}{enclosingClause} (structural; comment/string occurrences excluded).{snippetClause}",
-                    false,
-                    snippet,
-                    enclosing));
-            injected++;
+            injected = TryInjectCallerSiteEvidence(symbol, site, evidence, seen, injected);
         }
 
         return (references.Sites.Count, references.Truncated, injected);
+    }
+
+    private static async Task<ReferenceLookupResult?> TryGetReferencesAsync(
+        IReviewContextTools reviewTools,
+        string symbol,
+        CancellationToken ct)
+    {
+        try
+        {
+            return await reviewTools.FindReferencesAsync(new SymbolReferenceQuery(symbol), ct).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    private static int TryInjectCallerSiteEvidence(
+        string symbol,
+        ReferenceSite site,
+        List<PrefetchedContextEvidenceItem> evidence,
+        HashSet<string> seen,
+        int injected)
+    {
+        var key = $"{site.FilePath}:{site.Line}";
+        if (!seen.Add(key))
+        {
+            return injected;
+        }
+
+        // Carry the snippet + enclosing symbol the reference lookup already resolved, so the reviewer
+        // sees the caller line and its enclosing definition without re-fetching the file.
+        var enclosing = string.IsNullOrWhiteSpace(site.EnclosingName) ? null : site.EnclosingName;
+        var snippet = string.IsNullOrWhiteSpace(site.LineSnippet) ? null : site.LineSnippet;
+        var enclosingClause = enclosing is null ? string.Empty : $" in `{enclosing}`";
+        var snippetClause = snippet is null ? string.Empty : $"\n    {snippet}";
+
+        evidence.Add(
+            new PrefetchedContextEvidenceItem(
+                "supported_caller_site",
+                $"Confirmed caller of {symbol}: {site.FilePath}",
+                $"{site.FilePath}:L{site.Line}",
+                $"Confirmed cross-file caller of `{symbol}` at {site.FilePath}:{site.Line}{enclosingClause} (structural; comment/string occurrences excluded).{snippetClause}",
+                false,
+                snippet,
+                enclosing));
+
+        return injected + 1;
     }
 
     /// <summary>
