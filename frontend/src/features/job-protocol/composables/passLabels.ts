@@ -26,6 +26,8 @@ export function passKindLabel(
             return 'Initial review'
         case 'ProRVAugmentation':
             return 'ProRV verification'
+        case 'MultiPassUnion':
+            return 'Second opinion'
         case 'Synthesis':
             return 'Synthesis'
         default:
@@ -43,9 +45,9 @@ export function passKindLabel(
 
 /**
  * Coarse provenance label for an aggregate finding's origin pass. Finding
- * provenance stays Baseline vs ProRVAugmentation, so the badge taxonomy is
- * intentionally coarser than the per-pass tab labels. Returns null when the
- * origin is unknown so callers render no badge.
+ * provenance stays Baseline vs ProRVAugmentation vs MultiPassUnion, so the badge
+ * taxonomy is intentionally coarser than the per-pass tab labels. Returns null
+ * when the origin is unknown so callers render no badge.
  */
 export function originLabel(originPassKind: string | null | undefined): string | null {
     switch (originPassKind) {
@@ -53,6 +55,8 @@ export function originLabel(originPassKind: string | null | undefined): string |
             return 'Initial review'
         case 'ProRVAugmentation':
             return 'ProRV verification'
+        case 'MultiPassUnion':
+            return 'Second opinion'
         case 'Synthesis':
             return 'Synthesis'
         default:
