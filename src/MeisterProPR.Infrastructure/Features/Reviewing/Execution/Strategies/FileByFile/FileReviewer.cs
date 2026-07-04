@@ -605,10 +605,26 @@ internal sealed partial class FileReviewer(
                 effectiveClient,
                 fileContext.PerFileHint?.FocusedReviewGuidance ?? []);
 
-            // Resampling draws independent samples from the same model; nudge the temperature so passes diverge.
+            // Resampling draws independent samples for the resample passes; nudge the temperature so the passes
+            // diverge, and route the resample passes (2..k) to the diversity default model when one is configured
+            // and it differs from the file's tier model. The baseline pass keeps the tier model — only these
+            // resample passes switch — so the recall lift comes from a stronger default model resampling the file.
+            //
+            // Models are deployments on the tier connection and the review core selects the model purely by
+            // ChatOptions.ModelId (see ToolAwareAiReviewCore), so overriding the context model id while reusing the
+            // tier connection client is sufficient to switch the model. Tier capabilities are kept for the resample
+            // model: the runtime resolver binds capabilities by purpose, not by an arbitrary model id, and the
+            // resample runs against the same connection.
             if (diversity.Mode == MultiPassDiversityMode.Resampling)
             {
                 passContext.Temperature = diversity.ResampleTemperature;
+
+                var tierModel = passContext.ModelId;
+                if (!string.IsNullOrWhiteSpace(diversity.DefaultModel)
+                    && !string.Equals(diversity.DefaultModel, tierModel, StringComparison.Ordinal))
+                {
+                    passContext.ModelId = diversity.DefaultModel;
+                }
             }
 
             passContext = await this.RunDispatchPipelineAsync(

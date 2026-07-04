@@ -35,6 +35,9 @@ public sealed class FileReviewerMultiPassUnionTests
 
     private readonly IAiReviewCore _aiCore = Substitute.For<IAiReviewCore>();
     private readonly IJobRepository _jobRepository = Substitute.For<IJobRepository>();
+
+    // Model id observed on each AI call's context, in call order (baseline pass first, then resample passes).
+    private readonly List<string?> _observedModelIds = [];
     private readonly IProtocolRecorder _recorder = Substitute.For<IProtocolRecorder>();
     private int _aiCallCount;
     private ReviewFileResult? _persistedResult;
@@ -68,6 +71,7 @@ public sealed class FileReviewerMultiPassUnionTests
             {
                 var ctx = ci.ArgAt<ReviewSystemContext>(1);
                 ctx.LoopMetrics = new ReviewLoopMetrics(0, null, null, 90, 100, 10, 1);
+                this._observedModelIds.Add(ctx.ModelId);
                 var comment = PassComments[Math.Min(this._aiCallCount, PassComments.Count - 1)];
                 this._aiCallCount++;
                 return new ReviewResult("summary", [comment]);
@@ -221,5 +225,56 @@ public sealed class FileReviewerMultiPassUnionTests
         await this._recorder.Received(1).RecordReviewStrategyEventAsync(
             Arg.Any<Guid>(), ReviewProtocolEventNames.MultiPassUnionCompleted,
             Arg.Any<string?>(), Arg.Any<string?>(), Arg.Any<string?>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task Resampling_ResamplePassesUseDefaultModel_BaselineKeepsTierModel()
+    {
+        var reviewer = this.CreateReviewer();
+        var file = FileForTier(FileComplexityTier.Medium);
+        var (job, pr) = Fixture(file);
+
+        var baseContext = new ReviewSystemContext(null, [], null)
+        {
+            DefaultReviewChatClient = Substitute.For<IChatClient>(),
+            EnableMultiPassUnion = true,
+            MultiPassUnionPassCount = 3,
+            // The file's tier model; resample passes must switch off this to the diversity default model.
+            ModelId = "gpt-5.3-codex",
+            MultiPassDiversity = new MultiPassDiversity(DefaultModel: "gpt-5.4"),
+        };
+
+        await reviewer.ReviewAsync(job, pr, file, 1, 1, baseContext, null, Substitute.For<IChatClient>(), CancellationToken.None);
+
+        // k=3: the baseline pass plus two resamples, observed in call order.
+        Assert.Equal(3, this._observedModelIds.Count);
+        // The baseline pass stays on the file's tier model.
+        Assert.Equal("gpt-5.3-codex", this._observedModelIds[0]);
+        // The resample passes run the diversity default model — the recall lever.
+        Assert.Equal("gpt-5.4", this._observedModelIds[1]);
+        Assert.Equal("gpt-5.4", this._observedModelIds[2]);
+    }
+
+    [Fact]
+    public async Task Resampling_WithoutDefaultModel_AllPassesKeepTierModel()
+    {
+        var reviewer = this.CreateReviewer();
+        var file = FileForTier(FileComplexityTier.Medium);
+        var (job, pr) = Fixture(file);
+
+        var baseContext = new ReviewSystemContext(null, [], null)
+        {
+            DefaultReviewChatClient = Substitute.For<IChatClient>(),
+            EnableMultiPassUnion = true,
+            MultiPassUnionPassCount = 3,
+            ModelId = "gpt-5.3-codex",
+            // No default model configured — every pass, baseline and resample, stays on the tier model.
+            MultiPassDiversity = new MultiPassDiversity(DefaultModel: null),
+        };
+
+        await reviewer.ReviewAsync(job, pr, file, 1, 1, baseContext, null, Substitute.For<IChatClient>(), CancellationToken.None);
+
+        Assert.Equal(3, this._observedModelIds.Count);
+        Assert.All(this._observedModelIds, modelId => Assert.Equal("gpt-5.3-codex", modelId));
     }
 }

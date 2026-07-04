@@ -79,8 +79,8 @@ public static class ReviewingExecutionServiceCollectionExtensions
         // via the review context's EnableMultiPassUnion flag (default off). The judge is degraded-safe: when no
         // verification model is bound it returns keep-both, so the deduplicator only ever collapses confirmed
         // duplicates and never merges distinct bugs.
-        services.AddSingleton<IFindingMergeJudge, AiFindingMergeJudge>();
-        services.AddSingleton<IFindingDeduplicator, SemanticFindingDeduplicator>();
+        services.AddScoped<IFindingMergeJudge, AiFindingMergeJudge>();
+        services.AddScoped<IFindingDeduplicator, SemanticFindingDeduplicator>();
         services.AddScoped<ReviewSynthesisExecutor>();
         services.AddScoped<AgenticReviewSynthesisExecutor>();
         services.AddSingleton<ISummaryReconciliationService, SummaryReconciliationService>();
