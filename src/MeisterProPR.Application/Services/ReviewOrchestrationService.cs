@@ -774,6 +774,7 @@ public sealed partial class ReviewOrchestrationService(
         var customSystemMessage = await clientRegistry.GetCustomSystemMessageAsync(job.ClientId, ct);
         var enableProRv = await clientRegistry.GetProRvEnabledAsync(job.ClientId, ct);
         var enableEvidenceBackedVerification = await clientRegistry.GetEvidenceBackedVerificationEnabledAsync(job.ClientId, ct);
+        var enableMultiPassUnion = await clientRegistry.GetMultiPassUnionEnabledAsync(job.ClientId, ct);
 
         var workspacePreparation = preparedWorkspace;
 
@@ -839,6 +840,7 @@ public sealed partial class ReviewOrchestrationService(
             RuntimeCapabilities = runtimeCapabilities,
             EnableProRV = enableProRv,
             EnableEvidenceBackedVerification = enableEvidenceBackedVerification,
+            EnableMultiPassUnion = enableMultiPassUnion,
             AugmentationMode = ReviewAugmentationMode.LateAugmentation,
             ExclusionRules = exclusionRules,
             ModelId = job.AiModel,

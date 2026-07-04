@@ -40,6 +40,7 @@ public sealed record EvaluationConfiguration(
     float? Temperature = null,
     bool EnableProRV = false,
     bool EnableEvidenceBackedVerification = false,
+    bool EnableMultiPassUnion = false,
     ReviewAugmentationMode? AugmentationMode = null,
     EvaluationProCursorContext? ProCursor = null)
 {

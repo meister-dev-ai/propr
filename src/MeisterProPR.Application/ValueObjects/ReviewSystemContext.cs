@@ -151,6 +151,13 @@ public sealed class ReviewSystemContext
     public bool EnableEvidenceBackedVerification { get; set; } = false;
 
     /// <summary>
+    ///     Controls whether multi-pass union generation runs for this execution context. When <see langword="false" />
+    ///     the per-file dispatch runs once and behavior is identical to a single-pass review. When <see langword="true" />
+    ///     eligible files are reviewed across multiple independent passes whose findings are unioned before dedup.
+    /// </summary>
+    public bool EnableMultiPassUnion { get; set; } = false;
+
+    /// <summary>
     ///     Controls whether review execution uses disabled, early-steering, or late-augmentation semantics.
     /// </summary>
     public ReviewAugmentationMode AugmentationMode { get; set; } = ReviewAugmentationMode.EarlySteering;

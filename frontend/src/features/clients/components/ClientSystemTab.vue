@@ -132,6 +132,20 @@
                             </p>
                         </label>
                     </div>
+                </div>
+                <div class="inline-field-row review-publication-row">
+                    <div class="form-field flex-1 review-publication-field">
+                        <label class="checkbox-field" for="enableMultiPassUnion">
+                            <input id="enableMultiPassUnion"
+                                v-model="editedEnableMultiPassUnion"
+                                name="enableMultiPassUnion" type="checkbox" />
+                            <strong>Enable multi-pass union</strong>
+                            <p class="muted review-publication-copy">
+                                Enable this to review higher-complexity files across multiple independent
+                                passes and union their findings before deduplication.
+                            </p>
+                        </label>
+                    </div>
                     <button :disabled="!isAdvancedSettingsButtonEnabled()"
                         class="btn-primary inline-save-btn scm-advanced-settings-save-btn"
                         @click="saveAdvancedSettings">
@@ -179,6 +193,7 @@ const {
     editedScmCommentPostingEnabled,
     editedEnableProRV,
     editedEnableEvidenceBackedVerification,
+    editedEnableMultiPassUnion,
     reviewProfiles,
     clientReviewProfile,
     saveDisplayName,

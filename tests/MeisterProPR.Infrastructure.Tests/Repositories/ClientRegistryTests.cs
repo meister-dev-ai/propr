@@ -353,6 +353,26 @@ public sealed class ClientRegistryTests(PostgresContainerFixture fixture) : IAsy
     }
 
     [Fact]
+    public async Task GetMultiPassUnionEnabledAsync_ClientWithSetting_ReturnsPersistedValue()
+    {
+        var client = await this.SeedClientAsync();
+        client.EnableMultiPassUnion = true;
+        await this._dbContext.SaveChangesAsync();
+
+        var result = await this._registry.GetMultiPassUnionEnabledAsync(client.Id, CancellationToken.None);
+
+        Assert.True(result);
+    }
+
+    [Fact]
+    public async Task GetMultiPassUnionEnabledAsync_UnknownClient_DefaultsToFalse()
+    {
+        var result = await this._registry.GetMultiPassUnionEnabledAsync(Guid.NewGuid(), CancellationToken.None);
+
+        Assert.False(result);
+    }
+
+    [Fact]
     public async Task DefaultReviewPipelineProfileId_RoundTripsNullableValueAcrossPersistence()
     {
         var client = await this.SeedClientAsync();

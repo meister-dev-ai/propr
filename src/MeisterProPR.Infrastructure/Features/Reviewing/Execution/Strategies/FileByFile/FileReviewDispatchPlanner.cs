@@ -151,6 +151,7 @@ internal sealed class FileReviewDispatchPlanner(
             Temperature = baseContext.Temperature,
             EnableProRV = false,
             EnableEvidenceBackedVerification = baseContext.EnableEvidenceBackedVerification,
+            EnableMultiPassUnion = baseContext.EnableMultiPassUnion,
             AugmentationMode = baseContext.AugmentationMode,
             PassKind = baseContext.PassKind,
             PerFileHint = baseContext.PerFileHint,

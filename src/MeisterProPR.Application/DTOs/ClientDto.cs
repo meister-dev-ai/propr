@@ -22,6 +22,7 @@ public sealed record ClientDto(
     bool ScmCommentPostingEnabled,
     bool EnableProRV,
     bool EnableEvidenceBackedVerification = false,
+    bool EnableMultiPassUnion = false,
     Guid? TenantId = null,
     string? TenantSlug = null,
     string? TenantDisplayName = null);

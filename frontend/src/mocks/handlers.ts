@@ -316,6 +316,7 @@ function buildMockClient(id: string, displayName = `Mocked Client ${id}`, overri
     scmCommentPostingEnabled: true,
     enableProRV: true,
     enableEvidenceBackedVerification: false,
+    enableMultiPassUnion: false,
     ...overrides,
   }
 }

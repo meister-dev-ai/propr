@@ -93,6 +93,7 @@ describe('ClientDetailView', () => {
         scmCommentPostingEnabled: true,
         enableProRV: true,
         enableEvidenceBackedVerification: false,
+        enableMultiPassUnion: false,
       },
       response: { status: 200 },
     })
@@ -105,6 +106,7 @@ describe('ClientDetailView', () => {
         scmCommentPostingEnabled: true,
         enableProRV: false,
         enableEvidenceBackedVerification: false,
+        enableMultiPassUnion: false,
         defaultReviewStrategy: 'fileByFile',
       },
     })
@@ -143,6 +145,7 @@ describe('ClientDetailView', () => {
     expect(adminWrapper.find('input[name="scmCommentPostingEnabled"]').exists()).toBe(true)
     expect(adminWrapper.find('input[name="enableProRV"]').exists()).toBe(true)
     expect(adminWrapper.find('input[name="enableEvidenceBackedVerification"]').exists()).toBe(true)
+    expect(adminWrapper.find('input[name="enableMultiPassUnion"]').exists()).toBe(true)
 
     hasClientRoleMock.mockImplementation((_clientId: string, minRole: number) => minRole === 0)
 
@@ -152,6 +155,7 @@ describe('ClientDetailView', () => {
     expect(userWrapper.find('input[name="scmCommentPostingEnabled"]').exists()).toBe(false)
     expect(userWrapper.find('input[name="enableProRV"]').exists()).toBe(false)
     expect(userWrapper.find('input[name="enableEvidenceBackedVerification"]').exists()).toBe(false)
+    expect(userWrapper.find('input[name="enableMultiPassUnion"]').exists()).toBe(false)
   })
 
   it('sends enableProRV when saving advanced settings', async () => {
@@ -171,6 +175,7 @@ describe('ClientDetailView', () => {
         scmCommentPostingEnabled: true,
         enableProRV: false,
         enableEvidenceBackedVerification: false,
+        enableMultiPassUnion: false,
       },
     })
   })
@@ -192,6 +197,29 @@ describe('ClientDetailView', () => {
         scmCommentPostingEnabled: true,
         enableProRV: true,
         enableEvidenceBackedVerification: true,
+        enableMultiPassUnion: false,
+      },
+    })
+  })
+
+  it('sends enableMultiPassUnion when saving advanced settings', async () => {
+    hasClientRoleMock.mockImplementation((_clientId: string, minRole: number) => minRole <= 1)
+
+    const wrapper = await mountView()
+    await flushPromises()
+
+    await wrapper.find('input[name="enableMultiPassUnion"]').setValue(true)
+    await wrapper.find('button.scm-advanced-settings-save-btn').trigger('click')
+    await flushPromises()
+
+    expect(patchClientMock).toHaveBeenCalledWith('/clients/{clientId}', {
+      params: { path: { clientId: 'client-1' } },
+      body: {
+        defaultReviewStrategy: 'fileByFile',
+        scmCommentPostingEnabled: true,
+        enableProRV: true,
+        enableEvidenceBackedVerification: false,
+        enableMultiPassUnion: true,
       },
     })
   })

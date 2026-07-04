@@ -10594,6 +10594,7 @@ export interface components {
             scmCommentPostingEnabled?: boolean;
             enableProRV?: boolean;
             enableEvidenceBackedVerification?: boolean;
+            enableMultiPassUnion?: boolean;
             /** Format: uuid */
             tenantId?: string | null;
             tenantSlug?: string | null;
@@ -11197,6 +11198,7 @@ export interface components {
             scmCommentPostingEnabled?: boolean | null;
             enableProRV?: boolean | null;
             enableEvidenceBackedVerification?: boolean | null;
+            enableMultiPassUnion?: boolean | null;
             defaultReviewStrategy?: components["schemas"]["ReviewStrategy"];
         };
         /** @description Patch payload for one premium capability override. */

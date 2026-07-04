@@ -80,6 +80,7 @@ public sealed class ClientAdminService(
         bool? scmCommentPostingEnabled = null,
         bool? enableProRV = null,
         bool? enableEvidenceBackedVerification = null,
+        bool? enableMultiPassUnion = null,
         ReviewStrategy? defaultReviewStrategy = null,
         CancellationToken ct = default)
     {
@@ -139,6 +140,11 @@ public sealed class ClientAdminService(
         if (enableEvidenceBackedVerification.HasValue)
         {
             client.EnableEvidenceBackedVerification = enableEvidenceBackedVerification.Value;
+        }
+
+        if (enableMultiPassUnion.HasValue)
+        {
+            client.EnableMultiPassUnion = enableMultiPassUnion.Value;
         }
 
         await dbContext.SaveChangesAsync(ct);
@@ -326,6 +332,7 @@ public sealed class ClientAdminService(
             client.ScmCommentPostingEnabled,
             client.EnableProRV,
             client.EnableEvidenceBackedVerification,
+            client.EnableMultiPassUnion,
             tenantId,
             tenantSlug,
             tenantDisplayName);

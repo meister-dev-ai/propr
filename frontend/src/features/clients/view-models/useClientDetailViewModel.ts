@@ -34,6 +34,7 @@ export interface ClientDetailDto {
   scmCommentPostingEnabled: boolean
   enableProRV: boolean
   enableEvidenceBackedVerification: boolean
+  enableMultiPassUnion: boolean
 }
 
 export interface ReviewProfileCatalogItemDto {
@@ -64,6 +65,7 @@ export interface ClientDetailViewModel {
   editedScmCommentPostingEnabled: Ref<boolean>
   editedEnableProRV: Ref<boolean>
   editedEnableEvidenceBackedVerification: Ref<boolean>
+  editedEnableMultiPassUnion: Ref<boolean>
   reviewProfiles: Ref<ReviewProfileCatalogItemDto[]>
   clientReviewProfile: Ref<ClientReviewProfileDto | null>
   isProviderDetailOpen: Ref<boolean>
@@ -171,6 +173,7 @@ export function useClientDetailViewModel(options: UseClientDetailViewModelOption
   const editedScmCommentPostingEnabled = ref(true)
   const editedEnableProRV = ref(false)
   const editedEnableEvidenceBackedVerification = ref(false)
+  const editedEnableMultiPassUnion = ref(false)
   const reviewProfiles = ref<ReviewProfileCatalogItemDto[]>([])
   const clientReviewProfile = ref<ClientReviewProfileDto | null>(null)
 
@@ -212,6 +215,7 @@ export function useClientDetailViewModel(options: UseClientDetailViewModelOption
     editedScmCommentPostingEnabled.value = Boolean(nextClient.scmCommentPostingEnabled)
     editedEnableProRV.value = Boolean(nextClient.enableProRV)
     editedEnableEvidenceBackedVerification.value = Boolean(nextClient.enableEvidenceBackedVerification)
+    editedEnableMultiPassUnion.value = Boolean(nextClient.enableMultiPassUnion)
   }
 
   function applyClientReviewProfile(nextProfile: ClientReviewProfileDto): void {
@@ -360,6 +364,7 @@ export function useClientDetailViewModel(options: UseClientDetailViewModelOption
         scmCommentPostingEnabled: editedScmCommentPostingEnabled.value,
         enableProRV: editedEnableProRV.value,
         enableEvidenceBackedVerification: editedEnableEvidenceBackedVerification.value,
+        enableMultiPassUnion: editedEnableMultiPassUnion.value,
       })
       applyClient(data as ClientDetailDto)
     } catch {
@@ -401,6 +406,7 @@ export function useClientDetailViewModel(options: UseClientDetailViewModelOption
         editedScmCommentPostingEnabled.value !== Boolean(client.value.scmCommentPostingEnabled) ||
         editedEnableProRV.value !== Boolean(client.value.enableProRV) ||
         editedEnableEvidenceBackedVerification.value !== Boolean(client.value.enableEvidenceBackedVerification) ||
+        editedEnableMultiPassUnion.value !== Boolean(client.value.enableMultiPassUnion) ||
         editedDefaultReviewStrategy.value !== (client.value.defaultReviewStrategy ?? 'fileByFile')
       )
     )
@@ -439,6 +445,7 @@ export function useClientDetailViewModel(options: UseClientDetailViewModelOption
     editedScmCommentPostingEnabled,
     editedEnableProRV,
     editedEnableEvidenceBackedVerification,
+    editedEnableMultiPassUnion,
     reviewProfiles,
     clientReviewProfile,
     isProviderDetailOpen,

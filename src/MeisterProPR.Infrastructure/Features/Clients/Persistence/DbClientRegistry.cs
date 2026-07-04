@@ -144,6 +144,16 @@ public sealed class DbClientRegistry(
     }
 
     /// <inheritdoc />
+    public async Task<bool> GetMultiPassUnionEnabledAsync(Guid clientId, CancellationToken ct = default)
+    {
+        return await dbContext.Clients
+                   .Where(c => c.Id == clientId)
+                   .Select(c => (bool?)c.EnableMultiPassUnion)
+                   .FirstOrDefaultAsync(ct)
+               ?? false;
+    }
+
+    /// <inheritdoc />
     public async Task<ReviewStrategy?> GetDefaultReviewStrategyAsync(Guid clientId, CancellationToken ct = default)
     {
         return await dbContext.Clients

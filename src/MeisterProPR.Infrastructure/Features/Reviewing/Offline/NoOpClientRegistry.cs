@@ -53,6 +53,11 @@ public sealed class NoOpClientRegistry : IClientRegistry
         return Task.FromResult(false);
     }
 
+    public Task<bool> GetMultiPassUnionEnabledAsync(Guid clientId, CancellationToken ct = default)
+    {
+        return Task.FromResult(false);
+    }
+
     public Task<ReviewStrategy?> GetDefaultReviewStrategyAsync(Guid clientId, CancellationToken ct = default)
     {
         return Task.FromResult<ReviewStrategy?>(null);

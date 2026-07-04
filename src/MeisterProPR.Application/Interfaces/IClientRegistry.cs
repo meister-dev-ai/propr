@@ -76,6 +76,14 @@ public interface IClientRegistry
     Task<bool> GetEvidenceBackedVerificationEnabledAsync(Guid clientId, CancellationToken ct = default);
 
     /// <summary>
+    ///     Returns whether multi-pass union generation should run for the given client.
+    ///     Defaults to <see langword="false" /> if the client does not exist.
+    /// </summary>
+    /// <param name="clientId">Client identifier.</param>
+    /// <param name="ct">Cancellation token.</param>
+    Task<bool> GetMultiPassUnionEnabledAsync(Guid clientId, CancellationToken ct = default);
+
+    /// <summary>
     ///     Returns the default review strategy configured for the given client, or <see langword="null" /> if not set.
     /// </summary>
     Task<ReviewStrategy?> GetDefaultReviewStrategyAsync(Guid clientId, CancellationToken ct = default);

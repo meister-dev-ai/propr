@@ -15888,6 +15888,9 @@
           "enableEvidenceBackedVerification": {
             "type": "boolean"
           },
+          "enableMultiPassUnion": {
+            "type": "boolean"
+          },
           "tenantId": {
             "type": "string",
             "format": "uuid",
@@ -17463,6 +17466,10 @@
             "nullable": true
           },
           "enableEvidenceBackedVerification": {
+            "type": "boolean",
+            "nullable": true
+          },
+          "enableMultiPassUnion": {
             "type": "boolean",
             "nullable": true
           },

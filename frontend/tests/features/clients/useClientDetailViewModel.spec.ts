@@ -45,6 +45,7 @@ const sampleClient = {
   scmCommentPostingEnabled: true,
   enableProRV: true,
   enableEvidenceBackedVerification: false,
+  enableMultiPassUnion: false,
 }
 
 const sampleReviewProfiles = {
@@ -155,6 +156,7 @@ describe('useClientDetailViewModel (FR-007, FR-008, FR-012)', () => {
         scmCommentPostingEnabled: false,
         enableProRV: false,
         enableEvidenceBackedVerification: false,
+        enableMultiPassUnion: false,
       },
     })
   })

@@ -33,6 +33,7 @@ public sealed class ClientsController(
             client.ScmCommentPostingEnabled,
             client.EnableProRV,
             client.EnableEvidenceBackedVerification,
+            client.EnableMultiPassUnion,
             client.TenantId,
             client.TenantSlug,
             client.TenantDisplayName,
@@ -282,6 +283,7 @@ public sealed class ClientsController(
             request.ScmCommentPostingEnabled,
             request.EnableProRV,
             request.EnableEvidenceBackedVerification,
+            request.EnableMultiPassUnion,
             request.DefaultReviewStrategy,
             ct);
         return client is null ? this.NotFound() : this.Ok(ToClientResponse(client));
@@ -300,6 +302,7 @@ public sealed record ClientResponse(
     bool ScmCommentPostingEnabled,
     bool EnableProRV,
     bool EnableEvidenceBackedVerification,
+    bool EnableMultiPassUnion,
     Guid? TenantId,
     string? TenantSlug,
     string? TenantDisplayName,
@@ -350,4 +353,5 @@ public sealed record PatchClientRequest(
     bool? ScmCommentPostingEnabled = null,
     bool? EnableProRV = null,
     bool? EnableEvidenceBackedVerification = null,
+    bool? EnableMultiPassUnion = null,
     ReviewStrategy? DefaultReviewStrategy = null);

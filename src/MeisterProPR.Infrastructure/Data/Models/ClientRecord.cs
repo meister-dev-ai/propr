@@ -56,6 +56,12 @@ public sealed class ClientRecord
     /// </summary>
     public bool EnableEvidenceBackedVerification { get; set; } = false;
 
+    /// <summary>
+    ///     Controls whether multi-pass union generation runs during review for this client.
+    ///     Defaults to <see langword="false" /> so new clients opt in explicitly.
+    /// </summary>
+    public bool EnableMultiPassUnion { get; set; } = false;
+
     public TenantRecord? Tenant { get; set; }
 
     public ICollection<ClientScmConnectionRecord> ScmConnections { get; set; } = [];
