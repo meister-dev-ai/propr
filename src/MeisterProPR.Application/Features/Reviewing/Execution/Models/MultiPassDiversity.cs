@@ -10,13 +10,16 @@ namespace MeisterProPR.Application.Features.Reviewing.Execution.Models;
 public enum MultiPassDiversityMode
 {
     /// <summary>
-    ///     k independent passes over the same file with the same model at a resampling temperature. The default,
-    ///     and the only arm wired into the product runtime today.
+    ///     k independent passes over the same file with the same model at a resampling temperature. In production the
+    ///     resample model is resolved from the <c>ReviewUnionPass</c> purpose binding; the per-arm/default model ids
+    ///     here are an eval-harness-only override.
     /// </summary>
     Resampling = 0,
 
     /// <summary>
-    ///     Passes split across models to surface disjoint finds. Design-only arm; not wired into the runtime.
+    ///     Passes split across models to surface disjoint finds. Wired into the runtime; in production the resample
+    ///     model comes from the <c>ReviewUnionPass</c> binding, and the per-arm model ids here are an
+    ///     eval-harness-only override.
     /// </summary>
     CrossModel = 1,
 
@@ -43,7 +46,7 @@ public sealed record MultiPassArm(
 /// </summary>
 public sealed record MultiPassDiversity(
     MultiPassDiversityMode Mode = MultiPassDiversityMode.Resampling,
-    string? DefaultModel = "gpt-5.4",
+    string? DefaultModel = null,
     float ResampleTemperature = 0.5f,
     IReadOnlyList<MultiPassArm>? Arms = null)
 {
@@ -71,12 +74,13 @@ public sealed record MultiPassDiversity(
     ///     Resolves the model + provenance label for each resample pass (passes 2..k; the baseline pass keeps the
     ///     file's tier model). Resampling uses the diversity default model for every resample; cross-model spreads
     ///     the resamples across the declared arms (expanded by their count, cycling when there are more passes than
-    ///     arms). A resolved arm's <see cref="MultiPassArm.ModelId" /> is the model the pass runs; a null falls back
-    ///     to the diversity default, then to the tier model, so a pass never loses its model.
+    ///     arms). A resolved arm's <see cref="MultiPassArm.ModelId" /> is an eval-harness-only model override; when it
+    ///     resolves to null (production, where no config model is supplied) the caller resolves the pass model from
+    ///     the <c>ReviewUnionPass</c> purpose binding instead — deliberately NOT falling back to the file's tier model,
+    ///     because a same-tier-model resample is the ineffective case this mechanism exists to avoid.
     /// </summary>
     /// <param name="resamplePassCount">The number of resample passes to plan (k - 1).</param>
-    /// <param name="tierModelId">The file's resolved tier model, used as the final model fallback.</param>
-    public IReadOnlyList<MultiPassArm> ResolveResamplePasses(int resamplePassCount, string? tierModelId)
+    public IReadOnlyList<MultiPassArm> ResolveResamplePasses(int resamplePassCount)
     {
         if (resamplePassCount <= 0)
         {
@@ -92,24 +96,24 @@ public sealed record MultiPassDiversity(
                 if (plan.Count > 0)
                 {
                     var arm = plan[i % plan.Count];
-                    result.Add(arm with { ModelId = arm.ModelId ?? this.DefaultModel ?? tierModelId });
+                    result.Add(arm with { ModelId = arm.ModelId ?? this.DefaultModel });
                 }
                 else
                 {
                     // Cross-model with no arms declared degrades to the default model (behaves like resampling).
-                    result.Add(new MultiPassArm(this.ResolveArmLabel(), this.DefaultModel ?? tierModelId));
+                    result.Add(new MultiPassArm(this.ResolveArmLabel(), this.DefaultModel));
                 }
             }
 
             return result;
         }
 
-        // Resampling (and, until it is built, the lens mode): every resample runs the diversity default model.
-        var resampleModel = this.DefaultModel ?? tierModelId;
+        // Resampling (and, until it is built, the lens mode): every resample runs the diversity default model
+        // (eval-harness override) or, when that is null, the ReviewUnionPass binding resolved by the caller.
         var label = this.ResolveArmLabel();
         for (var i = 0; i < resamplePassCount; i++)
         {
-            result.Add(new MultiPassArm(label, resampleModel));
+            result.Add(new MultiPassArm(label, this.DefaultModel));
         }
 
         return result;

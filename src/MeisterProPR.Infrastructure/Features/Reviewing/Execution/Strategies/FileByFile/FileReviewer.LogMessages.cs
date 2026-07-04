@@ -22,6 +22,16 @@ internal sealed partial class FileReviewer
     private static partial void LogProtocolBeginFailed(ILogger logger, string filePath, Guid jobId, Exception ex);
 
     [LoggerMessage(
+        Level = LogLevel.Information,
+        Message = "Multi-pass union is enabled but no ReviewUnionPass binding is configured for job {JobId}; "
+                  + "skipping the extra passes (single-pass review) for file {FilePath}.")]
+    private static partial void LogMultiPassUnionPassBindingUnavailable(
+        ILogger logger,
+        Guid jobId,
+        string filePath,
+        Exception? ex);
+
+    [LoggerMessage(
         Level = LogLevel.Debug,
         Message = "File {FilePath} classified as tier {Tier} ({ChangedLines} changed lines) in job {JobId}")]
     private static partial void LogTierAssigned(

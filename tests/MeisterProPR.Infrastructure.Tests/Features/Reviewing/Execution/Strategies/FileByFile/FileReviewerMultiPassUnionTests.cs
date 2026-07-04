@@ -2,6 +2,7 @@
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
 using System.Text;
+using MeisterProPR.Application.DTOs;
 using MeisterProPR.Application.Features.Reviewing.Execution.Models;
 using MeisterProPR.Application.Interfaces;
 using MeisterProPR.Application.Options;
@@ -79,7 +80,7 @@ public sealed class FileReviewerMultiPassUnionTests
             });
     }
 
-    private FileReviewer CreateReviewer()
+    private FileReviewer CreateReviewer(IAiRuntimeResolver? aiRuntimeResolver = null)
     {
         this._aiCore
             .ReviewAsync(Arg.Any<PullRequest>(), Arg.Any<ReviewSystemContext>(), Arg.Any<CancellationToken>())
@@ -103,11 +104,22 @@ public sealed class FileReviewerMultiPassUnionTests
             null,
             null,
             null,
-            null,
+            aiRuntimeResolver,
             null,
             null,
             null,
             null);
+    }
+
+    // Minimal chat-capable configured-model DTO carrying the RemoteModelId the review core selects on.
+    private static AiConfiguredModelDto ConfiguredModel(string remoteModelId)
+    {
+        return new AiConfiguredModelDto(
+            Guid.NewGuid(),
+            remoteModelId,
+            remoteModelId,
+            [AiOperationKind.Chat],
+            [AiProtocolMode.Auto]);
     }
 
     // Builds a changed file whose size heuristic lands on the requested tier (<=30 Low, <=150 Medium, else High).
@@ -145,6 +157,9 @@ public sealed class FileReviewerMultiPassUnionTests
             DefaultReviewChatClient = Substitute.For<IChatClient>(),
             EnableMultiPassUnion = true,
             MultiPassUnionPassCount = passCount,
+            // Supply an eval-harness resample model so the fan-out runs without a ReviewUnionPass purpose binding
+            // (the production skip-when-unbound path is covered separately).
+            MultiPassDiversity = new MultiPassDiversity(DefaultModel: "gpt-5.4"),
         };
     }
 
@@ -183,7 +198,7 @@ public sealed class FileReviewerMultiPassUnionTests
         var file = FileForTier(FileComplexityTier.Low);
         var (job, pr) = Fixture(file);
 
-        await reviewer.ReviewAsync(job, pr, file, 1, 1, FileReviewerMultiPassUnionTests.MultiPassContext(3), null, Substitute.For<IChatClient>(), CancellationToken.None);
+        await reviewer.ReviewAsync(job, pr, file, 1, 1, MultiPassContext(3), null, Substitute.For<IChatClient>(), CancellationToken.None);
 
         // Tier binding: multi-pass union runs only for Medium/High tiers; a Low-tier file gets exactly one pass.
         await this._aiCore.Received(1).ReviewAsync(Arg.Any<PullRequest>(), Arg.Any<ReviewSystemContext>(), Arg.Any<CancellationToken>());
@@ -201,7 +216,7 @@ public sealed class FileReviewerMultiPassUnionTests
         var file = FileForTier(tier);
         var (job, pr) = Fixture(file);
 
-        await reviewer.ReviewAsync(job, pr, file, 1, 1, FileReviewerMultiPassUnionTests.MultiPassContext(3), null, Substitute.For<IChatClient>(), CancellationToken.None);
+        await reviewer.ReviewAsync(job, pr, file, 1, 1, MultiPassContext(3), null, Substitute.For<IChatClient>(), CancellationToken.None);
 
         // k=3 fan-out: the baseline pass plus two resamples.
         await this._aiCore.Received(3).ReviewAsync(Arg.Any<PullRequest>(), Arg.Any<ReviewSystemContext>(), Arg.Any<CancellationToken>());
@@ -220,7 +235,7 @@ public sealed class FileReviewerMultiPassUnionTests
         var file = FileForTier(FileComplexityTier.High);
         var (job, pr) = Fixture(file);
 
-        await reviewer.ReviewAsync(job, pr, file, 1, 1, FileReviewerMultiPassUnionTests.MultiPassContext(3), null, Substitute.For<IChatClient>(), CancellationToken.None);
+        await reviewer.ReviewAsync(job, pr, file, 1, 1, MultiPassContext(3), null, Substitute.For<IChatClient>(), CancellationToken.None);
 
         Assert.NotNull(this._persistedResult);
         var comments = this._persistedResult!.Comments!;
@@ -265,8 +280,10 @@ public sealed class FileReviewerMultiPassUnionTests
     }
 
     [Fact]
-    public async Task Resampling_WithoutDefaultModel_AllPassesKeepTierModel()
+    public async Task FlagOn_NoUnionPassBinding_SkipsExtraPasses_SinglePass()
     {
+        // No eval resample model AND no ReviewUnionPass binding (null resolver): the extra passes are skipped
+        // (single-pass review) rather than resampling the tier model. A skip event is recorded, not a completion.
         var reviewer = this.CreateReviewer();
         var file = FileForTier(FileComplexityTier.Medium);
         var (job, pr) = Fixture(file);
@@ -277,14 +294,53 @@ public sealed class FileReviewerMultiPassUnionTests
             EnableMultiPassUnion = true,
             MultiPassUnionPassCount = 3,
             ModelId = "gpt-5.3-codex",
-            // No default model configured — every pass, baseline and resample, stays on the tier model.
+            MultiPassDiversity = new MultiPassDiversity(DefaultModel: null),
+        };
+
+        await reviewer.ReviewAsync(job, pr, file, 1, 1, baseContext, null, Substitute.For<IChatClient>(), CancellationToken.None);
+
+        Assert.Single(this._observedModelIds);
+        Assert.Equal("gpt-5.3-codex", this._observedModelIds[0]);
+        await this._recorder.Received(1).RecordReviewStrategyEventAsync(
+            Arg.Any<Guid>(), ReviewProtocolEventNames.MultiPassUnionSkipped,
+            Arg.Any<string?>(), Arg.Any<string?>(), Arg.Any<string?>(), Arg.Any<CancellationToken>());
+        await this._recorder.DidNotReceive().RecordReviewStrategyEventAsync(
+            Arg.Any<Guid>(), ReviewProtocolEventNames.MultiPassUnionCompleted,
+            Arg.Any<string?>(), Arg.Any<string?>(), Arg.Any<string?>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task Production_ResolvesResamplesFromUnionPassBinding_BaselineKeepsTierModel()
+    {
+        // No eval resample model, but a ReviewUnionPass binding is configured: the resample passes run on the
+        // resolved "second opinion" model while the baseline keeps the tier model.
+        var resolver = Substitute.For<IAiRuntimeResolver>();
+        var runtime = Substitute.For<IResolvedAiChatRuntime>();
+        runtime.ChatClient.Returns(Substitute.For<IChatClient>());
+        runtime.Model.Returns(ConfiguredModel("second-opinion"));
+        resolver
+            .ResolveChatRuntimeAsync(Arg.Any<Guid>(), AiPurpose.ReviewUnionPass, Arg.Any<CancellationToken>())
+            .Returns(runtime);
+
+        var reviewer = this.CreateReviewer(resolver);
+        var file = FileForTier(FileComplexityTier.Medium);
+        var (job, pr) = Fixture(file);
+
+        var baseContext = new ReviewSystemContext(null, [], null)
+        {
+            DefaultReviewChatClient = Substitute.For<IChatClient>(),
+            EnableMultiPassUnion = true,
+            MultiPassUnionPassCount = 3,
+            ModelId = "gpt-5.3-codex",
             MultiPassDiversity = new MultiPassDiversity(DefaultModel: null),
         };
 
         await reviewer.ReviewAsync(job, pr, file, 1, 1, baseContext, null, Substitute.For<IChatClient>(), CancellationToken.None);
 
         Assert.Equal(3, this._observedModelIds.Count);
-        Assert.All(this._observedModelIds, modelId => Assert.Equal("gpt-5.3-codex", modelId));
+        Assert.Equal("gpt-5.3-codex", this._observedModelIds[0]);
+        Assert.Equal("second-opinion", this._observedModelIds[1]);
+        Assert.Equal("second-opinion", this._observedModelIds[2]);
     }
 
     [Fact]

@@ -37,4 +37,11 @@ public enum AiPurpose
 
     /// <summary>Evidence-gathering verification of a candidate finding before publication.</summary>
     ReviewVerification = 8,
+
+    /// <summary>
+    ///     Independent "second opinion" model for multi-pass union resample passes. When unbound the extra passes
+    ///     are skipped (multi-pass degrades to a single pass) rather than falling back to the tier model.
+    /// </summary>
+    [JsonStringEnumMemberName("reviewUnionPass")]
+    ReviewUnionPass = 9,
 }

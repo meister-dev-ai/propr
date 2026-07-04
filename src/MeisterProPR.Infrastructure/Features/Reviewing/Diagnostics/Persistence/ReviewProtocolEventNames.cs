@@ -13,6 +13,7 @@ public static class ReviewProtocolEventNames
     public const string LateSteeringAugmentationPassCompleted = "late_steering_augmentation_pass_completed";
     public const string LateSteeringMergeCompleted = "late_steering_merge_completed";
     public const string MultiPassUnionCompleted = "multi_pass_union_completed";
+    public const string MultiPassUnionSkipped = "multi_pass_union_skipped";
     public const string ReviewPipelineProfileApplied = "review_pipeline_profile_applied";
     public const string ReviewStrategySelected = "review_strategy_selected";
     public const string TriageDecision = "triage_decision";

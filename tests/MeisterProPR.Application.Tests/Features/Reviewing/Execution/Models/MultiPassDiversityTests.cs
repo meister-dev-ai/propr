@@ -10,8 +10,9 @@ namespace MeisterProPR.Application.Tests.Features.Reviewing.Execution.Models;
 /// <summary>
 ///     Tests for <see cref="MultiPassDiversity.ResolveResamplePasses" />: resampling routes every resample pass to
 ///     the diversity default model; cross-model spreads the resamples across the declared arm models (expanded by
-///     their count, cycling when there are more passes than arms), and a null arm model falls back through the
-///     diversity default to the tier model so a pass never loses its model.
+///     their count, cycling when there are more passes than arms). An arm model id is an eval-harness-only override;
+///     when it resolves to null the caller resolves the pass model from the ReviewUnionPass binding — the planner
+///     deliberately does NOT fall back to the file's tier model.
 /// </summary>
 public sealed class MultiPassDiversityTests
 {
@@ -34,7 +35,7 @@ public sealed class MultiPassDiversityTests
     {
         var diversity = new MultiPassDiversity(DefaultModel: "gpt-5.4");
 
-        var plan = diversity.ResolveResamplePasses(2, "gpt-5.3-codex");
+        var plan = diversity.ResolveResamplePasses(2);
 
         Assert.Equal(2, plan.Count);
         Assert.All(plan, arm => Assert.Equal("gpt-5.4", arm.ModelId));
@@ -42,13 +43,15 @@ public sealed class MultiPassDiversityTests
     }
 
     [Fact]
-    public void Resampling_WithoutDefaultModel_FallsBackToTierModel()
+    public void Resampling_WithoutDefaultModel_LeavesModelNullForPurposeBinding()
     {
+        // No config model ⇒ null model id ⇒ the caller resolves the ReviewUnionPass binding (or skips), rather than
+        // resampling the tier model.
         var diversity = new MultiPassDiversity(DefaultModel: null);
 
-        var plan = diversity.ResolveResamplePasses(2, "gpt-5.3-codex");
+        var plan = diversity.ResolveResamplePasses(2);
 
-        Assert.All(plan, arm => Assert.Equal("gpt-5.3-codex", arm.ModelId));
+        Assert.All(plan, arm => Assert.Null(arm.ModelId));
     }
 
     [Fact]
@@ -62,7 +65,7 @@ public sealed class MultiPassDiversityTests
                 new MultiPassArm("mini", "gpt-5.4-mini"),
             ]);
 
-        var plan = diversity.ResolveResamplePasses(2, "gpt-5.3-codex");
+        var plan = diversity.ResolveResamplePasses(2);
 
         Assert.Equal(Gpt54AndGpt54MiniModelIds, plan.Select(arm => arm.ModelId).ToArray());
         Assert.Equal(Gpt54AndMiniLabels, plan.Select(arm => arm.Label).ToArray());
@@ -80,25 +83,27 @@ public sealed class MultiPassDiversityTests
             ]);
 
         // Four resample passes over a three-entry expanded plan (gpt-5.4, gpt-5.4, codex) cycle back to the first.
-        var plan = diversity.ResolveResamplePasses(4, "tier-model");
+        var plan = diversity.ResolveResamplePasses(4);
 
         Assert.Equal(Gpt54TwiceCodexThenGpt54ModelIds, plan.Select(arm => arm.ModelId).ToArray());
     }
 
     [Fact]
-    public void CrossModel_ArmWithoutModel_FallsBackThroughDefaultThenTier()
+    public void CrossModel_ArmWithoutModel_FallsBackToDefaultThenNull()
     {
         var diversity = new MultiPassDiversity(
             MultiPassDiversityMode.CrossModel,
             "default-model",
             Arms: [new MultiPassArm("lens-only", null)]);
 
-        var withDefault = diversity.ResolveResamplePasses(1, "tier-model");
+        var withDefault = diversity.ResolveResamplePasses(1);
         Assert.Equal("default-model", withDefault[0].ModelId);
 
+        // Without a default model the pass model is left null so the caller resolves the ReviewUnionPass binding —
+        // never the tier model.
         var noDefault = diversity with { DefaultModel = null };
-        var withTier = noDefault.ResolveResamplePasses(1, "tier-model");
-        Assert.Equal("tier-model", withTier[0].ModelId);
+        var withoutDefault = noDefault.ResolveResamplePasses(1);
+        Assert.Null(withoutDefault[0].ModelId);
     }
 
     [Fact]
@@ -106,7 +111,7 @@ public sealed class MultiPassDiversityTests
     {
         var diversity = new MultiPassDiversity(MultiPassDiversityMode.CrossModel, "gpt-5.4", Arms: null);
 
-        var plan = diversity.ResolveResamplePasses(2, "tier-model");
+        var plan = diversity.ResolveResamplePasses(2);
 
         Assert.All(plan, arm => Assert.Equal("gpt-5.4", arm.ModelId));
         Assert.All(plan, arm => Assert.Equal("cross-model", arm.Label));
@@ -115,8 +120,8 @@ public sealed class MultiPassDiversityTests
     [Fact]
     public void ResolveResamplePasses_ZeroOrFewer_ReturnsEmpty()
     {
-        Assert.Empty(MultiPassDiversity.Default.ResolveResamplePasses(0, "m"));
-        Assert.Empty(MultiPassDiversity.Default.ResolveResamplePasses(-1, "m"));
+        Assert.Empty(MultiPassDiversity.Default.ResolveResamplePasses(0));
+        Assert.Empty(MultiPassDiversity.Default.ResolveResamplePasses(-1));
     }
 
     // Contract test: a cross-model arm must be expressible entirely in the offline eval config JSON. The eval
@@ -154,7 +159,7 @@ public sealed class MultiPassDiversityTests
         Assert.Equal(MultiPassDiversityMode.CrossModel, diversity!.Mode);
 
         // The parsed arms drive the runtime routing: two resample passes span the two declared models.
-        var plan = diversity.ResolveResamplePasses(2, "gpt-5.3-codex");
+        var plan = diversity.ResolveResamplePasses(2);
         Assert.Equal(Gpt54AndGpt53CodexModelIds, plan.Select(arm => arm.ModelId).ToArray());
     }
 }

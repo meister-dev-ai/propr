@@ -493,9 +493,24 @@ internal sealed partial class FileReviewer(
         var diversity = fileContext.MultiPassDiversity ?? MultiPassDiversity.Default;
         var armLabel = diversity.ResolveArmLabel();
 
-        // Plan the resample passes (passes 2 through k). Resampling routes every resample to the diversity default
-        // model; cross-model spreads them across the declared arm models. The baseline pass keeps the tier model.
-        var resamplePlan = diversity.ResolveResamplePasses(passCount - 1, tierModelId);
+        // Plan the resample passes (passes 2 through k). An arm's model id is an eval-harness-only override; when it
+        // is null (production) the pass model is resolved from the ReviewUnionPass purpose binding below.
+        var resamplePlan = diversity.ResolveResamplePasses(passCount - 1);
+
+        // Production passes (arm model id null) run on the ReviewUnionPass "second opinion" binding. Resolve it once;
+        // if any pass needs it and it is unbound, skip the extra passes entirely (degrade to the single baseline pass)
+        // rather than falling back to the tier model — a same-tier-model resample is the ineffective case this exists
+        // to avoid. Eval configs that set an arm/default model never take this path.
+        IResolvedAiChatRuntime? unionRuntime = null;
+        if (resamplePlan.Any(arm => string.IsNullOrWhiteSpace(arm.ModelId)))
+        {
+            unionRuntime = await this.TryResolveUnionPassRuntimeAsync(job, file.Path, ct);
+            if (unionRuntime is null)
+            {
+                await this.RecordMultiPassUnionSkippedAsync(protocolId, file.Path, armLabel, tier, ct);
+                return baselineResult;
+            }
+        }
 
         // The baseline pass is union pass 1; additional resamples are passes 2..k.
         var unionComments = new List<ReviewComment>(baselineResult.Comments);
@@ -505,6 +520,10 @@ internal sealed partial class FileReviewer(
         for (var passIndex = 2; passIndex <= passCount; passIndex++)
         {
             var passArm = resamplePlan[passIndex - 2];
+
+            // The pass model is the arm override (eval), else the resolved ReviewUnionPass model (production).
+            var passModelId = passArm.ModelId ?? unionRuntime?.Model.RemoteModelId ?? tierModelId;
+
             var passResult = await this.RunUnionResamplePassAsync(
                 job,
                 pr,
@@ -514,9 +533,9 @@ internal sealed partial class FileReviewer(
                 totalFiles,
                 fileContext,
                 tier,
-                tierModelId,
-                tierClient,
-                tierCapabilities,
+                passModelId,
+                passArm.ModelId is null ? unionRuntime?.ChatClient ?? tierClient : tierClient,
+                passArm.ModelId is null ? unionRuntime?.Capabilities ?? tierCapabilities : tierCapabilities,
                 effectiveClient,
                 passIndex,
                 diversity,
@@ -526,7 +545,7 @@ internal sealed partial class FileReviewer(
 
             unionComments.AddRange(StampUnionOrigin(passResult.Comments));
             perPassCatchCounts.Add(passResult.Comments.Count);
-            perPassModels.Add(passArm.ModelId ?? tierModelId);
+            perPassModels.Add(passModelId);
         }
 
         await this.RecordMultiPassUnionCompletedAsync(
@@ -615,24 +634,13 @@ internal sealed partial class FileReviewer(
                 effectiveClient,
                 fileContext.PerFileHint?.FocusedReviewGuidance ?? []);
 
-            // Each resample pass runs at the resampling temperature and against the model resolved for its arm:
-            // resampling routes every resample to the diversity default model; cross-model routes it to the arm's
-            // model so the passes span models and surface disjoint finds. The baseline pass (not this method) keeps
-            // the tier model — only these resample passes switch — so the recall lift comes from a different sampler
-            // reviewing the file, not from re-sampling the same one.
-            //
-            // Models are deployments on the tier connection and the review core selects the model purely by
-            // ChatOptions.ModelId (see ToolAwareAiReviewCore), so overriding the context model id while reusing the
-            // tier connection client is sufficient to switch the model. Tier capabilities are kept for the resample
-            // model: the runtime resolver binds capabilities by purpose, not by an arbitrary model id, and the
-            // resample runs against the same connection.
+            // Each resample pass runs at the resampling temperature. The pass model + client + capabilities were
+            // already resolved by the caller and threaded in here (an eval-harness arm-model override reusing the
+            // tier connection, or the production ReviewUnionPass "second opinion" runtime with its own client), so
+            // CreateFileContext has set them — the baseline pass keeps the tier model, only these resample passes
+            // switch, so any recall lift comes from a different sampler reviewing the file, not from re-sampling the
+            // same one.
             passContext.Temperature = diversity.ResampleTemperature;
-
-            if (!string.IsNullOrWhiteSpace(passArm.ModelId)
-                && !string.Equals(passArm.ModelId, passContext.ModelId, StringComparison.Ordinal))
-            {
-                passContext.ModelId = passArm.ModelId;
-            }
 
             passContext = await this.RunDispatchPipelineAsync(
                 job,
@@ -710,6 +718,67 @@ internal sealed partial class FileReviewer(
             FileComplexityTier.High => AiConnectionModelCategory.HighEffort,
             _ => AiConnectionModelCategory.MediumEffort,
         };
+    }
+
+    // Resolves the "second opinion" runtime for production multi-pass resample passes from the ReviewUnionPass
+    // purpose binding. Returns null when no runtime is available (unbound purpose, no resolver) so the caller
+    // skips the extra passes rather than resampling the tier model.
+    private async Task<IResolvedAiChatRuntime?> TryResolveUnionPassRuntimeAsync(
+        ReviewJob job,
+        string filePath,
+        CancellationToken ct)
+    {
+        if (aiRuntimeResolver is null)
+        {
+            LogMultiPassUnionPassBindingUnavailable(logger, job.Id, filePath, null);
+            return null;
+        }
+
+        try
+        {
+            return await aiRuntimeResolver.ResolveChatRuntimeAsync(job.ClientId, AiPurpose.ReviewUnionPass, ct)
+                .ConfigureAwait(false);
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            LogMultiPassUnionPassBindingUnavailable(logger, job.Id, filePath, ex);
+            return null;
+        }
+    }
+
+    private async Task RecordMultiPassUnionSkippedAsync(
+        Guid? protocolId,
+        string filePath,
+        string armLabel,
+        FileComplexityTier tier,
+        CancellationToken ct)
+    {
+        if (!protocolId.HasValue)
+        {
+            return;
+        }
+
+        await protocolRecorder.RecordReviewStrategyEventAsync(
+            protocolId.Value,
+            ReviewProtocolEventNames.MultiPassUnionSkipped,
+            JsonSerializer.Serialize(
+                new
+                {
+                    filePath,
+                    tier = tier.ToString(),
+                    arm = armLabel,
+                }),
+            JsonSerializer.Serialize(
+                new
+                {
+                    reason = "review_union_pass_unbound",
+                }),
+            null,
+            ct);
     }
 
     private async Task<ReviewResult> ReviewFileCoreAsync(
