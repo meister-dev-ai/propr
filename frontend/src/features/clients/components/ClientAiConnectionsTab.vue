@@ -299,36 +299,41 @@
             </div>
 
             <div class="ai-binding-editor-grid compact-bindings">
-              <div v-for="binding in editor.bindings" :key="binding.purpose" class="ai-binding-row compact-binding-row" :class="{'is-disabled': !binding.isEnabled}">
-                <div class="binding-header">
-                  <label class="checkbox-field binding-enable-toggle">
-                    <input v-model="binding.isEnabled" type="checkbox" />
-                    <strong>{{ purposeLabel(binding.purpose) }}</strong>
-                  </label>
-                  <p class="muted binding-desc">{{ purposeDescription(binding.purpose) }}</p>
+              <template v-for="section in purposeSectionOrder" :key="section">
+                <div v-if="bindingsForSection(editor.bindings, section).length" class="ai-binding-section-header">
+                  {{ purposeSectionLabels[section] }}
                 </div>
+                <div v-for="binding in bindingsForSection(editor.bindings, section)" :key="binding.purpose" class="ai-binding-row compact-binding-row" :class="{'is-disabled': !binding.isEnabled}">
+                  <div class="binding-header">
+                    <label class="checkbox-field binding-enable-toggle">
+                      <input v-model="binding.isEnabled" type="checkbox" />
+                      <strong>{{ purposeLabel(binding.purpose) }}</strong>
+                    </label>
+                    <p class="muted binding-desc">{{ purposeDescription(binding.purpose) }}</p>
+                  </div>
 
-                <div class="binding-controls">
-                  <label class="form-field">
-                    <span style="font-size: 0.8rem;">Model</span>
-                    <select v-model="binding.configuredModelId" :disabled="!binding.isEnabled" class="form-input-sm">
-                      <option value="">Select a model</option>
-                      <option v-for="model in modelsForPurpose(binding.purpose)" :key="model.localId" :value="model.localId">
-                        {{ model.remoteModelId || model.displayName || 'Unnamed model' }}
-                      </option>
-                    </select>
-                  </label>
+                  <div class="binding-controls">
+                    <label class="form-field">
+                      <span style="font-size: 0.8rem;">Model</span>
+                      <select v-model="binding.configuredModelId" :disabled="!binding.isEnabled" class="form-input-sm">
+                        <option value="">Select a model</option>
+                        <option v-for="model in modelsForPurpose(binding.purpose)" :key="model.localId" :value="model.localId">
+                          {{ model.remoteModelId || model.displayName || 'Unnamed model' }}
+                        </option>
+                      </select>
+                    </label>
 
-                  <label class="form-field">
-                    <span style="font-size: 0.8rem;">Protocol</span>
-                    <select v-model="binding.protocolMode" :disabled="!binding.isEnabled" class="form-input-sm">
-                      <option v-for="option in protocolOptions(binding.purpose)" :key="option.value" :value="option.value">
-                        {{ option.label }}
-                      </option>
-                    </select>
-                  </label>
+                    <label class="form-field">
+                      <span style="font-size: 0.8rem;">Protocol</span>
+                      <select v-model="binding.protocolMode" :disabled="!binding.isEnabled" class="form-input-sm">
+                        <option v-for="option in protocolOptions(binding.purpose)" :key="option.value" :value="option.value">
+                          {{ option.label }}
+                        </option>
+                      </select>
+                    </label>
+                  </div>
                 </div>
-              </div>
+              </template>
             </div>
           </div>
 
@@ -398,8 +403,11 @@ import {
   purposeDescription,
   purposeLabel,
   purposeOptions,
+  purposeSectionLabels,
+  purposeSectionOrder,
   verificationChipClass,
   verificationLabel,
+  type PurposeSection,
 } from './aiConnectionsFormatters'
 import { useClientAiConnectionsTab } from './useClientAiConnectionsTab'
 
@@ -440,6 +448,13 @@ const {
   confirmDelete,
   handleDelete,
 } = useClientAiConnectionsTab(props)
+
+// Group the purpose-binding rows by section so the editor list stays readable as purposes grow.
+const purposeSectionByValue: Record<string, PurposeSection> = Object.fromEntries(
+  purposeOptions.map((option) => [option.value, option.section]),
+)
+const bindingsForSection = <T extends { purpose: string }>(bindings: T[], section: PurposeSection): T[] =>
+  bindings.filter((binding) => purposeSectionByValue[binding.purpose] === section)
 </script>
 
 <style scoped>
@@ -738,6 +753,15 @@ textarea {
 /* Bindings compact row */
 .compact-bindings {
   grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+.ai-binding-section-header {
+  grid-column: 1 / -1;
+  margin-top: 0.35rem;
+  font-size: 0.72rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  opacity: 0.6;
 }
 .compact-binding-row {
   display: flex;

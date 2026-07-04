@@ -145,6 +145,16 @@
                                 passes and union their findings before deduplication.
                             </p>
                         </label>
+                        <label v-if="editedEnableMultiPassUnion" class="field-label" for="multiPassUnionPassCount">
+                            Passes per file (baseline + resamples)
+                            <input id="multiPassUnionPassCount"
+                                v-model.number="editedMultiPassUnionPassCount"
+                                max="5" min="1" name="multiPassUnionPassCount"
+                                placeholder="Server default (2)" type="number" />
+                            <p class="muted review-publication-copy">
+                                Leave blank to use the server default (2). 1 disables the extra passes.
+                            </p>
+                        </label>
                     </div>
                     <button :disabled="!isAdvancedSettingsButtonEnabled()"
                         class="btn-primary inline-save-btn scm-advanced-settings-save-btn"
@@ -194,6 +204,7 @@ const {
     editedEnableProRV,
     editedEnableEvidenceBackedVerification,
     editedEnableMultiPassUnion,
+    editedMultiPassUnionPassCount,
     reviewProfiles,
     clientReviewProfile,
     saveDisplayName,

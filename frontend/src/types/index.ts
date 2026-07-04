@@ -10479,7 +10479,7 @@ export interface components {
          * @description Product-owned AI purposes that resolve to configured models.
          * @enum {string}
          */
-        AiPurpose: "reviewDefault" | "proRvPrefilter" | "reviewLowEffort" | "reviewMediumEffort" | "reviewHighEffort" | "memoryReconsideration" | "embeddingDefault" | "reviewTriage" | "reviewVerification";
+        AiPurpose: "reviewDefault" | "proRvPrefilter" | "reviewLowEffort" | "reviewMediumEffort" | "reviewHighEffort" | "memoryReconsideration" | "embeddingDefault" | "reviewTriage" | "reviewVerification" | "reviewUnionPass";
         /** @description One configured AI purpose binding for an AI connection profile. */
         AiPurposeBindingDto: {
             /** Format: uuid */
@@ -10595,6 +10595,8 @@ export interface components {
             enableProRV?: boolean;
             enableEvidenceBackedVerification?: boolean;
             enableMultiPassUnion?: boolean;
+            /** Format: int32 */
+            multiPassUnionPassCount?: number | null;
             /** Format: uuid */
             tenantId?: string | null;
             tenantSlug?: string | null;
@@ -11199,6 +11201,8 @@ export interface components {
             enableProRV?: boolean | null;
             enableEvidenceBackedVerification?: boolean | null;
             enableMultiPassUnion?: boolean | null;
+            /** Format: int32 */
+            multiPassUnionPassCount?: number | null;
             defaultReviewStrategy?: components["schemas"]["ReviewStrategy"];
         };
         /** @description Patch payload for one premium capability override. */

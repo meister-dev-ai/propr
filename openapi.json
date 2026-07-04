@@ -15565,7 +15565,8 @@
           "memoryReconsideration",
           "embeddingDefault",
           "reviewTriage",
-          "reviewVerification"
+          "reviewVerification",
+          "reviewUnionPass"
         ],
         "type": "string",
         "description": "Product-owned AI purposes that resolve to configured models."
@@ -15890,6 +15891,11 @@
           },
           "enableMultiPassUnion": {
             "type": "boolean"
+          },
+          "multiPassUnionPassCount": {
+            "type": "integer",
+            "format": "int32",
+            "nullable": true
           },
           "tenantId": {
             "type": "string",
@@ -17471,6 +17477,11 @@
           },
           "enableMultiPassUnion": {
             "type": "boolean",
+            "nullable": true
+          },
+          "multiPassUnionPassCount": {
+            "type": "integer",
+            "format": "int32",
             "nullable": true
           },
           "defaultReviewStrategy": {

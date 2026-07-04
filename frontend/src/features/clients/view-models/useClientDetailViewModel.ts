@@ -35,6 +35,7 @@ export interface ClientDetailDto {
   enableProRV: boolean
   enableEvidenceBackedVerification: boolean
   enableMultiPassUnion: boolean
+  multiPassUnionPassCount?: number | null
 }
 
 export interface ReviewProfileCatalogItemDto {
@@ -66,6 +67,7 @@ export interface ClientDetailViewModel {
   editedEnableProRV: Ref<boolean>
   editedEnableEvidenceBackedVerification: Ref<boolean>
   editedEnableMultiPassUnion: Ref<boolean>
+  editedMultiPassUnionPassCount: Ref<number | null>
   reviewProfiles: Ref<ReviewProfileCatalogItemDto[]>
   clientReviewProfile: Ref<ClientReviewProfileDto | null>
   isProviderDetailOpen: Ref<boolean>
@@ -174,6 +176,7 @@ export function useClientDetailViewModel(options: UseClientDetailViewModelOption
   const editedEnableProRV = ref(false)
   const editedEnableEvidenceBackedVerification = ref(false)
   const editedEnableMultiPassUnion = ref(false)
+  const editedMultiPassUnionPassCount = ref<number | null>(null)
   const reviewProfiles = ref<ReviewProfileCatalogItemDto[]>([])
   const clientReviewProfile = ref<ClientReviewProfileDto | null>(null)
 
@@ -216,6 +219,7 @@ export function useClientDetailViewModel(options: UseClientDetailViewModelOption
     editedEnableProRV.value = Boolean(nextClient.enableProRV)
     editedEnableEvidenceBackedVerification.value = Boolean(nextClient.enableEvidenceBackedVerification)
     editedEnableMultiPassUnion.value = Boolean(nextClient.enableMultiPassUnion)
+    editedMultiPassUnionPassCount.value = nextClient.multiPassUnionPassCount ?? null
   }
 
   function applyClientReviewProfile(nextProfile: ClientReviewProfileDto): void {
@@ -365,6 +369,10 @@ export function useClientDetailViewModel(options: UseClientDetailViewModelOption
         enableProRV: editedEnableProRV.value,
         enableEvidenceBackedVerification: editedEnableEvidenceBackedVerification.value,
         enableMultiPassUnion: editedEnableMultiPassUnion.value,
+        multiPassUnionPassCount:
+          typeof editedMultiPassUnionPassCount.value === "number"
+            ? editedMultiPassUnionPassCount.value
+            : undefined,
       })
       applyClient(data as ClientDetailDto)
     } catch {
@@ -407,6 +415,8 @@ export function useClientDetailViewModel(options: UseClientDetailViewModelOption
         editedEnableProRV.value !== Boolean(client.value.enableProRV) ||
         editedEnableEvidenceBackedVerification.value !== Boolean(client.value.enableEvidenceBackedVerification) ||
         editedEnableMultiPassUnion.value !== Boolean(client.value.enableMultiPassUnion) ||
+        (typeof editedMultiPassUnionPassCount.value === 'number' ? editedMultiPassUnionPassCount.value : null) !==
+          (client.value.multiPassUnionPassCount ?? null) ||
         editedDefaultReviewStrategy.value !== (client.value.defaultReviewStrategy ?? 'fileByFile')
       )
     )
@@ -446,6 +456,7 @@ export function useClientDetailViewModel(options: UseClientDetailViewModelOption
     editedEnableProRV,
     editedEnableEvidenceBackedVerification,
     editedEnableMultiPassUnion,
+    editedMultiPassUnionPassCount,
     reviewProfiles,
     clientReviewProfile,
     isProviderDetailOpen,
