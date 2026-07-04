@@ -41,6 +41,8 @@ public sealed record EvaluationConfiguration(
     bool EnableProRV = false,
     bool EnableEvidenceBackedVerification = false,
     bool EnableMultiPassUnion = false,
+    int? MultiPassUnionPassCount = null,
+    MultiPassDiversity? MultiPassDiversity = null,
     ReviewAugmentationMode? AugmentationMode = null,
     EvaluationProCursorContext? ProCursor = null)
 {

@@ -44,8 +44,9 @@ internal sealed class CandidateFindingFactory(IReviewClaimExtractor? reviewClaim
                         fileResult.FilePath,
                         fileResult.Id,
                         index + 1,
-                        reviewPassKind: passKind,
-                        findingProvenanceKind: provenanceKind),
+                        reviewPassKind: ResolveCommentPassKind(comment, passKind),
+                        findingProvenanceKind: provenanceKind,
+                        unionArmLabel: ResolveUnionArmLabel(comment)),
                     comment.Severity,
                     comment.Message,
                     FileByFileReviewOrchestrator.DetermineCategory(comment),
@@ -325,6 +326,24 @@ internal sealed class CandidateFindingFactory(IReviewClaimExtractor? reviewClaim
         return passKind == ReviewPassKind.ProRVAugmentation
             ? FindingProvenanceKind.ProRVOnly
             : FindingProvenanceKind.BaselineOnly;
+    }
+
+    // A per-file comment tagged with the multi-pass union origin overrides the enclosing pass kind so the
+    // finding's provenance records that it came from a union resample. Untagged comments keep the pass kind of
+    // the enclosing build, so the single-pass path is unaffected.
+    private static ReviewPassKind ResolveCommentPassKind(ReviewComment comment, ReviewPassKind passKind)
+    {
+        return IsMultiPassUnionOrigin(comment) ? ReviewPassKind.MultiPassUnion : passKind;
+    }
+
+    private static string? ResolveUnionArmLabel(ReviewComment comment)
+    {
+        return IsMultiPassUnionOrigin(comment) ? comment.OriginPassKind : null;
+    }
+
+    private static bool IsMultiPassUnionOrigin(ReviewComment comment)
+    {
+        return string.Equals(comment.OriginPassKind, nameof(ReviewPassKind.MultiPassUnion), StringComparison.Ordinal);
     }
 
     private static string CreateFindingIdentityKey(CandidateReviewFinding finding)

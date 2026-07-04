@@ -154,6 +154,8 @@ public sealed class ReviewWorkflowRunner(
                 EnableProRV = request.Configuration?.EnableProRV ?? false,
                 EnableEvidenceBackedVerification = request.Configuration?.EnableEvidenceBackedVerification ?? false,
                 EnableMultiPassUnion = request.Configuration?.EnableMultiPassUnion ?? false,
+                MultiPassUnionPassCount = request.Configuration?.MultiPassUnionPassCount,
+                MultiPassDiversity = request.Configuration?.MultiPassDiversity,
                 AugmentationMode = request.EffectiveAugmentationMode,
                 PromptExperiment = promptExperimentContext,
                 SkippedSteps = request.EffectiveSkippedSteps,

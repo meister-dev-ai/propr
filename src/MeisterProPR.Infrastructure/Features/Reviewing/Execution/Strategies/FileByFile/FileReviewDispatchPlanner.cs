@@ -152,6 +152,8 @@ internal sealed class FileReviewDispatchPlanner(
             EnableProRV = false,
             EnableEvidenceBackedVerification = baseContext.EnableEvidenceBackedVerification,
             EnableMultiPassUnion = baseContext.EnableMultiPassUnion,
+            MultiPassUnionPassCount = baseContext.MultiPassUnionPassCount,
+            MultiPassDiversity = baseContext.MultiPassDiversity,
             AugmentationMode = baseContext.AugmentationMode,
             PassKind = baseContext.PassKind,
             PerFileHint = baseContext.PerFileHint,

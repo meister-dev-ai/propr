@@ -251,6 +251,8 @@ internal sealed partial class FileByFileReviewOrchestrator(
                 EnableProRV = baseContext.EnableProRV,
                 EnableEvidenceBackedVerification = baseContext.EnableEvidenceBackedVerification,
                 EnableMultiPassUnion = baseContext.EnableMultiPassUnion,
+                MultiPassUnionPassCount = baseContext.MultiPassUnionPassCount,
+                MultiPassDiversity = baseContext.MultiPassDiversity,
                 AugmentationMode = baseContext.AugmentationMode,
                 PassKind = ReviewPassKind.Baseline,
                 PerFileHint = new PerFileReviewHint(file.Path, index + 1, filesToReview.Count, pr.AllPrFileSummaries),

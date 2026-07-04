@@ -28,6 +28,30 @@ public sealed class CandidateFindingFactoryTests
     }
 
     [Fact]
+    public void Build_WithMultiPassUnionOriginComment_StampsUnionProvenance()
+    {
+        var baselineComment = new ReviewComment("src/Foo.cs", 12, CommentSeverity.Warning, "Baseline finding.");
+        var unionComment = new ReviewComment("src/Foo.cs", 30, CommentSeverity.Warning, "Union resample finding.")
+        {
+            OriginPassKind = nameof(ReviewPassKind.MultiPassUnion),
+        };
+        var fileResult = CreateCompletedFileResult("src/Foo.cs", [baselineComment, unionComment]);
+        var sut = new CandidateFindingFactory(null);
+
+        var findings = sut.Build([fileResult]);
+
+        Assert.Equal(2, findings.Count);
+
+        // The baseline finding keeps the enclosing (baseline) pass kind and carries no union arm.
+        Assert.Equal(ReviewPassKind.Baseline, findings[0].Provenance.ReviewPassKind);
+        Assert.Null(findings[0].Provenance.UnionArmLabel);
+
+        // The union-origin comment threads its pass identity into the finding provenance.
+        Assert.Equal(ReviewPassKind.MultiPassUnion, findings[1].Provenance.ReviewPassKind);
+        Assert.Equal(nameof(ReviewPassKind.MultiPassUnion), findings[1].Provenance.UnionArmLabel);
+    }
+
+    [Fact]
     public void Build_WithCrossFileDerivedComment_CreatesResolvedDerivedFinding()
     {
         var sut = new CandidateFindingFactory(null);

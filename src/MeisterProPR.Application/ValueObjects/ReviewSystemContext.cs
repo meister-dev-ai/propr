@@ -158,6 +158,20 @@ public sealed class ReviewSystemContext
     public bool EnableMultiPassUnion { get; set; } = false;
 
     /// <summary>
+    ///     Number of independent per-file passes to run when <see cref="EnableMultiPassUnion" /> is enabled and the
+    ///     file's resolved tier is in scope. <see langword="null" /> defers to the configured runtime default.
+    ///     Only consulted when <see cref="EnableMultiPassUnion" /> is <see langword="true" />.
+    /// </summary>
+    public int? MultiPassUnionPassCount { get; set; }
+
+    /// <summary>
+    ///     Diversity configuration for multi-pass union generation. <see langword="null" /> defers to
+    ///     <see cref="Features.Reviewing.Execution.Models.MultiPassDiversity.Default" />. Only consulted when
+    ///     <see cref="EnableMultiPassUnion" /> is <see langword="true" />.
+    /// </summary>
+    public MultiPassDiversity? MultiPassDiversity { get; set; }
+
+    /// <summary>
     ///     Controls whether review execution uses disabled, early-steering, or late-augmentation semantics.
     /// </summary>
     public ReviewAugmentationMode AugmentationMode { get; set; } = ReviewAugmentationMode.EarlySteering;

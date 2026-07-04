@@ -68,6 +68,16 @@ internal sealed partial class FileReviewer(
         return verdict;
     }
 
+    /// <summary>
+    ///     Returns the model-judged triage verdict resolved for <paramref name="filePath" /> during review, or
+    ///     <see langword="null" /> when the file has not been classified yet. Exposes the private triage cache so a
+    ///     multi-pass wrapper can bind fan-out scope to the same resolved tier the review used.
+    /// </summary>
+    public TriageVerdict? TryGetResolvedTier(string filePath)
+    {
+        return this._triageCache.TryGetValue(filePath, out var verdict) ? verdict : null;
+    }
+
     public async Task ReviewAsync(
         ReviewJob job,
         PullRequest pr,
@@ -167,6 +177,28 @@ internal sealed partial class FileReviewer(
 
             result = await this.RunReviewResultPipelineAsync(pipelineState, result, pipelineProfile, ct);
 
+            // When the client opts into multi-pass union and the file's resolved tier is in scope, run additional
+            // independent passes and union their locally-verified comments into this result before it is persisted,
+            // so the synthesis inlet sees the union rather than a single pass. Flag off (or an out-of-scope tier)
+            // returns the baseline result untouched — behavior is identical to a single-pass review.
+            result = await this.MaybeApplyMultiPassUnionAsync(
+                job,
+                pr,
+                filePr,
+                file,
+                fileIndex,
+                totalFiles,
+                fileContext,
+                protocolId,
+                tier,
+                tierModelId,
+                tierClient,
+                tierCapabilities,
+                effectiveClient,
+                pipelineProfile,
+                result,
+                ct);
+
             await this.CompleteReviewAsync(fileResult, fileContext, protocolId, result, ct);
 
             LogFileReviewCompleted(logger, file.Path, job.Id);
@@ -265,6 +297,8 @@ internal sealed partial class FileReviewer(
             EnableProRV = enableProRvForCurrentPass,
             EnableEvidenceBackedVerification = baseContext.EnableEvidenceBackedVerification,
             EnableMultiPassUnion = baseContext.EnableMultiPassUnion,
+            MultiPassUnionPassCount = baseContext.MultiPassUnionPassCount,
+            MultiPassDiversity = baseContext.MultiPassDiversity,
             AugmentationMode = baseContext.AugmentationMode,
             PassKind = baseContext.PassKind,
             PromptExperiment = baseContext.PromptExperiment,
@@ -410,11 +444,246 @@ internal sealed partial class FileReviewer(
             EnableProRV = baseContext.EnableProRV,
             EnableEvidenceBackedVerification = baseContext.EnableEvidenceBackedVerification,
             EnableMultiPassUnion = baseContext.EnableMultiPassUnion,
+            MultiPassUnionPassCount = baseContext.MultiPassUnionPassCount,
+            MultiPassDiversity = baseContext.MultiPassDiversity,
             AugmentationMode = baseContext.AugmentationMode,
             PassKind = ReviewPassKind.ProRVAugmentation,
             PerFileHint = baseContext.PerFileHint,
             PromptExperiment = baseContext.PromptExperiment,
             SkippedSteps = baseContext.SkippedSteps,
+        };
+    }
+
+    /// <summary>
+    ///     Runs additional independent passes over one file and unions their locally-verified comments with the
+    ///     baseline pass when the client opted into multi-pass union and the file's resolved tier is Medium or High.
+    ///     Low-tier files (and the flag-off path) return the baseline result unchanged, so the single-pass behavior
+    ///     is byte-identical. Duplicates are not collapsed here — that happens downstream at the synthesis dedup
+    ///     inlet; this step preserves every distinct finding produced by any pass.
+    /// </summary>
+    private async Task<ReviewResult> MaybeApplyMultiPassUnionAsync(
+        ReviewJob job,
+        PullRequest pr,
+        PullRequest filePr,
+        ChangedFile file,
+        int fileIndex,
+        int totalFiles,
+        ReviewSystemContext fileContext,
+        Guid? protocolId,
+        FileComplexityTier tier,
+        string? tierModelId,
+        IChatClient? tierClient,
+        AgentReviewRuntimeCapabilities? tierCapabilities,
+        IChatClient effectiveClient,
+        ReviewPipelineProfile pipelineProfile,
+        ReviewResult baselineResult,
+        CancellationToken ct)
+    {
+        if (!fileContext.EnableMultiPassUnion || !IsMultiPassUnionTier(tier))
+        {
+            return baselineResult;
+        }
+
+        var passCount = Math.Max(1, fileContext.MultiPassUnionPassCount ?? options.MultiPassUnionPassCount);
+        if (passCount <= 1)
+        {
+            return baselineResult;
+        }
+
+        var diversity = fileContext.MultiPassDiversity ?? MultiPassDiversity.Default;
+        var armLabel = diversity.ResolveArmLabel();
+
+        // The baseline pass is union pass 1; additional resamples are passes 2..k.
+        var unionComments = new List<ReviewComment>(baselineResult.Comments);
+        var perPassCatchCounts = new List<int> { baselineResult.Comments.Count };
+
+        for (var passIndex = 2; passIndex <= passCount; passIndex++)
+        {
+            var passResult = await this.RunUnionResamplePassAsync(
+                job,
+                pr,
+                filePr,
+                file,
+                fileIndex,
+                totalFiles,
+                fileContext,
+                tier,
+                tierModelId,
+                tierClient,
+                tierCapabilities,
+                effectiveClient,
+                passIndex,
+                diversity,
+                pipelineProfile,
+                ct);
+
+            unionComments.AddRange(StampUnionOrigin(passResult.Comments));
+            perPassCatchCounts.Add(passResult.Comments.Count);
+        }
+
+        await this.RecordMultiPassUnionCompletedAsync(
+            protocolId,
+            file.Path,
+            armLabel,
+            tier,
+            perPassCatchCounts,
+            unionComments.Count,
+            ct);
+
+        return baselineResult with { Comments = unionComments };
+    }
+
+    private static bool IsMultiPassUnionTier(FileComplexityTier tier)
+    {
+        return tier is FileComplexityTier.Medium or FileComplexityTier.High;
+    }
+
+    // Tags a resample pass's comments with the multi-pass union origin so the union source is visible on the
+    // persisted per-file result and surfaces through the protocol comment DTO.
+    private static IReadOnlyList<ReviewComment> StampUnionOrigin(IReadOnlyList<ReviewComment> comments)
+    {
+        if (comments.Count == 0)
+        {
+            return comments;
+        }
+
+        var stamped = new List<ReviewComment>(comments.Count);
+        foreach (var comment in comments)
+        {
+            stamped.Add(comment with { OriginPassKind = ReviewPassKind.MultiPassUnion.ToString() });
+        }
+
+        return stamped;
+    }
+
+    private async Task<ReviewResult> RunUnionResamplePassAsync(
+        ReviewJob job,
+        PullRequest pr,
+        PullRequest filePr,
+        ChangedFile file,
+        int fileIndex,
+        int totalFiles,
+        ReviewSystemContext fileContext,
+        FileComplexityTier tier,
+        string? tierModelId,
+        IChatClient? tierClient,
+        AgentReviewRuntimeCapabilities? tierCapabilities,
+        IChatClient effectiveClient,
+        int passIndex,
+        MultiPassDiversity diversity,
+        ReviewPipelineProfile pipelineProfile,
+        CancellationToken ct)
+    {
+        var tierCategory = TierCategory(tier);
+        var protocolId = await this.BeginAugmentationProtocolAsync(
+            job,
+            file,
+            tierCategory,
+            tierModelId,
+            $"multi-pass union {diversity.ResolveArmLabel()} pass #{passIndex}",
+            ReviewPassKind.MultiPassUnion,
+            ct);
+
+        // A transient result row keeps this pass from overwriting the persisted per-file result; only its
+        // returned comments are unioned by the caller before the single persistence write.
+        var transientFileResult = new ReviewFileResult(job.Id, file.Path);
+        ReviewSystemContext? passContext = null;
+        try
+        {
+            passContext = this.CreateFileContext(
+                job,
+                pr,
+                file,
+                fileIndex,
+                totalFiles,
+                fileContext,
+                protocolId,
+                tier,
+                tierModelId,
+                tierClient,
+                tierCapabilities,
+                effectiveClient,
+                fileContext.PerFileHint?.FocusedReviewGuidance ?? []);
+
+            // Resampling draws independent samples from the same model; nudge the temperature so passes diverge.
+            if (diversity.Mode == MultiPassDiversityMode.Resampling)
+            {
+                passContext.Temperature = diversity.ResampleTemperature;
+            }
+
+            passContext = await this.RunDispatchPipelineAsync(
+                job,
+                file,
+                transientFileResult,
+                passContext,
+                protocolId,
+                pipelineProfile,
+                ct);
+
+            var result = await this.ReviewFileCoreAsync(filePr, passContext, ct);
+            var pipelineState = new ReviewResultPipelineState(
+                job,
+                file,
+                filePr,
+                transientFileResult,
+                passContext,
+                protocolId,
+                reviewInvariantFactProviders?.SelectMany(provider => provider.GetFacts()).ToList() ?? []);
+
+            result = await this.RunReviewResultPipelineAsync(pipelineState, result, pipelineProfile, ct);
+            await this.CompleteAugmentationProtocolAsync(protocolId, passContext, "Completed", ct);
+            return result;
+        }
+        catch when (protocolId.HasValue)
+        {
+            await this.CompleteAugmentationProtocolAsync(protocolId, passContext, "Failed", CancellationToken.None);
+            throw;
+        }
+    }
+
+    private async Task RecordMultiPassUnionCompletedAsync(
+        Guid? protocolId,
+        string filePath,
+        string armLabel,
+        FileComplexityTier tier,
+        IReadOnlyList<int> perPassCatchCounts,
+        int unionCount,
+        CancellationToken ct)
+    {
+        if (!protocolId.HasValue)
+        {
+            return;
+        }
+
+        await protocolRecorder.RecordReviewStrategyEventAsync(
+            protocolId.Value,
+            ReviewProtocolEventNames.MultiPassUnionCompleted,
+            JsonSerializer.Serialize(
+                new
+                {
+                    filePath,
+                    tier = tier.ToString(),
+                    arm = armLabel,
+                    passCount = perPassCatchCounts.Count,
+                }),
+            JsonSerializer.Serialize(
+                new
+                {
+                    perPassCatchCounts,
+                    unionCount,
+                }),
+            null,
+            ct);
+    }
+
+    private static AiConnectionModelCategory TierCategory(FileComplexityTier tier)
+    {
+        return tier switch
+        {
+            FileComplexityTier.Low => AiConnectionModelCategory.LowEffort,
+            FileComplexityTier.Medium => AiConnectionModelCategory.MediumEffort,
+            FileComplexityTier.High => AiConnectionModelCategory.HighEffort,
+            _ => AiConnectionModelCategory.MediumEffort,
         };
     }
 
