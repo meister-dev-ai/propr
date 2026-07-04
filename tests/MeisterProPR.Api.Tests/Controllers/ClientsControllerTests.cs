@@ -438,7 +438,7 @@ public sealed class ClientsControllerTests(ClientsControllerTests.ClientsApiFact
     {
         var client = factory.CreateClient();
         using var request = new HttpRequestMessage(HttpMethod.Post, "/clients");
-        request.Content = JsonContent.Create(new { displayName = "Unauthorized" });
+        request.Content = JsonContent.Create(new { displayName = "Unauthorized", tenantId = Guid.NewGuid() });
 
         var response = await client.SendAsync(request);
         Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
@@ -1103,7 +1103,7 @@ public sealed class ClientsControllerJwtTests(ClientsControllerJwtTests.ClientsJ
         var token = factory.GenerateToken(factory.TestUserId, AppUserRole.User);
         using var request = new HttpRequestMessage(HttpMethod.Post, "/clients");
         request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
-        request.Content = JsonContent.Create(new { displayName = "Should Fail" });
+        request.Content = JsonContent.Create(new { displayName = "Should Fail", tenantId = Guid.NewGuid() });
 
         var response = await http.SendAsync(request);
 

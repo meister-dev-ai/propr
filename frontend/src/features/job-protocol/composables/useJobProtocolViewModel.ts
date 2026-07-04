@@ -111,7 +111,7 @@ function commentKey(comment: CommentGroupComment): string {
 
 function parseFilePath(label: string | null | undefined) {
     if (!label) return { filename: 'Pass', directory: '' }
-    const path = label.replace(/\\/g, '/')
+    const path = label.replaceAll('\\', '/')
     const parts = path.split('/')
     const filename = parts.pop() || path
     const directory = parts.join('/') || ''

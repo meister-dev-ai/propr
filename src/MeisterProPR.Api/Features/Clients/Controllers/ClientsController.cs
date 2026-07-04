@@ -10,6 +10,7 @@ using MeisterProPR.Application.Interfaces;
 using MeisterProPR.Domain.Enums;
 using MeisterProPR.Infrastructure.Features.IdentityAndAccess;
 using Microsoft.AspNetCore.Mvc;
+using System.Text.Json.Serialization;
 
 namespace MeisterProPR.Api.Controllers;
 
@@ -335,7 +336,7 @@ public sealed record CrawlRepoFilterResponse(
     string? DisplayName = null);
 
 /// <summary>Request body for creating a client.</summary>
-public sealed record CreateClientRequest(string DisplayName, Guid TenantId)
+public sealed record CreateClientRequest(string DisplayName, [property: JsonRequired] Guid TenantId)
 {
     /// <summary>Optional initial default review strategy. Missing defaults to file_by_file.</summary>
     public ReviewStrategy? DefaultReviewStrategy { get; init; }

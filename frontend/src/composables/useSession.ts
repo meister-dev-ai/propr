@@ -33,13 +33,13 @@ type JwtPayload = {
 function decodeBase64UrlSegment(segment: string): string | null {
   if (!segment) return null
 
-  const normalized = segment.replace(/-/g, '+').replace(/_/g, '/')
+  const normalized = segment.replaceAll('-', '+').replaceAll('_', '/')
   const paddingLength = (4 - (normalized.length % 4)) % 4
   const base64 = normalized.padEnd(normalized.length + paddingLength, '=')
 
   try {
     const binary = atob(base64)
-    const bytes = Uint8Array.from(binary, (character) => character.charCodeAt(0))
+    const bytes = Uint8Array.from(binary, (character) => character.codePointAt(0) ?? 0)
     return new TextDecoder().decode(bytes)
   } catch {
     return null

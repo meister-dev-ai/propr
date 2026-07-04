@@ -104,17 +104,17 @@ export function decodeHtmlEntities(value: string): string {
 
 export function decodeMergedEventEscapes(value: string): string {
     return value
-        .replace(/\\u([0-9a-fA-F]{4})/g, (_, hex: string) => String.fromCharCode(Number.parseInt(hex, 16)))
-        .replace(/\\x([0-9a-fA-F]{2})/g, (_, hex: string) => String.fromCharCode(Number.parseInt(hex, 16)))
-        .replace(/\\r\\n/g, '\n')
-        .replace(/\\n/g, '\n')
-        .replace(/\\r/g, '\r')
-        .replace(/\\t/g, '\t')
-        .replace(/\\f/g, '\f')
-        .replace(/\\"/g, '"')
-        .replace(/\\'/g, "'")
-        .replace(/\\\//g, '/')
-        .replace(/\\\\/g, '\\')
+        .replaceAll(/\\u([0-9a-fA-F]{4})/g, (_, hex: string) => String.fromCodePoint(Number.parseInt(hex, 16)))
+        .replaceAll(/\\x([0-9a-fA-F]{2})/g, (_, hex: string) => String.fromCodePoint(Number.parseInt(hex, 16)))
+        .replaceAll('\\r\\n', '\n')
+        .replaceAll('\\n', '\n')
+        .replaceAll('\\r', '\r')
+        .replaceAll('\\t', '\t')
+        .replaceAll('\\f', '\f')
+        .replaceAll('\\"', '"')
+        .replaceAll("\\'", "'")
+        .replaceAll('\\/', '/')
+        .replaceAll('\\\\', '\\')
 }
 
 export function renderMergedEventText(value: string | null | undefined): string {
@@ -182,7 +182,7 @@ export function formatDurationWithMs(ms: number | null | undefined): string {
 
 export function humanizeStatusValue(value: string): string {
     return value
-        .replace(/_/g, ' ')
+        .replaceAll('_', ' ')
         .replace(/\b\w/g, character => character.toUpperCase())
 }
 

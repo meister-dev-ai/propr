@@ -48,7 +48,7 @@ const renderedMarkdown = computed(() => {
     return props.text
         .replace(/`([^`]+)`/g, '<code>$1</code>')
         .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
-        .replace(/\n/g, '<br/>')
+        .replaceAll('\n', '<br/>')
 })
 
 function close() {

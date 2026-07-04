@@ -39,9 +39,9 @@ const defaultProviders: TenantLoginProviderFixture[] = [
 
 function encodeBase64Url(value: string): string {
   return btoa(value)
-    .replace(/\+/g, '-')
-    .replace(/\//g, '_')
-    .replace(/=+$/g, '')
+    .replaceAll('+', '-')
+    .replaceAll('/', '_')
+    .replaceAll(/=+$/g, '')
 }
 
 export function createTenantAccessToken(username = 'tenant.user'): string {

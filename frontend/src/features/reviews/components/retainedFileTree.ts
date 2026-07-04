@@ -23,7 +23,7 @@ function createFolder(name: string, path: string): RetainedTreeFolder {
 
 /** The directory part of a path, normalized to forward slashes, with empty segments dropped. */
 function directorySegments(filePath: string): string[] {
-    const normalized = filePath.replace(/\\/g, '/')
+    const normalized = filePath.replaceAll('\\', '/')
     const parts = normalized.split('/').filter(Boolean)
     // Drop the basename; what remains is the directory chain.
     parts.pop()
@@ -32,7 +32,7 @@ function directorySegments(filePath: string): string[] {
 
 /** The basename (file name) of a path, normalized to forward slashes. */
 function basename(filePath: string): string {
-    const normalized = filePath.replace(/\\/g, '/')
+    const normalized = filePath.replaceAll('\\', '/')
     const parts = normalized.split('/').filter(Boolean)
     return parts[parts.length - 1] ?? normalized
 }
