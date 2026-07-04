@@ -192,6 +192,6 @@ public sealed class FindReferencesToolTests
         Assert.Contains(
             result.Sites,
             s => s.LineSnippet is { Length: ReferenceSnippetEnricher.MaxSnippetChars }
-                 && s.LineSnippet.EndsWith("…", StringComparison.Ordinal));
+                 && s.LineSnippet.EndsWith('…'));
     }
 }
