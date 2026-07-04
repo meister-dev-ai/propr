@@ -1039,52 +1039,67 @@ export function useJobProtocolViewModel() {
     // dropped from the grouping — those calls still render, just as standalone
     // rows via the childEventIds membership check in buildEventRows.
     function groupToolCallsByAiTurn(mergedEvents: MergedEvent[]): { childEventsByParentId: Map<string, MergedEvent[]>; childEventIds: Set<string> } {
-        let activeAiTurnParentId: string | null = null
-        let pendingToolRows: PendingToolRow[] = []
-        const childEventsByParentId = new Map<string, MergedEvent[]>()
+        const state: AiTurnGroupingState = {
+            activeAiTurnParentId: null,
+            pendingToolRows: [],
+            childEventsByParentId: new Map<string, MergedEvent[]>(),
+        }
 
         for (const merged of mergedEvents) {
-            const isToolCall = (merged.callDetails.kind ?? '').toLowerCase() === 'toolcall'
-
-            if (isPrimaryAiTurnEvent(merged)) {
-                activeAiTurnParentId = merged.id
-
-                if (pendingToolRows.length > 0) {
-                    childEventsByParentId.set(
-                        merged.id,
-                        pendingToolRows.map(pendingToolRow => pendingToolRow.merged),
-                    )
-                }
-
-                pendingToolRows = []
-                continue
-            }
-
-            const parentId = isToolCall ? activeAiTurnParentId : null
-
-            if (isToolCall && !parentId) {
-                pendingToolRows.push({ merged })
-                continue
-            }
-
-            if (isToolCall && parentId) {
-                const existingChildren = childEventsByParentId.get(parentId) ?? []
-                existingChildren.push(merged)
-                childEventsByParentId.set(parentId, existingChildren)
-                continue
-            }
-
-            pendingToolRows = []
+            routeMergedEventForAiTurnGrouping(state, merged)
         }
 
         const childEventIds = new Set<string>()
-        for (const children of childEventsByParentId.values()) {
+        for (const children of state.childEventsByParentId.values()) {
             for (const child of children) {
                 childEventIds.add(child.id)
             }
         }
 
-        return { childEventsByParentId, childEventIds }
+        return { childEventsByParentId: state.childEventsByParentId, childEventIds }
+    }
+
+    // Routes a single merged event into the AI-turn grouping state. Pulled out of groupToolCallsByAiTurn
+    // so the orchestrator stays linear; this helper owns the four-way isPrimaryAiTurn / isToolCall / parentId
+    // decision tree and mutates the shared state in place.
+    function routeMergedEventForAiTurnGrouping(state: AiTurnGroupingState, merged: MergedEvent): void {
+        const isToolCall = (merged.callDetails.kind ?? '').toLowerCase() === 'toolcall'
+
+        if (isPrimaryAiTurnEvent(merged)) {
+            state.activeAiTurnParentId = merged.id
+
+            if (state.pendingToolRows.length > 0) {
+                state.childEventsByParentId.set(
+                    merged.id,
+                    state.pendingToolRows.map(pendingToolRow => pendingToolRow.merged),
+                )
+            }
+
+            state.pendingToolRows = []
+            return
+        }
+
+        const parentId = isToolCall ? state.activeAiTurnParentId : null
+
+        if (isToolCall && !parentId) {
+            state.pendingToolRows.push({ merged })
+            return
+        }
+
+        if (isToolCall && parentId) {
+            const existingChildren = state.childEventsByParentId.get(parentId) ?? []
+            existingChildren.push(merged)
+            state.childEventsByParentId.set(parentId, existingChildren)
+            return
+        }
+
+        state.pendingToolRows = []
+    }
+
+    interface AiTurnGroupingState {
+        activeAiTurnParentId: string | null
+        pendingToolRows: PendingToolRow[]
+        childEventsByParentId: Map<string, MergedEvent[]>
     }
 
     function buildEventRows(protocol: ReviewProtocolPass | null | undefined): EventDisplayRow[] {

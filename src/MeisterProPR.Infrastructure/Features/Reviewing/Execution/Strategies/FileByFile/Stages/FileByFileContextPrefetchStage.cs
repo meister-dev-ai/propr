@@ -239,7 +239,7 @@ internal sealed class FileByFileContextPrefetchStage(
 
         foreach (var symbol in changedSymbols)
         {
-            var outcome = await CollectCallerSitesForSymbolAsync(
+            var outcome = await CollectCallerSitesForSymbolAsync(new CallerCollectionInputs(
                 symbol!,
                 path,
                 reviewTools,
@@ -247,7 +247,7 @@ internal sealed class FileByFileContextPrefetchStage(
                 seen,
                 injected,
                 callerBudget,
-                ct).ConfigureAwait(false);
+                ct)).ConfigureAwait(false);
             if (outcome is null)
             {
                 continue;
@@ -273,30 +273,23 @@ internal sealed class FileByFileContextPrefetchStage(
     ///     produced no usable data (unavailable or cancelled-and-swallowed failure), so the caller can
     ///     tell "no data" apart from "zero references found".
     /// </summary>
-    private static async Task<(int ReferenceCount, bool Truncated, int Injected)?> CollectCallerSitesForSymbolAsync(
-        string symbol,
-        string path,
-        IReviewContextTools reviewTools,
-        List<PrefetchedContextEvidenceItem> evidence,
-        HashSet<string> seen,
-        int injected,
-        int callerBudget,
-        CancellationToken ct)
+    private static async Task<(int ReferenceCount, bool Truncated, int Injected)?> CollectCallerSitesForSymbolAsync(CallerCollectionInputs inputs)
     {
-        var references = await TryGetReferencesAsync(reviewTools, symbol, ct);
+        var references = await TryGetReferencesAsync(inputs.ReviewTools, inputs.Symbol, inputs.Ct);
         if (references is null || references.Unavailable)
         {
             return null;
         }
 
-        foreach (var site in references.Sites.Where(s => !string.Equals(s.FilePath, path, StringComparison.Ordinal)))
+        var injected = inputs.Injected;
+        foreach (var site in references.Sites.Where(s => !string.Equals(s.FilePath, inputs.Path, StringComparison.Ordinal)))
         {
-            if (injected >= callerBudget)
+            if (injected >= inputs.CallerBudget)
             {
                 break;
             }
 
-            injected = TryInjectCallerSiteEvidence(symbol, site, evidence, seen, injected);
+            injected = TryInjectCallerSiteEvidence(inputs.Symbol, site, inputs.Evidence, inputs.Seen, injected);
         }
 
         return (references.Sites.Count, references.Truncated, injected);
@@ -775,4 +768,14 @@ internal sealed class FileByFileContextPrefetchStage(
         truncated = true;
         return normalized[..maxChars].TrimEnd();
     }
+
+    private sealed record CallerCollectionInputs(
+        string Symbol,
+        string Path,
+        IReviewContextTools ReviewTools,
+        List<PrefetchedContextEvidenceItem> Evidence,
+        HashSet<string> Seen,
+        int Injected,
+        int CallerBudget,
+        CancellationToken Ct);
 }

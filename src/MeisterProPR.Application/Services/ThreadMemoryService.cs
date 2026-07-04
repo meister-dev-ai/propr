@@ -264,8 +264,8 @@ public sealed partial class ThreadMemoryService(
                 fallbackChecks.ToList().AsReadOnly());
         }
 
-        var fallbackMatch = await this.TryFindFilePathFallbackMatchAsync(
-            clientId, repositoryId, pullRequestId, normalizedFilePath, findingMessage, degradedComponents, fallbackChecks, ct);
+        var fallbackMatch = await this.TryFindFilePathFallbackMatchAsync(new FilePathFallbackInputs(
+            clientId, repositoryId, pullRequestId, normalizedFilePath, findingMessage, degradedComponents, fallbackChecks, ct));
         if (fallbackMatch is not null)
         {
             return HistoricalDuplicateSuppressionMatchDto.Match(
@@ -547,41 +547,33 @@ public sealed partial class ThreadMemoryService(
         }
     }
 
-    private async Task<TextSimilarityMatch?> TryFindFilePathFallbackMatchAsync(
-        Guid clientId,
-        string repositoryId,
-        int pullRequestId,
-        string normalizedFilePath,
-        string findingMessage,
-        HashSet<string> degradedComponents,
-        HashSet<string> fallbackChecks,
-        CancellationToken ct)
+    private async Task<TextSimilarityMatch?> TryFindFilePathFallbackMatchAsync(FilePathFallbackInputs inputs)
     {
         try
         {
             var filePathMatches = await repository.FindByPullRequestFilePathAsync(
-                clientId,
-                repositoryId,
-                pullRequestId,
-                normalizedFilePath,
+                inputs.ClientId,
+                inputs.RepositoryId,
+                inputs.PullRequestId,
+                inputs.NormalizedFilePath,
                 this._opts.MemoryTopN,
-                ct);
+                inputs.Ct);
 
-            if (degradedComponents.Count > 0)
+            if (inputs.DegradedComponents.Count > 0)
             {
-                fallbackChecks.Add(FilePathFallbackCheck);
+                inputs.FallbackChecks.Add(FilePathFallbackCheck);
             }
 
             return filePathMatches
-                .Select(match => new TextSimilarityMatch(match, CalculateTextSimilarity(findingMessage, match.ResolutionSummary)))
+                .Select(match => new TextSimilarityMatch(match, CalculateTextSimilarity(inputs.FindingMessage, match.ResolutionSummary)))
                 .Where(candidate => candidate.Score >= HistoricalTextFallbackThreshold)
                 .OrderByDescending(candidate => candidate.Score)
                 .FirstOrDefault();
         }
         catch (Exception ex)
         {
-            degradedComponents.Add(RepositoryDegradedComponent);
-            LogDuplicateSuppressionLookupFailed(logger, repositoryId, pullRequestId, clientId, ex);
+            inputs.DegradedComponents.Add(RepositoryDegradedComponent);
+            LogDuplicateSuppressionLookupFailed(logger, inputs.RepositoryId, inputs.PullRequestId, inputs.ClientId, ex);
             return null;
         }
     }
@@ -919,4 +911,14 @@ public sealed partial class ThreadMemoryService(
     }
 
     private sealed record TextSimilarityMatch(ThreadMemoryMatchDto Match, double Score);
+
+    private sealed record FilePathFallbackInputs(
+        Guid ClientId,
+        string RepositoryId,
+        int PullRequestId,
+        string NormalizedFilePath,
+        string FindingMessage,
+        HashSet<string> DegradedComponents,
+        HashSet<string> FallbackChecks,
+        CancellationToken Ct);
 }

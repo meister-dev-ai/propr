@@ -181,7 +181,7 @@ internal sealed partial class FileReviewer(
             // independent passes and union their locally-verified comments into this result before it is persisted,
             // so the synthesis inlet sees the union rather than a single pass. Flag off (or an out-of-scope tier)
             // returns the baseline result untouched — behavior is identical to a single-pass review.
-            result = await this.MaybeApplyMultiPassUnionAsync(
+            result = await this.MaybeApplyMultiPassUnionAsync(new MultiPassUnionInputs(
                 job,
                 pr,
                 filePr,
@@ -197,7 +197,7 @@ internal sealed partial class FileReviewer(
                 effectiveClient,
                 pipelineProfile,
                 result,
-                ct);
+                ct));
 
             await this.CompleteReviewAsync(fileResult, fileContext, protocolId, result, ct);
 
@@ -461,36 +461,20 @@ internal sealed partial class FileReviewer(
     ///     is byte-identical. Duplicates are not collapsed here — that happens downstream at the synthesis dedup
     ///     inlet; this step preserves every distinct finding produced by any pass.
     /// </summary>
-    private async Task<ReviewResult> MaybeApplyMultiPassUnionAsync(
-        ReviewJob job,
-        PullRequest pr,
-        PullRequest filePr,
-        ChangedFile file,
-        int fileIndex,
-        int totalFiles,
-        ReviewSystemContext fileContext,
-        Guid? protocolId,
-        FileComplexityTier tier,
-        string? tierModelId,
-        IChatClient? tierClient,
-        AgentReviewRuntimeCapabilities? tierCapabilities,
-        IChatClient effectiveClient,
-        ReviewPipelineProfile pipelineProfile,
-        ReviewResult baselineResult,
-        CancellationToken ct)
+    private async Task<ReviewResult> MaybeApplyMultiPassUnionAsync(MultiPassUnionInputs inputs)
     {
-        if (!fileContext.EnableMultiPassUnion || !IsMultiPassUnionTier(tier))
+        if (!inputs.FileContext.EnableMultiPassUnion || !IsMultiPassUnionTier(inputs.Tier))
         {
-            return baselineResult;
+            return inputs.BaselineResult;
         }
 
-        var passCount = Math.Max(1, fileContext.MultiPassUnionPassCount ?? options.MultiPassUnionPassCount);
+        var passCount = Math.Max(1, inputs.FileContext.MultiPassUnionPassCount ?? options.MultiPassUnionPassCount);
         if (passCount <= 1)
         {
-            return baselineResult;
+            return inputs.BaselineResult;
         }
 
-        var diversity = fileContext.MultiPassDiversity ?? MultiPassDiversity.Default;
+        var diversity = inputs.FileContext.MultiPassDiversity ?? MultiPassDiversity.Default;
         var armLabel = diversity.ResolveArmLabel();
 
         // Plan the resample passes (passes 2 through k). An arm's model id is an eval-harness-only override; when it
@@ -510,61 +494,63 @@ internal sealed partial class FileReviewer(
         IResolvedAiChatRuntime? unionRuntime = null;
         if (resamplePlan.Any(arm => string.IsNullOrWhiteSpace(arm.ModelId)))
         {
-            unionRuntime = await this.TryResolveUnionPassRuntimeAsync(job, file.Path, ct);
+            unionRuntime = await this.TryResolveUnionPassRuntimeAsync(inputs.Job, inputs.File.Path, inputs.Ct);
             if (unionRuntime is null)
             {
-                await this.RecordMultiPassUnionSkippedAsync(protocolId, file.Path, armLabel, tier, ct);
-                return baselineResult;
+                await this.RecordMultiPassUnionSkippedAsync(inputs.ProtocolId, inputs.File.Path, armLabel, inputs.Tier, inputs.Ct);
+                return inputs.BaselineResult;
             }
         }
 
         // The baseline pass is union pass 1; additional resamples are passes 2..k.
-        var unionComments = new List<ReviewComment>(baselineResult.Comments);
-        var perPassCatchCounts = new List<int> { baselineResult.Comments.Count };
-        var perPassModels = new List<string?> { tierModelId };
+        var unionComments = new List<ReviewComment>(inputs.BaselineResult.Comments);
+        var perPassCatchCounts = new List<int> { inputs.BaselineResult.Comments.Count };
+        var perPassModels = new List<string?> { inputs.TierModelId };
 
         for (var passIndex = 2; passIndex <= passCount; passIndex++)
         {
             var passArm = resamplePlan[passIndex - 2];
 
             // The pass model is the arm override (eval), else the resolved ReviewUnionPass model (production).
-            var passModelId = passArm.ModelId ?? unionRuntime?.Model.RemoteModelId ?? tierModelId;
+            var passModelId = passArm.ModelId ?? unionRuntime?.Model.RemoteModelId ?? inputs.TierModelId;
+            var passClient = passArm.ModelId is null ? unionRuntime?.ChatClient ?? inputs.TierClient : inputs.TierClient;
+            var passCapabilities = passArm.ModelId is null ? unionRuntime?.Capabilities ?? inputs.TierCapabilities : inputs.TierCapabilities;
 
-            var passResult = await this.RunUnionResamplePassAsync(
-                job,
-                pr,
-                filePr,
-                file,
-                fileIndex,
-                totalFiles,
-                fileContext,
-                tier,
+            var passResult = await this.RunUnionResamplePassAsync(new MultiPassUnionPassInputs(
+                inputs.Job,
+                inputs.Pr,
+                inputs.FilePr,
+                inputs.File,
+                inputs.FileIndex,
+                inputs.TotalFiles,
+                inputs.FileContext,
+                inputs.Tier,
                 passModelId,
-                passArm.ModelId is null ? unionRuntime?.ChatClient ?? tierClient : tierClient,
-                passArm.ModelId is null ? unionRuntime?.Capabilities ?? tierCapabilities : tierCapabilities,
-                effectiveClient,
+                passClient,
+                passCapabilities,
+                inputs.EffectiveClient,
                 passIndex,
                 diversity,
                 passArm,
-                pipelineProfile,
-                ct);
+                inputs.PipelineProfile,
+                inputs.Ct));
 
             unionComments.AddRange(StampUnionOrigin(passResult.Comments));
             perPassCatchCounts.Add(passResult.Comments.Count);
             perPassModels.Add(passModelId);
         }
 
-        await this.RecordMultiPassUnionCompletedAsync(
-            protocolId,
-            file.Path,
+        await this.RecordMultiPassUnionCompletedAsync(new MultiPassUnionCompletion(
+            inputs.ProtocolId,
+            inputs.File.Path,
             armLabel,
-            tier,
+            inputs.Tier,
             perPassCatchCounts,
             perPassModels,
             unionComments.Count,
-            ct);
+            inputs.Ct));
 
-        return baselineResult with { Comments = unionComments };
+        return inputs.BaselineResult with { Comments = unionComments };
     }
 
     private static bool IsMultiPassUnionTier(FileComplexityTier tier)
@@ -590,55 +576,38 @@ internal sealed partial class FileReviewer(
         return stamped;
     }
 
-    private async Task<ReviewResult> RunUnionResamplePassAsync(
-        ReviewJob job,
-        PullRequest pr,
-        PullRequest filePr,
-        ChangedFile file,
-        int fileIndex,
-        int totalFiles,
-        ReviewSystemContext fileContext,
-        FileComplexityTier tier,
-        string? tierModelId,
-        IChatClient? tierClient,
-        AgentReviewRuntimeCapabilities? tierCapabilities,
-        IChatClient effectiveClient,
-        int passIndex,
-        MultiPassDiversity diversity,
-        MultiPassArm passArm,
-        ReviewPipelineProfile pipelineProfile,
-        CancellationToken ct)
+    private async Task<ReviewResult> RunUnionResamplePassAsync(MultiPassUnionPassInputs inputs)
     {
-        var tierCategory = TierCategory(tier);
+        var tierCategory = TierCategory(inputs.Tier);
         var protocolId = await this.BeginAugmentationProtocolAsync(
-            job,
-            file,
+            inputs.Job,
+            inputs.File,
             tierCategory,
-            tierModelId,
-            $"multi-pass union {passArm.Label} pass #{passIndex}",
+            inputs.PassModelId,
+            $"multi-pass union {inputs.PassArm.Label} pass #{inputs.PassIndex}",
             ReviewPassKind.MultiPassUnion,
-            ct);
+            inputs.Ct);
 
         // A transient result row keeps this pass from overwriting the persisted per-file result; only its
         // returned comments are unioned by the caller before the single persistence write.
-        var transientFileResult = new ReviewFileResult(job.Id, file.Path);
+        var transientFileResult = new ReviewFileResult(inputs.Job.Id, inputs.File.Path);
         ReviewSystemContext? passContext = null;
         try
         {
             passContext = this.CreateFileContext(
-                job,
-                pr,
-                file,
-                fileIndex,
-                totalFiles,
-                fileContext,
+                inputs.Job,
+                inputs.Pr,
+                inputs.File,
+                inputs.FileIndex,
+                inputs.TotalFiles,
+                inputs.FileContext,
                 protocolId,
-                tier,
-                tierModelId,
-                tierClient,
-                tierCapabilities,
-                effectiveClient,
-                fileContext.PerFileHint?.FocusedReviewGuidance ?? []);
+                inputs.Tier,
+                inputs.PassModelId,
+                inputs.PassClient,
+                inputs.PassCapabilities,
+                inputs.EffectiveClient,
+                inputs.FileContext.PerFileHint?.FocusedReviewGuidance ?? []);
 
             // Each resample pass runs at the resampling temperature. The pass model + client + capabilities were
             // already resolved by the caller and threaded in here (an eval-harness arm-model override reusing the
@@ -646,29 +615,29 @@ internal sealed partial class FileReviewer(
             // CreateFileContext has set them — the baseline pass keeps the tier model, only these resample passes
             // switch, so any recall lift comes from a different sampler reviewing the file, not from re-sampling the
             // same one.
-            passContext.Temperature = diversity.ResampleTemperature;
+            passContext.Temperature = inputs.Diversity.ResampleTemperature;
 
             passContext = await this.RunDispatchPipelineAsync(
-                job,
-                file,
+                inputs.Job,
+                inputs.File,
                 transientFileResult,
                 passContext,
                 protocolId,
-                pipelineProfile,
-                ct);
+                inputs.PipelineProfile,
+                inputs.Ct);
 
-            var result = await this.ReviewFileCoreAsync(filePr, passContext, ct);
+            var result = await this.ReviewFileCoreAsync(inputs.FilePr, passContext, inputs.Ct);
             var pipelineState = new ReviewResultPipelineState(
-                job,
-                file,
-                filePr,
+                inputs.Job,
+                inputs.File,
+                inputs.FilePr,
                 transientFileResult,
                 passContext,
                 protocolId,
                 reviewInvariantFactProviders?.SelectMany(provider => provider.GetFacts()).ToList() ?? []);
 
-            result = await this.RunReviewResultPipelineAsync(pipelineState, result, pipelineProfile, ct);
-            await this.CompleteAugmentationProtocolAsync(protocolId, passContext, "Completed", ct);
+            result = await this.RunReviewResultPipelineAsync(pipelineState, result, inputs.PipelineProfile, inputs.Ct);
+            await this.CompleteAugmentationProtocolAsync(protocolId, passContext, "Completed", inputs.Ct);
             return result;
         }
         catch when (protocolId.HasValue)
@@ -678,41 +647,33 @@ internal sealed partial class FileReviewer(
         }
     }
 
-    private async Task RecordMultiPassUnionCompletedAsync(
-        Guid? protocolId,
-        string filePath,
-        string armLabel,
-        FileComplexityTier tier,
-        IReadOnlyList<int> perPassCatchCounts,
-        IReadOnlyList<string?> perPassModels,
-        int unionCount,
-        CancellationToken ct)
+    private async Task RecordMultiPassUnionCompletedAsync(MultiPassUnionCompletion completion)
     {
-        if (!protocolId.HasValue)
+        if (!completion.ProtocolId.HasValue)
         {
             return;
         }
 
         await protocolRecorder.RecordReviewStrategyEventAsync(
-            protocolId.Value,
+            completion.ProtocolId.Value,
             ReviewProtocolEventNames.MultiPassUnionCompleted,
             JsonSerializer.Serialize(
                 new
                 {
-                    filePath,
-                    tier = tier.ToString(),
-                    arm = armLabel,
-                    passCount = perPassCatchCounts.Count,
+                    filePath = completion.FilePath,
+                    tier = completion.Tier.ToString(),
+                    arm = completion.ArmLabel,
+                    passCount = completion.PerPassCatchCounts.Count,
                 }),
             JsonSerializer.Serialize(
                 new
                 {
-                    perPassCatchCounts,
-                    perPassModels,
-                    unionCount,
+                    perPassCatchCounts = completion.PerPassCatchCounts,
+                    perPassModels = completion.PerPassModels,
+                    unionCount = completion.UnionCount,
                 }),
             null,
-            ct);
+            completion.Ct);
     }
 
     private static AiConnectionModelCategory TierCategory(FileComplexityTier tier)
@@ -1460,4 +1421,51 @@ internal sealed partial class FileReviewer(
         ReviewSystemContext FileContext,
         Guid? ProtocolId,
         IReadOnlyList<InvariantFact> InvariantFacts);
+
+    private sealed record MultiPassUnionCompletion(
+        Guid? ProtocolId,
+        string FilePath,
+        string ArmLabel,
+        FileComplexityTier Tier,
+        IReadOnlyList<int> PerPassCatchCounts,
+        IReadOnlyList<string?> PerPassModels,
+        int UnionCount,
+        CancellationToken Ct);
+
+    private sealed record MultiPassUnionInputs(
+        ReviewJob Job,
+        PullRequest Pr,
+        PullRequest FilePr,
+        ChangedFile File,
+        int FileIndex,
+        int TotalFiles,
+        ReviewSystemContext FileContext,
+        Guid? ProtocolId,
+        FileComplexityTier Tier,
+        string? TierModelId,
+        IChatClient? TierClient,
+        AgentReviewRuntimeCapabilities? TierCapabilities,
+        IChatClient EffectiveClient,
+        ReviewPipelineProfile PipelineProfile,
+        ReviewResult BaselineResult,
+        CancellationToken Ct);
+
+    private sealed record MultiPassUnionPassInputs(
+        ReviewJob Job,
+        PullRequest Pr,
+        PullRequest FilePr,
+        ChangedFile File,
+        int FileIndex,
+        int TotalFiles,
+        ReviewSystemContext FileContext,
+        FileComplexityTier Tier,
+        string? PassModelId,
+        IChatClient? PassClient,
+        AgentReviewRuntimeCapabilities? PassCapabilities,
+        IChatClient EffectiveClient,
+        int PassIndex,
+        MultiPassDiversity Diversity,
+        MultiPassArm PassArm,
+        ReviewPipelineProfile PipelineProfile,
+        CancellationToken Ct);
 }

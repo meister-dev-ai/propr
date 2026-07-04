@@ -234,53 +234,46 @@ public sealed class ProCursorEmbeddingService(
                 ? chunk.LineStart.Value + index
                 : (int?)null;
 
-            AccumulateLineForChunkSplit(chunk, tokenizerName, maxInputTokens, newlineTokenCount, accumulator, splitChunks, line, lineNumber);
+            AccumulateLineForChunkSplit(new ChunkSplitInputs(
+                chunk, tokenizerName, maxInputTokens, newlineTokenCount, accumulator, splitChunks, line, lineNumber));
         }
 
         FlushCurrentChunk(chunk, accumulator, splitChunks);
         return splitChunks.Count == 0 ? [chunk] : splitChunks.AsReadOnly();
     }
 
-    private static void AccumulateLineForChunkSplit(
-        ProCursorExtractedChunk chunk,
-        string tokenizerName,
-        int maxInputTokens,
-        int newlineTokenCount,
-        LineChunkAccumulator accumulator,
-        List<ProCursorExtractedChunk> splitChunks,
-        string line,
-        int? lineNumber)
+    private static void AccumulateLineForChunkSplit(ChunkSplitInputs inputs)
     {
-        var lineTokenCount = EmbeddingTokenizerRegistry.CountTokens(tokenizerName, line);
+        var lineTokenCount = EmbeddingTokenizerRegistry.CountTokens(inputs.TokenizerName, inputs.Line);
 
-        if (lineTokenCount > maxInputTokens)
+        if (lineTokenCount > inputs.MaxInputTokens)
         {
-            FlushCurrentChunk(chunk, accumulator, splitChunks);
+            FlushCurrentChunk(inputs.Chunk, inputs.Accumulator, inputs.SplitChunks);
 
-            foreach (var segment in SplitOversizedText(line, tokenizerName, maxInputTokens))
+            foreach (var segment in SplitOversizedText(inputs.Line, inputs.TokenizerName, inputs.MaxInputTokens))
             {
-                splitChunks.Add(CreateChunk(chunk, lineNumber, lineNumber, segment));
+                inputs.SplitChunks.Add(CreateChunk(inputs.Chunk, inputs.LineNumber, inputs.LineNumber, segment));
             }
 
             return;
         }
 
-        var additionalTokens = accumulator.Lines.Count == 0
+        var additionalTokens = inputs.Accumulator.Lines.Count == 0
             ? lineTokenCount
-            : newlineTokenCount + lineTokenCount;
-        if (accumulator.Lines.Count > 0 && accumulator.TokenCount + additionalTokens > maxInputTokens)
+            : inputs.NewlineTokenCount + lineTokenCount;
+        if (inputs.Accumulator.Lines.Count > 0 && inputs.Accumulator.TokenCount + additionalTokens > inputs.MaxInputTokens)
         {
-            FlushCurrentChunk(chunk, accumulator, splitChunks);
+            FlushCurrentChunk(inputs.Chunk, inputs.Accumulator, inputs.SplitChunks);
         }
 
-        if (accumulator.Lines.Count == 0)
+        if (inputs.Accumulator.Lines.Count == 0)
         {
-            accumulator.LineStart = lineNumber;
+            inputs.Accumulator.LineStart = inputs.LineNumber;
         }
 
-        accumulator.Lines.Add(line);
-        accumulator.TokenCount += accumulator.Lines.Count == 1 ? lineTokenCount : additionalTokens;
-        accumulator.LineEnd = lineNumber;
+        inputs.Accumulator.Lines.Add(inputs.Line);
+        inputs.Accumulator.TokenCount += inputs.Accumulator.Lines.Count == 1 ? lineTokenCount : additionalTokens;
+        inputs.Accumulator.LineEnd = inputs.LineNumber;
     }
 
     private static void FlushCurrentChunk(
@@ -445,4 +438,14 @@ public sealed class ProCursorEmbeddingService(
         long CompletionTokens,
         long TotalTokens,
         bool TokensEstimated);
+
+    private sealed record ChunkSplitInputs(
+        ProCursorExtractedChunk Chunk,
+        string TokenizerName,
+        int MaxInputTokens,
+        int NewlineTokenCount,
+        LineChunkAccumulator Accumulator,
+        List<ProCursorExtractedChunk> SplitChunks,
+        string Line,
+        int? LineNumber);
 }

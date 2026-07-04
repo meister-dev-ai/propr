@@ -148,7 +148,7 @@ public sealed partial class MentionScanService(
         {
             foreach (var comment in thread.Comments)
             {
-                if (await this.ProcessCommentForMentionAsync(
+                if (await this.ProcessCommentForMentionAsync(new MentionCommentInputs(
                         config,
                         reviewer,
                         repositoryId,
@@ -157,7 +157,7 @@ public sealed partial class MentionScanService(
                         thread,
                         comment,
                         prScan,
-                        ct))
+                        ct)))
                 {
                     newMentionsEnqueued++;
                 }
@@ -216,97 +216,88 @@ public sealed partial class MentionScanService(
                comment.PublishedAt.Value > prScan.LastCommentSeenAt;
     }
 
-    private async Task<bool> ProcessCommentForMentionAsync(
-        CrawlConfigurationDto config,
-        ReviewerIdentity reviewer,
-        string repositoryId,
-        int pullRequestId,
-        PullRequest pullRequest,
-        PrCommentThread thread,
-        PrThreadComment comment,
-        MentionPrScan? prScan,
-        CancellationToken ct)
+    private async Task<bool> ProcessCommentForMentionAsync(MentionCommentInputs inputs)
     {
-        if (!ShouldProcessComment(comment, prScan))
+        if (!ShouldProcessComment(inputs.Comment, inputs.PrScan))
         {
             return false;
         }
 
         // Log the raw content so we can see what ADO actually stores (helps detect format changes).
-        LogCommentContent(logger, thread.ThreadId, comment.CommentId, comment.Content);
+        LogCommentContent(logger, inputs.Thread.ThreadId, inputs.Comment.CommentId, inputs.Comment.Content);
 
-        if (!MentionDetector.IsMentioned(comment.Content, reviewer))
+        if (!MentionDetector.IsMentioned(inputs.Comment.Content, inputs.Reviewer))
         {
             return false;
         }
 
         // Check for duplicate — unique constraint is the authoritative guard.
         var alreadyExists = await jobRepository.ExistsForCommentAsync(
-            config.ClientId,
-            repositoryId,
-            pullRequestId,
-            thread.ThreadId,
-            comment.CommentId,
-            ct);
+            inputs.Config.ClientId,
+            inputs.RepositoryId,
+            inputs.PullRequestId,
+            inputs.Thread.ThreadId,
+            inputs.Comment.CommentId,
+            inputs.Ct);
 
         if (alreadyExists)
         {
-            LogDuplicateMentionSkipped(logger, pullRequestId, thread.ThreadId, comment.CommentId);
+            LogDuplicateMentionSkipped(logger, inputs.PullRequestId, inputs.Thread.ThreadId, inputs.Comment.CommentId);
             return false;
         }
 
         var job = new MentionReplyJob(
             Guid.NewGuid(),
-            config.ClientId,
-            config.ProviderScopePath,
-            config.ProviderProjectKey,
-            repositoryId,
-            pullRequestId,
-            thread.ThreadId,
-            comment.CommentId,
-            comment.Content,
-            thread.FilePath,
-            thread.LineNumber,
-            comment.AuthorId,
-            comment.AuthorName,
-            comment.PublishedAt);
+            inputs.Config.ClientId,
+            inputs.Config.ProviderScopePath,
+            inputs.Config.ProviderProjectKey,
+            inputs.RepositoryId,
+            inputs.PullRequestId,
+            inputs.Thread.ThreadId,
+            inputs.Comment.CommentId,
+            inputs.Comment.Content,
+            inputs.Thread.FilePath,
+            inputs.Thread.LineNumber,
+            inputs.Comment.AuthorId,
+            inputs.Comment.AuthorName,
+            inputs.Comment.PublishedAt);
 
-        var host = new ProviderHostRef(config.Provider, config.ProviderScopePath);
+        var host = new ProviderHostRef(inputs.Config.Provider, inputs.Config.ProviderScopePath);
         var repository = new RepositoryRef(
             host,
-            repositoryId,
-            config.ProviderProjectKey,
-            ResolveRepositoryProjectPath(config, repositoryId, pullRequest));
+            inputs.RepositoryId,
+            inputs.Config.ProviderProjectKey,
+            ResolveRepositoryProjectPath(inputs.Config, inputs.RepositoryId, inputs.PullRequest));
         var review = new CodeReviewRef(
             repository,
             CodeReviewPlatformKind.PullRequest,
-            pullRequestId.ToString(),
-            pullRequestId);
+            inputs.PullRequestId.ToString(),
+            inputs.PullRequestId);
         var threadRef = new ReviewThreadRef(
             review,
-            thread.ThreadId.ToString(),
-            thread.FilePath,
-            thread.LineNumber,
+            inputs.Thread.ThreadId.ToString(),
+            inputs.Thread.FilePath,
+            inputs.Thread.LineNumber,
             false);
-        var commentAuthorExternalUserId = comment.AuthorId?.ToString("D") ?? comment.AuthorName;
+        var commentAuthorExternalUserId = inputs.Comment.AuthorId?.ToString("D") ?? inputs.Comment.AuthorName;
         var commentRef = new ReviewCommentRef(
             threadRef,
-            comment.CommentId.ToString(),
+            inputs.Comment.CommentId.ToString(),
             new ReviewerIdentity(
                 host,
-                commentAuthorExternalUserId ?? reviewer.ExternalUserId,
-                comment.AuthorName,
-                comment.AuthorName,
+                commentAuthorExternalUserId ?? inputs.Reviewer.ExternalUserId,
+                inputs.Comment.AuthorName,
+                inputs.Comment.AuthorName,
                 false),
-            comment.PublishedAt);
+            inputs.Comment.PublishedAt);
 
         job.SetProviderReviewContext(review);
         job.SetReviewThreadContext(threadRef);
         job.SetReviewCommentContext(commentRef);
 
-        await jobRepository.AddAsync(job, ct);
-        await channelWriter.WriteAsync(job, ct);
-        LogMentionEnqueued(logger, pullRequestId, thread.ThreadId, comment.CommentId);
+        await jobRepository.AddAsync(job, inputs.Ct);
+        await channelWriter.WriteAsync(job, inputs.Ct);
+        LogMentionEnqueued(logger, inputs.PullRequestId, inputs.Thread.ThreadId, inputs.Comment.CommentId);
         return true;
     }
 
@@ -338,4 +329,15 @@ public sealed partial class MentionScanService(
             ? repositoryId
             : $"{config.ProviderProjectKey.TrimEnd('/')}/{repositoryId}";
     }
+
+    private sealed record MentionCommentInputs(
+        CrawlConfigurationDto Config,
+        ReviewerIdentity Reviewer,
+        string RepositoryId,
+        int PullRequestId,
+        PullRequest PullRequest,
+        PrCommentThread Thread,
+        PrThreadComment Comment,
+        MentionPrScan? PrScan,
+        CancellationToken Ct);
 }

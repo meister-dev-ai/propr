@@ -23,12 +23,7 @@ public sealed class PrReviewViewController(
     ///     Requires valid user authentication and access to the specified client.
     /// </summary>
     /// <param name="clientId">Owning client identifier.</param>
-    /// <param name="providerScopePath">Provider scope path or host-qualified namespace for the repository.</param>
-    /// <param name="providerProjectKey">Provider project, owner, or namespace key for the repository.</param>
-    /// <param name="repositoryId">ADO repository identifier.</param>
-    /// <param name="pullRequestId">Pull request number.</param>
-    /// <param name="page">Page number (1-based, default 1).</param>
-    /// <param name="pageSize">Page size (default 20, max 100).</param>
+    /// <param name="query">Query-string parameters identifying the PR and pagination window.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <response code="200">PR view returned (empty DTO with zero jobs when the PR has no review jobs).</response>
     /// <response code="400">Missing or invalid parameters.</response>
@@ -40,12 +35,7 @@ public sealed class PrReviewViewController(
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     public async Task<IActionResult> GetPrView(
         Guid clientId,
-        [FromQuery] string? providerScopePath,
-        [FromQuery] string? providerProjectKey,
-        [FromQuery] string? repositoryId,
-        [FromQuery] int? pullRequestId,
-        [FromQuery] int page = 1,
-        [FromQuery] int pageSize = 20,
+        [FromQuery] GetPrViewQuery query,
         CancellationToken cancellationToken = default)
     {
         var auth = AuthHelpers.RequireAuthenticated(this.HttpContext);
@@ -60,23 +50,23 @@ public sealed class PrReviewViewController(
             return roleCheck;
         }
 
-        if (string.IsNullOrWhiteSpace(providerScopePath) ||
-            string.IsNullOrWhiteSpace(providerProjectKey) ||
-            string.IsNullOrWhiteSpace(repositoryId) ||
-            pullRequestId is null or < 1)
+        if (string.IsNullOrWhiteSpace(query.ProviderScopePath) ||
+            string.IsNullOrWhiteSpace(query.ProviderProjectKey) ||
+            string.IsNullOrWhiteSpace(query.RepositoryId) ||
+            query.PullRequestId is null or < 1)
         {
             return this.BadRequest(new { error = "providerScopePath, providerProjectKey, repositoryId and pullRequestId are required." });
         }
 
-        page = Math.Max(1, page);
-        pageSize = Math.Clamp(pageSize, 1, 100);
+        var page = Math.Max(1, query.Page);
+        var pageSize = Math.Clamp(query.PageSize, 1, 100);
 
         var jobs = await jobRepository.GetByPrAsync(
             clientId,
-            providerScopePath,
-            providerProjectKey,
-            repositoryId,
-            pullRequestId.Value,
+            query.ProviderScopePath,
+            query.ProviderProjectKey,
+            query.RepositoryId,
+            query.PullRequestId.Value,
             page,
             pageSize,
             cancellationToken);
@@ -120,8 +110,8 @@ public sealed class PrReviewViewController(
             1,
             50,
             MemorySource.ThreadResolved,
-            repositoryId,
-            pullRequestId.Value,
+            query.RepositoryId,
+            query.PullRequestId.Value,
             cancellationToken);
         var originatedMemories = originatedPaged.Items
             .Select(r => new ThreadMemorySummaryDto(
@@ -226,10 +216,10 @@ public sealed class PrReviewViewController(
             .AsReadOnly();
 
         var dto = new PrReviewViewDto(
-            providerScopePath,
-            providerProjectKey,
-            repositoryId,
-            pullRequestId.Value,
+            query.ProviderScopePath,
+            query.ProviderProjectKey,
+            query.RepositoryId,
+            query.PullRequestId.Value,
             jobs.Count,
             totalInput,
             totalOutput,
@@ -244,3 +234,12 @@ public sealed class PrReviewViewController(
         return this.Ok(dto);
     }
 }
+
+/// <summary>Query string for <see cref="PrReviewViewController.GetPrView" />.</summary>
+public sealed record GetPrViewQuery(
+    string? ProviderScopePath,
+    string? ProviderProjectKey,
+    string? RepositoryId,
+    int? PullRequestId,
+    int Page = 1,
+    int PageSize = 20);
