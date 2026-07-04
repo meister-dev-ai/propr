@@ -84,6 +84,14 @@ public interface IClientRegistry
     Task<bool> GetMultiPassUnionEnabledAsync(Guid clientId, CancellationToken ct = default);
 
     /// <summary>
+    ///     Returns the per-client multi-pass union pass count override, or <see langword="null" /> when unset (the
+    ///     caller then falls back to the <c>AiReviewOptions</c> server default).
+    /// </summary>
+    /// <param name="clientId">Client identifier.</param>
+    /// <param name="ct">Cancellation token.</param>
+    Task<int?> GetMultiPassUnionPassCountAsync(Guid clientId, CancellationToken ct = default);
+
+    /// <summary>
     ///     Returns the default review strategy configured for the given client, or <see langword="null" /> if not set.
     /// </summary>
     Task<ReviewStrategy?> GetDefaultReviewStrategyAsync(Guid clientId, CancellationToken ct = default);

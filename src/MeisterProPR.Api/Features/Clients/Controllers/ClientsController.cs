@@ -35,6 +35,7 @@ public sealed class ClientsController(
             client.EnableProRV,
             client.EnableEvidenceBackedVerification,
             client.EnableMultiPassUnion,
+            client.MultiPassUnionPassCount,
             client.TenantId,
             client.TenantSlug,
             client.TenantDisplayName,
@@ -285,6 +286,7 @@ public sealed class ClientsController(
             request.EnableProRV,
             request.EnableEvidenceBackedVerification,
             request.EnableMultiPassUnion,
+            request.MultiPassUnionPassCount,
             request.DefaultReviewStrategy,
             ct);
         return client is null ? this.NotFound() : this.Ok(ToClientResponse(client));
@@ -304,6 +306,7 @@ public sealed record ClientResponse(
     bool EnableProRV,
     bool EnableEvidenceBackedVerification,
     bool EnableMultiPassUnion,
+    int? MultiPassUnionPassCount,
     Guid? TenantId,
     string? TenantSlug,
     string? TenantDisplayName,
@@ -355,4 +358,5 @@ public sealed record PatchClientRequest(
     bool? EnableProRV = null,
     bool? EnableEvidenceBackedVerification = null,
     bool? EnableMultiPassUnion = null,
+    int? MultiPassUnionPassCount = null,
     ReviewStrategy? DefaultReviewStrategy = null);

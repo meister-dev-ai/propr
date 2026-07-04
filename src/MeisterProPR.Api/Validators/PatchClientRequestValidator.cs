@@ -34,6 +34,11 @@ public sealed class PatchClientRequestValidator : AbstractValidator<PatchClientR
             .Must(_ => true)
             .When(r => r.EnableMultiPassUnion.HasValue);
 
+        this.RuleFor(r => r.MultiPassUnionPassCount)
+            .InclusiveBetween(1, 5)
+            .WithMessage("MultiPassUnionPassCount must be between 1 and 5.")
+            .When(r => r.MultiPassUnionPassCount.HasValue);
+
         this.RuleFor(r => r.DefaultReviewStrategy)
             .Must(strategy => !strategy.HasValue || ReviewStrategyPolicy.IsSelectable(strategy.Value))
             .WithMessage(request => ReviewStrategyPolicy.GetDisabledSelectionMessage(request.DefaultReviewStrategy ?? ReviewStrategy.FileByFile));

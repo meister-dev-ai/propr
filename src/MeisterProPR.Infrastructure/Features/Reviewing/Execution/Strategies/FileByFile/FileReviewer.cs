@@ -501,6 +501,12 @@ internal sealed partial class FileReviewer(
         // if any pass needs it and it is unbound, skip the extra passes entirely (degrade to the single baseline pass)
         // rather than falling back to the tier model — a same-tier-model resample is the ineffective case this exists
         // to avoid. Eval configs that set an arm/default model never take this path.
+        //
+        // Tier-mix property (design record): with the second-opinion model bound to codex, the production shape is
+        // deliberately tier-dependent and matches neither tested A/B arm — Medium files (tier = codex) get codex
+        // baseline + codex resample(s) (same-model resampling), while High files (tier = gpt-5.4) get a gpt-5.4
+        // baseline + a codex second opinion (a genuine cross pair). The A/B (codex-list on 209, k=3) validated the
+        // Medium leg; the High cross pair is the shape that caught the app-credential finding in the cross-model run.
         IResolvedAiChatRuntime? unionRuntime = null;
         if (resamplePlan.Any(arm => string.IsNullOrWhiteSpace(arm.ModelId)))
         {

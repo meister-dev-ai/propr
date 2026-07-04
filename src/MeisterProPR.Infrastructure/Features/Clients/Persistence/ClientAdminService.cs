@@ -81,6 +81,7 @@ public sealed class ClientAdminService(
         bool? enableProRV = null,
         bool? enableEvidenceBackedVerification = null,
         bool? enableMultiPassUnion = null,
+        int? multiPassUnionPassCount = null,
         ReviewStrategy? defaultReviewStrategy = null,
         CancellationToken ct = default)
     {
@@ -145,6 +146,11 @@ public sealed class ClientAdminService(
         if (enableMultiPassUnion.HasValue)
         {
             client.EnableMultiPassUnion = enableMultiPassUnion.Value;
+        }
+
+        if (multiPassUnionPassCount.HasValue)
+        {
+            client.MultiPassUnionPassCount = multiPassUnionPassCount.Value;
         }
 
         await dbContext.SaveChangesAsync(ct);
@@ -333,6 +339,7 @@ public sealed class ClientAdminService(
             client.EnableProRV,
             client.EnableEvidenceBackedVerification,
             client.EnableMultiPassUnion,
+            client.MultiPassUnionPassCount,
             tenantId,
             tenantSlug,
             tenantDisplayName);

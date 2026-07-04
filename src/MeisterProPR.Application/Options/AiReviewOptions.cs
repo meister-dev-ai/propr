@@ -130,12 +130,14 @@ public sealed class AiReviewOptions
     public int QualityFilterThreshold { get; set; } = 20;
 
     /// <summary>
-    ///     Number of independent per-file passes to run for multi-pass union when a client opts in and the file's
-    ///     resolved tier is Medium or High. A value of 1 disables the additional passes. Bound to
-    ///     <c>AI_MULTI_PASS_UNION_PASS_COUNT</c>.
+    ///     Server-default number of independent per-file passes for multi-pass union when a client opts in and the
+    ///     file's resolved tier is Medium or High — the fallback used only when a client has no per-client
+    ///     <c>MultiPassUnionPassCount</c> override. A value of 1 disables the additional passes. Defaults to 2
+    ///     (baseline + one second-opinion pass); a third pass adds little because same-model resamples correlate.
+    ///     Bound to <c>AI_MULTI_PASS_UNION_PASS_COUNT</c>.
     /// </summary>
     [Range(1, 10, ErrorMessage = "MultiPassUnionPassCount must be between 1 and 10.")]
-    public int MultiPassUnionPassCount { get; set; } = 3;
+    public int MultiPassUnionPassCount { get; set; } = 2;
 
     /// <summary>Maximum number of candidate findings kept after per-file importance ranking.</summary>
     [Range(1, 100, ErrorMessage = "ImportanceRankingKeepTopN must be between 1 and 100.")]
