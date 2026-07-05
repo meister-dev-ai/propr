@@ -22,6 +22,7 @@ const detailTabs = [
 
 export type DetailTab = (typeof detailTabs)[number]
 type ReviewStrategy = components['schemas']['ReviewStrategy']
+export type ReviewPassEntry = components['schemas']['ReviewPassEntry']
 
 export interface ClientDetailDto {
   id: string
@@ -35,7 +36,7 @@ export interface ClientDetailDto {
   enableProRV: boolean
   enableEvidenceBackedVerification: boolean
   enableMultiPassUnion: boolean
-  multiPassUnionPassCount?: number | null
+  reviewPasses?: ReviewPassEntry[] | null
 }
 
 export interface ReviewProfileCatalogItemDto {
@@ -67,7 +68,7 @@ export interface ClientDetailViewModel {
   editedEnableProRV: Ref<boolean>
   editedEnableEvidenceBackedVerification: Ref<boolean>
   editedEnableMultiPassUnion: Ref<boolean>
-  editedMultiPassUnionPassCount: Ref<number | null>
+  editedReviewPasses: Ref<ReviewPassEntry[]>
   reviewProfiles: Ref<ReviewProfileCatalogItemDto[]>
   clientReviewProfile: Ref<ClientReviewProfileDto | null>
   isProviderDetailOpen: Ref<boolean>
@@ -96,7 +97,7 @@ export const ClientDetailVmKey: InjectionKey<ClientDetailViewModel> = Symbol('cl
 
 export interface ClientDetailService {
   getClient: (clientId: string) => Promise<{ data: ClientDetailDto | null; response?: Response | { status?: number; ok?: boolean } }>
-  patchClient: (clientId: string, body: Record<string, unknown>) => Promise<{ data: ClientDetailDto }>
+  patchClient: (clientId: string, body: Record<string, unknown>) => Promise<{ data?: ClientDetailDto | null; error?: unknown; response?: Response | { status?: number; ok?: boolean } }>
   getReviewProfiles: () => Promise<{ data: { profiles: ReviewProfileCatalogItemDto[] } | null }>
   getClientReviewProfile: (clientId: string) => Promise<{ data: ClientReviewProfileDto | null }>
   putClientReviewProfile: (clientId: string, body: { defaultReviewPipelineProfileId: string | null }) => Promise<{ data: ClientReviewProfileDto }>
@@ -148,6 +149,61 @@ function isDetailTab(value: string): value is DetailTab {
   return (detailTabs as readonly string[]).includes(value)
 }
 
+/** Normalizes a persisted review-pass list into a stable, ordinal-sorted list with
+ * contiguous zero-based ordinals so the edited list and the server echo compare cleanly.
+ * Entries with an empty/missing configuredModelId are dropped — a half-configured row is
+ * never sent to the server (which would reject it) and never counts toward the dirty check. */
+function normalizeReviewPasses(passes: ReviewPassEntry[] | null | undefined): ReviewPassEntry[] {
+  return [...(passes ?? [])]
+    .filter((pass) => (pass.configuredModelId ?? '') !== '')
+    .sort((left, right) => (left.ordinal ?? 0) - (right.ordinal ?? 0))
+    .map((pass, index) => ({ ordinal: index, configuredModelId: pass.configuredModelId ?? '' }))
+}
+
+/** Pulls a human-readable message out of an ASP.NET ValidationProblem body, preferring the specific
+ * field error (e.g. the review-pass validation message) over the generic problem title. Falls back to
+ * the supplied default when the body carries nothing useful. */
+function extractValidationMessage(error: unknown, fallback: string): string {
+  if (!error || typeof error !== 'object') {
+    return fallback
+  }
+
+  const problem = error as { detail?: unknown; title?: unknown; errors?: Record<string, unknown> }
+
+  if (typeof problem.detail === 'string' && problem.detail.trim().length > 0) {
+    return problem.detail
+  }
+
+  if (problem.errors && typeof problem.errors === 'object') {
+    for (const value of Object.values(problem.errors)) {
+      if (Array.isArray(value) && typeof value[0] === 'string' && value[0].trim().length > 0) {
+        return value[0]
+      }
+    }
+  }
+
+  if (typeof problem.title === 'string' && problem.title.trim().length > 0) {
+    return problem.title
+  }
+
+  return fallback
+}
+
+/** True when a patch response did not yield a client to apply (network error, 4xx, or empty body).
+ * Typed loosely so it accepts both the service-interface shape and openapi-fetch's raw response. */
+function isFailedPatch(result: { data?: unknown; error?: unknown; response?: Response | { status?: number; ok?: boolean } }): boolean {
+  return !!result.error || !result.data || (result.response !== undefined && result.response.ok === false)
+}
+
+/** Two pass lists are equal when they carry the same ordered configured-model ids. */
+function reviewPassesEqual(left: ReviewPassEntry[], right: ReviewPassEntry[]): boolean {
+  if (left.length !== right.length) {
+    return false
+  }
+
+  return left.every((pass, index) => (pass.configuredModelId ?? '') === (right[index]?.configuredModelId ?? ''))
+}
+
 export function useClientDetailViewModel(options: UseClientDetailViewModelOptions = {}): ClientDetailViewModel {
   const router = useRouter()
   const route = useRoute()
@@ -176,7 +232,7 @@ export function useClientDetailViewModel(options: UseClientDetailViewModelOption
   const editedEnableProRV = ref(false)
   const editedEnableEvidenceBackedVerification = ref(false)
   const editedEnableMultiPassUnion = ref(false)
-  const editedMultiPassUnionPassCount = ref<number | null>(null)
+  const editedReviewPasses = ref<ReviewPassEntry[]>([])
   const reviewProfiles = ref<ReviewProfileCatalogItemDto[]>([])
   const clientReviewProfile = ref<ClientReviewProfileDto | null>(null)
 
@@ -210,7 +266,14 @@ export function useClientDetailViewModel(options: UseClientDetailViewModelOption
   )
   const activeTab = ref<DetailTab>(defaultDetailTab.value)
 
-  function applyClient(nextClient: ClientDetailDto): void {
+  function applyClient(nextClient: ClientDetailDto | null | undefined): void {
+    // A failed save (e.g. a 400) resolves with `data === undefined` under openapi-fetch. Never assign a
+    // falsy client: doing so corrupts `client.value` and the next render dereferences `client.value.…`,
+    // blanking the whole page. Callers that see no data surface an error and skip this apply.
+    if (!nextClient) {
+      return
+    }
+
     client.value = nextClient
     editedDisplayName.value = nextClient.displayName
     editedDefaultReviewStrategy.value = nextClient.defaultReviewStrategy ?? 'fileByFile'
@@ -219,7 +282,7 @@ export function useClientDetailViewModel(options: UseClientDetailViewModelOption
     editedEnableProRV.value = Boolean(nextClient.enableProRV)
     editedEnableEvidenceBackedVerification.value = Boolean(nextClient.enableEvidenceBackedVerification)
     editedEnableMultiPassUnion.value = Boolean(nextClient.enableMultiPassUnion)
-    editedMultiPassUnionPassCount.value = nextClient.multiPassUnionPassCount ?? null
+    editedReviewPasses.value = normalizeReviewPasses(nextClient.reviewPasses)
   }
 
   function applyClientReviewProfile(nextProfile: ClientReviewProfileDto): void {
@@ -336,8 +399,12 @@ export function useClientDetailViewModel(options: UseClientDetailViewModelOption
     saving.value = true
     saveError.value = ''
     try {
-      const { data } = await patchClientFn(clientId, { displayName: editedDisplayName.value })
-      applyClient(data as ClientDetailDto)
+      const result = await patchClientFn(clientId, { displayName: editedDisplayName.value })
+      if (isFailedPatch(result)) {
+        saveError.value = extractValidationMessage(result.error, 'Failed to save.')
+        return
+      }
+      applyClient(result.data as ClientDetailDto | null | undefined)
     } catch {
       saveError.value = 'Failed to save.'
     } finally {
@@ -348,9 +415,14 @@ export function useClientDetailViewModel(options: UseClientDetailViewModelOption
   async function toggleStatus() {
     if (!canManageClient.value || !client.value) return
     saving.value = true
+    saveError.value = ''
     try {
-      const { data } = await patchClientFn(clientId, { isActive: !client.value.isActive })
-      applyClient(data as ClientDetailDto)
+      const result = await patchClientFn(clientId, { isActive: !client.value.isActive })
+      if (isFailedPatch(result)) {
+        saveError.value = extractValidationMessage(result.error, 'Failed to update status.')
+        return
+      }
+      applyClient(result.data as ClientDetailDto | null | undefined)
     } catch {
       saveError.value = 'Failed to update status.'
     } finally {
@@ -363,18 +435,30 @@ export function useClientDetailViewModel(options: UseClientDetailViewModelOption
     saving.value = true
     saveError.value = ''
     try {
-      const { data } = await patchClientFn(clientId, {
+      const patchBody: Record<string, unknown> = {
         defaultReviewStrategy: editedDefaultReviewStrategy.value,
         scmCommentPostingEnabled: editedScmCommentPostingEnabled.value,
         enableProRV: editedEnableProRV.value,
         enableEvidenceBackedVerification: editedEnableEvidenceBackedVerification.value,
         enableMultiPassUnion: editedEnableMultiPassUnion.value,
-        multiPassUnionPassCount:
-          typeof editedMultiPassUnionPassCount.value === "number"
-            ? editedMultiPassUnionPassCount.value
-            : undefined,
-      })
-      applyClient(data as ClientDetailDto)
+      }
+
+      // The review-pass list is edited on the AI Connections tab but shares this save path with the System tab.
+      // Send it only when it actually changed, so saving an unrelated System-tab toggle can never clobber a
+      // concurrently-edited (or still-loading) pass list with a stale value.
+      const normalizedReviewPasses = normalizeReviewPasses(editedReviewPasses.value)
+      if (!reviewPassesEqual(normalizedReviewPasses, normalizeReviewPasses(client.value.reviewPasses))) {
+        patchBody.reviewPasses = normalizedReviewPasses
+      }
+
+      const result = await patchClientFn(clientId, patchBody)
+      if (isFailedPatch(result)) {
+        // Surface the server's validation message (e.g. a duplicate configured-model rejection) so the user
+        // sees why the save was refused instead of a blank page.
+        saveError.value = extractValidationMessage(result.error, 'Failed to save review publication setting.')
+        return
+      }
+      applyClient(result.data as ClientDetailDto | null | undefined)
     } catch {
       saveError.value = 'Failed to save review publication setting.'
     } finally {
@@ -415,8 +499,7 @@ export function useClientDetailViewModel(options: UseClientDetailViewModelOption
         editedEnableProRV.value !== Boolean(client.value.enableProRV) ||
         editedEnableEvidenceBackedVerification.value !== Boolean(client.value.enableEvidenceBackedVerification) ||
         editedEnableMultiPassUnion.value !== Boolean(client.value.enableMultiPassUnion) ||
-        (typeof editedMultiPassUnionPassCount.value === 'number' ? editedMultiPassUnionPassCount.value : null) !==
-          (client.value.multiPassUnionPassCount ?? null) ||
+        !reviewPassesEqual(editedReviewPasses.value, normalizeReviewPasses(client.value.reviewPasses)) ||
         editedDefaultReviewStrategy.value !== (client.value.defaultReviewStrategy ?? 'fileByFile')
       )
     )
@@ -456,7 +539,7 @@ export function useClientDetailViewModel(options: UseClientDetailViewModelOption
     editedEnableProRV,
     editedEnableEvidenceBackedVerification,
     editedEnableMultiPassUnion,
-    editedMultiPassUnionPassCount,
+    editedReviewPasses,
     reviewProfiles,
     clientReviewProfile,
     isProviderDetailOpen,

@@ -69,4 +69,12 @@ public sealed class NoOpAiConnectionRepository : IAiConnectionRepository
     {
         return Task.FromResult<AiResolvedPurposeBindingDto?>(null);
     }
+
+    public Task<AiResolvedPurposeBindingDto?> GetModelBindingAsync(
+        Guid clientId,
+        Guid configuredModelId,
+        CancellationToken ct = default)
+    {
+        return Task.FromResult<AiResolvedPurposeBindingDto?>(null);
+    }
 }

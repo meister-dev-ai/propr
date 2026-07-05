@@ -33,6 +33,25 @@ public sealed class AiRuntimeResolver(
         return new ResolvedAiChatRuntime(resolved.Connection, resolved.Model, resolved.Binding, client, capabilities);
     }
 
+    public async Task<IResolvedAiChatRuntime> ResolveChatRuntimeForModelAsync(
+        Guid clientId,
+        Guid configuredModelId,
+        CancellationToken ct = default)
+    {
+        var resolved = await aiConnectionRepository.GetModelBindingAsync(clientId, configuredModelId, ct)
+                       ?? throw new InvalidOperationException($"No chat-capable configured model '{configuredModelId}' is available for the client.");
+
+        if (!resolved.Model.SupportsChat)
+        {
+            throw new InvalidOperationException($"The configured model '{resolved.Model.RemoteModelId}' does not support chat workloads.");
+        }
+
+        var driver = providerDriverRegistry.GetRequired(resolved.Connection.ProviderKind);
+        var client = driver.CreateChatClient(resolved.Connection, resolved.Model, resolved.Binding);
+        var capabilities = driver.GetChatRuntimeCapabilities(resolved.Connection, resolved.Model, resolved.Binding);
+        return new ResolvedAiChatRuntime(resolved.Connection, resolved.Model, resolved.Binding, client, capabilities);
+    }
+
     public async Task<IResolvedAiEmbeddingRuntime> ResolveEmbeddingRuntimeAsync(
         Guid clientId,
         AiPurpose purpose,

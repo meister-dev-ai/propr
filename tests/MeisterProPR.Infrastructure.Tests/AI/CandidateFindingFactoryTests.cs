@@ -34,6 +34,7 @@ public sealed class CandidateFindingFactoryTests
         var unionComment = new ReviewComment("src/Foo.cs", 30, CommentSeverity.Warning, "Union resample finding.")
         {
             OriginPassKind = nameof(ReviewPassKind.MultiPassUnion),
+            OriginPassIndex = 2,
         };
         var fileResult = CreateCompletedFileResult("src/Foo.cs", [baselineComment, unionComment]);
         var sut = new CandidateFindingFactory(null);
@@ -42,13 +43,37 @@ public sealed class CandidateFindingFactoryTests
 
         Assert.Equal(2, findings.Count);
 
-        // The baseline finding keeps the enclosing (baseline) pass kind and carries no union arm.
+        // The baseline finding keeps the enclosing (baseline) pass kind and carries no union arm or index.
         Assert.Equal(ReviewPassKind.Baseline, findings[0].Provenance.ReviewPassKind);
         Assert.Null(findings[0].Provenance.UnionArmLabel);
+        Assert.Null(findings[0].Provenance.UnionPassIndex);
 
-        // The union-origin comment threads its pass identity into the finding provenance.
+        // The union-origin comment threads its pass identity AND its 1-based pass index into the provenance.
         Assert.Equal(ReviewPassKind.MultiPassUnion, findings[1].Provenance.ReviewPassKind);
         Assert.Equal(nameof(ReviewPassKind.MultiPassUnion), findings[1].Provenance.UnionArmLabel);
+        Assert.Equal(2, findings[1].Provenance.UnionPassIndex);
+    }
+
+    [Fact]
+    public void Build_MultiPassUnionOriginComment_PublishedFindingOriginResolvesToUnionPassNotBaseline()
+    {
+        // A finding caught only by a union resample pass merges (no augmentation) as BaselineOnly, but its
+        // published origin must resolve to the union pass carrying its 1-based index — the value the Summary
+        // tab and posted comments render as "Pass N" — not the misleading "Baseline".
+        var unionComment = new ReviewComment("src/Foo.cs", 30, CommentSeverity.Warning, "Union-only finding.")
+        {
+            OriginPassKind = nameof(ReviewPassKind.MultiPassUnion),
+            OriginPassIndex = 2,
+        };
+        var fileResult = CreateCompletedFileResult("src/Foo.cs", [unionComment]);
+        var sut = new CandidateFindingFactory(null);
+
+        var baselineFindings = sut.Build([fileResult], [unionComment]);
+        var merged = CandidateFindingFactory.MergeFindings(baselineFindings, []);
+
+        var finding = Assert.Single(merged);
+        Assert.Equal(nameof(ReviewPassKind.MultiPassUnion), finding.Provenance.ResolveOriginPassKindName());
+        Assert.Equal(2, finding.Provenance.UnionPassIndex);
     }
 
     [Fact]

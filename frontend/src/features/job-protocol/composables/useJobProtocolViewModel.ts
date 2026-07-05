@@ -9,6 +9,7 @@ import { createDismissal } from '@/services/findingDismissalsService'
 import { restartJob } from '@/services/jobsService'
 import { formatTriageDecision } from './formatTriageDecision'
 import { originLabel, passKindLabel } from './passLabels'
+import { parseUnionContributions, parseUnionPassIndex, type UnionPassContribution } from './multiPassUnionContribution'
 import { useFileDiff } from './useFileDiff'
 import { useTokenTotals } from './useTokenTotals'
 import { useTraceSearch } from './useTraceSearch'
@@ -118,8 +119,8 @@ function parseFilePath(label: string | null | undefined) {
     return { filename, directory }
 }
 
-function commentOriginLabel(comment: { originPassKind?: string | null }): string | null {
-    return originLabel(comment.originPassKind)
+function commentOriginLabel(comment: { originPassKind?: string | null; originPassIndex?: number | null }): string | null {
+    return originLabel(comment.originPassKind, comment.originPassIndex)
 }
 
 function parentIterationLabel(name: string): string {
@@ -400,7 +401,7 @@ export function useJobProtocolViewModel() {
         const reason = (protocol.reason ?? '').trim()
         return {
             id: protocol.id ?? '',
-            label: passKindLabel(protocol.passKind, protocol.label),
+            label: passKindLabel(protocol.passKind, protocol.label, protocol.reason),
             reason: reason.length > 0 ? reason : null,
             tokens: passTokenTotal(protocol),
             findingCount: protocol.finalComments?.length ?? 0,
@@ -797,9 +798,54 @@ export function useJobProtocolViewModel() {
 
     const activePassFinalComments = computed<ReviewCommentRecord[]>(() => activePass.value?.finalComments ?? [])
 
+    // The `multi_pass_union_completed` event lives on a file's BASELINE pass. Within a file group the
+    // baseline is the pass that is neither a union resample nor a ProRV augmentation.
+    function findBaselinePassForFile(passes: ReviewProtocolPass[]): ReviewProtocolPass | null {
+        return passes.find(pass => pass.passKind !== 'MultiPassUnion' && pass.passKind !== 'ProRVAugmentation') ?? null
+    }
+
+    // Per-pass contribution counts for the active file, parsed from its baseline pass's union-completion
+    // event. Keyed by 1-based pass index (baseline = Pass 1, additional passes 2..k).
+    const multiPassUnionContributions = computed<Map<number, UnionPassContribution>>(() => {
+        const baselinePass = findBaselinePassForFile(passesForActiveFile.value)
+        const event = baselinePass?.events?.find(candidate => (candidate.name ?? '') === 'multi_pass_union_completed')
+        return parseUnionContributions(event?.outputSummary)
+    })
+
+    // Contribution line for the active pass when it is a union resample: how many findings that pass
+    // contributed to the file's union. A count of 0 is meaningful ("Pass 2 caught nothing extra"), so it
+    // is surfaced too. Null when the active pass is not a resample or the completion event is unavailable.
+    const activePassUnionContribution = computed<{ passIndex: number; catchCount: number; model: string | null } | null>(() => {
+        const pass = activePass.value
+        if (!pass || pass.passKind !== 'MultiPassUnion') {
+            return null
+        }
+
+        const passIndex = parseUnionPassIndex(pass.reason)
+        if (passIndex === null) {
+            return null
+        }
+
+        const contribution = multiPassUnionContributions.value.get(passIndex)
+        return contribution ? { passIndex, ...contribution } : null
+    })
+
+    // The union-completion event is on the baseline pass, whose events are lazily loaded. When a resample
+    // pass is active, make sure its file's baseline pass is loaded so the contribution line can resolve.
+    watch([activePass, passesForActiveFile], () => {
+        if (activePass.value?.passKind !== 'MultiPassUnion') {
+            return
+        }
+
+        const baselinePass = findBaselinePassForFile(passesForActiveFile.value)
+        if (baselinePass?.id) {
+            void ensureProtocolPassLoaded(baselinePass.id)
+        }
+    }, { flush: 'post' })
+
     // "You are here" metadata for the breadcrumb + reason line.
     const activePassLabel = computed<string>(() =>
-        activePass.value ? passKindLabel(activePass.value.passKind, activePass.value.label) : '',
+        activePass.value ? passKindLabel(activePass.value.passKind, activePass.value.label, activePass.value.reason) : '',
     )
 
     const activeFileDisplayPath = computed<string>(() => {
@@ -2114,6 +2160,7 @@ export function useJobProtocolViewModel() {
         selectFindingOrigin,
         commentOriginLabel,
         activePassFinalComments,
+        activePassUnionContribution,
         activePass,
         reviewTraceRows,
         activePassEventRows,

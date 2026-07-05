@@ -8,11 +8,11 @@ using MeisterProPR.Application.Features.Reviewing.Execution.Models;
 namespace MeisterProPR.Application.Tests.Features.Reviewing.Execution.Models;
 
 /// <summary>
-///     Tests for <see cref="MultiPassDiversity.ResolveResamplePasses" />: resampling routes every resample pass to
-///     the diversity default model; cross-model spreads the resamples across the declared arm models (expanded by
-///     their count, cycling when there are more passes than arms). An arm model id is an eval-harness-only override;
-///     when it resolves to null the caller resolves the pass model from the ReviewUnionPass binding — the planner
-///     deliberately does NOT fall back to the file's tier model.
+///     Tests for <see cref="MultiPassDiversity.ResolveResamplePasses" /> (the eval-harness multi-pass path):
+///     resampling routes every resample pass to the diversity default model; cross-model spreads the resamples
+///     across the declared arm models (expanded by their count, cycling when there are more passes than arms). An
+///     arm model id is an eval-harness-only override; when it resolves to null the harness reuses the file's tier
+///     model.
 /// </summary>
 public sealed class MultiPassDiversityTests
 {
@@ -43,10 +43,9 @@ public sealed class MultiPassDiversityTests
     }
 
     [Fact]
-    public void Resampling_WithoutDefaultModel_LeavesModelNullForPurposeBinding()
+    public void Resampling_WithoutDefaultModel_LeavesModelNull()
     {
-        // No config model ⇒ null model id ⇒ the caller resolves the ReviewUnionPass binding (or skips), rather than
-        // resampling the tier model.
+        // No config model ⇒ null model id ⇒ the eval harness reuses the file's tier model for the resample.
         var diversity = new MultiPassDiversity(DefaultModel: null);
 
         var plan = diversity.ResolveResamplePasses(2);
@@ -94,13 +93,12 @@ public sealed class MultiPassDiversityTests
         var diversity = new MultiPassDiversity(
             MultiPassDiversityMode.CrossModel,
             "default-model",
-            Arms: [new MultiPassArm("lens-only", null)]);
+            Arms: [new MultiPassArm("lens-only")]);
 
         var withDefault = diversity.ResolveResamplePasses(1);
         Assert.Equal("default-model", withDefault[0].ModelId);
 
-        // Without a default model the pass model is left null so the caller resolves the ReviewUnionPass binding —
-        // never the tier model.
+        // Without a default model the pass model is left null so the eval harness reuses the file's tier model.
         var noDefault = diversity with { DefaultModel = null };
         var withoutDefault = noDefault.ResolveResamplePasses(1);
         Assert.Null(withoutDefault[0].ModelId);

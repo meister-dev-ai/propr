@@ -154,12 +154,13 @@ public sealed class DbClientRegistry(
     }
 
     /// <inheritdoc />
-    public async Task<int?> GetMultiPassUnionPassCountAsync(Guid clientId, CancellationToken ct = default)
+    public async Task<IReadOnlyList<Guid>> GetReviewPassesAsync(Guid clientId, CancellationToken ct = default)
     {
-        return await dbContext.Clients
-            .Where(c => c.Id == clientId)
-            .Select(c => c.MultiPassUnionPassCount)
-            .FirstOrDefaultAsync(ct);
+        return await dbContext.ClientReviewPasses
+            .Where(pass => pass.ClientId == clientId)
+            .OrderBy(pass => pass.Ordinal)
+            .Select(pass => pass.ConfiguredModelId)
+            .ToListAsync(ct);
     }
 
     /// <inheritdoc />

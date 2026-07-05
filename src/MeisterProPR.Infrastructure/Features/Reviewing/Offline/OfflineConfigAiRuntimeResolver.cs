@@ -43,6 +43,17 @@ public sealed class OfflineConfigAiRuntimeResolver(IOfflineTierModelAccessor tie
         return Task.FromResult<IResolvedAiChatRuntime>(new ResolvedAiChatRuntime(connection, model, binding, client, OfflineCapabilities));
     }
 
+    public Task<IResolvedAiChatRuntime> ResolveChatRuntimeForModelAsync(
+        Guid clientId,
+        Guid configuredModelId,
+        CancellationToken ct = default)
+    {
+        // The offline harness drives multi-pass union through its diversity arms over the run's shared chat client
+        // (the eval path), not the production per-client review-pass list. There is no configured-model registry to
+        // resolve a persisted model id against offline, so this path is not supported.
+        throw new NotSupportedException("The offline harness resolves multi-pass models through diversity arms, not the per-client review-pass list.");
+    }
+
     public Task<IResolvedAiEmbeddingRuntime> ResolveEmbeddingRuntimeAsync(
         Guid clientId,
         AiPurpose purpose,

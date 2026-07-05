@@ -224,6 +224,7 @@ export type ReviewCommentRecord = {
     severity?: string | null
     message: string
     originPassKind?: string | null
+    originPassIndex?: number | null
 }
 
 /**
@@ -241,6 +242,7 @@ export interface CommentGroupComment {
     severity?: string | null
     message?: string | null
     originPassKind?: string | null
+    originPassIndex?: number | null
     changedLineRelation?: ReviewCommentDto['changedLineRelation']
 }
 

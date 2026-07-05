@@ -323,6 +323,54 @@ public sealed class AiConnectionRepository(
         return new AiResolvedPurposeBindingDto(this.ToDto(record), ToConfiguredModelDto(modelRecord), ToBindingDto(bindingRecord, modelRecord));
     }
 
+    public async Task<AiResolvedPurposeBindingDto?> GetModelBindingAsync(
+        Guid clientId,
+        Guid configuredModelId,
+        CancellationToken ct = default)
+    {
+        var records = await this.WithReadDbAsync(
+            db => db.AiConnectionProfiles
+                .Include(profile => profile.ConfiguredModels)
+                .Include(profile => profile.PurposeBindings)
+                .Where(profile => profile.ClientId == clientId)
+                .ToListAsync(ct),
+            ct);
+
+        foreach (var record in records)
+        {
+            var modelRecord = record.ConfiguredModels.FirstOrDefault(model => model.Id == configuredModelId);
+            if (modelRecord is null)
+            {
+                continue;
+            }
+
+            if (!modelRecord.OperationKinds.Contains(AiOperationKind.Chat.ToString(), StringComparer.Ordinal))
+            {
+                return null;
+            }
+
+            // Reuse an existing binding's protocol mode for this model so the pass runs on the same wire protocol
+            // the model was configured with; otherwise fall back to Auto (the driver only reads the protocol mode).
+            var existingBinding = record.PurposeBindings
+                                      .FirstOrDefault(binding => binding.ConfiguredModelId == configuredModelId && binding.IsEnabled)
+                                  ?? record.PurposeBindings.FirstOrDefault(binding => binding.ConfiguredModelId == configuredModelId);
+            var protocolMode = existingBinding is null
+                ? AiProtocolMode.Auto
+                : Enum.Parse<AiProtocolMode>(existingBinding.ProtocolMode, true);
+
+            var synthesizedBinding = new AiPurposeBindingDto(
+                Guid.NewGuid(),
+                AiPurpose.ReviewDefault,
+                modelRecord.Id,
+                modelRecord.RemoteModelId,
+                protocolMode);
+
+            return new AiResolvedPurposeBindingDto(this.ToDto(record), ToConfiguredModelDto(modelRecord), synthesizedBinding);
+        }
+
+        return null;
+    }
+
     private string? ProtectSecret(string? secret)
     {
         return string.IsNullOrWhiteSpace(secret)

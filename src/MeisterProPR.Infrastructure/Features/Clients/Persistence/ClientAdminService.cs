@@ -81,12 +81,14 @@ public sealed class ClientAdminService(
         bool? enableProRV = null,
         bool? enableEvidenceBackedVerification = null,
         bool? enableMultiPassUnion = null,
-        int? multiPassUnionPassCount = null,
+        IReadOnlyList<ReviewPassDto>? reviewPasses = null,
         ReviewStrategy? defaultReviewStrategy = null,
         CancellationToken ct = default)
     {
         var isCommunityEdition = await this.IsCommunityEditionAsync(ct);
-        var client = await dbContext.Clients.FindAsync([clientId], ct);
+        var client = await dbContext.Clients
+            .Include(record => record.ReviewPasses)
+            .FirstOrDefaultAsync(record => record.Id == clientId, ct);
         if (client is null)
         {
             return null;
@@ -148,9 +150,23 @@ public sealed class ClientAdminService(
             client.EnableMultiPassUnion = enableMultiPassUnion.Value;
         }
 
-        if (multiPassUnionPassCount.HasValue)
+        if (reviewPasses is not null)
         {
-            client.MultiPassUnionPassCount = multiPassUnionPassCount.Value;
+            // Wholesale replace the ordered pass list: clear the existing rows (cascade-deleted) and re-add the
+            // requested entries with normalized sequential ordinals in the caller's declared order.
+            client.ReviewPasses.Clear();
+            var ordinal = 0;
+            foreach (var pass in reviewPasses.OrderBy(entry => entry.Ordinal))
+            {
+                client.ReviewPasses.Add(
+                    new ClientReviewPassRecord
+                    {
+                        Id = Guid.NewGuid(),
+                        ClientId = client.Id,
+                        Ordinal = ordinal++,
+                        ConfiguredModelId = pass.ConfiguredModelId,
+                    });
+            }
         }
 
         await dbContext.SaveChangesAsync(ct);
@@ -279,7 +295,8 @@ public sealed class ClientAdminService(
     {
         IQueryable<ClientRecord> query = dbContext.Clients
             .AsNoTracking()
-            .Include(client => client.Tenant);
+            .Include(client => client.Tenant)
+            .Include(client => client.ReviewPasses);
 
         if (isCommunityEdition)
         {
@@ -325,6 +342,12 @@ public sealed class ClientAdminService(
             tenantDisplayName ??= TenantCatalog.SystemTenantDisplayName;
         }
 
+        var reviewPasses = client.ReviewPasses
+            .OrderBy(pass => pass.Ordinal)
+            .Select(pass => new ReviewPassDto(pass.Ordinal, pass.ConfiguredModelId))
+            .ToList()
+            .AsReadOnly();
+
         return new ClientDto(
             client.Id,
             client.DisplayName,
@@ -339,7 +362,7 @@ public sealed class ClientAdminService(
             client.EnableProRV,
             client.EnableEvidenceBackedVerification,
             client.EnableMultiPassUnion,
-            client.MultiPassUnionPassCount,
+            reviewPasses,
             tenantId,
             tenantSlug,
             tenantDisplayName);

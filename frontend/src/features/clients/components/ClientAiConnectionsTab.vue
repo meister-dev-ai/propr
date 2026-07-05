@@ -379,6 +379,29 @@
           </div>
         </div>
       </div>
+
+      <!-- The ordered review-pass list edits the same client, so it sits at the bottom of the config
+           content — below the provider list / purpose bindings — where a provider's configured models
+           already exist to bind passes to. -->
+      <div v-if="clientDetailVm" class="ai-review-passes-section">
+        <ClientReviewPassesEditor
+          :model-value="clientDetailVm.editedReviewPasses.value"
+          :connections="profiles"
+          @update:model-value="onReviewPassesUpdate"
+        />
+        <div class="ai-review-passes-actions">
+          <button
+            class="btn-primary btn-sm"
+            type="button"
+            data-testid="review-passes-save"
+            :disabled="!clientDetailVm.isAdvancedSettingsButtonEnabled()"
+            @click="clientDetailVm.saveAdvancedSettings()"
+          >
+            Save review passes
+          </button>
+          <span v-if="clientDetailVm.saveError.value" class="error">{{ clientDetailVm.saveError.value }}</span>
+        </div>
+      </div>
     </div>
 
     <ConfirmDialog
@@ -391,7 +414,10 @@
 </template>
 
 <script setup lang="ts">
+import { inject } from 'vue'
 import ConfirmDialog from '@/components/dialogs/ConfirmDialog.vue'
+import ClientReviewPassesEditor from './ClientReviewPassesEditor.vue'
+import { ClientDetailVmKey, type ReviewPassEntry } from '@/features/clients/view-models/useClientDetailViewModel'
 import {
   authModeLabel,
   authOptionsForProvider,
@@ -414,6 +440,17 @@ import { useClientAiConnectionsTab } from './useClientAiConnectionsTab'
 const props = defineProps<{
   clientId: string
 }>()
+
+// The ordered review-pass list is owned by the shared client-detail view-model (persisted via the
+// client PATCH). It is optional so this tab still mounts standalone; the editor renders only when the
+// parent detail view provides the view-model.
+const clientDetailVm = inject(ClientDetailVmKey, null)
+
+const onReviewPassesUpdate = (passes: ReviewPassEntry[]) => {
+  if (clientDetailVm) {
+    clientDetailVm.editedReviewPasses.value = passes
+  }
+}
 
 const {
   profiles,
@@ -484,6 +521,17 @@ const bindingsForSection = <T extends { purpose: string }>(bindings: T[], sectio
 .ai-list-hint,
 .ai-detail-nav-copy {
   margin: 0;
+}
+
+.ai-review-passes-section {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.ai-review-passes-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
 }
 
 .ai-detail-nav {

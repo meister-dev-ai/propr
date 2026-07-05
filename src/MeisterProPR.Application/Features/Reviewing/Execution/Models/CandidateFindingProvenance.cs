@@ -183,6 +183,14 @@ public sealed record CandidateFindingProvenance
             return null;
         }
 
+        // A multi-pass union resample owns the finding even after the merge classification collapses it to
+        // BaselineOnly (a union-only finding merges as baseline). Surface the union pass so published/posted
+        // findings render "Pass N" (via the carried UnionPassIndex) rather than the baseline label.
+        if (this.ReviewPassKind == ReviewPassKind.MultiPassUnion)
+        {
+            return ReviewPassKind.MultiPassUnion.ToString();
+        }
+
         return this.FindingProvenanceKind switch
         {
             FindingProvenanceKind.BaselineOnly => ReviewPassKind.Baseline.ToString(),

@@ -68,6 +68,14 @@ public sealed record ReviewComment
     public string? OriginPassKind { get; init; }
 
     /// <summary>
+    ///     The 1-based index of the review pass that produced this finding, when it came from a numbered
+    ///     multi-pass union pass. The tier baseline is pass 1, so the first additional pass is 2. Provenance
+    ///     metadata only: it does not participate in deduplication and is <see langword="null" /> for the
+    ///     baseline pass, legacy comments, and comments with no recorded numbered origin.
+    /// </summary>
+    public int? OriginPassIndex { get; init; }
+
+    /// <summary>
     ///     Deterministic classification of this comment's anchor line relative to the pull request's
     ///     changed-line ranges. Provenance metadata only: it does not participate in deduplication
     ///     (which keys on message text) and is <see langword="null" /> for legacy comments and comments

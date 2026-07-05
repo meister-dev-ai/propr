@@ -10764,56 +10764,48 @@
             }
           },
           {
-            "name": "providerScopePath",
+            "name": "ProviderScopePath",
             "in": "query",
-            "description": "Provider scope path or host-qualified namespace for the repository.",
             "schema": {
               "type": "string"
             }
           },
           {
-            "name": "providerProjectKey",
+            "name": "ProviderProjectKey",
             "in": "query",
-            "description": "Provider project, owner, or namespace key for the repository.",
             "schema": {
               "type": "string"
             }
           },
           {
-            "name": "repositoryId",
+            "name": "RepositoryId",
             "in": "query",
-            "description": "ADO repository identifier.",
             "schema": {
               "type": "string"
             }
           },
           {
-            "name": "pullRequestId",
+            "name": "PullRequestId",
             "in": "query",
-            "description": "Pull request number.",
             "schema": {
               "type": "integer",
               "format": "int32"
             }
           },
           {
-            "name": "page",
+            "name": "Page",
             "in": "query",
-            "description": "Page number (1-based, default 1).",
             "schema": {
               "type": "integer",
-              "format": "int32",
-              "default": 1
+              "format": "int32"
             }
           },
           {
-            "name": "pageSize",
+            "name": "PageSize",
             "in": "query",
-            "description": "Page size (default 20, max 100).",
             "schema": {
               "type": "integer",
-              "format": "int32",
-              "default": 20
+              "format": "int32"
             }
           }
         ],
@@ -10899,56 +10891,48 @@
             }
           },
           {
-            "name": "providerScopePath",
+            "name": "ProviderScopePath",
             "in": "query",
-            "description": "Provider scope path or host-qualified namespace for the repository.",
             "schema": {
               "type": "string"
             }
           },
           {
-            "name": "providerProjectKey",
+            "name": "ProviderProjectKey",
             "in": "query",
-            "description": "Provider project, owner, or namespace key for the repository.",
             "schema": {
               "type": "string"
             }
           },
           {
-            "name": "repositoryId",
+            "name": "RepositoryId",
             "in": "query",
-            "description": "ADO repository identifier.",
             "schema": {
               "type": "string"
             }
           },
           {
-            "name": "pullRequestId",
+            "name": "PullRequestId",
             "in": "query",
-            "description": "Pull request number.",
             "schema": {
               "type": "integer",
               "format": "int32"
             }
           },
           {
-            "name": "page",
+            "name": "Page",
             "in": "query",
-            "description": "Page number (1-based, default 1).",
             "schema": {
               "type": "integer",
-              "format": "int32",
-              "default": 1
+              "format": "int32"
             }
           },
           {
-            "name": "pageSize",
+            "name": "PageSize",
             "in": "query",
-            "description": "Page size (default 20, max 100).",
             "schema": {
               "type": "integer",
-              "format": "int32",
-              "default": 20
+              "format": "int32"
             }
           }
         ],
@@ -15565,8 +15549,7 @@
           "memoryReconsideration",
           "embeddingDefault",
           "reviewTriage",
-          "reviewVerification",
-          "reviewUnionPass"
+          "reviewVerification"
         ],
         "type": "string",
         "description": "Product-owned AI purposes that resolve to configured models."
@@ -15892,9 +15875,11 @@
           "enableMultiPassUnion": {
             "type": "boolean"
           },
-          "multiPassUnionPassCount": {
-            "type": "integer",
-            "format": "int32",
+          "reviewPasses": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ReviewPassEntry"
+            },
             "nullable": true
           },
           "tenantId": {
@@ -16662,6 +16647,9 @@
         "description": "Request body for creating a client-scoped provider scope selection."
       },
       "CreateClientRequest": {
+        "required": [
+          "tenantId"
+        ],
         "type": "object",
         "properties": {
           "displayName": {
@@ -17479,9 +17467,11 @@
             "type": "boolean",
             "nullable": true
           },
-          "multiPassUnionPassCount": {
-            "type": "integer",
-            "format": "int32",
+          "reviewPasses": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ReviewPassEntry"
+            },
             "nullable": true
           },
           "defaultReviewStrategy": {
@@ -19266,6 +19256,12 @@
           },
           "changedLineRelation": {
             "$ref": "#/components/schemas/ReviewCommentScopeRelation"
+          },
+          "originPassIndex": {
+            "type": "integer",
+            "description": "The 1-based index of the numbered multi-pass union pass that produced this finding, when known. The tier\nbaseline is pass 1 and additional passes are 2..k. null for the baseline and legacy comments.",
+            "format": "int32",
+            "nullable": true
           }
         },
         "additionalProperties": false,
@@ -19845,6 +19841,11 @@
           },
           "changedLineRelation": {
             "$ref": "#/components/schemas/ReviewCommentScopeRelation"
+          },
+          "originPassIndex": {
+            "type": "integer",
+            "format": "int32",
+            "nullable": true
           }
         },
         "additionalProperties": false,
@@ -20210,6 +20211,23 @@
         },
         "additionalProperties": false,
         "description": "List item for a review job."
+      },
+      "ReviewPassEntry": {
+        "type": "object",
+        "properties": {
+          "ordinal": {
+            "type": "integer",
+            "description": "Zero-based position of this pass after the implicit tier baseline pass.",
+            "format": "int32"
+          },
+          "configuredModelId": {
+            "type": "string",
+            "description": "Identifier of the configured model this pass runs on (its connection implied).",
+            "format": "uuid"
+          }
+        },
+        "additionalProperties": false,
+        "description": "One entry in a client's ordered review-pass list: an additional multi-pass union pass bound to a model."
       },
       "ReviewProfileCatalogItemResponse": {
         "type": "object",

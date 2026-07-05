@@ -254,6 +254,7 @@ internal sealed partial class FileByFileReviewOrchestrator(
                 EnableEvidenceBackedVerification = baseContext.EnableEvidenceBackedVerification,
                 EnableMultiPassUnion = baseContext.EnableMultiPassUnion,
                 MultiPassUnionPassCount = baseContext.MultiPassUnionPassCount,
+                ReviewPasses = baseContext.ReviewPasses,
                 MultiPassDiversity = baseContext.MultiPassDiversity,
                 AugmentationMode = baseContext.AugmentationMode,
                 PassKind = ReviewPassKind.Baseline,

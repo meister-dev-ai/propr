@@ -3,6 +3,7 @@
 
 using System.Net;
 using System.Text.Json;
+using MeisterProPR.Application.DTOs;
 using MeisterProPR.Application.Interfaces;
 using MeisterProPR.Domain.Enums;
 using MeisterProPR.Domain.ValueObjects;
@@ -78,6 +79,9 @@ public sealed class ClientRegistryTests(PostgresContainerFixture fixture) : IAsy
         {
             if (this._seededClientIds.Count > 0)
             {
+                await this._dbContext.ClientReviewPasses
+                    .Where(pass => this._seededClientIds.Contains(pass.ClientId))
+                    .ExecuteDeleteAsync();
                 await this._dbContext.ClientReviewerIdentities
                     .Where(identity => this._seededClientIds.Contains(identity.ClientId))
                     .ExecuteDeleteAsync();
@@ -373,6 +377,67 @@ public sealed class ClientRegistryTests(PostgresContainerFixture fixture) : IAsy
     }
 
     [Fact]
+    public async Task GetReviewPassesAsync_UnknownClient_ReturnsEmpty()
+    {
+        var result = await this._registry.GetReviewPassesAsync(Guid.NewGuid(), CancellationToken.None);
+
+        Assert.Empty(result);
+    }
+
+    [Fact]
+    public async Task ReviewPasses_PatchPersistsOrderedListAndGetEchoesIt()
+    {
+        var client = await this.SeedClientAsync();
+        var adminService = new ClientAdminService(this._dbContext);
+        // Each pass must reference a configured model that exists (the FK to ai_configured_models is enforced).
+        var modelA = await this.SeedChatModelAsync(client.Id);
+        var modelB = await this.SeedChatModelAsync(client.Id);
+
+        // Supplied out of ordinal order; PatchAsync normalizes to a contiguous 0..n order.
+        var updated = await adminService.PatchAsync(
+            client.Id,
+            null,
+            null,
+            reviewPasses: new List<ReviewPassDto> { new(1, modelB), new(0, modelA) },
+            ct: CancellationToken.None);
+
+        Assert.NotNull(updated);
+        Assert.Equal(
+            new[] { new ReviewPassDto(0, modelA), new ReviewPassDto(1, modelB) },
+            updated!.ReviewPassesOrEmpty.ToArray());
+
+        // The registry returns the configured-model ids in ordinal order for the review pipeline.
+        var passes = await this._registry.GetReviewPassesAsync(client.Id, CancellationToken.None);
+        Assert.Equal(new[] { modelA, modelB }, passes.ToArray());
+    }
+
+    [Fact]
+    public async Task ReviewPasses_PatchReplacesListWholesale()
+    {
+        var client = await this.SeedClientAsync();
+        var adminService = new ClientAdminService(this._dbContext);
+        var original = await this.SeedChatModelAsync(client.Id);
+        var replacement = await this.SeedChatModelAsync(client.Id);
+
+        await adminService.PatchAsync(
+            client.Id,
+            null,
+            null,
+            reviewPasses: new List<ReviewPassDto> { new(0, original) },
+            ct: CancellationToken.None);
+
+        await adminService.PatchAsync(
+            client.Id,
+            null,
+            null,
+            reviewPasses: new List<ReviewPassDto> { new(0, replacement) },
+            ct: CancellationToken.None);
+
+        var passes = await this._registry.GetReviewPassesAsync(client.Id, CancellationToken.None);
+        Assert.Equal(new[] { replacement }, passes.ToArray());
+    }
+
+    [Fact]
     public async Task DefaultReviewPipelineProfileId_RoundTripsNullableValueAcrossPersistence()
     {
         var client = await this.SeedClientAsync();
@@ -417,6 +482,50 @@ public sealed class ClientRegistryTests(PostgresContainerFixture fixture) : IAsy
         await this._dbContext.SaveChangesAsync();
         this._seededClientIds.Add(record.Id);
         return record;
+    }
+
+    // Seeds one chat-capable configured model (on its own connection profile) for the client and returns its id,
+    // so a review-pass entry can satisfy the configured-model foreign key. Cleaned up by the client-delete cascade.
+    private async Task<Guid> SeedChatModelAsync(Guid clientId)
+    {
+        var profileId = Guid.NewGuid();
+        var modelId = Guid.NewGuid();
+        var now = DateTimeOffset.UtcNow;
+
+        this._dbContext.AiConnectionProfiles.Add(
+            new AiConnectionProfileRecord
+            {
+                Id = profileId,
+                ClientId = clientId,
+                DisplayName = $"Connection {profileId:N}",
+                ProviderKind = AiProviderKind.AzureOpenAi.ToString(),
+                BaseUrl = "https://x.openai.azure.com/",
+                AuthMode = AiAuthMode.AzureIdentity.ToString(),
+                DiscoveryMode = AiDiscoveryMode.ManualOnly.ToString(),
+                DefaultHeaders = [],
+                DefaultQueryParams = [],
+                IsActive = false,
+                CreatedAt = now,
+                UpdatedAt = now,
+                PurposeBindings = [],
+                ConfiguredModels =
+                [
+                    new AiConfiguredModelRecord
+                    {
+                        Id = modelId,
+                        ConnectionProfileId = profileId,
+                        RemoteModelId = $"gpt-4o-{modelId:N}",
+                        DisplayName = "gpt-4o",
+                        OperationKinds = [AiOperationKind.Chat.ToString()],
+                        SupportedProtocolModes = [AiProtocolMode.Auto.ToString()],
+                        SupportsStructuredOutput = true,
+                        SupportsToolUse = true,
+                        Source = AiConfiguredModelSource.Manual.ToString(),
+                    },
+                ],
+            });
+        await this._dbContext.SaveChangesAsync();
+        return modelId;
     }
 
     private static HttpResponseMessage CreateJsonResponse<T>(T payload)

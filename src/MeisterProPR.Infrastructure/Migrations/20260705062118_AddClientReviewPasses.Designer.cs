@@ -13,8 +13,8 @@ using Pgvector;
 namespace MeisterProPR.Infrastructure.Migrations
 {
     [DbContext(typeof(MeisterProPRDbContext))]
-    [Migration("20260704201207_AddClientMultiPassUnionPassCount")]
-    partial class AddClientMultiPassUnionPassCount
+    [Migration("20260705062118_AddClientReviewPasses")]
+    partial class AddClientReviewPasses
     {
         /// <inheritdoc />
         protected override void BuildTargetModel(ModelBuilder modelBuilder)
@@ -1990,10 +1990,6 @@ namespace MeisterProPR.Infrastructure.Migrations
                         .HasDefaultValue(true)
                         .HasColumnName("is_active");
 
-                    b.Property<int?>("MultiPassUnionPassCount")
-                        .HasColumnType("integer")
-                        .HasColumnName("multi_pass_union_pass_count");
-
                     b.Property<bool>("ScmCommentPostingEnabled")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("boolean")
@@ -2010,6 +2006,35 @@ namespace MeisterProPR.Infrastructure.Migrations
                         .HasDatabaseName("ix_clients_tenant_id");
 
                     b.ToTable("clients", (string)null);
+                });
+
+            modelBuilder.Entity("MeisterProPR.Infrastructure.Data.Models.ClientReviewPassRecord", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<Guid>("ClientId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("client_id");
+
+                    b.Property<Guid>("ConfiguredModelId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("configured_model_id");
+
+                    b.Property<int>("Ordinal")
+                        .HasColumnType("integer")
+                        .HasColumnName("ordinal");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ConfiguredModelId");
+
+                    b.HasIndex("ClientId", "Ordinal")
+                        .IsUnique()
+                        .HasDatabaseName("ix_client_review_passes_client_id_ordinal");
+
+                    b.ToTable("client_review_passes", (string)null);
                 });
 
             modelBuilder.Entity("MeisterProPR.Infrastructure.Data.Models.ClientReviewerIdentityRecord", b =>
@@ -3473,6 +3498,23 @@ namespace MeisterProPR.Infrastructure.Migrations
                     b.Navigation("Tenant");
                 });
 
+            modelBuilder.Entity("MeisterProPR.Infrastructure.Data.Models.ClientReviewPassRecord", b =>
+                {
+                    b.HasOne("MeisterProPR.Infrastructure.Data.Models.ClientRecord", "Client")
+                        .WithMany("ReviewPasses")
+                        .HasForeignKey("ClientId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("MeisterProPR.Infrastructure.Data.Models.AiConfiguredModelRecord", null)
+                        .WithMany()
+                        .HasForeignKey("ConfiguredModelId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Client");
+                });
+
             modelBuilder.Entity("MeisterProPR.Infrastructure.Data.Models.ClientReviewerIdentityRecord", b =>
                 {
                     b.HasOne("MeisterProPR.Infrastructure.Data.Models.ClientRecord", "Client")
@@ -3839,6 +3881,8 @@ namespace MeisterProPR.Infrastructure.Migrations
                     b.Navigation("CrawlConfigurations");
 
                     b.Navigation("ProviderConnectionAuditEntries");
+
+                    b.Navigation("ReviewPasses");
 
                     b.Navigation("ReviewerIdentities");
 

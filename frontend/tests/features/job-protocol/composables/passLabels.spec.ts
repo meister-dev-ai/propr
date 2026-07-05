@@ -18,6 +18,25 @@ describe('passKindLabel', () => {
         expect(passKindLabel('Synthesis', 'synthesis')).toBe('Synthesis')
     })
 
+    it('renders a multi-pass union pass as "Pass N" using the index parsed from the reason', () => {
+        expect(passKindLabel('MultiPassUnion', 'src/foo.ts', 'multi-pass union review-pass-list pass #2')).toBe('Pass 2')
+        expect(passKindLabel('MultiPassUnion', 'src/foo.ts', 'multi-pass union review-pass-list pass #3')).toBe('Pass 3')
+    })
+
+    it('adding another pass yields the next "Pass N" without any code change', () => {
+        const nextIndex = 4
+        expect(passKindLabel('MultiPassUnion', 'src/foo.ts', `multi-pass union review-pass-list pass #${nextIndex}`)).toBe('Pass 4')
+    })
+
+    it('never surfaces the old "Second opinion" wording for a union pass', () => {
+        expect(passKindLabel('MultiPassUnion', 'src/foo.ts', 'multi-pass union review-pass-list pass #2')).not.toBe('Second opinion')
+    })
+
+    it('falls back to a generic label for a union pass whose reason carries no index', () => {
+        expect(passKindLabel('MultiPassUnion', 'src/foo.ts', null)).toBe('Additional pass')
+        expect(passKindLabel('MultiPassUnion', 'src/foo.ts')).toBe('Additional pass')
+    })
+
     it('derives PR-level labels from the protocol label when the kind is absent', () => {
         expect(passKindLabel(null, 'synthesis')).toBe('Synthesis')
         expect(passKindLabel(null, 'finalization')).toBe('Finalization')
@@ -46,6 +65,19 @@ describe('originLabel', () => {
 
     it('maps ProRVAugmentation provenance to "ProRV verification"', () => {
         expect(originLabel('ProRVAugmentation')).toBe('ProRV verification')
+    })
+
+    it('renders a multi-pass union finding as "Pass N" using its per-finding origin index', () => {
+        expect(originLabel('MultiPassUnion', 2)).toBe('Pass 2')
+        expect(originLabel('MultiPassUnion', 3)).toBe('Pass 3')
+        expect(originLabel('MultiPassUnion', 2)).not.toBe('Second opinion')
+        expect(originLabel('MultiPassUnion', 2)).not.toBe('Additional pass')
+    })
+
+    it('falls back to the coarse "Additional pass" for a union finding with no origin index', () => {
+        expect(originLabel('MultiPassUnion')).toBe('Additional pass')
+        expect(originLabel('MultiPassUnion', null)).toBe('Additional pass')
+        expect(originLabel('MultiPassUnion')).not.toBe('Second opinion')
     })
 
     it('returns null for unknown / absent origin so no badge renders', () => {

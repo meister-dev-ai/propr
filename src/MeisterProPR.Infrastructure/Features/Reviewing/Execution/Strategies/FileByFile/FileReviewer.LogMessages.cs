@@ -23,12 +23,14 @@ internal sealed partial class FileReviewer
 
     [LoggerMessage(
         Level = LogLevel.Information,
-        Message = "Multi-pass union is enabled but no ReviewUnionPass binding is configured for job {JobId}; "
-                  + "skipping the extra passes (single-pass review) for file {FilePath}.")]
-    private static partial void LogMultiPassUnionPassBindingUnavailable(
+        Message = "Multi-pass union pass #{PassIndex} for job {JobId} could not resolve its configured model "
+                  + "{ConfiguredModelId}; skipping that pass for file {FilePath} (the other passes still run).")]
+    private static partial void LogMultiPassUnionPassModelUnresolved(
         ILogger logger,
         Guid jobId,
         string filePath,
+        Guid configuredModelId,
+        int passIndex,
         Exception? ex);
 
     [LoggerMessage(

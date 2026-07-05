@@ -45,6 +45,22 @@ public sealed class CandidateFindingProvenanceTests
     }
 
     [Fact]
+    public void ResolveOriginPassKindName_MultiPassUnion_ReturnsMultiPassUnion()
+    {
+        // A union resample finding merges (no augmentation) as FindingProvenanceKind.BaselineOnly, but the
+        // union pass owns it: the origin must resolve to MultiPassUnion — whose carried pass index renders
+        // "Pass N" — rather than mislabeling it "Baseline".
+        var provenance = new CandidateFindingProvenance(
+            CandidateFindingProvenance.PerFileCommentOrigin, "stage",
+            reviewPassKind: ReviewPassKind.MultiPassUnion,
+            findingProvenanceKind: FindingProvenanceKind.BaselineOnly,
+            unionPassIndex: 2);
+
+        Assert.Equal("MultiPassUnion", provenance.ResolveOriginPassKindName());
+        Assert.Equal(2, provenance.UnionPassIndex);
+    }
+
+    [Fact]
     public void ResolveOriginPassKindName_SynthesizedCrossCutting_ReturnsNull()
     {
         // Synthesized cross-cutting findings default to FindingProvenanceKind.BaselineOnly, but they were NOT

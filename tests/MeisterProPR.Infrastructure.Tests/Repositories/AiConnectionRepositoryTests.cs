@@ -522,6 +522,56 @@ public sealed class AiConnectionRepositoryTests
     }
 
     [Fact]
+    public async Task GetModelBindingAsync_ChatModel_ReturnsSynthesizedBinding()
+    {
+        await using var db = CreateContext();
+        var clientId = Guid.NewGuid();
+        var profile = MakeProfile(clientId, true);
+        db.AiConnectionProfiles.Add(profile);
+        await db.SaveChangesAsync();
+        var chatModelId = profile.ConfiguredModels.First(model => model.RemoteModelId == "gpt-4o").Id;
+
+        var repo = CreateRepository(db);
+        var result = await repo.GetModelBindingAsync(clientId, chatModelId);
+
+        Assert.NotNull(result);
+        Assert.Equal("gpt-4o", result!.Model.RemoteModelId);
+        Assert.Equal(chatModelId, result.Binding.ConfiguredModelId);
+        Assert.True(result.Model.SupportsChat);
+    }
+
+    [Fact]
+    public async Task GetModelBindingAsync_EmbeddingModel_ReturnsNull()
+    {
+        await using var db = CreateContext();
+        var clientId = Guid.NewGuid();
+        var profile = MakeProfile(clientId, true);
+        db.AiConnectionProfiles.Add(profile);
+        await db.SaveChangesAsync();
+        var embeddingModelId = profile.ConfiguredModels.First(model => model.RemoteModelId == "text-embedding-3-large").Id;
+
+        var repo = CreateRepository(db);
+        var result = await repo.GetModelBindingAsync(clientId, embeddingModelId);
+
+        Assert.Null(result);
+    }
+
+    [Fact]
+    public async Task GetModelBindingAsync_UnknownModel_ReturnsNull()
+    {
+        await using var db = CreateContext();
+        var clientId = Guid.NewGuid();
+        var profile = MakeProfile(clientId, true);
+        db.AiConnectionProfiles.Add(profile);
+        await db.SaveChangesAsync();
+
+        var repo = CreateRepository(db);
+        var result = await repo.GetModelBindingAsync(clientId, Guid.NewGuid());
+
+        Assert.Null(result);
+    }
+
+    [Fact]
     public async Task GetActiveBindingForPurposeAsync_MissingTriageBinding_FallsBackToReviewLowEffort()
     {
         await using var db = CreateContext();

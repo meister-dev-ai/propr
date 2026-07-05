@@ -7447,18 +7447,12 @@ export interface paths {
         get: {
             parameters: {
                 query?: {
-                    /** @description Provider scope path or host-qualified namespace for the repository. */
-                    providerScopePath?: string;
-                    /** @description Provider project, owner, or namespace key for the repository. */
-                    providerProjectKey?: string;
-                    /** @description ADO repository identifier. */
-                    repositoryId?: string;
-                    /** @description Pull request number. */
-                    pullRequestId?: number;
-                    /** @description Page number (1-based, default 1). */
-                    page?: number;
-                    /** @description Page size (default 20, max 100). */
-                    pageSize?: number;
+                    ProviderScopePath?: string;
+                    ProviderProjectKey?: string;
+                    RepositoryId?: string;
+                    PullRequestId?: number;
+                    Page?: number;
+                    PageSize?: number;
                 };
                 header?: never;
                 path: {
@@ -7526,18 +7520,12 @@ export interface paths {
         get: {
             parameters: {
                 query?: {
-                    /** @description Provider scope path or host-qualified namespace for the repository. */
-                    providerScopePath?: string;
-                    /** @description Provider project, owner, or namespace key for the repository. */
-                    providerProjectKey?: string;
-                    /** @description ADO repository identifier. */
-                    repositoryId?: string;
-                    /** @description Pull request number. */
-                    pullRequestId?: number;
-                    /** @description Page number (1-based, default 1). */
-                    page?: number;
-                    /** @description Page size (default 20, max 100). */
-                    pageSize?: number;
+                    ProviderScopePath?: string;
+                    ProviderProjectKey?: string;
+                    RepositoryId?: string;
+                    PullRequestId?: number;
+                    Page?: number;
+                    PageSize?: number;
                 };
                 header?: never;
                 path: {
@@ -10479,7 +10467,7 @@ export interface components {
          * @description Product-owned AI purposes that resolve to configured models.
          * @enum {string}
          */
-        AiPurpose: "reviewDefault" | "proRvPrefilter" | "reviewLowEffort" | "reviewMediumEffort" | "reviewHighEffort" | "memoryReconsideration" | "embeddingDefault" | "reviewTriage" | "reviewVerification" | "reviewUnionPass";
+        AiPurpose: "reviewDefault" | "proRvPrefilter" | "reviewLowEffort" | "reviewMediumEffort" | "reviewHighEffort" | "memoryReconsideration" | "embeddingDefault" | "reviewTriage" | "reviewVerification";
         /** @description One configured AI purpose binding for an AI connection profile. */
         AiPurposeBindingDto: {
             /** Format: uuid */
@@ -10595,8 +10583,7 @@ export interface components {
             enableProRV?: boolean;
             enableEvidenceBackedVerification?: boolean;
             enableMultiPassUnion?: boolean;
-            /** Format: int32 */
-            multiPassUnionPassCount?: number | null;
+            reviewPasses?: components["schemas"]["ReviewPassEntry"][] | null;
             /** Format: uuid */
             tenantId?: string | null;
             tenantSlug?: string | null;
@@ -10863,7 +10850,7 @@ export interface components {
         CreateClientRequest: {
             displayName?: string | null;
             /** Format: uuid */
-            tenantId?: string;
+            tenantId: string;
             defaultReviewStrategy?: components["schemas"]["ReviewStrategy"];
         };
         /** @description Create-PAT request. */
@@ -11201,8 +11188,7 @@ export interface components {
             enableProRV?: boolean | null;
             enableEvidenceBackedVerification?: boolean | null;
             enableMultiPassUnion?: boolean | null;
-            /** Format: int32 */
-            multiPassUnionPassCount?: number | null;
+            reviewPasses?: components["schemas"]["ReviewPassEntry"][] | null;
             defaultReviewStrategy?: components["schemas"]["ReviewStrategy"];
         };
         /** @description Patch payload for one premium capability override. */
@@ -11905,6 +11891,12 @@ export interface components {
             /** @description The `ReviewPassKind` name of the pass that produced this finding, when known. */
             originPassKind?: string | null;
             changedLineRelation?: components["schemas"]["ReviewCommentScopeRelation"];
+            /**
+             * Format: int32
+             * @description The 1-based index of the numbered multi-pass union pass that produced this finding, when known. The tier
+             *     baseline is pass 1 and additional passes are 2..k. null for the baseline and legacy comments.
+             */
+            originPassIndex?: number | null;
         };
         /** @description Visibility for one tool-result evidence bounding or refresh action. */
         ProtocolToolEvidenceDto: {
@@ -12131,6 +12123,8 @@ export interface components {
             message?: string | null;
             originPassKind?: string | null;
             changedLineRelation?: components["schemas"]["ReviewCommentScopeRelation"];
+            /** Format: int32 */
+            originPassIndex?: number | null;
         };
         /**
          * @description Deterministic classification of where a review comment's anchor line falls relative to the
@@ -12323,6 +12317,19 @@ export interface components {
             repository?: components["schemas"]["ReviewRepositoryRefDto"];
             codeReview?: components["schemas"]["ReviewCodeReviewRefDto"];
             reviewRevision?: components["schemas"]["ReviewRevisionRefDto"];
+        };
+        /** @description One entry in a client's ordered review-pass list: an additional multi-pass union pass bound to a model. */
+        ReviewPassEntry: {
+            /**
+             * Format: int32
+             * @description Zero-based position of this pass after the implicit tier baseline pass.
+             */
+            ordinal?: number;
+            /**
+             * Format: uuid
+             * @description Identifier of the configured model this pass runs on (its connection implied).
+             */
+            configuredModelId?: string;
         };
         /** @description One selectable review profile entry. */
         ReviewProfileCatalogItemResponse: {

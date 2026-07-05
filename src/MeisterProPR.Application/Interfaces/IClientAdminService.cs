@@ -52,7 +52,10 @@ public interface IClientAdminService
     /// <param name="enableProRV">When non-null, sets whether ProRV executes for new reviews.</param>
     /// <param name="enableEvidenceBackedVerification">When non-null, sets whether evidence-backed local verification runs for new reviews.</param>
     /// <param name="enableMultiPassUnion">When non-null, sets whether multi-pass union generation runs for new reviews.</param>
-    /// <param name="multiPassUnionPassCount">When non-null, sets the per-client multi-pass union pass count override (null leaves the server default).</param>
+    /// <param name="reviewPasses">
+    ///     When non-null, replaces the client's ordered review-pass list wholesale (an empty list clears it).
+    ///     Each entry binds one additional multi-pass union pass to a configured model.
+    /// </param>
     /// <param name="defaultReviewStrategy">When non-null, sets the default review strategy for newly submitted jobs.</param>
     /// <param name="ct">Cancellation token.</param>
     Task<ClientDto?> PatchAsync(
@@ -66,7 +69,7 @@ public interface IClientAdminService
         bool? enableProRV = null,
         bool? enableEvidenceBackedVerification = null,
         bool? enableMultiPassUnion = null,
-        int? multiPassUnionPassCount = null,
+        IReadOnlyList<ReviewPassDto>? reviewPasses = null,
         ReviewStrategy? defaultReviewStrategy = null,
         CancellationToken ct = default);
 

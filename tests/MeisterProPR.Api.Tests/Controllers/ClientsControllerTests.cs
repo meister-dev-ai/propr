@@ -862,6 +862,137 @@ public sealed class ClientsControllerTests(ClientsControllerTests.ClientsApiFact
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
     }
 
+    [Fact]
+    public async Task PatchClient_ReviewPassWithChatModelOnClientConnection_Returns200()
+    {
+        var seeded = await this.SeedClientWithConnectionAsync("review-pass-valid");
+
+        var response = await this.PatchReviewPassesAsync(seeded.ClientId, seeded.ChatModelId);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var body = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        var passes = body.RootElement.GetProperty("reviewPasses").EnumerateArray().ToList();
+        Assert.Single(passes);
+        Assert.Equal(seeded.ChatModelId, passes[0].GetProperty("configuredModelId").GetGuid());
+    }
+
+    [Fact]
+    public async Task PatchClient_ReviewPassWithUnknownModel_Returns400()
+    {
+        var seeded = await this.SeedClientWithConnectionAsync("review-pass-unknown");
+
+        var response = await this.PatchReviewPassesAsync(seeded.ClientId, Guid.NewGuid());
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task PatchClient_ReviewPassWithEmbeddingOnlyModel_Returns400()
+    {
+        var seeded = await this.SeedClientWithConnectionAsync("review-pass-embedding");
+
+        var response = await this.PatchReviewPassesAsync(seeded.ClientId, seeded.EmbeddingModelId);
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task PatchClient_ReviewPassWithOtherClientsModel_Returns400()
+    {
+        var target = await this.SeedClientWithConnectionAsync("review-pass-owner");
+        var other = await this.SeedClientWithConnectionAsync("review-pass-foreign");
+
+        // The other client's chat model is chat-capable but does not belong to the target client's connections.
+        var response = await this.PatchReviewPassesAsync(target.ClientId, other.ChatModelId);
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+    }
+
+    private async Task<HttpResponseMessage> PatchReviewPassesAsync(Guid clientId, Guid configuredModelId)
+    {
+        var client = factory.CreateClient();
+        using var request = new HttpRequestMessage(HttpMethod.Patch, $"/clients/{clientId}");
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", factory.GenerateAdminToken());
+        request.Content = JsonContent.Create(
+            new
+            {
+                reviewPasses = new[] { new { ordinal = 0, configuredModelId } },
+            });
+        return await client.SendAsync(request);
+    }
+
+    private async Task<(Guid ClientId, Guid ChatModelId, Guid EmbeddingModelId)> SeedClientWithConnectionAsync(string slug)
+    {
+        using var scope = factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<MeisterProPRDbContext>();
+        var tenantId = Guid.NewGuid();
+        var clientId = Guid.NewGuid();
+        var profileId = Guid.NewGuid();
+        var chatModelId = Guid.NewGuid();
+        var embeddingModelId = Guid.NewGuid();
+        var now = DateTimeOffset.UtcNow;
+
+        db.Tenants.Add(CreateTenantRecord(tenantId, slug, $"{slug} Tenant"));
+        db.Clients.Add(
+            new ClientRecord
+            {
+                Id = clientId,
+                TenantId = tenantId,
+                DisplayName = $"{slug} Client",
+                IsActive = true,
+                EnableMultiPassUnion = true,
+                CreatedAt = now,
+            });
+        db.AiConnectionProfiles.Add(
+            new AiConnectionProfileRecord
+            {
+                Id = profileId,
+                ClientId = clientId,
+                DisplayName = "Connection",
+                ProviderKind = AiProviderKind.AzureOpenAi.ToString(),
+                BaseUrl = "https://x.openai.azure.com/",
+                AuthMode = AiAuthMode.AzureIdentity.ToString(),
+                DiscoveryMode = AiDiscoveryMode.ManualOnly.ToString(),
+                DefaultHeaders = [],
+                DefaultQueryParams = [],
+                IsActive = false,
+                CreatedAt = now,
+                UpdatedAt = now,
+                PurposeBindings = [],
+                ConfiguredModels =
+                [
+                    new AiConfiguredModelRecord
+                    {
+                        Id = chatModelId,
+                        ConnectionProfileId = profileId,
+                        RemoteModelId = "gpt-4o",
+                        DisplayName = "gpt-4o",
+                        OperationKinds = [AiOperationKind.Chat.ToString()],
+                        SupportedProtocolModes = [AiProtocolMode.Auto.ToString()],
+                        SupportsStructuredOutput = true,
+                        SupportsToolUse = true,
+                        Source = AiConfiguredModelSource.Manual.ToString(),
+                    },
+                    new AiConfiguredModelRecord
+                    {
+                        Id = embeddingModelId,
+                        ConnectionProfileId = profileId,
+                        RemoteModelId = "text-embedding-3-large",
+                        DisplayName = "text-embedding-3-large",
+                        OperationKinds = [AiOperationKind.Embedding.ToString()],
+                        SupportedProtocolModes = [AiProtocolMode.Auto.ToString(), AiProtocolMode.Embeddings.ToString()],
+                        TokenizerName = "cl100k_base",
+                        MaxInputTokens = 8192,
+                        EmbeddingDimensions = 3072,
+                        Source = AiConfiguredModelSource.Manual.ToString(),
+                    },
+                ],
+            });
+        await db.SaveChangesAsync();
+
+        return (clientId, chatModelId, embeddingModelId);
+    }
+
     private static TenantRecord CreateTenantRecord(Guid tenantId, string slug, string displayName)
     {
         return new TenantRecord

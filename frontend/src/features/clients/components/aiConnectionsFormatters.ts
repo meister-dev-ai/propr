@@ -39,7 +39,6 @@ export const purposeOptions: Array<{ value: AiPurpose; label: string; descriptio
   { value: 'proRvPrefilter', label: 'ProRV Prefilter', description: 'Optional focused-review guidance prefilter.', defaultEnabled: false, section: 'support' },
   { value: 'reviewTriage', label: 'Review Triage', description: 'Cheap per-file complexity triage. Falls back to Review Low Effort when unset.', defaultEnabled: false, section: 'support' },
   { value: 'reviewVerification', label: 'Review Verification', description: 'Evidence-gathering verification of candidate findings. Falls back to Review Triage when unset.', defaultEnabled: false, section: 'support' },
-  { value: 'reviewUnionPass', label: 'Review Second Opinion', description: 'Independent second-opinion model for multi-pass union resample passes on Medium/High files. When unset the extra passes are skipped (single-pass review).', defaultEnabled: false, section: 'support' },
   { value: 'memoryReconsideration', label: 'Memory Reconsideration', description: 'Thread-memory reconsideration calls.', defaultEnabled: true, section: 'memory' },
   { value: 'embeddingDefault', label: 'Embedding Default', description: 'Embedding generation for memory and ProCursor.', defaultEnabled: true, section: 'memory' },
 ]

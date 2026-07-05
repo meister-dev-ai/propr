@@ -62,13 +62,6 @@ public sealed class ClientRecord
     /// </summary>
     public bool EnableMultiPassUnion { get; set; } = false;
 
-    /// <summary>
-    ///     Per-client override for the number of multi-pass union passes (baseline + resamples) on Medium/High files.
-    ///     Null falls back to the <c>AiReviewOptions.MultiPassUnionPassCount</c> server default. Only consulted when
-    ///     <see cref="EnableMultiPassUnion" /> is enabled.
-    /// </summary>
-    public int? MultiPassUnionPassCount { get; set; }
-
     public TenantRecord? Tenant { get; set; }
 
     public ICollection<ClientScmConnectionRecord> ScmConnections { get; set; } = [];
@@ -76,6 +69,9 @@ public sealed class ClientRecord
     public ICollection<ProviderConnectionAuditEntryRecord> ProviderConnectionAuditEntries { get; set; } = [];
 
     public ICollection<ClientReviewerIdentityRecord> ReviewerIdentities { get; set; } = [];
+
+    /// <summary>Ordered per-client review-pass list; each entry runs one additional multi-pass union pass.</summary>
+    public ICollection<ClientReviewPassRecord> ReviewPasses { get; set; } = [];
 
     public ICollection<CrawlConfigurationRecord> CrawlConfigurations { get; set; } = [];
 }

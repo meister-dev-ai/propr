@@ -4,22 +4,22 @@
 namespace MeisterProPR.Application.Features.Reviewing.Execution.Models;
 
 /// <summary>
-///     Selects the source of diversity for multi-pass union generation. The k-pass source is a configuration
-///     arm of a single mechanism, so security- and PR-level lens arms slot in without new orchestration.
+///     Selects the source of diversity for the eval-harness multi-pass union path. The k-pass source is a
+///     configuration arm of a single mechanism, so security- and PR-level lens arms slot in without new
+///     orchestration. Production reviews instead drive the extra passes from the per-client review-pass list.
 /// </summary>
 public enum MultiPassDiversityMode
 {
     /// <summary>
-    ///     k independent passes over the same file with the same model at a resampling temperature. In production the
-    ///     resample model is resolved from the <c>ReviewUnionPass</c> purpose binding; the per-arm/default model ids
-    ///     here are an eval-harness-only override.
+    ///     k independent passes over the same file with the same model at a resampling temperature. The per-arm and
+    ///     default model ids are eval-harness-only overrides; when they resolve to null the harness reuses the tier
+    ///     model.
     /// </summary>
     Resampling = 0,
 
     /// <summary>
-    ///     Passes split across models to surface disjoint finds. Wired into the runtime; in production the resample
-    ///     model comes from the <c>ReviewUnionPass</c> binding, and the per-arm model ids here are an
-    ///     eval-harness-only override.
+    ///     Passes split across models to surface disjoint finds. The per-arm/default model ids are eval-harness-only
+    ///     overrides that route each resample to its own model.
     /// </summary>
     CrossModel = 1,
 
@@ -72,12 +72,10 @@ public sealed record MultiPassDiversity(
 
     /// <summary>
     ///     Resolves the model + provenance label for each resample pass (passes 2..k; the baseline pass keeps the
-    ///     file's tier model). Resampling uses the diversity default model for every resample; cross-model spreads
-    ///     the resamples across the declared arms (expanded by their count, cycling when there are more passes than
-    ///     arms). A resolved arm's <see cref="MultiPassArm.ModelId" /> is an eval-harness-only model override; when it
-    ///     resolves to null (production, where no config model is supplied) the caller resolves the pass model from
-    ///     the <c>ReviewUnionPass</c> purpose binding instead — deliberately NOT falling back to the file's tier model,
-    ///     because a same-tier-model resample is the ineffective case this mechanism exists to avoid.
+    ///     file's tier model) on the eval-harness path. Resampling uses the diversity default model for every
+    ///     resample; cross-model spreads the resamples across the declared arms (expanded by their count, cycling
+    ///     when there are more passes than arms). A resolved arm's <see cref="MultiPassArm.ModelId" /> is an
+    ///     eval-harness-only model override; when it resolves to null the harness reuses the file's tier model.
     /// </summary>
     /// <param name="resamplePassCount">The number of resample passes to plan (k - 1).</param>
     public IReadOnlyList<MultiPassArm> ResolveResamplePasses(int resamplePassCount)
@@ -109,7 +107,7 @@ public sealed record MultiPassDiversity(
         }
 
         // Resampling (and, until it is built, the lens mode): every resample runs the diversity default model
-        // (eval-harness override) or, when that is null, the ReviewUnionPass binding resolved by the caller.
+        // (eval-harness override) or, when that is null, the file's tier model reused by the harness.
         var label = this.ResolveArmLabel();
         for (var i = 0; i < resamplePassCount; i++)
         {

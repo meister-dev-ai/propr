@@ -195,6 +195,16 @@
                         <div v-if="vm.activePassFileOutcome?.errorMessage"><dt>Error</dt><dd>{{ vm.activePassFileOutcome.errorMessage }}</dd></div>
                     </dl>
 
+                    <p
+                        v-if="vm.detailTab === 'events' && vm.activePassUnionContribution"
+                        class="pass-union-contribution"
+                        data-testid="pass-union-contribution"
+                    >
+                        Contributed {{ vm.activePassUnionContribution.catchCount }}
+                        finding{{ vm.activePassUnionContribution.catchCount === 1 ? '' : 's' }} to the union.
+                        <span v-if="vm.activePassUnionContribution.model" class="pass-union-contribution-model">· {{ vm.activePassUnionContribution.model }}</span>
+                    </p>
+
                     <p v-if="vm.detailTab === 'events' && vm.activePassFileOutcome?.isDegraded" class="pass-file-outcome-note">
                         Agentic file investigation recorded a degraded intermediate outcome for this pass. It remained non-validated unless later verification and final gate kept it.
                     </p>
@@ -277,6 +287,7 @@
                             :vm="vm"
                             :groups="[{ directory: 'Root', comments: vm.activePassFinalComments }]"
                             empty-message=""
+                            show-origin
                         />
                     </section>
 
@@ -917,6 +928,19 @@ function retryFileDiff() {
     margin: 0;
     padding: 0 1.5rem 1.35rem;
     color: var(--color-text-muted);
+}
+
+.pass-union-contribution {
+    margin: 0;
+    padding: 0.9rem 1.5rem 0;
+    color: var(--color-text);
+    font-size: 0.9rem;
+}
+
+.pass-union-contribution-model {
+    color: var(--color-text-muted);
+    font-family: var(--font-mono, monospace);
+    font-size: 0.82rem;
 }
 
 .pass-final-result-section {

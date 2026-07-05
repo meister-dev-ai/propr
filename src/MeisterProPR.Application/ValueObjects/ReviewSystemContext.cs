@@ -158,16 +158,27 @@ public sealed class ReviewSystemContext
     public bool EnableMultiPassUnion { get; set; } = false;
 
     /// <summary>
-    ///     Number of independent per-file passes to run when <see cref="EnableMultiPassUnion" /> is enabled and the
-    ///     file's resolved tier is in scope. <see langword="null" /> defers to the configured runtime default.
+    ///     Eval-harness-only override for the number of independent per-file passes to run when
+    ///     <see cref="EnableMultiPassUnion" /> is enabled and the file's resolved tier is in scope. When set, the
+    ///     resample passes are driven by <see cref="MultiPassDiversity" /> arms over the tier connection. Production
+    ///     reviews leave this <see langword="null" /> and instead drive the extra passes from <see cref="ReviewPasses" />.
     ///     Only consulted when <see cref="EnableMultiPassUnion" /> is <see langword="true" />.
     /// </summary>
     public int? MultiPassUnionPassCount { get; set; }
 
     /// <summary>
+    ///     Ordered per-client review-pass list for production multi-pass union: each entry is the identifier of a
+    ///     configured model (its connection implied) that runs one additional pass after the implicit tier baseline.
+    ///     Effective pass count is <c>1 + ReviewPasses.Count</c>. Empty means a single baseline pass. Only consulted
+    ///     when <see cref="EnableMultiPassUnion" /> is <see langword="true" /> and <see cref="MultiPassUnionPassCount" />
+    ///     is <see langword="null" /> (the production path).
+    /// </summary>
+    public IReadOnlyList<Guid> ReviewPasses { get; init; } = [];
+
+    /// <summary>
     ///     Diversity configuration for multi-pass union generation. <see langword="null" /> defers to
     ///     <see cref="Features.Reviewing.Execution.Models.MultiPassDiversity.Default" />. Only consulted when
-    ///     <see cref="EnableMultiPassUnion" /> is <see langword="true" />.
+    ///     <see cref="EnableMultiPassUnion" /> is <see langword="true" /> on the eval-harness path.
     /// </summary>
     public MultiPassDiversity? MultiPassDiversity { get; set; }
 

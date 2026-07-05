@@ -50,4 +50,15 @@ public interface IAiConnectionRepository
         Guid clientId,
         AiPurpose purpose,
         CancellationToken ct = default);
+
+    /// <summary>
+    ///     Resolves a chat-capable configured model by its identifier across the client's connection profiles,
+    ///     synthesizing a purpose-neutral binding (reusing an existing enabled binding's protocol mode for that model
+    ///     when present, otherwise <see cref="AiProtocolMode.Auto" />). Returns <see langword="null" /> when the model
+    ///     is not found on any of the client's profiles or does not support chat workloads.
+    /// </summary>
+    Task<AiResolvedPurposeBindingDto?> GetModelBindingAsync(
+        Guid clientId,
+        Guid configuredModelId,
+        CancellationToken ct = default);
 }

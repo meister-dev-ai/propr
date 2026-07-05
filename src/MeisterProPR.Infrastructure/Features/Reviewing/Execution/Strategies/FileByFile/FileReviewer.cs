@@ -181,23 +181,24 @@ internal sealed partial class FileReviewer(
             // independent passes and union their locally-verified comments into this result before it is persisted,
             // so the synthesis inlet sees the union rather than a single pass. Flag off (or an out-of-scope tier)
             // returns the baseline result untouched — behavior is identical to a single-pass review.
-            result = await this.MaybeApplyMultiPassUnionAsync(new MultiPassUnionInputs(
-                job,
-                pr,
-                filePr,
-                file,
-                fileIndex,
-                totalFiles,
-                fileContext,
-                protocolId,
-                tier,
-                tierModelId,
-                tierClient,
-                tierCapabilities,
-                effectiveClient,
-                pipelineProfile,
-                result,
-                ct));
+            result = await this.MaybeApplyMultiPassUnionAsync(
+                new MultiPassUnionInputs(
+                    job,
+                    pr,
+                    filePr,
+                    file,
+                    fileIndex,
+                    totalFiles,
+                    fileContext,
+                    protocolId,
+                    tier,
+                    tierModelId,
+                    tierClient,
+                    tierCapabilities,
+                    effectiveClient,
+                    pipelineProfile,
+                    result,
+                    ct));
 
             await this.CompleteReviewAsync(fileResult, fileContext, protocolId, result, ct);
 
@@ -298,6 +299,7 @@ internal sealed partial class FileReviewer(
             EnableEvidenceBackedVerification = baseContext.EnableEvidenceBackedVerification,
             EnableMultiPassUnion = baseContext.EnableMultiPassUnion,
             MultiPassUnionPassCount = baseContext.MultiPassUnionPassCount,
+            ReviewPasses = baseContext.ReviewPasses,
             MultiPassDiversity = baseContext.MultiPassDiversity,
             AugmentationMode = baseContext.AugmentationMode,
             PassKind = baseContext.PassKind,
@@ -445,6 +447,7 @@ internal sealed partial class FileReviewer(
             EnableEvidenceBackedVerification = baseContext.EnableEvidenceBackedVerification,
             EnableMultiPassUnion = baseContext.EnableMultiPassUnion,
             MultiPassUnionPassCount = baseContext.MultiPassUnionPassCount,
+            ReviewPasses = baseContext.ReviewPasses,
             MultiPassDiversity = baseContext.MultiPassDiversity,
             AugmentationMode = baseContext.AugmentationMode,
             PassKind = ReviewPassKind.ProRVAugmentation,
@@ -468,89 +471,142 @@ internal sealed partial class FileReviewer(
             return inputs.BaselineResult;
         }
 
-        var passCount = Math.Max(1, inputs.FileContext.MultiPassUnionPassCount ?? options.MultiPassUnionPassCount);
-        if (passCount <= 1)
+        var diversity = inputs.FileContext.MultiPassDiversity ?? MultiPassDiversity.Default;
+
+        // Two ways the additional passes are chosen. The eval harness sets an explicit pass count and drives the
+        // resamples from MultiPassDiversity arms over the tier connection. Production leaves the count null and runs
+        // one pass per entry in the ordered per-client review-pass list, each resolved to its own configured model.
+        var (plannedPasses, armLabel, skippedWholeFile) = inputs.FileContext.MultiPassUnionPassCount.HasValue
+            ? this.PlanEvalResamplePasses(inputs, diversity)
+            : await this.PlanReviewListResamplePassesAsync(inputs);
+
+        // A whole-file skip (empty pass list) already recorded its trace; a plan with no runnable passes (single-pass
+        // configuration, or every configured pass model unresolvable) degrades to the baseline without a completion.
+        if (skippedWholeFile || plannedPasses.Count == 0)
         {
             return inputs.BaselineResult;
         }
 
-        var diversity = inputs.FileContext.MultiPassDiversity ?? MultiPassDiversity.Default;
-        var armLabel = diversity.ResolveArmLabel();
-
-        // Plan the resample passes (passes 2 through k). An arm's model id is an eval-harness-only override; when it
-        // is null (production) the pass model is resolved from the ReviewUnionPass purpose binding below.
-        var resamplePlan = diversity.ResolveResamplePasses(passCount - 1);
-
-        // Production passes (arm model id null) run on the ReviewUnionPass "second opinion" binding. Resolve it once;
-        // if any pass needs it and it is unbound, skip the extra passes entirely (degrade to the single baseline pass)
-        // rather than falling back to the tier model — a same-tier-model resample is the ineffective case this exists
-        // to avoid. Eval configs that set an arm/default model never take this path.
-        //
-        // Tier-mix property (design record): with the second-opinion model bound to codex, the production shape is
-        // deliberately tier-dependent and matches neither tested A/B arm — Medium files (tier = codex) get codex
-        // baseline + codex resample(s) (same-model resampling), while High files (tier = gpt-5.4) get a gpt-5.4
-        // baseline + a codex second opinion (a genuine cross pair). The A/B (codex-list on 209, k=3) validated the
-        // Medium leg; the High cross pair is the shape that caught the app-credential finding in the cross-model run.
-        IResolvedAiChatRuntime? unionRuntime = null;
-        if (resamplePlan.Any(arm => string.IsNullOrWhiteSpace(arm.ModelId)))
-        {
-            unionRuntime = await this.TryResolveUnionPassRuntimeAsync(inputs.Job, inputs.File.Path, inputs.Ct);
-            if (unionRuntime is null)
-            {
-                await this.RecordMultiPassUnionSkippedAsync(inputs.ProtocolId, inputs.File.Path, armLabel, inputs.Tier, inputs.Ct);
-                return inputs.BaselineResult;
-            }
-        }
-
-        // The baseline pass is union pass 1; additional resamples are passes 2..k.
+        // The baseline pass is union pass 1; the planned passes are 2..k.
         var unionComments = new List<ReviewComment>(inputs.BaselineResult.Comments);
         var perPassCatchCounts = new List<int> { inputs.BaselineResult.Comments.Count };
         var perPassModels = new List<string?> { inputs.TierModelId };
 
-        for (var passIndex = 2; passIndex <= passCount; passIndex++)
+        foreach (var plannedPass in plannedPasses)
         {
-            var passArm = resamplePlan[passIndex - 2];
+            var passResult = await this.RunUnionResamplePassAsync(
+                new MultiPassUnionPassInputs(
+                    inputs.Job,
+                    inputs.Pr,
+                    inputs.FilePr,
+                    inputs.File,
+                    inputs.FileIndex,
+                    inputs.TotalFiles,
+                    inputs.FileContext,
+                    inputs.Tier,
+                    plannedPass.ModelId,
+                    plannedPass.Client,
+                    plannedPass.Capabilities,
+                    inputs.EffectiveClient,
+                    plannedPass.PassIndex,
+                    diversity,
+                    new MultiPassArm(plannedPass.Label, plannedPass.ModelId),
+                    inputs.PipelineProfile,
+                    inputs.Ct));
 
-            // The pass model is the arm override (eval), else the resolved ReviewUnionPass model (production).
-            var passModelId = passArm.ModelId ?? unionRuntime?.Model.RemoteModelId ?? inputs.TierModelId;
-            var passClient = passArm.ModelId is null ? unionRuntime?.ChatClient ?? inputs.TierClient : inputs.TierClient;
-            var passCapabilities = passArm.ModelId is null ? unionRuntime?.Capabilities ?? inputs.TierCapabilities : inputs.TierCapabilities;
-
-            var passResult = await this.RunUnionResamplePassAsync(new MultiPassUnionPassInputs(
-                inputs.Job,
-                inputs.Pr,
-                inputs.FilePr,
-                inputs.File,
-                inputs.FileIndex,
-                inputs.TotalFiles,
-                inputs.FileContext,
-                inputs.Tier,
-                passModelId,
-                passClient,
-                passCapabilities,
-                inputs.EffectiveClient,
-                passIndex,
-                diversity,
-                passArm,
-                inputs.PipelineProfile,
-                inputs.Ct));
-
-            unionComments.AddRange(StampUnionOrigin(passResult.Comments));
+            unionComments.AddRange(StampUnionOrigin(passResult.Comments, plannedPass.PassIndex));
             perPassCatchCounts.Add(passResult.Comments.Count);
-            perPassModels.Add(passModelId);
+            perPassModels.Add(plannedPass.ModelId);
         }
 
-        await this.RecordMultiPassUnionCompletedAsync(new MultiPassUnionCompletion(
-            inputs.ProtocolId,
-            inputs.File.Path,
-            armLabel,
-            inputs.Tier,
-            perPassCatchCounts,
-            perPassModels,
-            unionComments.Count,
-            inputs.Ct));
+        await this.RecordMultiPassUnionCompletedAsync(
+            new MultiPassUnionCompletion(
+                inputs.ProtocolId,
+                inputs.File.Path,
+                armLabel,
+                inputs.Tier,
+                perPassCatchCounts,
+                perPassModels,
+                unionComments.Count,
+                inputs.Ct));
 
         return inputs.BaselineResult with { Comments = unionComments };
+    }
+
+    // Eval-harness path: the resample passes come from MultiPassDiversity arms and reuse the file's tier connection,
+    // switching only the model id (an arm override, or the tier model when the arm carries none).
+    private (IReadOnlyList<PlannedResamplePass> Passes, string ArmLabel, bool SkippedWholeFile) PlanEvalResamplePasses(
+        MultiPassUnionInputs inputs,
+        MultiPassDiversity diversity)
+    {
+        var passCount = Math.Max(1, inputs.FileContext.MultiPassUnionPassCount!.Value);
+        var armLabel = diversity.ResolveArmLabel();
+        if (passCount <= 1)
+        {
+            return ([], armLabel, false);
+        }
+
+        var resamplePlan = diversity.ResolveResamplePasses(passCount - 1);
+        var passes = new List<PlannedResamplePass>(resamplePlan.Count);
+        for (var index = 0; index < resamplePlan.Count; index++)
+        {
+            var arm = resamplePlan[index];
+            passes.Add(
+                new PlannedResamplePass(
+                    index + 2,
+                    arm.Label,
+                    arm.ModelId ?? inputs.TierModelId,
+                    inputs.TierClient,
+                    inputs.TierCapabilities));
+        }
+
+        return (passes, armLabel, false);
+    }
+
+    // Production path: one resample per entry in the ordered per-client review-pass list, each resolved to its own
+    // configured model (connection implied). An empty list records the whole-file skip; an unresolvable entry records
+    // a per-pass skip and is dropped while the rest run — never a same-tier-model resample fallback.
+    private async Task<(IReadOnlyList<PlannedResamplePass> Passes, string ArmLabel, bool SkippedWholeFile)> PlanReviewListResamplePassesAsync(
+        MultiPassUnionInputs inputs)
+    {
+        const string ReviewPassListLabel = "review-pass-list";
+        var reviewPasses = inputs.FileContext.ReviewPasses;
+        if (reviewPasses.Count == 0)
+        {
+            await this.RecordMultiPassUnionSkippedAsync(
+                inputs.ProtocolId,
+                inputs.File.Path,
+                ReviewPassListLabel,
+                inputs.Tier,
+                "empty_review_pass_list",
+                inputs.Ct);
+            return ([], ReviewPassListLabel, true);
+        }
+
+        var passes = new List<PlannedResamplePass>(reviewPasses.Count);
+        var passIndex = 2;
+        foreach (var configuredModelId in reviewPasses)
+        {
+            var runtime = await this.TryResolvePassRuntimeAsync(inputs.Job, inputs.File.Path, configuredModelId, passIndex, inputs.Ct);
+            if (runtime is null)
+            {
+                await this.RecordMultiPassUnionPassSkippedAsync(inputs.ProtocolId, inputs.File.Path, passIndex, configuredModelId, inputs.Tier, inputs.Ct);
+            }
+            else
+            {
+                passes.Add(
+                    new PlannedResamplePass(
+                        passIndex,
+                        runtime.Model.RemoteModelId,
+                        runtime.Model.RemoteModelId,
+                        runtime.ChatClient,
+                        runtime.Capabilities));
+            }
+
+            passIndex++;
+        }
+
+        return (passes, ReviewPassListLabel, false);
     }
 
     private static bool IsMultiPassUnionTier(FileComplexityTier tier)
@@ -558,9 +614,11 @@ internal sealed partial class FileReviewer(
         return tier is FileComplexityTier.Medium or FileComplexityTier.High;
     }
 
-    // Tags a resample pass's comments with the multi-pass union origin so the union source is visible on the
-    // persisted per-file result and surfaces through the protocol comment DTO.
-    private static IReadOnlyList<ReviewComment> StampUnionOrigin(IReadOnlyList<ReviewComment> comments)
+    // Tags a resample pass's comments with the multi-pass union origin and the 1-based pass index so the union
+    // source and the specific numbered pass are visible on the persisted per-file result and surface through the
+    // protocol comment DTO (the frontend renders the index as "Pass N"). The baseline pass is pass 1 and stays
+    // unstamped; the additional passes are 2..k.
+    private static IReadOnlyList<ReviewComment> StampUnionOrigin(IReadOnlyList<ReviewComment> comments, int passIndex)
     {
         if (comments.Count == 0)
         {
@@ -570,7 +628,12 @@ internal sealed partial class FileReviewer(
         var stamped = new List<ReviewComment>(comments.Count);
         foreach (var comment in comments)
         {
-            stamped.Add(comment with { OriginPassKind = ReviewPassKind.MultiPassUnion.ToString() });
+            stamped.Add(
+                comment with
+                {
+                    OriginPassKind = ReviewPassKind.MultiPassUnion.ToString(),
+                    OriginPassIndex = passIndex,
+                });
         }
 
         return stamped;
@@ -611,10 +674,9 @@ internal sealed partial class FileReviewer(
 
             // Each resample pass runs at the resampling temperature. The pass model + client + capabilities were
             // already resolved by the caller and threaded in here (an eval-harness arm-model override reusing the
-            // tier connection, or the production ReviewUnionPass "second opinion" runtime with its own client), so
-            // CreateFileContext has set them — the baseline pass keeps the tier model, only these resample passes
-            // switch, so any recall lift comes from a different sampler reviewing the file, not from re-sampling the
-            // same one.
+            // tier connection, or a production review-pass model resolved to its own runtime), so CreateFileContext
+            // has set them — the baseline pass keeps the tier model, only these resample passes switch, so any recall
+            // lift comes from a different sampler reviewing the file, not from re-sampling the same one.
             passContext.Temperature = inputs.Diversity.ResampleTemperature;
 
             passContext = await this.RunDispatchPipelineAsync(
@@ -687,23 +749,25 @@ internal sealed partial class FileReviewer(
         };
     }
 
-    // Resolves the "second opinion" runtime for production multi-pass resample passes from the ReviewUnionPass
-    // purpose binding. Returns null when no runtime is available (unbound purpose, no resolver) so the caller
-    // skips the extra passes rather than resampling the tier model.
-    private async Task<IResolvedAiChatRuntime?> TryResolveUnionPassRuntimeAsync(
+    // Resolves the runtime for one production resample pass from its configured model id (connection implied).
+    // Returns null when the model cannot be resolved (deleted/unresolved model, or no resolver) so the caller skips
+    // that pass rather than resampling the tier model.
+    private async Task<IResolvedAiChatRuntime?> TryResolvePassRuntimeAsync(
         ReviewJob job,
         string filePath,
+        Guid configuredModelId,
+        int passIndex,
         CancellationToken ct)
     {
         if (aiRuntimeResolver is null)
         {
-            LogMultiPassUnionPassBindingUnavailable(logger, job.Id, filePath, null);
+            LogMultiPassUnionPassModelUnresolved(logger, job.Id, filePath, configuredModelId, passIndex, null);
             return null;
         }
 
         try
         {
-            return await aiRuntimeResolver.ResolveChatRuntimeAsync(job.ClientId, AiPurpose.ReviewUnionPass, ct)
+            return await aiRuntimeResolver.ResolveChatRuntimeForModelAsync(job.ClientId, configuredModelId, ct)
                 .ConfigureAwait(false);
         }
         catch (OperationCanceledException)
@@ -712,7 +776,7 @@ internal sealed partial class FileReviewer(
         }
         catch (Exception ex)
         {
-            LogMultiPassUnionPassBindingUnavailable(logger, job.Id, filePath, ex);
+            LogMultiPassUnionPassModelUnresolved(logger, job.Id, filePath, configuredModelId, passIndex, ex);
             return null;
         }
     }
@@ -722,6 +786,7 @@ internal sealed partial class FileReviewer(
         string filePath,
         string armLabel,
         FileComplexityTier tier,
+        string reason,
         CancellationToken ct)
     {
         if (!protocolId.HasValue)
@@ -742,7 +807,40 @@ internal sealed partial class FileReviewer(
             JsonSerializer.Serialize(
                 new
                 {
-                    reason = "review_union_pass_unbound",
+                    reason,
+                }),
+            null,
+            ct);
+    }
+
+    private async Task RecordMultiPassUnionPassSkippedAsync(
+        Guid? protocolId,
+        string filePath,
+        int passIndex,
+        Guid configuredModelId,
+        FileComplexityTier tier,
+        CancellationToken ct)
+    {
+        if (!protocolId.HasValue)
+        {
+            return;
+        }
+
+        await protocolRecorder.RecordReviewStrategyEventAsync(
+            protocolId.Value,
+            ReviewProtocolEventNames.MultiPassUnionPassSkipped,
+            JsonSerializer.Serialize(
+                new
+                {
+                    filePath,
+                    tier = tier.ToString(),
+                    passIndex,
+                }),
+            JsonSerializer.Serialize(
+                new
+                {
+                    configuredModelId,
+                    reason = "pass_model_unresolved",
                 }),
             null,
             ct);
@@ -1421,6 +1519,15 @@ internal sealed partial class FileReviewer(
         ReviewSystemContext FileContext,
         Guid? ProtocolId,
         IReadOnlyList<InvariantFact> InvariantFacts);
+
+    // One planned resample pass (pass 2..k): its index, provenance label, resolved model id, and the client +
+    // capabilities it runs on. Eval passes reuse the tier connection; production passes carry their own runtime.
+    private sealed record PlannedResamplePass(
+        int PassIndex,
+        string Label,
+        string? ModelId,
+        IChatClient? Client,
+        AgentReviewRuntimeCapabilities? Capabilities);
 
     private sealed record MultiPassUnionCompletion(
         Guid? ProtocolId,

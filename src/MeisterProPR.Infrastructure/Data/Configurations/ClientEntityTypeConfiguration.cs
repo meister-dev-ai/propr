@@ -74,9 +74,6 @@ internal sealed class ClientEntityTypeConfiguration : IEntityTypeConfiguration<C
             .HasColumnName("enable_multi_pass_union")
             .HasDefaultValue(false);
 
-        builder.Property(c => c.MultiPassUnionPassCount)
-            .HasColumnName("multi_pass_union_pass_count");
-
         builder.HasIndex(c => c.TenantId)
             .HasDatabaseName("ix_clients_tenant_id");
 

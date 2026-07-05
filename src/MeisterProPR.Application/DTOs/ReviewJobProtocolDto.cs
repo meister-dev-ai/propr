@@ -253,13 +253,18 @@ public sealed record ProtocolWorkspaceDto(
 ///     Deterministic classification of the comment's anchor line relative to the pull request's changed-line
 ///     ranges, when known. <see langword="null" /> for comments that could not be classified.
 /// </param>
+/// <param name="OriginPassIndex">
+///     The 1-based index of the numbered multi-pass union pass that produced this finding, when known. The tier
+///     baseline is pass 1 and additional passes are 2..k. <see langword="null" /> for the baseline and legacy comments.
+/// </param>
 public sealed record ProtocolReviewCommentDto(
     string? FilePath,
     int? LineNumber,
     CommentSeverity Severity,
     string Message,
     string? OriginPassKind = null,
-    ReviewCommentScopeRelation? ChangedLineRelation = null);
+    ReviewCommentScopeRelation? ChangedLineRelation = null,
+    int? OriginPassIndex = null);
 
 /// <summary>
 ///     Terminal outcome metadata for one file-linked protocol pass.

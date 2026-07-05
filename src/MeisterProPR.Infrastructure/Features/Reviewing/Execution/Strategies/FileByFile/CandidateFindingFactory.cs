@@ -46,6 +46,7 @@ internal sealed class CandidateFindingFactory(IReviewClaimExtractor? reviewClaim
                         index + 1,
                         reviewPassKind: ResolveCommentPassKind(comment, passKind),
                         findingProvenanceKind: provenanceKind,
+                        unionPassIndex: ResolveUnionPassIndex(comment),
                         unionArmLabel: ResolveUnionArmLabel(comment)),
                     comment.Severity,
                     comment.Message,
@@ -339,6 +340,14 @@ internal sealed class CandidateFindingFactory(IReviewClaimExtractor? reviewClaim
     private static string? ResolveUnionArmLabel(ReviewComment comment)
     {
         return IsMultiPassUnionOrigin(comment) ? comment.OriginPassKind : null;
+    }
+
+    // Carries the 1-based union pass index from a union-origin comment onto the finding's provenance so a
+    // published finding can resolve its producing pass to "Pass N" rather than the baseline. Null for
+    // non-union comments, which leaves the single-pass path unaffected.
+    private static int? ResolveUnionPassIndex(ReviewComment comment)
+    {
+        return IsMultiPassUnionOrigin(comment) ? comment.OriginPassIndex : null;
     }
 
     private static bool IsMultiPassUnionOrigin(ReviewComment comment)

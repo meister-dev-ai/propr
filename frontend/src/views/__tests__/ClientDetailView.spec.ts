@@ -175,8 +175,7 @@ describe('ClientDetailView', () => {
         scmCommentPostingEnabled: true,
         enableProRV: false,
         enableEvidenceBackedVerification: false,
-        enableMultiPassUnion: false,
-      },
+        enableMultiPassUnion: false,      },
     })
   })
 
@@ -197,8 +196,7 @@ describe('ClientDetailView', () => {
         scmCommentPostingEnabled: true,
         enableProRV: true,
         enableEvidenceBackedVerification: true,
-        enableMultiPassUnion: false,
-      },
+        enableMultiPassUnion: false,      },
     })
   })
 
@@ -219,8 +217,7 @@ describe('ClientDetailView', () => {
         scmCommentPostingEnabled: true,
         enableProRV: true,
         enableEvidenceBackedVerification: false,
-        enableMultiPassUnion: true,
-      },
+        enableMultiPassUnion: true,      },
     })
   })
 

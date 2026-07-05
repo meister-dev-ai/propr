@@ -176,6 +176,35 @@ For Agent Framework-backed managed remote conversations, the first successful ma
 session and binds it to the remote conversation. Later turns continue through that same session using
 only the current prompt and do not re-pass the remote conversation identifier on each turn.
 
+## Multi-Pass Review Union
+
+When a client enables multi-pass review union, Medium- and High-tier files are reviewed by more than
+one independent pass and the passes' locally-verified comments are unioned before synthesis
+deduplication, so the synthesis inlet sees the combined set rather than a single pass. Low-tier files,
+and clients with the flag disabled, run a single pass with byte-identical behavior.
+
+The passes are configured as an ordered per-client review-pass list. Pass 1 is the tier-model baseline
+and is implicit — it is not a list entry. Each list entry adds one further pass bound to a specific
+configured model (the connection is implied by the model), so the effective pass count is one plus the
+list length. Distinct models across entries are the point: additional passes exist so a different
+sampler can surface disjoint findings, not to resample the tier model.
+
+Resolution and skip-safety:
+
+- Each additional pass resolves its own chat runtime from its configured model. An entry whose model
+  cannot be resolved is skipped for that pass alone (recorded as `multi_pass_union_pass_skipped`) while
+  the remaining passes still run. A pass never falls back to the tier model, because a same-model
+  resample is the ineffective case the mechanism exists to avoid.
+- The flag enabled with an empty pass list degrades to a single baseline pass and records
+  `multi_pass_union_skipped`.
+- A completed union records `multi_pass_union_completed` with per-pass catch counts and the actual
+  model used per pass. Each additional pass surfaces in the trace as `Pass N` (the baseline is the
+  initial review), and resample-pass comments are stamped with the multi-pass union origin.
+
+The offline evaluation harness expresses the same ordered passes as `MultiPassDiversity` arms (model-id
+strings resolved over the run's single connection); that arm/count path is evaluation-only and does not
+drive production, which uses the per-client review-pass list.
+
 ## Diagnostics Trace Search
 
 The diagnostics surface keeps trace investigation inside one opened review's execution traces tab.

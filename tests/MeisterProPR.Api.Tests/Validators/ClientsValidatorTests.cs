@@ -342,6 +342,106 @@ public sealed class ClientsValidatorTests
         Assert.True(result.IsValid);
     }
 
+    [Fact]
+    public void PatchClient_ValidReviewPassList_Passes()
+    {
+        var result = PatchClientValidator.Validate(
+            new PatchClientRequest(
+                ReviewPasses:
+                [
+                    new ReviewPassEntry(0, Guid.NewGuid()),
+                    new ReviewPassEntry(1, Guid.NewGuid()),
+                ]));
+
+        Assert.True(result.IsValid);
+    }
+
+    [Fact]
+    public void PatchClient_EmptyReviewPassList_Passes()
+    {
+        var result = PatchClientValidator.Validate(new PatchClientRequest(ReviewPasses: []));
+
+        Assert.True(result.IsValid);
+    }
+
+    [Fact]
+    public void PatchClient_ReviewPassListWithTooManyEntries_Fails()
+    {
+        var result = PatchClientValidator.Validate(
+            new PatchClientRequest(
+                ReviewPasses:
+                [
+                    new ReviewPassEntry(0, Guid.NewGuid()),
+                    new ReviewPassEntry(1, Guid.NewGuid()),
+                    new ReviewPassEntry(2, Guid.NewGuid()),
+                    new ReviewPassEntry(3, Guid.NewGuid()),
+                    new ReviewPassEntry(4, Guid.NewGuid()),
+                ]));
+
+        Assert.False(result.IsValid);
+        Assert.Contains(result.Errors, e => e.PropertyName == nameof(PatchClientRequest.ReviewPasses));
+    }
+
+    [Fact]
+    public void PatchClient_ReviewPassListWithGappedOrdinals_Fails()
+    {
+        var result = PatchClientValidator.Validate(
+            new PatchClientRequest(
+                ReviewPasses:
+                [
+                    new ReviewPassEntry(0, Guid.NewGuid()),
+                    new ReviewPassEntry(2, Guid.NewGuid()),
+                ]));
+
+        Assert.False(result.IsValid);
+        Assert.Contains(result.Errors, e => e.PropertyName == nameof(PatchClientRequest.ReviewPasses));
+    }
+
+    [Fact]
+    public void PatchClient_ReviewPassListWithDuplicateOrdinals_Fails()
+    {
+        var result = PatchClientValidator.Validate(
+            new PatchClientRequest(
+                ReviewPasses:
+                [
+                    new ReviewPassEntry(0, Guid.NewGuid()),
+                    new ReviewPassEntry(0, Guid.NewGuid()),
+                ]));
+
+        Assert.False(result.IsValid);
+        Assert.Contains(result.Errors, e => e.PropertyName == nameof(PatchClientRequest.ReviewPasses));
+    }
+
+    [Fact]
+    public void PatchClient_ReviewPassListWithEmptyModelId_Fails()
+    {
+        var result = PatchClientValidator.Validate(
+            new PatchClientRequest(
+                ReviewPasses:
+                [
+                    new ReviewPassEntry(0, Guid.Empty),
+                ]));
+
+        Assert.False(result.IsValid);
+        Assert.Contains(result.Errors, e => e.PropertyName == nameof(PatchClientRequest.ReviewPasses));
+    }
+
+    [Fact]
+    public void PatchClient_ReviewPassListWithDuplicateModelIds_Fails()
+    {
+        var sharedModelId = Guid.NewGuid();
+        var result = PatchClientValidator.Validate(
+            new PatchClientRequest(
+                ReviewPasses:
+                [
+                    new ReviewPassEntry(0, sharedModelId),
+                    new ReviewPassEntry(1, sharedModelId),
+                ]));
+
+        Assert.False(result.IsValid);
+        Assert.Contains(result.Errors, e => e.PropertyName == nameof(PatchClientRequest.ReviewPasses));
+    }
+
     [Theory]
     [InlineData(ReviewStrategy.PrWideAgentic)]
     [InlineData(ReviewStrategy.AgenticFileByFile)]

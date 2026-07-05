@@ -1,6 +1,7 @@
 // Copyright (c) Andreas Rain.
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
+using System.Text.Json.Serialization;
 using FluentValidation;
 using FluentValidation.Results;
 using MeisterProPR.Api.Extensions;
@@ -10,7 +11,6 @@ using MeisterProPR.Application.Interfaces;
 using MeisterProPR.Domain.Enums;
 using MeisterProPR.Infrastructure.Features.IdentityAndAccess;
 using Microsoft.AspNetCore.Mvc;
-using System.Text.Json.Serialization;
 
 namespace MeisterProPR.Api.Controllers;
 
@@ -35,7 +35,9 @@ public sealed class ClientsController(
             client.EnableProRV,
             client.EnableEvidenceBackedVerification,
             client.EnableMultiPassUnion,
-            client.MultiPassUnionPassCount,
+            client.ReviewPassesOrEmpty
+                .Select(pass => new ReviewPassEntry(pass.Ordinal, pass.ConfiguredModelId))
+                .ToList(),
             client.TenantId,
             client.TenantSlug,
             client.TenantDisplayName,
@@ -56,6 +58,38 @@ public sealed class ClientsController(
         }
 
         return this.ValidationProblem();
+    }
+
+    /// <summary>
+    ///     Rejects a review-pass list that references a configured model the client cannot run: each entry's
+    ///     <c>configuredModelId</c> must resolve to a chat-capable configured model on one of the client's own
+    ///     connection profiles (any profile, active or not). An unknown id, another client's model, or an
+    ///     embedding-only model yields a 400. Returns <see langword="null" /> when there is nothing to reject.
+    /// </summary>
+    private async Task<IActionResult?> ValidateReviewPassModelsAsync(
+        Guid clientId,
+        IReadOnlyList<ReviewPassEntry>? reviewPasses,
+        IAiConnectionRepository aiConnectionRepository,
+        CancellationToken ct)
+    {
+        if (reviewPasses is not { Count: > 0 })
+        {
+            return null;
+        }
+
+        foreach (var pass in reviewPasses)
+        {
+            var binding = await aiConnectionRepository.GetModelBindingAsync(clientId, pass.ConfiguredModelId, ct);
+            if (binding is null)
+            {
+                this.ModelState.AddModelError(
+                    nameof(PatchClientRequest.ReviewPasses),
+                    $"Review pass model '{pass.ConfiguredModelId}' is not a chat-capable configured model on any of this client's connections.");
+                return this.ValidationProblem();
+            }
+        }
+
+        return null;
     }
 
     /// <summary>
@@ -261,6 +295,7 @@ public sealed class ClientsController(
         Guid clientId,
         [FromBody] PatchClientRequest request,
         [FromServices] IValidator<PatchClientRequest> validator,
+        [FromServices] IAiConnectionRepository aiConnectionRepository,
         CancellationToken ct = default)
     {
         var auth = this.RequireClientAccess(clientId, ClientRole.ClientAdministrator);
@@ -275,6 +310,12 @@ public sealed class ClientsController(
             return validation;
         }
 
+        var reviewPassValidation = await this.ValidateReviewPassModelsAsync(clientId, request.ReviewPasses, aiConnectionRepository, ct);
+        if (reviewPassValidation is not null)
+        {
+            return reviewPassValidation;
+        }
+
         var client = await clientAdminService.PatchAsync(
             clientId,
             request.IsActive,
@@ -286,7 +327,9 @@ public sealed class ClientsController(
             request.EnableProRV,
             request.EnableEvidenceBackedVerification,
             request.EnableMultiPassUnion,
-            request.MultiPassUnionPassCount,
+            request.ReviewPasses?
+                .Select(pass => new ReviewPassDto(pass.Ordinal, pass.ConfiguredModelId))
+                .ToList(),
             request.DefaultReviewStrategy,
             ct);
         return client is null ? this.NotFound() : this.Ok(ToClientResponse(client));
@@ -306,12 +349,17 @@ public sealed record ClientResponse(
     bool EnableProRV,
     bool EnableEvidenceBackedVerification,
     bool EnableMultiPassUnion,
-    int? MultiPassUnionPassCount,
+    IReadOnlyList<ReviewPassEntry> ReviewPasses,
     Guid? TenantId,
     string? TenantSlug,
     string? TenantDisplayName,
     string? DefaultReviewPipelineProfileId,
     DateTimeOffset? DefaultReviewPipelineProfileUpdatedAtUtc);
+
+/// <summary>One entry in a client's ordered review-pass list: an additional multi-pass union pass bound to a model.</summary>
+/// <param name="Ordinal">Zero-based position of this pass after the implicit tier baseline pass.</param>
+/// <param name="ConfiguredModelId">Identifier of the configured model this pass runs on (its connection implied).</param>
+public sealed record ReviewPassEntry(int Ordinal, Guid ConfiguredModelId);
 
 /// <summary>Crawl configuration response.</summary>
 public sealed record CrawlConfigResponse(
@@ -358,5 +406,5 @@ public sealed record PatchClientRequest(
     bool? EnableProRV = null,
     bool? EnableEvidenceBackedVerification = null,
     bool? EnableMultiPassUnion = null,
-    int? MultiPassUnionPassCount = null,
+    IReadOnlyList<ReviewPassEntry>? ReviewPasses = null,
     ReviewStrategy? DefaultReviewStrategy = null);

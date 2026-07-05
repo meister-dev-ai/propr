@@ -19,6 +19,15 @@ public interface IAiRuntimeResolver
         CancellationToken ct = default);
 
     /// <summary>
+    ///     Resolves a chat runtime for the given client and configured model identifier (the model's connection is
+    ///     implied). Used by production multi-pass review to bind each additional pass to its own configured model.
+    /// </summary>
+    Task<IResolvedAiChatRuntime> ResolveChatRuntimeForModelAsync(
+        Guid clientId,
+        Guid configuredModelId,
+        CancellationToken ct = default);
+
+    /// <summary>
     ///     Resolves an embedding runtime for the given client and purpose.
     /// </summary>
     Task<IResolvedAiEmbeddingRuntime> ResolveEmbeddingRuntimeAsync(

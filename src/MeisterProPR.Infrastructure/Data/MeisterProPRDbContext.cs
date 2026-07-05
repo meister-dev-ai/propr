@@ -29,6 +29,9 @@ public sealed class MeisterProPRDbContext(DbContextOptions<MeisterProPRDbContext
     /// <summary>Configured provider reviewer identities.</summary>
     public DbSet<ClientReviewerIdentityRecord> ClientReviewerIdentities => this.Set<ClientReviewerIdentityRecord>();
 
+    /// <summary>Ordered per-client review-pass list entries.</summary>
+    public DbSet<ClientReviewPassRecord> ClientReviewPasses => this.Set<ClientReviewPassRecord>();
+
     /// <summary>Review jobs table.</summary>
     public DbSet<ReviewJob> ReviewJobs => this.Set<ReviewJob>();
 

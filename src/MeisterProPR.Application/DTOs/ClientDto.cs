@@ -23,7 +23,17 @@ public sealed record ClientDto(
     bool EnableProRV,
     bool EnableEvidenceBackedVerification = false,
     bool EnableMultiPassUnion = false,
-    int? MultiPassUnionPassCount = null,
+    IReadOnlyList<ReviewPassDto>? ReviewPasses = null,
     Guid? TenantId = null,
     string? TenantSlug = null,
-    string? TenantDisplayName = null);
+    string? TenantDisplayName = null)
+{
+    /// <summary>The ordered review-pass list, or an empty list when none are configured.</summary>
+    public IReadOnlyList<ReviewPassDto> ReviewPassesOrEmpty => this.ReviewPasses ?? [];
+}
+
+/// <summary>
+///     One entry in a client's ordered review-pass list: an additional multi-pass union pass bound to a configured
+///     model. <see cref="Ordinal" /> is the zero-based position after the implicit tier baseline pass.
+/// </summary>
+public sealed record ReviewPassDto(int Ordinal, Guid ConfiguredModelId);

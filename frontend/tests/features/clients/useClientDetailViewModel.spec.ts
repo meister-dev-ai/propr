@@ -149,6 +149,8 @@ describe('useClientDetailViewModel (FR-007, FR-008, FR-012)', () => {
 
     await vm.saveAdvancedSettings()
 
+    // The pass list was not touched, so it is omitted from the patch — saving System-tab toggles must not
+    // clobber a concurrently-edited (or still-loading) review-pass list.
     expect(mockPatch).toHaveBeenCalledWith('/clients/{clientId}', {
       params: { path: { clientId: 'client-1' } },
       body: {
@@ -159,6 +161,27 @@ describe('useClientDetailViewModel (FR-007, FR-008, FR-012)', () => {
         enableMultiPassUnion: false,
       },
     })
+  })
+
+  it('sends reviewPasses only when the pass list changed, dropping empty entries', async () => {
+    mockGet.mockReset()
+    mockGet
+      .mockResolvedValueOnce({ data: sampleClient, response: { status: 200, ok: true } })
+      .mockResolvedValueOnce({ data: sampleReviewProfiles, response: { status: 200, ok: true } })
+      .mockResolvedValueOnce({ data: sampleClientReviewProfile, response: { status: 200, ok: true } })
+    const vm = useClientDetailViewModel({ autoLoad: false })
+    await vm.loadClient()
+
+    // A newly chosen pass plus a half-configured (empty-model) row that must be dropped before sending.
+    vm.editedReviewPasses.value = [
+      { ordinal: 0, configuredModelId: 'model-x' },
+      { ordinal: 1, configuredModelId: '' },
+    ]
+
+    await vm.saveAdvancedSettings()
+
+    const body = mockPatch.mock.calls[0][1].body as Record<string, unknown>
+    expect(body.reviewPasses).toEqual([{ ordinal: 0, configuredModelId: 'model-x' }])
   })
 
   it('saves review aggressiveness through the dedicated review-profile endpoint', async () => {

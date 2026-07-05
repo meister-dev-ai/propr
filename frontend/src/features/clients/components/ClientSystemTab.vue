@@ -142,17 +142,8 @@
                             <strong>Enable multi-pass union</strong>
                             <p class="muted review-publication-copy">
                                 Enable this to review higher-complexity files across multiple independent
-                                passes and union their findings before deduplication.
-                            </p>
-                        </label>
-                        <label v-if="editedEnableMultiPassUnion" class="field-label" for="multiPassUnionPassCount">
-                            Passes per file (baseline + resamples)
-                            <input id="multiPassUnionPassCount"
-                                v-model.number="editedMultiPassUnionPassCount"
-                                max="5" min="1" name="multiPassUnionPassCount"
-                                placeholder="Server default (2)" type="number" />
-                            <p class="muted review-publication-copy">
-                                Leave blank to use the server default (2). 1 disables the extra passes.
+                                passes and union their findings before deduplication. Configure the
+                                per-pass models in the AI Providers tab under "Review passes".
                             </p>
                         </label>
                     </div>
@@ -204,7 +195,6 @@ const {
     editedEnableProRV,
     editedEnableEvidenceBackedVerification,
     editedEnableMultiPassUnion,
-    editedMultiPassUnionPassCount,
     reviewProfiles,
     clientReviewProfile,
     saveDisplayName,
