@@ -24,8 +24,9 @@ public enum MultiPassDiversityMode
     CrossModel = 1,
 
     /// <summary>
-    ///     One or more passes run a different prompt/scope lens rather than a resample. Design-only arm; not wired
-    ///     into the runtime.
+    ///     One or more passes run a different prompt/scope lens rather than a resample. Each declared arm carries a
+    ///     <see cref="MultiPassArm.Lens" /> (e.g. <c>security</c>); the eval fan-out scopes a lens pass to the files
+    ///     that lens targets (the security lens runs on security-floor-flagged files, any tier).
     /// </summary>
     Lens = 2,
 }
@@ -86,7 +87,11 @@ public sealed record MultiPassDiversity(
         }
 
         var result = new List<MultiPassArm>(resamplePassCount);
-        if (this.Mode == MultiPassDiversityMode.CrossModel)
+
+        // Arm-driven modes spread the resamples across the declared arms (expanded by their count, cycling when
+        // there are more passes than arms), preserving each arm's model and lens. Cross-model routes each resample
+        // to its own model; the lens mode routes each resample to its own prompt/scope lens (e.g. a security arm).
+        if (this.Mode is MultiPassDiversityMode.CrossModel or MultiPassDiversityMode.Lens)
         {
             var plan = this.ExpandArms();
             for (var i = 0; i < resamplePassCount; i++)
@@ -98,7 +103,7 @@ public sealed record MultiPassDiversity(
                 }
                 else
                 {
-                    // Cross-model with no arms declared degrades to the default model (behaves like resampling).
+                    // An arm-driven mode with no arms declared degrades to the default model (behaves like resampling).
                     result.Add(new MultiPassArm(this.ResolveArmLabel(), this.DefaultModel));
                 }
             }
@@ -106,8 +111,8 @@ public sealed record MultiPassDiversity(
             return result;
         }
 
-        // Resampling (and, until it is built, the lens mode): every resample runs the diversity default model
-        // (eval-harness override) or, when that is null, the file's tier model reused by the harness.
+        // Resampling: every resample runs the diversity default model (eval-harness override) or, when that is
+        // null, the file's tier model reused by the harness.
         var label = this.ResolveArmLabel();
         for (var i = 0; i < resamplePassCount; i++)
         {

@@ -602,6 +602,55 @@ public sealed class FileReviewerMultiPassUnionTests
     }
 
     [Fact]
+    public async Task Eval_LensArm_RunsSecurityLensOnFlaggedFile()
+    {
+        // Eval-harness path (MultiPassUnionPassCount set) with a Lens-mode diversity carrying a security arm: on a
+        // security-flagged file the resample pass runs under the security lens (ActiveLens=security), any tier.
+        var reviewer = this.CreateReviewer();
+        var file = SecurityFileForTier(FileComplexityTier.Low);
+        var (job, pr) = Fixture(file);
+
+        var context = new ReviewSystemContext(null, [], null)
+        {
+            DefaultReviewChatClient = Substitute.For<IChatClient>(),
+            EnableMultiPassUnion = true,
+            MultiPassUnionPassCount = 2,
+            MultiPassDiversity = new MultiPassDiversity(
+                MultiPassDiversityMode.Lens,
+                Arms: [new MultiPassArm("security", Lens: ReviewPassLens.Security)]),
+        };
+
+        await reviewer.ReviewAsync(job, pr, file, 1, 1, context, null, Substitute.For<IChatClient>(), CancellationToken.None);
+
+        Assert.Equal(new[] { null, ReviewPassLens.Security }, this._observedLenses.ToArray());
+    }
+
+    [Fact]
+    public async Task Eval_LensArm_SkippedOnUnflaggedFile()
+    {
+        // The lens arm is scoped to security-flagged files; on a non-flagged file it is out of scope even at an
+        // in-scope tier, so the eval run degrades to a single baseline pass.
+        var reviewer = this.CreateReviewer();
+        var file = FileForTier(FileComplexityTier.Medium);
+        var (job, pr) = Fixture(file);
+
+        var context = new ReviewSystemContext(null, [], null)
+        {
+            DefaultReviewChatClient = Substitute.For<IChatClient>(),
+            EnableMultiPassUnion = true,
+            MultiPassUnionPassCount = 2,
+            MultiPassDiversity = new MultiPassDiversity(
+                MultiPassDiversityMode.Lens,
+                Arms: [new MultiPassArm("security", Lens: ReviewPassLens.Security)]),
+        };
+
+        await reviewer.ReviewAsync(job, pr, file, 1, 1, context, null, Substitute.For<IChatClient>(), CancellationToken.None);
+
+        Assert.Single(this._observedModelIds);
+        Assert.Equal(new string?[] { null }, this._observedLenses.ToArray());
+    }
+
+    [Fact]
     public async Task CrossModel_RoutesResamplePassesToArmModels_BaselineKeepsTierModel()
     {
         var reviewer = this.CreateReviewer();
