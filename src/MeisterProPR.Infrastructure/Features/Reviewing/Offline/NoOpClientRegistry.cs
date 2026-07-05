@@ -2,6 +2,7 @@
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
 using MeisterProPR.Application.Interfaces;
+using MeisterProPR.Application.ValueObjects;
 using MeisterProPR.Domain.Enums;
 using MeisterProPR.Domain.ValueObjects;
 
@@ -58,9 +59,9 @@ public sealed class NoOpClientRegistry : IClientRegistry
         return Task.FromResult(false);
     }
 
-    public Task<IReadOnlyList<Guid>> GetReviewPassesAsync(Guid clientId, CancellationToken ct = default)
+    public Task<IReadOnlyList<ReviewPassSpec>> GetReviewPassesAsync(Guid clientId, CancellationToken ct = default)
     {
-        return Task.FromResult<IReadOnlyList<Guid>>([]);
+        return Task.FromResult<IReadOnlyList<ReviewPassSpec>>([]);
     }
 
     public Task<ReviewStrategy?> GetDefaultReviewStrategyAsync(Guid clientId, CancellationToken ct = default)

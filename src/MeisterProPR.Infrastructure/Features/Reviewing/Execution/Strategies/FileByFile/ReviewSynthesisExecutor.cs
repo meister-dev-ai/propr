@@ -652,6 +652,7 @@ internal sealed class ReviewSynthesisExecutor(
                 {
                     OriginPassKind = finding.Provenance.ResolveOriginPassKindName(),
                     OriginPassIndex = finding.Provenance.UnionPassIndex,
+                    OriginPassLens = finding.Provenance.UnionLens,
                     ScopeRelation = ReviewCommentScopeRelationMapper.Map(finding.ScopeRelation),
                 })
             .ToList();

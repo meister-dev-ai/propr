@@ -57,24 +57,33 @@ export function passKindLabel(
     return 'Initial review'
 }
 
+/** Title-cased display name for a review-pass lens (e.g. "security" -> "Security"). */
+function lensLabel(lens: string): string {
+    return lens.charAt(0).toUpperCase() + lens.slice(1)
+}
+
 /**
  * Provenance label for a finding's origin pass. Baseline vs ProRVAugmentation vs
  * MultiPassUnion vs Synthesis. When a multi-pass union finding carries its 1-based
  * pass index (the tier baseline is pass 1, so additional passes are 2..k) the badge
  * renders "Pass N"; without an index it falls back to the generic "Additional pass".
- * Returns null when the origin is unknown so callers render no badge.
+ * A specialist lens (e.g. security) is appended as "Pass N · Security". Returns null
+ * when the origin is unknown so callers render no badge.
  */
 export function originLabel(
     originPassKind: string | null | undefined,
     originPassIndex?: number | null,
+    originPassLens?: string | null,
 ): string | null {
     switch (originPassKind) {
         case 'Baseline':
             return 'Initial review'
         case 'ProRVAugmentation':
             return 'ProRV verification'
-        case 'MultiPassUnion':
-            return typeof originPassIndex === 'number' ? `Pass ${originPassIndex}` : 'Additional pass'
+        case 'MultiPassUnion': {
+            const base = typeof originPassIndex === 'number' ? `Pass ${originPassIndex}` : 'Additional pass'
+            return originPassLens ? `${base} · ${lensLabel(originPassLens)}` : base
+        }
         case 'Synthesis':
             return 'Synthesis'
         default:

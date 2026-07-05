@@ -24,6 +24,10 @@ internal static class PromptTemplateCatalog
                 "shared/memory-reconsideration-user.hbs"),
             [PromptStageKeys.PerFileContextSystem] = new(
                 PromptStageKeys.PerFileContextSystem, PromptStageRole.System, "file-by-file/per-file-context-system.hbs"),
+            [PromptStageKeys.PerFileSecurityLensContextSystem] = new(
+                PromptStageKeys.PerFileSecurityLensContextSystem,
+                PromptStageRole.System,
+                "file-by-file/per-file-security-lens-context-system.hbs"),
             [PromptStageKeys.PerFileUser] = new(PromptStageKeys.PerFileUser, PromptStageRole.User, "file-by-file/per-file-user.hbs"),
             [PromptStageKeys.AgenticFilePlanningSystem] = new(
                 PromptStageKeys.AgenticFilePlanningSystem,

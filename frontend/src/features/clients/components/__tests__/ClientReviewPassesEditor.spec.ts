@@ -27,6 +27,12 @@ function modelOptionValues(wrapper: ReturnType<typeof mount>, rowIndex: number):
     return selects[rowIndex].findAll('option').map(option => option.attributes('value') ?? '')
 }
 
+function lastEmittedPasses(wrapper: ReturnType<typeof mount>): ReviewPassEntry[] {
+    const emissions = wrapper.emitted('update:modelValue')
+    expect(emissions).toBeTruthy()
+    return emissions![emissions!.length - 1][0] as ReviewPassEntry[]
+}
+
 describe('ClientReviewPassesEditor model greying', () => {
     it("excludes a model chosen by another row while keeping the row's own selection", () => {
         const modelValue: ReviewPassEntry[] = [
@@ -49,5 +55,73 @@ describe('ClientReviewPassesEditor model greying', () => {
         expect(row1).toContain('m2')
         expect(row1).toContain('m3')
         expect(row1).not.toContain('m1')
+    })
+
+    it('excludes a model only from another row under the SAME lens (tuple distinctness)', () => {
+        // Both rows carry the security lens: the model bound by row 0 is taken from row 1's options.
+        const sameLens: ReviewPassEntry[] = [
+            { ordinal: 0, configuredModelId: 'm1', lens: 'security' },
+            { ordinal: 1, configuredModelId: 'm2', lens: 'security' },
+        ]
+        const sameLensWrapper = mount(ClientReviewPassesEditor, { props: { modelValue: sameLens, connections } })
+        expect(modelOptionValues(sameLensWrapper, 1)).not.toContain('m1')
+
+        // Row 0 is an ordinary pass and row 1 a security pass: the same model may be bound under both lenses, so
+        // row 1 still offers m1 even though row 0 uses it. This is the dogfood [resample, security] shape.
+        const differentLens: ReviewPassEntry[] = [
+            { ordinal: 0, configuredModelId: 'm1' },
+            { ordinal: 1, configuredModelId: 'm2', lens: 'security' },
+        ]
+        const differentLensWrapper = mount(ClientReviewPassesEditor, { props: { modelValue: differentLens, connections } })
+        expect(modelOptionValues(differentLensWrapper, 1)).toContain('m1')
+    })
+})
+
+describe('ClientReviewPassesEditor lens selector', () => {
+    it('offers None and Security lens options per row', () => {
+        const wrapper = mount(ClientReviewPassesEditor, {
+            props: { modelValue: [{ ordinal: 0, configuredModelId: 'm1' }] as ReviewPassEntry[], connections },
+        })
+
+        const lensOptions = wrapper
+            .find('[data-testid="review-pass-lens"]')
+            .findAll('option')
+            .map(option => option.attributes('value') ?? '')
+        expect(lensOptions).toEqual(['', 'security'])
+    })
+
+    it('emits the chosen lens on the entry', async () => {
+        const wrapper = mount(ClientReviewPassesEditor, {
+            props: { modelValue: [{ ordinal: 0, configuredModelId: 'm1' }] as ReviewPassEntry[], connections },
+        })
+
+        await wrapper.find('[data-testid="review-pass-lens"]').setValue('security')
+
+        const emitted = lastEmittedPasses(wrapper)
+        expect(emitted).toEqual([{ ordinal: 0, configuredModelId: 'm1', lens: 'security' }])
+    })
+
+    it('emits a null lens when a pass is switched back to None', async () => {
+        const wrapper = mount(ClientReviewPassesEditor, {
+            props: {
+                modelValue: [{ ordinal: 0, configuredModelId: 'm1', lens: 'security' }] as ReviewPassEntry[],
+                connections,
+            },
+        })
+
+        await wrapper.find('[data-testid="review-pass-lens"]').setValue('')
+
+        expect(lastEmittedPasses(wrapper)).toEqual([{ ordinal: 0, configuredModelId: 'm1', lens: null }])
+    })
+
+    it('hydrates the lens from the persisted value', () => {
+        const wrapper = mount(ClientReviewPassesEditor, {
+            props: {
+                modelValue: [{ ordinal: 0, configuredModelId: 'm1', lens: 'security' }] as ReviewPassEntry[],
+                connections,
+            },
+        })
+
+        expect((wrapper.find('[data-testid="review-pass-lens"]').element as HTMLSelectElement).value).toBe('security')
     })
 })

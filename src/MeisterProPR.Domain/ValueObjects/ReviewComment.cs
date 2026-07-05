@@ -76,6 +76,13 @@ public sealed record ReviewComment
     public int? OriginPassIndex { get; init; }
 
     /// <summary>
+    ///     The specialist lens of the multi-pass union pass that produced this finding (e.g. <c>"security"</c>),
+    ///     when the pass ran under a lens. Provenance metadata only: it does not participate in deduplication and is
+    ///     <see langword="null" /> for the baseline pass, ordinary resample passes, and legacy comments.
+    /// </summary>
+    public string? OriginPassLens { get; init; }
+
+    /// <summary>
     ///     Deterministic classification of this comment's anchor line relative to the pull request's
     ///     changed-line ranges. Provenance metadata only: it does not participate in deduplication
     ///     (which keys on message text) and is <see langword="null" /> for legacy comments and comments

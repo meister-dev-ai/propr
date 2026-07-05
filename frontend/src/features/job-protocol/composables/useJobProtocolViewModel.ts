@@ -119,8 +119,12 @@ function parseFilePath(label: string | null | undefined) {
     return { filename, directory }
 }
 
-function commentOriginLabel(comment: { originPassKind?: string | null; originPassIndex?: number | null }): string | null {
-    return originLabel(comment.originPassKind, comment.originPassIndex)
+function commentOriginLabel(comment: {
+    originPassKind?: string | null
+    originPassIndex?: number | null
+    originPassLens?: string | null
+}): string | null {
+    return originLabel(comment.originPassKind, comment.originPassIndex, comment.originPassLens)
 }
 
 function parentIterationLabel(name: string): string {

@@ -68,6 +68,10 @@ public sealed record CandidateFindingProvenance
     ///     Diversity-arm label of the multi-pass union pass that produced the finding (e.g. the resample arm), or
     ///     <see langword="null" /> when the finding did not originate from a multi-pass union resample.
     /// </param>
+    /// <param name="unionLens">
+    ///     Specialist lens of the multi-pass union pass that produced the finding (e.g. <c>security</c>), or
+    ///     <see langword="null" /> for the baseline, ordinary resample passes, and non-union findings.
+    /// </param>
     public CandidateFindingProvenance(
         string originKind,
         string generatedByStage,
@@ -80,7 +84,8 @@ public sealed record CandidateFindingProvenance
         ReviewPassKind reviewPassKind = ReviewPassKind.Baseline,
         FindingProvenanceKind findingProvenanceKind = FindingProvenanceKind.BaselineOnly,
         int? unionPassIndex = null,
-        string? unionArmLabel = null)
+        string? unionArmLabel = null,
+        string? unionLens = null)
     {
         if (string.IsNullOrWhiteSpace(originKind))
         {
@@ -104,6 +109,7 @@ public sealed record CandidateFindingProvenance
         this.FindingProvenanceKind = findingProvenanceKind;
         this.UnionPassIndex = unionPassIndex;
         this.UnionArmLabel = string.IsNullOrWhiteSpace(unionArmLabel) ? null : unionArmLabel;
+        this.UnionLens = string.IsNullOrWhiteSpace(unionLens) ? null : unionLens;
     }
 
     /// <summary>
@@ -167,6 +173,12 @@ public sealed record CandidateFindingProvenance
     ///     when the finding did not originate from a multi-pass union resample.
     /// </summary>
     public string? UnionArmLabel { get; }
+
+    /// <summary>
+    ///     Gets the specialist lens of the multi-pass union pass that produced the finding (e.g. <c>security</c>),
+    ///     or <see langword="null" /> for the baseline, ordinary resample passes, and non-union findings.
+    /// </summary>
+    public string? UnionLens { get; }
 
     /// <summary>
     ///     Resolves the single producing review pass for a published finding as a <see cref="ReviewPassKind" />

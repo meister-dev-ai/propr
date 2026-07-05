@@ -34,6 +34,7 @@
         <span></span>
         <span class="review-pass-col-label">Connection</span>
         <span class="review-pass-col-label">Model</span>
+        <span class="review-pass-col-label">Lens</span>
         <span></span>
       </div>
 
@@ -65,6 +66,18 @@
             <option value="">Select a model</option>
             <option v-for="model in modelsForRow(index)" :key="model.id" :value="model.id">
               {{ model.displayName || model.remoteModelId || 'Unnamed model' }}
+            </option>
+          </select>
+
+          <select
+            v-model="row.lens"
+            class="form-input-sm review-pass-input"
+            aria-label="Lens"
+            data-testid="review-pass-lens"
+            @change="emitChange"
+          >
+            <option v-for="option in LENS_OPTIONS" :key="option.value" :value="option.value">
+              {{ option.label }}
             </option>
           </select>
 
@@ -113,7 +126,8 @@
     </div>
 
     <p class="muted review-passes-hint">
-      Up to {{ MAX_PASSES }} additional passes. Each additional pass runs on Medium and High complexity files only.
+      Up to {{ MAX_PASSES }} additional passes. A resample pass runs on Medium and High complexity files only;
+      a Security lens pass runs a security-specialist prompt on security-flagged files of any complexity.
     </p>
   </div>
 </template>
@@ -126,13 +140,22 @@ import type { components } from '@/types'
 type ReviewPassEntry = components['schemas']['ReviewPassEntry']
 
 // The connection is only a UI convenience for narrowing the model dropdown; the persisted value per
-// pass is the configured-model id, so each editable row tracks the chosen connection alongside it.
+// pass is the configured-model id and an optional lens, so each editable row tracks the chosen
+// connection alongside them.
 interface PassRow {
   connectionId: string
   configuredModelId: string
+  lens: string
 }
 
 const MAX_PASSES = 4
+
+// The closed lens vocabulary offered per pass. '' is an ordinary resample pass; a lens value runs a
+// specialist prompt scoped to the files that lens targets. Mirrors the backend ReviewPassLens set.
+const LENS_OPTIONS: { value: string; label: string }[] = [
+  { value: '', label: 'None (resample)' },
+  { value: 'security', label: 'Security' },
+]
 
 const props = defineProps<{
   modelValue: ReviewPassEntry[]
@@ -158,10 +181,11 @@ const chatModelsFor = (connectionId: string): AiConfiguredModelDto[] => {
   return (connection?.configuredModels ?? []).filter((model) => model.supportsChat)
 }
 
-// Models offered in one row's dropdown: the connection's chat models minus any configured-model id already
-// selected by ANOTHER row. The row's own current selection stays selectable so it renders as chosen. Binding
-// the same model to two passes is same-model resampling, which the ordered list exists to avoid — and the
-// server rejects it with a 400, so greying it out here prevents creating the duplicate at all.
+// Models offered in one row's dropdown: the connection's chat models minus any model already bound by ANOTHER
+// row UNDER THE SAME LENS. The row's own current selection stays selectable so it renders as chosen. A distinct
+// (model, lens) pair is required — the same model twice under one lens is redundant resampling, which the server
+// rejects with a 400; the same model under different lenses (e.g. a plain resample plus a security-lens pass) is
+// allowed, so greying keys on the tuple, not the model alone.
 const modelsForRow = (index: number): AiConfiguredModelDto[] => {
   const row = rows.value[index]
   if (!row) {
@@ -170,7 +194,7 @@ const modelsForRow = (index: number): AiConfiguredModelDto[] => {
 
   const takenByOtherRows = new Set(
     rows.value
-      .filter((_, rowIndex) => rowIndex !== index)
+      .filter((otherRow, rowIndex) => rowIndex !== index && otherRow.lens === row.lens)
       .map((otherRow) => otherRow.configuredModelId)
       .filter((modelId) => modelId !== ''),
   )
@@ -210,15 +234,20 @@ const isModelUnavailable = (row: PassRow): boolean =>
 const completeEntries = (source: PassRow[]): ReviewPassEntry[] =>
   source
     .filter((row) => row.configuredModelId && (!connectionsLoaded.value || isModelAvailable(row.configuredModelId)))
-    .map((row, index) => ({ ordinal: index, configuredModelId: row.configuredModelId }))
+    .map((row, index) => ({
+      ordinal: index,
+      configuredModelId: row.configuredModelId,
+      lens: row.lens ? row.lens : null,
+    }))
 
 const entriesKey = (entries: ReviewPassEntry[]): string =>
-  entries.map((entry) => entry.configuredModelId ?? '').join('|')
+  entries.map((entry) => `${entry.configuredModelId ?? ''}:${entry.lens ?? ''}`).join('|')
 
 const syncRowsFromModelValue = (): void => {
   rows.value = (props.modelValue ?? []).map((entry) => ({
     connectionId: connectionIdForModel(entry.configuredModelId ?? ''),
     configuredModelId: entry.configuredModelId ?? '',
+    lens: entry.lens ?? '',
   }))
 }
 
@@ -259,7 +288,7 @@ const addRow = (): void => {
     return
   }
 
-  rows.value.push({ connectionId: '', configuredModelId: '' })
+  rows.value.push({ connectionId: '', configuredModelId: '', lens: '' })
   emitChange()
 }
 
@@ -290,7 +319,7 @@ const onConnectionChange = (index: number): void => {
 .review-passes-editor {
   /* Shared column template: fixed ordinal + fixed actions so the header row and every pass row size their
      two flexible middle columns identically — the "Connection"/"Model" headers then line up above the selects. */
-  --review-pass-cols: 4.5rem minmax(0, 1fr) minmax(0, 1fr) 9.5rem;
+  --review-pass-cols: 4.5rem minmax(0, 1fr) minmax(0, 1fr) 9rem 9.5rem;
   border: 1px solid var(--color-border);
   border-radius: var(--radius-lg);
   background: var(--color-surface);

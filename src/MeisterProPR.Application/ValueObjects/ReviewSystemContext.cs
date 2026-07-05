@@ -167,13 +167,20 @@ public sealed class ReviewSystemContext
     public int? MultiPassUnionPassCount { get; set; }
 
     /// <summary>
-    ///     Ordered per-client review-pass list for production multi-pass union: each entry is the identifier of a
-    ///     configured model (its connection implied) that runs one additional pass after the implicit tier baseline.
-    ///     Effective pass count is <c>1 + ReviewPasses.Count</c>. Empty means a single baseline pass. Only consulted
-    ///     when <see cref="EnableMultiPassUnion" /> is <see langword="true" /> and <see cref="MultiPassUnionPassCount" />
-    ///     is <see langword="null" /> (the production path).
+    ///     Ordered per-client review-pass list for production multi-pass union: each entry names a configured model
+    ///     (its connection implied) that runs one additional pass after the implicit tier baseline, with an optional
+    ///     specialist lens. Effective pass count is <c>1 + ReviewPasses.Count</c>. Empty means a single baseline pass.
+    ///     Only consulted when <see cref="EnableMultiPassUnion" /> is <see langword="true" /> and
+    ///     <see cref="MultiPassUnionPassCount" /> is <see langword="null" /> (the production path).
     /// </summary>
-    public IReadOnlyList<Guid> ReviewPasses { get; init; } = [];
+    public IReadOnlyList<ReviewPassSpec> ReviewPasses { get; init; } = [];
+
+    /// <summary>
+    ///     The specialist lens active for the current per-file pass context, or <see langword="null" /> for an
+    ///     ordinary pass. Set on a lens pass (e.g. security) so prompt construction selects the specialist template.
+    ///     Not persisted — a per-pass runtime marker set after the pass context is created.
+    /// </summary>
+    public string? ActiveLens { get; set; }
 
     /// <summary>
     ///     Diversity configuration for multi-pass union generation. <see langword="null" /> defers to

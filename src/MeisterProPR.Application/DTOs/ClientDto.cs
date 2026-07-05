@@ -34,6 +34,7 @@ public sealed record ClientDto(
 
 /// <summary>
 ///     One entry in a client's ordered review-pass list: an additional multi-pass union pass bound to a configured
-///     model. <see cref="Ordinal" /> is the zero-based position after the implicit tier baseline pass.
+///     model, with an optional specialist lens. <see cref="Ordinal" /> is the zero-based position after the implicit
+///     tier baseline pass; <see cref="Lens" /> is <see langword="null" /> for an ordinary resample pass.
 /// </summary>
-public sealed record ReviewPassDto(int Ordinal, Guid ConfiguredModelId);
+public sealed record ReviewPassDto(int Ordinal, Guid ConfiguredModelId, string? Lens = null);

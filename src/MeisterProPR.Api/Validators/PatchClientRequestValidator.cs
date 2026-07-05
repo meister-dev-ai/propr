@@ -3,6 +3,7 @@
 
 using FluentValidation;
 using MeisterProPR.Api.Controllers;
+using MeisterProPR.Application.Features.Reviewing.Execution.Models;
 using MeisterProPR.Domain.Enums;
 
 namespace MeisterProPR.Api.Validators;
@@ -37,8 +38,9 @@ public sealed class PatchClientRequestValidator : AbstractValidator<PatchClientR
         this.RuleFor(r => r.ReviewPasses)
             .Must(BeAValidReviewPassList)
             .WithMessage(
-                "ReviewPasses must contain at most 4 entries, each with a non-empty and distinct configuredModelId "
-                + "and unique, contiguous ordinals starting at 0.")
+                "ReviewPasses must contain at most 4 entries, each with a non-empty configuredModelId, an optional "
+                + "recognized lens, a distinct (configuredModelId, lens) pair, and unique, contiguous ordinals "
+                + "starting at 0.")
             .When(r => r.ReviewPasses is not null);
 
         this.RuleFor(r => r.DefaultReviewStrategy)
@@ -47,8 +49,9 @@ public sealed class PatchClientRequestValidator : AbstractValidator<PatchClientR
     }
 
     // At most 4 additional passes (5 total with the implicit tier baseline), each bound to a non-empty configured
-    // model that is distinct across entries, with ordinals that form a unique, contiguous 0..n-1 sequence. The
-    // model's existence and chat-capability are checked separately (they need the client id and the database).
+    // model, carrying at most a recognized lens, forming a distinct (model, lens) pair across entries, with ordinals
+    // that form a unique, contiguous 0..n-1 sequence. The model's existence and chat-capability are checked
+    // separately (they need the client id and the database).
     private static bool BeAValidReviewPassList(IReadOnlyList<ReviewPassEntry>? passes)
     {
         if (passes is null)
@@ -66,9 +69,16 @@ public sealed class PatchClientRequestValidator : AbstractValidator<PatchClientR
             return false;
         }
 
-        // Each pass must bind a distinct model — the same model twice is same-model resampling, which the
-        // ordered pass list exists to avoid.
-        if (passes.Select(pass => pass.ConfiguredModelId).Distinct().Count() != passes.Count)
+        // Only null (an ordinary resample pass) or a recognized lens value is permitted.
+        if (passes.Any(pass => !ReviewPassLens.IsValid(pass.Lens)))
+        {
+            return false;
+        }
+
+        // Each pass must be a distinct (model, lens) pair — the same model under the same lens twice is redundant
+        // resampling, which the ordered pass list exists to avoid. The same model under different lenses (e.g. a
+        // plain resample pass plus a security-lens pass on that model) is allowed.
+        if (passes.Select(pass => (pass.ConfiguredModelId, pass.Lens)).Distinct().Count() != passes.Count)
         {
             return false;
         }

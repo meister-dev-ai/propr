@@ -336,6 +336,36 @@ public class ReviewPromptsTests
     }
 
     [Fact]
+    public void BuildPerFileContextPrompt_WithSecurityLens_RendersSecuritySpecialistTemplate()
+    {
+        // A security-lens pass sets ActiveLens; the builder selects the dedicated specialist template, which frames
+        // the reviewer for adversarial security discovery and mandates cross-file taint tracing via find_references.
+        var context = new ReviewSystemContext(null, [], null)
+        {
+            ActiveLens = ReviewPassLens.Security,
+            PerFileHint = new PerFileReviewHint("src/Foo.cs", 1, 1, [new ChangedFileSummary("src/Foo.cs", ChangeType.Edit)]),
+        };
+
+        var prompt = ReviewPrompts.BuildPerFileContextPrompt(context, "src/Foo.cs", 1, 1);
+
+        Assert.Contains("adversarial SECURITY review", prompt, StringComparison.Ordinal);
+        Assert.Contains("find_references", prompt, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void BuildPerFileContextPrompt_WithoutLens_RendersOrdinaryTemplate()
+    {
+        var context = new ReviewSystemContext(null, [], null)
+        {
+            PerFileHint = new PerFileReviewHint("src/Foo.cs", 1, 1, [new ChangedFileSummary("src/Foo.cs", ChangeType.Edit)]),
+        };
+
+        var prompt = ReviewPrompts.BuildPerFileContextPrompt(context, "src/Foo.cs", 1, 1);
+
+        Assert.DoesNotContain("adversarial SECURITY review", prompt, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void BuildAgenticFilePlanningSystemPrompt_WithFocusedReviewGuidance_IncludesGuidanceSection()
     {
         var context = new ReviewSystemContext(null, [], null)

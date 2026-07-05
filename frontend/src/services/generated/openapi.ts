@@ -11897,6 +11897,11 @@ export interface components {
              *     baseline is pass 1 and additional passes are 2..k. null for the baseline and legacy comments.
              */
             originPassIndex?: number | null;
+            /**
+             * @description The specialist lens (e.g. `security`) of the multi-pass union pass that produced this finding, when the
+             *     pass ran under a lens. null for the baseline, ordinary resample passes, and legacy comments.
+             */
+            originPassLens?: string | null;
         };
         /** @description Visibility for one tool-result evidence bounding or refresh action. */
         ProtocolToolEvidenceDto: {
@@ -12125,6 +12130,7 @@ export interface components {
             changedLineRelation?: components["schemas"]["ReviewCommentScopeRelation"];
             /** Format: int32 */
             originPassIndex?: number | null;
+            originPassLens?: string | null;
         };
         /**
          * @description Deterministic classification of where a review comment's anchor line falls relative to the
@@ -12330,6 +12336,11 @@ export interface components {
              * @description Identifier of the configured model this pass runs on (its connection implied).
              */
             configuredModelId?: string;
+            /**
+             * @description Optional specialist lens for this pass (e.g. `security`); null is an ordinary
+             *     resample pass. A lens pass runs a specialist prompt scoped to the files that lens targets.
+             */
+            lens?: string | null;
         };
         /** @description One selectable review profile entry. */
         ReviewProfileCatalogItemResponse: {

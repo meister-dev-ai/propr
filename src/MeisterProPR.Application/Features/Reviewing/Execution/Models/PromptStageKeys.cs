@@ -14,6 +14,12 @@ public static class PromptStageKeys
     /// <summary>Per-file context system prompt stage key.</summary>
     public const string PerFileContextSystem = "per_file_context_system";
 
+    /// <summary>
+    ///     Per-file context system prompt stage key for the security-specialist lens pass. Selected in place of
+    ///     <see cref="PerFileContextSystem" /> when a review pass runs under the security lens.
+    /// </summary>
+    public const string PerFileSecurityLensContextSystem = "per_file_security_lens_context_system";
+
     /// <summary>Per-file user prompt stage key.</summary>
     public const string PerFileUser = "per_file_user";
 

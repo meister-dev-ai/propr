@@ -408,7 +408,33 @@ public sealed class ClientRegistryTests(PostgresContainerFixture fixture) : IAsy
 
         // The registry returns the configured-model ids in ordinal order for the review pipeline.
         var passes = await this._registry.GetReviewPassesAsync(client.Id, CancellationToken.None);
-        Assert.Equal(new[] { modelA, modelB }, passes.ToArray());
+        Assert.Equal(new[] { modelA, modelB }, passes.Select(pass => pass.ConfiguredModelId).ToArray());
+        Assert.All(passes, pass => Assert.Null(pass.Lens));
+    }
+
+    [Fact]
+    public async Task ReviewPasses_PatchPersistsLens_AndGetEchoesIt()
+    {
+        var client = await this.SeedClientAsync();
+        var adminService = new ClientAdminService(this._dbContext);
+        var resampleModel = await this.SeedChatModelAsync(client.Id);
+        var securityModel = await this.SeedChatModelAsync(client.Id);
+
+        var updated = await adminService.PatchAsync(
+            client.Id,
+            null,
+            null,
+            reviewPasses: new List<ReviewPassDto> { new(0, resampleModel), new(1, securityModel, "security") },
+            ct: CancellationToken.None);
+
+        Assert.NotNull(updated);
+        Assert.Equal(
+            new[] { new ReviewPassDto(0, resampleModel), new ReviewPassDto(1, securityModel, "security") },
+            updated!.ReviewPassesOrEmpty.ToArray());
+
+        // The lens survives to the review-pipeline projection so a lens pass runs the specialist prompt.
+        var passes = await this._registry.GetReviewPassesAsync(client.Id, CancellationToken.None);
+        Assert.Equal(new[] { null, "security" }, passes.Select(pass => pass.Lens).ToArray());
     }
 
     [Fact]
@@ -434,7 +460,7 @@ public sealed class ClientRegistryTests(PostgresContainerFixture fixture) : IAsy
             ct: CancellationToken.None);
 
         var passes = await this._registry.GetReviewPassesAsync(client.Id, CancellationToken.None);
-        Assert.Equal(new[] { replacement }, passes.ToArray());
+        Assert.Equal(new[] { replacement }, passes.Select(pass => pass.ConfiguredModelId).ToArray());
     }
 
     [Fact]

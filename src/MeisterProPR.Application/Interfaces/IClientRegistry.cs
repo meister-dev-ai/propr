@@ -1,6 +1,7 @@
 // Copyright (c) Andreas Rain.
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
+using MeisterProPR.Application.ValueObjects;
 using MeisterProPR.Domain.Enums;
 using MeisterProPR.Domain.ValueObjects;
 
@@ -84,13 +85,13 @@ public interface IClientRegistry
     Task<bool> GetMultiPassUnionEnabledAsync(Guid clientId, CancellationToken ct = default);
 
     /// <summary>
-    ///     Returns the ordered per-client review-pass list — the configured-model identifiers, in ordinal order, that
-    ///     each run one additional multi-pass union pass after the implicit tier baseline. Empty when the client has
-    ///     configured no additional passes (multi-pass union then degrades to a single baseline pass).
+    ///     Returns the ordered per-client review-pass list — each configured model (in ordinal order) with its optional
+    ///     specialist lens — that runs one additional multi-pass union pass after the implicit tier baseline. Empty
+    ///     when the client has configured no additional passes (multi-pass union then degrades to a single baseline pass).
     /// </summary>
     /// <param name="clientId">Client identifier.</param>
     /// <param name="ct">Cancellation token.</param>
-    Task<IReadOnlyList<Guid>> GetReviewPassesAsync(Guid clientId, CancellationToken ct = default);
+    Task<IReadOnlyList<ReviewPassSpec>> GetReviewPassesAsync(Guid clientId, CancellationToken ct = default);
 
     /// <summary>
     ///     Returns the default review strategy configured for the given client, or <see langword="null" /> if not set.

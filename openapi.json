@@ -19262,6 +19262,11 @@
             "description": "The 1-based index of the numbered multi-pass union pass that produced this finding, when known. The tier\nbaseline is pass 1 and additional passes are 2..k. null for the baseline and legacy comments.",
             "format": "int32",
             "nullable": true
+          },
+          "originPassLens": {
+            "type": "string",
+            "description": "The specialist lens (e.g. `security`) of the multi-pass union pass that produced this finding, when the\npass ran under a lens. null for the baseline, ordinary resample passes, and legacy comments.",
+            "nullable": true
           }
         },
         "additionalProperties": false,
@@ -19846,6 +19851,10 @@
             "type": "integer",
             "format": "int32",
             "nullable": true
+          },
+          "originPassLens": {
+            "type": "string",
+            "nullable": true
           }
         },
         "additionalProperties": false,
@@ -20224,6 +20233,11 @@
             "type": "string",
             "description": "Identifier of the configured model this pass runs on (its connection implied).",
             "format": "uuid"
+          },
+          "lens": {
+            "type": "string",
+            "description": "Optional specialist lens for this pass (e.g. `security`); null is an ordinary\nresample pass. A lens pass runs a specialist prompt scoped to the files that lens targets.",
+            "nullable": true
           }
         },
         "additionalProperties": false,

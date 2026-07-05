@@ -389,7 +389,8 @@ public sealed class InMemoryReviewDiagnosticsReader(InMemoryReviewJobRepository 
     private static ProtocolReviewCommentDto ToProtocolReviewCommentDto(ReviewComment comment)
     {
         return new ProtocolReviewCommentDto(
-            comment.FilePath, comment.LineNumber, comment.Severity, comment.Message, comment.OriginPassKind, comment.ScopeRelation, comment.OriginPassIndex);
+            comment.FilePath, comment.LineNumber, comment.Severity, comment.Message, comment.OriginPassKind, comment.ScopeRelation, comment.OriginPassIndex,
+            comment.OriginPassLens);
     }
 
     private static string ResolveProviderProjectKey(ReviewJob job)

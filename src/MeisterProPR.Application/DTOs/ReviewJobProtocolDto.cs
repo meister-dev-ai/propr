@@ -257,6 +257,10 @@ public sealed record ProtocolWorkspaceDto(
 ///     The 1-based index of the numbered multi-pass union pass that produced this finding, when known. The tier
 ///     baseline is pass 1 and additional passes are 2..k. <see langword="null" /> for the baseline and legacy comments.
 /// </param>
+/// <param name="OriginPassLens">
+///     The specialist lens (e.g. <c>security</c>) of the multi-pass union pass that produced this finding, when the
+///     pass ran under a lens. <see langword="null" /> for the baseline, ordinary resample passes, and legacy comments.
+/// </param>
 public sealed record ProtocolReviewCommentDto(
     string? FilePath,
     int? LineNumber,
@@ -264,7 +268,8 @@ public sealed record ProtocolReviewCommentDto(
     string Message,
     string? OriginPassKind = null,
     ReviewCommentScopeRelation? ChangedLineRelation = null,
-    int? OriginPassIndex = null);
+    int? OriginPassIndex = null,
+    string? OriginPassLens = null);
 
 /// <summary>
 ///     Terminal outcome metadata for one file-linked protocol pass.

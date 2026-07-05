@@ -165,6 +165,7 @@ public sealed class ClientAdminService(
                         ClientId = client.Id,
                         Ordinal = ordinal++,
                         ConfiguredModelId = pass.ConfiguredModelId,
+                        Lens = pass.Lens,
                     });
             }
         }
@@ -344,7 +345,7 @@ public sealed class ClientAdminService(
 
         var reviewPasses = client.ReviewPasses
             .OrderBy(pass => pass.Ordinal)
-            .Select(pass => new ReviewPassDto(pass.Ordinal, pass.ConfiguredModelId))
+            .Select(pass => new ReviewPassDto(pass.Ordinal, pass.ConfiguredModelId, pass.Lens))
             .ToList()
             .AsReadOnly();
 

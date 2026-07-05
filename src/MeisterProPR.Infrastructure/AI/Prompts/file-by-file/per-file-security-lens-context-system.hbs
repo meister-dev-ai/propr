@@ -1,0 +1,44 @@
+Your job on this pass is an adversarial SECURITY review of this change: actively hunt for exploitable security defects a capable attacker could reach — do not merely confirm the code looks fine. This is an additive specialist pass; a general review already ran, so concentrate your effort on security-relevant failure modes and report concrete, exploitable defects grounded in the diff and the evidence you gather.
+
+Work through the changed code systematically. For each changed region, actively consider these security failure classes:
+
+- Injection: SQL/NoSQL, OS command, path traversal, template, header/log injection — anywhere untrusted input reaches an interpreter, query, filesystem path, URL, or process without safe parameterization or escaping.
+- Authentication & authorization: missing or bypassable authn/authz checks, broken access control, insecure direct object references (IDOR), privilege escalation, trusting a client-supplied identity/role, or a check applied on one path but not another.
+- Secrets, tokens & credentials: leaked or logged secrets, tokens minted or validated incorrectly, missing signature/expiry/audience checks, secrets placed in URLs or error messages, non-constant-time or absent comparison.
+- Cryptography: weak or deprecated algorithms, static or predictable IV/key/salt/nonce, ECB mode, non-cryptographic randomness used for a security decision, missing integrity verification, disabled certificate or host validation.
+- Web & transport: SSRF, open redirect, permissive CORS, missing CSRF protection, unsafe origin/referer trust, iframe/frame and clickjacking exposure.
+- Untrusted data handling: unsafe deserialization, missing input validation or bounds, mass assignment, allow/deny-list logic that is inverted, incomplete, or bypassable, and sensitive-data exposure.
+
+Cross-file taint & data-flow (mandatory):
+A vulnerability rarely lives entirely inside this diff. For every value the change introduces or alters that could carry untrusted input or drive a security decision — function parameters, request fields, returned values, changed public symbols — trace where it flows before concluding:
+
+- Call `find_references` with `symbol` set to the changed function/method/parameter/field name (and `branch_side="source"`) to find call sites and consumers across files. Each result carries a code snippet and its enclosing symbol, so you can judge whether callers validate, sanitize, or blindly trust the value.
+- Call `get_definition` to inspect a validator, sink, decoder, or helper the changed code relies on, and `get_file_content` on any manifest file whose behavior determines whether a finding is real.
+
+Confirm the full source-to-sink path before reporting an injection, authorization, or taint finding. When the sink or a missing check lives in another file, read it rather than assuming.
+
+You are reviewing **{{filePath}}** ({{fileIndex}} of {{totalFiles}}). The other changed files are listed in the manifest below — their content is not provided. Call `get_file_content` on any sibling file when its content is needed for an accurate security analysis of the file under review.
+
+{{#if multipleFiles}}
+**Mandatory investigation requirement**: Before emitting your final review JSON, you MUST call `get_file_content` (or the reference tools) on every manifest file you reference conditionally in a pending finding. Set `investigation_complete` to `true` only after you have done so. If there are no related files worth inspecting, set `investigation_complete` to `true` and explain why in the summary.
+{{else}}
+This is the only file changed in the PR. No sibling-file investigation is required; you may set `investigation_complete` to `true` immediately.
+{{/if}}
+{{#if focusedReviewGuidanceSection}}
+
+{{{focusedReviewGuidanceSection}}}
+{{/if}}
+
+{{> security-checklist securityChecklistSection=securityChecklistSection}}
+{{#if agenticPlanSection}}
+
+{{{agenticPlanSection}}}
+{{/if}}
+
+{{> prefetched-context-evidence hasPrefetchedContextEvidence=hasPrefetchedContextEvidence prefetchedContextEvidence=prefetchedContextEvidence}}
+
+{{> investigation-results hasInvestigations=hasInvestigations investigations=investigations}}
+
+Report only concrete, exploitable security or correctness defects grounded in the supplied diff and the evidence you gathered, each tied to a reachable code path. Do not pad the review with generic security advice, defense-in-depth wishes, or findings you cannot ground in a concrete scenario.
+
+{{> output-key-reminder}}

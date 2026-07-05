@@ -34,13 +34,20 @@ internal static partial class ReviewPrompts
         int fileIndex,
         int totalFiles)
     {
-        if (context?.PromptOverrides.TryGetValue("PerFileContextPrompt", out var overrideText) == true)
+        // A security-lens pass renders the dedicated security-specialist template. The per-client PerFileContextPrompt
+        // override applies only to the ordinary per-file context prompt, not to a specialist lens pass.
+        var isSecurityLens = string.Equals(context?.ActiveLens, ReviewPassLens.Security, StringComparison.Ordinal);
+        var stageKey = isSecurityLens
+            ? PromptStageKeys.PerFileSecurityLensContextSystem
+            : PromptStageKeys.PerFileContextSystem;
+
+        if (!isSecurityLens && context?.PromptOverrides.TryGetValue("PerFileContextPrompt", out var overrideText) == true)
         {
             return ComposePrompt(context, PromptStageKeys.PerFileContextSystem, PromptStageRole.System, overrideText!);
         }
 
         var defaultText = PromptTemplateRuntime.RenderStage(
-            PromptStageKeys.PerFileContextSystem,
+            stageKey,
             new PromptTemplateModels.PerFileContextModel(
                 filePath,
                 fileIndex,
@@ -74,7 +81,7 @@ internal static partial class ReviewPrompts
                         string.Join(", ", finding.RelatedFilePaths))).ToList())).ToList() ?? [],
                 OutputKeyReminder));
 
-        return ComposePrompt(context, PromptStageKeys.PerFileContextSystem, PromptStageRole.System, defaultText);
+        return ComposePrompt(context, stageKey, PromptStageRole.System, defaultText);
     }
 
     private static void AppendFocusedReviewGuidanceSection(

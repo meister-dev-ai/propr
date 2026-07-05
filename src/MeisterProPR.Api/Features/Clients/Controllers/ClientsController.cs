@@ -36,7 +36,7 @@ public sealed class ClientsController(
             client.EnableEvidenceBackedVerification,
             client.EnableMultiPassUnion,
             client.ReviewPassesOrEmpty
-                .Select(pass => new ReviewPassEntry(pass.Ordinal, pass.ConfiguredModelId))
+                .Select(pass => new ReviewPassEntry(pass.Ordinal, pass.ConfiguredModelId, pass.Lens))
                 .ToList(),
             client.TenantId,
             client.TenantSlug,
@@ -328,7 +328,7 @@ public sealed class ClientsController(
             request.EnableEvidenceBackedVerification,
             request.EnableMultiPassUnion,
             request.ReviewPasses?
-                .Select(pass => new ReviewPassDto(pass.Ordinal, pass.ConfiguredModelId))
+                .Select(pass => new ReviewPassDto(pass.Ordinal, pass.ConfiguredModelId, pass.Lens))
                 .ToList(),
             request.DefaultReviewStrategy,
             ct);
@@ -359,7 +359,11 @@ public sealed record ClientResponse(
 /// <summary>One entry in a client's ordered review-pass list: an additional multi-pass union pass bound to a model.</summary>
 /// <param name="Ordinal">Zero-based position of this pass after the implicit tier baseline pass.</param>
 /// <param name="ConfiguredModelId">Identifier of the configured model this pass runs on (its connection implied).</param>
-public sealed record ReviewPassEntry(int Ordinal, Guid ConfiguredModelId);
+/// <param name="Lens">
+///     Optional specialist lens for this pass (e.g. <c>security</c>); <see langword="null" /> is an ordinary
+///     resample pass. A lens pass runs a specialist prompt scoped to the files that lens targets.
+/// </param>
+public sealed record ReviewPassEntry(int Ordinal, Guid ConfiguredModelId, string? Lens = null);
 
 /// <summary>Crawl configuration response.</summary>
 public sealed record CrawlConfigResponse(

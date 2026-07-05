@@ -28,6 +28,11 @@ internal sealed class ClientReviewPassEntityTypeConfiguration : IEntityTypeConfi
             .HasColumnName("configured_model_id")
             .IsRequired();
 
+        // Optional specialist lens (nullable = plain resample pass). Bounded to the short lens vocabulary.
+        builder.Property(pass => pass.Lens)
+            .HasColumnName("lens")
+            .HasMaxLength(64);
+
         builder.HasOne(pass => pass.Client)
             .WithMany(client => client.ReviewPasses)
             .HasForeignKey(pass => pass.ClientId)

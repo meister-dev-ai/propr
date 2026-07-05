@@ -3,6 +3,7 @@
 
 using MeisterProPR.Application.DTOs;
 using MeisterProPR.Application.Interfaces;
+using MeisterProPR.Application.ValueObjects;
 using MeisterProPR.Domain.Enums;
 using MeisterProPR.Domain.ValueObjects;
 using MeisterProPR.Infrastructure.Data;
@@ -154,12 +155,12 @@ public sealed class DbClientRegistry(
     }
 
     /// <inheritdoc />
-    public async Task<IReadOnlyList<Guid>> GetReviewPassesAsync(Guid clientId, CancellationToken ct = default)
+    public async Task<IReadOnlyList<ReviewPassSpec>> GetReviewPassesAsync(Guid clientId, CancellationToken ct = default)
     {
         return await dbContext.ClientReviewPasses
             .Where(pass => pass.ClientId == clientId)
             .OrderBy(pass => pass.Ordinal)
-            .Select(pass => pass.ConfiguredModelId)
+            .Select(pass => new ReviewPassSpec(pass.ConfiguredModelId, pass.Lens))
             .ToListAsync(ct);
     }
 

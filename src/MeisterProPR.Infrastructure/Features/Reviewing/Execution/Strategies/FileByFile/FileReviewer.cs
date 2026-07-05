@@ -177,10 +177,19 @@ internal sealed partial class FileReviewer(
 
             result = await this.RunReviewResultPipelineAsync(pipelineState, result, pipelineProfile, ct);
 
-            // When the client opts into multi-pass union and the file's resolved tier is in scope, run additional
-            // independent passes and union their locally-verified comments into this result before it is persisted,
-            // so the synthesis inlet sees the union rather than a single pass. Flag off (or an out-of-scope tier)
-            // returns the baseline result untouched — behavior is identical to a single-pass review.
+            // The full deterministic security floor for this file (path + content-marker + model-escalate legs).
+            // A security-lens pass is scoped to flagged files regardless of tier, so it is carried into the fan-out
+            // even when the main-path tier stays Low. RiskMarkers were populated by the dispatch pipeline above.
+            var securityFlagged = SecurityFloor.IsFlagged(
+                file.Path,
+                fileContext.PerFileHint?.RiskMarkers ?? FileRiskMarkers.None,
+                triageVerdict.SecurityEscalate);
+
+            // When the client opts into multi-pass union, run additional independent passes and union their
+            // locally-verified comments into this result before it is persisted, so the synthesis inlet sees the
+            // union rather than a single pass. Ordinary passes run only on Medium/High tiers; a security-lens pass
+            // runs on any tier when the file is security-flagged. Flag off (or nothing in scope) returns the
+            // baseline result untouched — behavior is identical to a single-pass review.
             result = await this.MaybeApplyMultiPassUnionAsync(
                 new MultiPassUnionInputs(
                     job,
@@ -192,6 +201,7 @@ internal sealed partial class FileReviewer(
                     fileContext,
                     protocolId,
                     tier,
+                    securityFlagged,
                     tierModelId,
                     tierClient,
                     tierCapabilities,
@@ -466,7 +476,15 @@ internal sealed partial class FileReviewer(
     /// </summary>
     private async Task<ReviewResult> MaybeApplyMultiPassUnionAsync(MultiPassUnionInputs inputs)
     {
-        if (!inputs.FileContext.EnableMultiPassUnion || !IsMultiPassUnionTier(inputs.Tier))
+        if (!inputs.FileContext.EnableMultiPassUnion)
+        {
+            return inputs.BaselineResult;
+        }
+
+        // Ordinary/resample passes are gated to Medium/High tiers; a security-lens pass runs on any tier when the
+        // file is security-flagged. Enter planning when either is in scope — the per-pass gate in the planners then
+        // drops the passes that are out of scope, so a file that qualifies for neither is byte-identical to today.
+        if (!IsMultiPassUnionTier(inputs.Tier) && !inputs.SecurityFlagged)
         {
             return inputs.BaselineResult;
         }
@@ -491,6 +509,7 @@ internal sealed partial class FileReviewer(
         var unionComments = new List<ReviewComment>(inputs.BaselineResult.Comments);
         var perPassCatchCounts = new List<int> { inputs.BaselineResult.Comments.Count };
         var perPassModels = new List<string?> { inputs.TierModelId };
+        var perPassLenses = new List<string?> { null };
 
         foreach (var plannedPass in plannedPasses)
         {
@@ -510,13 +529,14 @@ internal sealed partial class FileReviewer(
                     inputs.EffectiveClient,
                     plannedPass.PassIndex,
                     diversity,
-                    new MultiPassArm(plannedPass.Label, plannedPass.ModelId),
+                    new MultiPassArm(plannedPass.Label, plannedPass.ModelId, plannedPass.Lens),
                     inputs.PipelineProfile,
                     inputs.Ct));
 
-            unionComments.AddRange(StampUnionOrigin(passResult.Comments, plannedPass.PassIndex));
+            unionComments.AddRange(StampUnionOrigin(passResult.Comments, plannedPass.PassIndex, plannedPass.Lens));
             perPassCatchCounts.Add(passResult.Comments.Count);
             perPassModels.Add(plannedPass.ModelId);
+            perPassLenses.Add(plannedPass.Lens);
         }
 
         await this.RecordMultiPassUnionCompletedAsync(
@@ -527,6 +547,7 @@ internal sealed partial class FileReviewer(
                 inputs.Tier,
                 perPassCatchCounts,
                 perPassModels,
+                perPassLenses,
                 unionComments.Count,
                 inputs.Ct));
 
@@ -546,18 +567,29 @@ internal sealed partial class FileReviewer(
             return ([], armLabel, false);
         }
 
+        var tierEligible = IsMultiPassUnionTier(inputs.Tier);
         var resamplePlan = diversity.ResolveResamplePasses(passCount - 1);
         var passes = new List<PlannedResamplePass>(resamplePlan.Count);
         for (var index = 0; index < resamplePlan.Count; index++)
         {
             var arm = resamplePlan[index];
+
+            // A lens arm runs on any tier when the file is security-flagged; a plain resample arm runs only on the
+            // in-scope (Medium/High) tiers. Dropping out-of-scope arms keeps non-lens eval control configs identical.
+            var inScope = arm.Lens is not null ? inputs.SecurityFlagged : tierEligible;
+            if (!inScope)
+            {
+                continue;
+            }
+
             passes.Add(
                 new PlannedResamplePass(
                     index + 2,
                     arm.Label,
                     arm.ModelId ?? inputs.TierModelId,
                     inputs.TierClient,
-                    inputs.TierCapabilities));
+                    inputs.TierCapabilities,
+                    arm.Lens));
         }
 
         return (passes, armLabel, false);
@@ -583,14 +615,27 @@ internal sealed partial class FileReviewer(
             return ([], ReviewPassListLabel, true);
         }
 
+        var tierEligible = IsMultiPassUnionTier(inputs.Tier);
         var passes = new List<PlannedResamplePass>(reviewPasses.Count);
         var passIndex = 2;
-        foreach (var configuredModelId in reviewPasses)
+        foreach (var pass in reviewPasses)
         {
-            var runtime = await this.TryResolvePassRuntimeAsync(inputs.Job, inputs.File.Path, configuredModelId, passIndex, inputs.Ct);
+            // A security-lens entry runs on any tier when the file is security-flagged; an ordinary entry runs only
+            // on the in-scope (Medium/High) tiers. Out-of-scope entries are dropped without a trace (the common case
+            // is a lens configured on a client whose file under review is not security-relevant), but still consume
+            // their ordinal so a pass's "Pass N" index stays tied to its position in the configured list.
+            var isSecurityLens = pass.Lens == ReviewPassLens.Security;
+            var inScope = isSecurityLens ? inputs.SecurityFlagged : tierEligible;
+            if (!inScope)
+            {
+                passIndex++;
+                continue;
+            }
+
+            var runtime = await this.TryResolvePassRuntimeAsync(inputs.Job, inputs.File.Path, pass.ConfiguredModelId, passIndex, inputs.Ct);
             if (runtime is null)
             {
-                await this.RecordMultiPassUnionPassSkippedAsync(inputs.ProtocolId, inputs.File.Path, passIndex, configuredModelId, inputs.Tier, inputs.Ct);
+                await this.RecordMultiPassUnionPassSkippedAsync(inputs.ProtocolId, inputs.File.Path, passIndex, pass.ConfiguredModelId, inputs.Tier, inputs.Ct);
             }
             else
             {
@@ -600,7 +645,8 @@ internal sealed partial class FileReviewer(
                         runtime.Model.RemoteModelId,
                         runtime.Model.RemoteModelId,
                         runtime.ChatClient,
-                        runtime.Capabilities));
+                        runtime.Capabilities,
+                        pass.Lens));
             }
 
             passIndex++;
@@ -618,7 +664,7 @@ internal sealed partial class FileReviewer(
     // source and the specific numbered pass are visible on the persisted per-file result and surface through the
     // protocol comment DTO (the frontend renders the index as "Pass N"). The baseline pass is pass 1 and stays
     // unstamped; the additional passes are 2..k.
-    private static IReadOnlyList<ReviewComment> StampUnionOrigin(IReadOnlyList<ReviewComment> comments, int passIndex)
+    private static IReadOnlyList<ReviewComment> StampUnionOrigin(IReadOnlyList<ReviewComment> comments, int passIndex, string? lens)
     {
         if (comments.Count == 0)
         {
@@ -633,6 +679,7 @@ internal sealed partial class FileReviewer(
                 {
                     OriginPassKind = ReviewPassKind.MultiPassUnion.ToString(),
                     OriginPassIndex = passIndex,
+                    OriginPassLens = lens,
                 });
         }
 
@@ -678,6 +725,9 @@ internal sealed partial class FileReviewer(
             // has set them — the baseline pass keeps the tier model, only these resample passes switch, so any recall
             // lift comes from a different sampler reviewing the file, not from re-sampling the same one.
             passContext.Temperature = inputs.Diversity.ResampleTemperature;
+
+            // A lens pass selects a specialist per-file prompt; the marker is read during prompt construction.
+            passContext.ActiveLens = inputs.PassArm.Lens;
 
             passContext = await this.RunDispatchPipelineAsync(
                 inputs.Job,
@@ -732,6 +782,7 @@ internal sealed partial class FileReviewer(
                 {
                     perPassCatchCounts = completion.PerPassCatchCounts,
                     perPassModels = completion.PerPassModels,
+                    perPassLenses = completion.PerPassLenses,
                     unionCount = completion.UnionCount,
                 }),
             null,
@@ -1520,14 +1571,16 @@ internal sealed partial class FileReviewer(
         Guid? ProtocolId,
         IReadOnlyList<InvariantFact> InvariantFacts);
 
-    // One planned resample pass (pass 2..k): its index, provenance label, resolved model id, and the client +
-    // capabilities it runs on. Eval passes reuse the tier connection; production passes carry their own runtime.
+    // One planned resample pass (pass 2..k): its index, provenance label, resolved model id, the client +
+    // capabilities it runs on, and an optional specialist lens. Eval passes reuse the tier connection; production
+    // passes carry their own runtime.
     private sealed record PlannedResamplePass(
         int PassIndex,
         string Label,
         string? ModelId,
         IChatClient? Client,
-        AgentReviewRuntimeCapabilities? Capabilities);
+        AgentReviewRuntimeCapabilities? Capabilities,
+        string? Lens = null);
 
     private sealed record MultiPassUnionCompletion(
         Guid? ProtocolId,
@@ -1536,6 +1589,7 @@ internal sealed partial class FileReviewer(
         FileComplexityTier Tier,
         IReadOnlyList<int> PerPassCatchCounts,
         IReadOnlyList<string?> PerPassModels,
+        IReadOnlyList<string?> PerPassLenses,
         int UnionCount,
         CancellationToken Ct);
 
@@ -1549,6 +1603,7 @@ internal sealed partial class FileReviewer(
         ReviewSystemContext FileContext,
         Guid? ProtocolId,
         FileComplexityTier Tier,
+        bool SecurityFlagged,
         string? TierModelId,
         IChatClient? TierClient,
         AgentReviewRuntimeCapabilities? TierCapabilities,

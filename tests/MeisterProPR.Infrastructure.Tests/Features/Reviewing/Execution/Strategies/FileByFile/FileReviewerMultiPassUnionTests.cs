@@ -56,6 +56,10 @@ public sealed class FileReviewerMultiPassUnionTests
     private readonly List<string?> _beginReasons = [];
     private readonly IJobRepository _jobRepository = Substitute.For<IJobRepository>();
 
+    // Active lens observed on each AI call's context, in call order (null for the baseline and ordinary passes,
+    // the lens value for a lens pass) — lets tests assert which passes ran under a specialist lens.
+    private readonly List<string?> _observedLenses = [];
+
     // Model id observed on each AI call's context, in call order (baseline pass first, then resample passes).
     private readonly List<string?> _observedModelIds = [];
     private readonly IProtocolRecorder _recorder = Substitute.For<IProtocolRecorder>();
@@ -96,8 +100,13 @@ public sealed class FileReviewerMultiPassUnionTests
                 var ctx = ci.ArgAt<ReviewSystemContext>(1);
                 ctx.LoopMetrics = new ReviewLoopMetrics(0, null, null, 90, 100, 10, 1);
                 this._observedModelIds.Add(ctx.ModelId);
-                var comment = PassComments[Math.Min(this._aiCallCount, PassComments.Count - 1)];
+                this._observedLenses.Add(ctx.ActiveLens);
+                var template = PassComments[Math.Min(this._aiCallCount, PassComments.Count - 1)];
                 this._aiCallCount++;
+                // Anchor each finding to the file under review so it survives per-file filtering regardless of the
+                // fixture's path (security-floor fixtures use a security-sensitive path, not Program.cs).
+                var filePath = ctx.PerFileHint?.FilePath ?? template.FilePath;
+                var comment = new ReviewComment(filePath, template.LineNumber, template.Severity, template.Message);
                 return new ReviewResult("summary", [comment]);
             });
 
@@ -171,15 +180,30 @@ public sealed class FileReviewerMultiPassUnionTests
     }
 
     // Production multi-pass context: no eval pass count, the extra passes come from the ordered review-pass list.
+    // Each configured model id becomes an ordinary (lens-less) resample pass.
     private static ReviewSystemContext ProductionContext(string tierModelId, params Guid[] passModelIds)
+    {
+        return ProductionContextWithPasses(tierModelId, passModelIds.Select(id => new ReviewPassSpec(id)).ToArray());
+    }
+
+    // Production multi-pass context whose passes carry explicit specs, so a pass can opt into a specialist lens.
+    private static ReviewSystemContext ProductionContextWithPasses(string tierModelId, params ReviewPassSpec[] passes)
     {
         return new ReviewSystemContext(null, [], null)
         {
             DefaultReviewChatClient = Substitute.For<IChatClient>(),
             EnableMultiPassUnion = true,
             ModelId = tierModelId,
-            ReviewPasses = passModelIds,
+            ReviewPasses = passes,
         };
+    }
+
+    // A changed file at a security-sensitive path (fires the security floor's deterministic path leg) sized to the
+    // requested tier, so a security-lens pass is in scope regardless of the model-judged complexity tier.
+    private static ChangedFile SecurityFileForTier(FileComplexityTier tier)
+    {
+        var sized = FileForTier(tier);
+        return new ChangedFile("src/auth/TokenValidator.cs", ChangeType.Edit, "full content", sized.UnifiedDiff);
     }
 
     // A resolved chat runtime whose configured model carries the given remote id; the observed context ModelId on
@@ -429,6 +453,152 @@ public sealed class FileReviewerMultiPassUnionTests
         await this._recorder.Received(1).RecordReviewStrategyEventAsync(
             Arg.Any<Guid>(), ReviewProtocolEventNames.MultiPassUnionCompleted,
             Arg.Any<string?>(), Arg.Any<string?>(), Arg.Any<string?>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task SecurityLens_RunsOnFlaggedFile_EvenAtLowTier()
+    {
+        // A security-lens pass runs on a security-flagged file regardless of tier — here a Low-tier auth file the
+        // ordinary Medium/High gate would exclude — so the lens reaches the discovery-limited population.
+        var lensModel = Guid.NewGuid();
+        var lensRuntime = RuntimeForModel("security-model");
+        var resolver = Substitute.For<IAiRuntimeResolver>();
+        resolver.ResolveChatRuntimeForModelAsync(Arg.Any<Guid>(), lensModel, Arg.Any<CancellationToken>())
+            .Returns(lensRuntime);
+
+        var reviewer = this.CreateReviewer(resolver);
+        var file = SecurityFileForTier(FileComplexityTier.Low);
+        var (job, pr) = Fixture(file);
+
+        await reviewer.ReviewAsync(
+            job, pr, file, 1, 1,
+            ProductionContextWithPasses("gpt-5.3-codex", new ReviewPassSpec(lensModel, ReviewPassLens.Security)),
+            null, Substitute.For<IChatClient>(), CancellationToken.None);
+
+        // Baseline + the security-lens pass, which ran with ActiveLens=security so it selects the specialist prompt.
+        Assert.Equal(2, this._observedModelIds.Count);
+        Assert.Equal(new[] { null, ReviewPassLens.Security }, this._observedLenses.ToArray());
+
+        // The lens pass's finding carries the lens on its provenance so the UI can render "Pass N · Security".
+        Assert.NotNull(this._persistedResult);
+        Assert.Contains(this._persistedResult!.Comments!, c => c.OriginPassLens == ReviewPassLens.Security);
+    }
+
+    [Fact]
+    public async Task SecurityLens_SkippedOnUnflaggedFile_EvenAtInScopeTier()
+    {
+        // The only configured pass is a security lens; on a non-security file it is out of scope, so the review
+        // degrades to a single baseline pass even at an in-scope Medium tier.
+        var lensModel = Guid.NewGuid();
+        var lensRuntime = RuntimeForModel("security-model");
+        var resolver = Substitute.For<IAiRuntimeResolver>();
+        resolver.ResolveChatRuntimeForModelAsync(Arg.Any<Guid>(), lensModel, Arg.Any<CancellationToken>())
+            .Returns(lensRuntime);
+
+        var reviewer = this.CreateReviewer(resolver);
+        var file = FileForTier(FileComplexityTier.Medium); // Program.cs — not security-flagged
+        var (job, pr) = Fixture(file);
+
+        await reviewer.ReviewAsync(
+            job, pr, file, 1, 1,
+            ProductionContextWithPasses("gpt-5.3-codex", new ReviewPassSpec(lensModel, ReviewPassLens.Security)),
+            null, Substitute.For<IChatClient>(), CancellationToken.None);
+
+        Assert.Single(this._observedModelIds);
+        Assert.Equal(new string?[] { null }, this._observedLenses.ToArray());
+        Assert.DoesNotContain(this._persistedResult!.Comments!, c => c.OriginPassLens is not null);
+    }
+
+    [Fact]
+    public async Task OrdinaryPass_StaysMediumHighGated_SkippedOnLowFlaggedFile()
+    {
+        // An ordinary (lens-less) pass never runs on a Low tier, even on a security-flagged file — only the security
+        // lens is decoupled from the tier gate — so this Low file runs baseline only.
+        var ordinaryModel = Guid.NewGuid();
+        var ordinaryRuntime = RuntimeForModel("ordinary-model");
+        var resolver = Substitute.For<IAiRuntimeResolver>();
+        resolver.ResolveChatRuntimeForModelAsync(Arg.Any<Guid>(), ordinaryModel, Arg.Any<CancellationToken>())
+            .Returns(ordinaryRuntime);
+
+        var reviewer = this.CreateReviewer(resolver);
+        var file = SecurityFileForTier(FileComplexityTier.Low);
+        var (job, pr) = Fixture(file);
+
+        await reviewer.ReviewAsync(
+            job, pr, file, 1, 1,
+            ProductionContextWithPasses("gpt-5.3-codex", new ReviewPassSpec(ordinaryModel)),
+            null, Substitute.For<IChatClient>(), CancellationToken.None);
+
+        Assert.Single(this._observedModelIds);
+        Assert.Equal(new string?[] { null }, this._observedLenses.ToArray());
+    }
+
+    [Fact]
+    public async Task MixedList_UnflaggedInScopeFile_RunsOrdinaryPass_SkipsSecurityLens()
+    {
+        // On a non-flagged Medium file: the ordinary pass runs, the security lens is out of scope and does not run.
+        var ordinaryModel = Guid.NewGuid();
+        var lensModel = Guid.NewGuid();
+        var ordinaryRuntime = RuntimeForModel("ordinary-model");
+        var lensRuntime = RuntimeForModel("security-model");
+        var resolver = Substitute.For<IAiRuntimeResolver>();
+        resolver.ResolveChatRuntimeForModelAsync(Arg.Any<Guid>(), ordinaryModel, Arg.Any<CancellationToken>())
+            .Returns(ordinaryRuntime);
+        resolver.ResolveChatRuntimeForModelAsync(Arg.Any<Guid>(), lensModel, Arg.Any<CancellationToken>())
+            .Returns(lensRuntime);
+
+        var reviewer = this.CreateReviewer(resolver);
+        var file = FileForTier(FileComplexityTier.Medium);
+        var (job, pr) = Fixture(file);
+
+        await reviewer.ReviewAsync(
+            job, pr, file, 1, 1,
+            ProductionContextWithPasses(
+                "gpt-5.3-codex",
+                new ReviewPassSpec(ordinaryModel),
+                new ReviewPassSpec(lensModel, ReviewPassLens.Security)),
+            null, Substitute.For<IChatClient>(), CancellationToken.None);
+
+        // Baseline + ordinary; the security lens is filtered out on a non-flagged file.
+        Assert.Equal(new string?[] { null, null }, this._observedLenses.ToArray());
+        Assert.Equal(new[] { "gpt-5.3-codex", "ordinary-model" }, this._observedModelIds.ToArray());
+    }
+
+    [Fact]
+    public async Task MixedList_FlaggedLowFile_RunsSecurityLens_SkipsOrdinary()
+    {
+        // On a security-flagged Low file: the ordinary pass is tier-gated out, the security lens runs. The lens entry
+        // is at list position 2 (ordinal 1) so it is pass #3 — the tier-skipped ordinary entry still consumes pass #2.
+        var ordinaryModel = Guid.NewGuid();
+        var lensModel = Guid.NewGuid();
+        var ordinaryRuntime = RuntimeForModel("ordinary-model");
+        var lensRuntime = RuntimeForModel("security-model");
+        var resolver = Substitute.For<IAiRuntimeResolver>();
+        resolver.ResolveChatRuntimeForModelAsync(Arg.Any<Guid>(), ordinaryModel, Arg.Any<CancellationToken>())
+            .Returns(ordinaryRuntime);
+        resolver.ResolveChatRuntimeForModelAsync(Arg.Any<Guid>(), lensModel, Arg.Any<CancellationToken>())
+            .Returns(lensRuntime);
+
+        var reviewer = this.CreateReviewer(resolver);
+        var file = SecurityFileForTier(FileComplexityTier.Low);
+        var (job, pr) = Fixture(file);
+
+        await reviewer.ReviewAsync(
+            job, pr, file, 1, 1,
+            ProductionContextWithPasses(
+                "gpt-5.3-codex",
+                new ReviewPassSpec(ordinaryModel),
+                new ReviewPassSpec(lensModel, ReviewPassLens.Security)),
+            null, Substitute.For<IChatClient>(), CancellationToken.None);
+
+        // Baseline + the security lens; the ordinary pass is filtered out on a Low tier.
+        Assert.Equal(new[] { null, ReviewPassLens.Security }, this._observedLenses.ToArray());
+        Assert.Equal(new[] { "gpt-5.3-codex", "security-model" }, this._observedModelIds.ToArray());
+
+        // The lens finding is pass #3: the tier-skipped ordinary entry (ordinal 0 -> pass #2) still consumed its index.
+        Assert.NotNull(this._persistedResult);
+        var lensComment = this._persistedResult!.Comments!.Single(c => c.OriginPassLens == ReviewPassLens.Security);
+        Assert.Equal(3, lensComment.OriginPassIndex);
     }
 
     [Fact]

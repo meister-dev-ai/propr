@@ -47,7 +47,8 @@ internal sealed class CandidateFindingFactory(IReviewClaimExtractor? reviewClaim
                         reviewPassKind: ResolveCommentPassKind(comment, passKind),
                         findingProvenanceKind: provenanceKind,
                         unionPassIndex: ResolveUnionPassIndex(comment),
-                        unionArmLabel: ResolveUnionArmLabel(comment)),
+                        unionArmLabel: ResolveUnionArmLabel(comment),
+                        unionLens: ResolveUnionLens(comment)),
                     comment.Severity,
                     comment.Message,
                     FileByFileReviewOrchestrator.DetermineCategory(comment),
@@ -348,6 +349,13 @@ internal sealed class CandidateFindingFactory(IReviewClaimExtractor? reviewClaim
     private static int? ResolveUnionPassIndex(ReviewComment comment)
     {
         return IsMultiPassUnionOrigin(comment) ? comment.OriginPassIndex : null;
+    }
+
+    // Carries the specialist lens (e.g. security) from a union-origin comment onto the finding's provenance so a
+    // published finding can render "Pass N · <lens>". Null for non-union and ordinary resample comments.
+    private static string? ResolveUnionLens(ReviewComment comment)
+    {
+        return IsMultiPassUnionOrigin(comment) ? comment.OriginPassLens : null;
     }
 
     private static bool IsMultiPassUnionOrigin(ReviewComment comment)

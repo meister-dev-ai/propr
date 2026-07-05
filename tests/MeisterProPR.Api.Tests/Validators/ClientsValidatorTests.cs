@@ -442,6 +442,66 @@ public sealed class ClientsValidatorTests
         Assert.Contains(result.Errors, e => e.PropertyName == nameof(PatchClientRequest.ReviewPasses));
     }
 
+    [Fact]
+    public void PatchClient_ReviewPassListWithSecurityLens_Passes()
+    {
+        var result = PatchClientValidator.Validate(
+            new PatchClientRequest(
+                ReviewPasses:
+                [
+                    new ReviewPassEntry(0, Guid.NewGuid(), "security"),
+                ]));
+
+        Assert.True(result.IsValid);
+    }
+
+    [Fact]
+    public void PatchClient_SameModelUnderDifferentLenses_Passes()
+    {
+        // The dogfood shape: a plain resample pass plus a security-lens pass on the same model. Distinctness keys on
+        // the (model, lens) pair, so this is allowed even though the model id repeats.
+        var sharedModelId = Guid.NewGuid();
+        var result = PatchClientValidator.Validate(
+            new PatchClientRequest(
+                ReviewPasses:
+                [
+                    new ReviewPassEntry(0, sharedModelId),
+                    new ReviewPassEntry(1, sharedModelId, "security"),
+                ]));
+
+        Assert.True(result.IsValid);
+    }
+
+    [Fact]
+    public void PatchClient_SameModelSameLensTwice_Fails()
+    {
+        var sharedModelId = Guid.NewGuid();
+        var result = PatchClientValidator.Validate(
+            new PatchClientRequest(
+                ReviewPasses:
+                [
+                    new ReviewPassEntry(0, sharedModelId, "security"),
+                    new ReviewPassEntry(1, sharedModelId, "security"),
+                ]));
+
+        Assert.False(result.IsValid);
+        Assert.Contains(result.Errors, e => e.PropertyName == nameof(PatchClientRequest.ReviewPasses));
+    }
+
+    [Fact]
+    public void PatchClient_ReviewPassListWithUnknownLens_Fails()
+    {
+        var result = PatchClientValidator.Validate(
+            new PatchClientRequest(
+                ReviewPasses:
+                [
+                    new ReviewPassEntry(0, Guid.NewGuid(), "not-a-lens"),
+                ]));
+
+        Assert.False(result.IsValid);
+        Assert.Contains(result.Errors, e => e.PropertyName == nameof(PatchClientRequest.ReviewPasses));
+    }
+
     [Theory]
     [InlineData(ReviewStrategy.PrWideAgentic)]
     [InlineData(ReviewStrategy.AgenticFileByFile)]
