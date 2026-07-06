@@ -57,6 +57,12 @@ public sealed class ClientRecord
     public bool EnableEvidenceBackedVerification { get; set; } = false;
 
     /// <summary>
+    ///     When set, review-comment screening uses language-robust structured signals + evidence routing
+    ///     (self-report / classifier + demote-don't-delete) instead of the English phrase-list filters.
+    /// </summary>
+    public bool EnableLanguageRobustScreening { get; set; } = false;
+
+    /// <summary>
     ///     Controls whether multi-pass union generation runs during review for this client.
     ///     Defaults to <see langword="false" /> so new clients opt in explicitly.
     /// </summary>

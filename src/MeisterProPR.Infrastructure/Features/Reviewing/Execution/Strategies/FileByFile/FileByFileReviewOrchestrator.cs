@@ -252,6 +252,7 @@ internal sealed partial class FileByFileReviewOrchestrator(
                 // stage (gated on AugmentationMode/PassKind), so this only affects what augmentation inherits.
                 EnableProRV = baseContext.EnableProRV,
                 EnableEvidenceBackedVerification = baseContext.EnableEvidenceBackedVerification,
+                EnableLanguageRobustScreening = baseContext.EnableLanguageRobustScreening,
                 EnableMultiPassUnion = baseContext.EnableMultiPassUnion,
                 MultiPassUnionPassCount = baseContext.MultiPassUnionPassCount,
                 ReviewPasses = baseContext.ReviewPasses,

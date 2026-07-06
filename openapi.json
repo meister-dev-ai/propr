@@ -15872,6 +15872,9 @@
           "enableEvidenceBackedVerification": {
             "type": "boolean"
           },
+          "enableLanguageRobustScreening": {
+            "type": "boolean"
+          },
           "enableMultiPassUnion": {
             "type": "boolean"
           },
@@ -17460,6 +17463,10 @@
             "nullable": true
           },
           "enableEvidenceBackedVerification": {
+            "type": "boolean",
+            "nullable": true
+          },
+          "enableLanguageRobustScreening": {
             "type": "boolean",
             "nullable": true
           },

@@ -153,6 +153,7 @@ public sealed class ReviewWorkflowRunner(
                 Temperature = request.Configuration?.Temperature,
                 EnableProRV = request.Configuration?.EnableProRV ?? false,
                 EnableEvidenceBackedVerification = request.Configuration?.EnableEvidenceBackedVerification ?? false,
+                EnableLanguageRobustScreening = request.Configuration?.EnableLanguageRobustScreening ?? false,
                 EnableMultiPassUnion = request.Configuration?.EnableMultiPassUnion ?? false,
                 MultiPassUnionPassCount = request.Configuration?.MultiPassUnionPassCount,
                 MultiPassDiversity = request.Configuration?.MultiPassDiversity,

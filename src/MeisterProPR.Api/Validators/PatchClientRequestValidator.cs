@@ -31,6 +31,10 @@ public sealed class PatchClientRequestValidator : AbstractValidator<PatchClientR
             .Must(_ => true)
             .When(r => r.EnableEvidenceBackedVerification.HasValue);
 
+        this.RuleFor(r => r.EnableLanguageRobustScreening)
+            .Must(_ => true)
+            .When(r => r.EnableLanguageRobustScreening.HasValue);
+
         this.RuleFor(r => r.EnableMultiPassUnion)
             .Must(_ => true)
             .When(r => r.EnableMultiPassUnion.HasValue);

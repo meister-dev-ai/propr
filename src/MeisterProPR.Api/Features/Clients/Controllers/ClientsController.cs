@@ -34,6 +34,7 @@ public sealed class ClientsController(
             client.ScmCommentPostingEnabled,
             client.EnableProRV,
             client.EnableEvidenceBackedVerification,
+            client.EnableLanguageRobustScreening,
             client.EnableMultiPassUnion,
             client.ReviewPassesOrEmpty
                 .Select(pass => new ReviewPassEntry(pass.Ordinal, pass.ConfiguredModelId, pass.Lens))
@@ -326,6 +327,7 @@ public sealed class ClientsController(
             request.ScmCommentPostingEnabled,
             request.EnableProRV,
             request.EnableEvidenceBackedVerification,
+            request.EnableLanguageRobustScreening,
             request.EnableMultiPassUnion,
             request.ReviewPasses?
                 .Select(pass => new ReviewPassDto(pass.Ordinal, pass.ConfiguredModelId, pass.Lens))
@@ -348,6 +350,7 @@ public sealed record ClientResponse(
     bool ScmCommentPostingEnabled,
     bool EnableProRV,
     bool EnableEvidenceBackedVerification,
+    bool EnableLanguageRobustScreening,
     bool EnableMultiPassUnion,
     IReadOnlyList<ReviewPassEntry> ReviewPasses,
     Guid? TenantId,
@@ -409,6 +412,7 @@ public sealed record PatchClientRequest(
     bool? ScmCommentPostingEnabled = null,
     bool? EnableProRV = null,
     bool? EnableEvidenceBackedVerification = null,
+    bool? EnableLanguageRobustScreening = null,
     bool? EnableMultiPassUnion = null,
     IReadOnlyList<ReviewPassEntry>? ReviewPasses = null,
     ReviewStrategy? DefaultReviewStrategy = null);

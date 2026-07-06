@@ -77,6 +77,12 @@ public interface IClientRegistry
     Task<bool> GetEvidenceBackedVerificationEnabledAsync(Guid clientId, CancellationToken ct = default);
 
     /// <summary>
+    ///     Returns whether the client opted into language-robust, evidence-based comment screening.
+    ///     Defaults to <see langword="false" /> if the client does not exist.
+    /// </summary>
+    Task<bool> GetLanguageRobustScreeningEnabledAsync(Guid clientId, CancellationToken ct = default);
+
+    /// <summary>
     ///     Returns whether multi-pass union generation should run for the given client.
     ///     Defaults to <see langword="false" /> if the client does not exist.
     /// </summary>

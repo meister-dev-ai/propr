@@ -80,6 +80,7 @@ public sealed class ClientAdminService(
         bool? scmCommentPostingEnabled = null,
         bool? enableProRV = null,
         bool? enableEvidenceBackedVerification = null,
+        bool? enableLanguageRobustScreening = null,
         bool? enableMultiPassUnion = null,
         IReadOnlyList<ReviewPassDto>? reviewPasses = null,
         ReviewStrategy? defaultReviewStrategy = null,
@@ -143,6 +144,11 @@ public sealed class ClientAdminService(
         if (enableEvidenceBackedVerification.HasValue)
         {
             client.EnableEvidenceBackedVerification = enableEvidenceBackedVerification.Value;
+        }
+
+        if (enableLanguageRobustScreening.HasValue)
+        {
+            client.EnableLanguageRobustScreening = enableLanguageRobustScreening.Value;
         }
 
         if (enableMultiPassUnion.HasValue)
@@ -362,6 +368,7 @@ public sealed class ClientAdminService(
             client.ScmCommentPostingEnabled,
             client.EnableProRV,
             client.EnableEvidenceBackedVerification,
+            client.EnableLanguageRobustScreening,
             client.EnableMultiPassUnion,
             reviewPasses,
             tenantId,

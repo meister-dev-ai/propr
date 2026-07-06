@@ -151,6 +151,12 @@ public sealed class ReviewSystemContext
     public bool EnableEvidenceBackedVerification { get; set; } = false;
 
     /// <summary>
+    ///     When set, comment screening uses language-robust structured signals + evidence routing instead of the
+    ///     English phrase-list filters (self-report / classifier detector, demote-don't-delete dispositions).
+    /// </summary>
+    public bool EnableLanguageRobustScreening { get; set; } = false;
+
+    /// <summary>
     ///     Controls whether multi-pass union generation runs for this execution context. When <see langword="false" />
     ///     the per-file dispatch runs once and behavior is identical to a single-pass review. When <see langword="true" />
     ///     eligible files are reviewed across multiple independent passes whose findings are unioned before dedup.

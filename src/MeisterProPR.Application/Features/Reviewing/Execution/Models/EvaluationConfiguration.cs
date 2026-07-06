@@ -40,6 +40,7 @@ public sealed record EvaluationConfiguration(
     float? Temperature = null,
     bool EnableProRV = false,
     bool EnableEvidenceBackedVerification = false,
+    bool EnableLanguageRobustScreening = false,
     bool EnableMultiPassUnion = false,
     int? MultiPassUnionPassCount = null,
     MultiPassDiversity? MultiPassDiversity = null,

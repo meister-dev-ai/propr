@@ -10582,6 +10582,7 @@ export interface components {
             scmCommentPostingEnabled?: boolean;
             enableProRV?: boolean;
             enableEvidenceBackedVerification?: boolean;
+            enableLanguageRobustScreening?: boolean;
             enableMultiPassUnion?: boolean;
             reviewPasses?: components["schemas"]["ReviewPassEntry"][] | null;
             /** Format: uuid */
@@ -11187,6 +11188,7 @@ export interface components {
             scmCommentPostingEnabled?: boolean | null;
             enableProRV?: boolean | null;
             enableEvidenceBackedVerification?: boolean | null;
+            enableLanguageRobustScreening?: boolean | null;
             enableMultiPassUnion?: boolean | null;
             reviewPasses?: components["schemas"]["ReviewPassEntry"][] | null;
             defaultReviewStrategy?: components["schemas"]["ReviewStrategy"];
