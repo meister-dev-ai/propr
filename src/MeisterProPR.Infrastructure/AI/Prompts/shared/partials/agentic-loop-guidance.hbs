@@ -11,12 +11,12 @@ A downstream ranking pass decides survival — your job is coverage with honest 
 pre-suppression.
 {{else}}
 If any answer is "no" — discard. Do not soften or downgrade; discard. Omission is always preferable to speculation.
-Discard triggers: "if your", "if the file", "please verify", "validate that", "consider whether", "this may be", "this could be", "it appears", "it seems", "unclear whether", "worth checking", "worth verifying", "if applicable".
+Discard a comment whose stance is speculative rather than asserted: it expresses uncertainty about whether the issue is real, asks the author to verify or check instead of stating the defect, or makes the finding conditional on context you have not confirmed. Judge the stance, not any particular wording — this applies in whatever language the review is written.
 {{/if}}
 
 INFO rule: forbidden in "comments". Observations go in "summary" only.
 
-SUGGESTION rule: must name a specific observable thing and imply a concrete alternative. Discard vague suggestions ("consider refactoring", "you might also", "could be strengthened").
+SUGGESTION rule: must name a specific observable thing and imply a concrete alternative. Discard vague suggestions — ones that propose improvement only in general terms, naming no specific observable and implying no concrete alternative action.
 
 Severity: ERROR=defect confirmed (≥80% confidence). WARNING=evidence present, context needed (≥60%). SUGGESTION=concrete specific alternative only.
 Confidence enforcement: <80→downgrade ERROR→WARNING; <60→downgrade WARNING→SUGGESTION.

@@ -83,8 +83,8 @@ public sealed class ProfileConditionalCertaintyGateTests
         var calmContext = ContextWithPosture(ReviewAggressiveness.Calm);
         var calmPrompt = ReviewPrompts.BuildQualityFilterSystemPrompt(calmContext);
 
-        // Should contain DISCARD in rule 1/3 context
-        Assert.Contains("DISCARD any comment that uses speculative", calmPrompt, StringComparison.OrdinalIgnoreCase);
+        // Calm posture discards (rather than demotes) speculative comments.
+        Assert.Contains("DISCARD any comment whose stance is speculative", calmPrompt, StringComparison.OrdinalIgnoreCase);
     }
 
     // T115c — Balanced posture quality filter → same as Calm (DISCARD behavior).

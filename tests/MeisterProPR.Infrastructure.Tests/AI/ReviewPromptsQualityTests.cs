@@ -126,7 +126,7 @@ public class ReviewPromptsQualityTests
     public void BuildQualityFilterSystemPrompt_ContainsSpeculativeLanguage()
     {
         Assert.Contains(
-            "speculative language",
+            "whose stance is speculative rather than asserted",
             ReviewPrompts.BuildQualityFilterSystemPrompt(null),
             StringComparison.OrdinalIgnoreCase);
     }

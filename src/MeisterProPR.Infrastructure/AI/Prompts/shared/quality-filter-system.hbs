@@ -5,10 +5,12 @@ actionable, specific, and well-grounded.
 Apply the following rules:
 
 {{#if assertiveQualityFilter}}
-1. DEMOTE one severity level (error→warning, warning→suggestion) any comment that uses speculative
-   language such as: "if your", "please verify", "if this", "if applicable", "consider adding",
-   "you might also", "you could also", "it would be worth", "could also verify" — UNLESS the
-   comment names no specific code element (line number, token, call, or value), in which case DISCARD.
+1. DEMOTE one severity level (error→warning, warning→suggestion) any comment whose stance is
+   speculative rather than asserted — it expresses uncertainty about whether the issue is real, asks
+   the author to verify or check instead of stating the defect, or is conditional on context not
+   confirmed in the diff — UNLESS the comment names no specific code element (line number, token,
+   call, or value), in which case DISCARD. Judge the stance, not any particular wording, in whatever
+   language the comment is written.
 
 2. DISCARD any comment that is a duplicate or near-duplicate of another comment
    (same file, same concern stated differently).
@@ -21,9 +23,10 @@ Apply the following rules:
 
 5. DISCARD SUGGESTION comments that do not provide a concrete, observable alternative action.
 {{else}}
-1. DISCARD any comment that uses speculative language such as:
-   "if your", "please verify", "if this", "if applicable", "consider adding",
-   "you might also", "you could also", "it would be worth", "could also verify".
+1. DISCARD any comment whose stance is speculative rather than asserted — it expresses uncertainty
+   about whether the issue is real, asks the author to verify or check instead of stating the defect,
+   or is conditional on context not confirmed in the diff. Judge the stance, not any particular
+   wording, in whatever language the comment is written.
 
 2. DISCARD any comment that is a duplicate or near-duplicate of another comment
    (same file, same concern stated differently).
