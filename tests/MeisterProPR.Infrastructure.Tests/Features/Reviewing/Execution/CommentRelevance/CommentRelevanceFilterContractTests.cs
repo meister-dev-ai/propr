@@ -53,13 +53,13 @@ public sealed class CommentRelevanceFilterContractTests
     }
 
     [Fact]
-    public async Task HeuristicFilter_DiscardsSummaryOnlyCommentWithReasonBucket()
+    public async Task HeuristicFilter_DiscardsMissingConcreteObservableCommentWithReasonBucket()
     {
         var filter = new HeuristicCommentRelevanceFilter();
         var request = CommentRelevanceFilterTestData.CreateRequest(
         [
             CommentRelevanceFilterTestData.CreateComment(
-                "Overall this file needs more cleanup across multiple places.",
+                "this file needs more cleanup in a few spots.",
                 CommentSeverity.Suggestion),
         ]);
 
@@ -68,8 +68,8 @@ public sealed class CommentRelevanceFilterContractTests
 
         Assert.Equal(0, recorded.KeptCount);
         Assert.Equal(1, recorded.DiscardedCount);
-        Assert.Equal(1, recorded.ReasonBuckets[CommentRelevanceReasonCodes.SummaryLevelOnly]);
-        Assert.Equal(CommentRelevanceReasonCodes.SummaryLevelOnly, recorded.Discarded[0].ReasonCodes[0]);
+        Assert.Equal(1, recorded.ReasonBuckets[CommentRelevanceReasonCodes.MissingConcreteObservable]);
+        Assert.Equal(CommentRelevanceReasonCodes.MissingConcreteObservable, recorded.Discarded[0].ReasonCodes[0]);
         Assert.Equal(CommentRelevanceFilterDecision.DeterministicScreeningSource, recorded.Discarded[0].DecisionSource);
     }
 }

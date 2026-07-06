@@ -9,41 +9,36 @@ namespace MeisterProPR.Infrastructure.Tests.Features.Reviewing.Execution.Comment
 
 public sealed class HeuristicCommentRelevanceFilterTests
 {
-    [Theory]
-    [InlineData(CommentSeverity.Warning, "This likely fails when configuration is missing.", CommentRelevanceReasonCodes.HedgingLanguage)]
-    [InlineData(CommentSeverity.Suggestion, "Consider refactoring this file overall.", CommentRelevanceReasonCodes.NonActionableSuggestion)]
-    [InlineData(CommentSeverity.Warning, "Overall this file has too many responsibilities.", CommentRelevanceReasonCodes.SummaryLevelOnly)]
-    [InlineData(
-        CommentSeverity.Warning,
-        "The tool output was truncated so this might be a defect.",
-        CommentRelevanceReasonCodes.ToolingLimitationMisclassified)]
-    [InlineData(CommentSeverity.Warning, "Another file likely initializes this differently.", CommentRelevanceReasonCodes.UnverifiableCrossFileClaim)]
-    [InlineData(CommentSeverity.Warning, "behavior is broken in some cases.", CommentRelevanceReasonCodes.MissingConcreteObservable)]
-    public async Task FilterAsync_AssignsExpectedDiscardReasonCodes(CommentSeverity severity, string message, string expectedReasonCode)
+    [Fact]
+    public async Task FilterAsync_DiscardsMissingConcreteObservable_WhenNoLineOrCodeToken()
     {
         var filter = new HeuristicCommentRelevanceFilter();
-        var request = CommentRelevanceFilterTestData.CreateRequest([CommentRelevanceFilterTestData.CreateComment(message, severity)]);
+        var request = CommentRelevanceFilterTestData.CreateRequest([CommentRelevanceFilterTestData.CreateComment("behavior is broken in some cases.")]);
 
         var result = await filter.FilterAsync(request, CancellationToken.None);
 
         Assert.Equal(0, result.KeptCount);
         Assert.Equal(1, result.DiscardedCount);
-        Assert.Equal(1, result.ReasonBuckets[expectedReasonCode]);
+        Assert.Equal(1, result.ReasonBuckets[CommentRelevanceReasonCodes.MissingConcreteObservable]);
     }
 
-    [Fact]
-    public async Task FilterAsync_DetectsSeverityOverstatedWithoutChangingSeverity()
+    [Theory]
+    [InlineData("This likely fails when configuration is missing on line 5.")]
+    [InlineData("Consider refactoring GetById overall.")]
+    [InlineData("The tool output was truncated so this might be a defect at line 9.")]
+    [InlineData("Critical failure probably exists here in this method.")]
+    public async Task FilterAsync_KeepsHedgeVagueOrSeverityLanguage_WhenConcreteAndCorrectlyAnchored(string message)
     {
+        // Text-shaped hedge/vague/tooling/severity screening moved to the embedding-based semantic comment
+        // screener; the heuristic relevance filter no longer discards on those phrases. A concrete,
+        // correctly-anchored comment therefore survives regardless of such wording.
         var filter = new HeuristicCommentRelevanceFilter();
-        var comment = CommentRelevanceFilterTestData.CreateComment(
-            "Critical failure likely exists somewhere else in another file.",
-            CommentSeverity.Error);
+        var request = CommentRelevanceFilterTestData.CreateRequest([CommentRelevanceFilterTestData.CreateComment(message, CommentSeverity.Warning, 3)]);
 
-        var result = await filter.FilterAsync(CommentRelevanceFilterTestData.CreateRequest([comment]), CancellationToken.None);
-        var discarded = result.ToRecordedOutput().Discarded.Single();
+        var result = await filter.FilterAsync(request, CancellationToken.None);
 
-        Assert.Contains(CommentRelevanceReasonCodes.SeverityOverstated, discarded.ReasonCodes);
-        Assert.Equal("error", discarded.Severity);
+        Assert.Equal(1, result.KeptCount);
+        Assert.Equal(0, result.DiscardedCount);
     }
 
     [Fact]

@@ -119,8 +119,7 @@ public sealed class DeterministicReviewFindingGate : IDeterministicReviewFinding
                 finding.CandidateSummaryText ?? "Potential broad concern noted, but it did not meet the publication bar for an actionable review thread.");
         }
 
-        if (string.Equals(finding.Category, "non_actionable", StringComparison.Ordinal) ||
-            finding.Message.StartsWith("consider ", StringComparison.OrdinalIgnoreCase))
+        if (string.Equals(finding.Category, "non_actionable", StringComparison.Ordinal))
         {
             return new FinalGateDecision(
                 finding.FindingId,

@@ -1,7 +1,6 @@
 // Copyright (c) Andreas Rain.
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
-using System.Collections.Immutable;
 using System.Text.RegularExpressions;
 using MeisterProPR.Application.Features.Reviewing.Execution.Models;
 using MeisterProPR.Application.Features.Reviewing.Execution.Ports;
@@ -20,42 +19,6 @@ internal sealed partial class HeuristicCommentRelevanceFilter : ICommentRelevanc
         "not", "may", "can", "should", "could", "would", "will",
         "you", "your",
     };
-
-    private static readonly ImmutableArray<string> HedgeTerms =
-    [
-        "likely", "probably", "possibly", "might", "maybe", "appears to", "seems to", "could be",
-        "may be", "i suspect", "cannot confirm", "not sure", "unclear whether",
-    ];
-
-    private static readonly ImmutableArray<string> NonActionableSuggestionTerms =
-    [
-        "consider", "you may want", "you might want", "it may help", "could be improved",
-        "might be worth", "nice to have",
-    ];
-
-    private static readonly ImmutableArray<string> SummaryOnlyTerms =
-    [
-        "overall", "in general", "generally", "throughout this file", "across this file", "multiple places",
-        "several issues", "broadly speaking",
-    ];
-
-    private static readonly ImmutableArray<string> CrossFileTerms =
-    [
-        "another file", "other file", "elsewhere", "upstream", "downstream", "caller", "callee",
-        "cross-file", "across files", "outside this file",
-    ];
-
-    private static readonly ImmutableArray<string> ToolingTerms =
-    [
-        "tooling limitation", "truncated", "unable to inspect", "could not inspect", "cannot inspect",
-        "stale context", "incomplete context", "unable to load",
-    ];
-
-    private static readonly ImmutableArray<string> SevereClaimTerms =
-    [
-        "critical", "catastrophic", "guaranteed", "always fails", "will crash", "security vulnerability",
-        "data loss", "definitely broken",
-    ];
 
     public string ImplementationId => "heuristic-v1";
 
@@ -85,49 +48,25 @@ internal sealed partial class HeuristicCommentRelevanceFilter : ICommentRelevanc
         ReviewComment comment,
         bool allowAmbiguous)
     {
+        // Only language-agnostic, mechanical signals remain here: a mismatched file/line anchor, a
+        // structurally cross-file claim (two or more distinct file references), and the absence of any
+        // concrete observable (code token / line reference). Text-shaped hedge/vague/tooling/severity
+        // screening now lives in the embedding-based semantic comment screener.
         var reasonCodes = new HashSet<string>(StringComparer.Ordinal);
-        var message = comment.Message;
-
-        if (ContainsAny(message, HedgeTerms))
-        {
-            reasonCodes.Add(CommentRelevanceReasonCodes.HedgingLanguage);
-        }
-
-        if (comment.Severity == CommentSeverity.Suggestion && ContainsAny(message, NonActionableSuggestionTerms))
-        {
-            reasonCodes.Add(CommentRelevanceReasonCodes.NonActionableSuggestion);
-        }
 
         if (IsWrongFileOrAnchor(request, comment))
         {
             reasonCodes.Add(CommentRelevanceReasonCodes.WrongFileOrAnchor);
         }
 
-        if (ContainsAny(message, ToolingTerms))
-        {
-            reasonCodes.Add(CommentRelevanceReasonCodes.ToolingLimitationMisclassified);
-        }
-
-        if (IsSummaryLevelOnly(comment))
-        {
-            reasonCodes.Add(CommentRelevanceReasonCodes.SummaryLevelOnly);
-        }
-
-        var hasCrossFileClaim = ContainsAny(message, CrossFileTerms) || LooksLikeCrossFileReference(message);
-        if (hasCrossFileClaim)
+        if (LooksLikeCrossFileReference(comment.Message))
         {
             reasonCodes.Add(CommentRelevanceReasonCodes.UnverifiableCrossFileClaim);
         }
 
-        var missingConcreteObservable = IsMissingConcreteObservable(comment);
-        if (missingConcreteObservable)
+        if (IsMissingConcreteObservable(comment))
         {
             reasonCodes.Add(CommentRelevanceReasonCodes.MissingConcreteObservable);
-        }
-
-        if (IsSeverityOverstated(comment, missingConcreteObservable, hasCrossFileClaim))
-        {
-            reasonCodes.Add(CommentRelevanceReasonCodes.SeverityOverstated);
         }
 
         if (reasonCodes.Count == 0)
@@ -147,17 +86,9 @@ internal sealed partial class HeuristicCommentRelevanceFilter : ICommentRelevanc
         return Discard(comment, reasonCodes);
     }
 
-    private static bool IsSeverityOverstated(ReviewComment comment, bool missingConcreteObservable, bool hasCrossFileClaim)
-    {
-        return comment.Severity is CommentSeverity.Error or CommentSeverity.Warning &&
-               ContainsAny(comment.Message, SevereClaimTerms) &&
-               (missingConcreteObservable || hasCrossFileClaim);
-    }
-
     private static bool IsAmbiguousReasonSet(IEnumerable<string> reasonCodes)
     {
         return reasonCodes.All(code => code is CommentRelevanceReasonCodes.UnverifiableCrossFileClaim
-            or CommentRelevanceReasonCodes.SeverityOverstated
             or CommentRelevanceReasonCodes.MissingConcreteObservable);
     }
 
@@ -225,11 +156,6 @@ internal sealed partial class HeuristicCommentRelevanceFilter : ICommentRelevanc
             CommentRelevanceFilterDecision.DeterministicScreeningSource);
     }
 
-    private static bool ContainsAny(string message, IEnumerable<string> fragments)
-    {
-        return fragments.Any(fragment => message.Contains(fragment, StringComparison.OrdinalIgnoreCase));
-    }
-
     private static bool IsWrongFileOrAnchor(CommentRelevanceFilterRequest request, ReviewComment comment)
     {
         if (!string.IsNullOrWhiteSpace(comment.FilePath) &&
@@ -258,11 +184,6 @@ internal sealed partial class HeuristicCommentRelevanceFilter : ICommentRelevanc
         return string.IsNullOrWhiteSpace(path)
             ? string.Empty
             : path.Replace('\\', '/').TrimStart('/');
-    }
-
-    private static bool IsSummaryLevelOnly(ReviewComment comment)
-    {
-        return !comment.LineNumber.HasValue && ContainsAny(comment.Message, SummaryOnlyTerms);
     }
 
     private static bool IsMissingConcreteObservable(ReviewComment comment)

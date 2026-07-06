@@ -51,6 +51,7 @@ internal static class RepresentativeFilterEvaluationCorpus
 
     public static IReadOnlyList<RepresentativeFilterEvaluationCase> Cases { get; } =
     [
+        // Concrete, correctly-anchored findings: kept by every implementation.
         SingleCommentCase(
             "anchored-null-dereference",
             "AnchoredNullDeref.cs",
@@ -65,24 +66,24 @@ internal static class RepresentativeFilterEvaluationCorpus
             CommentSeverity.Error,
             "`state` is dereferenced before initialization at line 14 in `ApplyAsync()`.",
             RepresentativeFilterCommentCategory.ConfirmedValid),
+
+        // A genuinely valid finding whose only mechanical objection is that it spans two files. The
+        // deterministic heuristic discards it (it cannot verify a cross-file claim on its own); the hybrid
+        // evaluator opens the files, confirms it, and keeps it — so hybrid retains more valid findings.
         SingleCommentCase(
-            "ambiguous-valid-caller-contract",
-            "AmbiguousValidCallerContract.cs",
+            "cross-file-valid-caller-contract",
+            "CrossFileValidCallerContract.cs",
             null,
             CommentSeverity.Warning,
-            "The caller `PipelineBuilder.Build()` passes `null` into `ExecuteAsync()`, leaving this dereference unguarded.",
+            "The caller in `PipelineBuilder.cs` passes null into the guard defined in `ExecuteAsync.cs`, leaving this dereference unguarded.",
             RepresentativeFilterCommentCategory.ConfirmedValid,
             RepresentativeHybridEvaluationMode.Successful,
             RepresentativeHybridDecision.Keep,
             hybridInputTokens: 90,
             hybridOutputTokens: 20),
-        SingleCommentCase(
-            "summary-only-noise",
-            "SummaryOnlyNoise.cs",
-            null,
-            CommentSeverity.Suggestion,
-            "Overall this file could be cleaned up across multiple places.",
-            RepresentativeFilterCommentCategory.KnownFalsePositive),
+
+        // Speculative WARNING with no concrete observable (no line, no code token): discarded
+        // deterministically and confirmed discarded by the hybrid evaluator.
         SingleCommentCase(
             "speculative-missing-concrete-warning",
             "SpeculativeMissingConcreteWarning.cs",
@@ -95,53 +96,33 @@ internal static class RepresentativeFilterEvaluationCorpus
             CommentRelevanceReasonCodes.MissingConcreteObservable,
             95,
             24),
+
+        // Unverifiable cross-file ERROR (two distinct file references): discarded deterministically and
+        // confirmed discarded by the evaluator.
         SingleCommentCase(
-            "cross-file-critical-error",
-            "CrossFileCriticalError.cs",
+            "unverifiable-cross-file-error",
+            "UnverifiableCrossFileError.cs",
             null,
             CommentSeverity.Error,
-            "Critical issue may exist in another file.",
-            RepresentativeFilterCommentCategory.KnownFalsePositive | RepresentativeFilterCommentCategory.UnsupportedSpeculativeHighSeverity,
-            RepresentativeHybridEvaluationMode.Successful,
-            RepresentativeHybridDecision.Discard,
-            CommentRelevanceReasonCodes.UnverifiableCrossFileClaim,
-            110,
-            27),
-        SingleCommentCase(
-            "tooling-limitation-noise",
-            "ToolingLimitationNoise.cs",
-            null,
-            CommentSeverity.Warning,
-            "The tool output was truncated so this might be a defect.",
-            RepresentativeFilterCommentCategory.KnownFalsePositive),
-        SingleCommentCase(
-            "outage-fallback-warning",
-            "OutageFallbackWarning.cs",
-            null,
-            CommentSeverity.Warning,
-            "Another file initializes this differently.",
-            RepresentativeFilterCommentCategory.KnownFalsePositive | RepresentativeFilterCommentCategory.UnsupportedSpeculativeHighSeverity,
-            RepresentativeHybridEvaluationMode.Unavailable,
-            hybridDegradedCause: "Comment relevance evaluator timed out."),
-        SingleCommentCase(
-            "hedged-high-severity-warning",
-            "HedgedHighSeverityWarning.cs",
-            null,
-            CommentSeverity.Warning,
-            "This likely fails when configuration is missing.",
-            RepresentativeFilterCommentCategory.KnownFalsePositive | RepresentativeFilterCommentCategory.UnsupportedSpeculativeHighSeverity),
-        SingleCommentCase(
-            "severe-cross-file-warning",
-            "SevereCrossFileWarning.cs",
-            null,
-            CommentSeverity.Warning,
-            "Guaranteed data loss may occur in another file.",
+            "Data loss occurs where `ReviewArchiveStore.cs` writes a value that `GetFileDiffHandler.cs` reads back inconsistently.",
             RepresentativeFilterCommentCategory.KnownFalsePositive | RepresentativeFilterCommentCategory.UnsupportedSpeculativeHighSeverity,
             RepresentativeHybridEvaluationMode.Successful,
             RepresentativeHybridDecision.Discard,
             CommentRelevanceReasonCodes.UnverifiableCrossFileClaim,
             120,
             29),
+
+        // Cross-file claim routed to the evaluator during an outage: the hybrid filter conservatively keeps
+        // the ambiguous survivor and records a degraded run, while the deterministic heuristic still discards it.
+        SingleCommentCase(
+            "cross-file-outage-fallback",
+            "CrossFileOutageFallback.cs",
+            null,
+            CommentSeverity.Warning,
+            "Initialization differs between `StartupModule.cs` and `RuntimeModule.cs`, so this path may misbehave.",
+            RepresentativeFilterCommentCategory.KnownFalsePositive,
+            RepresentativeHybridEvaluationMode.Unavailable,
+            hybridDegradedCause: "Comment relevance evaluator timed out."),
     ];
 
     private static RepresentativeFilterEvaluationCase SingleCommentCase(

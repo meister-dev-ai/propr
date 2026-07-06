@@ -28,7 +28,7 @@ public sealed class FileByFileReviewOrchestratorCommentRelevanceFilterTests
                 new ReviewResult(
                     "summary",
                     [
-                        new ReviewComment("src/Foo.cs", null, CommentSeverity.Warning, "Overall this file has several issues."),
+                        new ReviewComment("src/Foo.cs", null, CommentSeverity.Warning, "this file has several issues in a few spots."),
                         new ReviewComment("src/Foo.cs", 8, CommentSeverity.Warning, "Confirmed null dereference at line 8 in `ExecuteAsync`."),
                     ]));
 
@@ -136,7 +136,13 @@ public sealed class FileByFileReviewOrchestratorCommentRelevanceFilterTests
         var aiCore = Substitute.For<IAiReviewCore>();
         aiCore.ReviewAsync(Arg.Any<PullRequest>(), Arg.Any<ReviewSystemContext>(), Arg.Any<CancellationToken>())
             .Returns(
-                new ReviewResult("summary", [new ReviewComment("src/Foo.cs", null, CommentSeverity.Warning, "Critical issue may exist in another file.")]));
+                new ReviewResult(
+                    "summary",
+                    [
+                        new ReviewComment(
+                            "src/Foo.cs", null, CommentSeverity.Warning,
+                            "The value written in ReviewArchiveStore.cs is read back differently in GetFileDiffHandler.cs."),
+                    ]));
 
         var protocolRecorder = CreateProtocolRecorder();
         var job = CreateJob();
@@ -152,7 +158,9 @@ public sealed class FileByFileReviewOrchestratorCommentRelevanceFilterTests
                     [
                         new CommentRelevanceFilterDecision(
                             CommentRelevanceFilterDecision.DiscardDecision,
-                            new ReviewComment("src/Foo.cs", null, CommentSeverity.Warning, "Critical issue may exist in another file."),
+                            new ReviewComment(
+                                "src/Foo.cs", null, CommentSeverity.Warning,
+                                "The value written in ReviewArchiveStore.cs is read back differently in GetFileDiffHandler.cs."),
                             [CommentRelevanceReasonCodes.UnverifiableCrossFileClaim],
                             CommentRelevanceFilterDecision.AiAdjudicationSource),
                     ],

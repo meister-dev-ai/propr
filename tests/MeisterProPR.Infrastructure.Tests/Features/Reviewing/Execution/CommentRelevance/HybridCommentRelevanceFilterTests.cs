@@ -24,8 +24,9 @@ public sealed class HybridCommentRelevanceFilterTests
                     "Evaluator unavailable."));
 
         var filter = new HybridCommentRelevanceFilter(evaluator);
-        var deterministicDiscard = CommentRelevanceFilterTestData.CreateComment("Overall this file has several issues across multiple places.");
-        var ambiguous = CommentRelevanceFilterTestData.CreateComment("Critical issue may exist in another file.");
+        var deterministicDiscard = CommentRelevanceFilterTestData.CreateComment(
+            "Confirmed defect in the stored lookup on this line.", CommentSeverity.Warning, 3, "src/Other.cs");
+        var ambiguous = CommentRelevanceFilterTestData.CreateComment("behavior is broken in some cases.");
 
         var result = await filter.FilterAsync(
             CommentRelevanceFilterTestData.CreateRequest([deterministicDiscard, ambiguous], "hybrid-v1"),
@@ -35,7 +36,7 @@ public sealed class HybridCommentRelevanceFilterTests
         Assert.Equal(1, result.DiscardedCount);
         AssertFallbackState(result, "Evaluator unavailable.");
         Assert.Equal(CommentRelevanceFilterDecision.FallbackModeSource, result.Decisions.Single(decision => decision.IsKeep).DecisionSource);
-        Assert.Contains(CommentRelevanceReasonCodes.SummaryLevelOnly, result.Decisions.Single(d => d.IsDiscard).ReasonCodes);
+        Assert.Contains(CommentRelevanceReasonCodes.WrongFileOrAnchor, result.Decisions.Single(d => d.IsDiscard).ReasonCodes);
     }
 
     [Fact]
@@ -81,7 +82,8 @@ public sealed class HybridCommentRelevanceFilterTests
                     null));
 
         var filter = new HybridCommentRelevanceFilter(evaluator);
-        var firstAmbiguous = CommentRelevanceFilterTestData.CreateComment("Critical issue may exist in another file.");
+        var firstAmbiguous =
+            CommentRelevanceFilterTestData.CreateComment("The value written in ReviewArchiveStore.cs is read back differently in GetFileDiffHandler.cs.");
         var secondAmbiguous = CommentRelevanceFilterTestData.CreateComment("behavior is broken in some cases.", lineNumber: null);
 
         var result = await filter.FilterAsync(
@@ -110,7 +112,7 @@ public sealed class HybridCommentRelevanceFilterTests
         var filter = new HybridCommentRelevanceFilter(evaluator);
         var comments = new[]
         {
-            CommentRelevanceFilterTestData.CreateComment("Critical issue may exist in another file."),
+            CommentRelevanceFilterTestData.CreateComment("The value written in ReviewArchiveStore.cs is read back differently in GetFileDiffHandler.cs."),
             CommentRelevanceFilterTestData.CreateComment("behavior is broken in some cases."),
         };
 
@@ -128,7 +130,8 @@ public sealed class HybridCommentRelevanceFilterTests
     public async Task FilterAsync_WhenEvaluatorReturnsDecisions_UsesAiAdjudicationAndTokenUsage()
     {
         var evaluator = Substitute.For<ICommentRelevanceAmbiguityEvaluator>();
-        var ambiguousComment = CommentRelevanceFilterTestData.CreateComment("Critical issue may exist in another file.");
+        var ambiguousComment =
+            CommentRelevanceFilterTestData.CreateComment("The value written in ReviewArchiveStore.cs is read back differently in GetFileDiffHandler.cs.");
         evaluator.EvaluateAsync(Arg.Any<CommentRelevanceFilterRequest>(), Arg.Any<IReadOnlyList<ReviewComment>>(), Arg.Any<CancellationToken>())
             .Returns(
                 new CommentRelevanceAmbiguityEvaluationResult(
@@ -168,8 +171,9 @@ public sealed class HybridCommentRelevanceFilterTests
                     degradedCause));
 
         var filter = new HybridCommentRelevanceFilter(evaluator);
-        var deterministicDiscard = CommentRelevanceFilterTestData.CreateComment("Overall this file has several issues across multiple places.");
-        var ambiguous = CommentRelevanceFilterTestData.CreateComment("Critical issue may exist in another file.");
+        var deterministicDiscard = CommentRelevanceFilterTestData.CreateComment(
+            "Confirmed defect in the stored lookup on this line.", CommentSeverity.Warning, 3, "src/Other.cs");
+        var ambiguous = CommentRelevanceFilterTestData.CreateComment("behavior is broken in some cases.");
 
         return await filter.FilterAsync(
             CommentRelevanceFilterTestData.CreateRequest([deterministicDiscard, ambiguous], "hybrid-v1"),

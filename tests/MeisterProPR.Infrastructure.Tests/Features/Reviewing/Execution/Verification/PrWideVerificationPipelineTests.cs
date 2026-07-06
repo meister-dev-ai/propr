@@ -339,8 +339,11 @@ public sealed class PrWideVerificationPipelineTests
     }
 
     [Fact]
-    public async Task ReviewAsync_SpeculativePrWideFinding_IsDroppedBeforePublication()
+    public async Task ReviewAsync_SpeculativePrWideFinding_IsWithheldFromPublicationWhenUnverified()
     {
+        // Speculative cross-cutting findings are no longer hard-dropped by deterministic phrase screening.
+        // They flow to evidence-backed verification, which withholds an unsupported claim to summary-only
+        // (missing_verified_claim_support) so it is not published as an actionable comment.
         var fallback = Substitute.For<IFileByFileReviewOrchestrator>();
         var protocolRecorder = CreateProtocolRecorder();
         var reviewTools = CreateReviewTools(true);
@@ -404,7 +407,7 @@ public sealed class PrWideVerificationPipelineTests
             context.ActiveProtocolId.Value,
             ReviewProtocolEventNames.PrWideVerificationCompleted,
             Arg.Is<string?>(details => details != null && details.Contains("candidate-001", StringComparison.Ordinal)),
-            Arg.Is<string?>(output => output != null && output.Contains("\"recommendedDisposition\":\"Drop\"", StringComparison.Ordinal)),
+            Arg.Is<string?>(output => output != null && output.Contains("\"recommendedDisposition\":\"SummaryOnly\"", StringComparison.Ordinal)),
             Arg.Is<string?>(error => error == null),
             Arg.Any<CancellationToken>());
     }
