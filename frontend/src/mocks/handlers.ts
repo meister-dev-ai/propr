@@ -317,6 +317,7 @@ function buildMockClient(id: string, displayName = `Mocked Client ${id}`, overri
     enableProRV: true,
     enableEvidenceBackedVerification: false,
     enableMultiPassUnion: false,
+    enableLanguageRobustScreening: false,
     ...overrides,
   }
 }

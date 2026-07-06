@@ -36,6 +36,7 @@ export interface ClientDetailDto {
   enableProRV: boolean
   enableEvidenceBackedVerification: boolean
   enableMultiPassUnion: boolean
+  enableLanguageRobustScreening: boolean
   reviewPasses?: ReviewPassEntry[] | null
 }
 
@@ -68,6 +69,7 @@ export interface ClientDetailViewModel {
   editedEnableProRV: Ref<boolean>
   editedEnableEvidenceBackedVerification: Ref<boolean>
   editedEnableMultiPassUnion: Ref<boolean>
+  editedEnableLanguageRobustScreening: Ref<boolean>
   editedReviewPasses: Ref<ReviewPassEntry[]>
   reviewProfiles: Ref<ReviewProfileCatalogItemDto[]>
   clientReviewProfile: Ref<ClientReviewProfileDto | null>
@@ -238,6 +240,7 @@ export function useClientDetailViewModel(options: UseClientDetailViewModelOption
   const editedEnableProRV = ref(false)
   const editedEnableEvidenceBackedVerification = ref(false)
   const editedEnableMultiPassUnion = ref(false)
+  const editedEnableLanguageRobustScreening = ref(false)
   const editedReviewPasses = ref<ReviewPassEntry[]>([])
   const reviewProfiles = ref<ReviewProfileCatalogItemDto[]>([])
   const clientReviewProfile = ref<ClientReviewProfileDto | null>(null)
@@ -288,6 +291,7 @@ export function useClientDetailViewModel(options: UseClientDetailViewModelOption
     editedEnableProRV.value = Boolean(nextClient.enableProRV)
     editedEnableEvidenceBackedVerification.value = Boolean(nextClient.enableEvidenceBackedVerification)
     editedEnableMultiPassUnion.value = Boolean(nextClient.enableMultiPassUnion)
+    editedEnableLanguageRobustScreening.value = Boolean(nextClient.enableLanguageRobustScreening)
     editedReviewPasses.value = normalizeReviewPasses(nextClient.reviewPasses)
   }
 
@@ -447,6 +451,7 @@ export function useClientDetailViewModel(options: UseClientDetailViewModelOption
         enableProRV: editedEnableProRV.value,
         enableEvidenceBackedVerification: editedEnableEvidenceBackedVerification.value,
         enableMultiPassUnion: editedEnableMultiPassUnion.value,
+        enableLanguageRobustScreening: editedEnableLanguageRobustScreening.value,
       }
 
       // The review-pass list is edited on the AI Connections tab but shares this save path with the System tab.
@@ -505,6 +510,7 @@ export function useClientDetailViewModel(options: UseClientDetailViewModelOption
         editedEnableProRV.value !== Boolean(client.value.enableProRV) ||
         editedEnableEvidenceBackedVerification.value !== Boolean(client.value.enableEvidenceBackedVerification) ||
         editedEnableMultiPassUnion.value !== Boolean(client.value.enableMultiPassUnion) ||
+        editedEnableLanguageRobustScreening.value !== Boolean(client.value.enableLanguageRobustScreening) ||
         !reviewPassesEqual(editedReviewPasses.value, normalizeReviewPasses(client.value.reviewPasses)) ||
         editedDefaultReviewStrategy.value !== (client.value.defaultReviewStrategy ?? 'fileByFile')
       )
@@ -545,6 +551,7 @@ export function useClientDetailViewModel(options: UseClientDetailViewModelOption
     editedEnableProRV,
     editedEnableEvidenceBackedVerification,
     editedEnableMultiPassUnion,
+    editedEnableLanguageRobustScreening,
     editedReviewPasses,
     reviewProfiles,
     clientReviewProfile,

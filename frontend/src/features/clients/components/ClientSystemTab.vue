@@ -135,6 +135,21 @@
                 </div>
                 <div class="inline-field-row review-publication-row">
                     <div class="form-field flex-1 review-publication-field">
+                        <label class="checkbox-field" for="enableLanguageRobustScreening">
+                            <input id="enableLanguageRobustScreening"
+                                v-model="editedEnableLanguageRobustScreening"
+                                name="enableLanguageRobustScreening" type="checkbox" />
+                            <strong>Enable language-robust comment screening</strong>
+                            <p class="muted review-publication-copy">
+                                Screen hedged or vague review comments by meaning (multilingual embeddings)
+                                rather than English phrase lists, folding low-confidence comments into the
+                                summary instead of posting them as threads. Off by default.
+                            </p>
+                        </label>
+                    </div>
+                </div>
+                <div class="inline-field-row review-publication-row">
+                    <div class="form-field flex-1 review-publication-field">
                         <label class="checkbox-field" for="enableMultiPassUnion">
                             <input id="enableMultiPassUnion"
                                 v-model="editedEnableMultiPassUnion"
@@ -195,6 +210,7 @@ const {
     editedEnableProRV,
     editedEnableEvidenceBackedVerification,
     editedEnableMultiPassUnion,
+    editedEnableLanguageRobustScreening,
     reviewProfiles,
     clientReviewProfile,
     saveDisplayName,
