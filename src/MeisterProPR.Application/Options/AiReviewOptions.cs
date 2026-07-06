@@ -124,10 +124,13 @@ public sealed class AiReviewOptions
     /// <summary>
     ///     Minimum cosine similarity (0–1) to a hedged/vague exemplar centroid for the semantic comment screener
     ///     to classify a comment as hedged or vague; below this the comment is kept as firm. Only consulted on the
-    ///     language-robust screening path (<c>EnableLanguageRobustScreening</c>). Tuned in Phase C validation.
+    ///     language-robust screening path (<c>EnableLanguageRobustScreening</c>). The default (0.40) was chosen from
+    ///     a de/fr/it validation sweep: firm comments were preserved 100% down to 0.30, while 0.50 caught only ~half
+    ///     of non-English hedge/vague; 0.40 recovers most of that recall while keeping a margin against demoting
+    ///     borderline-firm comments on harder inputs.
     /// </summary>
     [Range(0.0, 1.0, ErrorMessage = "CommentScreeningSimilarityThreshold must be between 0.0 and 1.0.")]
-    public double CommentScreeningSimilarityThreshold { get; set; } = 0.5;
+    public double CommentScreeningSimilarityThreshold { get; set; } = 0.40;
 
     /// <summary>
     ///     Minimum total comment count across all files before the cross-file quality filter AI pass
