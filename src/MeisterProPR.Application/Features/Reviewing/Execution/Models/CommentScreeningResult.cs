@@ -24,13 +24,17 @@ public enum CommentScreeningClass
 }
 
 /// <summary>
-///     Result of semantic comment screening: the classified <see cref="CommentScreeningClass" /> and the cosine
-///     similarity (0–1) to the winning class centroid. <see cref="Firm" /> with similarity 0 is the conservative
-///     degraded result returned when no embedding model is bound or the screener could not decide — the comment
-///     is kept, never dropped on a screening error.
+///     Result of semantic comment screening: the classified <see cref="CommentScreeningClass" />, the cosine
+///     similarity (0–1) to the winning class centroid, and whether the classification was degraded (screening
+///     unavailable — no embedding model bound, or a failure). A degraded result is always
+///     <see cref="CommentScreeningClass.Firm" /> so the comment is kept, but the flag lets the caller record a
+///     single <c>screening_degraded</c> trace instead of silently disabling screening for the file.
 /// </summary>
-public sealed record CommentScreeningResult(CommentScreeningClass Class, double Similarity)
+public sealed record CommentScreeningResult(CommentScreeningClass Class, double Similarity, bool IsDegraded = false)
 {
-    /// <summary>The conservative "keep the comment" result used on the degraded path.</summary>
+    /// <summary>The conservative "keep the comment" result for a genuine firm classification (or blank input).</summary>
     public static CommentScreeningResult Firm { get; } = new(CommentScreeningClass.Firm, 0.0);
+
+    /// <summary>The conservative "keep the comment" result used when screening is unavailable (degraded path).</summary>
+    public static CommentScreeningResult DegradedFirm { get; } = new(CommentScreeningClass.Firm, 0.0, true);
 }

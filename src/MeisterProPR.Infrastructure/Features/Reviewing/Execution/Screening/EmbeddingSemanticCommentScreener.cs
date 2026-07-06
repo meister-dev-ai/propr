@@ -33,9 +33,14 @@ public sealed partial class EmbeddingSemanticCommentScreener(
     /// <inheritdoc />
     public async Task<CommentScreeningResult> ClassifyAsync(string commentText, Guid clientId, CancellationToken ct = default)
     {
-        if (aiRuntimeResolver is null || clientId == Guid.Empty || string.IsNullOrWhiteSpace(commentText))
+        if (string.IsNullOrWhiteSpace(commentText))
         {
             return CommentScreeningResult.Firm;
+        }
+
+        if (aiRuntimeResolver is null || clientId == Guid.Empty)
+        {
+            return CommentScreeningResult.DegradedFirm;
         }
 
         try
@@ -47,7 +52,7 @@ public sealed partial class EmbeddingSemanticCommentScreener(
             var centroids = await this.GetCentroidsAsync(runtime, ct).ConfigureAwait(false);
             if (centroids.Count == 0)
             {
-                return CommentScreeningResult.Firm;
+                return CommentScreeningResult.DegradedFirm;
             }
 
             var vector = await EmbedAsync(runtime, Truncate(commentText), ct).ConfigureAwait(false);
@@ -81,7 +86,7 @@ public sealed partial class EmbeddingSemanticCommentScreener(
         catch (Exception ex)
         {
             LogScreeningFailed(logger, ex);
-            return CommentScreeningResult.Firm;
+            return CommentScreeningResult.DegradedFirm;
         }
     }
 

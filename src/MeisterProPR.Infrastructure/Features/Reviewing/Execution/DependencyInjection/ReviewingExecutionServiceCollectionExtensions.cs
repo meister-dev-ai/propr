@@ -41,6 +41,7 @@ public static class ReviewingExecutionServiceCollectionExtensions
         services.AddScoped<IReviewPipelineStage<PerFileReviewContext>, FileByFileProRvPrefilterStage>();
         services.AddScoped<IReviewPipelineStage<PerFileReviewContext>, AgenticProRvPrefilterStage>();
         services.AddScoped<IReviewPipelineStage<PerFileReviewContext>, FileByFileContextPrefetchStage>();
+        services.AddScoped<IReviewPipelineStage<PerFileReviewContext>, FileByFileSemanticScreeningStage>();
         services.AddSingleton<IReviewPipelineStage<PerFileReviewContext>, FileByFileRiskMarkerStage>();
         services.AddSingleton<IReviewPipelineStage<PerFileReviewContext>, FileByFileImportanceRankingStage>();
         services.AddSingleton<IReviewPipelineStage<PerFileReviewContext>, FileByFileSelfReflectionRankingStage>();
