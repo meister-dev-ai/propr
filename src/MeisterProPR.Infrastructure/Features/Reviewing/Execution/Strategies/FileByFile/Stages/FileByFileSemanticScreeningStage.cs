@@ -6,7 +6,6 @@ using System.Text.Json;
 using MeisterProPR.Application.Features.Reviewing.Execution.Models;
 using MeisterProPR.Application.Features.Reviewing.Execution.Ports;
 using MeisterProPR.Application.Interfaces;
-using MeisterProPR.Domain.Enums;
 using MeisterProPR.Domain.ValueObjects;
 using MeisterProPR.Infrastructure.Features.Reviewing.Diagnostics.Persistence;
 
@@ -19,11 +18,15 @@ namespace MeisterProPR.Infrastructure.Features.Reviewing.Execution.Strategies.Fi
 ///     <list type="bullet">
 ///         <item>Firm (and the conservative degraded default) is kept as a posted comment.</item>
 ///         <item>
-///             Hedged ERROR/WARNING is kept so the evidence verifier can confirm-or-summarize it downstream; when
-///             the verifier is disabled there is nothing downstream to demote it, so it is folded into the summary here.
+///             Every non-Firm classification — hedged or vague, at any severity, including hedged ERROR/WARNING —
+///             is folded into the review summary (summary-only). Interim semantics: hedged findings are NOT passed
+///             through to the evidence verifier, because verification only engages comments whose text yields
+///             extractable claims and the claim extractor is English-shaped, so a hedged non-English finding would
+///             otherwise be published unscreened.
 ///         </item>
-///         <item>Hedged/vague SUGGESTION (and vague at any severity) is folded into the review summary (summary-only).</item>
 ///     </list>
+///     Upgrade path (follow-up, not implemented): thread the screening class into verification so hedged findings
+///     become must-confirm-or-summarize and confirmed ones are published rewritten as firm.
 ///     Every fold emits a <c>comment_screening_disposition</c> trace; a degraded classification keeps every comment
 ///     and records one <c>comment_screening_degraded</c> event. Flag off ⇒ no-op.
 /// </summary>
@@ -45,7 +48,6 @@ internal sealed class FileByFileSemanticScreeningStage(
         }
 
         var clientId = context.Job.ClientId;
-        var verifierEnabled = context.FileReviewContext.EnableEvidenceBackedVerification;
 
         var kept = new List<ReviewComment>(result.Comments.Count);
         var foldedIntoSummary = new List<(ReviewComment Comment, CommentScreeningResult Screening)>();
@@ -61,7 +63,7 @@ internal sealed class FileByFileSemanticScreeningStage(
                 return context;
             }
 
-            if (KeepsComment(screening.Class, comment.Severity, verifierEnabled))
+            if (KeepsComment(screening.Class))
             {
                 kept.Add(comment);
             }
@@ -89,22 +91,14 @@ internal sealed class FileByFileSemanticScreeningStage(
         return context with { ReviewResult = updated };
     }
 
-    // Firm is always kept. Hedged ERROR/WARNING is kept when the evidence verifier can confirm-or-summarize it
-    // downstream; everything else (hedged/vague suggestions, vague at any severity, hedged E/W with no verifier) is
-    // folded into the summary rather than posted as a thread — and nothing is ever deleted outright.
-    private static bool KeepsComment(CommentScreeningClass screeningClass, CommentSeverity severity, bool verifierEnabled)
+    // Interim semantics: only a Firm classification is posted. Every non-Firm classification — hedged or vague, at
+    // any severity, including hedged ERROR/WARNING — folds to summary-only (never deleted). Hedged E/W is not passed
+    // to the evidence verifier: verification only engages comments whose text yields extractable claims and the claim
+    // extractor is English-shaped, so a hedged non-English finding would otherwise be published unscreened. The
+    // upgrade path (thread the screening class into verification; hedged ⇒ must-confirm-or-summarize) is a follow-up.
+    private static bool KeepsComment(CommentScreeningClass screeningClass)
     {
-        if (screeningClass == CommentScreeningClass.Firm)
-        {
-            return true;
-        }
-
-        if (screeningClass == CommentScreeningClass.Hedged && severity is CommentSeverity.Error or CommentSeverity.Warning)
-        {
-            return verifierEnabled;
-        }
-
-        return false;
+        return screeningClass == CommentScreeningClass.Firm;
     }
 
     private static string AppendSummaryOnlySection(

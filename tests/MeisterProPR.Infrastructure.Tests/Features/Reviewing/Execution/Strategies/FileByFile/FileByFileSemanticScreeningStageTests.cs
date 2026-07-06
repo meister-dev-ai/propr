@@ -3,10 +3,13 @@
 
 using MeisterProPR.Application.Features.Reviewing.Execution.Models;
 using MeisterProPR.Application.Features.Reviewing.Execution.Ports;
+using MeisterProPR.Application.Interfaces;
 using MeisterProPR.Application.ValueObjects;
 using MeisterProPR.Domain.Entities;
 using MeisterProPR.Domain.Enums;
 using MeisterProPR.Domain.ValueObjects;
+using MeisterProPR.Infrastructure.Features.Reviewing.Diagnostics.Persistence;
+using NSubstitute;
 
 namespace MeisterProPR.Infrastructure.Tests.Features.Reviewing.Execution.Strategies.FileByFile;
 
@@ -45,15 +48,25 @@ public sealed class FileByFileSemanticScreeningStageTests
     }
 
     [Fact]
-    public async Task HedgedErrorWarning_WithVerifier_IsKeptForDownstreamVerification()
+    public async Task HedgedErrorWarning_WithVerifierEnabled_FoldsToSummaryAndTraces()
     {
-        var context = BuildContext(true, true, new ReviewComment("a.cs", 1, CommentSeverity.Error, "hedged"));
-        var stage = new FileByFileSemanticScreeningStage(new FakeScreener(_ => Hedged()));
+        // Interim semantics: hedged E/W is not passed through to the verifier (English-shaped claim extraction
+        // lets no-claim comments slip past it), so it folds to summary regardless of the verifier flag.
+        var recorder = Substitute.For<IProtocolRecorder>();
+        var context = BuildContext(true, true, new ReviewComment("a.cs", 1, CommentSeverity.Error, "hedged maybe"));
+        var stage = new FileByFileSemanticScreeningStage(new FakeScreener(_ => Hedged()), recorder);
 
         var result = await stage.ExecuteAsync(context, CancellationToken.None);
 
-        // Kept so the evidence verifier can confirm-or-summarize it; never deleted here.
-        Assert.Single(result.ReviewResult!.Comments);
+        Assert.Empty(result.ReviewResult!.Comments);
+        Assert.Contains("hedged maybe", result.ReviewResult.Summary, StringComparison.Ordinal);
+        await recorder.Received(1).RecordReviewStrategyEventAsync(
+            Arg.Any<Guid>(),
+            Arg.Is<string>(name => name == ReviewProtocolEventNames.CommentScreeningDisposition),
+            Arg.Is<string?>(details => details != null && details.Contains("summary_only", StringComparison.Ordinal)),
+            Arg.Is<string?>(output => output == null),
+            Arg.Is<string?>(error => error == null),
+            Arg.Any<CancellationToken>());
     }
 
     [Fact]
