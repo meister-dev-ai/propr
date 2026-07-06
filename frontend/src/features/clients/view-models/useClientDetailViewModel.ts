@@ -151,13 +151,15 @@ function isDetailTab(value: string): value is DetailTab {
 
 /** Normalizes a persisted review-pass list into a stable, ordinal-sorted list with
  * contiguous zero-based ordinals so the edited list and the server echo compare cleanly.
- * Entries with an empty/missing configuredModelId are dropped — a half-configured row is
- * never sent to the server (which would reject it) and never counts toward the dirty check. */
-function normalizeReviewPasses(passes: ReviewPassEntry[] | null | undefined): ReviewPassEntry[] {
+ * Each pass keeps its optional lens (null is an ordinary resample pass) so the lens is
+ * sent to the server and counts toward the dirty check. Entries with an empty/missing
+ * configuredModelId are dropped — a half-configured row is never sent to the server
+ * (which would reject it) and never counts toward the dirty check. */
+export function normalizeReviewPasses(passes: ReviewPassEntry[] | null | undefined): ReviewPassEntry[] {
   return [...(passes ?? [])]
     .filter((pass) => (pass.configuredModelId ?? '') !== '')
     .sort((left, right) => (left.ordinal ?? 0) - (right.ordinal ?? 0))
-    .map((pass, index) => ({ ordinal: index, configuredModelId: pass.configuredModelId ?? '' }))
+    .map((pass, index) => ({ ordinal: index, configuredModelId: pass.configuredModelId ?? '', lens: pass.lens ?? null }))
 }
 
 /** Pulls a human-readable message out of an ASP.NET ValidationProblem body, preferring the specific
@@ -195,13 +197,17 @@ function isFailedPatch(result: { data?: unknown; error?: unknown; response?: Res
   return !!result.error || !result.data || (result.response !== undefined && result.response.ok === false)
 }
 
-/** Two pass lists are equal when they carry the same ordered configured-model ids. */
-function reviewPassesEqual(left: ReviewPassEntry[], right: ReviewPassEntry[]): boolean {
+/** Two pass lists are equal when they carry the same ordered (configured-model id, lens) pairs. */
+export function reviewPassesEqual(left: ReviewPassEntry[], right: ReviewPassEntry[]): boolean {
   if (left.length !== right.length) {
     return false
   }
 
-  return left.every((pass, index) => (pass.configuredModelId ?? '') === (right[index]?.configuredModelId ?? ''))
+  return left.every(
+    (pass, index) =>
+      (pass.configuredModelId ?? '') === (right[index]?.configuredModelId ?? '') &&
+      (pass.lens ?? null) === (right[index]?.lens ?? null),
+  )
 }
 
 export function useClientDetailViewModel(options: UseClientDetailViewModelOptions = {}): ClientDetailViewModel {

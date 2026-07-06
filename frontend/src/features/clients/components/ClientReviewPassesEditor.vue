@@ -318,8 +318,10 @@ const onConnectionChange = (index: number): void => {
 <style scoped>
 .review-passes-editor {
   /* Shared column template: fixed ordinal + fixed actions so the header row and every pass row size their
-     two flexible middle columns identically — the "Connection"/"Model" headers then line up above the selects. */
-  --review-pass-cols: 4.5rem minmax(0, 1fr) minmax(0, 1fr) 9rem 9.5rem;
+     two flexible middle columns identically — the "Connection"/"Model" headers then line up above the selects.
+     The actions column is wide enough to hold the two reorder buttons plus Remove so they never overflow left
+     onto the Lens cell. */
+  --review-pass-cols: 4.5rem minmax(0, 1fr) minmax(0, 1fr) 9rem 10.5rem;
   border: 1px solid var(--color-border);
   border-radius: var(--radius-lg);
   background: var(--color-surface);
@@ -418,6 +420,20 @@ const onConnectionChange = (index: number): void => {
   padding: 0.35rem 0.5rem;
   font-size: 0.85rem;
   height: 34px;
+}
+
+/* btn-sm / btn-xs have no global sizing, so without these the shared .btn-secondary / .btn-danger
+   padding renders the reorder and Remove buttons at full size — they then overflow the actions
+   column and overlay the Lens cell. Keep the action cluster compact so it fits its column. */
+.review-passes-header .btn-sm {
+  padding: 0.4rem 0.8rem;
+  font-size: 0.8rem;
+}
+
+.review-pass-actions .btn-xs {
+  padding: 0.35rem 0.6rem;
+  font-size: 0.8rem;
+  line-height: 1;
 }
 
 @media (max-width: 720px) {
