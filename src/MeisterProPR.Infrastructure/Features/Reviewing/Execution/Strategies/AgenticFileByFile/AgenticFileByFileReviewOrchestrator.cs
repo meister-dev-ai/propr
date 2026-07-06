@@ -1,7 +1,6 @@
 // Copyright (c) Andreas Rain.
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
-using System.Collections.Immutable;
 using System.Text.Json;
 using MeisterProPR.Application.Exceptions;
 using MeisterProPR.Application.Features.Reviewing.Execution.Models;
@@ -15,6 +14,7 @@ using MeisterProPR.Domain.Enums;
 using MeisterProPR.Domain.ValueObjects;
 using MeisterProPR.Infrastructure.Features.Reviewing.Diagnostics.Persistence;
 using MeisterProPR.Infrastructure.Features.Reviewing.Execution.CommentRelevance;
+using MeisterProPR.Infrastructure.Features.Reviewing.Execution.Screening;
 using MeisterProPR.Infrastructure.Features.Reviewing.Execution.Strategies.FileByFile;
 using MeisterProPR.Infrastructure.Features.Reviewing.Execution.Verification;
 using MeisterProPR.ProRV.Abstractions;
@@ -45,21 +45,6 @@ internal sealed class AgenticFileByFileReviewOrchestrator(
     IReviewClaimExtractor? reviewClaimExtractor = null,
     ISummaryReconciliationService? summaryReconciliationService = null) : IAgenticFileByFileReviewOrchestrator
 {
-    private static readonly ImmutableArray<string> HedgePhrases =
-    [
-        "if your ", "if the file", "if [", "please verify", "validate that",
-        "consider whether", "this may be", "this could be", "you may want to",
-        "worth checking", "it appears", "it seems", "i cannot confirm",
-        "unclear whether", "worth verifying", "if applicable",
-    ];
-
-    private static readonly ImmutableArray<string> VagueSuggestionPhrases =
-    [
-        "consider refactoring", "consider adding", "you could also", "you might also",
-        "you might want to", "it would be worth", "would also be good",
-        "could be strengthened", "could be made", "could also verify",
-    ];
-
     private readonly AiReviewOptions _opts = options.Value;
 
     public AgenticFileByFileReviewOrchestrator(
@@ -200,9 +185,13 @@ internal sealed class AgenticFileByFileReviewOrchestrator(
                 aiRuntimeResolver,
                 NullLogger<AgenticProRvPrefilterStage>.Instance),
             new AgenticConfidenceFloorStage(options),
-            new AgenticSpeculativeCommentFilterStage(),
+            new FileByFileSemanticScreeningStage(
+                new EmbeddingSemanticCommentScreener(
+                    Microsoft.Extensions.Options.Options.Create(options),
+                    aiRuntimeResolver,
+                    NullLogger<EmbeddingSemanticCommentScreener>.Instance),
+                protocolRecorder),
             new AgenticInfoCommentStripStage(),
-            new AgenticVagueSuggestionFilterStage(),
         ]);
     }
 
@@ -438,34 +427,6 @@ internal sealed class AgenticFileByFileReviewOrchestrator(
         return count;
     }
 
-    internal static ReviewResult FilterSpeculativeComments(ReviewResult result)
-    {
-        if (result.Comments.Count == 0)
-        {
-            return result;
-        }
-
-        var filtered = result.Comments
-            .Where(c =>
-            {
-                foreach (var phrase in HedgePhrases)
-                {
-                    if (c.Message.Contains(phrase, StringComparison.OrdinalIgnoreCase))
-                    {
-                        return false;
-                    }
-                }
-
-                return true;
-            })
-            .ToList()
-            .AsReadOnly();
-
-        return filtered.Count == result.Comments.Count
-            ? result
-            : result with { Comments = filtered };
-    }
-
     internal static ReviewResult StripInfoComments(ReviewResult result)
     {
         if (result.Comments.Count == 0)
@@ -475,39 +436,6 @@ internal sealed class AgenticFileByFileReviewOrchestrator(
 
         var filtered = result.Comments
             .Where(c => c.Severity != CommentSeverity.Info)
-            .ToList()
-            .AsReadOnly();
-
-        return filtered.Count == result.Comments.Count
-            ? result
-            : result with { Comments = filtered };
-    }
-
-    internal static ReviewResult FilterVagueSuggestions(ReviewResult result)
-    {
-        if (result.Comments.Count == 0)
-        {
-            return result;
-        }
-
-        var filtered = result.Comments
-            .Where(c =>
-            {
-                if (c.Severity != CommentSeverity.Suggestion)
-                {
-                    return true;
-                }
-
-                foreach (var phrase in VagueSuggestionPhrases)
-                {
-                    if (c.Message.Contains(phrase, StringComparison.OrdinalIgnoreCase))
-                    {
-                        return false;
-                    }
-                }
-
-                return true;
-            })
             .ToList()
             .AsReadOnly();
 

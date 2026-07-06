@@ -1,26 +1,17 @@
 // Copyright (c) Andreas Rain.
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
-using MeisterProPR.Application.Features.Reviewing.Execution.Models;
 using MeisterProPR.Application.Options;
-using MeisterProPR.Application.ValueObjects;
-using MeisterProPR.Domain.Entities;
 using MeisterProPR.Domain.Enums;
 using MeisterProPR.Domain.ValueObjects;
-using MeisterProPR.Infrastructure.Features.Reviewing.Execution.Strategies;
 
 namespace MeisterProPR.Infrastructure.Tests.AI;
 
 /// <summary>
-///     Unit tests for the per-file post-processing filters added in feature 023:
-///     <list type="bullet">
-///         <item>T006/T007/T008 — <c>FilterSpeculativeComments</c> (US1)</item>
-///         <item>T009/T010       — INFO strip (US2)</item>
-///         <item>T011/T012       — <c>FilterVagueSuggestions</c> (US3)</item>
-///         <item>T015/T016/T017  — <c>ApplyConfidenceFloor</c> (US5)</item>
-///     </list>
-///     All methods are tested via the internal static methods exposed through
-///     <c>InternalsVisibleTo</c> on the Infrastructure assembly.
+///     Unit tests for the deterministic per-file post-processing steps that remain after language-robust
+///     screening replaced the English phrase filters: <c>StripInfoComments</c> and <c>ApplyConfidenceFloor</c>.
+///     Both are exercised via the internal static methods exposed through <c>InternalsVisibleTo</c> on the
+///     Infrastructure assembly.
 /// </summary>
 public class FileByFileReviewOrchestratorPostProcessingTests
 {
@@ -36,136 +27,7 @@ public class FileByFileReviewOrchestratorPostProcessingTests
         return new ReviewComment(filePath, 1, severity, message);
     }
 
-    [Fact]
-    public async Task ReviewPipelineRunner_BaselineFileByFileProfile_AppliesConfiguredStagesInOrder()
-    {
-        var original = MakeResult(
-            MakeComment(CommentSeverity.Error, "please verify this is safe"),
-            MakeComment(CommentSeverity.Info, "Nice use of dependency injection."),
-            MakeComment(CommentSeverity.Suggestion, "consider refactoring this service into smaller methods"),
-            MakeComment(CommentSeverity.Warning, "Confirmed null dereference at line 10."));
-        var context = new PerFileReviewContext(
-            CreateJob(),
-            new ChangedFile("src/Foo.cs", ChangeType.Edit, "content", "diff"),
-            null,
-            new ReviewSystemContext(null, [], null)
-            {
-                LoopMetrics = new ReviewLoopMetrics(0, null, null, 59, 0, 0, 0),
-            },
-            null,
-            null,
-            original);
-        var profile = new ReviewPipelineProfile(
-            ReviewPipelineProfileProvider.FileByFileBaselineProfileId,
-            "File-by-file baseline",
-            ReviewStrategy.FileByFile,
-            [FileByFileProRvPrefilterStage.StageIdConstant],
-            [
-                FileByFileConfidenceFloorStage.StageIdConstant,
-                FileByFileSpeculativeCommentFilterStage.StageIdConstant,
-                FileByFileInfoCommentStripStage.StageIdConstant,
-                FileByFileVagueSuggestionFilterStage.StageIdConstant,
-            ],
-            [ReviewPipelineProfileProvider.FinalizeStageFamilyId],
-            true);
-        var runner = new ReviewPipelineRunner<PerFileReviewContext>(
-        [
-            new FileByFileConfidenceFloorStage(DefaultOpts()),
-            new FileByFileSpeculativeCommentFilterStage(),
-            new FileByFileInfoCommentStripStage(),
-            new FileByFileVagueSuggestionFilterStage(),
-        ]);
-
-        var result = await runner.ExecuteAsync(context, profile.PerFileStageIds, CancellationToken.None);
-
-        var finalResult = Assert.IsType<ReviewResult>(result.ReviewResult);
-        var surviving = Assert.Single(finalResult.Comments);
-        Assert.Equal(CommentSeverity.Suggestion, surviving.Severity);
-        Assert.Equal("Confirmed null dereference at line 10.", surviving.Message);
-    }
-
-    private static ReviewJob CreateJob()
-    {
-        return new ReviewJob(Guid.NewGuid(), Guid.NewGuid(), "https://dev.azure.com/org", "proj", "repo", 1, 1);
-    }
-
-    // ── T006: FilterSpeculativeComments — hedge phrase detection ─────────────────
-
-    [Theory]
-    [InlineData("please verify that this is correct")]
-    [InlineData("worth checking whether X is set")]
-    [InlineData("this may be a bug in the logic")]
-    [InlineData("If Your file contains the secret")] // case-insensitive
-    [InlineData("validate that the token is valid")]
-    [InlineData("it appears the config is missing")]
-    [InlineData("it seems like the null check was omitted")]
-    [InlineData("unclear whether the lock is acquired")]
-    [InlineData("i cannot confirm whether this is safe")]
-    [InlineData("consider whether a transaction is needed")]
-    [InlineData("this could be improved with caching")]
-    [InlineData("you may want to add logging here")]
-    [InlineData("worth verifying the schema exists")]
-    [InlineData("if applicable, add a retry policy")]
-    [InlineData("if the file contains credentials")]
-    [InlineData("if [FileName] contains the key")]
-    public void FilterSpeculativeComments_DropsCommentWithHedgePhrase(string message)
-    {
-        var result = MakeResult(MakeComment(CommentSeverity.Warning, message));
-
-        var filtered = FileByFileReviewOrchestrator.FilterSpeculativeComments(result);
-
-        Assert.Empty(filtered.Comments);
-    }
-
-    [Fact]
-    public void FilterSpeculativeComments_RetainsCommentWithoutHedgePhrase()
-    {
-        var comment = MakeComment(CommentSeverity.Error, "The password is stored in plaintext on line 42.");
-        var result = MakeResult(comment);
-
-        var filtered = FileByFileReviewOrchestrator.FilterSpeculativeComments(result);
-
-        Assert.Single(filtered.Comments);
-        Assert.Same(comment, filtered.Comments[0]);
-    }
-
-    [Fact]
-    public void FilterSpeculativeComments_WithOnlyCleanComments_ReturnsSameInstance()
-    {
-        var comment = MakeComment(CommentSeverity.Error, "Confirmed null dereference at line 10.");
-        var result = MakeResult(comment);
-
-        var filtered = FileByFileReviewOrchestrator.FilterSpeculativeComments(result);
-
-        // When nothing was dropped, the same ReviewResult instance is returned.
-        Assert.Same(result, filtered);
-    }
-
-    [Fact]
-    public void FilterSpeculativeComments_WithEmptyComments_ReturnsEmptyResult()
-    {
-        var result = MakeResult();
-
-        var filtered = FileByFileReviewOrchestrator.FilterSpeculativeComments(result);
-
-        Assert.Empty(filtered.Comments);
-    }
-
-    [Fact]
-    public void FilterSpeculativeComments_DropsHedgePhrasesAcrossAllSeverities()
-    {
-        var result = MakeResult(
-            MakeComment(CommentSeverity.Error, "please verify this is safe"),
-            MakeComment(CommentSeverity.Warning, "this may be a null ref"),
-            MakeComment(CommentSeverity.Info, "it appears config is missing"),
-            MakeComment(CommentSeverity.Suggestion, "worth checking if lock is held"));
-
-        var filtered = FileByFileReviewOrchestrator.FilterSpeculativeComments(result);
-
-        Assert.Empty(filtered.Comments);
-    }
-
-    // ── T009: INFO strip ─────────────────────────────────────────────────────────
+    // ── INFO strip ───────────────────────────────────────────────────────────────
 
     [Fact]
     public void StripInfoComments_SingleInfoComment_ReturnsEmptyList()
@@ -213,81 +75,7 @@ public class FileByFileReviewOrchestratorPostProcessingTests
         Assert.Same(result, stripped);
     }
 
-    // ── T011: FilterVagueSuggestions ─────────────────────────────────────────────
-
-    [Theory]
-    [InlineData("consider refactoring this service into smaller methods")]
-    [InlineData("consider adding a test for this edge case")]
-    [InlineData("you could also validate the input here")]
-    [InlineData("you might also add retry logic")]
-    [InlineData("you might want to extract a helper method")]
-    [InlineData("it would be worth adding observability")]
-    [InlineData("it would be worth considering a cache")]
-    [InlineData("would also be good to add documentation")]
-    [InlineData("could be strengthened by adding error handling")]
-    [InlineData("could be made more readable with constants")]
-    [InlineData("could also verify the return value")]
-    public void FilterVagueSuggestions_DropsSuggestionWithVaguePhrase(string message)
-    {
-        var result = MakeResult(MakeComment(CommentSeverity.Suggestion, message));
-
-        var filtered = FileByFileReviewOrchestrator.FilterVagueSuggestions(result);
-
-        Assert.Empty(filtered.Comments);
-    }
-
-    [Fact]
-    public void FilterVagueSuggestions_DoesNotDropWarningWithVaguePhrase()
-    {
-        // "consider refactoring" should NOT filter a WARNING — only SUGGESTIONs are filtered
-        var comment = MakeComment(CommentSeverity.Warning, "consider refactoring to avoid race condition");
-        var result = MakeResult(comment);
-
-        var filtered = FileByFileReviewOrchestrator.FilterVagueSuggestions(result);
-
-        Assert.Single(filtered.Comments);
-        Assert.Same(comment, filtered.Comments[0]);
-    }
-
-    [Fact]
-    public void FilterVagueSuggestions_DoesNotDropErrorWithVaguePhrase()
-    {
-        var comment = MakeComment(CommentSeverity.Error, "you could also remove the deadlock here");
-        var result = MakeResult(comment);
-
-        var filtered = FileByFileReviewOrchestrator.FilterVagueSuggestions(result);
-
-        Assert.Single(filtered.Comments);
-    }
-
-    [Fact]
-    public void FilterVagueSuggestions_RetainsConcreteSuggestion()
-    {
-        var comment = MakeComment(
-            CommentSeverity.Suggestion,
-            "Replace Foo.GetById(id) with Foo.FindAsync(id) to avoid synchronous blocking on line 42.");
-        var result = MakeResult(comment);
-
-        var filtered = FileByFileReviewOrchestrator.FilterVagueSuggestions(result);
-
-        Assert.Single(filtered.Comments);
-        Assert.Same(comment, filtered.Comments[0]);
-    }
-
-    [Fact]
-    public void FilterVagueSuggestions_WithNoVagueSuggestions_ReturnsSameInstance()
-    {
-        var comment = MakeComment(
-            CommentSeverity.Suggestion,
-            "Use IOptions<T> instead of direct environment variable access on line 15 to enable test overrides.");
-        var result = MakeResult(comment);
-
-        var filtered = FileByFileReviewOrchestrator.FilterVagueSuggestions(result);
-
-        Assert.Same(result, filtered);
-    }
-
-    // ── T015: ApplyConfidenceFloor ────────────────────────────────────────────────
+    // ── ApplyConfidenceFloor ──────────────────────────────────────────────────────
 
     private static AiReviewOptions DefaultOpts()
     {

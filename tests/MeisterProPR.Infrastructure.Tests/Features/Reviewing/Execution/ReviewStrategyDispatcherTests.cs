@@ -86,7 +86,6 @@ public sealed class ReviewStrategyDispatcherTests
                 ReviewStrategy.AgenticFileByFile,
                 [AgenticProRvPrefilterStage.StageIdConstant],
                 [
-                    AgenticSpeculativeCommentFilterStage.StageIdConstant,
                     AgenticInfoCommentStripStage.StageIdConstant,
                 ],
                 [ReviewPipelineProfileProvider.FinalizeStageFamilyId],

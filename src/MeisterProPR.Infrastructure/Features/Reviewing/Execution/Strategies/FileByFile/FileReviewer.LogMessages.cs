@@ -59,26 +59,8 @@ internal sealed partial class FileReviewer
 
     [LoggerMessage(
         Level = LogLevel.Debug,
-        Message = "Dropped {DroppedCount} speculative comment(s) from {FilePath} for job {JobId}")]
-    private static partial void LogSpeculativeCommentsDropped(
-        ILogger logger,
-        int droppedCount,
-        string filePath,
-        Guid jobId);
-
-    [LoggerMessage(
-        Level = LogLevel.Debug,
         Message = "Dropped {DroppedCount} INFO comment(s) from {FilePath} for job {JobId}")]
     private static partial void LogInfoCommentsDropped(ILogger logger, int droppedCount, string filePath, Guid jobId);
-
-    [LoggerMessage(
-        Level = LogLevel.Debug,
-        Message = "Dropped {DroppedCount} vague suggestion(s) from {FilePath} for job {JobId}")]
-    private static partial void LogVagueSuggestionsDropped(
-        ILogger logger,
-        int droppedCount,
-        string filePath,
-        Guid jobId);
 
     [LoggerMessage(
         Level = LogLevel.Debug,

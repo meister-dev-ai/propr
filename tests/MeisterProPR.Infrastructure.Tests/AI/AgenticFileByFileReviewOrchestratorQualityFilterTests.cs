@@ -10,7 +10,6 @@ using MeisterProPR.Domain.Entities;
 using MeisterProPR.Domain.Enums;
 using MeisterProPR.Domain.ValueObjects;
 using MeisterProPR.Infrastructure.Features.Reviewing.Execution.ReviewFindingGate;
-using MeisterProPR.Infrastructure.Features.Reviewing.Execution.Strategies;
 using MeisterProPR.Infrastructure.Features.Reviewing.Execution.Strategies.AgenticFileByFile;
 using MeisterProPR.Infrastructure.Features.Reviewing.Execution.Verification;
 using Microsoft.Extensions.AI;
@@ -21,55 +20,6 @@ namespace MeisterProPR.Infrastructure.Tests.AI;
 
 public sealed class AgenticFileByFileReviewOrchestratorQualityFilterTests
 {
-    [Fact]
-    public async Task ReviewPipelineRunner_AgenticExperimentalProfile_AppliesSelectedSharedStages()
-    {
-        var original = new ReviewResult(
-            "summary",
-            [
-                new ReviewComment("src/Foo.cs", 12, CommentSeverity.Warning, "this may be a bug in the logic"),
-                new ReviewComment("src/Foo.cs", 12, CommentSeverity.Info, "Nice abstraction."),
-                new ReviewComment("src/Foo.cs", 12, CommentSeverity.Suggestion, "consider refactoring this service into smaller methods"),
-                new ReviewComment("src/Foo.cs", 12, CommentSeverity.Warning, "Confirmed null dereference at line 12."),
-            ]);
-        var context = new PerFileReviewContext(
-            CreateJob(),
-            new ChangedFile("src/Foo.cs", ChangeType.Edit, "content", "diff"),
-            null,
-            new ReviewSystemContext(null, [], null)
-            {
-                LoopMetrics = new ReviewLoopMetrics(0, null, null, 82, 0, 0, 0),
-            },
-            null,
-            null,
-            original);
-        var profile = new ReviewPipelineProfile(
-            ReviewPipelineProfileProvider.AgenticExperimentalProfileId,
-            "Agentic experimental",
-            ReviewStrategy.AgenticFileByFile,
-            [AgenticProRvPrefilterStage.StageIdConstant],
-            [
-                AgenticSpeculativeCommentFilterStage.StageIdConstant,
-                AgenticInfoCommentStripStage.StageIdConstant,
-                AgenticVagueSuggestionFilterStage.StageIdConstant,
-            ],
-            [ReviewPipelineProfileProvider.FinalizeStageFamilyId],
-            false);
-        var runner = new ReviewPipelineRunner<PerFileReviewContext>(
-        [
-            new AgenticSpeculativeCommentFilterStage(),
-            new AgenticInfoCommentStripStage(),
-            new AgenticVagueSuggestionFilterStage(),
-        ]);
-
-        var result = await runner.ExecuteAsync(context, profile.PerFileStageIds, CancellationToken.None);
-
-        var finalResult = Assert.IsType<ReviewResult>(result.ReviewResult);
-        var surviving = Assert.Single(finalResult.Comments);
-        Assert.Equal(CommentSeverity.Warning, surviving.Severity);
-        Assert.Equal("Confirmed null dereference at line 12.", surviving.Message);
-    }
-
     [Theory]
     [InlineData("this may be a bug in the logic")]
     [InlineData("consider refactoring this service into smaller methods")]

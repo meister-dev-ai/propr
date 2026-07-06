@@ -46,13 +46,9 @@ public static class ReviewingExecutionServiceCollectionExtensions
         services.AddSingleton<IReviewPipelineStage<PerFileReviewContext>, FileByFileImportanceRankingStage>();
         services.AddSingleton<IReviewPipelineStage<PerFileReviewContext>, FileByFileSelfReflectionRankingStage>();
         services.AddSingleton<IReviewPipelineStage<PerFileReviewContext>, FileByFileConfidenceFloorStage>();
-        services.AddSingleton<IReviewPipelineStage<PerFileReviewContext>, FileByFileSpeculativeCommentFilterStage>();
         services.AddSingleton<IReviewPipelineStage<PerFileReviewContext>, FileByFileInfoCommentStripStage>();
-        services.AddSingleton<IReviewPipelineStage<PerFileReviewContext>, FileByFileVagueSuggestionFilterStage>();
         services.AddSingleton<IReviewPipelineStage<PerFileReviewContext>, AgenticConfidenceFloorStage>();
-        services.AddSingleton<IReviewPipelineStage<PerFileReviewContext>, AgenticSpeculativeCommentFilterStage>();
         services.AddSingleton<IReviewPipelineStage<PerFileReviewContext>, AgenticInfoCommentStripStage>();
-        services.AddSingleton<IReviewPipelineStage<PerFileReviewContext>, AgenticVagueSuggestionFilterStage>();
         services.AddTransient<IReviewJobProcessor>(sp => sp.GetRequiredService<ReviewOrchestrationService>());
         services.AddCommentRelevanceFiltering(selectedCommentRelevanceFilterId);
         services.AddSingleton<IDeterministicReviewFindingGate, DeterministicReviewFindingGate>();

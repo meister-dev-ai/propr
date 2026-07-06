@@ -6,7 +6,6 @@ using MeisterProPR.Application.Features.Reviewing.Execution.Models;
 using MeisterProPR.Application.Options;
 using MeisterProPR.Application.ValueObjects;
 using MeisterProPR.Domain.ValueObjects;
-using MeisterProPR.Infrastructure.Features.Reviewing.Execution.Strategies;
 using MeisterProPR.Infrastructure.Features.Reviewing.Execution.Strategies.FileByFile;
 
 namespace MeisterProPR.Infrastructure.AI;
@@ -143,12 +142,15 @@ internal static partial class ReviewPrompts
         ArgumentNullException.ThrowIfNull(comments);
         ArgumentNullException.ThrowIfNull(options);
 
+        // The hedging hint was a phrase-list feature; language-robust screening replaces phrase matching with a
+        // semantic (embedding) detector, so no phrase list is consulted here. The ranker no longer receives a
+        // hedging signal (the model field stays for template compatibility and is a follow-up cleanup).
         var candidates = comments.Select((comment, index) => new PromptTemplateModels.PromptImportanceRankingCandidateModel(
             index,
             comment.Severity.ToString().ToLowerInvariant(),
             comment.Message,
             FileByFileImportanceRankingStage.ScoreComment(comment),
-            ReviewCommentProcessing.IsHedged(comment.Message))).ToList();
+            false)).ToList();
 
         return PromptTemplateRuntime.RenderStage("importance_ranking_user", new PromptTemplateModels.ImportanceRankingUserModel(candidates));
     }

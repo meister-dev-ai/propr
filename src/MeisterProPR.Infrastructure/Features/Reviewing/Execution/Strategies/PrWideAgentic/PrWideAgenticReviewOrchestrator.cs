@@ -1301,31 +1301,15 @@ public sealed partial class PrWideAgenticReviewOrchestrator(
 
     private static CommentRelevanceFilterDecision? EvaluateDeterministicHardGuards(ReviewComment comment)
     {
+        // Phrase-based hedge/vague hard guards were removed with the language-robust screening change (no phrase
+        // list survives in the screening path). The info-severity guard is enum-based and remains.
         var result = new ReviewResult(string.Empty, [comment]);
-        if (ReviewCommentProcessing.FilterSpeculativeComments(result).Comments.Count == 0)
-        {
-            return new CommentRelevanceFilterDecision(
-                CommentRelevanceFilterDecision.DiscardDecision,
-                comment,
-                [CommentRelevanceReasonCodes.HedgingLanguage],
-                CommentRelevanceFilterDecision.DeterministicScreeningSource);
-        }
-
         if (ReviewCommentProcessing.StripInfoComments(result).Comments.Count == 0)
         {
             return new CommentRelevanceFilterDecision(
                 CommentRelevanceFilterDecision.DiscardDecision,
                 comment,
                 [CommentRelevanceReasonCodes.InfoSeverityNonActionable],
-                CommentRelevanceFilterDecision.DeterministicScreeningSource);
-        }
-
-        if (ReviewCommentProcessing.FilterVagueSuggestions(result).Comments.Count == 0)
-        {
-            return new CommentRelevanceFilterDecision(
-                CommentRelevanceFilterDecision.DiscardDecision,
-                comment,
-                [CommentRelevanceReasonCodes.NonActionableSuggestion],
                 CommentRelevanceFilterDecision.DeterministicScreeningSource);
         }
 

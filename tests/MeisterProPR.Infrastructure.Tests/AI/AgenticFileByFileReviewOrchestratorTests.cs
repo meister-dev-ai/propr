@@ -274,9 +274,7 @@ public sealed class AgenticFileByFileReviewOrchestratorTests
                 [AgenticProRvPrefilterStage.StageIdConstant],
                 [
                     AgenticConfidenceFloorStage.StageIdConstant,
-                    AgenticSpeculativeCommentFilterStage.StageIdConstant,
                     AgenticInfoCommentStripStage.StageIdConstant,
-                    AgenticVagueSuggestionFilterStage.StageIdConstant,
                 ],
                 [ReviewPipelineProfileProvider.FinalizeStageFamilyId],
                 true),
@@ -286,9 +284,7 @@ public sealed class AgenticFileByFileReviewOrchestratorTests
                 ReviewStrategy.AgenticFileByFile,
                 [],
                 [
-                    AgenticSpeculativeCommentFilterStage.StageIdConstant,
                     AgenticInfoCommentStripStage.StageIdConstant,
-                    AgenticVagueSuggestionFilterStage.StageIdConstant,
                 ],
                 [ReviewPipelineProfileProvider.FinalizeStageFamilyId],
                 false),
@@ -304,9 +300,7 @@ public sealed class AgenticFileByFileReviewOrchestratorTests
                 null,
                 null,
                 Substitute.For<ILogger<AgenticProRvPrefilterStage>>()),
-            new AgenticSpeculativeCommentFilterStage(),
             new AgenticInfoCommentStripStage(),
-            new AgenticVagueSuggestionFilterStage(),
         ]);
 
         var sut = new AgenticFileByFileReviewOrchestrator(

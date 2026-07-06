@@ -39,9 +39,8 @@ internal sealed class ReviewPipelineProfileProvider : IReviewPipelineProfileProv
                     ],
                     [
                         FileByFileConfidenceFloorStage.StageIdConstant,
-                        FileByFileSpeculativeCommentFilterStage.StageIdConstant,
+                        FileByFileSemanticScreeningStage.StageIdConstant,
                         FileByFileInfoCommentStripStage.StageIdConstant,
-                        FileByFileVagueSuggestionFilterStage.StageIdConstant,
                     ],
                     [FinalizeStageFamilyId],
                     false),
@@ -56,9 +55,8 @@ internal sealed class ReviewPipelineProfileProvider : IReviewPipelineProfileProv
                     ],
                     [
                         FileByFileConfidenceFloorStage.StageIdConstant,
-                        FileByFileSpeculativeCommentFilterStage.StageIdConstant,
+                        FileByFileSemanticScreeningStage.StageIdConstant,
                         FileByFileInfoCommentStripStage.StageIdConstant,
-                        FileByFileVagueSuggestionFilterStage.StageIdConstant,
                     ],
                     [FinalizeStageFamilyId],
                     false,
@@ -74,6 +72,7 @@ internal sealed class ReviewPipelineProfileProvider : IReviewPipelineProfileProv
                     ],
                     [
                         FileByFileConfidenceFloorStage.StageIdConstant,
+                        FileByFileSemanticScreeningStage.StageIdConstant,
                         FileByFileInfoCommentStripStage.StageIdConstant,
                         FileByFileSelfReflectionRankingStage.StageIdConstant,
                     ],
@@ -91,6 +90,7 @@ internal sealed class ReviewPipelineProfileProvider : IReviewPipelineProfileProv
                         FileByFileProRvPrefilterStage.StageIdConstant,
                     ],
                     [
+                        FileByFileSemanticScreeningStage.StageIdConstant,
                         FileByFileInfoCommentStripStage.StageIdConstant,
                         FileByFileSelfReflectionRankingStage.StageIdConstant,
                     ],
@@ -108,9 +108,8 @@ internal sealed class ReviewPipelineProfileProvider : IReviewPipelineProfileProv
                     [AgenticProRvPrefilterStage.StageIdConstant],
                     [
                         AgenticConfidenceFloorStage.StageIdConstant,
-                        AgenticSpeculativeCommentFilterStage.StageIdConstant,
+                        FileByFileSemanticScreeningStage.StageIdConstant,
                         AgenticInfoCommentStripStage.StageIdConstant,
-                        AgenticVagueSuggestionFilterStage.StageIdConstant,
                     ],
                     [FinalizeStageFamilyId],
                     true),
@@ -120,9 +119,8 @@ internal sealed class ReviewPipelineProfileProvider : IReviewPipelineProfileProv
                     ReviewStrategy.AgenticFileByFile,
                     [AgenticProRvPrefilterStage.StageIdConstant],
                     [
-                        AgenticSpeculativeCommentFilterStage.StageIdConstant,
+                        FileByFileSemanticScreeningStage.StageIdConstant,
                         AgenticInfoCommentStripStage.StageIdConstant,
-                        AgenticVagueSuggestionFilterStage.StageIdConstant,
                     ],
                     [FinalizeStageFamilyId],
                     false),

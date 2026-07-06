@@ -1017,9 +1017,8 @@ public class FileByFileReviewOrchestratorTests
                 [FileByFileProRvPrefilterStage.StageIdConstant],
                 [
                     FileByFileConfidenceFloorStage.StageIdConstant,
-                    FileByFileSpeculativeCommentFilterStage.StageIdConstant,
+                    FileByFileSemanticScreeningStage.StageIdConstant,
                     FileByFileInfoCommentStripStage.StageIdConstant,
-                    FileByFileVagueSuggestionFilterStage.StageIdConstant,
                 ],
                 [ReviewPipelineProfileProvider.FinalizeStageFamilyId],
                 true),
@@ -1030,9 +1029,8 @@ public class FileByFileReviewOrchestratorTests
                 [],
                 [
                     FileByFileConfidenceFloorStage.StageIdConstant,
-                    FileByFileSpeculativeCommentFilterStage.StageIdConstant,
+                    FileByFileSemanticScreeningStage.StageIdConstant,
                     FileByFileInfoCommentStripStage.StageIdConstant,
-                    FileByFileVagueSuggestionFilterStage.StageIdConstant,
                 ],
                 [ReviewPipelineProfileProvider.FinalizeStageFamilyId],
                 false),
@@ -1100,9 +1098,8 @@ public class FileByFileReviewOrchestratorTests
         Assert.Equal(
             [
                 FileByFileConfidenceFloorStage.StageIdConstant,
-                FileByFileSpeculativeCommentFilterStage.StageIdConstant,
+                FileByFileSemanticScreeningStage.StageIdConstant,
                 FileByFileInfoCommentStripStage.StageIdConstant,
-                FileByFileVagueSuggestionFilterStage.StageIdConstant,
             ],
             legacyBaseline.PerFileStageIds);
 
@@ -1111,9 +1108,8 @@ public class FileByFileReviewOrchestratorTests
         Assert.Equal(
             [
                 FileByFileConfidenceFloorStage.StageIdConstant,
-                FileByFileSpeculativeCommentFilterStage.StageIdConstant,
+                FileByFileSemanticScreeningStage.StageIdConstant,
                 FileByFileInfoCommentStripStage.StageIdConstant,
-                FileByFileVagueSuggestionFilterStage.StageIdConstant,
             ],
             calm.PerFileStageIds);
 
@@ -1122,6 +1118,7 @@ public class FileByFileReviewOrchestratorTests
         Assert.Equal(
             [
                 FileByFileConfidenceFloorStage.StageIdConstant,
+                FileByFileSemanticScreeningStage.StageIdConstant,
                 FileByFileInfoCommentStripStage.StageIdConstant,
                 FileByFileSelfReflectionRankingStage.StageIdConstant,
             ],
@@ -1131,6 +1128,7 @@ public class FileByFileReviewOrchestratorTests
         Assert.Equal(expectedDispatchStages, assertive.DispatchStageIds);
         Assert.Equal(
             [
+                FileByFileSemanticScreeningStage.StageIdConstant,
                 FileByFileInfoCommentStripStage.StageIdConstant,
                 FileByFileSelfReflectionRankingStage.StageIdConstant,
             ],

@@ -1222,28 +1222,12 @@ internal sealed partial class FileReviewer(
             LogSeverityDowngraded(logger, confidenceDroppedCount, file.Path, job.Id);
         }
 
-        var beforeHedge = result.Comments.Count;
-        result = ReviewCommentProcessing.FilterSpeculativeComments(result);
-        var hedgeDropped = beforeHedge - result.Comments.Count;
-        if (hedgeDropped > 0)
-        {
-            LogSpeculativeCommentsDropped(logger, hedgeDropped, file.Path, job.Id);
-        }
-
         var beforeInfo = result.Comments.Count;
         result = ReviewCommentProcessing.StripInfoComments(result);
         var infoDropped = beforeInfo - result.Comments.Count;
         if (infoDropped > 0)
         {
             LogInfoCommentsDropped(logger, infoDropped, file.Path, job.Id);
-        }
-
-        var beforeVague = result.Comments.Count;
-        result = ReviewCommentProcessing.FilterVagueSuggestions(result);
-        var vagueDropped = beforeVague - result.Comments.Count;
-        if (vagueDropped > 0)
-        {
-            LogVagueSuggestionsDropped(logger, vagueDropped, file.Path, job.Id);
         }
 
         return result;

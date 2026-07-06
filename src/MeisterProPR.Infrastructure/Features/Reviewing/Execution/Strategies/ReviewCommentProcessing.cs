@@ -1,7 +1,6 @@
 // Copyright (c) Andreas Rain.
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
-using System.Collections.Immutable;
 using MeisterProPR.Application.Options;
 using MeisterProPR.Domain.Enums;
 using MeisterProPR.Domain.ValueObjects;
@@ -10,31 +9,6 @@ namespace MeisterProPR.Infrastructure.Features.Reviewing.Execution.Strategies;
 
 internal static class ReviewCommentProcessing
 {
-    private static readonly ImmutableArray<string> HedgePhrases =
-    [
-        "if your ", "if the file", "if [", "please verify", "validate that",
-        "consider whether", "this may be", "this could be", "you may want to",
-        "worth checking", "it appears", "it seems", "i cannot confirm",
-        "unclear whether", "worth verifying", "if applicable",
-    ];
-
-    private static readonly ImmutableArray<string> VagueSuggestionPhrases =
-    [
-        "consider refactoring", "consider adding", "you could also", "you might also",
-        "you might want to", "it would be worth", "would also be good",
-        "could be strengthened", "could be made", "could also verify",
-    ];
-
-    /// <summary>
-    ///     Returns <see langword="true" /> when <paramref name="message" /> contains a hedge phrase
-    ///     that indicates the reviewer is guessing rather than confirming. Used as a feature input
-    ///     to the LLM self-reflection ranking stage (not an automatic disqualifier there).
-    /// </summary>
-    internal static bool IsHedged(string message)
-    {
-        return HedgePhrases.Any(phrase => message.Contains(phrase, StringComparison.OrdinalIgnoreCase));
-    }
-
     internal static ReviewComment CreateReviewComment(string? filePath, int? lineNumber, CommentSeverity severity, string message)
     {
         return new ReviewComment(filePath, NormalizeLineNumber(lineNumber), severity, message);
@@ -43,23 +17,6 @@ internal static class ReviewCommentProcessing
     internal static int? NormalizeLineNumber(int? lineNumber)
     {
         return lineNumber is > 0 ? lineNumber : null;
-    }
-
-    internal static ReviewResult FilterSpeculativeComments(ReviewResult result)
-    {
-        if (result.Comments.Count == 0)
-        {
-            return result;
-        }
-
-        var filtered = result.Comments
-            .Where(c => !HedgePhrases.Any(phrase => c.Message.Contains(phrase, StringComparison.OrdinalIgnoreCase)))
-            .ToList()
-            .AsReadOnly();
-
-        return filtered.Count == result.Comments.Count
-            ? result
-            : result with { Comments = filtered };
     }
 
     internal static ReviewResult StripInfoComments(ReviewResult result)
@@ -71,25 +28,6 @@ internal static class ReviewCommentProcessing
 
         var filtered = result.Comments
             .Where(c => c.Severity != CommentSeverity.Info)
-            .ToList()
-            .AsReadOnly();
-
-        return filtered.Count == result.Comments.Count
-            ? result
-            : result with { Comments = filtered };
-    }
-
-    internal static ReviewResult FilterVagueSuggestions(ReviewResult result)
-    {
-        if (result.Comments.Count == 0)
-        {
-            return result;
-        }
-
-        var filtered = result.Comments
-            .Where(c =>
-                c.Severity != CommentSeverity.Suggestion ||
-                !VagueSuggestionPhrases.Any(phrase => c.Message.Contains(phrase, StringComparison.OrdinalIgnoreCase)))
             .ToList()
             .AsReadOnly();
 

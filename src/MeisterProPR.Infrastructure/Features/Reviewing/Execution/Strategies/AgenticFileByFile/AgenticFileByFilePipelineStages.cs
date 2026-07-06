@@ -89,23 +89,6 @@ internal sealed class AgenticConfidenceFloorStage(AiReviewOptions options) : IRe
     }
 }
 
-internal sealed class AgenticSpeculativeCommentFilterStage : IReviewPipelineStage<PerFileReviewContext>
-{
-    // This id is part of persisted/profile-selected Reviewing protocol identity.
-    public const string StageIdConstant = "agentic.filter-speculative";
-
-    public string StageId => StageIdConstant;
-
-    public Task<PerFileReviewContext> ExecuteAsync(PerFileReviewContext context, CancellationToken cancellationToken)
-    {
-        return Task.FromResult(
-            context with
-            {
-                ReviewResult = context.ReviewResult is null ? null : ReviewCommentProcessing.FilterSpeculativeComments(context.ReviewResult),
-            });
-    }
-}
-
 internal sealed class AgenticInfoCommentStripStage : IReviewPipelineStage<PerFileReviewContext>
 {
     // This id is part of persisted/profile-selected Reviewing protocol identity.
@@ -119,23 +102,6 @@ internal sealed class AgenticInfoCommentStripStage : IReviewPipelineStage<PerFil
             context with
             {
                 ReviewResult = context.ReviewResult is null ? null : ReviewCommentProcessing.StripInfoComments(context.ReviewResult),
-            });
-    }
-}
-
-internal sealed class AgenticVagueSuggestionFilterStage : IReviewPipelineStage<PerFileReviewContext>
-{
-    // This id is part of persisted/profile-selected Reviewing protocol identity.
-    public const string StageIdConstant = "agentic.filter-vague-suggestions";
-
-    public string StageId => StageIdConstant;
-
-    public Task<PerFileReviewContext> ExecuteAsync(PerFileReviewContext context, CancellationToken cancellationToken)
-    {
-        return Task.FromResult(
-            context with
-            {
-                ReviewResult = context.ReviewResult is null ? null : ReviewCommentProcessing.FilterVagueSuggestions(context.ReviewResult),
             });
     }
 }

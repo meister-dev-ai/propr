@@ -1,7 +1,6 @@
 // Copyright (c) Andreas Rain.
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
-using System.Collections.Immutable;
 using System.Text.Json;
 using MeisterProPR.Application.Exceptions;
 using MeisterProPR.Application.Features.Reviewing.Execution.Models;
@@ -17,6 +16,7 @@ using MeisterProPR.Domain.ValueObjects;
 using MeisterProPR.Infrastructure.Features.Reviewing.Diagnostics.Persistence;
 using MeisterProPR.Infrastructure.Features.Reviewing.Execution.CommentRelevance;
 using MeisterProPR.Infrastructure.Features.Reviewing.Execution.Deduplication;
+using MeisterProPR.Infrastructure.Features.Reviewing.Execution.Screening;
 using MeisterProPR.Infrastructure.Features.Reviewing.Execution.Verification;
 using MeisterProPR.ProRV.Abstractions;
 using Microsoft.Extensions.AI;
@@ -46,29 +46,6 @@ internal sealed partial class FileByFileReviewOrchestrator(
     IReviewClaimExtractor? reviewClaimExtractor = null,
     ISummaryReconciliationService? summaryReconciliationService = null) : IFileByFileReviewOrchestrator
 {
-    /// <summary>
-    ///     Phrases indicating the reviewer is guessing rather than confirming a finding.
-    ///     A comment containing any of these is speculative and must be discarded.
-    /// </summary>
-    private static readonly ImmutableArray<string> HedgePhrases =
-    [
-        "if your ", "if the file", "if [", "please verify", "validate that",
-        "consider whether", "this may be", "this could be", "you may want to",
-        "worth checking", "it appears", "it seems", "i cannot confirm",
-        "unclear whether", "worth verifying", "if applicable",
-    ];
-
-    /// <summary>
-    ///     Vague action phrases applied only to <see cref="CommentSeverity.Suggestion" /> entries.
-    ///     A suggestion containing any of these does not name a specific, actionable alternative.
-    /// </summary>
-    private static readonly ImmutableArray<string> VagueSuggestionPhrases =
-    [
-        "consider refactoring", "consider adding", "you could also", "you might also",
-        "you might want to", "it would be worth", "would also be good",
-        "could be strengthened", "could be made", "could also verify",
-    ];
-
     private readonly AiReviewOptions _opts = options.Value;
 
     public FileByFileReviewOrchestrator(
@@ -190,9 +167,13 @@ internal sealed partial class FileByFileReviewOrchestrator(
                 aiRuntimeResolver,
                 NullLogger<FileByFileProRvPrefilterStage>.Instance),
             new FileByFileConfidenceFloorStage(options),
-            new FileByFileSpeculativeCommentFilterStage(),
+            new FileByFileSemanticScreeningStage(
+                new EmbeddingSemanticCommentScreener(
+                    Microsoft.Extensions.Options.Options.Create(options),
+                    aiRuntimeResolver,
+                    NullLogger<EmbeddingSemanticCommentScreener>.Instance),
+                protocolRecorder),
             new FileByFileInfoCommentStripStage(),
-            new FileByFileVagueSuggestionFilterStage(),
             new FileByFileImportanceRankingStage(options),
             new FileByFileSelfReflectionRankingStage(options, NullLogger<FileByFileSelfReflectionRankingStage>.Instance),
         ]);
@@ -577,39 +558,7 @@ internal sealed partial class FileByFileReviewOrchestrator(
     }
 
     /// <summary>
-    ///     Discards any <see cref="ReviewComment" /> whose message contains a hedge phrase,
-    ///     indicating the reviewer is speculating rather than confirming a finding (IMP-01, US1).
-    /// </summary>
-    internal static ReviewResult FilterSpeculativeComments(ReviewResult result)
-    {
-        if (result.Comments.Count == 0)
-        {
-            return result;
-        }
-
-        var filtered = result.Comments
-            .Where(c =>
-            {
-                foreach (var phrase in HedgePhrases)
-                {
-                    if (c.Message.Contains(phrase, StringComparison.OrdinalIgnoreCase))
-                    {
-                        return false;
-                    }
-                }
-
-                return true;
-            })
-            .ToList()
-            .AsReadOnly();
-
-        return filtered.Count == result.Comments.Count
-            ? result
-            : result with { Comments = filtered };
-    }
-
-    /// <summary>
-    ///     Removes all <see cref="CommentSeverity.Info" /> entries from the comment list (IMP-04, US2).
+    ///     Removes all <see cref="CommentSeverity.Info" /> entries from the comment list.
     ///     INFO observations belong in the narrative summary, not as actionable threads.
     /// </summary>
     internal static ReviewResult StripInfoComments(ReviewResult result)
@@ -630,46 +579,8 @@ internal sealed partial class FileByFileReviewOrchestrator(
     }
 
     /// <summary>
-    ///     Discards <see cref="CommentSeverity.Suggestion" /> entries that contain vague action phrases
-    ///     and do not provide a concrete, named alternative (IMP-05, US3).
-    ///     WARNING and ERROR entries are not affected.
-    /// </summary>
-    internal static ReviewResult FilterVagueSuggestions(ReviewResult result)
-    {
-        if (result.Comments.Count == 0)
-        {
-            return result;
-        }
-
-        var filtered = result.Comments
-            .Where(c =>
-            {
-                if (c.Severity != CommentSeverity.Suggestion)
-                {
-                    return true;
-                }
-
-                foreach (var phrase in VagueSuggestionPhrases)
-                {
-                    if (c.Message.Contains(phrase, StringComparison.OrdinalIgnoreCase))
-                    {
-                        return false;
-                    }
-                }
-
-                return true;
-            })
-            .ToList()
-            .AsReadOnly();
-
-        return filtered.Count == result.Comments.Count
-            ? result
-            : result with { Comments = filtered };
-    }
-
-    /// <summary>
     ///     Applies confidence-gated severity downgrade using the reviewer's final confidence score
-    ///     from the agentic loop (IMP-07, US5).
+    ///     from the agentic loop.
     ///     <list type="bullet">
     ///         <item>confidence &lt; <see cref="AiReviewOptions.ConfidenceFloorError" /> → ERROR becomes WARNING</item>
     ///         <item>confidence &lt; <see cref="AiReviewOptions.ConfidenceFloorWarning" /> → WARNING becomes SUGGESTION</item>
