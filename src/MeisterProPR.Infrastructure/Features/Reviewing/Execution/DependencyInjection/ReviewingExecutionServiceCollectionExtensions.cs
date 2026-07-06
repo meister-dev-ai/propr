@@ -9,6 +9,7 @@ using MeisterProPR.Application.Services;
 using MeisterProPR.Infrastructure.Features.Reviewing.Execution.Deduplication;
 using MeisterProPR.Infrastructure.Features.Reviewing.Execution.Persistence;
 using MeisterProPR.Infrastructure.Features.Reviewing.Execution.ReviewFindingGate;
+using MeisterProPR.Infrastructure.Features.Reviewing.Execution.Screening;
 using MeisterProPR.Infrastructure.Features.Reviewing.Execution.Strategies;
 using MeisterProPR.Infrastructure.Features.Reviewing.Execution.Strategies.AgenticFileByFile;
 using MeisterProPR.Infrastructure.Features.Reviewing.Execution.Strategies.FileByFile;
@@ -81,6 +82,7 @@ public static class ReviewingExecutionServiceCollectionExtensions
         // duplicates and never merges distinct bugs.
         services.AddScoped<IFindingMergeJudge, AiFindingMergeJudge>();
         services.AddScoped<IFindingDeduplicator, SemanticFindingDeduplicator>();
+        services.AddScoped<ISemanticCommentScreener, EmbeddingSemanticCommentScreener>();
         services.AddScoped<ReviewSynthesisExecutor>();
         services.AddScoped<AgenticReviewSynthesisExecutor>();
         services.AddSingleton<ISummaryReconciliationService, SummaryReconciliationService>();

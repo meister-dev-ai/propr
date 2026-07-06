@@ -122,6 +122,14 @@ public sealed class AiReviewOptions
     public int ConfidenceFloorWarning { get; set; } = 60;
 
     /// <summary>
+    ///     Minimum cosine similarity (0–1) to a hedged/vague exemplar centroid for the semantic comment screener
+    ///     to classify a comment as hedged or vague; below this the comment is kept as firm. Only consulted on the
+    ///     language-robust screening path (<c>EnableLanguageRobustScreening</c>). Tuned in Phase C validation.
+    /// </summary>
+    [Range(0.0, 1.0, ErrorMessage = "CommentScreeningSimilarityThreshold must be between 0.0 and 1.0.")]
+    public double CommentScreeningSimilarityThreshold { get; set; } = 0.5;
+
+    /// <summary>
     ///     Minimum total comment count across all files before the cross-file quality filter AI pass
     ///     is invoked. Below this threshold, comments are posted as-is after per-file filtering.
     ///     Bound to <c>AI_QUALITY_FILTER_THRESHOLD</c>.
