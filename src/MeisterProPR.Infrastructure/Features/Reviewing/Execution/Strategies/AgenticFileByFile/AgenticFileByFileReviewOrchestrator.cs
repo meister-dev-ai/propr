@@ -184,14 +184,14 @@ internal sealed class AgenticFileByFileReviewOrchestrator(
                 aiClientFactory,
                 aiRuntimeResolver,
                 NullLogger<AgenticProRvPrefilterStage>.Instance),
-            new AgenticConfidenceFloorStage(options),
+            new AgenticConfidenceFloorStage(options, protocolRecorder),
             new FileByFileSemanticScreeningStage(
                 new EmbeddingSemanticCommentScreener(
                     Microsoft.Extensions.Options.Options.Create(options),
                     aiRuntimeResolver,
                     NullLogger<EmbeddingSemanticCommentScreener>.Instance),
                 protocolRecorder),
-            new AgenticInfoCommentStripStage(),
+            new AgenticInfoCommentStripStage(protocolRecorder),
         ]);
     }
 

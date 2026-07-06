@@ -69,39 +69,46 @@ internal sealed class AgenticProRvPrefilterStage(
     }
 }
 
-internal sealed class AgenticConfidenceFloorStage(AiReviewOptions options) : IReviewPipelineStage<PerFileReviewContext>
+internal sealed class AgenticConfidenceFloorStage(AiReviewOptions options, IProtocolRecorder? protocolRecorder = null)
+    : IReviewPipelineStage<PerFileReviewContext>
 {
     // This id is part of persisted/profile-selected Reviewing protocol identity.
     public const string StageIdConstant = "agentic.confidence-floor";
 
     public string StageId => StageIdConstant;
 
-    public Task<PerFileReviewContext> ExecuteAsync(PerFileReviewContext context, CancellationToken cancellationToken)
+    public async Task<PerFileReviewContext> ExecuteAsync(PerFileReviewContext context, CancellationToken cancellationToken)
     {
-        var result = context.ReviewResult is null
-            ? null
-            : ReviewCommentProcessing.ApplyConfidenceFloor(
-                context.ReviewResult,
-                context.FileReviewContext.LoopMetrics?.FinalConfidence,
-                options);
+        if (context.ReviewResult is null)
+        {
+            return context;
+        }
 
-        return Task.FromResult(context with { ReviewResult = result });
+        var finalConfidence = context.FileReviewContext.LoopMetrics?.FinalConfidence;
+        var result = ReviewCommentProcessing.ApplyConfidenceFloor(context.ReviewResult, finalConfidence, options);
+        await PipelineStageTracing.RecordConfidenceDowngradesAsync(
+            protocolRecorder, context.ProtocolId, context.ReviewResult, result, finalConfidence, cancellationToken).ConfigureAwait(false);
+        return context with { ReviewResult = result };
     }
 }
 
-internal sealed class AgenticInfoCommentStripStage : IReviewPipelineStage<PerFileReviewContext>
+internal sealed class AgenticInfoCommentStripStage(IProtocolRecorder? protocolRecorder = null) : IReviewPipelineStage<PerFileReviewContext>
 {
     // This id is part of persisted/profile-selected Reviewing protocol identity.
     public const string StageIdConstant = "agentic.strip-info";
 
     public string StageId => StageIdConstant;
 
-    public Task<PerFileReviewContext> ExecuteAsync(PerFileReviewContext context, CancellationToken cancellationToken)
+    public async Task<PerFileReviewContext> ExecuteAsync(PerFileReviewContext context, CancellationToken cancellationToken)
     {
-        return Task.FromResult(
-            context with
-            {
-                ReviewResult = context.ReviewResult is null ? null : ReviewCommentProcessing.StripInfoComments(context.ReviewResult),
-            });
+        if (context.ReviewResult is null)
+        {
+            return context;
+        }
+
+        var stripped = ReviewCommentProcessing.StripInfoComments(context.ReviewResult);
+        await PipelineStageTracing.RecordInfoStrippedAsync(protocolRecorder, context.ProtocolId, context.ReviewResult, stripped, cancellationToken)
+            .ConfigureAwait(false);
+        return context with { ReviewResult = stripped };
     }
 }

@@ -166,14 +166,14 @@ internal sealed partial class FileByFileReviewOrchestrator(
                 aiClientFactory,
                 aiRuntimeResolver,
                 NullLogger<FileByFileProRvPrefilterStage>.Instance),
-            new FileByFileConfidenceFloorStage(options),
+            new FileByFileConfidenceFloorStage(options, protocolRecorder),
             new FileByFileSemanticScreeningStage(
                 new EmbeddingSemanticCommentScreener(
                     Microsoft.Extensions.Options.Options.Create(options),
                     aiRuntimeResolver,
                     NullLogger<EmbeddingSemanticCommentScreener>.Instance),
                 protocolRecorder),
-            new FileByFileInfoCommentStripStage(),
+            new FileByFileInfoCommentStripStage(protocolRecorder),
             new FileByFileImportanceRankingStage(options),
             new FileByFileSelfReflectionRankingStage(options, NullLogger<FileByFileSelfReflectionRankingStage>.Instance),
         ]);
