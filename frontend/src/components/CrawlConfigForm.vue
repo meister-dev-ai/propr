@@ -39,16 +39,8 @@
         </div>
 
         <div class="form-group">
-          <label :for="legacyModeWithoutScope ? 'crawlOrganizationScopeReadonly' : 'crawlOrganizationScope'">Azure DevOps Organization</label>
-          <div v-if="legacyModeWithoutScope" class="input-wrapper">
-            <input
-              id="crawlOrganizationScopeReadonly"
-              :value="props.config?.providerScopePath ?? ''"
-              type="text"
-              readonly
-            />
-          </div>
-          <div v-else class="input-wrapper">
+          <label for="crawlOrganizationScope">Azure DevOps Organization</label>
+          <div class="input-wrapper">
             <select
               id="crawlOrganizationScope"
               v-model="organizationScopeId"
@@ -77,25 +69,14 @@
           <span v-else-if="selectedOrganizationScope" class="field-help">
             {{ selectedOrganizationScope.organizationUrl }}
           </span>
-          <span v-else-if="legacyModeWithoutScope" class="field-help legacy-note">
-            This configuration predates client-scoped organization allowlists. Guided repository discovery is unavailable until it is recreated with a scoped organization.
-          </span>
           <span v-else-if="canLoadOrganizationScopes && !organizationScopes.length" class="field-help">
             No enabled organization scopes are available for this client yet.
           </span>
         </div>
 
         <div class="form-group">
-          <label :for="legacyModeWithoutScope ? 'crawlProjectIdReadonly' : 'crawlProjectId'">Azure DevOps Project</label>
-          <div v-if="legacyModeWithoutScope" class="input-wrapper">
-            <input
-              id="crawlProjectIdReadonly"
-              :value="projectId"
-              type="text"
-              readonly
-            />
-          </div>
-          <div v-else class="input-wrapper">
+          <label for="crawlProjectId">Azure DevOps Project</label>
+          <div class="input-wrapper">
             <select
               id="crawlProjectId"
               v-model="projectId"
@@ -191,9 +172,6 @@
 
         <span v-if="repoFiltersError" class="field-error">{{ repoFiltersError }}</span>
         <span v-else-if="crawlFilterOptionsError" class="field-error">{{ crawlFilterOptionsError }}</span>
-        <p v-else-if="legacyModeWithoutScope" class="filters-empty-hint">
-          Guided repository discovery is unavailable for this legacy configuration. Existing filters remain visible, but repair requires recreating the configuration with an organization scope.
-        </p>
         <p v-else-if="!projectId" class="filters-empty-hint">
           Select an organization and project before adding repository filters.
         </p>
@@ -291,7 +269,7 @@
             </button>
           </div>
         </div>
-        <p v-else-if="projectId && !legacyModeWithoutScope" class="filters-empty-hint">No filters selected — all repositories are crawled.</p>
+        <p v-else-if="projectId" class="filters-empty-hint">No filters selected — all repositories are crawled.</p>
       </div>
 
       <div class="form-group full-width source-scope-section">
@@ -530,7 +508,6 @@ const {
   effectiveClientId,
   canLoadOrganizationScopes,
   isAzureDevOpsProvider,
-  legacyModeWithoutScope,
   canEditOrganizationSelection,
   canEditProjectSelection,
   canEditRepoFilters,

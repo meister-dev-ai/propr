@@ -134,10 +134,9 @@ export function useCrawlConfigForm(props: CrawlConfigFormProps, emit: CrawlConfi
   const effectiveClientId = computed(() => (props.clientId ?? props.config?.clientId ?? clientId.value).trim())
   const canLoadOrganizationScopes = computed(() => isValidUuid(effectiveClientId.value))
   const isAzureDevOpsProvider = computed(() => provider.value === 'azureDevOps')
-  const legacyModeWithoutScope = computed(() => editMode.value && !organizationScopeId.value)
   const canEditOrganizationSelection = computed(() => isAzureDevOpsProvider.value && !editMode.value && canLoadOrganizationScopes.value)
   const canEditProjectSelection = computed(() => isAzureDevOpsProvider.value && !editMode.value && !!organizationScopeId.value)
-  const canEditRepoFilters = computed(() => isAzureDevOpsProvider.value && !!organizationScopeId.value && !!projectId.value && !legacyModeWithoutScope.value)
+  const canEditRepoFilters = computed(() => isAzureDevOpsProvider.value && !!organizationScopeId.value && !!projectId.value)
   const selectedOrganizationScope = computed(() =>
     organizationScopes.value.find((scope) => scope.id === organizationScopeId.value),
   )
@@ -145,7 +144,7 @@ export function useCrawlConfigForm(props: CrawlConfigFormProps, emit: CrawlConfi
   const currentProjectOption = computed(() =>
     projects.value.find((project) => normalizeText(project.projectId) === projectId.value),
   )
-  const projectMissing = computed(() => !!projectId.value && !currentProjectOption.value && !legacyModeWithoutScope.value)
+  const projectMissing = computed(() => !!projectId.value && !currentProjectOption.value)
   const usesSelectedProCursorSources = computed(() => proCursorSourceScopeMode.value === 'selectedSources')
   const selectableProCursorSources = computed(() =>
     proCursorSources.value.filter((source) => normalizeText(source.sourceId).length > 0 && source.status !== 'disabled'),
@@ -183,7 +182,7 @@ export function useCrawlConfigForm(props: CrawlConfigFormProps, emit: CrawlConfi
 
     await Promise.all([loadOrganizationScopes(true), loadProCursorSources()])
 
-    if (legacyModeWithoutScope.value || !organizationScopeId.value) {
+    if (!organizationScopeId.value) {
       return
     }
 
@@ -548,7 +547,7 @@ export function useCrawlConfigForm(props: CrawlConfigFormProps, emit: CrawlConfi
   }
 
   function validateOrganizationScope(): string {
-    return !legacyModeWithoutScope.value && !organizationScopeId.value
+    return !organizationScopeId.value
       ? 'Select an allowed Azure DevOps organization.'
       : ''
   }
@@ -768,7 +767,6 @@ export function useCrawlConfigForm(props: CrawlConfigFormProps, emit: CrawlConfi
     effectiveClientId,
     canLoadOrganizationScopes,
     isAzureDevOpsProvider,
-    legacyModeWithoutScope,
     canEditOrganizationSelection,
     canEditProjectSelection,
     canEditRepoFilters,

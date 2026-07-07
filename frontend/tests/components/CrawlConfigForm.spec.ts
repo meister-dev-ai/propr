@@ -470,54 +470,6 @@ describe('CrawlConfigForm', () => {
     )
   })
 
-  it('does not allow removing repository filters in legacy edit mode when filter edits are disabled', async () => {
-    const wrapper = await mountEditForm({
-      id: 'config-1',
-      clientId: CLIENT_ID,
-      provider: 'azureDevOps',
-      organizationScopeId: null,
-      providerScopePath: 'https://dev.azure.com/example',
-      providerProjectKey: 'project-1',
-      crawlIntervalSeconds: 60,
-      isActive: true,
-      repoFilters: [
-        {
-          id: 'filter-legacy',
-          repositoryName: 'Repository One',
-          displayName: 'Repository One',
-          canonicalSourceRef: { provider: 'azureDevOps', value: 'repo-1' },
-          targetBranchPatterns: ['main'],
-        },
-      ],
-      proCursorSourceScopeMode: 'allClientSources',
-      proCursorSourceIds: [],
-      invalidProCursorSourceIds: [],
-    })
-    await flushPromises()
-
-    const removeButton = wrapper.get('.btn-remove-row')
-    expect((removeButton.element as HTMLButtonElement).disabled).toBe(true)
-    expect(wrapper.findAll('.filter-row')).toHaveLength(1)
-
-    await removeButton.trigger('click')
-    await flushPromises()
-
-    expect(wrapper.findAll('.filter-row')).toHaveLength(1)
-
-    await wrapper.find('form').trigger('submit')
-    await flushPromises()
-
-    expect(mockPatch).toHaveBeenCalledWith(
-      '/admin/crawl-configurations/{configId}',
-      expect.objectContaining({
-        params: { path: { configId: 'config-1' } },
-        body: expect.objectContaining({
-          repoFilters: undefined,
-        }),
-      }),
-    )
-  })
-
   it('shows ProCursor source load errors while keeping selected-source controls available', async () => {
     listProCursorSourcesMock.mockRejectedValue(new Error('Failed to load ProCursor sources.'))
 
