@@ -6,60 +6,81 @@
 # Or run: bash scripts/setup-hooks.sh / scripts/setup-hooks.ps1
 set -eu
 
-STAGED_CS_FILES=$(git diff --cached --name-only --diff-filter=ACMR | grep '\.cs$' || true)
+STAGED_FILES=$(git diff --cached --name-only --diff-filter=ACMR)
+STAGED_CS_FILES=$(printf '%s\n' "$STAGED_FILES" | grep '\.cs$' || true)
+STAGED_FRONTEND_FILES=$(printf '%s\n' "$STAGED_FILES" | grep '^frontend/' || true)
 
-# Skip if no C# files are staged (avoids the overhead on docs-only commits).
-if [ -z "$STAGED_CS_FILES" ]; then
+# Nothing that affects backend or frontend is staged (e.g. a docs-only commit):
+# skip the heavy checks entirely.
+if [ -z "$STAGED_CS_FILES" ] && [ -z "$STAGED_FRONTEND_FILES" ]; then
     exit 0
 fi
 
-# --- 1. JetBrains Cleanup Block ---
-if command -v jb > /dev/null 2>&1; then
-    JB_FILES=$(printf '%s\n' "$STAGED_CS_FILES" | tr '\n' ';')
+# ── 1. Backend: format, build, test (only when C# files are staged) ───────────
+if [ -n "$STAGED_CS_FILES" ]; then
+    # --- JetBrains Cleanup Block ---
+    if command -v jb > /dev/null 2>&1; then
+        JB_FILES=$(printf '%s\n' "$STAGED_CS_FILES" | tr '\n' ';')
 
-    if [ -n "$STAGED_CS_FILES" ]; then
         echo "Running 'jb cleanupcode'..."
 
         # Run cleanup when the local JetBrains toolchain is healthy.
         # If it is installed but broken, keep build/test enforcement active.
         if jb cleanupcode "MeisterProPR.slnx" --include="$JB_FILES"; then
-            # 3. Stage ONLY the files that were in our list
-            # xargs passes the list of files to git add
+            # Stage ONLY the files that were in our list.
             printf '%s\n' "$STAGED_CS_FILES" | xargs git add
-
             echo "Cleanup complete and specific files staged."
         else
             echo "JetBrains 'jb cleanupcode' failed. Skipping cleanup and continuing with build/test checks."
         fi
+    else
+        echo "JetBrains 'jb' not found. Skipping cleanup."
     fi
-else
-    echo "JetBrains 'jb' not found. Skipping cleanup."
+
+    echo "pre-commit: format check passed."
+
+    echo "pre-commit: running dotnet build..."
+    if ! dotnet build ./MeisterProPR.slnx --no-restore --configuration Release --nologo -consoleLoggerParameters:NoSummary 2>&1; then
+        echo ""
+        echo "pre-commit: FAILED -- build errors detected."
+        echo "Fix the compilation errors and commit again."
+        exit 1
+    fi
+
+    echo "pre-commit: build passed."
+
+    echo "pre-commit: running dotnet test..."
+    if ! dotnet test ./MeisterProPR.slnx --no-build --no-restore --configuration Release --nologo --verbosity quiet 2>&1; then
+        echo ""
+        echo "pre-commit: FAILED -- one or more backend tests failed."
+        echo "Fix the failing tests and commit again."
+        exit 1
+    fi
+
+    echo "pre-commit: all backend tests passed."
 fi
 
-echo "pre-commit: format check passed."
+# ── 2. Frontend: type-check + tests (only when frontend files are staged) ─────
+if [ -n "$STAGED_FRONTEND_FILES" ]; then
+    echo "pre-commit: running frontend type-check..."
+    if ! (cd frontend && npm run type-check); then
+        echo ""
+        echo "pre-commit: FAILED -- frontend type-check errors detected."
+        echo "Fix the type errors and commit again."
+        exit 1
+    fi
 
-# ── 2. Build ─────────────────────────────────────────────────────────────────
+    echo "pre-commit: frontend type-check passed."
 
-echo "pre-commit: running dotnet build..."
+    echo "pre-commit: running frontend tests..."
+    if ! (cd frontend && npm run test); then
+        echo ""
+        echo "pre-commit: FAILED -- one or more frontend tests failed."
+        echo "Fix the failing tests and commit again."
+        exit 1
+    fi
 
-if ! dotnet build ./MeisterProPR.slnx --no-restore --configuration Release --nologo -consoleLoggerParameters:NoSummary 2>&1; then
-    echo ""
-    echo "pre-commit: FAILED -- build errors detected."
-    echo "Fix the compilation errors and commit again."
-    exit 1
+    echo "pre-commit: all frontend tests passed."
 fi
 
-echo "pre-commit: build passed."
-
-# ── 3. Test ──────────────────────────────────────────────────────────────────
-
-echo "pre-commit: running dotnet test..."
-
-if ! dotnet test ./MeisterProPR.slnx --no-build --no-restore --configuration Release --nologo --verbosity quiet 2>&1; then
-    echo ""
-    echo "pre-commit: FAILED -- one or more tests failed."
-    echo "Fix the failing tests and commit again."
-    exit 1
-fi
-
-echo "pre-commit: all tests passed."
+exit 0

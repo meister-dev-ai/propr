@@ -78,7 +78,7 @@ describe('ClientReviewPassesEditor', () => {
     expect(lastEmit(wrapper)).toEqual([])
 
     await selectPass(wrapper, 0, 'conn-a', 'model-a1')
-    expect(lastEmit(wrapper)).toEqual([{ ordinal: 0, configuredModelId: 'model-a1' }])
+    expect(lastEmit(wrapper)).toEqual([{ ordinal: 0, configuredModelId: 'model-a1', lens: null }])
   })
 
   it('only lists chat models for the chosen connection', async () => {
@@ -104,8 +104,8 @@ describe('ClientReviewPassesEditor', () => {
     await selectPass(wrapper, 1, 'conn-b', 'model-b1')
 
     expect(lastEmit(wrapper)).toEqual([
-      { ordinal: 0, configuredModelId: 'model-a1' },
-      { ordinal: 1, configuredModelId: 'model-b1' },
+      { ordinal: 0, configuredModelId: 'model-a1', lens: null },
+      { ordinal: 1, configuredModelId: 'model-b1', lens: null },
     ])
   })
 
@@ -117,7 +117,7 @@ describe('ClientReviewPassesEditor', () => {
 
     await wrapper.findAll('[data-testid="review-pass-remove"]')[0].trigger('click')
 
-    expect(lastEmit(wrapper)).toEqual([{ ordinal: 0, configuredModelId: 'model-b1' }])
+    expect(lastEmit(wrapper)).toEqual([{ ordinal: 0, configuredModelId: 'model-b1', lens: null }])
   })
 
   it('reorders passes with the move controls', async () => {
@@ -129,8 +129,8 @@ describe('ClientReviewPassesEditor', () => {
     await wrapper.findAll('[data-testid="review-pass-down"]')[0].trigger('click')
 
     expect(lastEmit(wrapper)).toEqual([
-      { ordinal: 0, configuredModelId: 'model-b1' },
-      { ordinal: 1, configuredModelId: 'model-a1' },
+      { ordinal: 0, configuredModelId: 'model-b1', lens: null },
+      { ordinal: 1, configuredModelId: 'model-a1', lens: null },
     ])
   })
 

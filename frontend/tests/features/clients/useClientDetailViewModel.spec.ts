@@ -159,6 +159,7 @@ describe('useClientDetailViewModel (FR-007, FR-008, FR-012)', () => {
         enableProRV: false,
         enableEvidenceBackedVerification: false,
         enableMultiPassUnion: false,
+        enableLanguageRobustScreening: false,
       },
     })
   })
@@ -181,7 +182,7 @@ describe('useClientDetailViewModel (FR-007, FR-008, FR-012)', () => {
     await vm.saveAdvancedSettings()
 
     const body = mockPatch.mock.calls[0][1].body as Record<string, unknown>
-    expect(body.reviewPasses).toEqual([{ ordinal: 0, configuredModelId: 'model-x' }])
+    expect(body.reviewPasses).toEqual([{ ordinal: 0, configuredModelId: 'model-x', lens: null }])
   })
 
   it('saves review aggressiveness through the dedicated review-profile endpoint', async () => {
