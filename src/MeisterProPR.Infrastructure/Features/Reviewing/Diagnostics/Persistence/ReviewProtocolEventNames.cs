@@ -19,6 +19,7 @@ public static class ReviewProtocolEventNames
     public const string CommentScreeningDegraded = "comment_screening_degraded";
     public const string CommentInfoStripped = "comment_info_stripped";
     public const string CommentSeverityDowngraded = "comment_severity_downgraded";
+    public const string MemoryReconsiderationCompleted = "memory_reconsideration_completed";
     public const string ReviewPipelineProfileApplied = "review_pipeline_profile_applied";
     public const string ReviewStrategySelected = "review_strategy_selected";
     public const string TriageDecision = "triage_decision";

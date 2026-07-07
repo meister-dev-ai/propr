@@ -7,6 +7,7 @@ using MeisterProPR.Application.DTOs;
 using MeisterProPR.Application.Interfaces;
 using MeisterProPR.Domain.Enums;
 using MeisterProPR.Domain.ValueObjects;
+using MeisterProPR.Infrastructure.Features.Reviewing.Diagnostics.Persistence;
 using Microsoft.AspNetCore.Mvc;
 
 namespace MeisterProPR.Api.Controllers;
@@ -130,7 +131,7 @@ public sealed class PrReviewViewController(
             foreach (var protocol in job.Protocols)
             {
                 foreach (var ev in protocol.Events.Where(e =>
-                             e.Name == "memory_reconsideration_completed" && e.InputTextSample != null))
+                             e.Name == ReviewProtocolEventNames.MemoryReconsiderationCompleted && e.InputTextSample != null))
                 {
                     try
                     {
@@ -167,7 +168,13 @@ public sealed class PrReviewViewController(
             var remainingIds = new HashSet<Guid>(externalContributingIds);
             var fetchPage = 1;
             const int fetchPageSize = 200;
-            while (remainingIds.Count > 0)
+
+            // The contributing-memory IDs come from request-scoped protocol JSON, so without a bound a
+            // high-cardinality set could page through the entire client-wide memory corpus in a single
+            // request. Cap the pages scanned; any IDs unresolved within this window are omitted from the
+            // detail list (the count reported above stays accurate).
+            const int maxPagesToScan = 25;
+            while (remainingIds.Count > 0 && fetchPage <= maxPagesToScan)
             {
                 var batch = await memoryRepository.GetPagedAsync(
                     clientId,
@@ -237,9 +244,14 @@ public sealed class PrReviewViewController(
 
 /// <summary>Query string for <see cref="PrReviewViewController.GetPrView" />.</summary>
 public sealed record GetPrViewQuery(
+    [property: FromQuery(Name = "providerScopePath")]
     string? ProviderScopePath,
+    [property: FromQuery(Name = "providerProjectKey")]
     string? ProviderProjectKey,
+    [property: FromQuery(Name = "repositoryId")]
     string? RepositoryId,
+    [property: FromQuery(Name = "pullRequestId")]
     int? PullRequestId,
-    int Page = 1,
+    [property: FromQuery(Name = "page")] int Page = 1,
+    [property: FromQuery(Name = "pageSize")]
     int PageSize = 20);

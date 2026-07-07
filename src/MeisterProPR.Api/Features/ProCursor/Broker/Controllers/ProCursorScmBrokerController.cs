@@ -16,7 +16,9 @@ namespace MeisterProPR.Api.Features.ProCursor.Broker.Controllers;
 [ApiController]
 [Authorize(AuthenticationSchemes = ProCursorSharedKeyAuthenticationDefaults.Scheme)]
 [Route("internal/propr/procursor/broker/scm")]
-public sealed class ProCursorScmBrokerController(IProCursorScmBroker scmBroker) : ControllerBase
+public sealed class ProCursorScmBrokerController(
+    IProCursorScmBroker scmBroker,
+    ILogger<ProCursorScmBrokerController> logger) : ControllerBase
 {
     /// <summary>
     ///     Materializes repository content for a tracked ProCursor branch.
@@ -43,11 +45,13 @@ public sealed class ProCursorScmBrokerController(IProCursorScmBroker scmBroker) 
         }
         catch (InvalidOperationException ex)
         {
-            return this.Conflict(new { error = ex.Message });
+            logger.LogWarning(ex, "ProCursor SCM broker request conflicted with the current source state.");
+            return this.Conflict(new { error = "The request conflicts with the current source state." });
         }
         catch (ProCursorDependencyUnavailableException ex)
         {
-            return this.StatusCode(StatusCodes.Status503ServiceUnavailable, new { error = ex.Message });
+            logger.LogWarning(ex, "ProCursor upstream dependency was unavailable during an SCM broker request.");
+            return this.StatusCode(StatusCodes.Status503ServiceUnavailable, new { error = "The upstream ProCursor dependency is unavailable." });
         }
     }
 
@@ -76,11 +80,13 @@ public sealed class ProCursorScmBrokerController(IProCursorScmBroker scmBroker) 
         }
         catch (InvalidOperationException ex)
         {
-            return this.Conflict(new { error = ex.Message });
+            logger.LogWarning(ex, "ProCursor SCM broker request conflicted with the current source state.");
+            return this.Conflict(new { error = "The request conflicts with the current source state." });
         }
         catch (ProCursorDependencyUnavailableException ex)
         {
-            return this.StatusCode(StatusCodes.Status503ServiceUnavailable, new { error = ex.Message });
+            logger.LogWarning(ex, "ProCursor upstream dependency was unavailable during an SCM broker request.");
+            return this.StatusCode(StatusCodes.Status503ServiceUnavailable, new { error = "The upstream ProCursor dependency is unavailable." });
         }
     }
 }

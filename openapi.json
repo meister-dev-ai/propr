@@ -10764,28 +10764,28 @@
             }
           },
           {
-            "name": "ProviderScopePath",
+            "name": "providerScopePath",
             "in": "query",
             "schema": {
               "type": "string"
             }
           },
           {
-            "name": "ProviderProjectKey",
+            "name": "providerProjectKey",
             "in": "query",
             "schema": {
               "type": "string"
             }
           },
           {
-            "name": "RepositoryId",
+            "name": "repositoryId",
             "in": "query",
             "schema": {
               "type": "string"
             }
           },
           {
-            "name": "PullRequestId",
+            "name": "pullRequestId",
             "in": "query",
             "schema": {
               "type": "integer",
@@ -10793,7 +10793,7 @@
             }
           },
           {
-            "name": "Page",
+            "name": "page",
             "in": "query",
             "schema": {
               "type": "integer",
@@ -10801,7 +10801,7 @@
             }
           },
           {
-            "name": "PageSize",
+            "name": "pageSize",
             "in": "query",
             "schema": {
               "type": "integer",
@@ -10891,28 +10891,28 @@
             }
           },
           {
-            "name": "ProviderScopePath",
+            "name": "providerScopePath",
             "in": "query",
             "schema": {
               "type": "string"
             }
           },
           {
-            "name": "ProviderProjectKey",
+            "name": "providerProjectKey",
             "in": "query",
             "schema": {
               "type": "string"
             }
           },
           {
-            "name": "RepositoryId",
+            "name": "repositoryId",
             "in": "query",
             "schema": {
               "type": "string"
             }
           },
           {
-            "name": "PullRequestId",
+            "name": "pullRequestId",
             "in": "query",
             "schema": {
               "type": "integer",
@@ -10920,7 +10920,7 @@
             }
           },
           {
-            "name": "Page",
+            "name": "page",
             "in": "query",
             "schema": {
               "type": "integer",
@@ -10928,7 +10928,7 @@
             }
           },
           {
-            "name": "PageSize",
+            "name": "pageSize",
             "in": "query",
             "schema": {
               "type": "integer",

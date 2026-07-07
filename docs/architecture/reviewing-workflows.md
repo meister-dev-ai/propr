@@ -201,10 +201,6 @@ Resolution and skip-safety:
   model used per pass. Each additional pass surfaces in the trace as `Pass N` (the baseline is the
   initial review), and resample-pass comments are stamped with the multi-pass union origin.
 
-The offline evaluation harness expresses the same ordered passes as `MultiPassDiversity` arms (model-id
-strings resolved over the run's single connection); that arm/count path is evaluation-only and does not
-drive production, which uses the per-client review-pass list.
-
 ## Diagnostics Trace Search
 
 The diagnostics surface keeps trace investigation inside one opened review's execution traces tab.

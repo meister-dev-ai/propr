@@ -3,6 +3,7 @@
 
 import { computed, type ComputedRef, type Ref } from 'vue'
 import { useSession } from '@/composables/useSession'
+import { type RoleLevel } from '@/composables/roles'
 
 export interface SessionViewModelState {
   isAuthenticated: ComputedRef<boolean>
@@ -18,9 +19,9 @@ export interface SessionViewModelState {
 export interface SessionViewModelActions {
   establishSession: (session: { accessToken: string; expiresIn?: number; tokenType?: string }) => Promise<void>
   clearTokens: () => void
-  loadClientRoles: () => Promise<void>
-  hasClientRole: (clientId: string, minRole: 0 | 1) => boolean
-  hasTenantRole: (tenantId: string, minRole: 0 | 1) => boolean
+  loadClientRoles: () => Promise<boolean>
+  hasClientRole: (clientId: string, minRole: RoleLevel) => boolean
+  hasTenantRole: (tenantId: string, minRole: RoleLevel) => boolean
   isCapabilityAvailable: (key: string) => boolean
 }
 

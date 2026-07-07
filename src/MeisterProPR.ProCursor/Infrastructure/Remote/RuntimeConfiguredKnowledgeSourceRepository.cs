@@ -231,6 +231,10 @@ public sealed class RuntimeConfiguredKnowledgeSourceRepository(
 
             return Clone(refreshedEntry.Source);
         }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
         catch (KeyNotFoundException)
         {
             lock (this._lock)
@@ -239,6 +243,13 @@ public sealed class RuntimeConfiguredKnowledgeSourceRepository(
             }
 
             return null;
+        }
+        catch (Exception) when (entry is not null)
+        {
+            // Refreshing a stale entry failed transiently (e.g. the broker was briefly unreachable).
+            // Prefer serving the last cached copy over failing the caller; the stale entry stays cached
+            // so the next access retries the refresh.
+            return Clone(entry.Source);
         }
     }
 

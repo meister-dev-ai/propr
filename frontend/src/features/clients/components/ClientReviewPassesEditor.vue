@@ -39,6 +39,8 @@
       </div>
 
       <ol class="review-passes-list">
+        <!-- Pass 1 is the baseline (initial) review, which is not part of this editable list.
+             The first editable row (index 0) is therefore Pass 2, hence `index + 2`. -->
         <li v-for="(row, index) in rows" :key="index" class="review-pass-row" data-testid="review-pass-row">
           <span class="review-pass-ordinal">Pass {{ index + 2 }}</span>
 

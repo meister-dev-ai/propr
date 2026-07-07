@@ -107,6 +107,11 @@ public sealed class AdminReviewProfilesController(IClientAdminService clientAdmi
             return auth;
         }
 
+        if (request is null)
+        {
+            return this.BadRequest();
+        }
+
         var profiles = await clientAdminService.GetSelectableReviewPipelineProfilesAsync(ct);
         if (!string.IsNullOrWhiteSpace(request.DefaultReviewPipelineProfileId)
             && profiles.All(profile => !string.Equals(profile.ProfileId, request.DefaultReviewPipelineProfileId, StringComparison.Ordinal)))

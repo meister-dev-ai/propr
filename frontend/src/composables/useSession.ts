@@ -4,6 +4,7 @@
 import { computed, ref } from 'vue'
 import { getActiveRuntime } from '@/app/runtime/runtimeContext'
 import type { components } from '@/types'
+import { type RoleLevel } from '@/composables/roles'
 
 const CLIENT_ROLES_KEY = 'meisterpropr_client_roles'
 /** Cross-tab logout signal: writing it fires a `storage` event in other tabs (see main.ts). */
@@ -141,7 +142,13 @@ export function useSession() {
     setTenantRoles({})
     setLicensingState('community', [])
     accessToken.value = session.accessToken
-    await loadClientRoles()
+    const loaded = await loadClientRoles()
+    if (!loaded) {
+      // /auth/me failed after the token was accepted: don't keep a half-initialized session with a
+      // valid token but empty roles/licensing. Clear everything and surface the failure to the caller.
+      clearTokens()
+      throw new Error('Failed to load the session profile after authentication.')
+    }
   }
 
   /**
@@ -238,13 +245,13 @@ export function useSession() {
    * Returns true if the current user has at least `minRole` for `clientId`,
    * or if they are a global admin.
    */
-  function hasClientRole(clientId: string, minRole: 0 | 1): boolean {
+  function hasClientRole(clientId: string, minRole: RoleLevel): boolean {
     if (isAdmin.value) return true
     const role = clientRoles.value[clientId]
     return role !== undefined && role >= minRole
   }
 
-  function hasTenantRole(tenantId: string, minRole: 0 | 1): boolean {
+  function hasTenantRole(tenantId: string, minRole: RoleLevel): boolean {
     if (isAdmin.value) return true
     const role = tenantRoles.value[tenantId]
     return role !== undefined && role >= minRole
@@ -253,15 +260,16 @@ export function useSession() {
   /**
    * Fetches `/auth/me` and stores the returned `clientRoles` in sessionStorage.
    * Call this once after login (or token refresh) to prime the roles cache.
+   * Returns `true` when the profile loaded successfully, `false` otherwise.
    */
-  async function loadClientRoles(): Promise<void> {
+  async function loadClientRoles(): Promise<boolean> {
     const token = getAccessToken()
     if (!token) {
       setClientRoles({})
       setTenantRoles({})
       setHasLocalPassword(false)
       setLicensingState('community', [])
-      return
+      return false
     }
 
     try {
@@ -274,17 +282,20 @@ export function useSession() {
         setTenantRoles(data.tenantRoles ?? {})
         setHasLocalPassword(data.hasLocalPassword === true)
         setLicensingState(data.edition ?? 'community', data.capabilities ?? [])
-      } else {
-        setClientRoles({})
-        setTenantRoles({})
-        setHasLocalPassword(false)
-        setLicensingState('community', [])
+        return true
       }
+
+      setClientRoles({})
+      setTenantRoles({})
+      setHasLocalPassword(false)
+      setLicensingState('community', [])
+      return false
     } catch {
       setClientRoles({})
       setTenantRoles({})
       setHasLocalPassword(false)
       setLicensingState('community', [])
+      return false
     }
   }
 

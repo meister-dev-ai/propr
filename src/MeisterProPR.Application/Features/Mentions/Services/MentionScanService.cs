@@ -148,16 +148,17 @@ public sealed partial class MentionScanService(
         {
             foreach (var comment in thread.Comments)
             {
-                if (await this.ProcessCommentForMentionAsync(new MentionCommentInputs(
-                        config,
-                        reviewer,
-                        repositoryId,
-                        pullRequestId,
-                        pullRequest,
-                        thread,
-                        comment,
-                        prScan,
-                        ct)))
+                if (await this.ProcessCommentForMentionAsync(
+                        new MentionCommentInputs(
+                            config,
+                            reviewer,
+                            repositoryId,
+                            pullRequestId,
+                            pullRequest,
+                            thread,
+                            comment,
+                            prScan,
+                            ct)))
                 {
                     newMentionsEnqueued++;
                 }
@@ -216,6 +217,21 @@ public sealed partial class MentionScanService(
                comment.PublishedAt.Value > prScan.LastCommentSeenAt;
     }
 
+    // Produce a redacted, single-line, length-bounded rendering of (attacker-controlled) comment text
+    // so Trace diagnostics can still spot format changes without leaking full content or letting a
+    // crafted comment inject extra log lines via embedded control characters.
+    private static string SanitizeCommentForLog(string? content)
+    {
+        if (string.IsNullOrEmpty(content))
+        {
+            return string.Empty;
+        }
+
+        const int maxLoggedChars = 256;
+        var trimmed = content.Length > maxLoggedChars ? content[..maxLoggedChars] + "…" : content;
+        return new string(trimmed.Select(static ch => char.IsControl(ch) ? ' ' : ch).ToArray());
+    }
+
     private async Task<bool> ProcessCommentForMentionAsync(MentionCommentInputs inputs)
     {
         if (!ShouldProcessComment(inputs.Comment, inputs.PrScan))
@@ -223,8 +239,9 @@ public sealed partial class MentionScanService(
             return false;
         }
 
-        // Log the raw content so we can see what ADO actually stores (helps detect format changes).
-        LogCommentContent(logger, inputs.Thread.ThreadId, inputs.Comment.CommentId, inputs.Comment.Content);
+        // Log a redacted, single-line, length-bounded rendering of the content so we can still detect
+        // format changes without leaking full (attacker-controlled) comment text or allowing log injection.
+        LogCommentContent(logger, inputs.Thread.ThreadId, inputs.Comment.CommentId, SanitizeCommentForLog(inputs.Comment.Content));
 
         if (!MentionDetector.IsMentioned(inputs.Comment.Content, inputs.Reviewer))
         {

@@ -7447,12 +7447,12 @@ export interface paths {
         get: {
             parameters: {
                 query?: {
-                    ProviderScopePath?: string;
-                    ProviderProjectKey?: string;
-                    RepositoryId?: string;
-                    PullRequestId?: number;
-                    Page?: number;
-                    PageSize?: number;
+                    providerScopePath?: string;
+                    providerProjectKey?: string;
+                    repositoryId?: string;
+                    pullRequestId?: number;
+                    page?: number;
+                    pageSize?: number;
                 };
                 header?: never;
                 path: {
@@ -7520,12 +7520,12 @@ export interface paths {
         get: {
             parameters: {
                 query?: {
-                    ProviderScopePath?: string;
-                    ProviderProjectKey?: string;
-                    RepositoryId?: string;
-                    PullRequestId?: number;
-                    Page?: number;
-                    PageSize?: number;
+                    providerScopePath?: string;
+                    providerProjectKey?: string;
+                    repositoryId?: string;
+                    pullRequestId?: number;
+                    page?: number;
+                    pageSize?: number;
                 };
                 header?: never;
                 path: {

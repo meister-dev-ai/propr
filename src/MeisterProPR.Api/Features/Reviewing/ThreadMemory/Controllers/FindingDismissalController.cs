@@ -4,6 +4,7 @@
 using MeisterProPR.Api.Extensions;
 using MeisterProPR.Application.Interfaces;
 using MeisterProPR.Domain.Entities;
+using MeisterProPR.Domain.Enums;
 using Microsoft.AspNetCore.Mvc;
 
 namespace MeisterProPR.Api.Controllers;
@@ -13,11 +14,6 @@ namespace MeisterProPR.Api.Controllers;
 [Route("clients/{clientId:guid}")]
 public sealed partial class FindingDismissalController(ILogger<FindingDismissalController> logger) : ControllerBase
 {
-    private IActionResult? RequireAdmin()
-    {
-        return AuthHelpers.RequireAdmin(this.HttpContext);
-    }
-
     /// <summary>
     ///     Dismisses a finding by storing it as an admin-dismissed memory record.
     ///     Future reviews will suppress similar findings via the memory reconsideration pipeline.
@@ -28,7 +24,7 @@ public sealed partial class FindingDismissalController(ILogger<FindingDismissalC
     /// <param name="ct">Cancellation token.</param>
     /// <response code="201">Finding dismissed and memory record created.</response>
     /// <response code="400">Validation failure.</response>
-    /// <response code="403">Caller is not an admin.</response>
+    /// <response code="403">Caller lacks administrator access to the client.</response>
     [HttpPost("reviewing/dismiss-finding")]
     [HttpPost("dismiss-finding")]
     [ProducesResponseType(typeof(ThreadMemoryRecordDto), StatusCodes.Status201Created)]
@@ -40,7 +36,7 @@ public sealed partial class FindingDismissalController(ILogger<FindingDismissalC
         [FromServices] IThreadMemoryService memoryService,
         CancellationToken ct = default)
     {
-        var auth = this.RequireAdmin();
+        var auth = AuthHelpers.RequireClientRole(this.HttpContext, clientId, ClientRole.ClientAdministrator);
         if (auth is not null)
         {
             return auth;

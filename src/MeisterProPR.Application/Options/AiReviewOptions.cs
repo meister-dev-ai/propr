@@ -7,9 +7,13 @@ using MeisterProPR.CodeAnalysis;
 namespace MeisterProPR.Application.Options;
 
 /// <summary>
-///     Configuration options for the agentic AI review loop.
-///     Bound from environment variables; validated on application startup.
+///     Configuration options for the agentic AI review loop. Validated on application startup.
 /// </summary>
+/// <remarks>
+///     Only options whose summary names an <c>AI_*</c> environment variable are overridable at runtime
+///     (wired in <c>InfrastructureServiceExtensions.ConfigureAiReviewOptions</c>). The remaining options are
+///     fixed tuning defaults with no configuration binding.
+/// </remarks>
 public sealed class AiReviewOptions
 {
     /// <summary>Maximum number of agentic loop iterations per review. Bound to <c>AI_MAX_REVIEW_ITERATIONS</c>.</summary>
@@ -159,15 +163,15 @@ public sealed class AiReviewOptions
     /// <summary>
     ///     Number of lines before each changed hunk to include in the hunk-centered prefetch window.
     ///     Asymmetrically larger than <see cref="PrefetchWindowLinesAfter" /> because code before a change
-    ///     (signatures, setup) matters more for context than code after.
-    ///     Bound to <c>AI_PREFETCH_WINDOW_LINES_BEFORE</c>.
+    ///     (signatures, setup) matters more for context than code after. Fixed tuning default; not
+    ///     environment-overridable.
     /// </summary>
     [Range(0, 500, ErrorMessage = "PrefetchWindowLinesBefore must be between 0 and 500.")]
     public int PrefetchWindowLinesBefore { get; set; } = 40;
 
     /// <summary>
     ///     Number of lines after each changed hunk to include in the hunk-centered prefetch window.
-    ///     Bound to <c>AI_PREFETCH_WINDOW_LINES_AFTER</c>.
+    ///     Fixed tuning default; not environment-overridable.
     /// </summary>
     [Range(0, 500, ErrorMessage = "PrefetchWindowLinesAfter must be between 0 and 500.")]
     public int PrefetchWindowLinesAfter { get; set; } = 15;

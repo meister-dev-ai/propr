@@ -354,9 +354,12 @@ public sealed class AiConnectionRepository(
             var existingBinding = record.PurposeBindings
                                       .FirstOrDefault(binding => binding.ConfiguredModelId == configuredModelId && binding.IsEnabled)
                                   ?? record.PurposeBindings.FirstOrDefault(binding => binding.ConfiguredModelId == configuredModelId);
-            var protocolMode = existingBinding is null
-                ? AiProtocolMode.Auto
-                : Enum.Parse<AiProtocolMode>(existingBinding.ProtocolMode, true);
+            // Fall back to Auto when there is no binding or the persisted protocol mode is not a known value,
+            // so an unexpected stored string cannot abort resolution for the whole model.
+            var protocolMode = existingBinding is not null
+                               && Enum.TryParse<AiProtocolMode>(existingBinding.ProtocolMode, true, out var parsedProtocolMode)
+                ? parsedProtocolMode
+                : AiProtocolMode.Auto;
 
             var synthesizedBinding = new AiPurposeBindingDto(
                 Guid.NewGuid(),

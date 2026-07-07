@@ -4,6 +4,7 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import type { RouteLocationNormalizedGeneric, RouteLocationRaw } from 'vue-router'
 import { useSession } from '@/composables/useSession'
+import { RoleLevel } from '@/composables/roles'
 
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
@@ -17,7 +18,7 @@ const router = createRouter({
           return { name: 'login' }
         }
 
-        const hasAnyAdminRole = isAdmin.value || Object.values(clientRoles.value).some((role) => role >= 1)
+        const hasAnyAdminRole = isAdmin.value || Object.values(clientRoles.value).some((role) => role >= RoleLevel.Administrator)
         if (hasAnyAdminRole) {
           return { name: 'clients' }
         }
@@ -168,20 +169,20 @@ function resolveTenantDirectoryGuard(
 function resolveTenantAdminGuard(
   to: RouteLocationNormalizedGeneric,
   isAdmin: boolean,
-  hasTenantRole: (tenantId: string, minRole: 0 | 1) => boolean,
+  hasTenantRole: (tenantId: string, minRole: RoleLevel) => boolean,
 ): RouteLocationRaw | undefined {
   if (!to.meta.requiresTenantAdmin || isAdmin) {
     return undefined
   }
   const routeTenantId = typeof to.params.tenantId === 'string' ? to.params.tenantId : undefined
-  return routeTenantId && hasTenantRole(routeTenantId, 1) ? undefined : ACCESS_DENIED
+  return routeTenantId && hasTenantRole(routeTenantId, RoleLevel.Administrator) ? undefined : ACCESS_DENIED
 }
 
-function resolveRequiredClientRole(to: RouteLocationNormalizedGeneric): 0 | 1 | null {
+function resolveRequiredClientRole(to: RouteLocationNormalizedGeneric): RoleLevel | null {
   if (to.meta.requiresClientAdmin) {
-    return 1
+    return RoleLevel.Administrator
   }
-  return to.meta.requiresClientAccess ? 0 : null
+  return to.meta.requiresClientAccess ? RoleLevel.User : null
 }
 
 function resolveRouteClientId(to: RouteLocationNormalizedGeneric): string | undefined {
@@ -194,7 +195,7 @@ function resolveRouteClientId(to: RouteLocationNormalizedGeneric): string | unde
 function resolveClientAccessGuard(
   to: RouteLocationNormalizedGeneric,
   isAdmin: boolean,
-  hasClientRole: (clientId: string, minRole: 0 | 1) => boolean,
+  hasClientRole: (clientId: string, minRole: RoleLevel) => boolean,
   clientRoles: Record<string, number>,
 ): RouteLocationRaw | undefined {
   const requiredClientRole = resolveRequiredClientRole(to)
