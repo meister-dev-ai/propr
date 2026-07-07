@@ -193,13 +193,14 @@ public sealed partial class MentionScanService(
         IReadOnlyList<PrCommentThread> threads,
         DateTimeOffset seed)
     {
-        // Advance the watermark to the latest comment we've seen.
+        // Advance the watermark to the latest comment we've seen, but never below the previous watermark:
+        // the seed is always in the running set, so the result can only move forward (monotonic).
         return threads
             .SelectMany(thread => thread.Comments)
             .Select(comment => comment.PublishedAt)
             .Where(publishedAt => publishedAt.HasValue)
             .Select(publishedAt => publishedAt!.Value)
-            .DefaultIfEmpty(seed)
+            .Append(seed)
             .Max();
     }
 

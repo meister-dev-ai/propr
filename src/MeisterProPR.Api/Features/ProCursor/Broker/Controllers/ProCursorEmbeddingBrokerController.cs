@@ -16,7 +16,9 @@ namespace MeisterProPR.Api.Features.ProCursor.Broker.Controllers;
 [ApiController]
 [Authorize(AuthenticationSchemes = ProCursorSharedKeyAuthenticationDefaults.Scheme)]
 [Route("internal/propr/procursor/broker/embeddings")]
-public sealed class ProCursorEmbeddingBrokerController(IProCursorEmbeddingBroker embeddingBroker) : ControllerBase
+public sealed class ProCursorEmbeddingBrokerController(
+    IProCursorEmbeddingBroker embeddingBroker,
+    ILogger<ProCursorEmbeddingBrokerController> logger) : ControllerBase
 {
     /// <summary>
     ///     Resolves the embedding deployment configuration for a client.
@@ -43,11 +45,13 @@ public sealed class ProCursorEmbeddingBrokerController(IProCursorEmbeddingBroker
         }
         catch (InvalidOperationException ex)
         {
-            return this.Conflict(new { error = ex.Message });
+            logger.LogWarning(ex, "ProCursor embedding broker request conflicted with the current embedding configuration.");
+            return this.Conflict(new { error = "The request conflicts with the current embedding configuration." });
         }
         catch (ProCursorDependencyUnavailableException ex)
         {
-            return this.StatusCode(StatusCodes.Status503ServiceUnavailable, new { error = ex.Message });
+            logger.LogWarning(ex, "ProCursor upstream dependency was unavailable during an embedding broker request.");
+            return this.StatusCode(StatusCodes.Status503ServiceUnavailable, new { error = "The upstream ProCursor dependency is unavailable." });
         }
     }
 
@@ -81,11 +85,13 @@ public sealed class ProCursorEmbeddingBrokerController(IProCursorEmbeddingBroker
         }
         catch (InvalidOperationException ex)
         {
-            return this.Conflict(new { error = ex.Message });
+            logger.LogWarning(ex, "ProCursor embedding broker request conflicted with the current embedding configuration.");
+            return this.Conflict(new { error = "The request conflicts with the current embedding configuration." });
         }
         catch (ProCursorDependencyUnavailableException ex)
         {
-            return this.StatusCode(StatusCodes.Status503ServiceUnavailable, new { error = ex.Message });
+            logger.LogWarning(ex, "ProCursor upstream dependency was unavailable during an embedding broker request.");
+            return this.StatusCode(StatusCodes.Status503ServiceUnavailable, new { error = "The upstream ProCursor dependency is unavailable." });
         }
     }
 }

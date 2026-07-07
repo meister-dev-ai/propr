@@ -495,7 +495,8 @@ public sealed class ProCursorKnowledgeSourcesControllerTests(ProCursorKnowledgeS
 
         Assert.Equal(HttpStatusCode.ServiceUnavailable, response.StatusCode);
         var payload = JsonDocument.Parse(await response.Content.ReadAsStringAsync()).RootElement;
-        Assert.Equal("embedding runtime unavailable", payload.GetProperty("error").GetString());
+        // The raw exception text must not leak to the client; a stable generic message is returned instead.
+        Assert.Equal("The upstream ProCursor dependency is unavailable.", payload.GetProperty("error").GetString());
     }
 
     [Fact]

@@ -7,6 +7,7 @@ using MeisterProPR.Application.Interfaces;
 using MeisterProPR.Domain.Entities;
 using MeisterProPR.Domain.Enums;
 using MeisterProPR.ProCursor.Options;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
 namespace MeisterProPR.ProCursor.Infrastructure.Remote;
@@ -16,7 +17,8 @@ namespace MeisterProPR.ProCursor.Infrastructure.Remote;
 /// </summary>
 public sealed class RuntimeConfiguredKnowledgeSourceRepository(
     IProCursorRuntimeConfigurationBroker runtimeConfigurationBroker,
-    IOptions<ProCursorHostOptions> hostOptions)
+    IOptions<ProCursorHostOptions> hostOptions,
+    ILogger<RuntimeConfiguredKnowledgeSourceRepository> logger)
     : IProCursorKnowledgeSourceRepository, IProCursorRuntimeConfigurationCache
 {
     private readonly Lock _lock = new();
@@ -244,11 +246,16 @@ public sealed class RuntimeConfiguredKnowledgeSourceRepository(
 
             return null;
         }
-        catch (Exception) when (entry is not null)
+        catch (Exception ex) when (entry is not null)
         {
             // Refreshing a stale entry failed transiently (e.g. the broker was briefly unreachable).
             // Prefer serving the last cached copy over failing the caller; the stale entry stays cached
-            // so the next access retries the refresh.
+            // so the next access retries the refresh. Log it so a persistently failing broker (which would
+            // otherwise serve stale config indefinitely) is observable.
+            logger.LogWarning(
+                ex,
+                "Refreshing ProCursor knowledge source {SourceId} failed; serving the last cached copy.",
+                sourceId);
             return Clone(entry.Source);
         }
     }

@@ -420,9 +420,7 @@ public sealed class FixtureReviewContextTools(
             usedChars += file.Path.Length + 16 + snippet.Length;
         }
 
-        // The last added site may itself have pushed the running total past the cap; report truncation
-        // when we ended over the limit so callers do not treat an over-budget result as complete.
-        return (usedChars > this._options.MaxReferenceResultChars, usedChars);
+        return (false, usedChars);
     }
 
     private string ResolveBranchName(string branchSide)
