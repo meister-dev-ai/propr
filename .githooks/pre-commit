@@ -24,9 +24,10 @@ if [ -n "$STAGED_CS_FILES" ]; then
 
         echo "Running 'jb cleanupcode'..."
 
-        # Run cleanup when the local JetBrains toolchain is healthy.
+        # Run cleanup when the local JetBrains toolchain is healthy, using the same profile CI verifies
+        # ("Built-in: Reformat Code") so locally-formatted files match the CI formatting check.
         # If it is installed but broken, keep build/test enforcement active.
-        if jb cleanupcode "MeisterProPR.slnx" --include="$JB_FILES"; then
+        if jb cleanupcode "MeisterProPR.slnx" --profile="Built-in: Reformat Code" --include="$JB_FILES"; then
             # Stage ONLY the files that were in our list.
             printf '%s\n' "$STAGED_CS_FILES" | xargs git add
             echo "Cleanup complete and specific files staged."

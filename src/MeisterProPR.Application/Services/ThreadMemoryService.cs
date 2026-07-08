@@ -264,8 +264,8 @@ public sealed partial class ThreadMemoryService(
                 fallbackChecks.ToList().AsReadOnly());
         }
 
-        var fallbackMatch = await this.TryFindFilePathFallbackMatchAsync(new FilePathFallbackInputs(
-            clientId, repositoryId, pullRequestId, normalizedFilePath, findingMessage, degradedComponents, fallbackChecks, ct));
+        var fallbackMatch = await this.TryFindFilePathFallbackMatchAsync(
+            new FilePathFallbackInputs(clientId, repositoryId, pullRequestId, normalizedFilePath, findingMessage, degradedComponents, fallbackChecks, ct));
         if (fallbackMatch is not null)
         {
             return HistoricalDuplicateSuppressionMatchDto.Match(

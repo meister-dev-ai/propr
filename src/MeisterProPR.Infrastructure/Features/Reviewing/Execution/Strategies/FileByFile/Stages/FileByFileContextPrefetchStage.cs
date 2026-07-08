@@ -239,15 +239,16 @@ internal sealed class FileByFileContextPrefetchStage(
 
         foreach (var symbol in changedSymbols)
         {
-            var outcome = await CollectCallerSitesForSymbolAsync(new CallerCollectionInputs(
-                symbol!,
-                path,
-                reviewTools,
-                evidence,
-                seen,
-                injected,
-                callerBudget,
-                ct)).ConfigureAwait(false);
+            var outcome = await CollectCallerSitesForSymbolAsync(
+                new CallerCollectionInputs(
+                    symbol!,
+                    path,
+                    reviewTools,
+                    evidence,
+                    seen,
+                    injected,
+                    callerBudget,
+                    ct)).ConfigureAwait(false);
             if (outcome is null)
             {
                 continue;

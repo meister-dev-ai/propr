@@ -234,8 +234,8 @@ public sealed class ProCursorEmbeddingService(
                 ? chunk.LineStart.Value + index
                 : (int?)null;
 
-            AccumulateLineForChunkSplit(new ChunkSplitInputs(
-                chunk, tokenizerName, maxInputTokens, newlineTokenCount, accumulator, splitChunks, line, lineNumber));
+            AccumulateLineForChunkSplit(
+                new ChunkSplitInputs(chunk, tokenizerName, maxInputTokens, newlineTokenCount, accumulator, splitChunks, line, lineNumber));
         }
 
         FlushCurrentChunk(chunk, accumulator, splitChunks);
