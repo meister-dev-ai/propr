@@ -15,6 +15,7 @@ using MeisterProPR.Domain.ValueObjects;
 using MeisterProPR.Infrastructure.AI;
 using MeisterProPR.Infrastructure.Features.Reviewing.Diagnostics.Persistence;
 using MeisterProPR.Infrastructure.Features.Reviewing.Execution.CommentRelevance;
+using MeisterProPR.Infrastructure.Features.Reviewing.Execution.Screening;
 using MeisterProPR.Infrastructure.Features.Reviewing.Execution.Verification;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Logging;
@@ -36,7 +37,8 @@ public sealed partial class PrWideAgenticReviewOrchestrator(
     IReviewClaimExtractor? reviewClaimExtractor = null,
     IReviewEvidenceCollector? reviewEvidenceCollector = null,
     ISummaryReconciliationService? summaryReconciliationService = null,
-    IReviewFindingVerifier? reviewFindingVerifier = null)
+    IReviewFindingVerifier? reviewFindingVerifier = null,
+    ISemanticCommentScreener? semanticCommentScreener = null)
     : IPrWideAgenticReviewOrchestrator
 {
     private static readonly JsonSerializerOptions FinalGateJsonOptions = new(JsonSerializerDefaults.Web);
@@ -52,6 +54,8 @@ public sealed partial class PrWideAgenticReviewOrchestrator(
                                                                               .SelectMany(provider => provider.GetFacts())
                                                                               .ToList()
                                                                           ?? [];
+
+    private readonly ISemanticCommentScreener? _semanticCommentScreener = semanticCommentScreener;
 
     private readonly ISummaryReconciliationService? _summaryReconciliationService = summaryReconciliationService;
 
@@ -834,9 +838,30 @@ public sealed partial class PrWideAgenticReviewOrchestrator(
         // every finding.
         var publishedComments = FindingDeduplicator.CollapseSameFileDuplicates(MaterializePublishedComments(candidateFindings, gateDecisions));
         var result = new ReviewResult(reconciliation.FinalSummary, publishedComments);
+        result = await this.ApplySemanticScreeningAsync(job, baseContext, result, ct);
 
         await this.RecordNativeCompletionAsync(job, baseContext, candidateFindings, gateDecisions, reconciliation, result, ct);
         return result;
+    }
+
+    // Language-robust screening for the PR-wide native path: mirrors the file-by-file screening stage via the shared
+    // applier so hedged/vague comments fold to summary here too. Opt-in per client; no-op when the flag is off, no
+    // screener is bound, or there are no comments.
+    private async Task<ReviewResult> ApplySemanticScreeningAsync(
+        ReviewJob job,
+        ReviewSystemContext baseContext,
+        ReviewResult result,
+        CancellationToken ct)
+    {
+        if (!baseContext.EnableLanguageRobustScreening
+            || this._semanticCommentScreener is null
+            || result.Comments.Count == 0)
+        {
+            return result;
+        }
+
+        var applier = new SemanticScreeningApplier(this._semanticCommentScreener, baseContext.ProtocolRecorder);
+        return await applier.ApplyAsync(result, job.ClientId, baseContext.ActiveProtocolId, ct);
     }
 
     private async Task<PrWideReviewPlan> RecordPlanAsync(
