@@ -45,12 +45,6 @@ public sealed class ClientRecord
     public bool ScmCommentPostingEnabled { get; set; } = true;
 
     /// <summary>
-    ///     Controls whether ProRV executes during review generation for this client.
-    ///     Defaults to <see langword="false" /> so new clients opt in explicitly.
-    /// </summary>
-    public bool EnableProRV { get; set; } = false;
-
-    /// <summary>
     ///     Controls whether evidence-backed local verification escalates conservatively-withheld claims for this client.
     ///     Defaults to <see langword="false" /> so new clients opt in explicitly.
     /// </summary>

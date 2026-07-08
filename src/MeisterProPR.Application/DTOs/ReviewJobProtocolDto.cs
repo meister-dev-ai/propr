@@ -105,7 +105,7 @@ public partial record ReviewJobProtocolDto
 
     /// <summary>
     ///     The kind of review pass — the <c>ReviewPassKind</c> name (e.g. <c>"Baseline"</c>,
-    ///     <c>"ProRVAugmentation"</c>). <see langword="null" /> for legacy rows and passes with no
+    ///     <c>"MultiPassUnion"</c>). <see langword="null" /> for legacy rows and passes with no
     ///     meaningful kind (e.g. synthesis, which the UI derives from <see cref="Label" />).
     /// </summary>
     public string? PassKind { get; init; }

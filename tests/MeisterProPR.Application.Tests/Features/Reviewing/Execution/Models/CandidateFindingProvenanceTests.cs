@@ -24,16 +24,6 @@ public sealed class CandidateFindingProvenanceTests
     }
 
     [Fact]
-    public void ResolveOriginPassKindName_ProRvOnly_ReturnsProRVAugmentation()
-    {
-        var provenance = new CandidateFindingProvenance(
-            CandidateFindingProvenance.PerFileCommentOrigin, "stage",
-            reviewPassKind: ReviewPassKind.ProRVAugmentation, findingProvenanceKind: FindingProvenanceKind.ProRVOnly);
-
-        Assert.Equal("ProRVAugmentation", provenance.ResolveOriginPassKindName());
-    }
-
-    [Fact]
     public void ResolveOriginPassKindName_Both_ReturnsNull()
     {
         // A finding produced by both passes has no single producing pass — must not claim one.

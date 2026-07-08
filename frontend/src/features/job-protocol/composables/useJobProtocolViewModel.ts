@@ -766,10 +766,9 @@ export function useJobProtocolViewModel() {
     })
 
     // Deep-link from an aggregate-view origin badge to the (file, pass) trace
-    // that produced the finding. Finding provenance is COARSE — only "Baseline"
-    // or "ProRVAugmentation". Match on the passKind FAMILY, not the rendered
-    // label: a "Baseline" origin lands on the baseline pass; a "ProRVAugmentation"
-    // origin lands on the augmentation pass in the file.
+    // that produced the finding. Finding provenance is COARSE. Match on the
+    // passKind FAMILY, not the rendered label: a "Baseline" origin lands on the
+    // baseline pass in the file; anything else falls back to the file's first pass.
     function selectFindingOrigin(comment: CommentGroupComment): void {
         const filePath = comment.filePath || comment.file_path || ''
         const targetGroup = fileGroups.value.find(group => group.path === filePath)
@@ -777,14 +776,10 @@ export function useJobProtocolViewModel() {
         if (!targetGroup || targetGroup.passes.length === 0) return
 
         const origin = comment.originPassKind
-        const isAugmentationKind = (kind: string | null | undefined) =>
-            kind === 'ProRVAugmentation'
 
         let matchByFamily: ReviewProtocolPass | undefined
         if (origin === 'Baseline') {
             matchByFamily = targetGroup.passes.find(pass => pass.passKind === 'Baseline')
-        } else if (isAugmentationKind(origin)) {
-            matchByFamily = targetGroup.passes.find(pass => isAugmentationKind(pass.passKind))
         }
 
         const target = matchByFamily ?? targetGroup.passes[0]
@@ -803,9 +798,9 @@ export function useJobProtocolViewModel() {
     const activePassFinalComments = computed<ReviewCommentRecord[]>(() => activePass.value?.finalComments ?? [])
 
     // The `multi_pass_union_completed` event lives on a file's BASELINE pass. Within a file group the
-    // baseline is the pass that is neither a union resample nor a ProRV augmentation.
+    // baseline is the pass that is not a union resample.
     function findBaselinePassForFile(passes: ReviewProtocolPass[]): ReviewProtocolPass | null {
-        return passes.find(pass => pass.passKind !== 'MultiPassUnion' && pass.passKind !== 'ProRVAugmentation') ?? null
+        return passes.find(pass => pass.passKind !== 'MultiPassUnion') ?? null
     }
 
     // Per-pass contribution counts for the active file, parsed from its baseline pass's union-completion

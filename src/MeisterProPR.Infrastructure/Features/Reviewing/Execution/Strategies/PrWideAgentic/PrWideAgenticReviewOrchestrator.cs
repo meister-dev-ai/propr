@@ -1618,8 +1618,6 @@ public sealed partial class PrWideAgenticReviewOrchestrator(
             RuntimeCapabilities = source.RuntimeCapabilities,
             ReviewSession = source.ReviewSession,
             Temperature = source.Temperature,
-            EnableProRV = source.EnableProRV,
-            AugmentationMode = source.AugmentationMode,
             PassKind = source.PassKind,
             PromptExperiment = source.PromptExperiment,
             SkippedSteps = source.SkippedSteps,

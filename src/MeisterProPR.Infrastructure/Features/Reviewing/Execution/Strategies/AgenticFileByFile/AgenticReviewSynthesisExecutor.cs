@@ -102,12 +102,6 @@ internal sealed class AgenticReviewSynthesisExecutor(
         var perFileCandidateFindings = CandidateFindingFactory.MergeFindings(
             baselinePerFileFindings,
             augmentationCandidateFindings ?? []);
-        await this.RecordLateSteeringMergeEventAsync(
-            baseContext,
-            baselinePerFileFindings.Count,
-            augmentationCandidateFindings ?? [],
-            perFileCandidateFindings,
-            ct);
 
         var gate = deterministicReviewFindingGate;
         if (gate is null)
@@ -640,43 +634,6 @@ internal sealed class AgenticReviewSynthesisExecutor(
                 null,
                 ct);
         }
-    }
-
-    private async Task RecordLateSteeringMergeEventAsync(
-        ReviewSystemContext baseContext,
-        int baselineCandidateCount,
-        IReadOnlyList<CandidateReviewFinding> augmentationFindings,
-        IReadOnlyList<CandidateReviewFinding> mergedPerFileFindings,
-        CancellationToken ct)
-    {
-        if (baseContext.AugmentationMode != ReviewAugmentationMode.LateAugmentation ||
-            !baseContext.ActiveProtocolId.HasValue ||
-            baseContext.ProtocolRecorder is null)
-        {
-            return;
-        }
-
-        await baseContext.ProtocolRecorder.RecordReviewStrategyEventAsync(
-            baseContext.ActiveProtocolId.Value,
-            ReviewProtocolEventNames.LateSteeringMergeCompleted,
-            JsonSerializer.Serialize(
-                new
-                {
-                    baselineCandidateCount,
-                    proRvCandidateCount = augmentationFindings.Count,
-                    mergedCandidateCount = mergedPerFileFindings.Count,
-                },
-                FinalGateJsonOptions),
-            JsonSerializer.Serialize(
-                new
-                {
-                    baselineOnlyCount = mergedPerFileFindings.Count(finding => finding.Provenance.FindingProvenanceKind == FindingProvenanceKind.BaselineOnly),
-                    proRvOnlyCount = mergedPerFileFindings.Count(finding => finding.Provenance.FindingProvenanceKind == FindingProvenanceKind.ProRVOnly),
-                    bothCount = mergedPerFileFindings.Count(finding => finding.Provenance.FindingProvenanceKind == FindingProvenanceKind.Both),
-                },
-                FinalGateJsonOptions),
-            null,
-            ct);
     }
 
     private static IReadOnlyList<ReviewComment> MaterializePublishedComments(

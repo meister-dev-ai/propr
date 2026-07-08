@@ -28,7 +28,7 @@ internal sealed class AgenticFileReviewDispatchPlanner(
         IChatClient effectiveClient,
         CancellationToken ct)
     {
-        var executionContext = CreateExecutionContext(baseContext);
+        var executionContext = baseContext;
         var jobWithResults = await jobRepository.GetByIdWithFileResultsAsync(job.Id, ct) ?? job;
 
         var existingResults = jobWithResults.FileReviewResults.ToDictionary(r => r.FilePath);
@@ -130,37 +130,6 @@ internal sealed class AgenticFileReviewDispatchPlanner(
         {
             semaphore.Dispose();
         }
-    }
-
-    private static ReviewSystemContext CreateExecutionContext(ReviewSystemContext baseContext)
-    {
-        if (baseContext.AugmentationMode != ReviewAugmentationMode.LateAugmentation)
-        {
-            return baseContext;
-        }
-
-        return new ReviewSystemContext(baseContext.ClientSystemMessage, baseContext.RepositoryInstructions, baseContext.ReviewTools)
-        {
-            LoopMetrics = baseContext.LoopMetrics,
-            ActiveProtocolId = baseContext.ActiveProtocolId,
-            ProtocolRecorder = baseContext.ProtocolRecorder,
-            ExclusionRules = baseContext.ExclusionRules,
-            DismissedPatterns = baseContext.DismissedPatterns,
-            PromptOverrides = baseContext.PromptOverrides,
-            TierChatClient = baseContext.TierChatClient,
-            ModelId = baseContext.ModelId,
-            DefaultReviewChatClient = baseContext.DefaultReviewChatClient,
-            DefaultReviewModelId = baseContext.DefaultReviewModelId,
-            RuntimeCapabilities = baseContext.RuntimeCapabilities,
-            ReviewSession = baseContext.ReviewSession,
-            Temperature = baseContext.Temperature,
-            EnableProRV = false,
-            AugmentationMode = baseContext.AugmentationMode,
-            PassKind = baseContext.PassKind,
-            PerFileHint = baseContext.PerFileHint,
-            PromptExperiment = baseContext.PromptExperiment,
-            SkippedSteps = baseContext.SkippedSteps,
-        };
     }
 
     private async Task MarkFileExcludedAsync(

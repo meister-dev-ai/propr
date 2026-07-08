@@ -33,7 +33,6 @@ export interface ClientDetailDto {
   defaultReviewPipelineProfileId?: string | null
   defaultReviewPipelineProfileUpdatedAtUtc?: string | null
   scmCommentPostingEnabled: boolean
-  enableProRV: boolean
   enableEvidenceBackedVerification: boolean
   enableMultiPassUnion: boolean
   enableLanguageRobustScreening: boolean
@@ -66,7 +65,6 @@ export interface ClientDetailViewModel {
   editedDefaultReviewStrategy: Ref<ReviewStrategy>
   editedDefaultReviewPipelineProfileId: Ref<string>
   editedScmCommentPostingEnabled: Ref<boolean>
-  editedEnableProRV: Ref<boolean>
   editedEnableEvidenceBackedVerification: Ref<boolean>
   editedEnableMultiPassUnion: Ref<boolean>
   editedEnableLanguageRobustScreening: Ref<boolean>
@@ -237,7 +235,6 @@ export function useClientDetailViewModel(options: UseClientDetailViewModelOption
   const editedDefaultReviewStrategy = ref<ReviewStrategy>('fileByFile')
   const editedDefaultReviewPipelineProfileId = ref('file-by-file-balanced')
   const editedScmCommentPostingEnabled = ref(true)
-  const editedEnableProRV = ref(false)
   const editedEnableEvidenceBackedVerification = ref(false)
   const editedEnableMultiPassUnion = ref(false)
   const editedEnableLanguageRobustScreening = ref(false)
@@ -288,7 +285,6 @@ export function useClientDetailViewModel(options: UseClientDetailViewModelOption
     editedDefaultReviewStrategy.value = nextClient.defaultReviewStrategy ?? 'fileByFile'
     editedDefaultReviewPipelineProfileId.value = nextClient.defaultReviewPipelineProfileId ?? 'file-by-file-balanced'
     editedScmCommentPostingEnabled.value = Boolean(nextClient.scmCommentPostingEnabled)
-    editedEnableProRV.value = Boolean(nextClient.enableProRV)
     editedEnableEvidenceBackedVerification.value = Boolean(nextClient.enableEvidenceBackedVerification)
     editedEnableMultiPassUnion.value = Boolean(nextClient.enableMultiPassUnion)
     editedEnableLanguageRobustScreening.value = Boolean(nextClient.enableLanguageRobustScreening)
@@ -448,7 +444,6 @@ export function useClientDetailViewModel(options: UseClientDetailViewModelOption
       const patchBody: Record<string, unknown> = {
         defaultReviewStrategy: editedDefaultReviewStrategy.value,
         scmCommentPostingEnabled: editedScmCommentPostingEnabled.value,
-        enableProRV: editedEnableProRV.value,
         enableEvidenceBackedVerification: editedEnableEvidenceBackedVerification.value,
         enableMultiPassUnion: editedEnableMultiPassUnion.value,
         enableLanguageRobustScreening: editedEnableLanguageRobustScreening.value,
@@ -507,7 +502,6 @@ export function useClientDetailViewModel(options: UseClientDetailViewModelOption
       client.value !== null &&
       (
         editedScmCommentPostingEnabled.value !== Boolean(client.value.scmCommentPostingEnabled) ||
-        editedEnableProRV.value !== Boolean(client.value.enableProRV) ||
         editedEnableEvidenceBackedVerification.value !== Boolean(client.value.enableEvidenceBackedVerification) ||
         editedEnableMultiPassUnion.value !== Boolean(client.value.enableMultiPassUnion) ||
         editedEnableLanguageRobustScreening.value !== Boolean(client.value.enableLanguageRobustScreening) ||
@@ -548,7 +542,6 @@ export function useClientDetailViewModel(options: UseClientDetailViewModelOption
     editedDefaultReviewStrategy,
     editedDefaultReviewPipelineProfileId,
     editedScmCommentPostingEnabled,
-    editedEnableProRV,
     editedEnableEvidenceBackedVerification,
     editedEnableMultiPassUnion,
     editedEnableLanguageRobustScreening,

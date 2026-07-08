@@ -78,7 +78,6 @@ public sealed class ClientAdminService(
         string? customSystemMessage = null,
         string? defaultReviewPipelineProfileId = null,
         bool? scmCommentPostingEnabled = null,
-        bool? enableProRV = null,
         bool? enableEvidenceBackedVerification = null,
         bool? enableLanguageRobustScreening = null,
         bool? enableMultiPassUnion = null,
@@ -134,11 +133,6 @@ public sealed class ClientAdminService(
         if (scmCommentPostingEnabled.HasValue)
         {
             client.ScmCommentPostingEnabled = scmCommentPostingEnabled.Value;
-        }
-
-        if (enableProRV.HasValue)
-        {
-            client.EnableProRV = enableProRV.Value;
         }
 
         if (enableEvidenceBackedVerification.HasValue)
@@ -366,7 +360,6 @@ public sealed class ClientAdminService(
             client.DefaultReviewPipelineProfileId,
             client.DefaultReviewPipelineProfileUpdatedAtUtc,
             client.ScmCommentPostingEnabled,
-            client.EnableProRV,
             client.EnableEvidenceBackedVerification,
             client.EnableLanguageRobustScreening,
             client.EnableMultiPassUnion,

@@ -123,7 +123,7 @@ surfacing a broken dependency, and `/healthz` does not include the `procursor-re
 
 - ProPR supports provider-neutral review execution across Azure DevOps, GitHub, GitLab, and Forgejo-family hosts.
 - Azure DevOps remains the guided-discovery provider for projects, branches, crawl filters, and ProCursor source selection.
-- ProRV is an optional review-knowledge prefilter that runs before file review when its AI purpose is configured. Without a dedicated `proRvPrefilter` binding, ProPR falls back to the active file-review runtime.
+- ProRV is an optional review-knowledge lens: add a `prorv` entry to a client's review-pass list and its applicability screen + focused-guidance pass run on that entry's configured model. (The `proRvPrefilter` AI-purpose binding is used by the offline evaluation harness's ProRV-prefilter mode, not the production review path.)
 
 For release-based deployments, keep the three runtime image tags aligned:
 

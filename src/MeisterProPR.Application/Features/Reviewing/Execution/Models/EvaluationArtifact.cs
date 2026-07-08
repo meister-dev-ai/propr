@@ -46,8 +46,6 @@ public sealed record EvaluationConfigurationMetadata(
     string ModelId,
     string DetailMode,
     ReviewStrategy Strategy,
-    bool EnableProRV,
-    string AugmentationMode,
     IReadOnlyDictionary<string, int> ProvenanceCounts,
     string VariantName,
     IReadOnlyList<string> TargetedStageKeys,

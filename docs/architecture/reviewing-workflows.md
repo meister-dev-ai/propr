@@ -59,8 +59,8 @@ Production execution enters through `ReviewOrchestrationService`, and offline ev
 For `FileByFile`, the shared pipeline-profile catalog now publishes the legacy
 `file-by-file-baseline` plus `file-by-file-calm`, `file-by-file-balanced`, and
 `file-by-file-assertive`. `file-by-file-balanced` is the baseline profile. All four currently share
-the same dispatch-stage family ordering for recall-uplift groundwork: context prefetch, risk-marker
-scan, then ProRV prefilter.
+the same dispatch-stage family ordering for recall-uplift groundwork: context prefetch, then
+risk-marker scan.
 
 ## Offline Prompt Experiment Harness
 
@@ -219,35 +219,35 @@ The diagnostics surface keeps trace investigation inside one opened review's exe
 This keeps Job Protocol as the authoritative investigation experience while making stored execution
 traces searchable across all traces in one review.
 
-## ProRV Focused Guidance
+## ProRV Knowledge Lens
 
-The Reviewing module can run a ProRV prefilter stage before each file review. ProRV is a bounded
-review-knowledge library that ranks the most relevant review checks for one changed file from the
-file path, diff, and optional language hints. The ranked items become focused guidance for the
-downstream file review rather than standalone findings.
+ProRV is a bounded review-knowledge library (CodeQL-derived per-language checks plus GitHub-Actions
+attack classes, severity-graded) that ranks the most relevant review checks for one changed file
+from its path, diff, and language. It is exposed as a review-pass **lens** (`prorv`) on the
+per-client ordered review-pass list, alongside `security` — one entry, its configured model runs
+the pass. The ranked items become focused guidance for that pass rather than standalone findings.
 
-1. `ProRVFocusedReviewGuidanceResolver.TryResolveAsync(...)` runs before the main file prompt for
-   `FileByFile`.
-2. The stage is skipped when ProRV is not configured, the file is binary, the file was deleted, or
-   the diff is empty.
-3. Runtime selection prefers a dedicated `proRvPrefilter` AI purpose binding. If that binding is not
-   available, the stage falls back to the file review runtime instead of failing the whole review.
-4. `IProRVPrefilter` resolves a supported language from file extension or technology hints, loads
-   the embedded ProRV knowledge catalog for that language, and asks the configured chat runtime to
-   rank the most relevant checks.
-5. The result is bounded to a small set of ranked guidance items and recorded as protocol events.
-   The review continues when ProRV returns no items or an unusable response.
-6. `FileReviewer` and `AgenticFileReviewer` inject the ranked guidance into the file-scoped prompts
-   and emit `prorv_focused_guidance_applied` when guidance influenced the review context.
-7. ProRV narrows reviewer attention early, but verification, synthesis, deduplication, and the final
-   finding gate stay authoritative for publication decisions.
+1. A `prorv` lens entry runs inside the existing multi-pass fan-out on any complexity tier. A file is
+   eligible when it is a text file with a diff (binary, deleted, and empty-diff files are skipped
+   deterministically, with no model call).
+2. For an eligible file, `ProRVFocusedReviewGuidanceResolver.TryResolveAsync(...)` calls
+   `IProRVPrefilter` on the pass entry's own configured model to rank the applicable checks against
+   the embedded catalog for the file's language. This single ranking call both gates the pass and
+   produces the guidance; guidance is cached per (file path, catalog version) within a job.
+3. When no check applies (or the ranking is unusable), the pass is skipped for that file with a
+   reason-coded trace and no review model call — exactly like an unresolvable pass model.
+4. When checks apply, the ranked items are injected into the shared per-file review prompt as
+   `focusedReviewGuidanceSection`, and the pass reviews the file on its model. Findings carry the
+   lens on their provenance ("Pass N · ProRV"); `prorv_prefilter_*` and
+   `prorv_focused_guidance_applied` protocol events record the screen and its outcome.
+5. ProRV narrows reviewer attention on the files it applies to, but verification, synthesis,
+   deduplication, and the final finding gate stay authoritative for publication decisions.
 
 ## Synthesis And Final Finding Gate
 
 ```mermaid
 flowchart TD
-    CTX["Build review context"] --> PRORV["Optional ProRV prefilter"]
-    PRORV --> FILE["Parallel per-file review"]
+    CTX["Build review context"] --> FILE["Parallel per-file review (baseline + configured lens/resample passes)"]
     FILE --> HARD["Hard guards"]
     HARD --> REL["Comment relevance filter"]
     REL --> MEM["Thread memory reconsideration"]
@@ -270,9 +270,9 @@ flowchart TD
    provider pull-request refs into a shared local mirror and creates isolated per-review base/head
    worktrees so repository-content tools can read local source instead of repeating provider content
    calls.
-3. Before the main file prompt, ProRV can rank a small set of focused review guidance items from the
-    changed diff by using the dedicated `proRvPrefilter` AI purpose when configured, or the review
-    runtime as a fallback.
+3. When a client configures a `prorv` lens pass, that pass ranks a small set of focused review
+    guidance items from the changed diff on the pass entry's own configured model, then reviews the
+    file with that guidance injected (see the ProRV Knowledge Lens section).
 4. `ToolAwareAiReviewCore` reviews each file against diff-only prompts and can call
      `get_changed_files`, `get_file_tree`, `get_file_content`, the legacy scoped regex tools
     (`search_source_repo`, `search_source_changed_files`, `search_target_repo`,
@@ -361,7 +361,7 @@ as limitations rather than failing the whole request. Repository overview and fi
 results are branch-specific, structured, and cacheable within one review-context instance; missing
 neighborhood files produce explicit not-found limitations.
 
-For the file-based strategies, the common per-file post-processing shape is explicit through Reviewing-owned pipeline profiles and a shared pipeline runner. The `FileByFile` catalog now uses ordered stage composition to express `Calm`, `Balanced`, and `Assertive` behavior without introducing a new top-level orchestrator. `Balanced` keeps the confidence floor and info stripping, while `Assertive` keeps only info stripping plus importance ranking. Ahead of those per-file stages, the shared dispatch path always runs bounded context prefetch and deterministic risk-marker scanning. Risk-marked files then get a specialist augmentation pass, and files that remain silent after baseline plus specialist review can receive one bounded high-risk escalation pass before synthesis finalizes the review.
+For the file-based strategies, the common per-file post-processing shape is explicit through Reviewing-owned pipeline profiles and a shared pipeline runner. The `FileByFile` catalog now uses ordered stage composition to express `Calm`, `Balanced`, and `Assertive` behavior without introducing a new top-level orchestrator. `Balanced` keeps the confidence floor and info stripping, while `Assertive` keeps only info stripping plus importance ranking. Ahead of those per-file stages, the shared dispatch path always runs bounded context prefetch and deterministic risk-marker scanning. Extra scrutiny on risky files is opt-in through the per-client review-pass list: a `security` or `prorv` lens pass (or a plain resample pass) runs alongside the baseline pass and its findings are unioned before synthesis finalizes the review.
 
 **Windowed prefetch (R-1, 2026-06-10):** For files larger than `MaxPrefetchRegionChars`, the context-prefetch stage no longer injects the head of the file. Instead it computes new-file line ranges from each diff hunk (via `ReviewDiffProcessor.ExtractChangedNewLineRanges`), expands each range by `PrefetchWindowLinesBefore` (default 40) and `PrefetchWindowLinesAfter` (default 15), snaps the window start upward to the nearest structural boundary line (column-0 non-whitespace or line following a blank — a language-agnostic heuristic), merges overlapping windows, and renders only those windows with `[lines {start}-{end} of {total}]` markers. The budget cap `MaxPrefetchRegionChars` is enforced across the merged set. The `context_prefetch_applied` trace event now carries `windowCount`, `firstWindowStartLine`, and `windowedInjection` to distinguish the windowed path from whole-file injection.
 

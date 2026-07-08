@@ -885,7 +885,6 @@ public sealed class EfReviewDiagnosticsReader(
 
         foreach (var evt in protocol.Events)
         {
-            ApplyProRvProfileAppliedEvent(evt, accumulator);
             ApplyProRvAiCallEvent(evt, accumulator);
             ApplyProRvGuidanceAppliedEvent(evt, accumulator);
             ApplyProRvStageLifecycleEvent(evt, accumulator);
@@ -907,16 +906,6 @@ public sealed class EfReviewDiagnosticsReader(
                 accumulator.AppliedPromptKind,
                 accumulator.AppliedGuidanceIds)
             : null;
-    }
-
-    private static void ApplyProRvProfileAppliedEvent(ProtocolEvent evt, ProRvPrefilterAccumulator accumulator)
-    {
-        if (string.Equals(evt.Name, ReviewProtocolEventNames.ReviewPipelineProfileApplied, StringComparison.Ordinal) &&
-            (GetStringArray(evt.OutputSummary, "dispatchStageIds").Contains(FileByFileProRvPrefilterStage.StageIdConstant, StringComparer.Ordinal) ||
-             GetStringArray(evt.OutputSummary, "dispatchStageIds").Contains(AgenticProRvPrefilterStage.StageIdConstant, StringComparer.Ordinal)))
-        {
-            accumulator.Selected = true;
-        }
     }
 
     private static void ApplyProRvAiCallEvent(ProtocolEvent evt, ProRvPrefilterAccumulator accumulator)

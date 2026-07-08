@@ -613,7 +613,7 @@ public sealed class EfReviewDiagnosticsReaderTests
                 OccurredAt = DateTimeOffset.UtcNow.AddSeconds(-4),
                 InputTextSample = "{\"filePath\":\"src/Foo.cs\",\"profileId\":\"agentic-baseline\",\"strategy\":\"AgenticFileByFile\"}",
                 OutputSummary =
-                    $"{{\"profileId\":\"agentic-baseline\",\"dispatchStageIds\":[\"{AgenticProRvPrefilterStage.StageIdConstant}\"],\"perFileStageIds\":[\"{AgenticConfidenceFloorStage.StageIdConstant}\"],\"finalizationStageIds\":[\"{ReviewPipelineProfileProvider.FinalizeStageFamilyId}\"]}}",
+                    $"{{\"profileId\":\"agentic-baseline\",\"dispatchStageIds\":[\"{"agentic.prorv-prefilter"}\"],\"perFileStageIds\":[\"{AgenticConfidenceFloorStage.StageIdConstant}\"],\"finalizationStageIds\":[\"{ReviewPipelineProfileProvider.FinalizeStageFamilyId}\"]}}",
             });
         protocol.Events.Add(
             new ProtocolEvent
@@ -624,7 +624,7 @@ public sealed class EfReviewDiagnosticsReaderTests
                 Name = ReviewProtocolEventNames.ProRVPrefilterStarted,
                 OccurredAt = DateTimeOffset.UtcNow.AddSeconds(-3),
                 InputTextSample =
-                    $"{{\"purpose\":\"ProRVPrefilter\",\"filePath\":\"src/Foo.cs\",\"stageId\":\"{AgenticProRvPrefilterStage.StageIdConstant}\",\"details\":null}}",
+                    $"{{\"purpose\":\"ProRVPrefilter\",\"filePath\":\"src/Foo.cs\",\"stageId\":\"{"agentic.prorv-prefilter"}\",\"details\":null}}",
             });
         protocol.Events.Add(
             new ProtocolEvent
@@ -635,9 +635,9 @@ public sealed class EfReviewDiagnosticsReaderTests
                 Name = ReviewProtocolEventNames.ProRVPrefilterAiCall,
                 OccurredAt = DateTimeOffset.UtcNow.AddSeconds(-2),
                 InputTextSample =
-                    $"{{\"purpose\":\"ProRVPrefilter\",\"filePath\":\"src/Foo.cs\",\"stageId\":\"{AgenticProRvPrefilterStage.StageIdConstant}\",\"status\":\"Success\",\"language\":\"csharp\",\"runtimeSource\":\"dedicated_runtime\"}}",
+                    $"{{\"purpose\":\"ProRVPrefilter\",\"filePath\":\"src/Foo.cs\",\"stageId\":\"{"agentic.prorv-prefilter"}\",\"status\":\"Success\",\"language\":\"csharp\",\"runtimeSource\":\"dedicated_runtime\"}}",
                 SystemPrompt =
-                    $"{{\"purpose\":\"ProRVPrefilter\",\"stageId\":\"{AgenticProRvPrefilterStage.StageIdConstant}\",\"modelId\":\"gpt-5.4-mini\",\"runtimeSource\":\"dedicated_runtime\"}}",
+                    $"{{\"purpose\":\"ProRVPrefilter\",\"stageId\":\"{"agentic.prorv-prefilter"}\",\"modelId\":\"gpt-5.4-mini\",\"runtimeSource\":\"dedicated_runtime\"}}",
                 OutputSummary = "{\"ranked_checks\":[]}",
             });
         protocol.Events.Add(
@@ -649,7 +649,7 @@ public sealed class EfReviewDiagnosticsReaderTests
                 Name = ReviewProtocolEventNames.ProRVPrefilterCompleted,
                 OccurredAt = DateTimeOffset.UtcNow.AddSeconds(-1),
                 InputTextSample =
-                    $"{{\"purpose\":\"ProRVPrefilter\",\"filePath\":\"src/Foo.cs\",\"stageId\":\"{AgenticProRvPrefilterStage.StageIdConstant}\",\"details\":null}}",
+                    $"{{\"purpose\":\"ProRVPrefilter\",\"filePath\":\"src/Foo.cs\",\"stageId\":\"{"agentic.prorv-prefilter"}\",\"details\":null}}",
                 OutputSummary =
                     "{\"runtimeSource\":\"dedicated_runtime\",\"modelId\":\"gpt-5.4-mini\",\"proRvStatus\":\"Success\",\"guidanceCount\":1,\"language\":\"csharp\"}",
             });
@@ -680,7 +680,7 @@ public sealed class EfReviewDiagnosticsReaderTests
         Assert.True(returnedProtocol.ProRvPrefilter!.Selected);
         Assert.True(returnedProtocol.ProRvPrefilter.AiCallRecorded);
         Assert.Equal("completed", returnedProtocol.ProRvPrefilter.ExecutionState);
-        Assert.Equal(AgenticProRvPrefilterStage.StageIdConstant, returnedProtocol.ProRvPrefilter.StageId);
+        Assert.Equal("agentic.prorv-prefilter", returnedProtocol.ProRvPrefilter.StageId);
         Assert.Equal("dedicated_runtime", returnedProtocol.ProRvPrefilter.RuntimeSource);
         Assert.Equal("gpt-5.4-mini", returnedProtocol.ProRvPrefilter.ModelId);
         Assert.Equal("csharp", returnedProtocol.ProRvPrefilter.Language);

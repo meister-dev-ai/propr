@@ -61,7 +61,7 @@ public sealed record ReviewComment
 
     /// <summary>
     ///     The <c>ReviewPassKind</c> name of the review pass that produced this finding (e.g.
-    ///     <c>"Baseline"</c>, <c>"ProRVAugmentation"</c>), when known. Provenance metadata only:
+    ///     <c>"Baseline"</c>, <c>"MultiPassUnion"</c>), when known. Provenance metadata only:
     ///     it does not participate in deduplication (which keys on message text) and is
     ///     <see langword="null" /> for legacy comments and comments with no recorded origin.
     /// </summary>

@@ -21,14 +21,15 @@ describe('originLabel', () => {
         expect(originLabel('MultiPassUnion', null, 'security')).toBe('Additional pass · Security')
     })
 
-    it('maps the baseline and ProRV kinds to their labels regardless of lens', () => {
+    it('maps the baseline kind to its label regardless of lens', () => {
         expect(originLabel('Baseline')).toBe('Initial review')
-        expect(originLabel('ProRVAugmentation')).toBe('ProRV verification')
     })
 
     it('returns null for an unknown origin so no badge is rendered', () => {
         expect(originLabel(null)).toBeNull()
         expect(originLabel('Nonsense')).toBeNull()
+        // Legacy rows carrying the retired raw pass kind fall through to no badge.
+        expect(originLabel('ProRVAugmentation')).toBeNull()
     })
 })
 

@@ -172,69 +172,6 @@ public sealed class CandidateFindingFactoryTests
     }
 
     [Fact]
-    public void MergeFindings_AugmentationOnlyFinding_IsTaggedAsProRvOnly()
-    {
-        var augmentationFinding = new CandidateReviewFinding(
-            "finding-aug-001",
-            new CandidateFindingProvenance(
-                CandidateFindingProvenance.PerFileCommentOrigin,
-                "per_file_review",
-                "src/Foo.cs",
-                reviewPassKind: ReviewPassKind.ProRVAugmentation,
-                findingProvenanceKind: FindingProvenanceKind.ProRVOnly),
-            CommentSeverity.Warning,
-            "Augmentation-only issue.",
-            CandidateReviewFinding.PerFileCommentCategory,
-            "src/Foo.cs",
-            12);
-
-        var merged = CandidateFindingFactory.MergeFindings([], [augmentationFinding]);
-
-        var finding = Assert.Single(merged);
-        Assert.NotNull(finding.MergedFinding);
-        Assert.Equal(FindingProvenanceKind.ProRVOnly, finding.MergedFinding!.Provenance);
-        Assert.Equal([ReviewPassKind.ProRVAugmentation], finding.MergedFinding.SourcePasses);
-    }
-
-    [Fact]
-    public void MergeFindings_ExactBaselineAndAugmentationMatch_MergesToBoth()
-    {
-        var baselineFinding = new CandidateReviewFinding(
-            "finding-base-001",
-            new CandidateFindingProvenance(
-                CandidateFindingProvenance.PerFileCommentOrigin,
-                "per_file_review",
-                "src/Foo.cs",
-                reviewPassKind: ReviewPassKind.Baseline,
-                findingProvenanceKind: FindingProvenanceKind.BaselineOnly),
-            CommentSeverity.Warning,
-            "Shared issue.",
-            CandidateReviewFinding.PerFileCommentCategory,
-            "src/Foo.cs",
-            12);
-        var augmentationFinding = new CandidateReviewFinding(
-            "finding-aug-001",
-            new CandidateFindingProvenance(
-                CandidateFindingProvenance.PerFileCommentOrigin,
-                "per_file_review",
-                "src/Foo.cs",
-                reviewPassKind: ReviewPassKind.ProRVAugmentation,
-                findingProvenanceKind: FindingProvenanceKind.ProRVOnly),
-            CommentSeverity.Warning,
-            "Shared issue.",
-            CandidateReviewFinding.PerFileCommentCategory,
-            "src/Foo.cs",
-            12);
-
-        var merged = CandidateFindingFactory.MergeFindings([baselineFinding], [augmentationFinding]);
-
-        var finding = Assert.Single(merged);
-        Assert.NotNull(finding.MergedFinding);
-        Assert.Equal(FindingProvenanceKind.Both, finding.MergedFinding!.Provenance);
-        Assert.Equal([ReviewPassKind.Baseline, ReviewPassKind.ProRVAugmentation], finding.MergedFinding.SourcePasses);
-    }
-
-    [Fact]
     public void Build_FindingOnChangedLine_ClassifiesAsOnChangedLine()
     {
         var comment = new ReviewComment("src/Foo.cs", 12, CommentSeverity.Warning, "On a changed line.");

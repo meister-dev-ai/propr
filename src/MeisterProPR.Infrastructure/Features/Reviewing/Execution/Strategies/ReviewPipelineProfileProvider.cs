@@ -35,7 +35,6 @@ internal sealed class ReviewPipelineProfileProvider : IReviewPipelineProfileProv
                     [
                         FileByFileContextPrefetchStage.StageIdConstant,
                         FileByFileRiskMarkerStage.StageIdConstant,
-                        FileByFileProRvPrefilterStage.StageIdConstant,
                     ],
                     [
                         FileByFileConfidenceFloorStage.StageIdConstant,
@@ -51,7 +50,6 @@ internal sealed class ReviewPipelineProfileProvider : IReviewPipelineProfileProv
                     [
                         FileByFileContextPrefetchStage.StageIdConstant,
                         FileByFileRiskMarkerStage.StageIdConstant,
-                        FileByFileProRvPrefilterStage.StageIdConstant,
                     ],
                     [
                         FileByFileConfidenceFloorStage.StageIdConstant,
@@ -68,7 +66,6 @@ internal sealed class ReviewPipelineProfileProvider : IReviewPipelineProfileProv
                     [
                         FileByFileContextPrefetchStage.StageIdConstant,
                         FileByFileRiskMarkerStage.StageIdConstant,
-                        FileByFileProRvPrefilterStage.StageIdConstant,
                     ],
                     [
                         FileByFileConfidenceFloorStage.StageIdConstant,
@@ -87,7 +84,6 @@ internal sealed class ReviewPipelineProfileProvider : IReviewPipelineProfileProv
                     [
                         FileByFileContextPrefetchStage.StageIdConstant,
                         FileByFileRiskMarkerStage.StageIdConstant,
-                        FileByFileProRvPrefilterStage.StageIdConstant,
                     ],
                     [
                         FileByFileSemanticScreeningStage.StageIdConstant,
@@ -105,7 +101,7 @@ internal sealed class ReviewPipelineProfileProvider : IReviewPipelineProfileProv
                     ReviewPipelineProfileCatalog.AgenticBaselineProfileId,
                     "Agentic baseline",
                     ReviewStrategy.AgenticFileByFile,
-                    [AgenticProRvPrefilterStage.StageIdConstant],
+                    [],
                     [
                         AgenticConfidenceFloorStage.StageIdConstant,
                         FileByFileSemanticScreeningStage.StageIdConstant,
@@ -117,7 +113,7 @@ internal sealed class ReviewPipelineProfileProvider : IReviewPipelineProfileProv
                     ReviewPipelineProfileCatalog.AgenticExperimentalProfileId,
                     "Agentic experimental",
                     ReviewStrategy.AgenticFileByFile,
-                    [AgenticProRvPrefilterStage.StageIdConstant],
+                    [],
                     [
                         FileByFileSemanticScreeningStage.StageIdConstant,
                         AgenticInfoCommentStripStage.StageIdConstant,

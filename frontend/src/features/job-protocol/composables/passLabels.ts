@@ -3,7 +3,7 @@
 
 // Single source of truth for the pass taxonomy shown in the trace selector,
 // breadcrumb, and origin badges. The UI must never surface raw enum identifiers
-// (e.g. "ProRVAugmentation").
+// (e.g. "MultiPassUnion").
 
 /** Labels for the PR-level (non-file) passes, derived from the protocol label. */
 const PR_LEVEL_LABELS: Record<string, string> = {
@@ -38,8 +38,6 @@ export function passKindLabel(
     switch (passKind) {
         case 'Baseline':
             return 'Initial review'
-        case 'ProRVAugmentation':
-            return 'ProRV verification'
         case 'MultiPassUnion':
             return multiPassUnionLabel(reason)
         case 'Synthesis':
@@ -63,8 +61,8 @@ function lensLabel(lens: string): string {
 }
 
 /**
- * Provenance label for a finding's origin pass. Baseline vs ProRVAugmentation vs
- * MultiPassUnion vs Synthesis. When a multi-pass union finding carries its 1-based
+ * Provenance label for a finding's origin pass. Baseline vs MultiPassUnion vs
+ * Synthesis. When a multi-pass union finding carries its 1-based
  * pass index (the tier baseline is pass 1, so additional passes are 2..k) the badge
  * renders "Pass N"; without an index it falls back to the generic "Additional pass".
  * A specialist lens (e.g. security) is appended as "Pass N · Security". Returns null
@@ -78,8 +76,6 @@ export function originLabel(
     switch (originPassKind) {
         case 'Baseline':
             return 'Initial review'
-        case 'ProRVAugmentation':
-            return 'ProRV verification'
         case 'MultiPassUnion': {
             const base = typeof originPassIndex === 'number' ? `Pass ${originPassIndex}` : 'Additional pass'
             return originPassLens ? `${base} · ${lensLabel(originPassLens)}` : base

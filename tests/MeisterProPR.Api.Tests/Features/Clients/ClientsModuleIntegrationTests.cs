@@ -42,7 +42,6 @@ public sealed class ClientsModuleIntegrationTests(ClientsControllerTests.Clients
         Assert.DoesNotContain("secret", payload, StringComparison.OrdinalIgnoreCase);
         var body = JsonDocument.Parse(payload).RootElement;
         Assert.Equal(displayName, body.GetProperty("displayName").GetString());
-        Assert.False(body.GetProperty("enableProRV").GetBoolean());
         Assert.False(body.TryGetProperty("hasAdoCredentials", out _));
     }
 
@@ -124,7 +123,6 @@ public sealed class ClientsModuleIntegrationTests(ClientsControllerTests.Clients
         Assert.Equal(HttpStatusCode.OK, getResponse.StatusCode);
         var body = JsonDocument.Parse(await getResponse.Content.ReadAsStringAsync()).RootElement;
         Assert.Equal("fileByFile", body.GetProperty("defaultReviewStrategy").GetString());
-        Assert.False(body.GetProperty("enableProRV").GetBoolean());
     }
 }
 

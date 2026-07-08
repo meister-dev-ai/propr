@@ -33,7 +33,7 @@ internal sealed class FileReviewDispatchPlanner(
         IChatClient effectiveClient,
         CancellationToken ct)
     {
-        var executionContext = CreateExecutionContext(baseContext);
+        var executionContext = baseContext;
         var jobWithResults = await jobRepository.GetByIdWithFileResultsAsync(job.Id, ct) ?? job;
 
         var existingResults = jobWithResults.FileReviewResults.ToDictionary(r => r.FilePath);
@@ -126,42 +126,6 @@ internal sealed class FileReviewDispatchPlanner(
         {
             semaphore.Dispose();
         }
-    }
-
-    private static ReviewSystemContext CreateExecutionContext(ReviewSystemContext baseContext)
-    {
-        if (baseContext.AugmentationMode != ReviewAugmentationMode.LateAugmentation)
-        {
-            return baseContext;
-        }
-
-        return new ReviewSystemContext(baseContext.ClientSystemMessage, baseContext.RepositoryInstructions, baseContext.ReviewTools)
-        {
-            LoopMetrics = baseContext.LoopMetrics,
-            ActiveProtocolId = baseContext.ActiveProtocolId,
-            ProtocolRecorder = baseContext.ProtocolRecorder,
-            ExclusionRules = baseContext.ExclusionRules,
-            DismissedPatterns = baseContext.DismissedPatterns,
-            PromptOverrides = baseContext.PromptOverrides,
-            TierChatClient = baseContext.TierChatClient,
-            ModelId = baseContext.ModelId,
-            DefaultReviewChatClient = baseContext.DefaultReviewChatClient,
-            DefaultReviewModelId = baseContext.DefaultReviewModelId,
-            RuntimeCapabilities = baseContext.RuntimeCapabilities,
-            Temperature = baseContext.Temperature,
-            EnableProRV = false,
-            EnableEvidenceBackedVerification = baseContext.EnableEvidenceBackedVerification,
-            EnableLanguageRobustScreening = baseContext.EnableLanguageRobustScreening,
-            EnableMultiPassUnion = baseContext.EnableMultiPassUnion,
-            MultiPassUnionPassCount = baseContext.MultiPassUnionPassCount,
-            ReviewPasses = baseContext.ReviewPasses,
-            MultiPassDiversity = baseContext.MultiPassDiversity,
-            AugmentationMode = baseContext.AugmentationMode,
-            PassKind = baseContext.PassKind,
-            PerFileHint = baseContext.PerFileHint,
-            PromptExperiment = baseContext.PromptExperiment,
-            SkippedSteps = baseContext.SkippedSteps,
-        };
     }
 
     private async Task MarkFileExcludedAsync(

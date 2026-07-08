@@ -16,8 +16,16 @@ public static class ReviewPassLens
     /// </summary>
     public const string Security = "security";
 
+    /// <summary>
+    ///     Knowledge-guided review lens. A pass with this lens screens the file against the embedded ProRV catalog
+    ///     (CodeQL-derived per-language checks + GitHub-Actions attack classes), injects the applicable checks as
+    ///     focused guidance, and runs on any tier when at least one check applies — a file the catalog finds nothing
+    ///     for is skipped for that pass.
+    /// </summary>
+    public const string ProRV = "prorv";
+
     /// <summary>All recognized lens values.</summary>
-    public static IReadOnlyCollection<string> Known { get; } = [Security];
+    public static IReadOnlyCollection<string> Known { get; } = [Security, ProRV];
 
     /// <summary>
     ///     True when <paramref name="lens" /> is <see langword="null" /> (an ordinary pass) or a recognized lens value.

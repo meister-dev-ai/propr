@@ -26,9 +26,6 @@ public sealed class ReviewingExecutionServiceCollectionExtensionsTests
         Assert.Equal(ServiceLifetime.Singleton, GetLifetime<AgenticCandidateFindingFactory>(services));
         Assert.Equal(ServiceLifetime.Singleton, GetLifetime<QualityFilterExecutor>(services));
         Assert.Equal(ServiceLifetime.Singleton, GetLifetime<IProRVPrefilter>(services));
-        Assert.Equal(
-            ServiceLifetime.Scoped,
-            services.Single(descriptor => descriptor.ImplementationType == typeof(FileByFileProRvPrefilterStage)).Lifetime);
     }
 
     [Fact]

@@ -151,13 +151,11 @@ public sealed class ReviewWorkflowRunner(
                 ExclusionRules = exclusionRules,
                 ModelId = request.Configuration?.ModelSelection.ModelId ?? request.ModelId,
                 Temperature = request.Configuration?.Temperature,
-                EnableProRV = request.Configuration?.EnableProRV ?? false,
                 EnableEvidenceBackedVerification = request.Configuration?.EnableEvidenceBackedVerification ?? false,
                 EnableLanguageRobustScreening = request.Configuration?.EnableLanguageRobustScreening ?? false,
                 EnableMultiPassUnion = request.Configuration?.EnableMultiPassUnion ?? false,
                 MultiPassUnionPassCount = request.Configuration?.MultiPassUnionPassCount,
                 MultiPassDiversity = request.Configuration?.MultiPassDiversity,
-                AugmentationMode = request.EffectiveAugmentationMode,
                 PromptExperiment = promptExperimentContext,
                 SkippedSteps = request.EffectiveSkippedSteps,
                 ReviewWorkspace = workspacePreparation.Workspace,
@@ -203,8 +201,7 @@ public sealed class ReviewWorkflowRunner(
                 jobs.GetById(job.Id) ?? job,
                 result,
                 protocols,
-                this._boundaryIssues,
-                context.AugmentationMode);
+                this._boundaryIssues);
         }
         catch (Exception ex)
         {

@@ -92,24 +92,6 @@ describe('chip matching', () => {
         })
     })
 
-    describe('High-risk re-review', () => {
-        it('matches a ProRVAugmentation pass kind', () => {
-            expect(chipMatches('highRiskReReview', pass({ passKind: 'ProRVAugmentation' }), event())).toBe(true)
-        })
-
-        it('matches a pass whose reason starts with "high-risk file"', () => {
-            expect(chipMatches('highRiskReReview', pass({ reason: 'high-risk file re-review triggered' }), event())).toBe(true)
-        })
-
-        it('does not match a baseline pass with an unrelated reason', () => {
-            expect(chipMatches('highRiskReReview', pass({ passKind: 'Baseline', reason: 'routine pass' }), event())).toBe(false)
-        })
-
-        it('does not match a PR-wide pass with no relevant metadata', () => {
-            expect(chipMatches('highRiskReReview', pass({ passKind: null, reason: null }), event())).toBe(false)
-        })
-    })
-
     describe('Comment-relevance discarded', () => {
         const discardNames = [
             'comment_relevance_filter_output',

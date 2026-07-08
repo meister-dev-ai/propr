@@ -28,8 +28,7 @@ public sealed class ReviewEvaluationModelsTests
         var configuration = new EvaluationConfiguration(
             "baseline",
             new EvaluationModelSelection(["gpt-4o"]),
-            new EvaluationOutputOptions("artifacts/run.json", "full"),
-            EnableProRV: false);
+            new EvaluationOutputOptions("artifacts/run.json", "full"));
 
         var request = new ReviewWorkflowRequest(job, chatClient, "gpt-4o", fixture, configuration);
 
@@ -39,84 +38,10 @@ public sealed class ReviewEvaluationModelsTests
         Assert.Same(fixture, request.Fixture);
         Assert.Same(configuration, request.Configuration);
         Assert.NotNull(request.Configuration);
-        Assert.False(request.Configuration.EnableProRV);
-        Assert.Equal(ReviewAugmentationMode.Disabled, request.Configuration.EffectiveAugmentationMode);
-        Assert.Equal(ReviewAugmentationMode.Disabled, request.EffectiveAugmentationMode);
     }
 
     [Fact]
-    public void ReviewWorkflowRequest_ExplicitAugmentationModeOverridesConfiguration()
-    {
-        var job = new ReviewJob(
-            Guid.NewGuid(),
-            Guid.NewGuid(),
-            "https://dev.azure.com/example",
-            "sample-project",
-            "sample-repository",
-            42,
-            1);
-        var chatClient = Substitute.For<IChatClient>();
-        var configuration = new EvaluationConfiguration(
-            "baseline",
-            new EvaluationModelSelection(["gpt-4o"]),
-            new EvaluationOutputOptions("artifacts/run.json", "full"),
-            AugmentationMode: ReviewAugmentationMode.Disabled);
-
-        var request = new ReviewWorkflowRequest(
-            job,
-            chatClient,
-            "gpt-4o",
-            Configuration: configuration,
-            AugmentationMode: ReviewAugmentationMode.LateAugmentation);
-
-        Assert.Equal(ReviewAugmentationMode.LateAugmentation, request.EffectiveAugmentationMode);
-    }
-
-    [Fact]
-    public void ReviewWorkflowRequest_OmittedAugmentationDefaultsToDisabled()
-    {
-        var job = new ReviewJob(
-            Guid.NewGuid(),
-            Guid.NewGuid(),
-            "https://dev.azure.com/example",
-            "sample-project",
-            "sample-repository",
-            42,
-            1);
-        var chatClient = Substitute.For<IChatClient>();
-
-        var request = new ReviewWorkflowRequest(job, chatClient, "gpt-4o");
-
-        Assert.Equal(ReviewAugmentationMode.Disabled, request.EffectiveAugmentationMode);
-    }
-
-    [Fact]
-    public void EvaluationConfiguration_OmittedProRvDefaultsToDisabled()
-    {
-        var configuration = new EvaluationConfiguration(
-            "baseline",
-            new EvaluationModelSelection(["gpt-4o"]),
-            new EvaluationOutputOptions("artifacts/run.json", "full"));
-
-        Assert.False(configuration.EnableProRV);
-        Assert.Equal(ReviewAugmentationMode.Disabled, configuration.EffectiveAugmentationMode);
-    }
-
-    [Fact]
-    public void EvaluationConfiguration_ExplicitAugmentationModeOverridesLegacyBoolean()
-    {
-        var configuration = new EvaluationConfiguration(
-            "late-steering",
-            new EvaluationModelSelection(["gpt-4o"]),
-            new EvaluationOutputOptions("artifacts/run.json", "full"),
-            EnableProRV: true,
-            AugmentationMode: ReviewAugmentationMode.LateAugmentation);
-
-        Assert.Equal(ReviewAugmentationMode.LateAugmentation, configuration.EffectiveAugmentationMode);
-    }
-
-    [Fact]
-    public void CandidateReviewFinding_WithMergedProvenanceCapturesLateSteeringMetadata()
+    public void CandidateReviewFinding_WithMergedProvenanceCapturesMultiPassMetadata()
     {
         var finding = new CandidateReviewFinding(
             "finding-001",
@@ -134,20 +59,20 @@ public sealed class ReviewEvaluationModelsTests
 
         var merged = finding.WithMergedProvenance(
             FindingProvenanceKind.Both,
-            [ReviewPassKind.Baseline, ReviewPassKind.ProRVAugmentation],
+            [ReviewPassKind.Baseline, ReviewPassKind.MultiPassUnion],
             "deduped identical semantic issue",
             "identity-1",
             "merge-group-1");
 
         Assert.NotNull(merged.MergedFinding);
         Assert.Equal(FindingProvenanceKind.Both, merged.MergedFinding!.Provenance);
-        Assert.Equal([ReviewPassKind.Baseline, ReviewPassKind.ProRVAugmentation], merged.MergedFinding.SourcePasses);
+        Assert.Equal([ReviewPassKind.Baseline, ReviewPassKind.MultiPassUnion], merged.MergedFinding.SourcePasses);
         Assert.Equal("identity-1", merged.MergedFinding.IdentityKey);
         Assert.Equal("merge-group-1", merged.MergedFinding.MergeGroupKey);
     }
 
     [Fact]
-    public void ReviewWorkflowResult_ExposesMergedCandidateFindingsAndAugmentationMode()
+    public void ReviewWorkflowResult_ExposesMergedCandidateFindings()
     {
         var job = new ReviewJob(
             Guid.NewGuid(),
@@ -179,10 +104,8 @@ public sealed class ReviewEvaluationModelsTests
             job,
             new ReviewResult("summary", []),
             [],
-            AugmentationMode: ReviewAugmentationMode.LateAugmentation,
             MergedCandidateFindings: [mergedFinding]);
 
-        Assert.Equal(ReviewAugmentationMode.LateAugmentation, result.AugmentationMode);
         Assert.Single(result.MergedCandidateFindingsOrEmpty);
         Assert.Equal("identity-001", result.MergedCandidateFindingsOrEmpty[0].IdentityKey);
     }
@@ -216,8 +139,6 @@ public sealed class ReviewEvaluationModelsTests
                 "gpt-4o",
                 "full",
                 ReviewStrategy.PrWideAgentic,
-                true,
-                ReviewAugmentationMode.EarlySteering.ToString(),
                 new Dictionary<string, int>(StringComparer.Ordinal)
                 {
                     ["baselineOnly"] = 0,
@@ -273,7 +194,6 @@ public sealed class ReviewEvaluationModelsTests
         Assert.Equal("fixture-sample", artifact.Fixture.FixtureId);
         Assert.Equal("baseline", artifact.Configuration.ConfigurationId);
         Assert.Equal(ReviewStrategy.PrWideAgentic, artifact.Configuration.Strategy);
-        Assert.True(artifact.Configuration.EnableProRV);
         Assert.Single(artifact.FinalResult.Comments);
         Assert.Single(artifact.Stages);
         Assert.Equal(20, artifact.TokenUsage.TotalInputTokens);

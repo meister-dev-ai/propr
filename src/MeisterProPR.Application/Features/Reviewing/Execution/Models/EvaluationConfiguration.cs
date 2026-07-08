@@ -8,28 +8,6 @@ namespace MeisterProPR.Application.Features.Reviewing.Execution.Models;
 /// <summary>
 ///     Portable non-secret configuration for one offline review execution.
 /// </summary>
-public enum ReviewAugmentationMode
-{
-    /// <summary>
-    ///     Augmentation mode is disabled. No ProRV execution or integration will take place, and no related configuration properties need to be set.
-    /// </summary>
-    Disabled,
-
-    /// <summary>
-    ///     Augmentation mode is enabled for early steering. ProRV execution and integration will take place during the early stages of the review process.
-    /// </summary>
-    EarlySteering,
-
-    /// <summary>
-    ///     Augmentation mode is enabled for late augmentation. ProRV execution and integration will take place during the later stages of the review process, such as
-    ///     synthesis and finalization.
-    /// </summary>
-    LateAugmentation,
-}
-
-/// <summary>
-///     Portable non-secret configuration for one offline review execution.
-/// </summary>
 public sealed record EvaluationConfiguration(
     string ConfigurationId,
     EvaluationModelSelection ModelSelection,
@@ -38,13 +16,11 @@ public sealed record EvaluationConfiguration(
     IReadOnlyDictionary<string, string>? RunMetadata = null,
     EvaluationAiConnection? AiConnection = null,
     float? Temperature = null,
-    bool EnableProRV = false,
     bool EnableEvidenceBackedVerification = false,
     bool EnableLanguageRobustScreening = false,
     bool EnableMultiPassUnion = false,
     int? MultiPassUnionPassCount = null,
     MultiPassDiversity? MultiPassDiversity = null,
-    ReviewAugmentationMode? AugmentationMode = null,
     EvaluationProCursorContext? ProCursor = null)
 {
     /// <summary>Protected values that must be resolved before execution begins.</summary>
@@ -52,13 +28,6 @@ public sealed record EvaluationConfiguration(
 
     /// <summary>Optional metadata labels used to identify the run configuration.</summary>
     public IReadOnlyDictionary<string, string> RunMetadataOrEmpty => this.RunMetadata ?? new Dictionary<string, string>();
-
-    /// <summary>
-    ///     Effective augmentation mode for this evaluation run. Explicit mode wins; otherwise preserve existing
-    ///     boolean compatibility for older configuration files.
-    /// </summary>
-    public ReviewAugmentationMode EffectiveAugmentationMode => this.AugmentationMode
-                                                               ?? (this.EnableProRV ? ReviewAugmentationMode.EarlySteering : ReviewAugmentationMode.Disabled);
 }
 
 /// <summary>

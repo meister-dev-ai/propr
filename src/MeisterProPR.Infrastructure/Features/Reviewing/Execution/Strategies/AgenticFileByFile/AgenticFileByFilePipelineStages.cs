@@ -5,69 +5,8 @@ using MeisterProPR.Application.Features.Reviewing.Execution.Models;
 using MeisterProPR.Application.Features.Reviewing.Execution.Ports;
 using MeisterProPR.Application.Interfaces;
 using MeisterProPR.Application.Options;
-using MeisterProPR.ProRV.Abstractions;
-using Microsoft.Extensions.Logging;
 
 namespace MeisterProPR.Infrastructure.Features.Reviewing.Execution.Strategies.AgenticFileByFile;
-
-internal sealed class AgenticProRvPrefilterStage(
-    IProtocolRecorder protocolRecorder,
-    IProRVPrefilter? proRvPrefilter,
-    IAiConnectionRepository? aiConnectionRepository,
-    IAiChatClientFactory? aiClientFactory,
-    IAiRuntimeResolver? aiRuntimeResolver,
-    ILogger<AgenticProRvPrefilterStage> logger) : IReviewPipelineStage<PerFileReviewContext>
-{
-    // This id is part of persisted/profile-selected Reviewing protocol identity.
-    public const string StageIdConstant = "agentic.prorv-prefilter";
-
-    public string StageId => StageIdConstant;
-
-    public async Task<PerFileReviewContext> ExecuteAsync(PerFileReviewContext context, CancellationToken cancellationToken)
-    {
-        if (context.ReviewResult is not null ||
-            context.FileReviewContext.PerFileHint is null ||
-            !context.FileReviewContext.EnableProRV ||
-            (context.FileReviewContext.AugmentationMode != ReviewAugmentationMode.EarlySteering
-             && context.FileReviewContext.PassKind != ReviewPassKind.ProRVAugmentation))
-        {
-            return context;
-        }
-
-        var fallbackChatClient = context.FileReviewContext.TierChatClient ?? context.FileReviewContext.DefaultReviewChatClient;
-        if (fallbackChatClient is null)
-        {
-            return context;
-        }
-
-        var focusedReviewGuidance = await ProRVFocusedReviewGuidanceResolver.TryResolveAsync(
-            context.Job,
-            context.ChangedFile,
-            context.FileReviewContext,
-            fallbackChatClient,
-            context.ProtocolId,
-            protocolRecorder,
-            proRvPrefilter,
-            aiConnectionRepository,
-            aiClientFactory,
-            aiRuntimeResolver,
-            logger,
-            StageIdConstant,
-            cancellationToken);
-
-        if (focusedReviewGuidance.Guidance.Count == 0)
-        {
-            return context;
-        }
-
-        context.FileReviewContext.PerFileHint = context.FileReviewContext.PerFileHint with
-        {
-            FocusedReviewGuidance = focusedReviewGuidance.Guidance,
-        };
-
-        return context;
-    }
-}
 
 internal sealed class AgenticConfidenceFloorStage(AiReviewOptions options, IProtocolRecorder? protocolRecorder = null)
     : IReviewPipelineStage<PerFileReviewContext>

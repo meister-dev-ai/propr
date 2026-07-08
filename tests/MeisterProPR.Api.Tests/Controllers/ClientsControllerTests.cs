@@ -493,13 +493,11 @@ public sealed class ClientsControllerTests(ClientsControllerTests.ClientsApiFact
         Assert.False(body.RootElement.TryGetProperty("key", out _), "Raw key must never be returned.");
         Assert.Equal("Test Client", body.RootElement.GetProperty("displayName").GetString());
         Assert.True(body.RootElement.GetProperty("isActive").GetBoolean());
-        Assert.False(body.RootElement.GetProperty("enableProRV").GetBoolean());
 
         using var verificationScope = factory.Services.CreateScope();
         var verificationDb = verificationScope.ServiceProvider.GetRequiredService<MeisterProPRDbContext>();
         var createdClient = await verificationDb.Clients.SingleAsync(record => record.Id == createdClientId);
         Assert.Equal(tenantId, createdClient.TenantId);
-        Assert.False(createdClient.EnableProRV);
     }
 
     [Theory]
@@ -711,41 +709,6 @@ public sealed class ClientsControllerTests(ClientsControllerTests.ClientsApiFact
     }
 
     [Fact]
-    public async Task PatchClient_EnableProRv_PersistedAndReturned()
-    {
-        using var scope = factory.Services.CreateScope();
-        var db = scope.ServiceProvider.GetRequiredService<MeisterProPRDbContext>();
-        var tenantId = Guid.NewGuid();
-        db.Tenants.Add(CreateTenantRecord(tenantId, "prorv-test", "ProRV Tenant"));
-        var record = new ClientRecord
-        {
-            Id = Guid.NewGuid(),
-            TenantId = tenantId,
-            DisplayName = "ProRV Test",
-            IsActive = true,
-            CreatedAt = DateTimeOffset.UtcNow,
-            EnableProRV = true,
-        };
-        db.Clients.Add(record);
-        await db.SaveChangesAsync();
-
-        var client = factory.CreateClient();
-        using var request = new HttpRequestMessage(HttpMethod.Patch, $"/clients/{record.Id}");
-        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", factory.GenerateAdminToken());
-        request.Content = JsonContent.Create(new { enableProRV = false });
-
-        var response = await client.SendAsync(request);
-        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
-
-        var body = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
-        Assert.False(body.RootElement.GetProperty("enableProRV").GetBoolean());
-
-        db.ChangeTracker.Clear();
-        var updated = await db.Clients.SingleAsync(c => c.Id == record.Id);
-        Assert.False(updated.EnableProRV);
-    }
-
-    [Fact]
     public async Task PatchClient_EnableEvidenceBackedVerification_PersistedAndReturned()
     {
         using var scope = factory.Services.CreateScope();
@@ -813,37 +776,6 @@ public sealed class ClientsControllerTests(ClientsControllerTests.ClientsApiFact
         db.ChangeTracker.Clear();
         var updated = await db.Clients.SingleAsync(c => c.Id == record.Id);
         Assert.True(updated.EnableMultiPassUnion);
-    }
-
-    [Fact]
-    public async Task PatchClient_OmittedEnableProRv_LeavesExistingValueUnchanged()
-    {
-        using var scope = factory.Services.CreateScope();
-        var db = scope.ServiceProvider.GetRequiredService<MeisterProPRDbContext>();
-        var tenantId = Guid.NewGuid();
-        db.Tenants.Add(CreateTenantRecord(tenantId, "prorv-omit", "ProRV Omit Tenant"));
-        var record = new ClientRecord
-        {
-            Id = Guid.NewGuid(),
-            TenantId = tenantId,
-            DisplayName = "ProRV Omit",
-            IsActive = true,
-            CreatedAt = DateTimeOffset.UtcNow,
-            EnableProRV = false,
-        };
-        db.Clients.Add(record);
-        await db.SaveChangesAsync();
-
-        var client = factory.CreateClient();
-        using var request = new HttpRequestMessage(HttpMethod.Patch, $"/clients/{record.Id}");
-        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", factory.GenerateAdminToken());
-        request.Content = JsonContent.Create(new { displayName = "Renamed ProRV Client" });
-
-        var response = await client.SendAsync(request);
-        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
-
-        var body = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
-        Assert.False(body.RootElement.GetProperty("enableProRV").GetBoolean());
     }
 
     [Theory]

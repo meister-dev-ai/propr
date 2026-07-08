@@ -86,7 +86,7 @@ public sealed class ReviewJobProtocol
 
     /// <summary>
     ///     The kind of review pass this protocol represents — the <c>ReviewPassKind</c> name
-    ///     (e.g. <c>"Baseline"</c>, <c>"ProRVAugmentation"</c>). <see langword="null" /> for legacy
+    ///     (e.g. <c>"Baseline"</c>, <c>"MultiPassUnion"</c>). <see langword="null" /> for legacy
     ///     records and passes with no meaningful kind (e.g. synthesis, which the UI derives from <see cref="Label" />).
     /// </summary>
     public string? PassKind { get; set; }

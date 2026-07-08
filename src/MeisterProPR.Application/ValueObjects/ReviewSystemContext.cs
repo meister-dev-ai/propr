@@ -139,11 +139,6 @@ public sealed class ReviewSystemContext
     public float? Temperature { get; set; }
 
     /// <summary>
-    ///     Controls whether ProRV-focused review guidance should run for this execution context.
-    /// </summary>
-    public bool EnableProRV { get; set; } = true;
-
-    /// <summary>
     ///     Controls whether evidence-backed local verification escalates conservatively-withheld claims for this
     ///     execution context. When <see langword="false" /> the composite verifier behaves exactly like the
     ///     deterministic verifier.
@@ -196,12 +191,7 @@ public sealed class ReviewSystemContext
     public MultiPassDiversity? MultiPassDiversity { get; set; }
 
     /// <summary>
-    ///     Controls whether review execution uses disabled, early-steering, or late-augmentation semantics.
-    /// </summary>
-    public ReviewAugmentationMode AugmentationMode { get; set; } = ReviewAugmentationMode.EarlySteering;
-
-    /// <summary>
-    ///     Identifies whether the current execution context is the baseline review pass or a ProRV augmentation pass.
+    ///     Identifies whether the current execution context is the baseline review pass or a multi-pass-union pass.
     /// </summary>
     public ReviewPassKind PassKind { get; set; } = ReviewPassKind.Baseline;
 

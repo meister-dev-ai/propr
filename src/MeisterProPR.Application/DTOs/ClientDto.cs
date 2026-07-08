@@ -20,7 +20,6 @@ public sealed record ClientDto(
     string? DefaultReviewPipelineProfileId,
     DateTimeOffset? DefaultReviewPipelineProfileUpdatedAtUtc,
     bool ScmCommentPostingEnabled,
-    bool EnableProRV,
     bool EnableEvidenceBackedVerification = false,
     bool EnableLanguageRobustScreening = false,
     bool EnableMultiPassUnion = false,

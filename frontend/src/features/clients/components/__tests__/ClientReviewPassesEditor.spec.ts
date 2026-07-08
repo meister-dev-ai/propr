@@ -78,7 +78,7 @@ describe('ClientReviewPassesEditor model greying', () => {
 })
 
 describe('ClientReviewPassesEditor lens selector', () => {
-    it('offers None and Security lens options per row', () => {
+    it('offers None, Security, and ProRV lens options per row', () => {
         const wrapper = mount(ClientReviewPassesEditor, {
             props: { modelValue: [{ ordinal: 0, configuredModelId: 'm1' }] as ReviewPassEntry[], connections },
         })
@@ -87,7 +87,7 @@ describe('ClientReviewPassesEditor lens selector', () => {
             .find('[data-testid="review-pass-lens"]')
             .findAll('option')
             .map(option => option.attributes('value') ?? '')
-        expect(lensOptions).toEqual(['', 'security'])
+        expect(lensOptions).toEqual(['', 'security', 'prorv'])
     })
 
     it('emits the chosen lens on the entry', async () => {

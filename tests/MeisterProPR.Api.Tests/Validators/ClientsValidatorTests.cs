@@ -315,16 +315,6 @@ public sealed class ClientsValidatorTests
     [Theory]
     [InlineData(true)]
     [InlineData(false)]
-    public void PatchClient_EnableProRvBoolean_Passes(bool value)
-    {
-        var result = PatchClientValidator.Validate(new PatchClientRequest(EnableProRV: value));
-
-        Assert.True(result.IsValid);
-    }
-
-    [Theory]
-    [InlineData(true)]
-    [InlineData(false)]
     public void PatchClient_EnableEvidenceBackedVerificationBoolean_Passes(bool value)
     {
         var result = PatchClientValidator.Validate(new PatchClientRequest(EnableEvidenceBackedVerification: value));
@@ -450,6 +440,19 @@ public sealed class ClientsValidatorTests
                 ReviewPasses:
                 [
                     new ReviewPassEntry(0, Guid.NewGuid(), "security"),
+                ]));
+
+        Assert.True(result.IsValid);
+    }
+
+    [Fact]
+    public void PatchClient_ReviewPassListWithProRvLens_Passes()
+    {
+        var result = PatchClientValidator.Validate(
+            new PatchClientRequest(
+                ReviewPasses:
+                [
+                    new ReviewPassEntry(0, Guid.NewGuid(), "prorv"),
                 ]));
 
         Assert.True(result.IsValid);

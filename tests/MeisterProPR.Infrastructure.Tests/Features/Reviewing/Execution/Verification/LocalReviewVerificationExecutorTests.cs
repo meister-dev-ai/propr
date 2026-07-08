@@ -317,7 +317,7 @@ public sealed class LocalReviewVerificationExecutorTests
                 CandidateFindingProvenance.PerFileCommentOrigin,
                 "late_steering_merge",
                 "src/Foo.cs",
-                reviewPassKind: findingProvenanceKind == FindingProvenanceKind.ProRVOnly ? ReviewPassKind.ProRVAugmentation : ReviewPassKind.Baseline,
+                reviewPassKind: ReviewPassKind.Baseline,
                 findingProvenanceKind: findingProvenanceKind),
             CommentSeverity.Warning,
             message,

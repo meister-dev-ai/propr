@@ -15,7 +15,6 @@ public sealed record ReviewWorkflowResult(
     ReviewResult FinalResult,
     IReadOnlyList<ReviewJobProtocolDto> Protocols,
     IReadOnlyList<BoundaryIssueReport>? BoundaryIssues = null,
-    ReviewAugmentationMode AugmentationMode = ReviewAugmentationMode.EarlySteering,
     IReadOnlyList<MergedCandidateFinding>? MergedCandidateFindings = null)
 {
     /// <summary>

@@ -43,7 +43,6 @@ const sampleClient = {
   defaultReviewPipelineProfileId: 'file-by-file-balanced',
   defaultReviewPipelineProfileUpdatedAtUtc: null,
   scmCommentPostingEnabled: true,
-  enableProRV: true,
   enableEvidenceBackedVerification: false,
   enableMultiPassUnion: false,
 }
@@ -131,21 +130,20 @@ describe('useClientDetailViewModel (FR-007, FR-008, FR-012)', () => {
     expect(vm.client.value?.displayName).toBe('New Name')
   })
 
-  it('saves advanced settings with strategy, scm posting, and ProRV state', async () => {
+  it('saves advanced settings with strategy and scm posting state', async () => {
     mockGet.mockReset()
     mockGet
       .mockResolvedValueOnce({ data: sampleClient, response: { status: 200, ok: true } })
       .mockResolvedValueOnce({ data: sampleReviewProfiles, response: { status: 200, ok: true } })
       .mockResolvedValueOnce({ data: sampleClientReviewProfile, response: { status: 200, ok: true } })
     mockPatch.mockResolvedValue({
-      data: { ...sampleClient, defaultReviewStrategy: 'prWideAgentic', scmCommentPostingEnabled: false, enableProRV: false },
+      data: { ...sampleClient, defaultReviewStrategy: 'prWideAgentic', scmCommentPostingEnabled: false },
       response: { ok: true },
     })
     const vm = useClientDetailViewModel({ autoLoad: false })
     await vm.loadClient()
     vm.editedDefaultReviewStrategy.value = 'prWideAgentic'
     vm.editedScmCommentPostingEnabled.value = false
-    vm.editedEnableProRV.value = false
 
     await vm.saveAdvancedSettings()
 
@@ -156,7 +154,6 @@ describe('useClientDetailViewModel (FR-007, FR-008, FR-012)', () => {
       body: {
         defaultReviewStrategy: 'prWideAgentic',
         scmCommentPostingEnabled: false,
-        enableProRV: false,
         enableEvidenceBackedVerification: false,
         enableMultiPassUnion: false,
         enableLanguageRobustScreening: false,

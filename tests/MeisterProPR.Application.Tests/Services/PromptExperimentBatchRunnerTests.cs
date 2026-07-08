@@ -79,8 +79,7 @@ public sealed class PromptExperimentBatchRunnerTests
                             "ai_call_iter_1",
                             $"system-{variantName}",
                             $"user-{variantName}"),
-                    ],
-                    AugmentationMode: request.EffectiveAugmentationMode);
+                    ]);
             });
         artifactWriter.WriteAsync(Arg.Any<EvaluationArtifact>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
             .Returns(callInfo => Task.FromResult(callInfo.ArgAt<string>(1)));
@@ -142,8 +141,7 @@ public sealed class PromptExperimentBatchRunnerTests
                 return new ReviewWorkflowResult(
                     request.Job,
                     new ReviewResult("summary", []),
-                    [CreateProtocol(request.Job.Id, "synthesis", "ai_call_iter_1", "system-default", "user-default")],
-                    AugmentationMode: request.EffectiveAugmentationMode);
+                    [CreateProtocol(request.Job.Id, "synthesis", "ai_call_iter_1", "system-default", "user-default")]);
             });
         artifactWriter.WriteAsync(Arg.Any<EvaluationArtifact>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
             .Returns(callInfo => Task.FromResult(callInfo.ArgAt<string>(1)));
@@ -203,8 +201,7 @@ public sealed class PromptExperimentBatchRunnerTests
                 return new ReviewWorkflowResult(
                     request.Job,
                     new ReviewResult($"summary-{variantName}", []),
-                    [CreateProtocolWithPromptEvidence(request.Job.Id, variantName, PromptStageKeys.PerFileUser, PromptCompositionMode.Replace)],
-                    AugmentationMode: request.EffectiveAugmentationMode);
+                    [CreateProtocolWithPromptEvidence(request.Job.Id, variantName, PromptStageKeys.PerFileUser, PromptCompositionMode.Replace)]);
             });
         artifactWriter.WriteAsync(Arg.Any<EvaluationArtifact>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
             .Returns(callInfo => Task.FromResult(callInfo.ArgAt<string>(1)));
@@ -259,8 +256,7 @@ public sealed class PromptExperimentBatchRunnerTests
                 return new ReviewWorkflowResult(
                     request.Job,
                     new ReviewResult("summary", []),
-                    [CreateProtocol(request.Job.Id, "synthesis", "ai_call_iter_1", "system-default", "user-default")],
-                    AugmentationMode: request.EffectiveAugmentationMode);
+                    [CreateProtocol(request.Job.Id, "synthesis", "ai_call_iter_1", "system-default", "user-default")]);
             });
         artifactWriter.WriteAsync(Arg.Any<EvaluationArtifact>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
             .Returns(callInfo => Task.FromResult(callInfo.ArgAt<string>(1)));

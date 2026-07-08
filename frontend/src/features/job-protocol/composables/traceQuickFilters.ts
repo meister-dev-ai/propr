@@ -15,14 +15,13 @@ import type { ProtocolEventDto, ReviewProtocolPass } from '../types'
 /** Stable identifier for a quick-filter chip, also used as its URL token. */
 export type TraceChipId =
     | 'droppedByGate'
-    | 'highRiskReReview'
     | 'commentRelevanceDiscarded'
     | 'memoryReconsiderations'
     | 'errorsPresent'
     | 'toolCallFailed'
 
 /** Visual grouping for chips. Same-group chips OR; cross-group chips AND. */
-export type TraceChipGroup = 'gate-outcome' | 'risk-rereview' | 'pre-gate-override' | 'failure-cost'
+export type TraceChipGroup = 'gate-outcome' | 'pre-gate-override' | 'failure-cost'
 
 export interface TraceChipDefinition {
     id: TraceChipId
@@ -35,7 +34,6 @@ export interface TraceChipDefinition {
 /** Display order and copy for each group divider. */
 export const traceChipGroups: ReadonlyArray<{ group: TraceChipGroup; label: string }> = [
     { group: 'gate-outcome', label: 'Gate outcome' },
-    { group: 'risk-rereview', label: 'Risk & re-review' },
     { group: 'pre-gate-override', label: 'Pre-gate & override' },
     { group: 'failure-cost', label: 'Failure & cost' },
 ]
@@ -141,14 +139,6 @@ function parseFinalGateDisposition(outputSummary: string | null | undefined): st
     }
 }
 
-function isHighRiskReReviewPass(pass: ReviewProtocolPass): boolean {
-    if (normalize(pass.passKind) === 'prorvaugmentation') {
-        return true
-    }
-
-    return normalize(pass.reason).startsWith('high-risk file')
-}
-
 function isCommentRelevanceDiscardEvent(event: ProtocolEventDto): boolean {
     const category = deriveEventCategory(event.kind, event.name, event.eventCategory)
     if (category !== 'comment-relevance') {
@@ -171,12 +161,6 @@ export const traceChipDefinitions: ReadonlyArray<TraceChipDefinition> = [
         label: 'Dropped by gate',
         group: 'gate-outcome',
         matches: (_pass, event) => isFinalGateDropEvent(event),
-    },
-    {
-        id: 'highRiskReReview',
-        label: 'High-risk re-review',
-        group: 'risk-rereview',
-        matches: pass => isHighRiskReReviewPass(pass),
     },
     {
         id: 'commentRelevanceDiscarded',

@@ -9,9 +9,9 @@ describe('passKindLabel', () => {
         expect(passKindLabel('Baseline', 'src/foo.ts')).toBe('Initial review')
     })
 
-    it('maps ProRVAugmentation to "ProRV verification"', () => {
-        expect(passKindLabel('ProRVAugmentation', 'src/foo.ts')).toBe('ProRV verification')
-        expect(passKindLabel('ProRVAugmentation', 'src/foo.ts')).not.toBe('High-risk review')
+    it('falls back to the default label for the retired ProRVAugmentation kind', () => {
+        // The raw kind is no longer handled; legacy file rows carrying it render as the default.
+        expect(passKindLabel('ProRVAugmentation', 'src/foo.ts')).toBe('Initial review')
     })
 
     it('maps the Synthesis kind to "Synthesis"', () => {
@@ -63,8 +63,8 @@ describe('originLabel', () => {
         expect(originLabel('Baseline')).toBe('Initial review')
     })
 
-    it('maps ProRVAugmentation provenance to "ProRV verification"', () => {
-        expect(originLabel('ProRVAugmentation')).toBe('ProRV verification')
+    it('returns null for the retired ProRVAugmentation provenance so no badge renders', () => {
+        expect(originLabel('ProRVAugmentation')).toBeNull()
     })
 
     it('renders a multi-pass union finding as "Pass N" using its per-finding origin index', () => {

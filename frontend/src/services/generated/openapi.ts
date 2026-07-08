@@ -4585,7 +4585,7 @@ export interface paths {
                         "text/json": components["schemas"]["ProblemDetails"];
                     };
                 };
-                /** @description Caller is not an admin. */
+                /** @description Caller lacks administrator access to the client. */
                 403: {
                     headers: {
                         [name: string]: unknown;
@@ -4658,7 +4658,7 @@ export interface paths {
                         "text/json": components["schemas"]["ProblemDetails"];
                     };
                 };
-                /** @description Caller is not an admin. */
+                /** @description Caller lacks administrator access to the client. */
                 403: {
                     headers: {
                         [name: string]: unknown;
@@ -10580,7 +10580,6 @@ export interface components {
             defaultReviewStrategy?: components["schemas"]["ReviewStrategy"];
             customSystemMessage?: string | null;
             scmCommentPostingEnabled?: boolean;
-            enableProRV?: boolean;
             enableEvidenceBackedVerification?: boolean;
             enableLanguageRobustScreening?: boolean;
             enableMultiPassUnion?: boolean;
@@ -11186,7 +11185,6 @@ export interface components {
             commentResolutionBehavior?: components["schemas"]["CommentResolutionBehavior"];
             customSystemMessage?: string | null;
             scmCommentPostingEnabled?: boolean | null;
-            enableProRV?: boolean | null;
             enableEvidenceBackedVerification?: boolean | null;
             enableLanguageRobustScreening?: boolean | null;
             enableMultiPassUnion?: boolean | null;

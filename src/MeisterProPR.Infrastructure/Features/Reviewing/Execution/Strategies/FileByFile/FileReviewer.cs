@@ -16,6 +16,8 @@ using MeisterProPR.Domain.ValueObjects;
 using MeisterProPR.Infrastructure.Features.Reviewing.Diagnostics.Persistence;
 using MeisterProPR.Infrastructure.Features.Reviewing.Execution.CommentRelevance;
 using MeisterProPR.Infrastructure.Features.Reviewing.Execution.Verification;
+using MeisterProPR.ProRV.Abstractions;
+using MeisterProPR.ProRV.Models;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Logging;
 
@@ -36,9 +38,23 @@ internal sealed partial class FileReviewer(
     IEnumerable<IReviewInvariantFactProvider>? reviewInvariantFactProviders,
     LocalReviewVerificationExecutor? localReviewVerificationExecutor,
     IReviewPipelineProfileProvider? pipelineProfileProvider,
+    IProRVPrefilter? proRvPrefilter = null,
     IReviewComplexityClassifier? complexityClassifier = null)
 {
+    // Stage id recorded on the ProRV-lens applicability screen's protocol events.
+    private const string ProRvLensStageId = "file-by-file.prorv-lens";
+
+    // The embedded ProRV catalog is compiled into the ProRV assembly, so its assembly version is a stable token
+    // that changes only when the assets change — used to key the per-job focused-guidance cache.
+    private static readonly string ProRvCatalogVersion =
+        typeof(IProRVPrefilter).Assembly.GetName().Version?.ToString() ?? "0";
+
     private readonly ConcurrentDictionary<string, TriageVerdict> _triageCache = new(StringComparer.Ordinal);
+
+    // Focused ProRV guidance is deterministic per (file path, catalog version) within a job, so a prorv lens pass
+    // that re-screens the same file reuses the ranking instead of paying a second model call.
+    private readonly ConcurrentDictionary<string, IReadOnlyList<FocusedReviewGuidanceItem>> _proRvGuidanceCache =
+        new(StringComparer.Ordinal);
 
     /// <summary>
     ///     Per-file complexity tier, model-judged via the injected classifier and cached so the baseline and
@@ -258,16 +274,6 @@ internal sealed partial class FileReviewer(
         IChatClient effectiveClient,
         IReadOnlyList<FocusedReviewGuidanceItem> focusedReviewGuidance)
     {
-        var enableProRvForCurrentPass = baseContext.AugmentationMode switch
-        {
-            // ProRVAugmentation passes still honor the client's ProRV opt-out: when EnableProRV is false the
-            // high-risk second look runs WITHOUT the ProRV prefilter (the manual focused guidance still applies).
-            _ when baseContext.PassKind == ReviewPassKind.ProRVAugmentation => baseContext.EnableProRV,
-            ReviewAugmentationMode.LateAugmentation => false,
-            ReviewAugmentationMode.Disabled => false,
-            _ => baseContext.EnableProRV,
-        };
-
         var changedLinesCount = ReviewDiffProcessor.CountChangedLines(file.UnifiedDiff);
         LogTierAssigned(logger, file.Path, tier, changedLinesCount, job.Id);
 
@@ -305,14 +311,12 @@ internal sealed partial class FileReviewer(
             ModelId = tierModelId ?? baseContext.ModelId,
             RuntimeCapabilities = tierCapabilities ?? baseContext.RuntimeCapabilities,
             Temperature = baseContext.Temperature,
-            EnableProRV = enableProRvForCurrentPass,
             EnableEvidenceBackedVerification = baseContext.EnableEvidenceBackedVerification,
             EnableLanguageRobustScreening = baseContext.EnableLanguageRobustScreening,
             EnableMultiPassUnion = baseContext.EnableMultiPassUnion,
             MultiPassUnionPassCount = baseContext.MultiPassUnionPassCount,
             ReviewPasses = baseContext.ReviewPasses,
             MultiPassDiversity = baseContext.MultiPassDiversity,
-            AugmentationMode = baseContext.AugmentationMode,
             PassKind = baseContext.PassKind,
             PromptExperiment = baseContext.PromptExperiment,
             SkippedSteps = baseContext.SkippedSteps,
@@ -323,150 +327,6 @@ internal sealed partial class FileReviewer(
 
         LogDismissalsInjected(logger, fileContext.DismissedPatterns?.Count ?? 0, file.Path, job.Id);
         return fileContext;
-    }
-
-    public async Task<ReviewResult> ReviewAugmentationAsync(
-        ReviewJob job,
-        PullRequest pr,
-        ChangedFile file,
-        int fileIndex,
-        int totalFiles,
-        ReviewSystemContext baseContext,
-        IChatClient effectiveClient,
-        CancellationToken ct,
-        string? reason = null,
-        ReviewPassKind displayPassKind = ReviewPassKind.ProRVAugmentation,
-        FanOutSignal? fanOut = null)
-    {
-        var verdict = await this.ClassifyTierAsync(job, file, baseContext, ct);
-
-        // Deeper-pass tier = Max(model-judged tier, blast-radius floor, security floor). Floors are
-        // escalate-only (Truncated fan-out and any security leg floor at Medium); for the ordinary ProRV
-        // augmentation path fanOut is Unavailable and the security set is typically empty, so they are no-ops.
-        var securityFlagged = SecurityFloor.IsFlagged(
-            file.Path,
-            baseContext.PerFileHint?.RiskMarkers ?? FileRiskMarkers.None,
-            verdict.SecurityEscalate);
-        var tier = TierJoin.Max(
-            verdict.Tier,
-            TierJoin.FloorFromFanOut(fanOut ?? FanOutSignal.Unavailable),
-            securityFlagged ? FileComplexityTier.Medium : FileComplexityTier.Low);
-        var tierCategory = tier switch
-        {
-            FileComplexityTier.Low => AiConnectionModelCategory.LowEffort,
-            FileComplexityTier.Medium => AiConnectionModelCategory.MediumEffort,
-            FileComplexityTier.High => AiConnectionModelCategory.HighEffort,
-            _ => AiConnectionModelCategory.MediumEffort,
-        };
-        var tierPurpose = GetTierPurpose(tier);
-        var (tierClient, tierModelId, tierCapabilities) = await this.ResolveTierClientAsync(job, tierCategory, tierPurpose, ct);
-
-        var relevantThreads = FilterThreadsForFile(pr.ExistingThreads, file.Path);
-        var filePr = new PullRequest(
-            pr.OrganizationUrl,
-            pr.ProjectId,
-            pr.RepositoryId,
-            pr.RepositoryName,
-            pr.PullRequestId,
-            pr.IterationId,
-            pr.Title,
-            pr.Description,
-            pr.SourceBranch,
-            pr.TargetBranch,
-            [file],
-            pr.Status,
-            relevantThreads);
-
-        var augmentationContext = CreateAugmentationContext(baseContext);
-        var transientFileResult = new ReviewFileResult(job.Id, file.Path);
-
-        // Open a dedicated protocol pass for the augmentation/second-look so its AI calls, tokens,
-        // tool calls, and findings are recorded. Previously this pass ran with protocolId=null and was
-        // entirely unprotocolled (its tokens never reached the job aggregate). fileResultId is null —
-        // the pass is identified by the file path.
-        var protocolId = await this.BeginAugmentationProtocolAsync(job, file, tierCategory, tierModelId, reason, displayPassKind, ct);
-
-        ReviewSystemContext? fileContext = null;
-        try
-        {
-            fileContext = this.CreateFileContext(
-                job,
-                pr,
-                file,
-                fileIndex,
-                totalFiles,
-                augmentationContext,
-                protocolId,
-                tier,
-                tierModelId,
-                tierClient,
-                tierCapabilities,
-                effectiveClient,
-                augmentationContext.PerFileHint?.FocusedReviewGuidance ?? []);
-
-            var pipelineProfile = ResolvePipelineProfile(job, pipelineProfileProvider);
-            fileContext = await this.RunDispatchPipelineAsync(
-                job,
-                file,
-                transientFileResult,
-                fileContext,
-                protocolId,
-                pipelineProfile,
-                ct);
-
-            var result = await this.ReviewFileCoreAsync(filePr, fileContext, ct);
-            var pipelineState = new ReviewResultPipelineState(
-                job,
-                file,
-                filePr,
-                transientFileResult,
-                fileContext,
-                protocolId,
-                reviewInvariantFactProviders?.SelectMany(provider => provider.GetFacts()).ToList() ?? []);
-
-            result = await this.RunReviewResultPipelineAsync(pipelineState, result, pipelineProfile, ct);
-
-            await this.CompleteAugmentationProtocolAsync(protocolId, fileContext, "Completed", ct);
-            return result;
-        }
-        catch when (protocolId.HasValue)
-        {
-            // Never leave the augmentation pass open on failure: close it so any partial loop-metric tokens
-            // still reach the job aggregate. CancellationToken.None so cancellation still records completion.
-            await this.CompleteAugmentationProtocolAsync(protocolId, fileContext, "Failed", CancellationToken.None);
-            throw;
-        }
-    }
-
-    private static ReviewSystemContext CreateAugmentationContext(ReviewSystemContext baseContext)
-    {
-        return new ReviewSystemContext(baseContext.ClientSystemMessage, baseContext.RepositoryInstructions, baseContext.ReviewTools)
-        {
-            LoopMetrics = baseContext.LoopMetrics,
-            ActiveProtocolId = baseContext.ActiveProtocolId,
-            ProtocolRecorder = baseContext.ProtocolRecorder,
-            ExclusionRules = baseContext.ExclusionRules,
-            DismissedPatterns = baseContext.DismissedPatterns,
-            PromptOverrides = baseContext.PromptOverrides,
-            TierChatClient = baseContext.TierChatClient,
-            ModelId = baseContext.ModelId,
-            DefaultReviewChatClient = baseContext.DefaultReviewChatClient,
-            DefaultReviewModelId = baseContext.DefaultReviewModelId,
-            RuntimeCapabilities = baseContext.RuntimeCapabilities,
-            Temperature = baseContext.Temperature,
-            EnableProRV = baseContext.EnableProRV,
-            EnableEvidenceBackedVerification = baseContext.EnableEvidenceBackedVerification,
-            EnableLanguageRobustScreening = baseContext.EnableLanguageRobustScreening,
-            EnableMultiPassUnion = baseContext.EnableMultiPassUnion,
-            MultiPassUnionPassCount = baseContext.MultiPassUnionPassCount,
-            ReviewPasses = baseContext.ReviewPasses,
-            MultiPassDiversity = baseContext.MultiPassDiversity,
-            AugmentationMode = baseContext.AugmentationMode,
-            PassKind = ReviewPassKind.ProRVAugmentation,
-            PerFileHint = baseContext.PerFileHint,
-            PromptExperiment = baseContext.PromptExperiment,
-            SkippedSteps = baseContext.SkippedSteps,
-        };
     }
 
     /// <summary>
@@ -484,9 +344,13 @@ internal sealed partial class FileReviewer(
         }
 
         // Ordinary/resample passes are gated to Medium/High tiers; a security-lens pass runs on any tier when the
-        // file is security-flagged. Enter planning when either is in scope — the per-pass gate in the planners then
-        // drops the passes that are out of scope, so a file that qualifies for neither is byte-identical to today.
-        if (!IsMultiPassUnionTier(inputs.Tier) && !inputs.SecurityFlagged)
+        // file is security-flagged; a prorv-lens pass runs on any tier when the file is catalog-eligible. Enter
+        // planning when any is in scope — the per-pass gate in the planners then drops the passes that are out of
+        // scope, so a file that qualifies for none is byte-identical to today.
+        var hasEligibleProRvPass = proRvPrefilter is not null
+                                   && IsProRvEligible(inputs.File)
+                                   && inputs.FileContext.ReviewPasses.Any(pass => pass.Lens == ReviewPassLens.ProRV);
+        if (!IsMultiPassUnionTier(inputs.Tier) && !inputs.SecurityFlagged && !hasEligibleProRvPass)
         {
             return inputs.BaselineResult;
         }
@@ -622,12 +486,26 @@ internal sealed partial class FileReviewer(
         var passIndex = 2;
         foreach (var pass in reviewPasses)
         {
-            // A security-lens entry runs on any tier when the file is security-flagged; an ordinary entry runs only
-            // on the in-scope (Medium/High) tiers. Out-of-scope entries are dropped without a trace (the common case
-            // is a lens configured on a client whose file under review is not security-relevant), but still consume
-            // their ordinal so a pass's "Pass N" index stays tied to its position in the configured list.
-            var isSecurityLens = pass.Lens == ReviewPassLens.Security;
-            var inScope = isSecurityLens ? inputs.SecurityFlagged : tierEligible;
+            // A security-lens entry runs on any tier when the file is security-flagged; a ProRV-lens entry runs on any
+            // tier when the file is deterministically catalog-eligible (a text file with a diff — the model ranking
+            // that picks the applicable checks, and decides whether any apply, runs inside the pass); an ordinary
+            // entry runs only on the in-scope (Medium/High) tiers. Out-of-scope entries are dropped without a trace
+            // (the common case is a lens configured on a client whose file under review is not relevant) but still
+            // consume their ordinal so a pass's "Pass N" index stays tied to its position in the configured list.
+            bool inScope;
+            if (pass.Lens == ReviewPassLens.Security)
+            {
+                inScope = inputs.SecurityFlagged;
+            }
+            else if (pass.Lens == ReviewPassLens.ProRV)
+            {
+                inScope = proRvPrefilter is not null && IsProRvEligible(inputs.File);
+            }
+            else
+            {
+                inScope = tierEligible;
+            }
+
             if (!inScope)
             {
                 passIndex++;
@@ -660,6 +538,15 @@ internal sealed partial class FileReviewer(
     private static bool IsMultiPassUnionTier(FileComplexityTier tier)
     {
         return tier is FileComplexityTier.Medium or FileComplexityTier.High;
+    }
+
+    // Cheap deterministic ProRV eligibility screen (no model call): a text file with an actual diff. The model
+    // ranking that decides which catalog checks apply — and whether any do — runs inside the pass.
+    private static bool IsProRvEligible(ChangedFile file)
+    {
+        return !file.IsBinary
+               && file.ChangeType != ChangeType.Delete
+               && !string.IsNullOrWhiteSpace(file.UnifiedDiff);
     }
 
     // Tags a resample pass's comments with the multi-pass union origin and the 1-based pass index so the union
@@ -706,6 +593,22 @@ internal sealed partial class FileReviewer(
         ReviewSystemContext? passContext = null;
         try
         {
+            var focusedGuidance = inputs.FileContext.PerFileHint?.FocusedReviewGuidance ?? [];
+
+            // A ProRV-lens pass screens the file against the embedded catalog first. The applicability ranking is a
+            // single model call on this pass's own configured model; it both gates the pass and produces the focused
+            // guidance. No applicable check (or a deterministic ineligibility) skips the review with a reason-coded
+            // trace and NO review model call — the pass contributes nothing to the union.
+            if (string.Equals(inputs.PassArm.Lens, ReviewPassLens.ProRV, StringComparison.Ordinal))
+            {
+                focusedGuidance = await this.ResolveProRvLensGuidanceAsync(inputs, protocolId, inputs.Ct);
+                if (focusedGuidance.Count == 0)
+                {
+                    await this.CompleteAugmentationProtocolAsync(protocolId, null, "Completed", inputs.Ct);
+                    return new ReviewResult(string.Empty, []);
+                }
+            }
+
             passContext = this.CreateFileContext(
                 inputs.Job,
                 inputs.Pr,
@@ -719,7 +622,7 @@ internal sealed partial class FileReviewer(
                 inputs.PassClient,
                 inputs.PassCapabilities,
                 inputs.EffectiveClient,
-                inputs.FileContext.PerFileHint?.FocusedReviewGuidance ?? []);
+                focusedGuidance);
 
             // Each resample pass runs at the resampling temperature. The pass model + client + capabilities were
             // already resolved by the caller and threaded in here (an eval-harness arm-model override reusing the
@@ -759,6 +662,45 @@ internal sealed partial class FileReviewer(
             await this.CompleteAugmentationProtocolAsync(protocolId, passContext, "Failed", CancellationToken.None);
             throw;
         }
+    }
+
+    // Resolves ProRV focused guidance for a prorv-lens pass by ranking the file against the embedded catalog on the
+    // pass's own configured model (one model call). Cached per (file path, model id, catalog version) within the job
+    // so a repeated prorv pass over the same file on the same model reuses the ranking; the model id is part of the
+    // key because the ranking is a model call, not deterministic across models. Only a successful ranking is cached,
+    // so a transient failure or a skip never poisons a later pass. Returns an empty list when the file is ineligible
+    // or no catalog check applies — the caller then skips the pass without a review model call.
+    private async Task<IReadOnlyList<FocusedReviewGuidanceItem>> ResolveProRvLensGuidanceAsync(
+        MultiPassUnionPassInputs inputs,
+        Guid? protocolId,
+        CancellationToken ct)
+    {
+        var cacheKey = $"{inputs.File.Path}::{inputs.PassModelId}::{ProRvCatalogVersion}";
+        if (this._proRvGuidanceCache.TryGetValue(cacheKey, out var cached))
+        {
+            return cached;
+        }
+
+        var resolution = await ProRVFocusedReviewGuidanceResolver.TryResolveAsync(
+            inputs.Job,
+            inputs.File,
+            inputs.PassClient ?? inputs.EffectiveClient,
+            inputs.PassModelId,
+            protocolId,
+            protocolRecorder,
+            proRvPrefilter,
+            logger,
+            ProRvLensStageId,
+            ct);
+
+        // Only cache a completed ranking; a skip/failure returns empty guidance but must not short-circuit a
+        // subsequent pass whose model might succeed.
+        if (resolution.PrefilterStatus == ProRVPrefilterStatus.Success)
+        {
+            this._proRvGuidanceCache[cacheKey] = resolution.Guidance;
+        }
+
+        return resolution.Guidance;
     }
 
     private async Task RecordMultiPassUnionCompletedAsync(MultiPassUnionCompletion completion)
@@ -1002,7 +944,6 @@ internal sealed partial class FileReviewer(
                 [
                     FileByFileContextPrefetchStage.StageIdConstant,
                     FileByFileRiskMarkerStage.StageIdConstant,
-                    FileByFileProRvPrefilterStage.StageIdConstant,
                 ],
                 [
                     FileByFileConfidenceFloorStage.StageIdConstant,
@@ -1034,7 +975,6 @@ internal sealed partial class FileReviewer(
                    [
                        FileByFileContextPrefetchStage.StageIdConstant,
                        FileByFileRiskMarkerStage.StageIdConstant,
-                       FileByFileProRvPrefilterStage.StageIdConstant,
                    ],
                    [
                        FileByFileConfidenceFloorStage.StageIdConstant,
@@ -1088,12 +1028,19 @@ internal sealed partial class FileReviewer(
         string promptKind,
         CancellationToken ct)
     {
-        if (!protocolId.HasValue || !fileContext.EnableProRV)
+        if (!protocolId.HasValue)
         {
             return;
         }
 
+        // ProRV focused guidance now flows only through a prorv-lens pass; record its application when guidance is
+        // present on the pass context (an ordinary/baseline pass carries none, so nothing is recorded there).
         var guidance = fileContext.PerFileHint?.FocusedReviewGuidance ?? [];
+        if (guidance.Count == 0)
+        {
+            return;
+        }
+
         await protocolRecorder.RecordProRvEventAsync(
             protocolId.Value,
             ReviewProtocolEventNames.ProRVFocusedGuidanceApplied,

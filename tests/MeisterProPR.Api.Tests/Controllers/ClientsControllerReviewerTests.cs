@@ -85,35 +85,6 @@ public sealed class ClientsControllerReviewerTests(ClientsControllerReviewerTest
         Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
     }
 
-    [Fact]
-    public async Task PatchClient_ClientAdministratorCanUpdateEnableProRv()
-    {
-        var httpClient = factory.CreateClient();
-        using var request = new HttpRequestMessage(HttpMethod.Patch, $"/clients/{factory.ClientId}");
-        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", factory.GenerateClientAdministratorToken());
-        request.Content = JsonContent.Create(new { enableProRV = false });
-
-        var response = await httpClient.SendAsync(request);
-
-        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
-
-        var body = JsonDocument.Parse(await response.Content.ReadAsStringAsync()).RootElement;
-        Assert.False(body.GetProperty("enableProRV").GetBoolean());
-    }
-
-    [Fact]
-    public async Task PatchClient_ClientAdministratorCannotUpdateDifferentClientEnableProRv()
-    {
-        var httpClient = factory.CreateClient();
-        using var request = new HttpRequestMessage(HttpMethod.Patch, $"/clients/{factory.OtherClientId}");
-        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", factory.GenerateClientAdministratorToken());
-        request.Content = JsonContent.Create(new { enableProRV = false });
-
-        var response = await httpClient.SendAsync(request);
-
-        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
-    }
-
     public sealed class ReviewerApiFactory : WebApplicationFactory<Program>
     {
         private const string TestJwtSecret = "test-reviewer-jwt-secret-32chars!";

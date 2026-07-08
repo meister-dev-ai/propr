@@ -109,18 +109,6 @@
                 </div>
                 <div class="inline-field-row review-publication-row">
                     <div class="form-field flex-1 review-publication-field">
-                        <label class="checkbox-field" for="enableProRV">
-                            <input id="enableProRV" v-model="editedEnableProRV" name="enableProRV"
-                                type="checkbox" />
-                            <strong>Run ProRV verification</strong>
-                            <p class="muted review-publication-copy">
-                                Disable this to skip ProRV during review generation for this client.
-                            </p>
-                        </label>
-                    </div>
-                </div>
-                <div class="inline-field-row review-publication-row">
-                    <div class="form-field flex-1 review-publication-field">
                         <label class="checkbox-field" for="enableEvidenceBackedVerification">
                             <input id="enableEvidenceBackedVerification"
                                 v-model="editedEnableEvidenceBackedVerification"
@@ -207,7 +195,6 @@ const {
     editedDefaultReviewStrategy,
     editedDefaultReviewPipelineProfileId,
     editedScmCommentPostingEnabled,
-    editedEnableProRV,
     editedEnableEvidenceBackedVerification,
     editedEnableMultiPassUnion,
     editedEnableLanguageRobustScreening,

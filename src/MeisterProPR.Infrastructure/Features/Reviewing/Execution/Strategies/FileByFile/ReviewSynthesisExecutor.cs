@@ -112,7 +112,6 @@ internal sealed class ReviewSynthesisExecutor(
         var changedLineRangesByPath = ReviewDiffProcessor.BuildChangedLineRangesByPath(pr.ChangedFiles);
         var baselineFindings = candidateFindingFactory.Build(freshResults, deduped, changedLineRangesByPath: changedLineRangesByPath);
         var mergedPerFileFindings = CandidateFindingFactory.MergeFindings(baselineFindings, augmentationCandidateFindings ?? []);
-        await this.RecordLateSteeringMergeEventAsync(baseContext, baselineFindings, augmentationCandidateFindings ?? [], mergedPerFileFindings, ct);
 
         var gate = deterministicReviewFindingGate;
         if (gate is null)
@@ -582,43 +581,6 @@ internal sealed class ReviewSynthesisExecutor(
                 null,
                 ct);
         }
-    }
-
-    private async Task RecordLateSteeringMergeEventAsync(
-        ReviewSystemContext baseContext,
-        IReadOnlyList<CandidateReviewFinding> baselineFindings,
-        IReadOnlyList<CandidateReviewFinding> augmentationFindings,
-        IReadOnlyList<CandidateReviewFinding> mergedPerFileFindings,
-        CancellationToken ct)
-    {
-        if (baseContext.AugmentationMode != ReviewAugmentationMode.LateAugmentation ||
-            !baseContext.ActiveProtocolId.HasValue ||
-            baseContext.ProtocolRecorder is null)
-        {
-            return;
-        }
-
-        await baseContext.ProtocolRecorder.RecordReviewStrategyEventAsync(
-            baseContext.ActiveProtocolId.Value,
-            ReviewProtocolEventNames.LateSteeringMergeCompleted,
-            JsonSerializer.Serialize(
-                new
-                {
-                    baselineCandidateCount = baselineFindings.Count,
-                    proRvCandidateCount = augmentationFindings.Count,
-                    mergedCandidateCount = mergedPerFileFindings.Count,
-                },
-                FinalGateJsonOptions),
-            JsonSerializer.Serialize(
-                new
-                {
-                    baselineOnlyCount = mergedPerFileFindings.Count(finding => finding.Provenance.FindingProvenanceKind == FindingProvenanceKind.BaselineOnly),
-                    proRvOnlyCount = mergedPerFileFindings.Count(finding => finding.Provenance.FindingProvenanceKind == FindingProvenanceKind.ProRVOnly),
-                    bothCount = mergedPerFileFindings.Count(finding => finding.Provenance.FindingProvenanceKind == FindingProvenanceKind.Both),
-                },
-                FinalGateJsonOptions),
-            null,
-            ct);
     }
 
     // Selects the dedup strategy for this review. When the client opted into multi-pass union and a semantic

@@ -271,14 +271,9 @@ public sealed class SemanticFindingDeduplicator : IFindingDeduplicator
 
         private static FindingProvenanceKind ResolveProvenanceKind(IReadOnlyList<ReviewPassKind> sourcePasses)
         {
-            var hasBaseline = sourcePasses.Any(p => p is ReviewPassKind.Baseline or ReviewPassKind.MultiPassUnion);
-            var hasProRv = sourcePasses.Contains(ReviewPassKind.ProRVAugmentation);
-            if (hasBaseline && hasProRv)
-            {
-                return FindingProvenanceKind.Both;
-            }
-
-            return hasProRv ? FindingProvenanceKind.ProRVOnly : FindingProvenanceKind.BaselineOnly;
+            // Only baseline and multi-pass-union passes remain; every merged finding classifies as baseline-only.
+            _ = sourcePasses;
+            return FindingProvenanceKind.BaselineOnly;
         }
     }
 }

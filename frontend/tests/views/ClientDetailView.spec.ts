@@ -146,7 +146,6 @@ const sampleClient = {
   defaultReviewPipelineProfileId: 'file-by-file-balanced',
   defaultReviewPipelineProfileUpdatedAtUtc: null,
   scmCommentPostingEnabled: true,
-  enableProRV: false,
   enableEvidenceBackedVerification: false,
   enableMultiPassUnion: false,
 }
@@ -268,7 +267,7 @@ describe('ClientDetailView', () => {
       '/clients/{clientId}',
         expect.objectContaining({
           params: { path: { clientId: 'client-1' } },
-          body: { defaultReviewStrategy: 'fileByFile', scmCommentPostingEnabled: false, enableProRV: false, enableEvidenceBackedVerification: false, enableMultiPassUnion: false, enableLanguageRobustScreening: false },
+          body: { defaultReviewStrategy: 'fileByFile', scmCommentPostingEnabled: false, enableEvidenceBackedVerification: false, enableMultiPassUnion: false, enableLanguageRobustScreening: false },
         })
     )
   })
@@ -296,7 +295,7 @@ describe('ClientDetailView', () => {
       '/clients/{clientId}',
         expect.objectContaining({
           params: { path: { clientId: 'client-1' } },
-          body: { defaultReviewStrategy: 'fileByFile', scmCommentPostingEnabled: true, enableProRV: false, enableEvidenceBackedVerification: false, enableMultiPassUnion: false, enableLanguageRobustScreening: false },
+          body: { defaultReviewStrategy: 'fileByFile', scmCommentPostingEnabled: true, enableEvidenceBackedVerification: false, enableMultiPassUnion: false, enableLanguageRobustScreening: false },
         })
     )
   })
@@ -320,7 +319,7 @@ describe('ClientDetailView', () => {
       '/clients/{clientId}',
         expect.objectContaining({
           params: { path: { clientId: 'client-1' } },
-          body: { defaultReviewStrategy: 'prWideAgentic', scmCommentPostingEnabled: true, enableProRV: false, enableEvidenceBackedVerification: false, enableMultiPassUnion: false, enableLanguageRobustScreening: false },
+          body: { defaultReviewStrategy: 'prWideAgentic', scmCommentPostingEnabled: true, enableEvidenceBackedVerification: false, enableMultiPassUnion: false, enableLanguageRobustScreening: false },
         })
     )
   })
@@ -343,7 +342,7 @@ describe('ClientDetailView', () => {
       '/clients/{clientId}',
         expect.objectContaining({
           params: { path: { clientId: 'client-1' } },
-          body: { defaultReviewStrategy: 'agenticFileByFile', scmCommentPostingEnabled: true, enableProRV: false, enableEvidenceBackedVerification: false, enableMultiPassUnion: false, enableLanguageRobustScreening: false },
+          body: { defaultReviewStrategy: 'agenticFileByFile', scmCommentPostingEnabled: true, enableEvidenceBackedVerification: false, enableMultiPassUnion: false, enableLanguageRobustScreening: false },
         })
     )
   })

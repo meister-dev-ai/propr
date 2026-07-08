@@ -116,60 +116,17 @@ internal sealed class AgenticCandidateFindingFactory(IReviewClaimExtractor? revi
         IReadOnlyList<CandidateReviewFinding> baselineFindings,
         IReadOnlyList<CandidateReviewFinding> augmentationFindings)
     {
-        if (augmentationFindings.Count == 0)
-        {
-            return baselineFindings
-                .Select(finding => finding.WithMergedProvenance(
-                    FindingProvenanceKind.BaselineOnly,
-                    [ReviewPassKind.Baseline],
-                    "baseline_only",
-                    CreateFindingIdentityKey(finding)))
-                .ToList();
-        }
-
-        var augmentationByIdentity = augmentationFindings
-            .GroupBy(CreateFindingIdentityKey, StringComparer.Ordinal)
-            .ToDictionary(group => group.Key, group => new Queue<CandidateReviewFinding>(group), StringComparer.Ordinal);
-        var merged = new List<CandidateReviewFinding>(baselineFindings.Count + augmentationFindings.Count);
-
-        foreach (var baselineFinding in baselineFindings)
-        {
-            var identityKey = CreateFindingIdentityKey(baselineFinding);
-            if (augmentationByIdentity.TryGetValue(identityKey, out var matches) && matches.Count > 0)
-            {
-                matches.Dequeue();
-                merged.Add(
-                    baselineFinding.WithMergedProvenance(
-                        FindingProvenanceKind.Both,
-                        [ReviewPassKind.Baseline, ReviewPassKind.ProRVAugmentation],
-                        "exact_identity_match",
-                        identityKey));
-                continue;
-            }
-
-            merged.Add(
-                baselineFinding.WithMergedProvenance(
-                    FindingProvenanceKind.BaselineOnly,
-                    [ReviewPassKind.Baseline],
-                    "baseline_only",
-                    identityKey));
-        }
-
-        foreach (var remaining in augmentationByIdentity)
-        {
-            while (remaining.Value.Count > 0)
-            {
-                var augmentationFinding = remaining.Value.Dequeue();
-                merged.Add(
-                    augmentationFinding.WithMergedProvenance(
-                        FindingProvenanceKind.ProRVOnly,
-                        [ReviewPassKind.ProRVAugmentation],
-                        "augmentation_only",
-                        remaining.Key));
-            }
-        }
-
-        return merged;
+        // Per-file findings all originate from the baseline pass. The former late-augmentation second look is gone,
+        // so there is nothing to merge; multi-pass-union resample/lens findings carry their own origin on the comment
+        // (OriginPassKind/OriginPassLens) rather than through this per-file merge.
+        _ = augmentationFindings;
+        return baselineFindings
+            .Select(finding => finding.WithMergedProvenance(
+                FindingProvenanceKind.BaselineOnly,
+                [ReviewPassKind.Baseline],
+                "baseline_only",
+                CreateFindingIdentityKey(finding)))
+            .ToList();
     }
 
     public static IReadOnlyList<CandidateReviewFinding> AssignSynthesisFindingIds(IReadOnlyList<CandidateReviewFinding> synthesizedFindings)
@@ -356,9 +313,10 @@ internal sealed class AgenticCandidateFindingFactory(IReviewClaimExtractor? revi
 
     private static FindingProvenanceKind GetProvenanceKind(ReviewPassKind passKind)
     {
-        return passKind == ReviewPassKind.ProRVAugmentation
-            ? FindingProvenanceKind.ProRVOnly
-            : FindingProvenanceKind.BaselineOnly;
+        // Only the baseline and multi-pass-union passes remain; both classify as baseline-only for the per-file merge
+        // provenance (a union finding surfaces its pass via ReviewPassKind/OriginPassIndex, not this classification).
+        _ = passKind;
+        return FindingProvenanceKind.BaselineOnly;
     }
 
     private static string CreateFindingIdentityKey(CandidateReviewFinding finding)

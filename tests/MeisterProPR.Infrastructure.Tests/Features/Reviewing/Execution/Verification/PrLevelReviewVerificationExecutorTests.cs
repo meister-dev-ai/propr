@@ -190,7 +190,7 @@ public sealed class PrLevelReviewVerificationExecutorTests
                 CandidateFindingProvenance.PerFileCommentOrigin,
                 "late_steering_merge",
                 "src/Foo.cs",
-                reviewPassKind: ReviewPassKind.ProRVAugmentation,
+                reviewPassKind: ReviewPassKind.Baseline,
                 findingProvenanceKind: FindingProvenanceKind.ProRVOnly),
             CommentSeverity.Warning,
             "ProRV-only issue needs stronger support.",

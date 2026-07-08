@@ -59,7 +59,6 @@ public sealed class PromptExperimentBatchRunner(
                 requestConfiguration.ModelSelection.ModelId,
                 fixture,
                 requestConfiguration,
-                AugmentationMode: requestConfiguration.AugmentationMode,
                 PromptExperiment: promptExperimentContext,
                 SkippedSteps: skippedSteps);
 
@@ -160,8 +159,6 @@ public sealed class PromptExperimentBatchRunner(
                 configuration.ModelSelection.ModelId,
                 configuration.Output.DetailMode,
                 job.ReviewStrategy,
-                configuration.EnableProRV,
-                workflowResult.AugmentationMode.ToString(),
                 CreateDefaultProvenanceCounts(),
                 promptExperiment.VariantName,
                 promptExperiment.ActiveStageKeys,

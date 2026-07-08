@@ -61,14 +61,6 @@ public interface IClientRegistry
     Task<bool> GetScmCommentPostingEnabledAsync(Guid clientId, CancellationToken ct = default);
 
     /// <summary>
-    ///     Returns whether ProRV should execute for the given client.
-    ///     Defaults to <see langword="false" /> if the client does not exist.
-    /// </summary>
-    /// <param name="clientId">Client identifier.</param>
-    /// <param name="ct">Cancellation token.</param>
-    Task<bool> GetProRvEnabledAsync(Guid clientId, CancellationToken ct = default);
-
-    /// <summary>
     ///     Returns whether evidence-backed local verification should run for the given client.
     ///     Defaults to <see langword="false" /> if the client does not exist.
     /// </summary>

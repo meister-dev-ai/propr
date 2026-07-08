@@ -62,12 +62,11 @@ function buildProtocols(): ReviewProtocolPass[] {
             ],
         },
         {
-            id: 'pass-highrisk',
+            id: 'pass-file2',
             jobId: 'job-1',
             attemptNumber: 1,
-            label: 'src/risky.ts',
-            passKind: 'ProRVAugmentation',
-            reason: 'high-risk file re-review',
+            label: 'src/other.ts',
+            passKind: 'Baseline',
             startedAt: '2026-06-20T00:02:00Z',
             completedAt: '2026-06-20T00:03:00Z',
             events: [
@@ -146,11 +145,10 @@ describe('JobProtocolTraceTab quick filter chips', () => {
         replaceMock.mockClear()
     })
 
-    it('renders all six chips with live counts against the unfiltered data', async () => {
+    it('renders the quick-filter chips with live counts against the unfiltered data', async () => {
         const { wrapper } = await mountTab()
 
         expect(chip(wrapper, 'droppedByGate').find('[data-testid="trace-chip-count"]').text()).toBe('1')
-        expect(chip(wrapper, 'highRiskReReview').find('[data-testid="trace-chip-count"]').text()).toBe('2')
         expect(chip(wrapper, 'commentRelevanceDiscarded').find('[data-testid="trace-chip-count"]').text()).toBe('1')
         expect(chip(wrapper, 'memoryReconsiderations').find('[data-testid="trace-chip-count"]').text()).toBe('1')
         expect(chip(wrapper, 'errorsPresent').find('[data-testid="trace-chip-count"]').text()).toBe('1')

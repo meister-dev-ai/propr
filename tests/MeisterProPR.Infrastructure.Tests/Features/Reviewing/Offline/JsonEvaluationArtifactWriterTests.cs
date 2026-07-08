@@ -28,8 +28,6 @@ public sealed class JsonEvaluationArtifactWriterTests
                 "gpt-5.4",
                 "full",
                 ReviewStrategy.FileByFile,
-                true,
-                ReviewAugmentationMode.EarlySteering.ToString(),
                 new Dictionary<string, int>(StringComparer.Ordinal)
                 {
                     ["baselineOnly"] = 0,
@@ -126,8 +124,6 @@ public sealed class JsonEvaluationArtifactWriterTests
                 "gpt-5.4",
                 "full",
                 ReviewStrategy.FileByFile,
-                true,
-                ReviewAugmentationMode.EarlySteering.ToString(),
                 new Dictionary<string, int>(StringComparer.Ordinal)
                 {
                     ["baselineOnly"] = 0,

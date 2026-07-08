@@ -30,7 +30,7 @@ describe('JobProtocolCommentGroups — origin badges', () => {
                     {
                         directory: 'src/foo.ts',
                         comments: [
-                            { severity: 'error', message: 'finding A', filePath: 'src/foo.ts', lineNumber: 42, originPassKind: 'ProRVAugmentation' },
+                            { severity: 'error', message: 'finding A', filePath: 'src/foo.ts', lineNumber: 42, originPassKind: 'Baseline' },
                         ],
                     },
                 ],
@@ -41,8 +41,8 @@ describe('JobProtocolCommentGroups — origin badges', () => {
 
         const badge = wrapper.find('[data-testid="origin-badge"]')
         expect(badge.exists()).toBe(true)
-        expect(badge.text()).toContain('ProRV verification')
-        expect(badge.attributes('aria-label')).toBe('Found by ProRV verification on src/foo.ts')
+        expect(badge.text()).toContain('Initial review')
+        expect(badge.attributes('aria-label')).toBe('Found by Initial review on src/foo.ts')
     })
 
     it('omits the badge when originPassKind is null', () => {

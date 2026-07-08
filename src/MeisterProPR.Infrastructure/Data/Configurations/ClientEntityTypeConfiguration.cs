@@ -62,10 +62,6 @@ internal sealed class ClientEntityTypeConfiguration : IEntityTypeConfiguration<C
             .HasColumnName("scm_comment_posting_enabled")
             .HasDefaultValue(true);
 
-        builder.Property(c => c.EnableProRV)
-            .HasColumnName("enable_prorv")
-            .HasDefaultValue(false);
-
         builder.Property(c => c.EnableEvidenceBackedVerification)
             .HasColumnName("enable_evidence_backed_verification")
             .HasDefaultValue(false);

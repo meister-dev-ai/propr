@@ -58,8 +58,6 @@ public sealed class JsonEvaluationArtifactWriter : IEvaluationArtifactWriter
                 modelId = artifact.Configuration.ModelId,
                 detailMode = artifact.Configuration.DetailMode,
                 strategy = artifact.Configuration.Strategy,
-                enableProRV = artifact.Configuration.EnableProRV,
-                augmentationMode = artifact.Configuration.AugmentationMode,
                 provenanceCounts = artifact.Configuration.ProvenanceCounts,
                 variantName = artifact.Configuration.VariantName,
                 targetedStageKeys = artifact.Configuration.TargetedStageKeys,

@@ -22,14 +22,11 @@ internal static class ProRVFocusedReviewGuidanceResolver
     public static async Task<ProRVFocusedReviewGuidanceResolution> TryResolveAsync(
         ReviewJob job,
         ChangedFile file,
-        ReviewSystemContext baseContext,
-        IChatClient fallbackChatClient,
+        IChatClient chatClient,
+        string? modelId,
         Guid? protocolId,
         IProtocolRecorder protocolRecorder,
         IProRVPrefilter? proRvPrefilter,
-        IAiConnectionRepository? aiConnectionRepository,
-        IAiChatClientFactory? aiClientFactory,
-        IAiRuntimeResolver? aiRuntimeResolver,
         ILogger logger,
         string stageId,
         CancellationToken ct)
@@ -64,13 +61,6 @@ internal static class ProRVFocusedReviewGuidanceResolver
                 null,
                 ct);
 
-            var runtime = await ResolveRuntimeAsync(
-                job,
-                baseContext,
-                new ProRVRuntimeDependencies(fallbackChatClient, aiConnectionRepository, aiClientFactory, aiRuntimeResolver),
-                logger,
-                ct);
-
             var request = new ProRVPrefilterRequest(file.Path, file.UnifiedDiff)
             {
                 Language = TryResolveExplicitLanguage(file.Path),
@@ -79,16 +69,16 @@ internal static class ProRVFocusedReviewGuidanceResolver
 
             var result = await proRvPrefilter.RankRelevantItemsAsync(
                 request,
-                runtime.ChatClient,
-                new ChatOptions { ModelId = runtime.ModelId },
+                chatClient,
+                new ChatOptions { ModelId = modelId },
                 ct);
 
             await RecordProtocolUsageAsync(
                 recording,
                 file.Path,
                 stageId,
-                runtime.RuntimeSource,
-                runtime.ModelId,
+                ProRVRuntimeSources.LensEntryModel,
+                modelId,
                 result,
                 ct);
 
@@ -114,8 +104,8 @@ internal static class ProRVFocusedReviewGuidanceResolver
                 new ProRVStageLocation(file.Path, stageId),
                 new
                 {
-                    runtimeSource = runtime.RuntimeSource,
-                    modelId = runtime.ModelId,
+                    runtimeSource = ProRVRuntimeSources.LensEntryModel,
+                    modelId,
                     proRvStatus = result.Status.ToString(),
                     guidanceCount = guidance.Count,
                     language = result.Language,
@@ -128,8 +118,8 @@ internal static class ProRVFocusedReviewGuidanceResolver
                 result.Status == ProRVPrefilterStatus.Success ? ProRVStageExecutionStates.Completed : ProRVStageExecutionStates.Failed,
                 result.Status == ProRVPrefilterStatus.Success ? null : result.FailureReason,
                 result.Status,
-                runtime.RuntimeSource,
-                runtime.ModelId,
+                ProRVRuntimeSources.LensEntryModel,
+                modelId,
                 result.Language,
                 guidance);
         }
@@ -146,44 +136,6 @@ internal static class ProRVFocusedReviewGuidanceResolver
                 ct);
             return ProRVFocusedReviewGuidanceResolution.Failed(ex.Message);
         }
-    }
-
-    private static async Task<ProRVRuntimeSelection> ResolveRuntimeAsync(
-        ReviewJob job,
-        ReviewSystemContext baseContext,
-        ProRVRuntimeDependencies dependencies,
-        ILogger logger,
-        CancellationToken ct)
-    {
-        if (dependencies.AiRuntimeResolver is not null)
-        {
-            try
-            {
-                var runtime = await dependencies.AiRuntimeResolver.ResolveChatRuntimeAsync(job.ClientId, AiPurpose.ProRVPrefilter, ct);
-                return new ProRVRuntimeSelection(runtime.ChatClient, runtime.Model.RemoteModelId, ProRVRuntimeSources.DedicatedRuntime);
-            }
-            catch (Exception ex)
-            {
-                logger.LogDebug(ex, "Falling back from dedicated ProRV runtime for job {JobId}", job.Id);
-            }
-        }
-
-        if (dependencies.AiConnectionRepository is not null && dependencies.AiClientFactory is not null)
-        {
-            var resolved = await dependencies.AiConnectionRepository.GetActiveBindingForPurposeAsync(job.ClientId, AiPurpose.ProRVPrefilter, ct);
-            if (resolved is not null)
-            {
-                return new ProRVRuntimeSelection(
-                    dependencies.AiClientFactory.CreateClient(resolved.Connection.BaseUrl, resolved.Connection.Secret),
-                    resolved.Binding.RemoteModelId ?? resolved.Model.RemoteModelId,
-                    ProRVRuntimeSources.PurposeBinding);
-            }
-        }
-
-        return new ProRVRuntimeSelection(
-            dependencies.FallbackChatClient,
-            baseContext.DefaultReviewModelId ?? baseContext.ModelId ?? job.AiModel,
-            ProRVRuntimeSources.FallbackReviewRuntime);
     }
 
     private static async Task RecordProtocolUsageAsync(
@@ -394,18 +346,9 @@ internal static class ProRVFocusedReviewGuidanceResolver
 
     internal static class ProRVRuntimeSources
     {
-        public const string DedicatedRuntime = "dedicated_runtime";
-        public const string PurposeBinding = "purpose_binding";
-        public const string FallbackReviewRuntime = "fallback_review_runtime";
+        // The ProRV-lens applicability ranking runs on the lens pass entry's own configured model.
+        public const string LensEntryModel = "lens_entry_model";
     }
-
-    private sealed record ProRVRuntimeSelection(IChatClient ChatClient, string? ModelId, string RuntimeSource);
-
-    private sealed record ProRVRuntimeDependencies(
-        IChatClient FallbackChatClient,
-        IAiConnectionRepository? AiConnectionRepository,
-        IAiChatClientFactory? AiClientFactory,
-        IAiRuntimeResolver? AiRuntimeResolver);
 
     private readonly record struct ProtocolRecordingHandle(Guid? ProtocolId, IProtocolRecorder Recorder);
 

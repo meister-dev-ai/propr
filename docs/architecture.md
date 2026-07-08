@@ -23,8 +23,8 @@ background workers perform review and crawl execution, PostgreSQL stores durable
 OpenAI or AI Foundry provides model execution. Azure DevOps provides guided discovery, crawl
 materialization, and ProCursor source validation. GitHub, GitLab, and Forgejo-family hosts integrate
 through shared provider-neutral review, webhook, publication, and observability seams without
-forking lifecycle, mention, or audit logic. The reviewing flow includes an optional ProRV prefilter
-that ranks file-specific review guidance before the main file review, followed by structured
+forking lifecycle, mention, or audit logic. The reviewing flow supports an optional ProRV knowledge
+lens on the per-client review-pass list that ranks file-specific review guidance for its pass, followed by structured
 verification before publication: local contradiction checks precede per-file persistence, PR-level
     evidence retrieval and bounded AI micro-verification precede the deterministic final gate, summary
     reconciliation aligns the final summary with surviving outcomes, token-optimization diagnostics
@@ -117,9 +117,10 @@ This composition model keeps feature-owned registrations in module roots while s
 cross-cutting and feature-agnostic. The file-by-file reviewing path also publishes a shared profile
 catalog with `Calm`, `Balanced`, and `Assertive` compositions, where `Balanced` is the baseline
 profile resolved for jobs without an explicit `ReviewPipelineProfileId`. The same path also applies
-deterministic context-prefetch and risk-marker dispatch stages ahead of review, then conditionally
-runs a security/concurrency specialist augmentation pass and one bounded high-risk zero-finding
-escalation pass before synthesis. DB-backed registrations are enabled whenever
+deterministic context-prefetch and risk-marker dispatch stages ahead of review; extra scrutiny on
+risky files is opt-in per client through additional review-pass-list entries (a `security` or
+`prorv` lens pass, or a plain resample pass) whose findings are unioned before synthesis.
+DB-backed registrations are enabled whenever
 `DB_CONNECTION_STRING` is configured, including in `Testing`.
 
 When `PROCURSOR_REMOTE_MODE=proprManagedRemote`, the API host binds `IProCursorGateway` to the remote

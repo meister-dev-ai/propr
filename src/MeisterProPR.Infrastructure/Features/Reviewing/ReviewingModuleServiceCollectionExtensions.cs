@@ -28,6 +28,7 @@ using MeisterProPR.Infrastructure.Features.Reviewing.Intake.DependencyInjection;
 using MeisterProPR.Infrastructure.Features.Reviewing.Offline.DependencyInjection;
 using MeisterProPR.Infrastructure.Features.Reviewing.ThreadMemory.DependencyInjection;
 using MeisterProPR.Infrastructure.Repositories;
+using MeisterProPR.ProRV.Abstractions;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
@@ -125,6 +126,7 @@ public static class ReviewingModuleServiceCollectionExtensions
             sp.GetServices<IReviewInvariantFactProvider>(),
             sp.GetService<LocalReviewVerificationExecutor>(),
             sp.GetService<IReviewPipelineProfileProvider>(),
+            sp.GetService<IProRVPrefilter>(),
             sp.GetService<IReviewComplexityClassifier>()));
         services.AddScoped<AgenticFileReviewer>(sp => new AgenticFileReviewer(
             sp.GetRequiredService<ApplicationIAiReviewCore>(),

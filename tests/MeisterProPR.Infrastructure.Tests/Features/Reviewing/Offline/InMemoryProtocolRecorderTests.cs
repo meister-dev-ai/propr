@@ -101,11 +101,11 @@ public sealed class InMemoryProtocolRecorderTests
         var sut = new InMemoryProtocolRecorder(jobs);
         await sut.BeginAsync(
             job.Id, 1, "Program.cs", null, AiConnectionModelCategory.MediumEffort, "gpt-5.4-mini", CancellationToken.None,
-            ReviewPassKind.ProRVAugmentation, "high-risk file — re-reviewed in depth");
+            ReviewPassKind.MultiPassUnion, "resample pass — unioned with the baseline");
 
         var protocol = Assert.Single(job.Protocols);
-        Assert.Equal(ReviewPassKind.ProRVAugmentation.ToString(), protocol.PassKind);
-        Assert.Equal("high-risk file — re-reviewed in depth", protocol.Reason);
+        Assert.Equal(ReviewPassKind.MultiPassUnion.ToString(), protocol.PassKind);
+        Assert.Equal("resample pass — unioned with the baseline", protocol.Reason);
     }
 
     [Fact]

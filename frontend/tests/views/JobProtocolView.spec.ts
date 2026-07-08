@@ -808,7 +808,7 @@ describe('JobProtocolView — comment search and filter (T042)', () => {
             summary: 'All good',
             comments: [
               { severity: 'error', message: 'auth issue', filePath: 'src/auth.ts', lineNumber: 10, originPassKind: 'Baseline' },
-              { severity: 'warning', message: 'high-risk finding', filePath: 'src/auth.ts', lineNumber: 20, originPassKind: 'ProRVAugmentation' },
+              { severity: 'warning', message: 'union finding', filePath: 'src/auth.ts', lineNumber: 20, originPassKind: 'MultiPassUnion', originPassIndex: 2 },
               { severity: 'info', message: 'no provenance', filePath: 'src/utils.ts', lineNumber: 5, originPassKind: null },
             ],
           },
@@ -830,7 +830,7 @@ describe('JobProtocolView — comment search and filter (T042)', () => {
     expect(badges.length).toBe(2)
     const badgeText = badges.map((b) => b.text()).join(' | ')
     expect(badgeText).toContain('Initial review')
-    expect(badgeText).toContain('ProRV verification')
+    expect(badgeText).toContain('Pass 2')
   })
 
   it('shows the clean empty-state on the landing when the review has no findings', async () => {

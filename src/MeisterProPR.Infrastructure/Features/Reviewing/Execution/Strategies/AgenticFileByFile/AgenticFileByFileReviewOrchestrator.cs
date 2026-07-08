@@ -144,17 +144,13 @@ internal sealed class AgenticFileByFileReviewOrchestrator(
 
         var dispatchResult = this.GetDispatchPlanner().ExecuteAsync(job, pr, baseContext, effectiveClient, ct);
         var result = await dispatchResult;
-        await this.RecordLateSteeringBaselinePassEventAsync(baseContext, pr, result.Exceptions.Count, ct);
-        var augmentationFindings = await this.BuildAugmentationFindingsAsync(job, pr, baseContext, effectiveClient, ct);
-        await this.RecordLateSteeringAugmentationPassEventAsync(baseContext, pr, augmentationFindings.Count, ct);
 
         if (result.Exceptions.Count > 0)
         {
             ReviewResult? partialResult = null;
             try
             {
-                partialResult = await this.SynthesizeResultsAsync(
-                    job, pr, baseContext, effectiveClient, result.AgenticCandidateFindings, augmentationFindings, ct);
+                partialResult = await this.SynthesizeResultsAsync(job, pr, baseContext, effectiveClient, result.AgenticCandidateFindings, ct);
             }
             catch (Exception ex)
             {
@@ -164,7 +160,7 @@ internal sealed class AgenticFileByFileReviewOrchestrator(
             throw new PartialReviewFailureException(result.Exceptions.Count, pr.ChangedFiles.Count, result.Exceptions, partialResult);
         }
 
-        return await this.SynthesizeResultsAsync(job, pr, baseContext, effectiveClient, result.AgenticCandidateFindings, augmentationFindings, ct);
+        return await this.SynthesizeResultsAsync(job, pr, baseContext, effectiveClient, result.AgenticCandidateFindings, ct);
     }
 
     private static IReviewPipeline<PerFileReviewContext> CreateDefaultPerFilePipeline(
@@ -177,13 +173,6 @@ internal sealed class AgenticFileByFileReviewOrchestrator(
     {
         return new ReviewPipelineRunner<PerFileReviewContext>(
         [
-            new AgenticProRvPrefilterStage(
-                protocolRecorder,
-                proRvPrefilter,
-                aiConnectionRepository,
-                aiClientFactory,
-                aiRuntimeResolver,
-                NullLogger<AgenticProRvPrefilterStage>.Instance),
             new AgenticConfidenceFloorStage(options, protocolRecorder),
             new FileByFileSemanticScreeningStage(
                 new EmbeddingSemanticCommentScreener(
@@ -201,128 +190,9 @@ internal sealed class AgenticFileByFileReviewOrchestrator(
         ReviewSystemContext baseContext,
         IChatClient effectiveClient,
         IReadOnlyList<CandidateReviewFinding> agenticCandidateFindings,
-        IReadOnlyList<CandidateReviewFinding> augmentationFindings,
         CancellationToken ct)
     {
-        return await this.GetSynthesisExecutor().SynthesizeAsync(job, pr, baseContext, effectiveClient, agenticCandidateFindings, augmentationFindings, ct);
-    }
-
-    private async Task<IReadOnlyList<CandidateReviewFinding>> BuildAugmentationFindingsAsync(
-        ReviewJob job,
-        PullRequest pr,
-        ReviewSystemContext baseContext,
-        IChatClient effectiveClient,
-        CancellationToken ct)
-    {
-        if (baseContext.AugmentationMode != ReviewAugmentationMode.LateAugmentation)
-        {
-            return [];
-        }
-
-        var filesToReview = pr.ChangedFiles
-            .Where(file => !baseContext.ExclusionRules.Matches(file.Path))
-            .ToList();
-        if (filesToReview.Count == 0)
-        {
-            return [];
-        }
-
-        var findings = new List<CandidateReviewFinding>();
-        for (var index = 0; index < filesToReview.Count; index++)
-        {
-            var file = filesToReview[index];
-            var augmentationResult = await fileReviewer.ReviewAugmentationAsync(
-                job,
-                pr,
-                file,
-                index + 1,
-                filesToReview.Count,
-                baseContext,
-                effectiveClient,
-                ct);
-            if (augmentationResult.Comments.Count == 0)
-            {
-                continue;
-            }
-
-            var transientResult = new ReviewFileResult(job.Id, file.Path);
-            transientResult.MarkCompleted(augmentationResult.Summary, augmentationResult.Comments);
-            findings.AddRange(this.GetCandidateFindingFactory().Build([transientResult], passKind: ReviewPassKind.ProRVAugmentation));
-        }
-
-        return findings;
-    }
-
-    private async Task RecordLateSteeringBaselinePassEventAsync(
-        ReviewSystemContext baseContext,
-        PullRequest pr,
-        int failedFileCount,
-        CancellationToken ct)
-    {
-        if (baseContext.AugmentationMode != ReviewAugmentationMode.LateAugmentation ||
-            !baseContext.ActiveProtocolId.HasValue ||
-            baseContext.ProtocolRecorder is null)
-        {
-            return;
-        }
-
-        await baseContext.ProtocolRecorder.RecordReviewStrategyEventAsync(
-            baseContext.ActiveProtocolId.Value,
-            ReviewProtocolEventNames.LateSteeringBaselinePassCompleted,
-            JsonSerializer.Serialize(
-                new
-                {
-                    augmentationMode = baseContext.AugmentationMode.ToString(),
-                    passKind = ReviewPassKind.Baseline.ToString(),
-                    proRvEnabled = false,
-                    scopedFileCount = CountFilesInScope(pr, baseContext),
-                }),
-            JsonSerializer.Serialize(
-                new
-                {
-                    completed = failedFileCount == 0,
-                    failedFileCount,
-                }),
-            null,
-            ct);
-    }
-
-    private async Task RecordLateSteeringAugmentationPassEventAsync(
-        ReviewSystemContext baseContext,
-        PullRequest pr,
-        int augmentationCandidateCount,
-        CancellationToken ct)
-    {
-        if (baseContext.AugmentationMode != ReviewAugmentationMode.LateAugmentation ||
-            !baseContext.ActiveProtocolId.HasValue ||
-            baseContext.ProtocolRecorder is null)
-        {
-            return;
-        }
-
-        await baseContext.ProtocolRecorder.RecordReviewStrategyEventAsync(
-            baseContext.ActiveProtocolId.Value,
-            ReviewProtocolEventNames.LateSteeringAugmentationPassCompleted,
-            JsonSerializer.Serialize(
-                new
-                {
-                    augmentationMode = baseContext.AugmentationMode.ToString(),
-                    passKind = ReviewPassKind.ProRVAugmentation.ToString(),
-                    proRvEnabled = true,
-                    scopedFileCount = CountFilesInScope(pr, baseContext),
-                }),
-            JsonSerializer.Serialize(
-                new
-                {
-                    augmentationCandidateCount,
-                }),
-            null,
-            ct);
-    }
-
-    private static int CountFilesInScope(PullRequest pr, ReviewSystemContext baseContext)
-    {
-        return pr.ChangedFiles.Count(file => !baseContext.ExclusionRules.Matches(file.Path));
+        return await this.GetSynthesisExecutor().SynthesizeAsync(job, pr, baseContext, effectiveClient, agenticCandidateFindings, [], ct);
     }
 
     private AgenticFileReviewDispatchPlanner GetDispatchPlanner()

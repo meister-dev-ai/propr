@@ -99,16 +99,16 @@ describe('useJobProtocolViewModel — file → pass grouping', () => {
         vi.restoreAllMocks()
     })
 
-    it('groups a base + augmentation pass under one file with chronological pass tabs', async () => {
+    it('groups a base + additional union pass under one file with chronological pass tabs', async () => {
         mockProtocols([
             { ...baseProtocol, id: 'pass-base', label: 'Program.cs', passKind: 'Baseline', startedAt: '2024-01-01T00:00:00Z' },
             {
                 ...baseProtocol,
-                id: 'pass-aug',
+                id: 'pass-union',
                 label: 'Program.cs',
                 fileResultId: null,
-                passKind: 'ProRVAugmentation',
-                reason: 'high-risk file — re-reviewed in depth',
+                passKind: 'MultiPassUnion',
+                reason: 'multi-pass union review-pass-list pass #2',
                 startedAt: '2024-01-01T00:02:00Z',
                 totalInputTokens: 400,
                 totalOutputTokens: 100,
@@ -122,11 +122,11 @@ describe('useJobProtocolViewModel — file → pass grouping', () => {
         const fileGroup = vm.fileGroups.find(group => group.path === 'Program.cs')
         expect(fileGroup).toBeTruthy()
         expect(fileGroup!.passes).toHaveLength(2)
-        expect(fileGroup!.tabs.map(tab => tab.label)).toEqual(['Initial review', 'ProRV verification'])
+        expect(fileGroup!.tabs.map(tab => tab.label)).toEqual(['Initial review', 'Pass 2'])
         // Chronological: baseline first.
         expect(fileGroup!.tabs[0].id).toBe('pass-base')
-        expect(fileGroup!.tabs[1].id).toBe('pass-aug')
-        expect(fileGroup!.tabs[1].reason).toBe('high-risk file — re-reviewed in depth')
+        expect(fileGroup!.tabs[1].id).toBe('pass-union')
+        expect(fileGroup!.tabs[1].reason).toBe('multi-pass union review-pass-list pass #2')
         expect(vm.fileGroups).toHaveLength(1)
     })
 
@@ -207,42 +207,16 @@ describe('useJobProtocolViewModel — file → pass grouping', () => {
         expect(prLevel!.passes.map(p => p.id)).toEqual(['pass-synth-failed'])
     })
 
-    it('deep-links an augmentation-origin finding to the file\'s augmentation pass', async () => {
-        mockProtocols([
-            { ...baseProtocol, id: 'pass-base', label: 'Program.cs', passKind: 'Baseline', startedAt: '2024-01-01T00:00:00Z' },
-            {
-                ...baseProtocol,
-                id: 'pass-aug',
-                label: 'Program.cs',
-                fileResultId: null,
-                passKind: 'ProRVAugmentation',
-                startedAt: '2024-01-01T00:02:00Z',
-                totalInputTokens: 400,
-                totalOutputTokens: 100,
-            },
-        ])
-
-        const vm = await mountViewModel()
-        vm.activeTab = 'traces'
-        await flushPromises()
-
-        vm.selectFindingOrigin({ filePath: 'Program.cs', originPassKind: 'ProRVAugmentation' })
-        await flushPromises()
-
-        // Must land on the augmentation pass, NOT the baseline.
-        expect(vm.activePassId).toBe('pass-aug')
-        expect(vm.activeTab).toBe('traces')
-    })
-
     it('deep-links a baseline-origin finding to the baseline pass', async () => {
         mockProtocols([
             { ...baseProtocol, id: 'pass-base', label: 'Program.cs', passKind: 'Baseline', startedAt: '2024-01-01T00:00:00Z' },
             {
                 ...baseProtocol,
-                id: 'pass-aug',
+                id: 'pass-union',
                 label: 'Program.cs',
                 fileResultId: null,
-                passKind: 'ProRVAugmentation',
+                passKind: 'MultiPassUnion',
+                reason: 'multi-pass union review-pass-list pass #2',
                 startedAt: '2024-01-01T00:02:00Z',
                 totalInputTokens: 400,
                 totalOutputTokens: 100,

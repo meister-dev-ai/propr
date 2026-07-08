@@ -6716,7 +6716,7 @@
             }
           },
           "403": {
-            "description": "Caller is not an admin.",
+            "description": "Caller lacks administrator access to the client.",
             "content": {
               "text/plain": {
                 "schema": {
@@ -6818,7 +6818,7 @@
             }
           },
           "403": {
-            "description": "Caller is not an admin.",
+            "description": "Caller lacks administrator access to the client.",
             "content": {
               "text/plain": {
                 "schema": {
@@ -15866,9 +15866,6 @@
           "scmCommentPostingEnabled": {
             "type": "boolean"
           },
-          "enableProRV": {
-            "type": "boolean"
-          },
           "enableEvidenceBackedVerification": {
             "type": "boolean"
           },
@@ -17455,10 +17452,6 @@
             "nullable": true
           },
           "scmCommentPostingEnabled": {
-            "type": "boolean",
-            "nullable": true
-          },
-          "enableProRV": {
             "type": "boolean",
             "nullable": true
           },

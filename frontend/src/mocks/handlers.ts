@@ -314,7 +314,6 @@ function buildMockClient(id: string, displayName = `Mocked Client ${id}`, overri
     defaultReviewPipelineProfileId: storedProfile,
     defaultReviewPipelineProfileUpdatedAtUtc: clientReviewProfiles[id]?.updatedAtUtc ?? null,
     scmCommentPostingEnabled: true,
-    enableProRV: true,
     enableEvidenceBackedVerification: false,
     enableMultiPassUnion: false,
     enableLanguageRobustScreening: false,
@@ -1942,7 +1941,7 @@ export const handlers = [
     await delay(300)
     return HttpResponse.json([
       buildMockClient('1', 'Acme Corp'),
-      buildMockClient('2', 'Globex Inc', { isActive: false, recentUsageTokens: 0, enableProRV: false }),
+      buildMockClient('2', 'Globex Inc', { isActive: false, recentUsageTokens: 0 }),
       buildMockClient('3', 'Umbrella Corp', { recentUsageTokens: 89300 }),
     ])
   }),

@@ -125,16 +125,6 @@ public sealed class DbClientRegistry(
     }
 
     /// <inheritdoc />
-    public async Task<bool> GetProRvEnabledAsync(Guid clientId, CancellationToken ct = default)
-    {
-        return await dbContext.Clients
-                   .Where(c => c.Id == clientId)
-                   .Select(c => (bool?)c.EnableProRV)
-                   .FirstOrDefaultAsync(ct)
-               ?? false;
-    }
-
-    /// <inheritdoc />
     public async Task<bool> GetEvidenceBackedVerificationEnabledAsync(Guid clientId, CancellationToken ct = default)
     {
         return await dbContext.Clients

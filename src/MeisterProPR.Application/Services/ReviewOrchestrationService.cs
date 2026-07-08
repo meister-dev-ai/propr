@@ -772,7 +772,6 @@ public sealed partial class ReviewOrchestrationService(
         }
 
         var customSystemMessage = await clientRegistry.GetCustomSystemMessageAsync(job.ClientId, ct);
-        var enableProRv = await clientRegistry.GetProRvEnabledAsync(job.ClientId, ct);
         var enableEvidenceBackedVerification = await clientRegistry.GetEvidenceBackedVerificationEnabledAsync(job.ClientId, ct);
         var enableLanguageRobustScreening = await clientRegistry.GetLanguageRobustScreeningEnabledAsync(job.ClientId, ct);
         var enableMultiPassUnion = await clientRegistry.GetMultiPassUnionEnabledAsync(job.ClientId, ct);
@@ -840,12 +839,10 @@ public sealed partial class ReviewOrchestrationService(
             DefaultReviewChatClient = chatClient,
             DefaultReviewModelId = job.AiModel,
             RuntimeCapabilities = runtimeCapabilities,
-            EnableProRV = enableProRv,
             EnableEvidenceBackedVerification = enableEvidenceBackedVerification,
             EnableLanguageRobustScreening = enableLanguageRobustScreening,
             EnableMultiPassUnion = enableMultiPassUnion,
             ReviewPasses = reviewPasses,
-            AugmentationMode = ReviewAugmentationMode.LateAugmentation,
             ExclusionRules = exclusionRules,
             ModelId = job.AiModel,
             ProtocolRecorder = protocolRecorder,

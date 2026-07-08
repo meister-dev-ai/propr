@@ -164,8 +164,9 @@ curl -k -X POST https://localhost:5443/api/clients/<client-id>/ai-connections \
   }'
 ```
 
-The optional `proRvPrefilter` binding gives ProRV a dedicated runtime. If it is absent, the review
-pipeline falls back to the main file-review runtime.
+The optional `proRvPrefilter` binding gives the ProRV applicability screen a dedicated runtime in the
+offline evaluation harness's ProRV-prefilter mode. In production, a `prorv` review-pass lens runs its
+applicability screen on the pass entry's own configured model, so this binding is not required there.
 
 ## Guided Discovery Endpoints
 

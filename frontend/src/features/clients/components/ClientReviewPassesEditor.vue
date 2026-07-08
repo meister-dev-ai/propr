@@ -157,6 +157,7 @@ const MAX_PASSES = 4
 const LENS_OPTIONS: { value: string; label: string }[] = [
   { value: '', label: 'None (resample)' },
   { value: 'security', label: 'Security' },
+  { value: 'prorv', label: 'ProRV' },
 ]
 
 const props = defineProps<{

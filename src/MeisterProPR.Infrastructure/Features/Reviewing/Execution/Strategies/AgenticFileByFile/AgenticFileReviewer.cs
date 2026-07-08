@@ -184,14 +184,6 @@ internal sealed partial class AgenticFileReviewer(
         IChatClient effectiveClient,
         IReadOnlyList<FocusedReviewGuidanceItem> focusedReviewGuidance)
     {
-        var enableProRvForCurrentPass = baseContext.AugmentationMode switch
-        {
-            _ when baseContext.PassKind == ReviewPassKind.ProRVAugmentation => true,
-            ReviewAugmentationMode.LateAugmentation => false,
-            ReviewAugmentationMode.Disabled => false,
-            _ => baseContext.EnableProRV,
-        };
-
         var changedLinesCount = ReviewDiffProcessor.CountChangedLines(file.UnifiedDiff);
         LogTierAssigned(logger, file.Path, tier, changedLinesCount, job.Id);
 
@@ -230,8 +222,6 @@ internal sealed partial class AgenticFileReviewer(
             RuntimeCapabilities = tierCapabilities ?? baseContext.RuntimeCapabilities,
             ReviewSession = baseContext.ReviewSession,
             Temperature = baseContext.Temperature,
-            EnableProRV = enableProRvForCurrentPass,
-            AugmentationMode = baseContext.AugmentationMode,
             PassKind = baseContext.PassKind,
             PromptExperiment = baseContext.PromptExperiment,
             SkippedSteps = baseContext.SkippedSteps,
@@ -278,118 +268,10 @@ internal sealed partial class AgenticFileReviewer(
             RuntimeCapabilities = fileContext.RuntimeCapabilities,
             ReviewSession = fileContext.ReviewSession,
             Temperature = fileContext.Temperature,
-            EnableProRV = fileContext.EnableProRV,
-            AugmentationMode = fileContext.AugmentationMode,
             PassKind = fileContext.PassKind,
             PerFileHint = hint is null ? null : hint with { AgenticPlan = plan, AgenticInvestigations = investigations },
             PromptExperiment = fileContext.PromptExperiment,
             SkippedSteps = fileContext.SkippedSteps,
-        };
-    }
-
-    public async Task<ReviewResult> ReviewAugmentationAsync(
-        ReviewJob job,
-        PullRequest pr,
-        ChangedFile file,
-        int fileIndex,
-        int totalFiles,
-        ReviewSystemContext baseContext,
-        IChatClient effectiveClient,
-        CancellationToken ct)
-    {
-        var tier = ReviewDiffProcessor.ClassifyTier(file);
-        var tierCategory = tier switch
-        {
-            FileComplexityTier.Low => AiConnectionModelCategory.LowEffort,
-            FileComplexityTier.Medium => AiConnectionModelCategory.MediumEffort,
-            FileComplexityTier.High => AiConnectionModelCategory.HighEffort,
-            _ => AiConnectionModelCategory.MediumEffort,
-        };
-        var tierPurpose = GetTierPurpose(tier);
-        var (tierClient, tierModelId, tierCapabilities) = await this.ResolveTierClientAsync(job, tierCategory, tierPurpose, ct);
-
-        var relevantThreads = FilterThreadsForFile(pr.ExistingThreads, file.Path);
-        var filePr = new PullRequest(
-            pr.OrganizationUrl,
-            pr.ProjectId,
-            pr.RepositoryId,
-            pr.RepositoryName,
-            pr.PullRequestId,
-            pr.IterationId,
-            pr.Title,
-            pr.Description,
-            pr.SourceBranch,
-            pr.TargetBranch,
-            [file],
-            pr.Status,
-            relevantThreads);
-
-        var augmentationContext = CreateAugmentationContext(baseContext);
-        var transientFileResult = new ReviewFileResult(job.Id, file.Path);
-        var fileContext = this.CreateFileContext(
-            job,
-            pr,
-            file,
-            fileIndex,
-            totalFiles,
-            augmentationContext,
-            null,
-            tier,
-            tierModelId,
-            tierClient,
-            tierCapabilities,
-            effectiveClient,
-            []);
-
-        var pipelineProfile = ResolvePipelineProfile(job, pipelineProfileProvider);
-        fileContext = await this.RunDispatchPipelineAsync(
-            job,
-            file,
-            transientFileResult,
-            fileContext,
-            null,
-            pipelineProfile,
-            ct);
-        fileContext = await this.EnrichContextWithAgenticArtifactsAsync(job, pr, filePr, file, fileContext, effectiveClient, ct);
-
-        var result = await this.ReviewFileCoreAsync(filePr, fileContext, ct);
-        result = MergeAgenticCandidateComments(result, GetAgenticCandidateFindings(fileContext));
-
-        var pipelineState = new ReviewResultPipelineState(
-            job,
-            file,
-            filePr,
-            transientFileResult,
-            fileContext,
-            null,
-            reviewInvariantFactProviders?.SelectMany(provider => provider.GetFacts()).ToList() ?? []);
-
-        return await this.RunReviewResultPipelineAsync(pipelineState, result, pipelineProfile, ct);
-    }
-
-    private static ReviewSystemContext CreateAugmentationContext(ReviewSystemContext baseContext)
-    {
-        return new ReviewSystemContext(baseContext.ClientSystemMessage, baseContext.RepositoryInstructions, baseContext.ReviewTools)
-        {
-            LoopMetrics = baseContext.LoopMetrics,
-            ActiveProtocolId = baseContext.ActiveProtocolId,
-            ProtocolRecorder = baseContext.ProtocolRecorder,
-            ExclusionRules = baseContext.ExclusionRules,
-            DismissedPatterns = baseContext.DismissedPatterns,
-            PromptOverrides = baseContext.PromptOverrides,
-            TierChatClient = baseContext.TierChatClient,
-            ModelId = baseContext.ModelId,
-            DefaultReviewChatClient = baseContext.DefaultReviewChatClient,
-            DefaultReviewModelId = baseContext.DefaultReviewModelId,
-            RuntimeCapabilities = baseContext.RuntimeCapabilities,
-            ReviewSession = baseContext.ReviewSession,
-            Temperature = baseContext.Temperature,
-            EnableProRV = true,
-            AugmentationMode = baseContext.AugmentationMode,
-            PassKind = ReviewPassKind.ProRVAugmentation,
-            PerFileHint = baseContext.PerFileHint,
-            PromptExperiment = baseContext.PromptExperiment,
-            SkippedSteps = baseContext.SkippedSteps,
         };
     }
 
@@ -1226,12 +1108,17 @@ internal sealed partial class AgenticFileReviewer(
         string promptKind,
         CancellationToken ct)
     {
-        if (!protocolId.HasValue || !fileContext.EnableProRV)
+        if (!protocolId.HasValue)
         {
             return;
         }
 
         var guidance = fileContext.PerFileHint?.FocusedReviewGuidance ?? [];
+        if (guidance.Count == 0)
+        {
+            return;
+        }
+
         await protocolRecorder.RecordProRvEventAsync(
             protocolId.Value,
             ReviewProtocolEventNames.ProRVFocusedGuidanceApplied,
@@ -1262,7 +1149,7 @@ internal sealed partial class AgenticFileReviewer(
                 ReviewPipelineProfileCatalog.AgenticBaselineProfileId,
                 "Agentic baseline",
                 ReviewStrategy.AgenticFileByFile,
-                [AgenticProRvPrefilterStage.StageIdConstant],
+                [],
                 [
                     AgenticConfidenceFloorStage.StageIdConstant,
                     AgenticInfoCommentStripStage.StageIdConstant,
@@ -1287,7 +1174,7 @@ internal sealed partial class AgenticFileReviewer(
                    ReviewPipelineProfileCatalog.AgenticBaselineProfileId,
                    "Agentic baseline",
                    ReviewStrategy.AgenticFileByFile,
-                   [AgenticProRvPrefilterStage.StageIdConstant],
+                   [],
                    [
                        AgenticConfidenceFloorStage.StageIdConstant,
                        AgenticInfoCommentStripStage.StageIdConstant,
