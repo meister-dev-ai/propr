@@ -21,6 +21,8 @@ internal sealed class AppUserEntityTypeConfiguration : IEntityTypeConfiguration<
         builder.Property(u => u.GlobalRole).HasColumnName("global_role").HasConversion<string>().IsRequired();
         builder.Property(u => u.IsActive).HasColumnName("is_active").HasDefaultValue(true).IsRequired();
         builder.Property(u => u.CreatedAt).HasColumnName("created_at").IsRequired();
+        builder.Property(u => u.FailedLoginAttempts).HasColumnName("failed_login_attempts").HasDefaultValue(0).IsRequired();
+        builder.Property(u => u.LockoutEndAt).HasColumnName("lockout_end_at").IsRequired(false);
 
         builder.HasIndex(u => u.Username).HasDatabaseName("ix_app_users_username").IsUnique();
         builder.HasIndex(u => u.NormalizedEmail).HasDatabaseName("ix_app_users_normalized_email");

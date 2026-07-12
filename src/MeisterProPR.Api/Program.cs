@@ -5,6 +5,7 @@ using System.Net;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using System.Threading.Channels;
+using System.Threading.RateLimiting;
 using FluentValidation;
 using MeisterProPR.Api.Controllers;
 using MeisterProPR.Api.Extensions;
@@ -46,9 +47,11 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using Microsoft.AspNetCore.HttpOverrides;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Diagnostics.HealthChecks;
+using Microsoft.Extensions.Options;
 using Microsoft.FeatureManagement;
 using Microsoft.OpenApi;
 using OpenTelemetry.Metrics;
@@ -359,6 +362,52 @@ try
         });
     });
 
+    // Anti-automation on the credential endpoints: a per-client-IP fixed window. Disabled by default under
+    // Testing (the in-memory test server has no per-request client IP, which would collapse every request
+    // into one partition). Complemented by the per-account lockout in the login path.
+    builder.Services.AddOptions<AuthRateLimitOptions>()
+        .Configure(options =>
+        {
+            options.Enabled = bool.TryParse(builder.Configuration["MEISTER_AUTH_RATELIMIT_ENABLED"], out var enabled)
+                ? enabled
+                : !isTesting;
+            if (int.TryParse(builder.Configuration["MEISTER_AUTH_RATELIMIT_PERMITS"], out var permits))
+            {
+                options.PermitLimit = permits;
+            }
+
+            if (int.TryParse(builder.Configuration["MEISTER_AUTH_RATELIMIT_WINDOW_SECONDS"], out var windowSeconds))
+            {
+                options.WindowSeconds = windowSeconds;
+            }
+        })
+        .ValidateDataAnnotations()
+        .ValidateOnStart();
+
+    builder.Services.AddRateLimiter(limiterOptions =>
+    {
+        limiterOptions.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+        limiterOptions.AddPolicy(
+            "auth", httpContext =>
+            {
+                var authRateLimit = httpContext.RequestServices.GetRequiredService<IOptions<AuthRateLimitOptions>>().Value;
+                if (!authRateLimit.Enabled)
+                {
+                    return RateLimitPartition.GetNoLimiter("auth-disabled");
+                }
+
+                var partitionKey = httpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown";
+                return RateLimitPartition.GetFixedWindowLimiter(
+                    partitionKey,
+                    _ => new FixedWindowRateLimiterOptions
+                    {
+                        PermitLimit = authRateLimit.PermitLimit,
+                        Window = TimeSpan.FromSeconds(authRateLimit.WindowSeconds),
+                        QueueLimit = 0,
+                    });
+            });
+    });
+
     builder.Services.AddControllers()
         .AddJsonOptions(opts =>
             opts.JsonSerializerOptions.Converters.Add(new JsonStringEnumConverter(JsonNamingPolicy.CamelCase)));
@@ -524,6 +573,7 @@ try
     // authorization evaluates the deny-by-default fallback policy.
     app.UseAuthentication();
     app.UseAuthorization();
+    app.UseRateLimiter();
     app.MapControllers();
     app.MapHealthChecks(
             "/livez",

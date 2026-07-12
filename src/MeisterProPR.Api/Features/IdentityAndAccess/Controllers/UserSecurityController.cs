@@ -4,6 +4,7 @@
 using MeisterProPR.Api.Extensions;
 using MeisterProPR.Application.Interfaces;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 
 namespace MeisterProPR.Api.Controllers;
 
@@ -21,6 +22,7 @@ public sealed class UserSecurityController(
     /// <response code="204">Password changed successfully.</response>
     /// <response code="400">The request is invalid or the new password does not meet policy.</response>
     /// <response code="401">Authentication is missing, invalid, or the current password is incorrect.</response>
+    [EnableRateLimiting("auth")]
     [HttpPost("password")]
     [HttpPost("/users/me/password")]
     [ProducesResponseType(StatusCodes.Status204NoContent)]

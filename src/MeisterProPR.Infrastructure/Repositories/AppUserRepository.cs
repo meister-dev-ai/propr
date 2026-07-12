@@ -55,6 +55,8 @@ public sealed class AppUserRepository(MeisterProPRDbContext db) : IUserRepositor
             GlobalRole = user.GlobalRole,
             IsActive = user.IsActive,
             CreatedAt = user.CreatedAt,
+            FailedLoginAttempts = user.FailedLoginAttempts,
+            LockoutEndAt = user.LockoutEndAt,
         };
         db.AppUsers.Add(record);
         await db.SaveChangesAsync(ct);
@@ -100,6 +102,48 @@ public sealed class AppUserRepository(MeisterProPRDbContext db) : IUserRepositor
         }
 
         record.PasswordHash = passwordHash;
+        await db.SaveChangesAsync(ct);
+    }
+
+    public async Task<int> IncrementFailedLoginAttemptsAsync(Guid id, CancellationToken ct = default)
+    {
+        // Re-read the current row and increment it (rather than writing a value derived from a stale,
+        // request-start snapshot) so sequential failed attempts always accumulate. True concurrent-attempt
+        // atomicity would need a DB-side `col = col + 1`, but the in-memory test provider does not support
+        // ExecuteUpdate; the residual simultaneous-request race is bounded by the per-IP auth rate limit.
+        var record = await db.AppUsers.FindAsync([id], ct);
+        if (record is null)
+        {
+            return 0;
+        }
+
+        record.FailedLoginAttempts += 1;
+        await db.SaveChangesAsync(ct);
+        return record.FailedLoginAttempts;
+    }
+
+    public async Task SetLockoutEndAsync(Guid id, DateTimeOffset? lockoutEndAt, CancellationToken ct = default)
+    {
+        var record = await db.AppUsers.FindAsync([id], ct);
+        if (record is null)
+        {
+            return;
+        }
+
+        record.LockoutEndAt = lockoutEndAt;
+        await db.SaveChangesAsync(ct);
+    }
+
+    public async Task ResetFailedLoginsAsync(Guid id, CancellationToken ct = default)
+    {
+        var record = await db.AppUsers.FindAsync([id], ct);
+        if (record is null)
+        {
+            return;
+        }
+
+        record.FailedLoginAttempts = 0;
+        record.LockoutEndAt = null;
         await db.SaveChangesAsync(ct);
     }
 
@@ -297,6 +341,8 @@ public sealed class AppUserRepository(MeisterProPRDbContext db) : IUserRepositor
             GlobalRole = record.GlobalRole,
             IsActive = record.IsActive,
             CreatedAt = record.CreatedAt,
+            FailedLoginAttempts = record.FailedLoginAttempts,
+            LockoutEndAt = record.LockoutEndAt,
         };
         foreach (var a in record.ClientAssignments)
         {

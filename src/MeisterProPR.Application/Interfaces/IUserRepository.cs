@@ -40,6 +40,15 @@ public interface IUserRepository
     /// <summary>Updates the password hash for the given user.</summary>
     Task UpdatePasswordHashAsync(Guid id, string passwordHash, CancellationToken ct = default);
 
+    /// <summary>Atomically increments the consecutive failed-login count for the user and returns the new value.</summary>
+    Task<int> IncrementFailedLoginAttemptsAsync(Guid id, CancellationToken ct = default);
+
+    /// <summary>Sets (or clears) the lockout expiry for the user without touching the failure count.</summary>
+    Task SetLockoutEndAsync(Guid id, DateTimeOffset? lockoutEndAt, CancellationToken ct = default);
+
+    /// <summary>Clears the failed-login count and lockout after a successful sign-in.</summary>
+    Task ResetFailedLoginsAsync(Guid id, CancellationToken ct = default);
+
     /// <summary>Adds a client role assignment for a user.</summary>
     Task AddClientAssignmentAsync(UserClientRole assignment, CancellationToken ct = default);
 

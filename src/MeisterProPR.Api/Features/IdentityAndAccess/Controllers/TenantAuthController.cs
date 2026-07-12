@@ -13,6 +13,7 @@ using MeisterProPR.Application.Features.Licensing.Support;
 using MeisterProPR.Application.Interfaces;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 
 namespace MeisterProPR.Api.Controllers;
 
@@ -64,6 +65,7 @@ public sealed class TenantAuthController(
     }
 
     /// <summary>Signs a tenant user in with local credentials when tenant policy allows it.</summary>
+    [EnableRateLimiting("auth")]
     [HttpPost("tenants/{tenantSlug}/local-login")]
     [ProducesResponseType(typeof(TenantAuthSessionDto), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]

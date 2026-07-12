@@ -86,6 +86,76 @@ public sealed class IdentityAndAccessModuleIntegrationTests(IdentityAndAccessMod
     }
 
     [Fact]
+    public async Task Login_AfterConsecutiveFailures_LocksAccountEvenForCorrectPassword()
+    {
+        await factory.ResetStateAsync();
+        await factory.SeedUserAsync("dave", "CorrectPassword1!");
+        var client = factory.CreateClient();
+
+        for (var attempt = 0; attempt < 5; attempt++)
+        {
+            var failure = await client.PostAsJsonAsync(
+                "/auth/login",
+                new { username = "dave", password = "WrongPassword1!" });
+            Assert.Equal(HttpStatusCode.Unauthorized, failure.StatusCode);
+        }
+
+        var response = await client.PostAsJsonAsync(
+            "/auth/login",
+            new { username = "dave", password = "CorrectPassword1!" });
+
+        Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+        var body = JsonDocument.Parse(await response.Content.ReadAsStringAsync()).RootElement;
+        Assert.Equal("account_locked", body.GetProperty("code").GetString());
+    }
+
+    [Fact]
+    public async Task Login_Successful_ResetsFailureCounter()
+    {
+        await factory.ResetStateAsync();
+        var user = await factory.SeedUserAsync("erin", "CorrectPassword1!");
+        var client = factory.CreateClient();
+
+        for (var attempt = 0; attempt < 2; attempt++)
+        {
+            await client.PostAsJsonAsync("/auth/login", new { username = "erin", password = "WrongPassword1!" });
+        }
+
+        var ok = await client.PostAsJsonAsync("/auth/login", new { username = "erin", password = "CorrectPassword1!" });
+        Assert.Equal(HttpStatusCode.OK, ok.StatusCode);
+
+        using var scope = factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<MeisterProPRDbContext>();
+        var record = db.AppUsers.Single(u => u.Id == user.Id);
+        Assert.Equal(0, record.FailedLoginAttempts);
+        Assert.Null(record.LockoutEndAt);
+    }
+
+    [Fact]
+    public async Task Login_ExceedingRateLimit_Returns429()
+    {
+        await factory.ResetStateAsync();
+        using var limited = factory.WithWebHostBuilder(builder =>
+        {
+            builder.UseSetting("MEISTER_AUTH_RATELIMIT_ENABLED", "true");
+            builder.UseSetting("MEISTER_AUTH_RATELIMIT_PERMITS", "3");
+            builder.UseSetting("MEISTER_AUTH_RATELIMIT_WINDOW_SECONDS", "60");
+        });
+        var client = limited.CreateClient();
+
+        var last = HttpStatusCode.OK;
+        for (var attempt = 0; attempt < 4; attempt++)
+        {
+            var response = await client.PostAsJsonAsync(
+                "/auth/login",
+                new { username = "nobody", password = "whatever" });
+            last = response.StatusCode;
+        }
+
+        Assert.Equal(HttpStatusCode.TooManyRequests, last);
+    }
+
+    [Fact]
     public async Task GetMe_WithJwtAndClientAssignments_ReturnsRoleMap()
     {
         await factory.ResetStateAsync();
@@ -376,6 +446,7 @@ public sealed class IdentityAndAccessModuleIntegrationTests(IdentityAndAccessMod
                 services.AddScoped<IUserRepository, AppUserRepository>();
                 services.AddScoped<IRefreshTokenRepository, RefreshTokenRepository>();
                 services.AddScoped<IUserPatRepository, UserPatRepository>();
+                services.AddScoped<IAccountLockoutService, AccountLockoutService>();
 
                 services.AddSingleton(Substitute.For<IPullRequestFetcher>());
                 services.AddSingleton(Substitute.For<IAdoCommentPoster>());

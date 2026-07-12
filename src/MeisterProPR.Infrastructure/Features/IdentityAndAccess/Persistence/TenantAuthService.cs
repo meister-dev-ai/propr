@@ -26,6 +26,7 @@ public sealed class TenantAuthService(
     ISecretProtectionCodec secretProtectionCodec,
     IHttpClientFactory httpClientFactory,
     ITenantOidcTokenValidator oidcTokenValidator,
+    IAccountLockoutService accountLockoutService,
     ILogger<TenantAuthService> logger) : ITenantAuthService
 {
     private const string ClientSecretPurpose = "tenant-sso-provider-client-secret";
@@ -100,8 +101,19 @@ public sealed class TenantAuthService(
             return null;
         }
 
+        if (accountLockoutService.IsLockedOut(user))
+        {
+            logger.LogWarning(
+                "TenantLocalLoginDenied TenantSlug={TenantSlug} Username={Username} Reason={Reason}",
+                safeTenantSlug,
+                safeUsername,
+                "account_locked");
+            return null;
+        }
+
         if (!passwordHashService.Verify(password, user.PasswordHash))
         {
+            await accountLockoutService.RecordFailureAsync(user, ct);
             logger.LogWarning(
                 "TenantLocalLoginDenied TenantSlug={TenantSlug} Username={Username} Reason={Reason}",
                 safeTenantSlug,
@@ -109,6 +121,8 @@ public sealed class TenantAuthService(
                 "invalid_password");
             return null;
         }
+
+        await accountLockoutService.ResetAsync(user, ct);
 
         var membership = await userRepository.GetTenantMembershipAsync(tenant.Id, user.Id, ct);
         if (membership is null)

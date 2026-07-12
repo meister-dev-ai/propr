@@ -110,6 +110,36 @@ public sealed class TenantAuthControllerTests(TenantAdministrationApiFactory fac
     }
 
     [Fact]
+    public async Task LocalLogin_AfterConsecutiveFailures_LocksAccount()
+    {
+        factory.ResetLicensing();
+
+        var tenantSlug = $"acme-{Guid.NewGuid():N}";
+        var username = $"tenant.user.{Guid.NewGuid():N}";
+        var email = $"{username}@acme.test";
+        var tenantId = await factory.SeedTenantAsync(tenantSlug, "Acme Corp");
+        var userId = await factory.SeedUserAsync(username, email);
+        await factory.SetLocalPasswordAsync(userId, "CorrectPassword1!");
+        await factory.SeedTenantMembershipAsync(tenantId, userId, TenantRole.TenantUser);
+
+        var client = factory.CreateClient();
+        for (var attempt = 0; attempt < 5; attempt++)
+        {
+            var failure = await client.PostAsJsonAsync(
+                $"/auth/tenants/{tenantSlug}/local-login",
+                new { username, password = "WrongPassword1!" });
+            Assert.Equal(HttpStatusCode.Unauthorized, failure.StatusCode);
+        }
+
+        // Correct password now, but the account is locked out.
+        var response = await client.PostAsJsonAsync(
+            $"/auth/tenants/{tenantSlug}/local-login",
+            new { username, password = "CorrectPassword1!" });
+
+        Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+    }
+
+    [Fact]
     public async Task ChallengeExternal_WhenSsoCapabilityUnavailable_ReturnsPremiumFeatureUnavailable()
     {
         factory.ResetLicensing();

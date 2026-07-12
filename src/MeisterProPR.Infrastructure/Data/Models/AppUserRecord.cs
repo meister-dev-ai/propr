@@ -16,6 +16,8 @@ public sealed class AppUserRecord
     public AppUserRole GlobalRole { get; set; } = AppUserRole.User;
     public bool IsActive { get; set; } = true;
     public DateTimeOffset CreatedAt { get; set; }
+    public int FailedLoginAttempts { get; set; }
+    public DateTimeOffset? LockoutEndAt { get; set; }
 
     public ICollection<UserClientRoleRecord> ClientAssignments { get; set; } = [];
     public ICollection<TenantMembershipRecord> TenantMemberships { get; set; } = [];

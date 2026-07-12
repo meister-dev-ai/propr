@@ -497,6 +497,7 @@ public sealed class TenantAdministrationApiFactory : WebApplicationFactory<Progr
             services.AddSingleton(crawlRepo);
 
             services.AddSingleton(Substitute.For<IJobRepository>());
+            services.AddScoped<IAccountLockoutService, AccountLockoutService>();
 
             // Validate id_tokens against a static, in-memory OIDC configuration keyed off the derived
             // metadata address, so the SSO callback exercises the real signature/issuer/audience/lifetime

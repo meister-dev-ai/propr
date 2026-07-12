@@ -12,6 +12,7 @@ using MeisterProPR.Application.Interfaces;
 using MeisterProPR.Domain.Entities;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 
 namespace MeisterProPR.Api.Controllers;
 
@@ -23,10 +24,12 @@ public sealed class AuthController(
     IRefreshTokenRepository refreshTokenRepository,
     IPasswordHashService passwordHashService,
     IJwtTokenService jwtTokenService,
+    IAccountLockoutService accountLockoutService,
     ILicensingCapabilityService? licensingCapabilityService = null) : ControllerBase
 {
     /// <summary>Authenticate with username and password; returns a JWT access token and refresh token.</summary>
     [AllowAnonymous]
+    [EnableRateLimiting("auth")]
     [HttpPost("login")]
     public async Task<IActionResult> Login([FromBody] LoginRequest request, CancellationToken ct)
     {
@@ -36,11 +39,28 @@ public sealed class AuthController(
         }
 
         var user = await userRepository.GetByUsernameAsync(request.Username, ct);
-        if (user is null || !user.IsActive || string.IsNullOrWhiteSpace(user.PasswordHash) ||
-            !passwordHashService.Verify(request.Password, user.PasswordHash))
+        if (user is null || !user.IsActive || string.IsNullOrWhiteSpace(user.PasswordHash))
         {
             return this.Unauthorized(new { error = "Invalid credentials." });
         }
+
+        if (accountLockoutService.IsLockedOut(user))
+        {
+            return this.Unauthorized(
+                new
+                {
+                    error = "Account is temporarily locked due to repeated failed sign-in attempts. Try again later.",
+                    code = "account_locked",
+                });
+        }
+
+        if (!passwordHashService.Verify(request.Password, user.PasswordHash))
+        {
+            await accountLockoutService.RecordFailureAsync(user, ct);
+            return this.Unauthorized(new { error = "Invalid credentials." });
+        }
+
+        await accountLockoutService.ResetAsync(user, ct);
 
         var accessToken = jwtTokenService.GenerateAccessToken(user);
 
@@ -73,6 +93,7 @@ public sealed class AuthController(
 
     /// <summary>Exchange the refresh-token cookie (or body, for legacy callers) for a new JWT access token.</summary>
     [AllowAnonymous]
+    [EnableRateLimiting("auth")]
     [HttpPost("refresh")]
     public async Task<IActionResult> Refresh([FromBody] RefreshRequest? request = null, CancellationToken ct = default)
     {

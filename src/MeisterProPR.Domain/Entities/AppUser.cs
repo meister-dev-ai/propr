@@ -35,6 +35,12 @@ public sealed class AppUser
     /// <summary>When the account was created.</summary>
     public DateTimeOffset CreatedAt { get; set; } = DateTimeOffset.UtcNow;
 
+    /// <summary>Consecutive failed local-login attempts since the last successful sign-in.</summary>
+    public int FailedLoginAttempts { get; set; }
+
+    /// <summary>When set and in the future, local sign-in is blocked until this instant (failed-attempt lockout).</summary>
+    public DateTimeOffset? LockoutEndAt { get; set; }
+
     /// <summary>Per-client role assignments. Only used when <see cref="GlobalRole" /> is <see cref="AppUserRole.User" />.</summary>
     public ICollection<UserClientRole> ClientAssignments { get; } = [];
 

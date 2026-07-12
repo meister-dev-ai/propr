@@ -2,6 +2,7 @@
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
 using MeisterProPR.Application.Interfaces;
+using MeisterProPR.Application.Options;
 using MeisterProPR.Infrastructure.Auth;
 using MeisterProPR.Infrastructure.DependencyInjection;
 using MeisterProPR.Infrastructure.Features.IdentityAndAccess.Persistence;
@@ -33,6 +34,27 @@ public static class IdentityAndAccessModuleServiceCollectionExtensions
         // an in-memory DbContext without providing a full DB connection string.
         services.AddScoped<ITenantAdminService, TenantAdminService>();
 
+        services.AddOptions<AccountLockoutOptions>()
+            .Configure(options =>
+            {
+                if (int.TryParse(configuration["MEISTER_AUTH_LOCKOUT_MAX_ATTEMPTS"], out var maxAttempts))
+                {
+                    options.MaxFailedAttempts = maxAttempts;
+                }
+
+                if (int.TryParse(configuration["MEISTER_AUTH_LOCKOUT_BASE_MINUTES"], out var baseMinutes))
+                {
+                    options.BaseLockoutMinutes = baseMinutes;
+                }
+
+                if (int.TryParse(configuration["MEISTER_AUTH_LOCKOUT_MAX_MINUTES"], out var maxMinutes))
+                {
+                    options.MaxLockoutMinutes = maxMinutes;
+                }
+            })
+            .ValidateDataAnnotations()
+            .ValidateOnStart();
+
         if (configuration.HasDatabaseConnectionString())
         {
             services.AddScoped<IUserRepository, AppUserRepository>();
@@ -55,6 +77,7 @@ public static class IdentityAndAccessModuleServiceCollectionExtensions
                     validatorLogger);
             });
             services.AddScoped<ITenantAuthService, TenantAuthService>();
+            services.AddScoped<IAccountLockoutService, AccountLockoutService>();
             services.AddScoped<ISessionFactory, SessionFactory>();
             services.AddScoped<SecretBackfillService>();
             services.AddTransient<SystemTenantBootstrapService>();
