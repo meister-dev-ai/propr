@@ -462,7 +462,7 @@ public sealed class TenantAuthControllerTests(TenantAdministrationApiFactory fac
         var providerId = await factory.SeedSsoProviderAsync(
             tenantId,
             "Acme Entra",
-            issuerOrAuthorityUrl: "https://login.microsoftonline.com/common/v2.0",
+            issuerOrAuthorityUrl: "https://login.microsoftonline.com/11111111-1111-1111-1111-111111111111/v2.0",
             clientId: clientId,
             scopes: ["openid", "profile", "email"],
             autoCreateUsers: true);
@@ -475,7 +475,7 @@ public sealed class TenantAuthControllerTests(TenantAdministrationApiFactory fac
         factory.QueueExternalAuthResponse(request =>
         {
             Assert.Equal(HttpMethod.Post, request.Method);
-            Assert.Equal("https://login.microsoftonline.com/common/oauth2/v2.0/token", request.RequestUri?.ToString());
+            Assert.Equal("https://login.microsoftonline.com/11111111-1111-1111-1111-111111111111/oauth2/v2.0/token", request.RequestUri?.ToString());
             var body = request.Content?.ReadAsStringAsync().GetAwaiter().GetResult() ?? string.Empty;
             Assert.Contains($"code={Uri.EscapeDataString("entra-code-existing-user")}", body, StringComparison.Ordinal);
             Assert.Contains($"redirect_uri={Uri.EscapeDataString(expectedCallbackUri)}", body, StringComparison.Ordinal);
@@ -484,7 +484,7 @@ public sealed class TenantAuthControllerTests(TenantAdministrationApiFactory fac
                 new
                 {
                     id_token = CreateOidcIdToken(
-                        "https://login.microsoftonline.com/common/v2.0",
+                        "https://login.microsoftonline.com/11111111-1111-1111-1111-111111111111/v2.0",
                         clientId,
                         "entra-existing-user",
                         email,
@@ -509,6 +509,108 @@ public sealed class TenantAuthControllerTests(TenantAdministrationApiFactory fac
                 && identity.SsoProviderId == providerId
                 && identity.Subject == "entra-existing-user"
                 && identity.UserId == existingUserId));
+    }
+
+    [Fact]
+    public async Task ExternalCallback_WithExistingLocalPasswordAccount_RefusesSilentLink()
+    {
+        factory.ResetLicensing();
+        factory.ResetExternalAuthResponses();
+
+        var tenantSlug = $"acme-{Guid.NewGuid():N}";
+        var username = $"tenant.user.{Guid.NewGuid():N}";
+        var email = $"{username}@acme.test";
+        var tenantId = await factory.SeedTenantAsync(tenantSlug, "Acme Corp");
+        const string clientId = "entra-client-id";
+        var providerId = await factory.SeedSsoProviderAsync(
+            tenantId,
+            "Acme Entra",
+            issuerOrAuthorityUrl: "https://login.microsoftonline.com/common/v2.0",
+            clientId: clientId,
+            scopes: ["openid", "profile", "email"],
+            autoCreateUsers: true);
+        var existingUserId = await factory.SeedUserAsync(username, email);
+        await factory.SetLocalPasswordAsync(existingUserId, "S3cure-Local-Password!");
+
+        using var client = CreateNonRedirectingClient(factory);
+        var (_, state) = await StartChallengeAsync(client, tenantSlug, providerId);
+
+        factory.QueueExternalAuthResponse(_ => CreateJsonResponse(
+            new
+            {
+                id_token = CreateOidcIdToken(
+                    "https://login.microsoftonline.com/common/v2.0",
+                    clientId,
+                    "entra-foreign-subject",
+                    email,
+                    true,
+                    username),
+            }));
+
+        var response = await client.GetAsync($"/auth/external/callback/{tenantSlug}?code=entra-code-local-collision&state={Uri.EscapeDataString(state)}");
+
+        Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+
+        using var scope = factory.Services.CreateScope();
+        var dbContext = scope.ServiceProvider.GetRequiredService<MeisterProPRDbContext>();
+        Assert.False(
+            await dbContext.ExternalIdentities.AnyAsync(identity =>
+                identity.TenantId == tenantId && identity.SsoProviderId == providerId && identity.UserId == existingUserId));
+        Assert.False(
+            await dbContext.TenantMemberships.AnyAsync(membership =>
+                membership.TenantId == tenantId && membership.UserId == existingUserId));
+    }
+
+    [Fact]
+    public async Task ExternalCallback_WithMultiTenantAuthorityAndExistingSsoOnlyAccount_RefusesSilentLink()
+    {
+        factory.ResetLicensing();
+        factory.ResetExternalAuthResponses();
+
+        var tenantSlug = $"acme-{Guid.NewGuid():N}";
+        var username = $"tenant.user.{Guid.NewGuid():N}";
+        var email = $"{username}@acme.test";
+        var tenantId = await factory.SeedTenantAsync(tenantSlug, "Acme Corp");
+        const string clientId = "entra-client-id";
+
+        // Multi-tenant authority (/common) accepts tokens from any Microsoft tenant, so an existing
+        // SSO-only account must not be silently linked by a matching (attacker-assertable) email claim.
+        var providerId = await factory.SeedSsoProviderAsync(
+            tenantId,
+            "Acme Entra",
+            issuerOrAuthorityUrl: "https://login.microsoftonline.com/common/v2.0",
+            clientId: clientId,
+            scopes: ["openid", "profile", "email"],
+            autoCreateUsers: true);
+        var existingUserId = await factory.SeedUserAsync(username, email);
+        await factory.SeedTenantMembershipAsync(tenantId, existingUserId, TenantRole.TenantUser);
+
+        using var client = CreateNonRedirectingClient(factory);
+        var (_, state) = await StartChallengeAsync(client, tenantSlug, providerId);
+
+        factory.QueueExternalAuthResponse(_ => CreateJsonResponse(
+            new
+            {
+                id_token = CreateOidcIdToken(
+                    "https://login.microsoftonline.com/common/v2.0",
+                    clientId,
+                    "entra-foreign-tenant-subject",
+                    email,
+                    true,
+                    username),
+            }));
+
+        var response = await client.GetAsync($"/auth/external/callback/{tenantSlug}?code=entra-code-mt-collision&state={Uri.EscapeDataString(state)}");
+
+        Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+
+        using var scope = factory.Services.CreateScope();
+        var dbContext = scope.ServiceProvider.GetRequiredService<MeisterProPRDbContext>();
+        Assert.False(
+            await dbContext.ExternalIdentities.AnyAsync(identity =>
+                identity.TenantId == tenantId
+                && identity.SsoProviderId == providerId
+                && identity.Subject == "entra-foreign-tenant-subject"));
     }
 
     [Fact]
@@ -564,7 +666,7 @@ public sealed class TenantAuthControllerTests(TenantAdministrationApiFactory fac
         var providerId = await factory.SeedSsoProviderAsync(
             tenantId,
             "Acme Entra",
-            issuerOrAuthorityUrl: "https://login.microsoftonline.com/common/v2.0",
+            issuerOrAuthorityUrl: "https://login.microsoftonline.com/11111111-1111-1111-1111-111111111111/v2.0",
             clientId: clientId,
             scopes: ["openid", "profile", "email"],
             autoCreateUsers: false);
@@ -579,7 +681,7 @@ public sealed class TenantAuthControllerTests(TenantAdministrationApiFactory fac
         factory.QueueExternalAuthResponse(request =>
         {
             Assert.Equal(HttpMethod.Post, request.Method);
-            Assert.Equal("https://login.microsoftonline.com/common/oauth2/v2.0/token", request.RequestUri?.ToString());
+            Assert.Equal("https://login.microsoftonline.com/11111111-1111-1111-1111-111111111111/oauth2/v2.0/token", request.RequestUri?.ToString());
             var body = request.Content?.ReadAsStringAsync().GetAwaiter().GetResult() ?? string.Empty;
             Assert.Contains($"code={Uri.EscapeDataString("entra-code-3")}", body, StringComparison.Ordinal);
             Assert.Contains($"redirect_uri={Uri.EscapeDataString(expectedCallbackUri)}", body, StringComparison.Ordinal);
@@ -588,7 +690,7 @@ public sealed class TenantAuthControllerTests(TenantAdministrationApiFactory fac
                 new
                 {
                     id_token = CreateOidcIdToken(
-                        "https://login.microsoftonline.com/common/v2.0",
+                        "https://login.microsoftonline.com/11111111-1111-1111-1111-111111111111/v2.0",
                         clientId,
                         "entra-user-2",
                         email,
@@ -629,7 +731,7 @@ public sealed class TenantAuthControllerTests(TenantAdministrationApiFactory fac
         var originalProviderId = await factory.SeedSsoProviderAsync(
             tenantId,
             "Acme Entra",
-            issuerOrAuthorityUrl: "https://login.microsoftonline.com/common/v2.0",
+            issuerOrAuthorityUrl: "https://login.microsoftonline.com/11111111-1111-1111-1111-111111111111/v2.0",
             clientId: clientId,
             scopes: ["openid", "profile", "email"]);
         var existingUserId = await factory.SeedUserAsync(username, email);
@@ -638,7 +740,7 @@ public sealed class TenantAuthControllerTests(TenantAdministrationApiFactory fac
             tenantId,
             existingUserId,
             originalProviderId,
-            "https://login.microsoftonline.com/common/v2.0",
+            "https://login.microsoftonline.com/11111111-1111-1111-1111-111111111111/v2.0",
             "entra-user-relink",
             email);
 
@@ -652,7 +754,7 @@ public sealed class TenantAuthControllerTests(TenantAdministrationApiFactory fac
         var recreatedProviderId = await factory.SeedSsoProviderAsync(
             tenantId,
             "Acme Entra",
-            issuerOrAuthorityUrl: "https://login.microsoftonline.com/common/v2.0",
+            issuerOrAuthorityUrl: "https://login.microsoftonline.com/11111111-1111-1111-1111-111111111111/v2.0",
             clientId: clientId,
             scopes: ["openid", "profile", "email"]);
 
@@ -663,7 +765,7 @@ public sealed class TenantAuthControllerTests(TenantAdministrationApiFactory fac
         factory.QueueExternalAuthResponse(request =>
         {
             Assert.Equal(HttpMethod.Post, request.Method);
-            Assert.Equal("https://login.microsoftonline.com/common/oauth2/v2.0/token", request.RequestUri?.ToString());
+            Assert.Equal("https://login.microsoftonline.com/11111111-1111-1111-1111-111111111111/oauth2/v2.0/token", request.RequestUri?.ToString());
             var body = request.Content?.ReadAsStringAsync().GetAwaiter().GetResult() ?? string.Empty;
             Assert.Contains($"code={Uri.EscapeDataString("entra-code-relink")}", body, StringComparison.Ordinal);
             Assert.Contains($"redirect_uri={Uri.EscapeDataString(expectedCallbackUri)}", body, StringComparison.Ordinal);
@@ -672,7 +774,7 @@ public sealed class TenantAuthControllerTests(TenantAdministrationApiFactory fac
                 new
                 {
                     id_token = CreateOidcIdToken(
-                        "https://login.microsoftonline.com/common/v2.0",
+                        "https://login.microsoftonline.com/11111111-1111-1111-1111-111111111111/v2.0",
                         clientId,
                         "entra-user-relink",
                         email,
@@ -958,7 +1060,13 @@ public sealed class TenantAuthControllerTests(TenantAdministrationApiFactory fac
             claims.Add(new Claim("name", displayName));
         }
 
-        var token = new JwtSecurityToken(issuer, audience, claims);
+        var token = new JwtSecurityToken(
+            issuer,
+            audience,
+            claims,
+            notBefore: DateTime.UtcNow.AddMinutes(-5),
+            expires: DateTime.UtcNow.AddMinutes(5),
+            signingCredentials: TenantAdministrationApiFactory.OidcSigningCredentials);
         return new JwtSecurityTokenHandler().WriteToken(token);
     }
 

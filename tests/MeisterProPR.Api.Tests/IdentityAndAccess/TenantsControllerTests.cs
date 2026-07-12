@@ -6,6 +6,7 @@ using System.Net;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Security.Claims;
+using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using MeisterProPR.Application.DTOs;
@@ -29,6 +30,9 @@ using Microsoft.EntityFrameworkCore.Storage;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging;
+using Microsoft.IdentityModel.Protocols;
+using Microsoft.IdentityModel.Protocols.OpenIdConnect;
 using Microsoft.IdentityModel.Tokens;
 using NSubstitute;
 
@@ -205,12 +209,20 @@ public sealed class TenantsControllerTests(TenantAdministrationApiFactory factor
 public sealed class TenantAdministrationApiFactory : WebApplicationFactory<Program>
 {
     private const string TestJwtSecret = "test-tenant-admin-jwt-secret-32chars!";
+
+    private static readonly RsaSecurityKey OidcSigningKey = new(RSA.Create(2048)) { KeyId = "test-oidc-signing-key" };
+
     private readonly string _dbName = $"TestDb_TenantAdmin_{Guid.NewGuid()}";
     private readonly InMemoryDatabaseRoot _dbRoot = new();
     private readonly Queue<Func<HttpRequestMessage, HttpResponseMessage>> _externalAuthResponses = new();
     private readonly Lock _externalAuthResponsesLock = new();
     private readonly TestLicensingCapabilityService _licensingCapabilityService = new();
     private string? _publicBaseUrl;
+
+    /// <summary>
+    ///     Credentials the test id_token factory signs with; the SSO validator is wired to trust the matching public key.
+    /// </summary>
+    public static SigningCredentials OidcSigningCredentials { get; } = new(OidcSigningKey, SecurityAlgorithms.RsaSha256);
 
     public void SetPublicBaseUrl(string? publicBaseUrl)
     {
@@ -485,6 +497,23 @@ public sealed class TenantAdministrationApiFactory : WebApplicationFactory<Progr
             services.AddSingleton(crawlRepo);
 
             services.AddSingleton(Substitute.For<IJobRepository>());
+
+            // Validate id_tokens against a static, in-memory OIDC configuration keyed off the derived
+            // metadata address, so the SSO callback exercises the real signature/issuer/audience/lifetime
+            // path without any network fetch. The trusted public key matches OidcSigningCredentials.
+            services.RemoveAll<ITenantOidcTokenValidator>();
+            services.AddSingleton<ITenantOidcTokenValidator>(_ => new TenantOidcTokenValidator(
+                metadataAddress =>
+                {
+                    var configuration = new OpenIdConnectConfiguration
+                    {
+                        Issuer = metadataAddress.Replace("/.well-known/openid-configuration", string.Empty, StringComparison.Ordinal),
+                    };
+                    configuration.SigningKeys.Add(OidcSigningKey);
+                    return new StaticConfigurationManager<OpenIdConnectConfiguration>(configuration);
+                },
+                Substitute.For<ILogger<TenantOidcTokenValidator>>()));
+
             services.AddScoped<ITenantAuthService, TenantAuthService>();
         });
     }

@@ -10,6 +10,9 @@ using MeisterProPR.Infrastructure.Services;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging;
+using Microsoft.IdentityModel.Protocols;
+using Microsoft.IdentityModel.Protocols.OpenIdConnect;
 
 namespace MeisterProPR.Infrastructure.Features.IdentityAndAccess;
 
@@ -37,6 +40,20 @@ public static class IdentityAndAccessModuleServiceCollectionExtensions
             services.AddScoped<IUserPatRepository, UserPatRepository>();
             services.AddScoped<ITenantMembershipService, TenantMembershipService>();
             services.AddScoped<ITenantSsoProviderService, TenantSsoProviderService>();
+
+            // OIDC id_token validation resolves and caches each provider's discovery document + JWKS per
+            // metadata address, so it is a singleton. The named "TenantSsoAuth" client carries the fetch.
+            services.AddSingleton<ITenantOidcTokenValidator>(serviceProvider =>
+            {
+                var httpClientFactory = serviceProvider.GetRequiredService<IHttpClientFactory>();
+                var validatorLogger = serviceProvider.GetRequiredService<ILogger<TenantOidcTokenValidator>>();
+                return new TenantOidcTokenValidator(
+                    metadataAddress => new ConfigurationManager<OpenIdConnectConfiguration>(
+                        metadataAddress,
+                        new OpenIdConnectConfigurationRetriever(),
+                        new HttpDocumentRetriever(httpClientFactory.CreateClient("TenantSsoAuth"))),
+                    validatorLogger);
+            });
             services.AddScoped<ITenantAuthService, TenantAuthService>();
             services.AddScoped<ISessionFactory, SessionFactory>();
             services.AddScoped<SecretBackfillService>();

@@ -2,14 +2,15 @@
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 // This file implements commercial-only functionality. A commercial license is required to activate or use that functionality.
 
-using System.IdentityModel.Tokens.Jwt;
 using System.Net.Http.Headers;
+using System.Security.Claims;
 using System.Text.Json;
 using MeisterProPR.Application.DTOs;
 using MeisterProPR.Application.Exceptions;
 using MeisterProPR.Application.Interfaces;
 using MeisterProPR.Domain.Entities;
 using MeisterProPR.Domain.Enums;
+using MeisterProPR.Infrastructure.Auth;
 using MeisterProPR.Infrastructure.Data;
 using MeisterProPR.Infrastructure.Data.Models;
 using Microsoft.EntityFrameworkCore;
@@ -24,6 +25,7 @@ public sealed class TenantAuthService(
     IPasswordHashService passwordHashService,
     ISecretProtectionCodec secretProtectionCodec,
     IHttpClientFactory httpClientFactory,
+    ITenantOidcTokenValidator oidcTokenValidator,
     ILogger<TenantAuthService> logger) : ITenantAuthService
 {
     private const string ClientSecretPurpose = "tenant-sso-provider-client-secret";
@@ -364,6 +366,25 @@ public sealed class TenantAuthService(
         var existingUser = await userRepository.GetByNormalizedEmailAsync(normalizedEmail, ct);
         if (existingUser is not null)
         {
+            // Never silently bind an external identity to a pre-existing account when the email claim is
+            // not a trustworthy account key. That holds when (a) the account uses local-password sign-in,
+            // or (b) the provider authority is multi-tenant, where a foreign Microsoft tenant can assert an
+            // arbitrary email in a genuinely signed token. Require an explicit, authenticated link instead.
+            // (Brand-new users are still auto-provisioned below; only linking to an existing account is gated.)
+            if (!string.IsNullOrWhiteSpace(existingUser.PasswordHash) || IsMultiTenantAuthority(provider))
+            {
+                logger.LogWarning(
+                    "TenantExternalSignInRejected TenantId={TenantId} ProviderId={ProviderId} Reason={Reason} UserId={UserId}",
+                    provider.TenantId,
+                    provider.Id,
+                    "external_link_requires_confirmation",
+                    existingUser.Id);
+
+                throw new TenantExternalSignInPolicyException(
+                    "external_link_requires_confirmation",
+                    "An account with this email address already exists. Sign in with your existing method and link this identity provider from your account settings.");
+            }
+
             var membership = await userRepository.GetTenantMembershipAsync(provider.TenantId, existingUser.Id, ct);
             if (membership is not null)
             {
@@ -575,33 +596,23 @@ public sealed class TenantAuthService(
             return null;
         }
 
-        JwtSecurityToken token;
-        try
-        {
-            token = new JwtSecurityTokenHandler().ReadJwtToken(idToken);
-        }
-        catch (ArgumentException)
-        {
-            logger.LogWarning(
-                "TenantExternalSignInRejected TenantId={TenantId} ProviderId={ProviderId} Reason={Reason}",
-                provider.TenantId,
-                provider.Id,
-                "invalid_id_token");
-            return null;
-        }
-
-        if (!token.Audiences.Contains(provider.ClientId, StringComparer.Ordinal))
+        var metadataAddress = BuildOidcMetadataAddress(configuration.Issuer);
+        var validation = await oidcTokenValidator
+            .ValidateAsync(new OidcTokenValidationRequest(idToken, metadataAddress, provider.ClientId), ct)
+            .ConfigureAwait(false);
+        if (!validation.IsValid || validation.Principal is null || validation.Issuer is null)
         {
             logger.LogWarning(
                 "TenantExternalSignInRejected TenantId={TenantId} ProviderId={ProviderId} Reason={Reason}",
                 provider.TenantId,
                 provider.Id,
-                "unexpected_token_audience");
+                validation.FailureCode ?? "invalid_id_token");
             return null;
         }
 
-        var subject = token.Claims.FirstOrDefault(claim => claim.Type == "sub")?.Value;
-        if (string.IsNullOrWhiteSpace(token.Issuer) || string.IsNullOrWhiteSpace(subject))
+        var claims = validation.Principal.Claims.ToList();
+        var subject = claims.FirstOrDefault(claim => claim.Type == "sub")?.Value;
+        if (string.IsNullOrWhiteSpace(subject))
         {
             logger.LogWarning(
                 "TenantExternalSignInRejected TenantId={TenantId} ProviderId={ProviderId} Reason={Reason}",
@@ -611,16 +622,16 @@ public sealed class TenantAuthService(
             return null;
         }
 
-        var email = token.Claims.FirstOrDefault(claim => claim.Type == "email")?.Value
-                    ?? token.Claims.FirstOrDefault(claim => claim.Type == "preferred_username")?.Value
-                    ?? token.Claims.FirstOrDefault(claim => claim.Type == "upn")?.Value;
-        var emailVerified = TryParseBooleanClaim(token, "email_verified", out var explicitEmailVerified)
+        var email = claims.FirstOrDefault(claim => claim.Type == "email")?.Value
+                    ?? claims.FirstOrDefault(claim => claim.Type == "preferred_username")?.Value
+                    ?? claims.FirstOrDefault(claim => claim.Type == "upn")?.Value;
+        var emailVerified = TryParseBooleanClaim(claims, "email_verified", out var explicitEmailVerified)
             ? explicitEmailVerified
             : IsImplicitlyVerifiedOidcEmail(provider, email);
-        var displayName = token.Claims.FirstOrDefault(claim => claim.Type == "name")?.Value
-                          ?? token.Claims.FirstOrDefault(claim => claim.Type == "preferred_username")?.Value;
+        var displayName = claims.FirstOrDefault(claim => claim.Type == "name")?.Value
+                          ?? claims.FirstOrDefault(claim => claim.Type == "preferred_username")?.Value;
 
-        return new TenantExternalIdentityPayload(token.Issuer, subject, email, emailVerified, displayName);
+        return new TenantExternalIdentityPayload(validation.Issuer, subject, email, emailVerified, displayName);
     }
 
     private async Task<TenantExternalIdentityPayload?> ResolveGitHubIdentityPayloadAsync(
@@ -1101,10 +1112,33 @@ public sealed class TenantAuthService(
         return false;
     }
 
-    private static bool TryParseBooleanClaim(JwtSecurityToken token, string claimType, out bool value)
+    private static string BuildOidcMetadataAddress(string issuer)
+    {
+        return $"{issuer.TrimEnd('/')}/.well-known/openid-configuration";
+    }
+
+    private static bool IsMultiTenantAuthority(TenantSsoProviderRecord provider)
+    {
+        if (NormalizeProviderKey(provider.ProviderKind) != "entraid"
+            || !Uri.TryCreate(provider.IssuerOrAuthorityUrl, UriKind.Absolute, out var authority))
+        {
+            return false;
+        }
+
+        // Entra multi-tenant authorities route through the /common, /organizations, or /consumers tenant
+        // segment and accept tokens from any Microsoft tenant, so their email claim is not a trustworthy
+        // key for matching a pre-existing account.
+        var firstSegment = authority.AbsolutePath.Split('/', StringSplitOptions.RemoveEmptyEntries).FirstOrDefault();
+        return firstSegment is not null
+               && (firstSegment.Equals("common", StringComparison.OrdinalIgnoreCase)
+                   || firstSegment.Equals("organizations", StringComparison.OrdinalIgnoreCase)
+                   || firstSegment.Equals("consumers", StringComparison.OrdinalIgnoreCase));
+    }
+
+    private static bool TryParseBooleanClaim(IEnumerable<Claim> claims, string claimType, out bool value)
     {
         value = false;
-        var claimValue = token.Claims.FirstOrDefault(claim => claim.Type == claimType)?.Value;
+        var claimValue = claims.FirstOrDefault(claim => claim.Type == claimType)?.Value;
         if (!bool.TryParse(claimValue, out var parsed))
         {
             return false;
