@@ -60,7 +60,8 @@ public sealed class ProviderRuntimeCapabilityTests
             CreateTransport(
                 HttpStatusCode.OK, """
                                    {"data":[{"id":"gpt-5.4-mini"}]}
-                                   """));
+                                   """),
+            CreateHttpClientFactory());
         var model = AiConnectionTestFactory.CreateChatModel("gpt-5.4-mini");
         var binding = AiConnectionTestFactory.CreateBinding(AiPurpose.ReviewDefault, model, protocolMode);
         var connection = AiConnectionTestFactory.CreateConnection(
@@ -89,7 +90,8 @@ public sealed class ProviderRuntimeCapabilityTests
             CreateTransport(
                 HttpStatusCode.OK, """
                                    {"data":[{"id":"gpt-4o-mini"}]}
-                                   """));
+                                   """),
+            CreateHttpClientFactory());
         var model = AiConnectionTestFactory.CreateChatModel("gpt-4o-mini");
         var binding = AiConnectionTestFactory.CreateBinding(AiPurpose.ReviewDefault, model, AiProtocolMode.Responses);
         var connection = AiConnectionTestFactory.CreateConnection(Guid.NewGuid(), [model], [binding]) with
@@ -100,6 +102,13 @@ public sealed class ProviderRuntimeCapabilityTests
         var capabilities = driver.GetChatRuntimeCapabilities(connection, model, binding);
 
         Assert.Equal(new AgentReviewRuntimeCapabilities(false, false, false, false), capabilities);
+    }
+
+    private static IHttpClientFactory CreateHttpClientFactory()
+    {
+        var services = new ServiceCollection();
+        services.AddHttpClient();
+        return services.BuildServiceProvider().GetRequiredService<IHttpClientFactory>();
     }
 
     private static OpenAiCompatibleTransport CreateTransport(HttpStatusCode statusCode, string payload)

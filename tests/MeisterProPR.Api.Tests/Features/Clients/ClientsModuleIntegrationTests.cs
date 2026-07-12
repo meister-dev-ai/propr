@@ -94,7 +94,7 @@ public sealed class ClientsAiConnectionsModuleIntegrationTests(ClientsController
             {
                 displayName,
                 providerKind = "azureOpenAi",
-                baseUrl = "https://azure.example/openai/",
+                baseUrl = "https://azure-example.openai.azure.com/",
                 auth = new
                 {
                     mode = "apiKey",

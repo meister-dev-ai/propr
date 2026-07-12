@@ -2,6 +2,7 @@
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
 using System.ClientModel;
+using System.ClientModel.Primitives;
 using MeisterProPR.Application.DTOs;
 using MeisterProPR.Application.Features.Reviewing.Execution.Models;
 using MeisterProPR.Application.Interfaces;
@@ -18,7 +19,7 @@ namespace MeisterProPR.Infrastructure.AI.Providers.OpenAi;
 /// <summary>
 ///     OpenAI-hosted provider driver.
 /// </summary>
-public sealed class OpenAiProviderDriver(OpenAiCompatibleTransport transport) : IAiProviderDriver
+public sealed class OpenAiProviderDriver(OpenAiCompatibleTransport transport, IHttpClientFactory httpClientFactory) : IAiProviderDriver
 {
     public AiProviderKind ProviderKind => AiProviderKind.OpenAi;
 
@@ -107,11 +108,14 @@ public sealed class OpenAiProviderDriver(OpenAiCompatibleTransport transport) : 
         return client.AsIEmbeddingGenerator();
     }
 
-    private static OpenAIClientOptions CreateClientOptions(string baseUrl)
+    private OpenAIClientOptions CreateClientOptions(string baseUrl)
     {
+        // Route runtime traffic through the SSRF-guarded HttpClient so a saved baseUrl that resolves to an
+        // internal address cannot be reached at review time (the connect-time guard validates the resolved IP).
         return new OpenAIClientOptions
         {
             Endpoint = new Uri(baseUrl, UriKind.Absolute),
+            Transport = new HttpClientPipelineTransport(httpClientFactory.CreateClient("AiProviderRuntime")),
         };
     }
 

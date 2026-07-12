@@ -14,9 +14,9 @@ namespace MeisterProPR.Infrastructure.AI.Providers.LiteLlm;
 /// <summary>
 ///     LiteLLM OpenAI-compatible provider driver.
 /// </summary>
-public sealed class LiteLlmProviderDriver(OpenAiCompatibleTransport transport) : IAiProviderDriver
+public sealed class LiteLlmProviderDriver(OpenAiCompatibleTransport transport, IHttpClientFactory httpClientFactory) : IAiProviderDriver
 {
-    private readonly OpenAiProviderDriver _innerDriver = new(transport);
+    private readonly OpenAiProviderDriver _innerDriver = new(transport, httpClientFactory);
 
     public AiProviderKind ProviderKind => AiProviderKind.LiteLlm;
 

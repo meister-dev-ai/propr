@@ -16,6 +16,7 @@ using MeisterProPR.Infrastructure.AI.Providers.LiteLlm;
 using MeisterProPR.Infrastructure.AI.Providers.OpenAi;
 using MeisterProPR.Infrastructure.Data;
 using MeisterProPR.Infrastructure.Features.Providers.AzureDevOps.DependencyInjection;
+using MeisterProPR.Infrastructure.Net;
 using MeisterProPR.Infrastructure.Options;
 using MeisterProPR.Infrastructure.Services;
 using Microsoft.EntityFrameworkCore;
@@ -144,17 +145,21 @@ public static class InfrastructureServiceExtensions
                     CreateChatClient(evaluatorEndpoint, configuration["AI_API_KEY"]));
         }
 
-        // Per-client AI connection factory (singleton — stateless, creates new clients on demand)
+        // Per-client AI connection factory (singleton — stateless, creates new clients on demand).
+        // Guard these outbound clients against SSRF: an admin-supplied AI baseUrl must not reach
+        // private/loopback/link-local (incl. cloud-metadata) addresses, and redirects are never followed.
+        // Localhost egress is permitted only in Development so a local provider (e.g. LiteLLM) stays reachable.
+        var allowPrivateEgress = environment?.IsDevelopment() ?? false;
         services.AddHttpClient("AiProbe")
-            .ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler
-            {
-                // Probe requests are outbound only — standard TLS validation applies.
-            });
+            .ConfigurePrimaryHttpMessageHandler(() => GuardedEgressHttpHandler.Create(allowPrivateEgress));
         services.AddHttpClient("AiProviderAdmin")
-            .ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler
-            {
-                // Provider admin operations are outbound only — standard TLS validation applies.
-            });
+            .ConfigurePrimaryHttpMessageHandler(() => GuardedEgressHttpHandler.Create(allowPrivateEgress));
+
+        // Runtime chat/embedding traffic egresses through the same SSRF guard. An infinite HttpClient
+        // timeout matches the SDK's default shared transport so long completions are not truncated; the
+        // per-request cancellation token still bounds each call.
+        services.AddHttpClient("AiProviderRuntime", client => client.Timeout = Timeout.InfiniteTimeSpan)
+            .ConfigurePrimaryHttpMessageHandler(() => GuardedEgressHttpHandler.Create(allowPrivateEgress));
         services.AddSingleton<OpenAiCompatibleRequestFactory>();
         services.AddSingleton<OpenAiCompatibleTransport>();
         services.AddSingleton<IAiProviderDriver, AzureOpenAiProviderDriver>();

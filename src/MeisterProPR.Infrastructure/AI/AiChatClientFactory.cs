@@ -2,9 +2,11 @@
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
 using System.ClientModel;
+using System.ClientModel.Primitives;
 using Azure.AI.OpenAI;
 using Azure.Identity;
 using MeisterProPR.Application.Interfaces;
+using MeisterProPR.Application.Networking;
 using MeisterProPR.Domain.Enums;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Logging;
@@ -20,7 +22,7 @@ namespace MeisterProPR.Infrastructure.AI;
 ///     Either way the returned client is endpoint-bound and selects the deployment per request via
 ///     <see cref="ChatOptions.ModelId" />.
 /// </summary>
-public sealed partial class AiChatClientFactory(ILogger<AiChatClientFactory> logger) : IAiChatClientFactory
+public sealed partial class AiChatClientFactory(ILogger<AiChatClientFactory> logger, IHttpClientFactory httpClientFactory) : IAiChatClientFactory
 {
     /// <inheritdoc />
     public IChatClient CreateClient(string endpointUrl, string? apiKey)
@@ -37,16 +39,27 @@ public sealed partial class AiChatClientFactory(ILogger<AiChatClientFactory> log
 
         if (provider is AiProviderKind.OpenAi or AiProviderKind.LiteLlm)
         {
+            // Route runtime traffic through the SSRF-guarded HttpClient so a base URL resolving to an internal
+            // address is refused at connect time.
             var openAiOptions = new OpenAIClientOptions
             {
                 Endpoint = new Uri(endpointUrl, UriKind.Absolute),
                 NetworkTimeout = networkTimeout,
+                Transport = new HttpClientPipelineTransport(httpClientFactory.CreateClient("AiProviderRuntime")),
             };
             var openAiClient = new OpenAIClient(new ApiKeyCredential(apiKey ?? string.Empty), openAiOptions);
             return openAiClient.GetResponsesClient().AsIChatClient();
         }
 
         var uri = NormaliseRoot(endpointUrl);
+
+        // The Azure SDK has no connect-time egress guard, so lock the host to Microsoft-controlled Azure AI
+        // hosts (private endpoints use these hostnames too) to prevent it reaching an internal target.
+        if (!AzureAiHostPolicy.IsAzureAiHost(uri.Host))
+        {
+            throw new ArgumentException($"Azure AI endpoint host '{uri.Host}' is not an allowed Azure AI host.", nameof(endpointUrl));
+        }
+
         var options = new AzureOpenAIClientOptions
         {
             NetworkTimeout = networkTimeout,
@@ -66,6 +79,11 @@ public sealed partial class AiChatClientFactory(ILogger<AiChatClientFactory> log
         CancellationToken ct = default)
     {
         var endpoint = new Uri(endpointUrl);
+        if (!AzureAiHostPolicy.IsAzureAiHost(endpoint.Host))
+        {
+            return [];
+        }
+
         var azureClient = new AzureOpenAIClient(
             endpoint,
             new ApiKeyCredential(apiKey),

@@ -186,6 +186,60 @@ public sealed class ClientAiConnectionsControllerTests(ClientsControllerTests.Cl
     }
 
     [Fact]
+    public async Task DiscoverModels_WithHttpBaseUrl_Returns400()
+    {
+        var client = this.CreateAuthorizedClient();
+        var payload = new
+        {
+            providerKind = "openAi",
+            baseUrl = "http://api.example.com/v1",
+            auth = new { mode = "apiKey", apiKey = "secret-api-key" },
+        };
+
+        var response = await client.PostAsJsonAsync($"/clients/{ClientId}/ai-connections/discover-models", payload);
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        var body = await response.Content.ReadAsStringAsync();
+        Assert.Contains("https", body, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task DiscoverModels_WithLinkLocalMetadataBaseUrl_Returns400()
+    {
+        var client = this.CreateAuthorizedClient();
+        var payload = new
+        {
+            providerKind = "openAi",
+            baseUrl = "https://169.254.169.254/latest/meta-data/",
+            auth = new { mode = "apiKey", apiKey = "secret-api-key" },
+        };
+
+        var response = await client.PostAsJsonAsync($"/clients/{ClientId}/ai-connections/discover-models", payload);
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        var body = await response.Content.ReadAsStringAsync();
+        Assert.Contains("private, loopback, or link-local", body, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task DiscoverModels_AzureProviderWithNonAzureHost_Returns400()
+    {
+        var client = this.CreateAuthorizedClient();
+        var payload = new
+        {
+            providerKind = "azureOpenAi",
+            baseUrl = "https://internal.corp.example/",
+            auth = new { mode = "apiKey", apiKey = "secret-api-key" },
+        };
+
+        var response = await client.PostAsJsonAsync($"/clients/{ClientId}/ai-connections/discover-models", payload);
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        var body = await response.Content.ReadAsStringAsync();
+        Assert.Contains("Azure AI host", body, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public async Task UpdateAiConnection_WithProviderNeutralPayload_UpdatesConnection()
     {
         var created = await this.SeedConnectionAsync("Primary Profile", ["gpt-4o"]);
