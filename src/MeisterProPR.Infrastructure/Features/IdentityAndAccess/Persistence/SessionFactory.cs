@@ -11,25 +11,28 @@ namespace MeisterProPR.Infrastructure.Features.IdentityAndAccess.Persistence;
 /// <summary>Creates the standard JWT plus refresh-token session payload used by auth endpoints.</summary>
 public sealed class SessionFactory(
     IJwtTokenService jwtTokenService,
-    IRefreshTokenRepository refreshTokenRepository) : ISessionFactory
+    IRefreshTokenRepository refreshTokenRepository,
+    SessionPolicy sessionPolicy) : ISessionFactory
 {
     public async Task<IssuedSession> CreateAsync(AppUser user, CancellationToken ct = default)
     {
         var accessToken = jwtTokenService.GenerateAccessToken(user);
         var rawRefreshToken = Convert.ToBase64String(RandomNumberGenerator.GetBytes(32));
 
+        var now = DateTimeOffset.UtcNow;
         var refreshToken = new RefreshToken
         {
             Id = Guid.NewGuid(),
             UserId = user.Id,
             TokenHash = ComputeSha256(rawRefreshToken),
-            ExpiresAt = DateTimeOffset.UtcNow.AddDays(7),
-            CreatedAt = DateTimeOffset.UtcNow,
+            ExpiresAt = now + sessionPolicy.AbsoluteLifetime,
+            CreatedAt = now,
+            LastUsedAt = now,
         };
 
         await refreshTokenRepository.AddAsync(refreshToken, ct);
 
-        return new IssuedSession(accessToken, rawRefreshToken);
+        return new IssuedSession(accessToken, rawRefreshToken, refreshToken.ExpiresAt);
     }
 
     private static string ComputeSha256(string input)

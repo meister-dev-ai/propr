@@ -21,6 +21,12 @@ public sealed class RefreshToken
     /// <summary>When this refresh token was issued.</summary>
     public DateTimeOffset CreatedAt { get; set; } = DateTimeOffset.UtcNow;
 
+    /// <summary>
+    ///     When this refresh token was last exchanged for an access token. Advanced on every successful
+    ///     refresh and used to enforce the idle-timeout bound of the session policy.
+    /// </summary>
+    public DateTimeOffset LastUsedAt { get; set; } = DateTimeOffset.UtcNow;
+
     /// <summary>When this refresh token was revoked, if applicable.</summary>
     public DateTimeOffset? RevokedAt { get; set; }
 

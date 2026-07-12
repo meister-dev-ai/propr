@@ -11,8 +11,14 @@ public interface IRefreshTokenRepository
     /// <summary>Persists a new refresh token.</summary>
     Task AddAsync(RefreshToken token, CancellationToken ct = default);
 
-    /// <summary>Returns an active refresh token by hash, or null if not found or revoked/expired.</summary>
+    /// <summary>
+    ///     Returns an active refresh token by hash, or null when it is missing, revoked, past its
+    ///     absolute expiry, or idle beyond the session policy's idle timeout.
+    /// </summary>
     Task<RefreshToken?> GetActiveByHashAsync(string tokenHash, CancellationToken ct = default);
+
+    /// <summary>Advances a refresh token's last-used timestamp to keep the session within its idle window.</summary>
+    Task TouchLastUsedAsync(Guid id, DateTimeOffset lastUsedAt, CancellationToken ct = default);
 
     /// <summary>Revokes all active refresh tokens for the given user.</summary>
     Task RevokeAllForUserAsync(Guid userId, CancellationToken ct = default);

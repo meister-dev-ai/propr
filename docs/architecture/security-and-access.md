@@ -20,13 +20,14 @@ sequenceDiagram
     UR-->>Auth: AppUser (BCrypt password hash)
     Auth->>Auth: BCrypt.Verify(password, hash)
     Auth->>JT: GenerateAccessToken(user)
-    Auth->>UR: persist RefreshToken (SHA-256 hash, 7 days)
-    Auth-->>User: { accessToken (15 min), refreshToken (7 days) }
+    Auth->>UR: persist RefreshToken (SHA-256 hash, absolute + idle bounds)
+    Auth-->>User: { accessToken (15 min) } + httpOnly refresh-token cookie
 
-    Note over User,Auth: Silent refresh within 60 s of expiry
+    Note over User,Auth: Silent refresh within 60 s of access-token expiry
 
-    User->>Auth: POST /auth/refresh { refreshToken }
-    Auth->>UR: GetActiveByHashAsync(sha256(token))
+    User->>Auth: POST /auth/refresh (refresh-token cookie)
+    Auth->>UR: GetActiveByHashAsync (rejects if past absolute expiry, idle-timed-out, or revoked)
+    Auth->>UR: advance LastUsedAt (renews the idle window)
     Auth->>JT: GenerateAccessToken(user)
     Auth-->>User: { accessToken (15 min) }
 ```
@@ -34,6 +35,16 @@ sequenceDiagram
 JWTs and PATs establish the caller identity used by admin endpoints and review-submission role
 checks. `X-Ado-Token` is validated separately on review intake and status endpoints so the backend
 can verify the caller against Azure DevOps without storing or logging the token.
+
+### Session lifetime
+
+A browser session is bound by two limits, and ends when either is crossed: an **idle timeout** (no
+successful `/auth/refresh` within the window) and an **absolute lifetime** (measured from sign-in,
+regardless of activity). Each successful refresh advances the token's last-used timestamp to renew
+the idle window; the absolute expiry is fixed at issuance and never extended, so a continuously-active
+session is still forced to re-authenticate once it elapses. Both bounds are operator-tunable via
+`MEISTER_SESSION_IDLE_MINUTES` (default 480 — eight hours) and `MEISTER_SESSION_ABSOLUTE_HOURS`
+(default 72 — three days); the httpOnly refresh-token cookie carries the absolute expiry.
 
 ## Tenant Authentication Flow
 

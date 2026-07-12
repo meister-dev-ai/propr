@@ -10,7 +10,8 @@ using Microsoft.EntityFrameworkCore;
 namespace MeisterProPR.Infrastructure.Repositories;
 
 /// <summary>EF Core implementation of <see cref="IRefreshTokenRepository" />.</summary>
-public sealed class RefreshTokenRepository(MeisterProPRDbContext db) : IRefreshTokenRepository
+public sealed class RefreshTokenRepository(MeisterProPRDbContext db, SessionPolicy sessionPolicy)
+    : IRefreshTokenRepository
 {
     public async Task AddAsync(RefreshToken token, CancellationToken ct = default)
     {
@@ -22,6 +23,7 @@ public sealed class RefreshTokenRepository(MeisterProPRDbContext db) : IRefreshT
                 TokenHash = token.TokenHash,
                 ExpiresAt = token.ExpiresAt,
                 CreatedAt = token.CreatedAt,
+                LastUsedAt = token.LastUsedAt,
                 RevokedAt = token.RevokedAt,
             });
         await db.SaveChangesAsync(ct);
@@ -30,12 +32,14 @@ public sealed class RefreshTokenRepository(MeisterProPRDbContext db) : IRefreshT
     public async Task<RefreshToken?> GetActiveByHashAsync(string tokenHash, CancellationToken ct = default)
     {
         var now = DateTimeOffset.UtcNow;
+        var idleThreshold = now - sessionPolicy.IdleTimeout;
         var record = await db.RefreshTokens
             .FirstOrDefaultAsync(
                 t =>
                     t.TokenHash == tokenHash &&
                     t.RevokedAt == null &&
-                    t.ExpiresAt > now,
+                    t.ExpiresAt > now &&
+                    t.LastUsedAt > idleThreshold,
                 ct);
 
         return record is null
@@ -47,8 +51,21 @@ public sealed class RefreshTokenRepository(MeisterProPRDbContext db) : IRefreshT
                 TokenHash = record.TokenHash,
                 ExpiresAt = record.ExpiresAt,
                 CreatedAt = record.CreatedAt,
+                LastUsedAt = record.LastUsedAt,
                 RevokedAt = record.RevokedAt,
             };
+    }
+
+    public async Task TouchLastUsedAsync(Guid id, DateTimeOffset lastUsedAt, CancellationToken ct = default)
+    {
+        var record = await db.RefreshTokens.FirstOrDefaultAsync(t => t.Id == id, ct);
+        if (record is null)
+        {
+            return;
+        }
+
+        record.LastUsedAt = lastUsedAt;
+        await db.SaveChangesAsync(ct);
     }
 
     public async Task RevokeAllForUserAsync(Guid userId, CancellationToken ct = default)

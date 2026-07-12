@@ -25,6 +25,7 @@ public sealed class AuthController(
     IPasswordHashService passwordHashService,
     IJwtTokenService jwtTokenService,
     IAccountLockoutService accountLockoutService,
+    SessionPolicy sessionPolicy,
     ILicensingCapabilityService? licensingCapabilityService = null) : ControllerBase
 {
     /// <summary>Authenticate with username and password; returns a JWT access token and refresh token.</summary>
@@ -67,13 +68,15 @@ public sealed class AuthController(
         var rawRefreshToken = Convert.ToBase64String(RandomNumberGenerator.GetBytes(32));
         var tokenHash = ComputeSha256(rawRefreshToken);
 
+        var now = DateTimeOffset.UtcNow;
         var refreshToken = new RefreshToken
         {
             Id = Guid.NewGuid(),
             UserId = user.Id,
             TokenHash = tokenHash,
-            ExpiresAt = DateTimeOffset.UtcNow.AddDays(7),
-            CreatedAt = DateTimeOffset.UtcNow,
+            ExpiresAt = now + sessionPolicy.AbsoluteLifetime,
+            CreatedAt = now,
+            LastUsedAt = now,
         };
 
         await refreshTokenRepository.AddAsync(refreshToken, ct);
@@ -116,6 +119,10 @@ public sealed class AuthController(
         {
             return this.Unauthorized(new { error = "User account is not active." });
         }
+
+        // Advance the idle window so an actively-used session keeps refreshing; an abandoned session
+        // stops here and lapses once the idle timeout elapses.
+        await refreshTokenRepository.TouchLastUsedAsync(token.Id, DateTimeOffset.UtcNow, ct);
 
         var accessToken = jwtTokenService.GenerateAccessToken(user);
         return this.Ok(

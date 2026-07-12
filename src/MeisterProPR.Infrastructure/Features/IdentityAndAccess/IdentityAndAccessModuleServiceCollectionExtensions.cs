@@ -30,6 +30,10 @@ public static class IdentityAndAccessModuleServiceCollectionExtensions
         IConfiguration configuration,
         IHostEnvironment? environment = null)
     {
+        // Session lifetimes are needed both by the DB-backed refresh-token repository and by the
+        // auth controllers, so register the policy unconditionally.
+        services.AddSingleton(SessionPolicyFactory.FromConfiguration(configuration));
+
         // Tenant administration is EF-backed and must be available in test hosts that swap in
         // an in-memory DbContext without providing a full DB connection string.
         services.AddScoped<ITenantAdminService, TenantAdminService>();

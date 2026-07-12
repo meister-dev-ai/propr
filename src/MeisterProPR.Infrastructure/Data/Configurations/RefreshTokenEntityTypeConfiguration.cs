@@ -18,6 +18,7 @@ internal sealed class RefreshTokenEntityTypeConfiguration : IEntityTypeConfigura
         builder.Property(t => t.TokenHash).HasColumnName("token_hash").IsRequired();
         builder.Property(t => t.ExpiresAt).HasColumnName("expires_at").IsRequired();
         builder.Property(t => t.CreatedAt).HasColumnName("created_at").IsRequired();
+        builder.Property(t => t.LastUsedAt).HasColumnName("last_used_at").IsRequired();
         builder.Property(t => t.RevokedAt).HasColumnName("revoked_at").IsRequired(false);
 
         builder.HasIndex(t => t.TokenHash).HasDatabaseName("ix_refresh_tokens_token_hash");

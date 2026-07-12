@@ -21,5 +21,6 @@ public interface ISessionFactory
 public sealed record IssuedSession(
     string AccessToken,
     string RefreshToken,
+    DateTimeOffset RefreshTokenExpiresAt,
     int ExpiresIn = 900,
     string TokenType = "Bearer");

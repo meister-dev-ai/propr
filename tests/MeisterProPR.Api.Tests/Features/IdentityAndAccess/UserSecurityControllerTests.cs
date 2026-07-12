@@ -279,6 +279,17 @@ public sealed class UserSecurityControllerTests(UserSecurityControllerTests.User
                     t.ExpiresAt > now));
         }
 
+        public Task TouchLastUsedAsync(Guid id, DateTimeOffset lastUsedAt, CancellationToken ct = default)
+        {
+            var token = this._tokens.FirstOrDefault(t => t.Id == id);
+            if (token is not null)
+            {
+                token.LastUsedAt = lastUsedAt;
+            }
+
+            return Task.CompletedTask;
+        }
+
         public Task RevokeAllForUserAsync(Guid userId, CancellationToken ct = default)
         {
             var now = DateTimeOffset.UtcNow;
