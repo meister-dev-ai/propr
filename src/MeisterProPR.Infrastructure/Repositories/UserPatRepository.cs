@@ -2,6 +2,7 @@
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
 using MeisterProPR.Application.Interfaces;
+using MeisterProPR.Application.Security;
 using MeisterProPR.Domain.Entities;
 using MeisterProPR.Infrastructure.Data;
 using MeisterProPR.Infrastructure.Data.Models;
@@ -20,6 +21,7 @@ public sealed class UserPatRepository(MeisterProPRDbContext db) : IUserPatReposi
                 Id = pat.Id == Guid.Empty ? Guid.NewGuid() : pat.Id,
                 UserId = pat.UserId,
                 TokenHash = pat.TokenHash,
+                TokenLookupHash = pat.TokenLookupHash,
                 Label = pat.Label,
                 ExpiresAt = pat.ExpiresAt,
                 CreatedAt = pat.CreatedAt,
@@ -32,33 +34,52 @@ public sealed class UserPatRepository(MeisterProPRDbContext db) : IUserPatReposi
     public async Task<UserPat?> GetActiveByRawTokenAsync(string rawToken, CancellationToken ct = default)
     {
         var now = DateTimeOffset.UtcNow;
-        // Load all non-revoked, non-expired candidates and BCrypt-verify in memory.
-        var candidates = await db.UserPats
-            .Where(p => !p.IsRevoked && (p.ExpiresAt == null || p.ExpiresAt > now))
-            .ToListAsync(ct);
+        var lookupHash = PatTokenLookupHash.Compute(rawToken);
 
-        var matched = candidates.FirstOrDefault(p =>
-            BCrypt.Net.BCrypt.Verify(rawToken, p.TokenHash));
+        // Fast path: a single indexed candidate by the deterministic lookup hash.
+        var record = await db.UserPats
+            .Where(p => p.TokenLookupHash == lookupHash && !p.IsRevoked && (p.ExpiresAt == null || p.ExpiresAt > now))
+            .FirstOrDefaultAsync(ct);
 
-        if (matched is null)
+        if (record is null)
         {
+            // Fallback for PATs issued before the lookup hash existed: a bounded scan over only the
+            // not-yet-migrated rows, backfilling the hash on a match so this set shrinks toward empty.
+            var legacyCandidates = await db.UserPats
+                .Where(p => p.TokenLookupHash == null && !p.IsRevoked && (p.ExpiresAt == null || p.ExpiresAt > now))
+                .ToListAsync(ct);
+            record = legacyCandidates.FirstOrDefault(p => BCrypt.Net.BCrypt.Verify(rawToken, p.TokenHash));
+            if (record is null)
+            {
+                return null;
+            }
+        }
+        else if (!BCrypt.Net.BCrypt.Verify(rawToken, record.TokenHash))
+        {
+            // The lookup hash only narrows candidates; the salted BCrypt hash is the authoritative check.
             return null;
         }
 
-        // Update LastUsedAt
-        matched.LastUsedAt = now;
+        record.LastUsedAt = now;
+        record.TokenLookupHash = lookupHash; // idempotent on the fast path; backfills on the legacy path
         await db.SaveChangesAsync(ct);
 
+        return MapToDomain(record);
+    }
+
+    private static UserPat MapToDomain(UserPatRecord record)
+    {
         return new UserPat
         {
-            Id = matched.Id,
-            UserId = matched.UserId,
-            TokenHash = matched.TokenHash,
-            Label = matched.Label,
-            ExpiresAt = matched.ExpiresAt,
-            CreatedAt = matched.CreatedAt,
-            LastUsedAt = matched.LastUsedAt,
-            IsRevoked = matched.IsRevoked,
+            Id = record.Id,
+            UserId = record.UserId,
+            TokenHash = record.TokenHash,
+            TokenLookupHash = record.TokenLookupHash,
+            Label = record.Label,
+            ExpiresAt = record.ExpiresAt,
+            CreatedAt = record.CreatedAt,
+            LastUsedAt = record.LastUsedAt,
+            IsRevoked = record.IsRevoked,
         };
     }
 

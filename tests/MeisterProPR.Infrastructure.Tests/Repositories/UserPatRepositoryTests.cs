@@ -1,6 +1,7 @@
 // Copyright (c) Andreas Rain.
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
+using MeisterProPR.Application.Security;
 using MeisterProPR.Infrastructure.Data;
 using MeisterProPR.Infrastructure.Data.Models;
 using MeisterProPR.Infrastructure.Repositories;
@@ -162,5 +163,84 @@ public sealed class UserPatRepositoryTests
         // Assert: only the non-expired PAT is returned
         Assert.Single(results);
         Assert.Equal("Active PAT", results[0].Label);
+    }
+
+    [Fact]
+    public async Task GetActiveByRawTokenAsync_WithLookupHash_ResolvesViaIndexedFastPath()
+    {
+        await using var db = CreateContext();
+        const string rawToken = "mpr_fast_path_token";
+        var patId = Guid.NewGuid();
+        db.UserPats.Add(
+            new UserPatRecord
+            {
+                Id = patId,
+                UserId = Guid.NewGuid(),
+                TokenHash = BCrypt.Net.BCrypt.HashPassword(rawToken),
+                TokenLookupHash = PatTokenLookupHash.Compute(rawToken),
+                Label = "PAT",
+                IsRevoked = false,
+                CreatedAt = DateTimeOffset.UtcNow,
+            });
+        await db.SaveChangesAsync();
+        var repo = new UserPatRepository(db);
+
+        var result = await repo.GetActiveByRawTokenAsync(rawToken);
+
+        Assert.NotNull(result);
+        Assert.Equal(patId, result.Id);
+        Assert.NotNull(result.LastUsedAt);
+    }
+
+    [Fact]
+    public async Task GetActiveByRawTokenAsync_LegacyPatWithoutLookupHash_MatchesAndBackfillsHash()
+    {
+        await using var db = CreateContext();
+        const string rawToken = "mpr_legacy_token";
+        var patId = Guid.NewGuid();
+        db.UserPats.Add(
+            new UserPatRecord
+            {
+                Id = patId,
+                UserId = Guid.NewGuid(),
+                TokenHash = BCrypt.Net.BCrypt.HashPassword(rawToken),
+                TokenLookupHash = null, // issued before the lookup hash existed
+                Label = "Legacy PAT",
+                IsRevoked = false,
+                CreatedAt = DateTimeOffset.UtcNow,
+            });
+        await db.SaveChangesAsync();
+        var repo = new UserPatRepository(db);
+
+        var result = await repo.GetActiveByRawTokenAsync(rawToken);
+
+        Assert.NotNull(result);
+        Assert.Equal(patId, result.Id);
+        var record = await db.UserPats.FindAsync(patId);
+        Assert.Equal(PatTokenLookupHash.Compute(rawToken), record!.TokenLookupHash);
+    }
+
+    [Fact]
+    public async Task GetActiveByRawTokenAsync_WithUnknownToken_ReturnsNull()
+    {
+        await using var db = CreateContext();
+        const string rawToken = "mpr_real_token";
+        db.UserPats.Add(
+            new UserPatRecord
+            {
+                Id = Guid.NewGuid(),
+                UserId = Guid.NewGuid(),
+                TokenHash = BCrypt.Net.BCrypt.HashPassword(rawToken),
+                TokenLookupHash = PatTokenLookupHash.Compute(rawToken),
+                Label = "PAT",
+                IsRevoked = false,
+                CreatedAt = DateTimeOffset.UtcNow,
+            });
+        await db.SaveChangesAsync();
+        var repo = new UserPatRepository(db);
+
+        var result = await repo.GetActiveByRawTokenAsync("mpr_wrong_token");
+
+        Assert.Null(result);
     }
 }

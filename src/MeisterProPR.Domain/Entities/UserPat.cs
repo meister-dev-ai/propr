@@ -15,6 +15,12 @@ public sealed class UserPat
     /// <summary>BCrypt hash of the plaintext token. The plaintext is returned only once at creation.</summary>
     public string TokenHash { get; set; } = string.Empty;
 
+    /// <summary>
+    ///     Deterministic SHA-256 hash of the plaintext token, used only as an indexed lookup key to fetch the
+    ///     single candidate row (the salted BCrypt hash cannot be queried). Never a substitute for BCrypt verification.
+    /// </summary>
+    public string? TokenLookupHash { get; set; }
+
     /// <summary>Human-readable label for the PAT.</summary>
     public string Label { get; set; } = string.Empty;
 

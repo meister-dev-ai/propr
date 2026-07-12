@@ -9,6 +9,7 @@ public sealed class UserPatRecord
     public Guid Id { get; set; }
     public Guid UserId { get; set; }
     public string TokenHash { get; set; } = string.Empty;
+    public string? TokenLookupHash { get; set; }
     public string Label { get; set; } = string.Empty;
     public DateTimeOffset? ExpiresAt { get; set; }
     public DateTimeOffset CreatedAt { get; set; }

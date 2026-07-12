@@ -16,6 +16,7 @@ internal sealed class UserPatEntityTypeConfiguration : IEntityTypeConfiguration<
         builder.Property(p => p.Id).HasColumnName("id").ValueGeneratedNever();
         builder.Property(p => p.UserId).HasColumnName("user_id").IsRequired();
         builder.Property(p => p.TokenHash).HasColumnName("token_hash").IsRequired();
+        builder.Property(p => p.TokenLookupHash).HasColumnName("token_lookup_hash").IsRequired(false);
         builder.Property(p => p.Label).HasColumnName("label").IsRequired();
         builder.Property(p => p.ExpiresAt).HasColumnName("expires_at").IsRequired(false);
         builder.Property(p => p.CreatedAt).HasColumnName("created_at").IsRequired();
@@ -23,5 +24,6 @@ internal sealed class UserPatEntityTypeConfiguration : IEntityTypeConfiguration<
         builder.Property(p => p.IsRevoked).HasColumnName("is_revoked").HasDefaultValue(false).IsRequired();
 
         builder.HasIndex(p => p.TokenHash).HasDatabaseName("ix_user_pats_token_hash");
+        builder.HasIndex(p => p.TokenLookupHash).HasDatabaseName("ix_user_pats_token_lookup_hash");
     }
 }

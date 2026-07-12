@@ -4,6 +4,7 @@
 using System.Security.Cryptography;
 using MeisterProPR.Api.Extensions;
 using MeisterProPR.Application.Interfaces;
+using MeisterProPR.Application.Security;
 using MeisterProPR.Domain.Entities;
 using Microsoft.AspNetCore.Mvc;
 
@@ -37,6 +38,7 @@ public sealed class UserPatsController(IUserPatRepository userPatRepository) : C
             Id = Guid.NewGuid(),
             UserId = userId.Value,
             TokenHash = tokenHash,
+            TokenLookupHash = PatTokenLookupHash.Compute(rawToken),
             Label = request.Label,
             ExpiresAt = request.ExpiresAt,
             CreatedAt = DateTimeOffset.UtcNow,
