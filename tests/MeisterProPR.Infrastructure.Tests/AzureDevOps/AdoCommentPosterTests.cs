@@ -122,8 +122,12 @@ public class AdoCommentPosterTests
     }
 
     [Fact]
-    public void ResolveAnchorContext_WithoutCompareIteration_OmitsCompareRevisionReference()
+    public void ResolveAnchorContext_WithoutCompareIteration_PinsFullDiffCompareReference()
     {
+        // A full (non-incremental) review has no compare iteration. The anchor must still pin
+        // the reviewed iteration as the right side of the full-diff view (iteration 1 → N);
+        // otherwise Azure DevOps resolves the line numbers against the latest iteration at
+        // posting time and every anchor shifts when the PR advanced mid-review.
         var comment = new ReviewComment("src/Program.cs", 42, CommentSeverity.Warning, "Bad line.");
         var changeTrackingIds = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase)
         {
@@ -140,6 +144,78 @@ public class AdoCommentPosterTests
         Assert.Equal("/src/Program.cs", anchor.NormalizedFilePath);
         Assert.Equal(42, anchor.ResolvedLineNumber);
         Assert.Equal("177", anchor.ProviderTrackingReference);
+        Assert.Equal("1:7", anchor.CompareRevisionReference);
+    }
+
+    [Fact]
+    public void ResolveAnchorContext_SingleIterationFullReview_PinsFullDiffCompareReference()
+    {
+        // The most common case: a pull request with exactly one iteration. The full-diff view
+        // is iteration 1 compared with itself, which is also what the Azure DevOps web UI sends.
+        var comment = new ReviewComment("src/Program.cs", 42, CommentSeverity.Warning, "Bad line.");
+        var changeTrackingIds = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["/src/Program.cs"] = 177,
+        };
+
+        var anchor = AdoCommentPoster.ResolveAnchorContext(comment, 1, null, changeTrackingIds);
+
+        Assert.Equal("1:1", anchor.CompareRevisionReference);
+    }
+
+    [Fact]
+    public void ResolveAnchorContext_NonPositiveCompareIteration_PinsFullDiffCompareReference()
+    {
+        // A non-positive compare iteration is not a usable incremental baseline, so the anchor
+        // pins the full-diff view instead of posting unpinned.
+        var comment = new ReviewComment("src/Program.cs", 42, CommentSeverity.Warning, "Bad line.");
+        var changeTrackingIds = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["/src/Program.cs"] = 177,
+        };
+
+        var anchor = AdoCommentPoster.ResolveAnchorContext(comment, 7, 0, changeTrackingIds);
+
+        Assert.Equal("1:7", anchor.CompareRevisionReference);
+    }
+
+    [Fact]
+    public void BuildThreadContexts_IterationBeyondShortRange_OmitsIterationContext()
+    {
+        // The iteration-context fields are shorts; an unrepresentable reviewed iteration must
+        // post an unpinned inline thread instead of a wrapped negative iteration pair.
+        var comment = new ReviewComment("src/Program.cs", 42, CommentSeverity.Warning, "Bad line.");
+        var changeTrackingIds = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["/src/Program.cs"] = 177,
+        };
+
+        var anchor = AdoCommentPoster.ResolveAnchorContext(comment, short.MaxValue + 1, null, changeTrackingIds);
+        var (threadContext, prThreadContext) = AdoCommentPoster.BuildThreadContexts(anchor);
+
+        Assert.NotNull(threadContext);
+        Assert.Equal(42, threadContext!.RightFileStart!.Line);
+        Assert.NotNull(prThreadContext);
+        Assert.Null(prThreadContext!.IterationContext);
+    }
+
+    [Fact]
+    public void ResolveAnchorContext_UnresolvableIteration_OmitsCompareRevisionReference()
+    {
+        // Without a valid reviewed iteration there is nothing to pin the anchor to.
+        var comment = new ReviewComment("src/Program.cs", 42, CommentSeverity.Warning, "Bad line.");
+        var changeTrackingIds = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["/src/Program.cs"] = 177,
+        };
+
+        var anchor = AdoCommentPoster.ResolveAnchorContext(
+            comment,
+            0,
+            null,
+            changeTrackingIds);
+
+        Assert.Equal(PublicationAnchorPrecision.Inline, anchor.AnchorPrecision);
         Assert.Null(anchor.CompareRevisionReference);
     }
 
@@ -188,8 +264,38 @@ public class AdoCommentPosterTests
     }
 
     [Fact]
+    public void BuildThreadContexts_FullReviewInlineAnchor_PinsReviewedIteration()
+    {
+        // End-to-end over the anchor helpers: a full review of iteration 7 (no compare
+        // iteration) must produce an inline thread whose iteration context pins the reviewed
+        // iteration (full-diff view 1 → 7), so the posted line numbers keep meaning "line in
+        // the reviewed file" even when the pull request advances before or after posting.
+        var comment = new ReviewComment("src/Program.cs", 42, CommentSeverity.Warning, "Bad line.");
+        var changeTrackingIds = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["/src/Program.cs"] = 177,
+        };
+
+        var anchor = AdoCommentPoster.ResolveAnchorContext(comment, 7, null, changeTrackingIds);
+        var (threadContext, prThreadContext) = AdoCommentPoster.BuildThreadContexts(anchor);
+
+        Assert.NotNull(threadContext);
+        Assert.Equal("/src/Program.cs", threadContext!.FilePath);
+        Assert.Equal(42, threadContext.RightFileStart!.Line);
+        Assert.Equal(42, threadContext.RightFileEnd!.Line);
+
+        Assert.NotNull(prThreadContext);
+        Assert.Equal(177, prThreadContext!.ChangeTrackingId);
+        Assert.NotNull(prThreadContext.IterationContext);
+        Assert.Equal(1, prThreadContext.IterationContext.FirstComparingIteration);
+        Assert.Equal(7, prThreadContext.IterationContext.SecondComparingIteration);
+    }
+
+    [Fact]
     public void BuildThreadContexts_InlineAnchorWithoutCompareRevision_OmitsIterationContext()
     {
+        // An anchor context that carries no compare revision reference (unresolvable reviewed
+        // iteration) still posts inline, just without an iteration pin.
         var anchor = new PublicationAnchorContext(
             "/src/Program.cs",
             42,
@@ -247,7 +353,7 @@ public class AdoCommentPosterTests
         Assert.Null(prThreadContext);
     }
 
-    // T008 — Content-length truncation tests
+    // Content-length truncation tests
 
     [Fact]
     public void TruncateIfNeeded_ShortMessage_ReturnsUnchanged()

@@ -7,6 +7,7 @@ using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using MeisterProPR.Application.Features.Reviewing.Execution.Models;
+using MeisterProPR.Application.Features.Reviewing.Execution.Services;
 using MeisterProPR.Application.Interfaces;
 using MeisterProPR.Application.Options;
 using MeisterProPR.Application.ValueObjects;
@@ -32,6 +33,14 @@ internal sealed partial class ToolAwareAiReviewCore(
     ILogger<ToolAwareAiReviewCore> logger,
     IManagedReviewSessionTransportFactory? managedSessionTransportFactory = null) : IAiReviewCore
 {
+    /// <summary>
+    ///     Severity vocabulary permitted for review comments. Must stay in lock-step with the
+    ///     Schema line of the shared system-prompt template (a test pins the two together).
+    ///     "info" is deliberately absent: informational observations belong in the summary, and
+    ///     comments whose severity parses (or falls back) to Info are stripped before publication.
+    /// </summary>
+    internal const string CommentSeverityVocabulary = "\"warning\"|\"error\"|\"suggestion\"";
+
     private static readonly ActivitySource ActivitySource = new("MeisterProPR.ReviewLoop");
 
     private static readonly JsonSerializerOptions JsonOptions = new()
@@ -455,7 +464,8 @@ internal sealed partial class ToolAwareAiReviewCore(
                 "Your previous response was invalid for the required final review output. You MUST reformat it now. " +
                 "Output a single raw JSON object with EXACTLY these keys: " +
                 "\"summary\" (plain string), " +
-                "\"comments\" (array — move ALL review findings here as {\"file_path\": \"...\", \"line_number\": <int|null>, \"severity\": \"info\"|\"warning\"|\"error\"|\"suggestion\", \"message\": \"...\"}), " +
+                "\"comments\" (array — move ALL review findings here as {\"file_path\": \"...\", \"line_number\": <int|null — the \"N | \" annotation shown on the cited line>, \"severity\": " +
+                CommentSeverityVocabulary + ", \"message\": \"...\"}), " +
                 "\"confidence_evaluations\" (array), " +
                 "\"investigation_complete\": true, " +
                 "\"loop_complete\": true. " +
@@ -1027,13 +1037,15 @@ internal sealed partial class ToolAwareAiReviewCore(
             });
 
         var getFileContent = AIFunctionFactory.Create(
-            (string path, string branch, int startLine, int endLine) =>
-                reviewTools.GetFileContentAsync(path, branch, startLine, endLine, cancellationToken),
+            async (string path, string branch, int startLine, int endLine) =>
+                AnnotateFileContentToolResult(
+                    await reviewTools.GetFileContentAsync(path, branch, startLine, endLine, cancellationToken),
+                    startLine),
             new AIFunctionFactoryOptions
             {
                 Name = "get_file_content",
                 Description =
-                    "Get the content of a file at a specific line range (1-based, inclusive). Use this to read full file contents when you only have a partial diff. Always use the PR source branch (shown in the per-file header) — never main or master.",
+                    "Get the content of a file at a specific line range (1-based, inclusive). Every returned line is prefixed \"N | \" where N is its line number in the file — use N directly as line_number, never count lines. Use this to read full file contents when you only have a partial diff. Always use the PR source branch (shown in the per-file header) — never main or master.",
             });
 
         var searchSourceChangedFiles = AIFunctionFactory.Create(
@@ -1204,6 +1216,31 @@ internal sealed partial class ToolAwareAiReviewCore(
         }
 
         return tools;
+    }
+
+    /// <summary>
+    ///     Result shaping for the file-content tool: prefixes every line with its absolute file
+    ///     line number ("N | ") so the reviewing model reads anchor line numbers from the
+    ///     annotation instead of counting lines. Empty results and the binary/too-large notice
+    ///     placeholders pass through unchanged. Numbering relies on every
+    ///     <see cref="IReviewContextTools.GetFileContentAsync" /> implementation slicing from
+    ///     <c>Math.Max(1, startLine)</c>, which the provider, fixture, and bounded-delegate
+    ///     implementations all honor.
+    /// </summary>
+    internal static string AnnotateFileContentToolResult(string? content, int requestedStartLine)
+    {
+        if (string.IsNullOrEmpty(content))
+        {
+            return string.Empty;
+        }
+
+        if (content.StartsWith("[Binary file", StringComparison.Ordinal) ||
+            content.StartsWith("[File too large", StringComparison.Ordinal))
+        {
+            return content;
+        }
+
+        return ReviewDiffProcessor.AnnotateContentWithLineNumbers(content, requestedStartLine);
     }
 
     private List<AIFunction> WrapToolsForManagedSession(

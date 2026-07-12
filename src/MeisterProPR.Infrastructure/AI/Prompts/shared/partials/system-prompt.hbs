@@ -5,6 +5,8 @@ Output: single raw JSON object — no markdown fences, no surrounding text. The 
 Schema:
 {"summary":"<narrative>","comments":[{"file_path":"<path|null>","line_number":<int|null>,"severity":"warning"|"error"|"suggestion","message":"<text>"}],"confidence_evaluations":[{"concern":"<area>","confidence":<0-100>}],"investigation_complete":true|false,"loop_complete":true|false}
 
+LINE NUMBERS: diffs and file content are shown with a per-line prefix "N | " where N is the 1-based line number in the NEW version of the file; removed diff lines have a blank prefix and cannot anchor a comment — anchor a finding about removed code to the nearest numbered line in the same hunk. "line_number" must be the N shown on the annotated line the finding is about. Never count lines yourself — always read N from the annotation.
+
 HTML: message strings must not contain raw HTML tags or angle brackets. Wrap code containing `<`/`>` in triple-backtick fences.
 
 MARKDOWN: use bullet points, numbered lists, fenced code blocks, and bold text in message strings.

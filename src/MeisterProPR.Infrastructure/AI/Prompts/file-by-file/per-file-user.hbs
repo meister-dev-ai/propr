@@ -14,6 +14,7 @@ Changed files in this PR (bounded list; call get_changed_files for the complete 
 {{else}}
 === {{filePath}} [{{changeType}}] ===
 ======================================= DIFF =======================================
+Line numbers: each line below is prefixed "N | " where N is its 1-based line number in the new version of the file; removed lines have a blank number column. The first character after "| " is the diff marker (+, -, or space), not file content. Use N as line_number — never count lines yourself.
 {{{diffText}}}
 ======================================= END DIFF =======================================
 (Full file content is not included. Call `get_file_content` on this file if the diff is insufficient for a complete analysis.)

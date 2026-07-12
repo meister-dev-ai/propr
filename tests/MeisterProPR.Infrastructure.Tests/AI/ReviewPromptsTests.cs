@@ -497,6 +497,73 @@ public class ReviewPromptsTests
         Assert.Contains("+UNIQUE_DIFF_MARKER", msg);
     }
 
+    // The diff shown to the model carries an explicit new-file line-number column so the model
+    // reads anchor line numbers from the annotation instead of counting lines inside hunks.
+    [Fact]
+    public void BuildPerFileUserMessage_AnnotatesDiffWithNewFileLineNumbers()
+    {
+        const string diff = "@@ -12,4 +12,4 @@\n alpha\n bravo\n-charlie\n+charlie-fixed\n delta";
+        var file = CreateFile("src/Foo.cs", "code", diff);
+        var allFiles = AsSummaries(file);
+
+        var msg = ReviewPrompts.BuildPerFileUserMessage(file, 1, 1, allFiles, [], "My PR", "feature/x", "main");
+
+        // Context and added lines carry their 1-based new-file line number; removed lines keep
+        // a blank number column; the hunk header passes through untouched.
+        Assert.Contains("@@ -12,4 +12,4 @@", msg, StringComparison.Ordinal);
+        Assert.Contains("12 |  alpha", msg, StringComparison.Ordinal);
+        Assert.Contains("13 |  bravo", msg, StringComparison.Ordinal);
+        Assert.Contains("   | -charlie\n", msg, StringComparison.Ordinal);
+        Assert.Contains("14 | +charlie-fixed", msg, StringComparison.Ordinal);
+        Assert.Contains("15 |  delta", msg, StringComparison.Ordinal);
+    }
+
+    // The DIFF block explains the annotation so the model knows N is the new-file line number.
+    [Fact]
+    public void BuildPerFileUserMessage_ExplainsLineNumberAnnotation()
+    {
+        var file = CreateFile("src/Foo.cs", "code", "@@ -1,1 +1,1 @@\n-a\n+b");
+        var allFiles = AsSummaries(file);
+
+        var msg = ReviewPrompts.BuildPerFileUserMessage(file, 1, 1, allFiles, [], "My PR", "feature/x", "main");
+
+        Assert.Contains("\"N | \"", msg, StringComparison.Ordinal);
+        Assert.Contains("new version of the file", msg, StringComparison.Ordinal);
+    }
+
+    // The output schema defines line_number as the annotated new-file line number.
+    [Fact]
+    public void BuildGlobalSystemPrompt_DefinesLineNumberAsAnnotatedNewFileLine()
+    {
+        var prompt = ReviewPrompts.BuildGlobalSystemPrompt(null);
+
+        Assert.Contains("LINE NUMBERS", prompt, StringComparison.Ordinal);
+        Assert.Contains("Never count lines", prompt, StringComparison.Ordinal);
+    }
+
+    // The system-prompt schema is the authority for the comment severity vocabulary. The
+    // schema-repair message derives from the shared constant and the quality-filter schema
+    // repeats the same set, so "info" can never reappear as an accepted comment severity —
+    // comments whose severity parses to Info are stripped before publication, not published.
+    [Fact]
+    public void CommentSeverityVocabulary_MatchesSystemPromptAndQualityFilterSchemas()
+    {
+        Assert.Contains(
+            "\"severity\":" + ToolAwareAiReviewCore.CommentSeverityVocabulary,
+            ReviewPrompts.SystemPrompt,
+            StringComparison.Ordinal);
+        Assert.DoesNotContain("\"info\"", ReviewPrompts.SystemPrompt, StringComparison.Ordinal);
+
+        var qualityFilterSystem = PromptTemplateRuntime.RenderStage(
+            "quality_filter_system",
+            new PromptTemplateModels.QualityFilterSystemModel());
+        Assert.Contains(
+            "\"severity\": " + ToolAwareAiReviewCore.CommentSeverityVocabulary,
+            qualityFilterSystem,
+            StringComparison.Ordinal);
+        Assert.DoesNotContain("\"info\"", qualityFilterSystem, StringComparison.Ordinal);
+    }
+
     // T005 — Per-file user message includes fallback note about get_file_content
     [Fact]
     public void BuildPerFileUserMessage_ContainsFallbackNote()

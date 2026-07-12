@@ -80,6 +80,43 @@ public sealed class FileByFileContextPrefetchStageTests
         Assert.True(firstWindowStartLine!.Value <= 390, "Window should start at or before hunk start line");
     }
 
+    // Window lines carry their absolute 1-based file line number so the model reads anchors
+    // from the annotation instead of counting from the window's start marker.
+    [Fact]
+    public void BuildSurroundingContext_AnnotatesWindowLinesWithAbsoluteLineNumbers()
+    {
+        var file = BuildFile(600);
+        var diff = BuildDiffWithHunkAt(390, 10);
+        var opts = OptionsWithBudget();
+
+        var (content, _, windowedInjection, _, firstWindowStartLine) =
+            FileByFileContextPrefetchStage.BuildSurroundingContext(file, diff, opts);
+
+        Assert.True(windowedInjection, "Expected windowed injection");
+        Assert.True(firstWindowStartLine is > 1, "Expected a window that does not start at line 1");
+
+        // The changed line itself is annotated with its absolute file line number.
+        Assert.Contains("390 | public void Method390() { var x = 390; }", content, StringComparison.Ordinal);
+
+        // Every rendered line is either a range marker or an annotated "N | " line whose number
+        // matches the actual file content at that line.
+        var fileLines = file.Split('\n');
+        foreach (var rawLine in content.Split('\n', StringSplitOptions.RemoveEmptyEntries))
+        {
+            // Window lines are rendered with the platform newline; strip a residual carriage return.
+            var line = rawLine.TrimEnd('\r');
+            if (line.StartsWith("[lines ", StringComparison.Ordinal))
+            {
+                continue;
+            }
+
+            var separator = line.IndexOf(" | ", StringComparison.Ordinal);
+            Assert.True(separator > 0, $"Expected an annotated line, got: {line}");
+            var number = int.Parse(line[..separator].Trim(), System.Globalization.CultureInfo.InvariantCulture);
+            Assert.Equal(fileLines[number - 1], line[(separator + 3)..]);
+        }
+    }
+
     // T101b — two hunks far apart: evidence contains both windows with line-range annotations.
     [Fact]
     public void BuildSurroundingContext_TwoHunksFarApart_ContainsBothWindowsWithAnnotations()

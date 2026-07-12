@@ -2,6 +2,7 @@
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
 using System.Diagnostics.Metrics;
+using System.Globalization;
 using System.Text;
 using System.Text.Json;
 using MeisterProPR.Application.Features.Reviewing.Execution.Models;
@@ -717,7 +718,8 @@ internal sealed class FileByFileContextPrefetchStage(
         foreach (var (start, end) in windows)
         {
             // 1-based line markers
-            var markerLine = $"[lines {start + 1}-{Math.Min(end + 1, totalLines)} of {totalLines}]";
+            var lastLineNumber = Math.Min(end + 1, totalLines);
+            var markerLine = $"[lines {start + 1}-{lastLineNumber} of {totalLines}]";
             if (sb.Length > 0)
             {
                 sb.AppendLine();
@@ -725,9 +727,12 @@ internal sealed class FileByFileContextPrefetchStage(
 
             sb.AppendLine(markerLine);
 
+            // Each window line carries its absolute 1-based file line number so the model reads
+            // anchor line numbers from the annotation instead of counting from the marker.
+            var width = lastLineNumber.ToString(CultureInfo.InvariantCulture).Length;
             for (var i = start; i <= end && i < lines.Length; i++)
             {
-                sb.AppendLine(lines[i]);
+                sb.AppendLine(ReviewDiffProcessor.FormatAnnotatedLine(i + 1, lines[i], width));
 
                 if (sb.Length >= maxChars)
                 {

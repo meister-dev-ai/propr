@@ -297,7 +297,7 @@ internal static partial class ReviewPrompts
                     f.Path == file.Path,
                     false)).ToList(),
                 file.IsBinary,
-                file.UnifiedDiff,
+                ReviewDiffProcessor.AnnotateUnifiedDiffWithNewLineNumbers(file.UnifiedDiff),
                 relevantThreads.Count > 0,
                 relevantThreads.Select(thread => new PromptTemplateModels.PromptThreadModel(
                         FormatThreadLocation(thread),

@@ -24,6 +24,46 @@ namespace MeisterProPR.Infrastructure.Tests.AI;
 /// </summary>
 public class ToolAwareAiReviewCoreTests
 {
+    // The file-content tool prefixes every returned line with its absolute file line number so
+    // the model reads anchors from the annotation instead of counting lines.
+    [Fact]
+    public void AnnotateFileContentToolResult_PrefixesLinesWithAbsoluteNumbers()
+    {
+        var annotated = ToolAwareAiReviewCore.AnnotateFileContentToolResult("alpha\nbravo", 41);
+
+        Assert.Equal("41 | alpha\n42 | bravo", annotated);
+    }
+
+    [Fact]
+    public void AnnotateFileContentToolResult_NonPositiveStart_ClampsToLineOne()
+    {
+        var annotated = ToolAwareAiReviewCore.AnnotateFileContentToolResult("alpha\nbravo", 0);
+
+        Assert.Equal("1 | alpha\n2 | bravo", annotated);
+    }
+
+    [Fact]
+    public void AnnotateFileContentToolResult_NoticePlaceholders_PassThroughUnchanged()
+    {
+        const string binaryNotice = "[Binary file — content not available: assets/logo.png]";
+        const string tooLargeNotice = "[File too large: 2000000 bytes exceeds limit of 1000000 bytes]";
+
+        Assert.Equal(binaryNotice, ToolAwareAiReviewCore.AnnotateFileContentToolResult(binaryNotice, 1));
+        Assert.Equal(tooLargeNotice, ToolAwareAiReviewCore.AnnotateFileContentToolResult(tooLargeNotice, 1));
+        Assert.Equal(string.Empty, ToolAwareAiReviewCore.AnnotateFileContentToolResult(string.Empty, 1));
+        Assert.Equal(string.Empty, ToolAwareAiReviewCore.AnnotateFileContentToolResult(null, 1));
+    }
+
+    // Content that merely looks bracketed (e.g. a JSON array line) is still real file content
+    // and must be annotated.
+    [Fact]
+    public void AnnotateFileContentToolResult_BracketedFileContent_IsStillAnnotated()
+    {
+        var annotated = ToolAwareAiReviewCore.AnnotateFileContentToolResult("[1, 2, 3]", 7);
+
+        Assert.Equal("7 | [1, 2, 3]", annotated);
+    }
+
     private static IOptions<AiReviewOptions> DefaultOptions(
         int maxIterations = 5,
         int confidenceThreshold = 70,

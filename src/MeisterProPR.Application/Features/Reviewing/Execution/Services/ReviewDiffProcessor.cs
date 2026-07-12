@@ -1,6 +1,7 @@
 // Copyright (c) Andreas Rain.
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
+using System.Globalization;
 using System.Text;
 using MeisterProPR.Application.Features.Reviewing.Execution.Models;
 using MeisterProPR.Domain.Enums;
@@ -390,6 +391,161 @@ public static class ReviewDiffProcessor
         }
 
         return ChangedLineRelation.OutsideChange;
+    }
+
+    /// <summary>
+    ///     Renders a single-file unified diff with an explicit new-file line-number column: every
+    ///     context and added payload line is prefixed with its 1-based line number in the new
+    ///     version of the file ("N | "), removed lines keep a blank number column, and file/hunk
+    ///     headers pass through untouched. Reviewer models read anchor line numbers from this
+    ///     column instead of counting lines inside hunks. Inside a hunk every line is payload and
+    ///     is classified by its first character only, so added/removed lines whose content itself
+    ///     begins with "++" or "--" are never mistaken for file headers. Diffs without any
+    ///     parseable hunk header are returned unchanged; concatenated multi-file diffs are outside
+    ///     this method's contract.
+    /// </summary>
+    public static string AnnotateUnifiedDiffWithNewLineNumbers(string? unifiedDiff)
+    {
+        if (string.IsNullOrEmpty(unifiedDiff))
+        {
+            return string.Empty;
+        }
+
+        var diffLines = unifiedDiff.Replace("\r\n", "\n", StringComparison.Ordinal).Split('\n');
+        var entries = new List<(string Text, int? NewLineNumber, bool Annotate)>(diffLines.Length);
+        var hasHunkHeader = false;
+        var sawValidHunkHeader = false;
+        var currentNewLine = 0;
+        var maxNewLine = 0;
+
+        for (var index = 0; index < diffLines.Length; index++)
+        {
+            var diffLine = diffLines[index];
+
+            // A trailing empty element from a final newline is structure, not a payload line.
+            if (index == diffLines.Length - 1 && diffLine.Length == 0)
+            {
+                entries.Add((diffLine, null, false));
+                continue;
+            }
+
+            if (diffLine.StartsWith("@@", StringComparison.Ordinal))
+            {
+                if (TryParseUnifiedDiffNewLineStart(diffLine, out var newLineStart))
+                {
+                    currentNewLine = newLineStart;
+                    hasHunkHeader = true;
+                    sawValidHunkHeader = true;
+                }
+                else
+                {
+                    // An unparseable hunk header leaves the following payload without
+                    // trustworthy coordinates; stop annotating until the next valid header
+                    // rather than carry a stale cursor forward.
+                    hasHunkHeader = false;
+                }
+
+                entries.Add((diffLine, null, false));
+                continue;
+            }
+
+            // Outside a hunk only file headers and metadata occur; the "\ No newline at end of
+            // file" marker is metadata wherever it appears.
+            if (!hasHunkHeader || diffLine.StartsWith("\\", StringComparison.Ordinal))
+            {
+                entries.Add((diffLine, null, false));
+                continue;
+            }
+
+            if (diffLine.StartsWith("-", StringComparison.Ordinal))
+            {
+                entries.Add((diffLine, null, true));
+                continue;
+            }
+
+            entries.Add((diffLine, currentNewLine, true));
+            maxNewLine = Math.Max(maxNewLine, currentNewLine);
+            currentNewLine++;
+        }
+
+        if (!sawValidHunkHeader)
+        {
+            return unifiedDiff;
+        }
+
+        // Deletion-only diffs render no new-file numbers but still get the blank column so the
+        // annotated format stays uniform.
+        var width = Math.Max(1, maxNewLine.ToString(CultureInfo.InvariantCulture).Length);
+        var builder = new StringBuilder(unifiedDiff.Length + (entries.Count * (width + 3)));
+        for (var index = 0; index < entries.Count; index++)
+        {
+            if (index > 0)
+            {
+                builder.Append('\n');
+            }
+
+            var (text, newLineNumber, annotate) = entries[index];
+            builder.Append(annotate ? FormatAnnotatedLine(newLineNumber, text, width) : text);
+        }
+
+        return builder.ToString();
+    }
+
+    /// <summary>
+    ///     Prefixes every line of <paramref name="content" /> with its absolute 1-based file line
+    ///     number ("N | "), starting at <paramref name="firstLineNumber" /> (clamped to 1). Used for
+    ///     file-content slices handed to reviewer models so anchor line numbers are read from the
+    ///     annotation instead of counted.
+    /// </summary>
+    public static string AnnotateContentWithLineNumbers(string? content, int firstLineNumber)
+    {
+        if (string.IsNullOrEmpty(content))
+        {
+            return string.Empty;
+        }
+
+        var start = Math.Max(1, firstLineNumber);
+        var lines = content.Split('\n');
+
+        // A trailing empty element from a final newline is structure, not an existing line; it
+        // must neither be numbered nor widen the number column.
+        var lineCount = lines.Length;
+        var hasTrailingNewline = lineCount > 1 && lines[^1].Length == 0;
+        if (hasTrailingNewline)
+        {
+            lineCount--;
+        }
+
+        var width = (start + lineCount - 1).ToString(CultureInfo.InvariantCulture).Length;
+        var builder = new StringBuilder(content.Length + (lineCount * (width + 3)));
+
+        for (var index = 0; index < lineCount; index++)
+        {
+            if (index > 0)
+            {
+                builder.Append('\n');
+            }
+
+            builder.Append(FormatAnnotatedLine(start + index, lines[index], width));
+        }
+
+        if (hasTrailingNewline)
+        {
+            builder.Append('\n');
+        }
+
+        return builder.ToString();
+    }
+
+    /// <summary>
+    ///     Formats a single annotated line: a right-aligned line number (or a blank column when
+    ///     <paramref name="lineNumber" /> is <see langword="null" />), the " | " separator, and the
+    ///     unmodified line text.
+    /// </summary>
+    public static string FormatAnnotatedLine(int? lineNumber, string text, int width)
+    {
+        var column = lineNumber?.ToString(CultureInfo.InvariantCulture).PadLeft(width) ?? new string(' ', width);
+        return $"{column} | {text}";
     }
 
     private static bool TryParseUnifiedDiffNewLineStart(string diffLine, out int newLineStart)

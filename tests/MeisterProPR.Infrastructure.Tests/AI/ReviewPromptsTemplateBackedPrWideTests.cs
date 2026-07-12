@@ -27,7 +27,8 @@ public sealed class ReviewPromptsTemplateBackedPrWideTests
         var message = ReviewPrompts.BuildPrWidePlanningUserMessage(pr);
 
         Assert.Contains("Changed file manifest:", message, StringComparison.Ordinal);
-        Assert.Contains("Diff excerpts:", message, StringComparison.Ordinal);
+        // The heading also explains the "N | " new-file line-number annotation on diff lines.
+        Assert.Contains("Diff excerpts (each line is prefixed \"N | \"", message, StringComparison.Ordinal);
     }
 
     [Fact]

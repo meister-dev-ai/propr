@@ -536,7 +536,9 @@ public sealed class AdoCommentPoster(
     {
         var (firstComparingIteration, secondComparingIteration) = ParseCompareRevisionReference(compareRevisionReference);
 
-        if (firstComparingIteration <= 0 || secondComparingIteration <= 0)
+        // The iteration-context fields are shorts; a pair that cannot be represented must fall
+        // back to an unpinned thread rather than wrap negative and get the payload rejected.
+        if (firstComparingIteration is <= 0 or > short.MaxValue || secondComparingIteration is <= 0 or > short.MaxValue)
         {
             return null;
         }
@@ -548,14 +550,22 @@ public sealed class AdoCommentPoster(
         };
     }
 
+    // Builds the "first:second" comparing-iteration pair the inline thread is pinned to. The
+    // review computes right-side line numbers against the reviewed iteration's source commit, so
+    // the posted thread must carry that iteration as its second comparing iteration; a thread
+    // created without an iteration context is resolved by Azure DevOps against the latest
+    // iteration at posting time, which shifts every anchor when the pull request advanced
+    // mid-review. A full (non-incremental) review pins the full-diff view (iteration 1 → N),
+    // matching what the Azure DevOps web UI sends for comments on the all-updates diff.
     private static string? BuildCompareRevisionReference(int? compareToIterationId, int iterationId)
     {
-        if (!compareToIterationId.HasValue || compareToIterationId.Value <= 0 || iterationId <= 0)
+        if (iterationId <= 0)
         {
             return null;
         }
 
-        return $"{compareToIterationId.Value}:{iterationId}";
+        var firstComparingIteration = compareToIterationId is > 0 ? compareToIterationId.Value : 1;
+        return $"{firstComparingIteration}:{iterationId}";
     }
 
     private static (int FirstComparingIteration, int SecondComparingIteration) ParseCompareRevisionReference(string? compareRevisionReference)

@@ -2,6 +2,7 @@
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
 using MeisterProPR.Application.Features.Reviewing.Execution.Models;
+using MeisterProPR.Application.Features.Reviewing.Execution.Services;
 using MeisterProPR.Application.ValueObjects;
 using MeisterProPR.Domain.ValueObjects;
 
@@ -33,7 +34,11 @@ internal static partial class ReviewPrompts
                 pr.Description,
                 pr.ChangedFiles.Select(file => new PromptTemplateModels.PromptFileManifestItem(file.Path, file.ChangeType.ToString(), false, false)).ToList(),
                 pr.ChangedFiles.Select(file =>
-                    new PromptTemplateModels.PromptDiffExcerptItem(file.Path, file.IsBinary ? "[binary file omitted]" : file.UnifiedDiff)).ToList()));
+                    new PromptTemplateModels.PromptDiffExcerptItem(
+                        file.Path,
+                        file.IsBinary
+                            ? "[binary file omitted]"
+                            : ReviewDiffProcessor.AnnotateUnifiedDiffWithNewLineNumbers(file.UnifiedDiff))).ToList()));
     }
 
     internal static string BuildPrWideInvestigationSystemPrompt(ReviewSystemContext? context)
