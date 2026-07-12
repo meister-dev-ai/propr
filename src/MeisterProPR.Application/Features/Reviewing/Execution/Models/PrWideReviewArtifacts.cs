@@ -81,7 +81,8 @@ public sealed record PrWideCandidateFinding(
     public CandidateReviewFinding ToCandidateReviewFinding(
         CandidateFindingProvenance provenance,
         string? findingId = null,
-        VerificationOutcome? verificationOutcome = null)
+        VerificationOutcome? verificationOutcome = null,
+        ChangedLineRelation? scopeRelation = null)
     {
         ArgumentNullException.ThrowIfNull(provenance);
 
@@ -96,7 +97,8 @@ public sealed record PrWideCandidateFinding(
             this.EvidenceReference,
             this.CandidateSummaryText,
             this.InvariantCheckContext,
-            verificationOutcome);
+            verificationOutcome,
+            scopeRelation);
     }
 }
 

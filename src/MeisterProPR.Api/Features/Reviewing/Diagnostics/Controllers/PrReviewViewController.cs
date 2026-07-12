@@ -215,10 +215,7 @@ public sealed class PrReviewViewController(
                 j.Result?.Comments.Count,
                 j.TotalInputTokensAggregated ?? j.Protocols.Sum(p => p.TotalInputTokens),
                 j.TotalOutputTokensAggregated ?? j.Protocols.Sum(p => p.TotalOutputTokens),
-                j.TokenBreakdown)
-            {
-                ResolvedReviewStrategy = j.ReviewStrategy,
-            })
+                j.TokenBreakdown))
             .ToList()
             .AsReadOnly();
 

@@ -148,7 +148,6 @@ public class ReviewOrchestrationServiceDeduplicationTests
         aiRepo.GetActiveForClientAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
             .Returns(Task.FromResult<AiConnectionDto?>(connDto));
         var providerRegistry = CreateProviderRegistry(commentPoster);
-        var reviewStrategyDispatcher = CreateDispatcher(orchestrator);
 
         return new ReviewOrchestrationService(
             jobs,
@@ -166,7 +165,7 @@ public class ReviewOrchestrationServiceDeduplicationTests
             Substitute.For<ILogger<ReviewOrchestrationService>>(),
             aiRepo,
             Substitute.For<IAiChatClientFactory>(),
-            reviewStrategyDispatcher,
+            orchestrator,
             workspaceManager: CreateDefaultWorkspaceManager());
     }
 
@@ -180,26 +179,7 @@ public class ReviewOrchestrationServiceDeduplicationTests
         return manager;
     }
 
-    private static IReviewStrategyDispatcher CreateDispatcher(IFileByFileReviewOrchestrator orchestrator)
-    {
-        var dispatcher = Substitute.For<IReviewStrategyDispatcher>();
-        dispatcher.ReviewAsync(
-                Arg.Any<ReviewJob>(),
-                Arg.Any<PullRequest>(),
-                Arg.Any<ReviewSystemContext>(),
-                Arg.Any<CancellationToken>(),
-                Arg.Any<IChatClient?>(),
-                Arg.Any<string?>())
-            .Returns(callInfo => orchestrator.ReviewAsync(
-                callInfo.ArgAt<ReviewJob>(0),
-                callInfo.ArgAt<PullRequest>(1),
-                callInfo.ArgAt<ReviewSystemContext>(2),
-                callInfo.ArgAt<CancellationToken>(3),
-                callInfo.ArgAt<IChatClient?>(4)));
-        return dispatcher;
-    }
-
-    // T024 — ReviewOrchestrationService passes the orchestrator result to the comment poster
+    // ReviewOrchestrationService passes the orchestrator result to the comment poster
     //         without additional deduplication (dedup was moved to FileByFileReviewOrchestrator)
     [Fact]
     public async Task ProcessAsync_PassesOrchestratorResultToCommentPosterUnmodified()

@@ -38,21 +38,6 @@ public sealed record ReviewJobStatusDto(
     /// <summary>Normalized review revision when available.</summary>
     public ReviewRevision? ReviewRevision { get; init; }
 
-    /// <summary>Resolved review strategy snapshotted on the stored job.</summary>
-    public ReviewStrategy ResolvedReviewStrategy { get; init; } = ReviewStrategy.FileByFile;
-
-    /// <summary>How the resolved strategy was selected.</summary>
-    public ReviewStrategySelectionSource StrategySelectionSource { get; init; } = ReviewStrategySelectionSource.FallbackDefault;
-
-    /// <summary>Comparison mode snapshotted on the stored job.</summary>
-    public ReviewComparisonMode ComparisonMode { get; init; } = ReviewComparisonMode.Single;
-
-    /// <summary>Publication mode snapshotted on the stored job.</summary>
-    public ReviewPublicationMode PublicationMode { get; init; } = ReviewPublicationMode.Publish;
-
-    /// <summary>Comparison group identifier when the stored job participates in one.</summary>
-    public Guid? ComparisonGroupId { get; init; }
-
     /// <summary>Local workspace visibility metadata when available.</summary>
     public ReviewJobWorkspaceStatusDto? Workspace { get; init; }
 }

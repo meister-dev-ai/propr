@@ -9,7 +9,6 @@ using MeisterProPR.Application.Interfaces;
 using MeisterProPR.Domain.Entities;
 using MeisterProPR.Domain.ValueObjects;
 using MeisterProPR.Infrastructure.Data;
-using MeisterProPR.Infrastructure.Features.Reviewing.Execution.Strategies.AgenticFileByFile;
 using MeisterProPR.Infrastructure.Features.Reviewing.Execution.Strategies.FileByFile;
 using Microsoft.EntityFrameworkCore;
 
@@ -463,8 +462,6 @@ public sealed class EfReviewDiagnosticsReader(
             ProviderProjectKey = ResolveProviderProjectKey(projectionJob),
             RepositoryId = projectionJob.RepositoryId,
             PullRequestId = projectionJob.PullRequestId,
-            ResolvedReviewStrategy = projectionJob.ReviewStrategy,
-            StrategySelectionSource = projectionJob.ReviewStrategySelectionSource,
             FileOutcome = ResolveFileOutcome(projectionJob, protocol, fileResultOverride),
             FollowUp = ResolveFollowUp(protocol),
             RepeatedJudgment = ResolveRepeatedJudgment(protocol),

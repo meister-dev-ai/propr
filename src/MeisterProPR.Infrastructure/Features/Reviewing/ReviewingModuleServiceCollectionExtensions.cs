@@ -20,7 +20,6 @@ using MeisterProPR.Infrastructure.Features.Providers.GitLab.DependencyInjection;
 using MeisterProPR.Infrastructure.Features.Reviewing.Diagnostics.DependencyInjection;
 using MeisterProPR.Infrastructure.Features.Reviewing.Execution.CommentRelevance;
 using MeisterProPR.Infrastructure.Features.Reviewing.Execution.DependencyInjection;
-using MeisterProPR.Infrastructure.Features.Reviewing.Execution.Strategies.AgenticFileByFile;
 using MeisterProPR.Infrastructure.Features.Reviewing.Execution.Strategies.FileByFile;
 using MeisterProPR.Infrastructure.Features.Reviewing.Execution.Strategies.PrWideAgentic;
 using MeisterProPR.Infrastructure.Features.Reviewing.Execution.Verification;
@@ -128,21 +127,6 @@ public static class ReviewingModuleServiceCollectionExtensions
             sp.GetService<IReviewPipelineProfileProvider>(),
             sp.GetService<IProRVPrefilter>(),
             sp.GetService<IReviewComplexityClassifier>()));
-        services.AddScoped<AgenticFileReviewer>(sp => new AgenticFileReviewer(
-            sp.GetRequiredService<ApplicationIAiReviewCore>(),
-            sp.GetRequiredService<IProtocolRecorder>(),
-            sp.GetRequiredService<IJobRepository>(),
-            sp.GetRequiredService<IOptions<AiReviewOptions>>().Value,
-            sp.GetRequiredService<ILogger<AgenticFileByFileReviewOrchestrator>>(),
-            sp.GetService<IReviewPipeline<PerFileReviewContext>>(),
-            sp.GetService<IAiConnectionRepository>(),
-            sp.GetService<IAiChatClientFactory>(),
-            sp.GetService<IThreadMemoryService>(),
-            sp.GetService<IAiRuntimeResolver>(),
-            sp.GetService<CommentRelevanceFilterExecutor>(),
-            sp.GetServices<IReviewInvariantFactProvider>(),
-            sp.GetService<LocalReviewVerificationExecutor>(),
-            sp.GetService<IReviewPipelineProfileProvider>()));
         services.AddScoped<IFileByFileReviewOrchestrator>(sp => new FileByFileReviewOrchestrator(
             sp.GetRequiredService<IProtocolRecorder>(),
             sp.GetRequiredService<IJobRepository>(),
@@ -161,32 +145,20 @@ public static class ReviewingModuleServiceCollectionExtensions
             sp.GetService<IDeterministicReviewFindingGate>(),
             sp.GetServices<IReviewInvariantFactProvider>(),
             sp.GetService<IReviewClaimExtractor>(),
-            sp.GetService<ISummaryReconciliationService>()));
+            sp.GetService<ISummaryReconciliationService>(),
+            // Lazy: resolved only when a pr_wide-scope pass entry runs, after this orchestrator is constructed, so
+            // the PR-wide generator's dependency back on the file-by-file orchestrator does not form a DI cycle.
+            () => sp.GetService<IPrWideCandidateGenerator>()));
         if (!hasDatabase)
         {
             services.AddScoped<IReviewWorkflowRunner, ReviewWorkflowRunner>();
         }
 
-        services.AddScoped<IAgenticFileByFileReviewOrchestrator>(sp => new AgenticFileByFileReviewOrchestrator(
-            sp.GetRequiredService<IProtocolRecorder>(),
-            sp.GetRequiredService<IJobRepository>(),
-            null,
-            sp.GetRequiredService<IOptions<AiReviewOptions>>(),
-            sp.GetRequiredService<ILogger<AgenticFileByFileReviewOrchestrator>>(),
-            sp.GetRequiredService<AgenticFileReviewer>(),
-            sp.GetService<AgenticFileReviewDispatchPlanner>(),
-            sp.GetService<AgenticReviewSynthesisExecutor>(),
-            sp.GetService<AgenticCandidateFindingFactory>(),
-            sp.GetService<QualityFilterExecutor>(),
-            sp.GetService<PrLevelReviewVerificationExecutor>(),
-            sp.GetService<IAiConnectionRepository>(),
-            sp.GetService<IAiChatClientFactory>(),
-            sp.GetService<IAiRuntimeResolver>(),
-            sp.GetService<IDeterministicReviewFindingGate>(),
-            sp.GetServices<IReviewInvariantFactProvider>(),
-            sp.GetService<IReviewClaimExtractor>(),
-            sp.GetService<ISummaryReconciliationService>()));
         services.AddScoped<IPrWideAgenticReviewOrchestrator, PrWideAgenticReviewOrchestrator>();
+
+        // The same PR-wide orchestrator instance also exposes the generate-only entry point the file-by-file
+        // orchestrator uses to run a pr_wide-scope pass at the job level.
+        services.AddScoped<IPrWideCandidateGenerator>(sp => (PrWideAgenticReviewOrchestrator)sp.GetRequiredService<IPrWideAgenticReviewOrchestrator>());
         services.AddSingleton<IAiCommentResolutionCore, AgentAiCommentResolutionCore>();
 
         if (hasDatabase)

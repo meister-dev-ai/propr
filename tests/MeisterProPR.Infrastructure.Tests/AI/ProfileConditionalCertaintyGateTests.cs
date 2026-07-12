@@ -107,7 +107,7 @@ public sealed class ProfileConditionalCertaintyGateTests
     {
         // The relaxed certainty gate must never ship without the LLM ranker.
         var provider = new ReviewPipelineProfileProvider();
-        var profiles = provider.GetProfiles(ReviewStrategy.FileByFile);
+        var profiles = provider.GetProfiles();
         var assertiveProfile = profiles.FirstOrDefault(p =>
             string.Equals(p.ProfileId, ReviewPipelineProfileCatalog.FileByFileAssertiveProfileId, StringComparison.Ordinal));
 

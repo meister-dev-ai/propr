@@ -346,10 +346,12 @@ internal sealed partial class FileReviewer(
         // Ordinary/resample passes are gated to Medium/High tiers; a security-lens pass runs on any tier when the
         // file is security-flagged; a prorv-lens pass runs on any tier when the file is catalog-eligible. Enter
         // planning when any is in scope — the per-pass gate in the planners then drops the passes that are out of
-        // scope, so a file that qualifies for none is byte-identical to today.
+        // scope, so a file that qualifies for none is byte-identical to today. A pr_wide-scope pass never runs per
+        // file, so it is excluded here — a pass list of only pr_wide entries is not a reason to fan out per-file.
         var hasEligibleProRvPass = proRvPrefilter is not null
                                    && IsProRvEligible(inputs.File)
-                                   && inputs.FileContext.ReviewPasses.Any(pass => pass.Lens == ReviewPassLens.ProRV);
+                                   && inputs.FileContext.ReviewPasses.Any(pass =>
+                                       pass.Lens == ReviewPassLens.ProRV && pass.Scope != ReviewPassScope.PrWide);
         if (!IsMultiPassUnionTier(inputs.Tier) && !inputs.SecurityFlagged && !hasEligibleProRvPass)
         {
             return inputs.BaselineResult;
@@ -399,10 +401,23 @@ internal sealed partial class FileReviewer(
                     inputs.PipelineProfile,
                     inputs.Ct));
 
-            unionComments.AddRange(StampUnionOrigin(passResult.Comments, plannedPass.PassIndex, plannedPass.Lens));
+            unionComments.AddRange(StampUnionOrigin(passResult.Comments, plannedPass.PassIndex, plannedPass.Lens, plannedPass.Shadow));
             perPassCatchCounts.Add(passResult.Comments.Count);
             perPassModels.Add(plannedPass.ModelId);
             perPassLenses.Add(plannedPass.Lens);
+
+            // A shadow pass runs and its findings are unioned into the persisted per-file result for the trace, but
+            // they carry the shadow marker so synthesis drops them from the publishable set. Record its catch count.
+            if (plannedPass.Shadow)
+            {
+                await this.RecordPassShadowCompletedAsync(
+                    inputs.ProtocolId,
+                    inputs.File.Path,
+                    plannedPass.PassIndex,
+                    plannedPass.ModelId,
+                    passResult.Comments.Count,
+                    inputs.Ct);
+            }
         }
 
         await this.RecordMultiPassUnionCompletedAsync(
@@ -486,6 +501,16 @@ internal sealed partial class FileReviewer(
         var passIndex = 2;
         foreach (var pass in reviewPasses)
         {
+            // A pr_wide-scope entry runs once at the job level over the whole change set, not per file, so this
+            // per-file planner skips it — like an out-of-scope entry — while still consuming its ordinal so a pass's
+            // "Pass N" index stays tied to its position in the configured list. PR-wide execution is handled
+            // separately; here the entry simply contributes nothing to the per-file union.
+            if (pass.Scope == ReviewPassScope.PrWide)
+            {
+                passIndex++;
+                continue;
+            }
+
             // A security-lens entry runs on any tier when the file is security-flagged; a ProRV-lens entry runs on any
             // tier when the file is deterministically catalog-eligible (a text file with a diff — the model ranking
             // that picks the applicable checks, and decides whether any apply, runs inside the pass); an ordinary
@@ -526,7 +551,8 @@ internal sealed partial class FileReviewer(
                         runtime.Model.RemoteModelId,
                         runtime.ChatClient,
                         runtime.Capabilities,
-                        pass.Lens));
+                        pass.Lens,
+                        pass.Shadow));
             }
 
             passIndex++;
@@ -553,7 +579,7 @@ internal sealed partial class FileReviewer(
     // source and the specific numbered pass are visible on the persisted per-file result and surface through the
     // protocol comment DTO (the frontend renders the index as "Pass N"). The baseline pass is pass 1 and stays
     // unstamped; the additional passes are 2..k.
-    private static IReadOnlyList<ReviewComment> StampUnionOrigin(IReadOnlyList<ReviewComment> comments, int passIndex, string? lens)
+    private static IReadOnlyList<ReviewComment> StampUnionOrigin(IReadOnlyList<ReviewComment> comments, int passIndex, string? lens, bool shadow)
     {
         if (comments.Count == 0)
         {
@@ -569,6 +595,7 @@ internal sealed partial class FileReviewer(
                     OriginPassKind = ReviewPassKind.MultiPassUnion.ToString(),
                     OriginPassIndex = passIndex,
                     OriginPassLens = lens,
+                    OriginPassShadow = shadow,
                 });
         }
 
@@ -841,6 +868,40 @@ internal sealed partial class FileReviewer(
             ct);
     }
 
+    private async Task RecordPassShadowCompletedAsync(
+        Guid? protocolId,
+        string filePath,
+        int passIndex,
+        string? modelId,
+        int catchCount,
+        CancellationToken ct)
+    {
+        if (!protocolId.HasValue)
+        {
+            return;
+        }
+
+        await protocolRecorder.RecordReviewStrategyEventAsync(
+            protocolId.Value,
+            ReviewProtocolEventNames.PassShadowCompleted,
+            JsonSerializer.Serialize(
+                new
+                {
+                    scope = "per_file",
+                    filePath,
+                    passIndex,
+                }),
+            JsonSerializer.Serialize(
+                new
+                {
+                    modelId,
+                    catchCount,
+                    published = false,
+                }),
+            null,
+            ct);
+    }
+
     private async Task<ReviewResult> ReviewFileCoreAsync(
         PullRequest filePr,
         ReviewSystemContext fileContext,
@@ -940,7 +1001,6 @@ internal sealed partial class FileReviewer(
             return new ReviewPipelineProfile(
                 ReviewPipelineProfileCatalog.FileByFileBalancedProfileId,
                 "Balanced",
-                ReviewStrategy.FileByFile,
                 [
                     FileByFileContextPrefetchStage.StageIdConstant,
                     FileByFileRiskMarkerStage.StageIdConstant,
@@ -956,7 +1016,7 @@ internal sealed partial class FileReviewer(
                 10);
         }
 
-        var profiles = pipelineProfileProvider.GetProfiles(ReviewStrategy.FileByFile);
+        var profiles = pipelineProfileProvider.GetProfiles();
         if (!string.IsNullOrWhiteSpace(job.ReviewPipelineProfileId))
         {
             var selected = profiles.FirstOrDefault(profile => string.Equals(profile.ProfileId, job.ReviewPipelineProfileId, StringComparison.Ordinal));
@@ -971,7 +1031,6 @@ internal sealed partial class FileReviewer(
                ?? new ReviewPipelineProfile(
                    ReviewPipelineProfileCatalog.FileByFileBalancedProfileId,
                    "Balanced",
-                   ReviewStrategy.FileByFile,
                    [
                        FileByFileContextPrefetchStage.StageIdConstant,
                        FileByFileRiskMarkerStage.StageIdConstant,
@@ -1006,7 +1065,6 @@ internal sealed partial class FileReviewer(
                 {
                     filePath,
                     profileId = pipelineProfile.ProfileId,
-                    strategy = pipelineProfile.Strategy.ToString(),
                 }),
             JsonSerializer.Serialize(
                 new
@@ -1513,7 +1571,8 @@ internal sealed partial class FileReviewer(
         string? ModelId,
         IChatClient? Client,
         AgentReviewRuntimeCapabilities? Capabilities,
-        string? Lens = null);
+        string? Lens = null,
+        bool Shadow = false);
 
     private sealed record MultiPassUnionCompletion(
         Guid? ProtocolId,

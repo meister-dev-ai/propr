@@ -63,4 +63,14 @@ internal sealed partial class FileByFileReviewOrchestrator
         Level = LogLevel.Warning,
         Message = "Quality filter failed for job {JobId} — using pre-filter comment list")]
     private static partial void LogQualityFilterFailed(ILogger logger, Guid jobId, Exception ex);
+
+    [LoggerMessage(
+        Level = LogLevel.Warning,
+        Message = "Skipping PR-wide-scope pass entries for job {JobId} (generatorMissing={GeneratorMissing}, resolverMissing={ResolverMissing})")]
+    private static partial void LogPrWideScopeUnavailable(ILogger logger, Guid jobId, bool generatorMissing, bool resolverMissing);
+
+    [LoggerMessage(
+        Level = LogLevel.Warning,
+        Message = "Skipping PR-wide-scope pass entry #{Ordinal} for job {JobId}: configured model {ConfiguredModelId} could not be resolved")]
+    private static partial void LogPrWideScopePassModelUnresolved(ILogger logger, Guid jobId, Guid configuredModelId, int ordinal, Exception ex);
 }

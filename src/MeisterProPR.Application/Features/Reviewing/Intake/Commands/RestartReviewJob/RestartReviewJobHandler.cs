@@ -45,13 +45,7 @@ public sealed partial class RestartReviewJobHandler(
             source.PullRequestId,
             source.IterationId);
 
-        restarted.SelectReviewStrategy(
-            source.ReviewStrategy,
-            source.ReviewStrategySelectionSource,
-            source.ReviewComparisonMode,
-            source.ReviewPublicationMode,
-            source.ComparisonGroupId,
-            source.ReviewPipelineProfileId);
+        restarted.SetReviewPipelineProfile(source.ReviewPipelineProfileId);
 
         restarted.SetProviderReviewContext(source.CodeReviewReference);
         restarted.SetReviewRevision(source.ReviewRevisionReference);

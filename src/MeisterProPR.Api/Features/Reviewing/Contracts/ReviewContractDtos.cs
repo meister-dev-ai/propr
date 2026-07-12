@@ -41,15 +41,6 @@ public sealed record SubmitReviewRequest(
 {
     /// <summary>Optional normalized reviewer identity preferred for publication and automation.</summary>
     public ReviewReviewerIdentityDto? RequestedReviewerIdentity { get; init; }
-
-    /// <summary>Optional per-job review strategy override. Missing preserves the client default or file_by_file fallback.</summary>
-    public ReviewStrategy? ReviewStrategy { get; init; }
-
-    /// <summary>Optional comparison mode. Missing defaults to single.</summary>
-    public ReviewComparisonMode ComparisonMode { get; init; } = ReviewComparisonMode.Single;
-
-    /// <summary>Optional publication mode. Missing defaults to publish.</summary>
-    public ReviewPublicationMode PublicationMode { get; init; } = ReviewPublicationMode.Publish;
 }
 
 /// <summary>Response returned when a review job is accepted or a duplicate is found.</summary>
@@ -60,23 +51,7 @@ public sealed record ReviewJobAcceptedResponse(
     string? HostBaseUrl,
     ReviewRepositoryRefDto? Repository,
     ReviewCodeReviewRefDto? CodeReview,
-    ReviewRevisionRefDto? ReviewRevision)
-{
-    /// <summary>Resolved review strategy snapshotted on the accepted job.</summary>
-    public ReviewStrategy ResolvedReviewStrategy { get; init; } = ReviewStrategy.FileByFile;
-
-    /// <summary>How the resolved strategy was selected.</summary>
-    public ReviewStrategySelectionSource StrategySelectionSource { get; init; } = ReviewStrategySelectionSource.FallbackDefault;
-
-    /// <summary>Comparison mode snapshotted on the accepted job.</summary>
-    public ReviewComparisonMode ComparisonMode { get; init; } = ReviewComparisonMode.Single;
-
-    /// <summary>Publication mode snapshotted on the accepted job.</summary>
-    public ReviewPublicationMode PublicationMode { get; init; } = ReviewPublicationMode.Publish;
-
-    /// <summary>Comparison group identifier when this job participates in one.</summary>
-    public Guid? ComparisonGroupId { get; init; }
-}
+    ReviewRevisionRefDto? ReviewRevision);
 
 /// <summary>Response returned when a failed review job is restarted.</summary>
 /// <param name="JobId">Identifier of the newly-created pending review job.</param>
@@ -115,21 +90,6 @@ public sealed record ReviewStatusResponse(
 
     /// <summary>Normalized review revision identity for the review job.</summary>
     public ReviewRevisionRefDto? ReviewRevision { get; init; }
-
-    /// <summary>Resolved review strategy snapshotted on the job.</summary>
-    public ReviewStrategy ResolvedReviewStrategy { get; init; } = ReviewStrategy.FileByFile;
-
-    /// <summary>How the resolved strategy was selected.</summary>
-    public ReviewStrategySelectionSource StrategySelectionSource { get; init; } = ReviewStrategySelectionSource.FallbackDefault;
-
-    /// <summary>Comparison mode snapshotted on the job.</summary>
-    public ReviewComparisonMode ComparisonMode { get; init; } = ReviewComparisonMode.Single;
-
-    /// <summary>Publication mode snapshotted on the job.</summary>
-    public ReviewPublicationMode PublicationMode { get; init; } = ReviewPublicationMode.Publish;
-
-    /// <summary>Comparison group identifier when this job participates in one.</summary>
-    public Guid? ComparisonGroupId { get; init; }
 
     /// <summary>Local workspace visibility metadata when available.</summary>
     public ReviewWorkspaceStatusDto? Workspace { get; init; }

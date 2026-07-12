@@ -33,21 +33,6 @@
       <span v-if="displayNameError" class="field-error">{{ displayNameError }}</span>
     </div>
 
-    <div class="form-field">
-      <label for="defaultReviewStrategy">Default Review Strategy</label>
-      <select
-        id="defaultReviewStrategy"
-        v-model="defaultReviewStrategy"
-        data-testid="client-review-strategy-select"
-        name="defaultReviewStrategy"
-      >
-        <option value="fileByFile">File-by-File</option>
-        <option value="agenticFileByFile">Agentic File-by-File</option>
-        <option value="prWideAgentic">PR-wide Agentic</option>
-      </select>
-      <span class="field-hint">Controls how new review jobs run by default for this client.</span>
-    </div>
-
     <div class="form-actions">
       <button type="submit" class="btn-primary" :disabled="loading">
         {{ loading ? 'Creating…' : 'Create Client' }}
@@ -61,9 +46,6 @@
 import { ref } from 'vue'
 import { createAdminClient } from '@/services/api'
 import type { TenantDto } from '@/services/tenantAdminService'
-import type { components } from '@/types'
-
-type ReviewStrategy = components['schemas']['ReviewStrategy']
 
 const props = withDefaults(defineProps<{
   tenants?: TenantDto[]
@@ -80,7 +62,6 @@ const emit = defineEmits<{
 
 const tenantId = ref(props.initialTenantId)
 const displayName = ref('')
-const defaultReviewStrategy = ref<ReviewStrategy>('fileByFile')
 const tenantError = ref('')
 const displayNameError = ref('')
 const formError = ref('')
@@ -108,7 +89,6 @@ async function handleSubmit() {
       body: {
         displayName: displayName.value.trim(),
         tenantId: tenantId.value,
-        defaultReviewStrategy: defaultReviewStrategy.value,
       },
     })
     if (!response.ok) {

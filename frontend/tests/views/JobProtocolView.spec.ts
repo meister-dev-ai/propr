@@ -66,8 +66,6 @@ const sampleProtocols = [
     providerProjectKey: 'proj',
     repositoryId: 'repo',
     pullRequestId: 42,
-    resolvedReviewStrategy: 'fileByFile',
-    strategySelectionSource: 'fallbackDefault',
     startedAt: '2024-01-01T00:00:00Z',
     completedAt: '2024-01-01T00:01:00Z',
     totalInputTokens: 100,
@@ -1768,14 +1766,12 @@ describe('JobProtocolView — comment search and filter (T042)', () => {
     expect(wrapper.text()).toContain('Final file-level finding')
   })
 
-  it('renders agentic file strategy and degraded file outcome details', async () => {
+  it('renders degraded file outcome details', async () => {
     mockGet.mockImplementation((path: string) => {
       if (path.includes('/protocol')) {
         return Promise.resolve({
           data: [{
             ...sampleProtocols[0],
-            resolvedReviewStrategy: 'agenticFileByFile',
-            strategySelectionSource: 'clientDefault',
             fileOutcome: {
               filePath: 'src/foo.ts',
               isComplete: true,
@@ -1814,9 +1810,6 @@ describe('JobProtocolView — comment search and filter (T042)', () => {
 
     const wrapper = await mountView()
 
-    expect(wrapper.text()).toContain('Strategy')
-    expect(wrapper.text()).toContain('Agentic File-by-File')
-
     const tracesTab = wrapper.findAll('button.tab-btn').find((btn) => btn.text() === 'Execution Traces')
     await tracesTab!.trigger('click')
     await flushPromises()
@@ -1833,8 +1826,6 @@ describe('JobProtocolView — comment search and filter (T042)', () => {
         return Promise.resolve({
           data: [{
             ...sampleProtocols[0],
-            resolvedReviewStrategy: 'agenticFileByFile',
-            strategySelectionSource: 'clientDefault',
             fileOutcome: {
               filePath: 'src/foo.ts',
               isComplete: true,
@@ -1891,7 +1882,6 @@ describe('JobProtocolView — comment search and filter (T042)', () => {
         return Promise.resolve({
           data: [{
             ...sampleProtocols[0],
-            resolvedReviewStrategy: 'agenticFileByFile',
             followUp: {
               used: true,
               triggerFamily: 'dispatch_or_registration',
@@ -1936,7 +1926,6 @@ describe('JobProtocolView — comment search and filter (T042)', () => {
         return Promise.resolve({
           data: [{
             ...sampleProtocols[0],
-            resolvedReviewStrategy: 'agenticFileByFile',
             repeatedJudgment: {
               findingId: 'candidate-001',
               evidenceSetId: 'evidence-task-001',

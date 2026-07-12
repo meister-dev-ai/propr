@@ -651,12 +651,6 @@ public sealed class PrWideAgenticReviewOrchestratorTests
     private static ReviewJob CreateJob()
     {
         var job = new ReviewJob(Guid.NewGuid(), Guid.NewGuid(), "https://dev.azure.com/org", "proj", "repo", 42, 7);
-        job.SelectReviewStrategy(
-            ReviewStrategy.PrWideAgentic,
-            ReviewStrategySelectionSource.ClientDefault,
-            ReviewComparisonMode.Single,
-            ReviewPublicationMode.Publish,
-            null);
         return job;
     }
 

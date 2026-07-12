@@ -41,8 +41,8 @@ public sealed partial class SubmitReviewJobHandler(
             return ToResult(existing, true);
         }
 
-        var selection = await this.ResolveStrategySelectionAsync(command.ClientId, request, cancellationToken);
-        request = request with { ResolvedReviewStrategySelection = selection };
+        var resolvedProfileId = await this.ResolveReviewPipelineProfileIdAsync(command.ClientId, cancellationToken);
+        request = request with { ResolvedReviewPipelineProfileId = resolvedProfileId };
 
         if (licensingCapabilityService is not null)
         {
@@ -100,54 +100,14 @@ public sealed partial class SubmitReviewJobHandler(
         return ToResult(job, false);
     }
 
-    private async Task<ReviewStrategySelection> ResolveStrategySelectionAsync(
+    private async Task<string> ResolveReviewPipelineProfileIdAsync(
         Guid clientId,
-        SubmitReviewJobRequestDto request,
         CancellationToken cancellationToken)
     {
-        if (request.ReviewStrategy.HasValue)
-        {
-            EnsureStrategySelectable(request.ReviewStrategy.Value, "job override");
-            return new ReviewStrategySelection(
-                request.ReviewStrategy.Value,
-                ReviewStrategySelectionSource.JobOverride,
-                request.ComparisonMode,
-                request.PublicationMode,
-                null,
-                ResolvePipelineProfileId(request.ReviewStrategy.Value, null));
-        }
-
+        string? configuredProfileId = null;
         if (clientRegistry is not null)
         {
-            var clientDefault = await clientRegistry.GetDefaultReviewStrategyAsync(clientId, cancellationToken);
-            var clientDefaultProfileId = await clientRegistry.GetDefaultReviewPipelineProfileIdAsync(clientId, cancellationToken);
-            if (clientDefault.HasValue)
-            {
-                EnsureStrategySelectable(clientDefault.Value, "client default");
-                return new ReviewStrategySelection(
-                    clientDefault.Value,
-                    ReviewStrategySelectionSource.ClientDefault,
-                    request.ComparisonMode,
-                    request.PublicationMode,
-                    null,
-                    ResolvePipelineProfileId(clientDefault.Value, clientDefaultProfileId));
-            }
-        }
-
-        return new ReviewStrategySelection(
-            ReviewStrategy.FileByFile,
-            ReviewStrategySelectionSource.FallbackDefault,
-            request.ComparisonMode,
-            request.PublicationMode,
-            null,
-            ReviewPipelineProfileCatalog.FileByFileBalancedProfileId);
-    }
-
-    private static string? ResolvePipelineProfileId(ReviewStrategy strategy, string? configuredProfileId)
-    {
-        if (strategy != ReviewStrategy.FileByFile)
-        {
-            return null;
+            configuredProfileId = await clientRegistry.GetDefaultReviewPipelineProfileIdAsync(clientId, cancellationToken);
         }
 
         return string.IsNullOrWhiteSpace(configuredProfileId)
@@ -155,25 +115,12 @@ public sealed partial class SubmitReviewJobHandler(
             : configuredProfileId;
     }
 
-    private static void EnsureStrategySelectable(ReviewStrategy strategy, string source)
-    {
-        if (!ReviewStrategyPolicy.IsSelectable(strategy))
-        {
-            throw new InvalidOperationException($"{ReviewStrategyPolicy.GetDisabledSelectionMessage(strategy)} Selection source: {source}.");
-        }
-    }
-
     private static SubmitReviewJobResult ToResult(ReviewJob job, bool isDuplicate)
     {
         return new SubmitReviewJobResult(
             job.Id,
             job.Status,
-            isDuplicate,
-            job.ReviewStrategy,
-            job.ReviewStrategySelectionSource,
-            job.ReviewComparisonMode,
-            job.ReviewPublicationMode,
-            job.ComparisonGroupId);
+            isDuplicate);
     }
 
     [LoggerMessage(

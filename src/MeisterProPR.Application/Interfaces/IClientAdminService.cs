@@ -25,13 +25,6 @@ public interface IClientAdminService
     /// <param name="ct">Cancellation token.</param>
     Task<ClientDto> CreateAsync(Guid tenantId, string displayName, CancellationToken ct = default);
 
-    /// <summary>Creates a new active client and returns its data.</summary>
-    Task<ClientDto> CreateAsync(
-        Guid tenantId,
-        string displayName,
-        ReviewStrategy defaultReviewStrategy,
-        CancellationToken ct = default);
-
     /// <summary>
     ///     Applies partial updates to a client.
     ///     Returns the updated client, or <c>null</c> if not found.
@@ -56,7 +49,6 @@ public interface IClientAdminService
     ///     When non-null, replaces the client's ordered review-pass list wholesale (an empty list clears it).
     ///     Each entry binds one additional multi-pass union pass to a configured model.
     /// </param>
-    /// <param name="defaultReviewStrategy">When non-null, sets the default review strategy for newly submitted jobs.</param>
     /// <param name="ct">Cancellation token.</param>
     Task<ClientDto?> PatchAsync(
         Guid clientId,
@@ -70,7 +62,6 @@ public interface IClientAdminService
         bool? enableLanguageRobustScreening = null,
         bool? enableMultiPassUnion = null,
         IReadOnlyList<ReviewPassDto>? reviewPasses = null,
-        ReviewStrategy? defaultReviewStrategy = null,
         CancellationToken ct = default);
 
     /// <summary>

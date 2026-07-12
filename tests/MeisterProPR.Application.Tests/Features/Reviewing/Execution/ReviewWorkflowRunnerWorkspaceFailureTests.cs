@@ -32,7 +32,7 @@ public sealed class ReviewWorkflowRunnerWorkspaceFailureTests
         var instructionFetcher = Substitute.For<IRepositoryInstructionFetcher>();
         var exclusionFetcher = Substitute.For<IRepositoryExclusionFetcher>();
         var instructionEvaluator = Substitute.For<IRepositoryInstructionEvaluator>();
-        var reviewStrategyDispatcher = Substitute.For<IReviewStrategyDispatcher>();
+        var fileByFileReviewOrchestrator = Substitute.For<IFileByFileReviewOrchestrator>();
 
         var fixture = CreateFixture();
         var job = new ReviewJob(
@@ -66,7 +66,7 @@ public sealed class ReviewWorkflowRunnerWorkspaceFailureTests
         exclusionFetcher.FetchAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<Guid?>(), Arg.Any<CancellationToken>())
             .Returns(ReviewExclusionRules.Default);
         diagnosticsReader.GetJobProtocolAsync(job.Id, ct: Arg.Any<CancellationToken>()).Returns(new GetReviewJobProtocolResult(job.Id, []));
-        reviewStrategyDispatcher.ReviewAsync(job, pullRequest, Arg.Any<ReviewSystemContext>(), Arg.Any<CancellationToken>(), request.ChatClient)
+        fileByFileReviewOrchestrator.ReviewAsync(job, pullRequest, Arg.Any<ReviewSystemContext>(), Arg.Any<CancellationToken>(), request.ChatClient)
             .Returns(expectedReviewResult);
 
         var sut = new ReviewWorkflowRunner(
@@ -80,7 +80,7 @@ public sealed class ReviewWorkflowRunnerWorkspaceFailureTests
             instructionFetcher,
             exclusionFetcher,
             instructionEvaluator,
-            reviewStrategyDispatcher,
+            fileByFileReviewOrchestrator,
             workspaceManager);
 
         var result = await sut.RunAsync(request, CancellationToken.None);

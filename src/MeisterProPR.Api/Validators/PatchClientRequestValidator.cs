@@ -39,19 +39,15 @@ public sealed class PatchClientRequestValidator : AbstractValidator<PatchClientR
             .Must(BeAValidReviewPassList)
             .WithMessage(
                 "ReviewPasses must contain at most 4 entries, each with a non-empty configuredModelId, an optional "
-                + "recognized lens, a distinct (configuredModelId, lens) pair, and unique, contiguous ordinals "
-                + "starting at 0.")
+                + "recognized lens, an optional recognized scope, a distinct (configuredModelId, lens, scope, shadow) "
+                + "tuple, and unique, contiguous ordinals starting at 0.")
             .When(r => r.ReviewPasses is not null);
-
-        this.RuleFor(r => r.DefaultReviewStrategy)
-            .Must(strategy => !strategy.HasValue || ReviewStrategyPolicy.IsSelectable(strategy.Value))
-            .WithMessage(request => ReviewStrategyPolicy.GetDisabledSelectionMessage(request.DefaultReviewStrategy ?? ReviewStrategy.FileByFile));
     }
 
     // At most 4 additional passes (5 total with the implicit tier baseline), each bound to a non-empty configured
-    // model, carrying at most a recognized lens, forming a distinct (model, lens) pair across entries, with ordinals
-    // that form a unique, contiguous 0..n-1 sequence. The model's existence and chat-capability are checked
-    // separately (they need the client id and the database).
+    // model, carrying at most a recognized lens and a recognized scope, forming a distinct (model, lens, scope, shadow)
+    // tuple across entries, with ordinals that form a unique, contiguous 0..n-1 sequence. The model's existence and
+    // chat-capability are checked separately (they need the client id and the database).
     private static bool BeAValidReviewPassList(IReadOnlyList<ReviewPassEntry>? passes)
     {
         if (passes is null)
@@ -75,10 +71,17 @@ public sealed class PatchClientRequestValidator : AbstractValidator<PatchClientR
             return false;
         }
 
-        // Each pass must be a distinct (model, lens) pair — the same model under the same lens twice is redundant
-        // resampling, which the ordered pass list exists to avoid. The same model under different lenses (e.g. a
-        // plain resample pass plus a security-lens pass on that model) is allowed.
-        if (passes.Select(pass => (pass.ConfiguredModelId, pass.Lens)).Distinct().Count() != passes.Count)
+        // Only null (the per-file default) or a recognized scope value is permitted.
+        if (passes.Any(pass => !ReviewPassScope.IsValid(pass.Scope)))
+        {
+            return false;
+        }
+
+        // Each pass must be a distinct (model, lens, scope, shadow) tuple — the same model under the same lens, scope,
+        // and shadow flag twice is redundant resampling, which the ordered pass list exists to avoid. The same model
+        // under a different lens/scope/shadow (e.g. a plain resample pass plus a security-lens pass on that model) is
+        // allowed.
+        if (passes.Select(pass => (pass.ConfiguredModelId, pass.Lens, pass.Scope, pass.Shadow)).Distinct().Count() != passes.Count)
         {
             return false;
         }

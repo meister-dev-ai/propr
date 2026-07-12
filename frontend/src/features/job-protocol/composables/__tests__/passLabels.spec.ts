@@ -13,6 +13,10 @@ describe('originLabel', () => {
         expect(originLabel('MultiPassUnion', 3, 'security')).toBe('Pass 3 · Security')
     })
 
+    it('renders the PR-wide scope marker as "Pass N · PR-wide"', () => {
+        expect(originLabel('MultiPassUnion', 2, 'pr_wide')).toBe('Pass 2 · PR-wide')
+    })
+
     it('falls back to a generic label when the union pass carries no index', () => {
         expect(originLabel('MultiPassUnion', null)).toBe('Additional pass')
     })

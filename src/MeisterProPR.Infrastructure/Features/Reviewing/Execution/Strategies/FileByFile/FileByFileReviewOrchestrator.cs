@@ -44,7 +44,8 @@ internal sealed partial class FileByFileReviewOrchestrator(
     IDeterministicReviewFindingGate? deterministicReviewFindingGate = null,
     IEnumerable<IReviewInvariantFactProvider>? reviewInvariantFactProviders = null,
     IReviewClaimExtractor? reviewClaimExtractor = null,
-    ISummaryReconciliationService? summaryReconciliationService = null) : IFileByFileReviewOrchestrator
+    ISummaryReconciliationService? summaryReconciliationService = null,
+    Func<IPrWideCandidateGenerator?>? prWideCandidateGeneratorFactory = null) : IFileByFileReviewOrchestrator
 {
     private readonly AiReviewOptions _opts = options.Value;
 
@@ -68,7 +69,8 @@ internal sealed partial class FileByFileReviewOrchestrator(
         ISummaryReconciliationService? summaryReconciliationService = null,
         IReviewPipeline<PerFileReviewContext>? perFilePipeline = null,
         IReviewPipelineProfileProvider? pipelineProfileProvider = null,
-        IProRVPrefilter? proRvPrefilter = null)
+        IProRVPrefilter? proRvPrefilter = null,
+        Func<IPrWideCandidateGenerator?>? prWideCandidateGeneratorFactory = null)
         : this(
             protocolRecorder,
             jobRepository,
@@ -108,7 +110,8 @@ internal sealed partial class FileByFileReviewOrchestrator(
             deterministicReviewFindingGate,
             reviewInvariantFactProviders,
             reviewClaimExtractor,
-            summaryReconciliationService)
+            summaryReconciliationService,
+            prWideCandidateGeneratorFactory)
     {
     }
 
@@ -124,6 +127,11 @@ internal sealed partial class FileByFileReviewOrchestrator(
         await this.RecordReviewProfileSelectedEventAsync(job, baseContext, ct);
         var dispatchResult = await this.GetDispatchPlanner().ExecuteAsync(job, pr, baseContext, effectiveClient, ct);
 
+        // Job-level PR-wide-scope pass entries run once over the whole change set here — after the per-file fan-out
+        // and before synthesis — and their candidates are threaded into synthesis so they flow through the shared
+        // verify -> gate -> publish path alongside the synthesized cross-cutting findings.
+        var prWideCandidates = await this.RunPrWideScopePassesAsync(job, pr, baseContext, ct);
+
         if (dispatchResult.Exceptions.Count > 0)
         {
             // Attempt synthesis for the files that did succeed before propagating the partial failure.
@@ -132,7 +140,7 @@ internal sealed partial class FileByFileReviewOrchestrator(
             ReviewResult? partialResult = null;
             try
             {
-                partialResult = await this.SynthesizeResultsAsync(job, pr, baseContext, effectiveClient, ct);
+                partialResult = await this.SynthesizeResultsAsync(job, pr, baseContext, effectiveClient, prWideCandidates, ct);
             }
             catch (Exception ex)
             {
@@ -142,7 +150,77 @@ internal sealed partial class FileByFileReviewOrchestrator(
             throw new PartialReviewFailureException(dispatchResult.Exceptions.Count, pr.ChangedFiles.Count, dispatchResult.Exceptions, partialResult);
         }
 
-        return await this.SynthesizeResultsAsync(job, pr, baseContext, effectiveClient, ct);
+        return await this.SynthesizeResultsAsync(job, pr, baseContext, effectiveClient, prWideCandidates, ct);
+    }
+
+    // Runs each pr_wide-scope entry in the client's review-pass list once at the job level. Each entry resolves to
+    // its own configured model via the by-model seam (the same seam per-file passes use); an entry whose model
+    // cannot be resolved is skipped with a trace and never falls back to another connection, while the remaining
+    // entries still run. Returns the collected candidates, which the caller threads into synthesis. Returns an empty
+    // list when there is no generator, no resolver, or no pr_wide entry — leaving a review without one byte-identical.
+    private async Task<IReadOnlyList<CandidateReviewFinding>> RunPrWideScopePassesAsync(
+        ReviewJob job,
+        PullRequest pr,
+        ReviewSystemContext baseContext,
+        CancellationToken ct)
+    {
+        if (prWideCandidateGeneratorFactory is null)
+        {
+            return [];
+        }
+
+        var prWidePasses = baseContext.ReviewPasses
+            .Select((pass, ordinal) => (pass, ordinal))
+            .Where(entry => string.Equals(entry.pass.Scope, ReviewPassScope.PrWide, StringComparison.Ordinal))
+            .ToList();
+        if (prWidePasses.Count == 0)
+        {
+            return [];
+        }
+
+        var generator = prWideCandidateGeneratorFactory();
+        if (generator is null || aiRuntimeResolver is null)
+        {
+            LogPrWideScopeUnavailable(logger, job.Id, generator is null, aiRuntimeResolver is null);
+            return [];
+        }
+
+        var budget = new PrWideGenerationBudget(
+            MaxInvestigations: 3,
+            MaxToolCallsPerInvestigation: 3,
+            MaxSeedFilesPerInvestigation: 5);
+
+        var collected = new List<CandidateReviewFinding>();
+        foreach (var (pass, ordinal) in prWidePasses)
+        {
+            IResolvedAiChatRuntime runtime;
+            try
+            {
+                runtime = await aiRuntimeResolver.ResolveChatRuntimeForModelAsync(job.ClientId, pass.ConfiguredModelId, ct);
+            }
+            catch (OperationCanceledException)
+            {
+                throw;
+            }
+            catch (Exception ex)
+            {
+                // Never fall back to another connection: skip this entry with a trace and let the rest run.
+                LogPrWideScopePassModelUnresolved(logger, job.Id, pass.ConfiguredModelId, ordinal, ex);
+                continue;
+            }
+
+            // The per-file baseline is pass 1, so a job-level entry numbers as its list ordinal plus two.
+            var candidates = await generator.GenerateCandidatesAsync(job, pr, baseContext, runtime, budget, ordinal + 2, pass.Shadow, ct);
+
+            // A shadow entry still runs and records its full generation trace plus a shadow-completed event (both
+            // inside the generator), but its candidates are never threaded into synthesis, so it never publishes.
+            if (!pass.Shadow)
+            {
+                collected.AddRange(candidates);
+            }
+        }
+
+        return collected;
     }
 
     private static IReviewPipeline<PerFileReviewContext> CreateDefaultPerFilePipeline(
@@ -175,9 +253,10 @@ internal sealed partial class FileByFileReviewOrchestrator(
         PullRequest pr,
         ReviewSystemContext baseContext,
         IChatClient effectiveClient,
+        IReadOnlyList<CandidateReviewFinding> prWideCandidates,
         CancellationToken ct)
     {
-        return await this.GetSynthesisExecutor().SynthesizeAsync(job, pr, baseContext, effectiveClient, [], ct);
+        return await this.GetSynthesisExecutor().SynthesizeAsync(job, pr, baseContext, effectiveClient, prWideCandidates, ct);
     }
 
     private async Task RecordReviewProfileSelectedEventAsync(
@@ -196,8 +275,7 @@ internal sealed partial class FileByFileReviewOrchestrator(
             JsonSerializer.Serialize(
                 new
                 {
-                    strategy = job.ReviewStrategy.ToString(),
-                    selectionSource = job.ReviewStrategySelectionSource.ToString(),
+                    reviewKind = "file_by_file",
                 }),
             JsonSerializer.Serialize(
                 new

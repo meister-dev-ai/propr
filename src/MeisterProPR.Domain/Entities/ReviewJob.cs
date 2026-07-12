@@ -226,26 +226,7 @@ public sealed class ReviewJob
     /// </summary>
     public ICollection<ReviewFileResult> FileReviewResults { get; } = [];
 
-    /// <summary>Durable per-strategy run outputs associated with this job.</summary>
-    public ICollection<ReviewModeRunResult> ModeRunResults { get; } = [];
-
-    /// <summary>Snapshotted review strategy selected at intake time.</summary>
-    public ReviewStrategy ReviewStrategy { get; private set; } = ReviewStrategy.FileByFile;
-
-    /// <summary>Explains the source of the snapshotted review strategy.</summary>
-    public ReviewStrategySelectionSource ReviewStrategySelectionSource { get; private set; } =
-        ReviewStrategySelectionSource.FallbackDefault;
-
-    /// <summary>Snapshotted comparison behavior selected at intake time.</summary>
-    public ReviewComparisonMode ReviewComparisonMode { get; private set; } = ReviewComparisonMode.Single;
-
-    /// <summary>Snapshotted publication behavior selected at intake time.</summary>
-    public ReviewPublicationMode ReviewPublicationMode { get; private set; } = ReviewPublicationMode.Publish;
-
-    /// <summary>Comparison group shared by related strategy runs, when applicable.</summary>
-    public Guid? ComparisonGroupId { get; private set; }
-
-    /// <summary>Optional internal pipeline profile selection captured with the strategy snapshot.</summary>
+    /// <summary>Optional internal pipeline profile selection captured at intake time.</summary>
     public string? ReviewPipelineProfileId { get; private set; }
 
     /// <summary>
@@ -353,34 +334,10 @@ public sealed class ReviewJob
         this.ReviewTemperature = reviewTemperature;
     }
 
-    /// <summary>Stores the immutable strategy selection snapshot for this job.</summary>
-    public void SelectReviewStrategy(
-        ReviewStrategy strategy,
-        ReviewStrategySelectionSource source,
-        ReviewComparisonMode comparisonMode,
-        ReviewPublicationMode publicationMode,
-        Guid? comparisonGroupId,
-        string? pipelineProfileId = null)
+    /// <summary>Stores the internal pipeline profile snapshot selected at intake time.</summary>
+    public void SetReviewPipelineProfile(string? pipelineProfileId)
     {
-        this.ReviewStrategy = strategy;
-        this.ReviewStrategySelectionSource = source;
-        this.ReviewComparisonMode = comparisonMode;
-        this.ReviewPublicationMode = publicationMode;
-        this.ComparisonGroupId = comparisonGroupId;
         this.ReviewPipelineProfileId = string.IsNullOrWhiteSpace(pipelineProfileId) ? null : pipelineProfileId;
-    }
-
-    /// <summary>Stores the immutable strategy selection snapshot for this job.</summary>
-    public void SelectReviewStrategy(ReviewStrategySelection selection)
-    {
-        ArgumentNullException.ThrowIfNull(selection);
-        this.SelectReviewStrategy(
-            selection.Strategy,
-            selection.Source,
-            selection.ComparisonMode,
-            selection.PublicationMode,
-            selection.ComparisonGroupId,
-            selection.PipelineProfileId);
     }
 
     /// <summary>Records the PR context snapshot captured from ADO at job-creation time.</summary>

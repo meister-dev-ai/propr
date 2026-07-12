@@ -93,7 +93,6 @@ public sealed class ModuleRegistrationTests
         Assert.NotNull(FindService<IMentionAnswerService>(services));
         Assert.NotNull(FindService<IPrCrawlService>(services));
         Assert.NotNull(FindService<IFileByFileReviewOrchestrator>(services));
-        Assert.NotNull(FindService<IAgenticFileByFileReviewOrchestrator>(services));
         Assert.NotNull(FindService<IScmProviderRegistry>(services));
         Assert.NotNull(FindService<IRepositoryDiscoveryProvider>(services));
         Assert.NotNull(FindService<ICodeReviewQueryService>(services));
@@ -128,7 +127,6 @@ public sealed class ModuleRegistrationTests
         services.AddReviewingModule(configuration);
 
         Assert.NotNull(FindService<IFileByFileReviewOrchestrator>(services));
-        Assert.NotNull(FindService<IAgenticFileByFileReviewOrchestrator>(services));
         Assert.NotNull(FindService<IPrWideAgenticReviewOrchestrator>(services));
     }
 
@@ -207,7 +205,6 @@ public sealed class ModuleRegistrationTests
         Assert.NotNull(FindService<IMentionAnswerService>(services));
         Assert.NotNull(FindService<IPrCrawlService>(services));
         Assert.NotNull(FindService<IFileByFileReviewOrchestrator>(services));
-        Assert.NotNull(FindService<IAgenticFileByFileReviewOrchestrator>(services));
         Assert.NotNull(FindService<IProCursorGateway>(services));
         Assert.NotNull(FindService<IScmProviderRegistry>(services));
         Assert.NotNull(FindService<IRepositoryDiscoveryProvider>(services));

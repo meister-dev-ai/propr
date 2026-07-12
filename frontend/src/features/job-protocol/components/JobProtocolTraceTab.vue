@@ -187,7 +187,6 @@
                         <div><dt>Tool Calls</dt><dd>{{ vm.activePass.toolCallCount ?? '—' }}</dd></div>
                         <div><dt>In Tokens</dt><dd class="fat-tokens">{{ vm.formatTokens(vm.activePass.totalInputTokens) }}</dd></div>
                         <div><dt>Out Tokens</dt><dd class="fat-tokens">{{ vm.formatTokens(vm.activePass.totalOutputTokens) }}</dd></div>
-                        <div><dt>Strategy</dt><dd>{{ vm.activePassReviewStrategyDisplay }}</dd></div>
                         <!-- File outcome folded into the attribute grid; the path is omitted because it's the file already
                              named by the selector above. -->
                         <div v-if="vm.activePassFileOutcome"><dt>Outcome</dt><dd>{{ vm.formatFileOutcomeStatus(vm.activePassFileOutcome) }}</dd></div>

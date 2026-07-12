@@ -1,7 +1,6 @@
 // Copyright (c) Andreas Rain.
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
-using System.Text;
 using System.Text.Json;
 using MeisterProPR.Application.DTOs;
 using MeisterProPR.Application.Features.Reviewing.Execution.Models;
@@ -56,7 +55,7 @@ internal sealed class ReviewSynthesisExecutor(
         PullRequest pr,
         ReviewSystemContext baseContext,
         IChatClient effectiveClient,
-        IReadOnlyList<CandidateReviewFinding>? augmentationCandidateFindings,
+        IReadOnlyList<CandidateReviewFinding>? prWideCandidateFindings,
         CancellationToken ct)
     {
         var jobWithResults = await jobRepository.GetByIdWithFileResultsAsync(job.Id, ct);
@@ -76,9 +75,13 @@ internal sealed class ReviewSynthesisExecutor(
             .Select(r => (r.FilePath, Summary: r.PerFileSummary!))
             .ToList();
 
+        // Shadow-pass comments stay in the persisted per-file result for the trace, but they are dropped here before
+        // deduplication and gating so they never publish. Filtering before dedup means a finding a real (non-shadow)
+        // pass independently produced still survives via its own comment — a shadow pass never suppresses a real one.
         var allComments = freshResults
             .Where(r => r.IsComplete && r.Comments is not null)
             .SelectMany(r => r.Comments!)
+            .Where(comment => !comment.OriginPassShadow)
             .Select(NormalizeCommentAnchor)
             .ToList();
 
@@ -111,12 +114,17 @@ internal sealed class ReviewSynthesisExecutor(
 
         var changedLineRangesByPath = ReviewDiffProcessor.BuildChangedLineRangesByPath(pr.ChangedFiles);
         var baselineFindings = candidateFindingFactory.Build(freshResults, deduped, changedLineRangesByPath: changedLineRangesByPath);
-        var mergedPerFileFindings = CandidateFindingFactory.MergeFindings(baselineFindings, augmentationCandidateFindings ?? []);
+        var mergedPerFileFindings = CandidateFindingFactory.MergeFindings(baselineFindings, []);
+
+        // Job-level PR-wide pass candidates join the synthesized cross-cutting findings and flow through the same
+        // PR-level verification -> final gate -> publication path below. They are NOT semantically deduped against
+        // per-file findings; they meet them only at the per-finding gate, matching how cross-cutting findings behave.
+        var prWideFindings = prWideCandidateFindings ?? [];
 
         var gate = deterministicReviewFindingGate;
         if (gate is null)
         {
-            var combinedComments = synthesisOutcome.SynthesizedFindings.Count > 0
+            IEnumerable<ReviewComment> synthesizedComments = synthesisOutcome.SynthesizedFindings.Count > 0
                 ? CandidateFindingFactory.AssignSynthesisFindingIds(synthesisOutcome.SynthesizedFindings)
                     .Select(finding => FileByFileReviewOrchestrator.CreateReviewComment(finding.FilePath, finding.LineNumber, finding.Severity, finding.Message)
                         with
@@ -124,9 +132,17 @@ internal sealed class ReviewSynthesisExecutor(
                             OriginPassKind = finding.Provenance.ResolveOriginPassKindName(),
                             ScopeRelation = ReviewCommentScopeRelationMapper.Map(finding.ScopeRelation),
                         })
-                    .Concat(deduped)
-                    .ToList()
-                : (IReadOnlyList<ReviewComment>)deduped;
+                : [];
+            var prWideComments = prWideFindings
+                .Select(finding => FileByFileReviewOrchestrator.CreateReviewComment(finding.FilePath, finding.LineNumber, finding.Severity, finding.Message)
+                    with
+                    {
+                        OriginPassKind = finding.Provenance.ResolveOriginPassKindName(),
+                        OriginPassIndex = finding.Provenance.UnionPassIndex,
+                        OriginPassLens = finding.Provenance.UnionLens,
+                        ScopeRelation = ReviewCommentScopeRelationMapper.Map(finding.ScopeRelation),
+                    });
+            var combinedComments = synthesizedComments.Concat(prWideComments).Concat(deduped).ToList();
 
             logger.LogInformation(
                 "Found {CrossCuttingCount} cross-cutting concerns in synthesis for job {JobId}",
@@ -139,11 +155,14 @@ internal sealed class ReviewSynthesisExecutor(
         }
 
         var assignedSynthesisFindings = CandidateFindingFactory.AssignSynthesisFindingIds(synthesisOutcome.SynthesizedFindings);
+        var synthesisAndPrWideFindings = prWideFindings.Count > 0
+            ? assignedSynthesisFindings.Concat(prWideFindings).ToList()
+            : assignedSynthesisFindings;
         var skipPrVerification = await this.TryRecordSkippedStepAsync(protocolId, baseContext, FileByFileReviewStepIds.PrVerification, ct);
         var prLevelFindings = prLevelReviewVerificationExecutor is null || skipPrVerification
-            ? assignedSynthesisFindings
+            ? synthesisAndPrWideFindings
             : await prLevelReviewVerificationExecutor.ApplyAsync(
-                assignedSynthesisFindings,
+                synthesisAndPrWideFindings,
                 baseContext,
                 pr.SourceBranch,
                 protocolId,
@@ -172,7 +191,7 @@ internal sealed class ReviewSynthesisExecutor(
                 [],
                 false,
                 "skipped")
-            : GroundSummaryToFinalGateOutcomes(
+            : ReviewSummaryGrounding.Ground(
                 reconciler.Reconcile(synthesisOutcome.FinalSummary, candidateFindings, gateDecisions),
                 candidateFindings,
                 gateDecisions);
@@ -254,114 +273,6 @@ internal sealed class ReviewSynthesisExecutor(
         return new SynthesisRuntimeSelection(effectiveClient, synthesisModelId);
     }
 
-    private static SummaryReconciliationResult GroundSummaryToFinalGateOutcomes(
-        SummaryReconciliationResult reconciliation,
-        IReadOnlyList<CandidateReviewFinding> candidateFindings,
-        IReadOnlyList<FinalGateDecision> gateDecisions)
-    {
-        ArgumentNullException.ThrowIfNull(reconciliation);
-        ArgumentNullException.ThrowIfNull(candidateFindings);
-        ArgumentNullException.ThrowIfNull(gateDecisions);
-
-        var publishCount = gateDecisions.Count(decision =>
-            string.Equals(decision.Disposition, FinalGateDecision.PublishDisposition, StringComparison.Ordinal));
-
-        var summaryOnlyItems = gateDecisions
-            .Where(decision => string.Equals(decision.Disposition, FinalGateDecision.SummaryOnlyDisposition, StringComparison.Ordinal))
-            .Select(decision => decision.SummaryText)
-            .Where(text => !string.IsNullOrWhiteSpace(text))
-            .Cast<string>()
-            .Distinct(StringComparer.Ordinal)
-            .ToList();
-
-        var outsideChangeCount = CountRetainedOutsideChangeFindings(candidateFindings, gateDecisions);
-
-        var groundedSummary = BuildGroundedSummary(reconciliation.FinalSummary, publishCount, summaryOnlyItems, outsideChangeCount);
-        if (string.Equals(reconciliation.FinalSummary, groundedSummary, StringComparison.Ordinal))
-        {
-            return reconciliation;
-        }
-
-        return new SummaryReconciliationResult(
-            reconciliation.OriginalSummary,
-            groundedSummary,
-            reconciliation.DroppedFindingIds,
-            reconciliation.SummaryOnlyFindingIds,
-            true,
-            "deterministic_summary_grounding");
-    }
-
-    /// <summary>
-    ///     Counts retained (published) findings whose anchor line is classified as outside the pull request's
-    ///     changed-line ranges, so the grounded summary can note that they live in pre-existing code.
-    /// </summary>
-    private static int CountRetainedOutsideChangeFindings(
-        IReadOnlyList<CandidateReviewFinding> candidateFindings,
-        IReadOnlyList<FinalGateDecision> gateDecisions)
-    {
-        var publishedFindingIds = gateDecisions
-            .Where(decision => string.Equals(decision.Disposition, FinalGateDecision.PublishDisposition, StringComparison.Ordinal))
-            .Select(decision => decision.FindingId)
-            .ToHashSet(StringComparer.Ordinal);
-
-        return candidateFindings.Count(finding =>
-            finding.ScopeRelation == ChangedLineRelation.OutsideChange &&
-            publishedFindingIds.Contains(finding.FindingId));
-    }
-
-    private static string BuildGroundedSummary(
-        string reconciledSummary,
-        int publishCount,
-        IReadOnlyList<string> summaryOnlyItems,
-        int outsideChangeCount)
-    {
-        ArgumentException.ThrowIfNullOrWhiteSpace(reconciledSummary);
-
-        var sb = new StringBuilder(reconciledSummary.Trim());
-
-        if (publishCount == 0 && summaryOnlyItems.Count == 0)
-        {
-            sb.AppendLine()
-                .AppendLine()
-                .AppendLine("**No publishable or summary-only findings remained after verification.**");
-
-            return sb.ToString();
-        }
-
-        if (publishCount > 0)
-        {
-            sb.AppendLine()
-                .AppendLine()
-                .AppendLine($"**Verification retained {publishCount} publishable finding{(publishCount == 1 ? string.Empty : "s")}.**");
-
-            if (outsideChangeCount > 0)
-            {
-                sb.AppendLine()
-                    .AppendLine($"_{outsideChangeCount} of these {(outsideChangeCount == 1 ? "is" : "are")} in pre-existing code outside this change._");
-            }
-        }
-
-        if (summaryOnlyItems.Count > 0)
-        {
-            if (publishCount == 0)
-            {
-                sb.AppendLine()
-                    .AppendLine()
-                    .AppendLine("**No publishable findings remained after verification.**");
-            }
-
-            sb.AppendLine()
-                .AppendLine()
-                .AppendLine("**Summary-only findings:**");
-
-            foreach (var item in summaryOnlyItems)
-            {
-                sb.AppendLine($"- {item}");
-            }
-        }
-
-        return sb.ToString();
-    }
 
     private async Task<Guid?> BeginSynthesisProtocolAsync(
         ReviewJob job,

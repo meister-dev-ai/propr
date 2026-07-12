@@ -4,7 +4,6 @@
 using System.Reflection;
 using MeisterProPR.Application.Features.Reviewing.Execution.Models;
 using MeisterProPR.Application.Features.Reviewing.Execution.Ports;
-using MeisterProPR.Domain.Enums;
 using MeisterProPR.Infrastructure.Features.Reviewing.Execution.DependencyInjection;
 using MeisterProPR.Infrastructure.Features.Reviewing.Execution.Strategies;
 using Microsoft.Extensions.DependencyInjection;
@@ -20,14 +19,6 @@ namespace MeisterProPR.Infrastructure.Tests.AI;
 /// </summary>
 public sealed class ReviewPipelineStageRegistrationTests
 {
-    // Strategies whose dispatch/per-file stage lists are concrete (resolved through ReviewPipelineRunner).
-    // PrWide uses only family-placeholder ids and is resolved by a different mechanism.
-    private static readonly ReviewStrategy[] ConcretePipelineStrategies =
-    [
-        ReviewStrategy.FileByFile,
-        ReviewStrategy.AgenticFileByFile,
-    ];
-
     [Fact]
     public void EveryProfileStageIdResolvesToARegisteredStage()
     {
@@ -43,16 +34,13 @@ public sealed class ReviewPipelineStageRegistrationTests
             StringComparer.Ordinal);
 
         var missing = new List<string>();
-        foreach (var strategy in ConcretePipelineStrategies)
+        foreach (var profile in provider.GetProfiles())
         {
-            foreach (var profile in provider.GetProfiles(strategy))
+            foreach (var stageId in profile.DispatchStageIds.Concat(profile.PerFileStageIds))
             {
-                foreach (var stageId in profile.DispatchStageIds.Concat(profile.PerFileStageIds))
+                if (!familyIds.Contains(stageId) && !registered.Contains(stageId))
                 {
-                    if (!familyIds.Contains(stageId) && !registered.Contains(stageId))
-                    {
-                        missing.Add($"{strategy}/{profile.ProfileId} -> '{stageId}'");
-                    }
+                    missing.Add($"{profile.ProfileId} -> '{stageId}'");
                 }
             }
         }

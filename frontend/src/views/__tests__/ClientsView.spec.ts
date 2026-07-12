@@ -176,7 +176,6 @@ describe('ClientsView', () => {
     expect((tenantSelect.element as HTMLSelectElement).value).toBe('tenant-2')
 
     await wrapper.get('#displayName').setValue('Acme Review Team')
-    await wrapper.get('[data-testid="client-review-strategy-select"]').setValue('prWideAgentic')
     await wrapper.get('form').trigger('submit.prevent')
     await flushPromises()
 
@@ -184,44 +183,10 @@ describe('ClientsView', () => {
       body: {
         displayName: 'Acme Review Team',
         tenantId: 'tenant-2',
-        defaultReviewStrategy: 'prWideAgentic',
       },
     })
     expect(replaceMock).toHaveBeenCalledWith({ name: 'clients', query: {} })
     expect(wrapper.find('form').exists()).toBe(false)
-  })
-
-  it('posts the agentic file-by-file strategy from the create flow', async () => {
-    routeQuery.value = {
-      create: 'true',
-      tenantId: 'tenant-1',
-    }
-
-    postClientMock.mockResolvedValue({
-      data: {
-        id: 'client-2',
-        displayName: 'Agentic Review Team',
-        isActive: true,
-        createdAt: '2026-04-25T10:00:00Z',
-      },
-      response: { ok: true, status: 201 },
-    })
-
-    const wrapper = await mountView()
-    await flushPromises()
-
-    await wrapper.get('#displayName').setValue('Agentic Review Team')
-    await wrapper.get('[data-testid="client-review-strategy-select"]').setValue('agenticFileByFile')
-    await wrapper.get('form').trigger('submit.prevent')
-    await flushPromises()
-
-    expect(postClientMock).toHaveBeenCalledWith('/clients', {
-      body: {
-        displayName: 'Agentic Review Team',
-        tenantId: 'tenant-1',
-        defaultReviewStrategy: 'agenticFileByFile',
-      },
-    })
   })
 
   it('shows tenant ownership in the directory and filters clients by tenant', async () => {

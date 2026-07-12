@@ -10577,7 +10577,6 @@ export interface components {
             /** Format: date-time */
             createdAt?: string;
             commentResolutionBehavior?: components["schemas"]["CommentResolutionBehavior"];
-            defaultReviewStrategy?: components["schemas"]["ReviewStrategy"];
             customSystemMessage?: string | null;
             scmCommentPostingEnabled?: boolean;
             enableEvidenceBackedVerification?: boolean;
@@ -10851,7 +10850,6 @@ export interface components {
             displayName?: string | null;
             /** Format: uuid */
             tenantId: string;
-            defaultReviewStrategy?: components["schemas"]["ReviewStrategy"];
         };
         /** @description Create-PAT request. */
         CreatePatRequest: {
@@ -11008,7 +11006,6 @@ export interface components {
             prTargetBranch?: string | null;
             prRepositoryName?: string | null;
             aiModel?: string | null;
-            resolvedReviewStrategy?: components["schemas"]["ReviewStrategy"];
         };
         /** @description Response for the job list endpoint. */
         JobListResponse: {
@@ -11189,7 +11186,6 @@ export interface components {
             enableLanguageRobustScreening?: boolean | null;
             enableMultiPassUnion?: boolean | null;
             reviewPasses?: components["schemas"]["ReviewPassEntry"][] | null;
-            defaultReviewStrategy?: components["schemas"]["ReviewStrategy"];
         };
         /** @description Patch payload for one premium capability override. */
         PatchPremiumCapabilityOverrideRequest: {
@@ -11212,7 +11208,6 @@ export interface components {
             /** Format: int64 */
             totalOutputTokens?: number | null;
             tokenBreakdown?: components["schemas"]["TokenBreakdownEntry"][] | null;
-            resolvedReviewStrategy?: components["schemas"]["ReviewStrategy"];
         };
         /** @description Aggregated view of all review activity for a specific pull request. */
         PrReviewViewDto: {
@@ -12140,11 +12135,6 @@ export interface components {
          * @enum {string}
          */
         ReviewCommentScopeRelation: "onChangedLine" | "adjacentToChange" | "outsideChange";
-        /**
-         * @description Controls whether one or more review strategies execute against a PR snapshot.
-         * @enum {string}
-         */
-        ReviewComparisonMode: "single" | "sideBySideInternal" | "shadow" | "replay";
         /** @description Response returned when a review job is accepted or a duplicate is found. */
         ReviewJobAcceptedResponse: {
             /** Format: uuid */
@@ -12155,15 +12145,6 @@ export interface components {
             repository?: components["schemas"]["ReviewRepositoryRefDto"];
             codeReview?: components["schemas"]["ReviewCodeReviewRefDto"];
             reviewRevision?: components["schemas"]["ReviewRevisionRefDto"];
-            resolvedReviewStrategy?: components["schemas"]["ReviewStrategy"];
-            strategySelectionSource?: components["schemas"]["ReviewStrategySelectionSource"];
-            comparisonMode?: components["schemas"]["ReviewComparisonMode"];
-            publicationMode?: components["schemas"]["ReviewPublicationMode"];
-            /**
-             * Format: uuid
-             * @description Comparison group identifier when this job participates in one.
-             */
-            comparisonGroupId?: string | null;
         };
         /** @description Carries protocol data for a single review job execution attempt. */
         ReviewJobProtocolDto: {
@@ -12247,8 +12228,6 @@ export interface components {
              * @description Pull request number for the parent review job.
              */
             pullRequestId?: number;
-            resolvedReviewStrategy?: components["schemas"]["ReviewStrategy"];
-            strategySelectionSource?: components["schemas"]["ReviewStrategySelectionSource"];
             fileOutcome?: components["schemas"]["ProtocolFileOutcomeDto"];
             followUp?: components["schemas"]["ProtocolFollowUpDto"];
             repeatedJudgment?: components["schemas"]["ProtocolRepeatedJudgmentDto"];
@@ -12266,7 +12245,7 @@ export interface components {
             inheritance?: components["schemas"]["ProtocolInheritanceDto"];
             /**
              * @description The kind of review pass — the `ReviewPassKind` name (e.g. `"Baseline"`,
-             *     `"ProRVAugmentation"`). null for legacy rows and passes with no
+             *     `"MultiPassUnion"`). null for legacy rows and passes with no
              *     meaningful kind (e.g. synthesis, which the UI derives from MeisterProPR.Application.DTOs.ReviewJobProtocolDto.Label).
              */
             passKind?: string | null;
@@ -12341,6 +12320,13 @@ export interface components {
              *     resample pass. A lens pass runs a specialist prompt scoped to the files that lens targets.
              */
             lens?: string | null;
+            /**
+             * @description Optional scope for this pass; null is the per-file default and `pr_wide` runs the pass
+             *     at the job level rather than per file.
+             */
+            scope?: string | null;
+            /** @description Whether this pass runs in shadow mode. Additive metadata the runtime does not act on yet. */
+            shadow?: boolean;
         };
         /** @description One selectable review profile entry. */
         ReviewProfileCatalogItemResponse: {
@@ -12357,11 +12343,6 @@ export interface components {
          * @enum {string}
          */
         ReviewProfileSource: "systemDefault" | "clientDefault";
-        /**
-         * @description Controls whether a strategy run is allowed to publish review findings.
-         * @enum {string}
-         */
-        ReviewPublicationMode: "publish" | "dryRun" | "internalOnly";
         /** @description Provider-neutral repository identity supplied by review intake clients. */
         ReviewRepositoryRefDto: {
             externalRepositoryId?: string | null;
@@ -12412,27 +12393,8 @@ export interface components {
             repository?: components["schemas"]["ReviewRepositoryRefDto"];
             codeReview?: components["schemas"]["ReviewCodeReviewRefDto"];
             reviewRevision?: components["schemas"]["ReviewRevisionRefDto"];
-            resolvedReviewStrategy?: components["schemas"]["ReviewStrategy"];
-            strategySelectionSource?: components["schemas"]["ReviewStrategySelectionSource"];
-            comparisonMode?: components["schemas"]["ReviewComparisonMode"];
-            publicationMode?: components["schemas"]["ReviewPublicationMode"];
-            /**
-             * Format: uuid
-             * @description Comparison group identifier when this job participates in one.
-             */
-            comparisonGroupId?: string | null;
             workspace?: components["schemas"]["ReviewWorkspaceStatusDto"];
         };
-        /**
-         * @description Selectable strategy used to generate review findings for a job.
-         * @enum {string}
-         */
-        ReviewStrategy: "fileByFile" | "prWideAgentic" | "agenticFileByFile";
-        /**
-         * @description Explains why a review job selected its final review strategy.
-         * @enum {string}
-         */
-        ReviewStrategySelectionSource: "fallbackDefault" | "clientDefault" | "jobOverride" | "fallback";
         /** @description DTO representing local review workspace adoption and fallback visibility. */
         ReviewWorkspaceStatusDto: {
             attempted?: boolean;
@@ -12472,9 +12434,6 @@ export interface components {
             codeReview?: components["schemas"]["ReviewCodeReviewRefDto"];
             reviewRevision?: components["schemas"]["ReviewRevisionRefDto"];
             requestedReviewerIdentity?: components["schemas"]["ReviewReviewerIdentityDto"];
-            reviewStrategy?: components["schemas"]["ReviewStrategy"];
-            comparisonMode?: components["schemas"]["ReviewComparisonMode"];
-            publicationMode?: components["schemas"]["ReviewPublicationMode"];
         };
         /** @description Tenant-authenticated session payload returned by tenant login endpoints. */
         TenantAuthSessionDto: {

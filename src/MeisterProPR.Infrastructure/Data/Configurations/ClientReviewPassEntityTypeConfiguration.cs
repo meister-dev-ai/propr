@@ -33,6 +33,16 @@ internal sealed class ClientReviewPassEntityTypeConfiguration : IEntityTypeConfi
             .HasColumnName("lens")
             .HasMaxLength(64);
 
+        // Optional scope (nullable = per-file default). Bounded to the short scope vocabulary.
+        builder.Property(pass => pass.Scope)
+            .HasColumnName("scope")
+            .HasMaxLength(64);
+
+        // Whether the pass runs in shadow mode. Defaults to false so existing rows read as non-shadow.
+        builder.Property(pass => pass.Shadow)
+            .HasColumnName("shadow")
+            .HasDefaultValue(false);
+
         builder.HasOne(pass => pass.Client)
             .WithMany(client => client.ReviewPasses)
             .HasForeignKey(pass => pass.ClientId)

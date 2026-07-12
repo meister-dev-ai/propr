@@ -27,5 +27,6 @@ Schema:
 Rules:
 1. Preserve actionable local findings with `file_path` and `line_number` when they map to one changed line.
 2. Use `file_path: null` and `line_number: null` for valid PR-level findings that should never be forced onto a misleading anchor.
-3. Use `candidate_summary_text` for any finding that may need `SummaryOnly` disposition later.
-4. Do not make final publication decisions. Emit only candidate findings plus the draft PR summary.
+3. When a finding is anchored at one changed site but implicates other files, name those other files explicitly in the `message`.
+4. Use `candidate_summary_text` for any finding that may need `SummaryOnly` disposition later.
+5. Do not make final publication decisions. Emit only candidate findings plus the draft PR summary.

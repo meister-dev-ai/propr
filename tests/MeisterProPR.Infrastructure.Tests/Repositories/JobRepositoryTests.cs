@@ -840,7 +840,6 @@ public sealed class JobRepositoryTests(PostgresContainerFixture fixture) : IAsyn
             Assert.Equal(entity.Status, dto.Status);
             Assert.Equal(entity.OrganizationUrl, dto.OrganizationUrl);
             Assert.Equal(entity.PullRequestId, dto.PullRequestId);
-            Assert.Equal(entity.ReviewStrategy, dto.ReviewStrategy);
             var expectedInput = entity.TotalInputTokensAggregated ?? entity.Protocols.Sum(p => p.TotalInputTokens) ?? 0;
             var expectedOutput = entity.TotalOutputTokensAggregated ?? entity.Protocols.Sum(p => p.TotalOutputTokens) ?? 0;
             Assert.Equal(expectedInput, dto.TotalInputTokens);

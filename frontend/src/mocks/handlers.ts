@@ -310,7 +310,6 @@ function buildMockClient(id: string, displayName = `Mocked Client ${id}`, overri
     createdAt: new Date().toISOString(),
     recentUsageTokens: 14520,
     reviewerId: '0000-1111-2222-3333',
-    defaultReviewStrategy: 'fileByFile',
     defaultReviewPipelineProfileId: storedProfile,
     defaultReviewPipelineProfileUpdatedAtUtc: clientReviewProfiles[id]?.updatedAtUtc ?? null,
     scmCommentPostingEnabled: true,

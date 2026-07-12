@@ -290,8 +290,6 @@ public sealed class PrCrawlServiceTests
                 Arg.Any<int>(),
                 Arg.Any<int>())
             .Returns((ReviewJob?)null);
-        this._clientRegistry.GetDefaultReviewStrategyAsync(DefaultConfig.ClientId, Arg.Any<CancellationToken>())
-            .Returns(ReviewStrategy.FileByFile);
         this._clientRegistry.GetDefaultReviewPipelineProfileIdAsync(DefaultConfig.ClientId, Arg.Any<CancellationToken>())
             .Returns(ReviewPipelineProfileCatalog.FileByFileCalmProfileId);
 
@@ -302,50 +300,6 @@ public sealed class PrCrawlServiceTests
                 Arg.Is<ReviewJob>(j =>
                     j.ClientId == DefaultConfig.ClientId
                     && j.ReviewPipelineProfileId == ReviewPipelineProfileCatalog.FileByFileCalmProfileId));
-    }
-
-    [Fact]
-    public async Task CrawlAsync_WhenDisabledPrWideClientDefaultStrategyExists_ThrowsInvalidOperationException()
-    {
-        this._crawlConfigs.GetAllActiveAsync().ReturnsForAnyArgs([DefaultConfig]);
-        var pr = MakePr(142);
-        this._prFetcher.ListAssignedOpenReviewsAsync(DefaultConfig).ReturnsForAnyArgs([pr]);
-        this._jobs.FindActiveJob(
-                Arg.Any<string>(),
-                Arg.Any<string>(),
-                Arg.Any<string>(),
-                Arg.Any<int>(),
-                Arg.Any<int>())
-            .Returns((ReviewJob?)null);
-        this._clientRegistry.GetDefaultReviewStrategyAsync(DefaultConfig.ClientId, Arg.Any<CancellationToken>())
-            .Returns(ReviewStrategy.PrWideAgentic);
-
-        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() => this._sut.CrawlAsync());
-
-        Assert.Contains("currently disabled", ex.Message, StringComparison.OrdinalIgnoreCase);
-        await this._jobs.DidNotReceive().AddAsync(Arg.Any<ReviewJob>());
-    }
-
-    [Fact]
-    public async Task CrawlAsync_WhenDisabledAgenticClientDefaultStrategyExists_ThrowsInvalidOperationException()
-    {
-        this._crawlConfigs.GetAllActiveAsync().ReturnsForAnyArgs([DefaultConfig]);
-        var pr = MakePr(143);
-        this._prFetcher.ListAssignedOpenReviewsAsync(DefaultConfig).ReturnsForAnyArgs([pr]);
-        this._jobs.FindActiveJob(
-                Arg.Any<string>(),
-                Arg.Any<string>(),
-                Arg.Any<string>(),
-                Arg.Any<int>(),
-                Arg.Any<int>())
-            .Returns((ReviewJob?)null);
-        this._clientRegistry.GetDefaultReviewStrategyAsync(DefaultConfig.ClientId, Arg.Any<CancellationToken>())
-            .Returns(ReviewStrategy.AgenticFileByFile);
-
-        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() => this._sut.CrawlAsync());
-
-        Assert.Contains("currently disabled", ex.Message, StringComparison.OrdinalIgnoreCase);
-        await this._jobs.DidNotReceive().AddAsync(Arg.Any<ReviewJob>());
     }
 
     [Fact]

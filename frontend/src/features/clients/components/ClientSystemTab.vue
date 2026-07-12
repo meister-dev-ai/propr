@@ -78,24 +78,6 @@
                 </div>
                 <div class="inline-field-row review-publication-row">
                     <div class="form-field flex-1 review-publication-field">
-                        <label for="defaultReviewStrategy">Default Review Strategy</label>
-                        <select
-                            id="defaultReviewStrategy"
-                            v-model="editedDefaultReviewStrategy"
-                            name="defaultReviewStrategy"
-                        >
-                            <option value="fileByFile">File-by-File</option>
-                            <option value="agenticFileByFile">Agentic File-by-File (Experimental)</option>
-                            <option value="prWideAgentic">PR-wide Agentic (Experimental)</option>
-                        </select>
-                        <p class="muted review-publication-copy">
-                            Choose whether new reviews for this client use the classic file-by-file flow,
-                            the plan-driven agentic file-by-file flow, or the PR-wide agentic review flow.
-                        </p>
-                    </div>
-                </div>
-                <div class="inline-field-row review-publication-row">
-                    <div class="form-field flex-1 review-publication-field">
                         <label class="checkbox-field" for="scmCommentPostingEnabled">
                             <input id="scmCommentPostingEnabled" v-model="editedScmCommentPostingEnabled"
                                 name="scmCommentPostingEnabled" type="checkbox" />
@@ -192,7 +174,6 @@ const {
     saveError,
     showDeleteDialog,
     editedDisplayName,
-    editedDefaultReviewStrategy,
     editedDefaultReviewPipelineProfileId,
     editedScmCommentPostingEnabled,
     editedEnableEvidenceBackedVerification,

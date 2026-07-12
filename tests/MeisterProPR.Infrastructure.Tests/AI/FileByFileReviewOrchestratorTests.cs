@@ -212,12 +212,6 @@ public class FileByFileReviewOrchestratorTests
                 new ReviewResult("file summary", [new ReviewComment("src/Foo.cs", 12, CommentSeverity.Warning, "Direct file finding remains publishable.")]));
 
         var job = CreateJob();
-        job.SelectReviewStrategy(
-            ReviewStrategy.FileByFile,
-            ReviewStrategySelectionSource.ClientDefault,
-            ReviewComparisonMode.Single,
-            ReviewPublicationMode.Publish,
-            null);
 
         var pr = CreatePr(CreateFile("src/Foo.cs"));
         var storedResults = new List<ReviewFileResult>();
@@ -802,7 +796,7 @@ public class FileByFileReviewOrchestratorTests
     {
         var sut = new ReviewPipelineProfileProvider();
 
-        var profiles = sut.GetProfiles(ReviewStrategy.FileByFile);
+        var profiles = sut.GetProfiles();
 
         var legacyBaseline = Assert.Single(profiles, profile => profile.ProfileId == ReviewPipelineProfileProvider.FileByFileBaselineProfileId);
         var calm = Assert.Single(profiles, profile => profile.ProfileId == ReviewPipelineProfileProvider.FileByFileCalmProfileId);
@@ -861,12 +855,6 @@ public class FileByFileReviewOrchestratorTests
     public async Task ReviewAsync_WithoutExplicitProfile_UsesBalancedBaselineProfileWithRecallDispatchStages()
     {
         var job = CreateJob();
-        job.SelectReviewStrategy(
-            ReviewStrategy.FileByFile,
-            ReviewStrategySelectionSource.ClientDefault,
-            ReviewComparisonMode.Single,
-            ReviewPublicationMode.Publish,
-            null);
 
         var pr = CreatePr(CreateFile("src/Foo.cs"));
         var aiCore = Substitute.For<IAiReviewCore>();
@@ -908,13 +896,7 @@ public class FileByFileReviewOrchestratorTests
     public async Task ReviewAsync_WithBalancedProfile_RecordsReviewProfileSelectionSourceAndProfileId()
     {
         var job = CreateJob();
-        job.SelectReviewStrategy(
-            ReviewStrategy.FileByFile,
-            ReviewStrategySelectionSource.ClientDefault,
-            ReviewComparisonMode.Single,
-            ReviewPublicationMode.Publish,
-            null,
-            ReviewPipelineProfileProvider.FileByFileBalancedProfileId);
+        job.SetReviewPipelineProfile(ReviewPipelineProfileProvider.FileByFileBalancedProfileId);
 
         var pr = CreatePr(CreateFile("src/Foo.cs"));
         var aiCore = Substitute.For<IAiReviewCore>();
@@ -945,8 +927,7 @@ public class FileByFileReviewOrchestratorTests
                 ReviewProtocolEventNames.ReviewProfileSelected,
                 Arg.Is<string?>(details =>
                     details != null
-                    && details.Contains("\"strategy\":\"FileByFile\"", StringComparison.Ordinal)
-                    && details.Contains("\"selectionSource\":\"ClientDefault\"", StringComparison.Ordinal)),
+                    && details.Contains("\"reviewKind\":\"file_by_file\"", StringComparison.Ordinal)),
                 Arg.Is<string?>(output =>
                     output != null
                     && output.Contains(ReviewPipelineProfileProvider.FileByFileBalancedProfileId, StringComparison.Ordinal)),
@@ -958,13 +939,7 @@ public class FileByFileReviewOrchestratorTests
     public async Task ReviewAsync_WithBalancedProfile_KeepsOnlyTopRankedPerFileComments()
     {
         var job = CreateJob();
-        job.SelectReviewStrategy(
-            ReviewStrategy.FileByFile,
-            ReviewStrategySelectionSource.ClientDefault,
-            ReviewComparisonMode.Single,
-            ReviewPublicationMode.Publish,
-            null,
-            ReviewPipelineProfileProvider.FileByFileBalancedProfileId);
+        job.SetReviewPipelineProfile(ReviewPipelineProfileProvider.FileByFileBalancedProfileId);
 
         var pr = CreatePr(CreateFile("src/Foo.cs"));
         var aiCore = Substitute.For<IAiReviewCore>();

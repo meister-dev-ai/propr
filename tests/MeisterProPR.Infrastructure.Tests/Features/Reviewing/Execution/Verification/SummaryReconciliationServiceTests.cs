@@ -10,8 +10,11 @@ namespace MeisterProPR.Infrastructure.Tests.Features.Reviewing.Execution.Verific
 public sealed class SummaryReconciliationServiceTests
 {
     [Fact]
-    public void Reconcile_WithSummaryOnlyDecision_AppendsControlledSummaryText()
+    public void Reconcile_WithSummaryOnlyDecision_LeavesNarrativeForGroundingToFooter()
     {
+        // Reconciliation owns only the narrative. When the model prose does not reference a dropped
+        // finding it passes the narrative through untouched; the summary-only footer is appended once,
+        // downstream, by the grounding step — so this service must not append it here.
         var sut = new SummaryReconciliationService();
         var findings = new[]
         {
@@ -39,11 +42,11 @@ public sealed class SummaryReconciliationServiceTests
             ]);
 
         Assert.Equal("Base summary.", result.OriginalSummary);
-        Assert.Contains("Base summary.", result.FinalSummary);
-        Assert.Contains("Summary-only findings:", result.FinalSummary);
-        Assert.Contains("Potential architecture concern noted.", result.FinalSummary);
+        Assert.Equal("Base summary.", result.FinalSummary);
+        Assert.DoesNotContain("Summary-only findings:", result.FinalSummary);
+        Assert.Contains("finding-summary-1", result.SummaryOnlyFindingIds);
         Assert.False(result.RewritePerformed);
-        Assert.Equal("deterministic_summary_append", result.RuleSource);
+        Assert.Equal("deterministic_summary_passthrough", result.RuleSource);
     }
 
     [Fact]
@@ -90,8 +93,10 @@ public sealed class SummaryReconciliationServiceTests
                     null),
             ]);
 
+        // The unsafe narrative is replaced with a neutral drop notice. Publishable counts are the
+        // grounding step's concern, not reconciliation's, so they are intentionally absent here.
         Assert.DoesNotContain("missing DI registration", result.FinalSummary, StringComparison.OrdinalIgnoreCase);
-        Assert.Contains("1 publishable finding", result.FinalSummary);
+        Assert.DoesNotContain("publishable finding", result.FinalSummary);
         Assert.Contains("1 candidate finding was dropped", result.FinalSummary);
         Assert.Contains("finding-drop-1", result.DroppedFindingIds);
         Assert.True(result.RewritePerformed);
@@ -99,7 +104,7 @@ public sealed class SummaryReconciliationServiceTests
     }
 
     [Fact]
-    public void Reconcile_WhenAllFindingsDropped_ReplacesOriginalNarrative()
+    public void Reconcile_WhenAllFindingsDropped_ReplacesNarrativeWithDropNotice()
     {
         var sut = new SummaryReconciliationService();
         var findings = new[]
@@ -126,7 +131,10 @@ public sealed class SummaryReconciliationServiceTests
                     null),
             ]);
 
-        Assert.Equal("No publishable or summary-only findings remained after verification.", result.FinalSummary);
+        // Reconciliation replaces the unsafe narrative with the drop notice; the terminal
+        // "No publishable or summary-only findings remained" line is the grounding step's output.
+        Assert.Equal("1 candidate finding was dropped during verification.", result.FinalSummary);
+        Assert.DoesNotContain("issues everywhere", result.FinalSummary, StringComparison.OrdinalIgnoreCase);
         Assert.True(result.RewritePerformed);
         Assert.Contains("finding-drop-1", result.DroppedFindingIds);
     }

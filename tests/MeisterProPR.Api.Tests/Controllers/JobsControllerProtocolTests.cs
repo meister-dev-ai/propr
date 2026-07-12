@@ -764,17 +764,11 @@ public sealed class JobsControllerProtocolTests(JobsControllerProtocolTests.Prot
     }
 
     [Fact]
-    public async Task GetJobProtocol_AgenticFileByFile_IncludesStrategyAndFileOutcomeMetadata()
+    public async Task GetJobProtocol_FileLinkedPass_IncludesFileOutcomeMetadata()
     {
         using var scope = factory.Services.CreateScope();
         var jobRepo = scope.ServiceProvider.GetRequiredService<IJobRepository>();
         var job = new ReviewJob(Guid.NewGuid(), Guid.NewGuid(), "https://dev.azure.com/org", "proj", "repo", 8, 1);
-        job.SelectReviewStrategy(
-            ReviewStrategy.AgenticFileByFile,
-            ReviewStrategySelectionSource.ClientDefault,
-            ReviewComparisonMode.Single,
-            ReviewPublicationMode.Publish,
-            null);
 
         var fileResult = new ReviewFileResult(job.Id, "src/Agentic.cs");
         fileResult.MarkCompleted("Final file summary", []);
@@ -818,8 +812,6 @@ public sealed class JobsControllerProtocolTests(JobsControllerProtocolTests.Prot
             .RootElement.EnumerateArray()
             .Single();
 
-        Assert.Equal("agenticFileByFile", protocolJson.GetProperty("resolvedReviewStrategy").GetString());
-        Assert.Equal("clientDefault", protocolJson.GetProperty("strategySelectionSource").GetString());
         Assert.Equal("https://dev.azure.com/org", protocolJson.GetProperty("providerScopePath").GetString());
         Assert.Equal("proj", protocolJson.GetProperty("providerProjectKey").GetString());
         Assert.Equal("repo", protocolJson.GetProperty("repositoryId").GetString());
@@ -840,12 +832,6 @@ public sealed class JobsControllerProtocolTests(JobsControllerProtocolTests.Prot
         using var scope = factory.Services.CreateScope();
         var jobRepo = scope.ServiceProvider.GetRequiredService<IJobRepository>();
         var job = new ReviewJob(Guid.NewGuid(), Guid.NewGuid(), "https://dev.azure.com/org", "proj", "repo", 9, 1);
-        job.SelectReviewStrategy(
-            ReviewStrategy.AgenticFileByFile,
-            ReviewStrategySelectionSource.ClientDefault,
-            ReviewComparisonMode.Single,
-            ReviewPublicationMode.Publish,
-            null);
 
         var fileResult = new ReviewFileResult(job.Id, "src/Agentic.cs");
         fileResult.MarkCompleted("Final file summary", []);
@@ -902,12 +888,6 @@ public sealed class JobsControllerProtocolTests(JobsControllerProtocolTests.Prot
         using var scope = factory.Services.CreateScope();
         var jobRepo = scope.ServiceProvider.GetRequiredService<IJobRepository>();
         var job = new ReviewJob(Guid.NewGuid(), Guid.NewGuid(), "https://dev.azure.com/org", "proj", "repo", 10, 1);
-        job.SelectReviewStrategy(
-            ReviewStrategy.AgenticFileByFile,
-            ReviewStrategySelectionSource.ClientDefault,
-            ReviewComparisonMode.Single,
-            ReviewPublicationMode.Publish,
-            null);
 
         var fileResult = new ReviewFileResult(job.Id, "src/FollowUp.cs");
         fileResult.MarkCompleted("Final file summary", []);

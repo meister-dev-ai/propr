@@ -156,8 +156,6 @@ public sealed class InMemoryReviewDiagnosticsReader(InMemoryReviewJobRepository 
             ProviderProjectKey = ResolveProviderProjectKey(projectionJob),
             RepositoryId = projectionJob.RepositoryId,
             PullRequestId = projectionJob.PullRequestId,
-            ResolvedReviewStrategy = projectionJob.ReviewStrategy,
-            StrategySelectionSource = projectionJob.ReviewStrategySelectionSource,
             FileOutcome = ResolveFileOutcome(projectionJob, protocol, fileResultOverride),
             FollowUp = ResolveFollowUp(protocol),
             RepeatedJudgment = ResolveRepeatedJudgment(protocol),

@@ -142,7 +142,6 @@ const sampleClient = {
   displayName: 'Acme Corp',
   isActive: true,
   createdAt: '2024-01-01T00:00:00Z',
-  defaultReviewStrategy: 'fileByFile',
   defaultReviewPipelineProfileId: 'file-by-file-balanced',
   defaultReviewPipelineProfileUpdatedAtUtc: null,
   scmCommentPostingEnabled: true,
@@ -267,7 +266,7 @@ describe('ClientDetailView', () => {
       '/clients/{clientId}',
         expect.objectContaining({
           params: { path: { clientId: 'client-1' } },
-          body: { defaultReviewStrategy: 'fileByFile', scmCommentPostingEnabled: false, enableEvidenceBackedVerification: false, enableMultiPassUnion: false, enableLanguageRobustScreening: false },
+          body: { scmCommentPostingEnabled: false, enableEvidenceBackedVerification: false, enableMultiPassUnion: false, enableLanguageRobustScreening: false },
         })
     )
   })
@@ -295,54 +294,7 @@ describe('ClientDetailView', () => {
       '/clients/{clientId}',
         expect.objectContaining({
           params: { path: { clientId: 'client-1' } },
-          body: { defaultReviewStrategy: 'fileByFile', scmCommentPostingEnabled: true, enableEvidenceBackedVerification: false, enableMultiPassUnion: false, enableLanguageRobustScreening: false },
-        })
-    )
-  })
-
-  it('loads and saves the default review strategy from advanced settings', async () => {
-    mockPatch.mockResolvedValue({ data: { ...sampleClient, defaultReviewStrategy: 'prWideAgentic' }, response: { ok: true } })
-
-    const { default: ClientDetailView } = await import('@/features/clients/views/ClientDetailView.vue')
-    const wrapper = mount(ClientDetailView)
-    await flushPromises()
-
-    const strategySelect = wrapper.find('select[name="defaultReviewStrategy"]')
-    expect(strategySelect.exists()).toBe(true)
-    expect((strategySelect.element as HTMLSelectElement).value).toBe('fileByFile')
-
-    await strategySelect.setValue('prWideAgentic')
-    await wrapper.find('button.scm-advanced-settings-save-btn').trigger('click')
-    await flushPromises()
-
-    expect(mockPatch).toHaveBeenCalledWith(
-      '/clients/{clientId}',
-        expect.objectContaining({
-          params: { path: { clientId: 'client-1' } },
-          body: { defaultReviewStrategy: 'prWideAgentic', scmCommentPostingEnabled: true, enableEvidenceBackedVerification: false, enableMultiPassUnion: false, enableLanguageRobustScreening: false },
-        })
-    )
-  })
-
-  it('loads and saves the agentic file-by-file default review strategy from advanced settings', async () => {
-    mockPatch.mockResolvedValue({ data: { ...sampleClient, defaultReviewStrategy: 'agenticFileByFile' }, response: { ok: true } })
-
-    const { default: ClientDetailView } = await import('@/features/clients/views/ClientDetailView.vue')
-    const wrapper = mount(ClientDetailView)
-    await flushPromises()
-
-    const strategySelect = wrapper.find('select[name="defaultReviewStrategy"]')
-    expect(strategySelect.exists()).toBe(true)
-
-    await strategySelect.setValue('agenticFileByFile')
-    await wrapper.find('button.scm-advanced-settings-save-btn').trigger('click')
-    await flushPromises()
-
-    expect(mockPatch).toHaveBeenCalledWith(
-      '/clients/{clientId}',
-        expect.objectContaining({
-          params: { path: { clientId: 'client-1' } },
-          body: { defaultReviewStrategy: 'agenticFileByFile', scmCommentPostingEnabled: true, enableEvidenceBackedVerification: false, enableMultiPassUnion: false, enableLanguageRobustScreening: false },
+          body: { scmCommentPostingEnabled: true, enableEvidenceBackedVerification: false, enableMultiPassUnion: false, enableLanguageRobustScreening: false },
         })
     )
   })

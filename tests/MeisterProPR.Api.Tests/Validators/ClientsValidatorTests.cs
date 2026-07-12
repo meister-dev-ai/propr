@@ -42,21 +42,6 @@ public sealed class ClientsValidatorTests
         Assert.Contains(result.Errors, e => e.PropertyName == nameof(CreateClientRequest.TenantId));
     }
 
-    [Theory]
-    [InlineData(ReviewStrategy.PrWideAgentic)]
-    [InlineData(ReviewStrategy.AgenticFileByFile)]
-    public void CreateClient_DisabledDefaultReviewStrategy_Fails(ReviewStrategy strategy)
-    {
-        var result = CreateClientValidator.Validate(
-            new CreateClientRequest("My Client", Guid.NewGuid())
-            {
-                DefaultReviewStrategy = strategy,
-            });
-
-        Assert.False(result.IsValid);
-        Assert.Contains(result.Errors, e => e.PropertyName == nameof(CreateClientRequest.DefaultReviewStrategy));
-    }
-
     [Fact]
     public void CreateProviderConnection_GitHubPatRequest_Passes()
     {
@@ -505,14 +490,63 @@ public sealed class ClientsValidatorTests
         Assert.Contains(result.Errors, e => e.PropertyName == nameof(PatchClientRequest.ReviewPasses));
     }
 
-    [Theory]
-    [InlineData(ReviewStrategy.PrWideAgentic)]
-    [InlineData(ReviewStrategy.AgenticFileByFile)]
-    public void PatchClient_DisabledDefaultReviewStrategy_Fails(ReviewStrategy strategy)
+    [Fact]
+    public void PatchClient_ReviewPassListWithPrWideScopeAndShadow_Passes()
     {
-        var result = PatchClientValidator.Validate(new PatchClientRequest(DefaultReviewStrategy: strategy));
+        var result = PatchClientValidator.Validate(
+            new PatchClientRequest(
+                ReviewPasses:
+                [
+                    new ReviewPassEntry(0, Guid.NewGuid(), Scope: "pr_wide", Shadow: true),
+                ]));
+
+        Assert.True(result.IsValid);
+    }
+
+    [Fact]
+    public void PatchClient_ReviewPassListWithUnknownScope_Fails()
+    {
+        var result = PatchClientValidator.Validate(
+            new PatchClientRequest(
+                ReviewPasses:
+                [
+                    new ReviewPassEntry(0, Guid.NewGuid(), Scope: "not-a-scope"),
+                ]));
 
         Assert.False(result.IsValid);
-        Assert.Contains(result.Errors, e => e.PropertyName == nameof(PatchClientRequest.DefaultReviewStrategy));
+        Assert.Contains(result.Errors, e => e.PropertyName == nameof(PatchClientRequest.ReviewPasses));
+    }
+
+    [Fact]
+    public void PatchClient_SameModelDifferentScope_Passes()
+    {
+        // Distinctness keys on the (model, lens, scope, shadow) tuple, so the same model at a per-file scope plus a
+        // pr_wide scope is allowed even though the model id repeats.
+        var sharedModelId = Guid.NewGuid();
+        var result = PatchClientValidator.Validate(
+            new PatchClientRequest(
+                ReviewPasses:
+                [
+                    new ReviewPassEntry(0, sharedModelId),
+                    new ReviewPassEntry(1, sharedModelId, Scope: "pr_wide"),
+                ]));
+
+        Assert.True(result.IsValid);
+    }
+
+    [Fact]
+    public void PatchClient_SameModelLensScopeShadowTwice_Fails()
+    {
+        var sharedModelId = Guid.NewGuid();
+        var result = PatchClientValidator.Validate(
+            new PatchClientRequest(
+                ReviewPasses:
+                [
+                    new ReviewPassEntry(0, sharedModelId, Scope: "pr_wide", Shadow: true),
+                    new ReviewPassEntry(1, sharedModelId, Scope: "pr_wide", Shadow: true),
+                ]));
+
+        Assert.False(result.IsValid);
+        Assert.Contains(result.Errors, e => e.PropertyName == nameof(PatchClientRequest.ReviewPasses));
     }
 }

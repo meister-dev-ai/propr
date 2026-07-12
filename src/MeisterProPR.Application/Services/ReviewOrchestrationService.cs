@@ -8,6 +8,7 @@ using MeisterProPR.Application.Exceptions;
 using MeisterProPR.Application.Features.ReviewArchive;
 using MeisterProPR.Application.Features.Reviewing.Execution.Models;
 using MeisterProPR.Application.Features.Reviewing.Execution.Ports;
+using MeisterProPR.Application.Features.Reviewing.Execution.Strategies.Ports;
 using MeisterProPR.Application.Interfaces;
 using MeisterProPR.Application.Options;
 using MeisterProPR.Application.Support;
@@ -41,7 +42,7 @@ public sealed partial class ReviewOrchestrationService(
     ILogger<ReviewOrchestrationService> logger,
     IAiConnectionRepository aiConnectionRepository,
     IAiChatClientFactory aiChatClientFactory,
-    IReviewStrategyDispatcher reviewStrategyDispatcher,
+    IFileByFileReviewOrchestrator fileByFileReviewOrchestrator,
     IPromptOverrideService? promptOverrideService = null,
     IProviderActivationService? providerActivationService = null,
     IAiRuntimeResolver? aiRuntimeResolver = null,
@@ -988,7 +989,7 @@ public sealed partial class ReviewOrchestrationService(
     {
         try
         {
-            return await reviewStrategyDispatcher.ReviewAsync(job, pr, systemContext, ct, chatClient);
+            return await fileByFileReviewOrchestrator.ReviewAsync(job, pr, systemContext, ct, chatClient);
         }
         finally
         {

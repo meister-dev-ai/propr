@@ -64,11 +64,6 @@ public sealed class NoOpClientRegistry : IClientRegistry
         return Task.FromResult<IReadOnlyList<ReviewPassSpec>>([]);
     }
 
-    public Task<ReviewStrategy?> GetDefaultReviewStrategyAsync(Guid clientId, CancellationToken ct = default)
-    {
-        return Task.FromResult<ReviewStrategy?>(null);
-    }
-
     public Task<string?> GetDefaultReviewPipelineProfileIdAsync(Guid clientId, CancellationToken ct = default)
     {
         return Task.FromResult<string?>(null);

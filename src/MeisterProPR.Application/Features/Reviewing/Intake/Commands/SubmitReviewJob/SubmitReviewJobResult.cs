@@ -9,9 +9,4 @@ namespace MeisterProPR.Application.Features.Reviewing.Intake.Commands.SubmitRevi
 public sealed record SubmitReviewJobResult(
     Guid JobId,
     JobStatus Status,
-    bool IsDuplicate,
-    ReviewStrategy ResolvedReviewStrategy = ReviewStrategy.FileByFile,
-    ReviewStrategySelectionSource StrategySelectionSource = ReviewStrategySelectionSource.FallbackDefault,
-    ReviewComparisonMode ComparisonMode = ReviewComparisonMode.Single,
-    ReviewPublicationMode PublicationMode = ReviewPublicationMode.Publish,
-    Guid? ComparisonGroupId = null);
+    bool IsDuplicate);

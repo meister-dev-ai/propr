@@ -327,8 +327,6 @@ public sealed class ReviewOrchestrationServiceProCursorIntegrationTests
             proCursorGateway,
             Microsoft.Extensions.Options.Options.Create(new AiReviewOptions { MaxFileSizeBytes = 1024 * 1024, ModelId = "gpt-4o" }),
             NullLoggerFactory.Instance);
-        var reviewStrategyDispatcher = CreateDispatcher(orchestrator);
-
         var service = new ReviewOrchestrationService(
             jobs,
             prFetcher,
@@ -345,7 +343,7 @@ public sealed class ReviewOrchestrationServiceProCursorIntegrationTests
             NullLogger<ReviewOrchestrationService>.Instance,
             aiConnectionRepository,
             chatClientFactory,
-            reviewStrategyDispatcher,
+            orchestrator,
             workspaceManager: CreateDefaultWorkspaceManager());
 
         await service.ProcessAsync(job, CancellationToken.None);
@@ -501,8 +499,6 @@ public sealed class ReviewOrchestrationServiceProCursorIntegrationTests
             proCursorGateway,
             Microsoft.Extensions.Options.Options.Create(new AiReviewOptions { MaxFileSizeBytes = 1024 * 1024, ModelId = "gpt-4o" }),
             NullLoggerFactory.Instance);
-        var reviewStrategyDispatcher = CreateDispatcher(orchestrator);
-
         return new ReviewOrchestrationService(
             jobs,
             prFetcher,
@@ -519,7 +515,7 @@ public sealed class ReviewOrchestrationServiceProCursorIntegrationTests
             NullLogger<ReviewOrchestrationService>.Instance,
             aiConnectionRepository,
             chatClientFactory,
-            reviewStrategyDispatcher,
+            orchestrator,
             workspaceManager: CreateDefaultWorkspaceManager());
     }
 
@@ -533,24 +529,6 @@ public sealed class ReviewOrchestrationServiceProCursorIntegrationTests
         return manager;
     }
 
-    private static IReviewStrategyDispatcher CreateDispatcher(IFileByFileReviewOrchestrator orchestrator)
-    {
-        var dispatcher = Substitute.For<IReviewStrategyDispatcher>();
-        dispatcher.ReviewAsync(
-                Arg.Any<ReviewJob>(),
-                Arg.Any<PullRequest>(),
-                Arg.Any<ReviewSystemContext>(),
-                Arg.Any<CancellationToken>(),
-                Arg.Any<IChatClient?>(),
-                Arg.Any<string?>())
-            .Returns(callInfo => orchestrator.ReviewAsync(
-                callInfo.ArgAt<ReviewJob>(0),
-                callInfo.ArgAt<PullRequest>(1),
-                callInfo.ArgAt<ReviewSystemContext>(2),
-                callInfo.ArgAt<CancellationToken>(3),
-                callInfo.ArgAt<IChatClient?>(4)));
-        return dispatcher;
-    }
 
     private static ReviewJob CreateJob()
     {

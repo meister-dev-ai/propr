@@ -17,7 +17,6 @@ import type {
     ProtocolFollowUp,
     ProtocolRepeatedJudgment,
     ReviewProtocolPass,
-    ReviewStrategy,
     ToolPhaseGroup,
     VerificationEvidenceAttemptRecord,
     VerificationEvidenceItemRecord,
@@ -269,20 +268,7 @@ export function severityVariant(severity: string | null | undefined): string {
     }
 }
 
-// === Strategy / outcome formatting ===
-
-export function formatReviewStrategy(strategy: ReviewStrategy | null | undefined): string {
-    switch (strategy) {
-        case 'fileByFile':
-            return 'File-by-File'
-        case 'agenticFileByFile':
-            return 'Agentic File-by-File'
-        case 'prWideAgentic':
-            return 'PR-wide Agentic'
-        default:
-            return strategy ?? 'Not recorded'
-    }
-}
+// === Outcome formatting ===
 
 export function formatFileOutcomeStatus(fileOutcome: ProtocolFileOutcome | null | undefined): string {
     if (!fileOutcome) return 'Not recorded'

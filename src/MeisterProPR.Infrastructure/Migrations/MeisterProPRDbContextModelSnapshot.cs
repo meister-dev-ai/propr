@@ -992,10 +992,6 @@ namespace MeisterProPR.Infrastructure.Migrations
                         .HasDefaultValue(0)
                         .HasColumnName("code_review_platform_kind");
 
-                    b.Property<Guid?>("ComparisonGroupId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("comparison_group_id");
-
                     b.Property<DateTimeOffset?>("CompletedAt")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("completed_at");
@@ -1102,12 +1098,6 @@ namespace MeisterProPR.Infrastructure.Migrations
                         .HasDefaultValue(0)
                         .HasColumnName("retry_count");
 
-                    b.Property<int>("ReviewComparisonMode")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("integer")
-                        .HasDefaultValue(0)
-                        .HasColumnName("review_comparison_mode");
-
                     b.Property<string>("ReviewPatchIdentity")
                         .HasMaxLength(256)
                         .HasColumnType("character varying(256)")
@@ -1117,24 +1107,6 @@ namespace MeisterProPR.Infrastructure.Migrations
                         .HasMaxLength(128)
                         .HasColumnType("character varying(128)")
                         .HasColumnName("review_pipeline_profile_id");
-
-                    b.Property<int>("ReviewPublicationMode")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("integer")
-                        .HasDefaultValue(0)
-                        .HasColumnName("review_publication_mode");
-
-                    b.Property<int>("ReviewStrategy")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("integer")
-                        .HasDefaultValue(0)
-                        .HasColumnName("review_strategy");
-
-                    b.Property<int>("ReviewStrategySelectionSource")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("integer")
-                        .HasDefaultValue(0)
-                        .HasColumnName("review_strategy_selection_source");
 
                     b.Property<float?>("ReviewTemperature")
                         .HasColumnType("real")
@@ -1183,9 +1155,6 @@ namespace MeisterProPR.Infrastructure.Migrations
 
                     b.HasIndex("ClientId")
                         .HasDatabaseName("ix_review_jobs_client_id");
-
-                    b.HasIndex("ComparisonGroupId")
-                        .HasDatabaseName("ix_review_jobs_comparison_group_id");
 
                     b.HasIndex("Status")
                         .HasDatabaseName("ix_review_jobs_status");
@@ -1294,63 +1263,6 @@ namespace MeisterProPR.Infrastructure.Migrations
                         .HasDatabaseName("ix_review_job_protocols_job_id");
 
                     b.ToTable("review_job_protocols", (string)null);
-                });
-
-            modelBuilder.Entity("MeisterProPR.Domain.Entities.ReviewModeRunResult", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .HasColumnType("uuid")
-                        .HasColumnName("id");
-
-                    b.Property<Guid?>("ComparisonGroupId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("comparison_group_id");
-
-                    b.Property<DateTimeOffset?>("CompletedAt")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("completed_at");
-
-                    b.Property<int>("PublicationMode")
-                        .HasColumnType("integer")
-                        .HasColumnName("publication_mode");
-
-                    b.Property<string>("Result")
-                        .HasColumnType("jsonb")
-                        .HasColumnName("result_json");
-
-                    b.Property<Guid>("ReviewJobId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("review_job_id");
-
-                    b.Property<DateTimeOffset>("StartedAt")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("started_at");
-
-                    b.Property<string>("Status")
-                        .IsRequired()
-                        .HasColumnType("text")
-                        .HasColumnName("status");
-
-                    b.Property<int>("Strategy")
-                        .HasColumnType("integer")
-                        .HasColumnName("strategy");
-
-                    b.Property<string>("_stageMetrics")
-                        .IsRequired()
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("jsonb")
-                        .HasColumnName("stage_metrics_json")
-                        .HasDefaultValueSql("'[]'");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("ComparisonGroupId")
-                        .HasDatabaseName("ix_review_mode_run_results_comparison_group_id");
-
-                    b.HasIndex("ReviewJobId")
-                        .HasDatabaseName("ix_review_mode_run_results_review_job_id");
-
-                    b.ToTable("review_mode_run_results", (string)null);
                 });
 
             modelBuilder.Entity("MeisterProPR.Domain.Entities.ReviewPrScan", b =>
@@ -1952,12 +1864,6 @@ namespace MeisterProPR.Infrastructure.Migrations
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("default_review_pipeline_profile_updated_at_utc");
 
-                    b.Property<int>("DefaultReviewStrategy")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("integer")
-                        .HasDefaultValue(0)
-                        .HasColumnName("default_review_strategy");
-
                     b.Property<string>("DisplayName")
                         .IsRequired()
                         .HasColumnType("text")
@@ -2027,6 +1933,17 @@ namespace MeisterProPR.Infrastructure.Migrations
                     b.Property<int>("Ordinal")
                         .HasColumnType("integer")
                         .HasColumnName("ordinal");
+
+                    b.Property<string>("Scope")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("scope");
+
+                    b.Property<bool>("Shadow")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false)
+                        .HasColumnName("shadow");
 
                     b.HasKey("Id");
 
@@ -3377,15 +3294,6 @@ namespace MeisterProPR.Infrastructure.Migrations
                         .IsRequired();
                 });
 
-            modelBuilder.Entity("MeisterProPR.Domain.Entities.ReviewModeRunResult", b =>
-                {
-                    b.HasOne("MeisterProPR.Domain.Entities.ReviewJob", null)
-                        .WithMany("ModeRunResults")
-                        .HasForeignKey("ReviewJobId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-                });
-
             modelBuilder.Entity("MeisterProPR.Domain.Entities.ReviewPrScan", b =>
                 {
                     b.HasOne("MeisterProPR.Infrastructure.Data.Models.ClientRecord", null)
@@ -3830,8 +3738,6 @@ namespace MeisterProPR.Infrastructure.Migrations
             modelBuilder.Entity("MeisterProPR.Domain.Entities.ReviewJob", b =>
                 {
                     b.Navigation("FileReviewResults");
-
-                    b.Navigation("ModeRunResults");
 
                     b.Navigation("Protocols");
                 });

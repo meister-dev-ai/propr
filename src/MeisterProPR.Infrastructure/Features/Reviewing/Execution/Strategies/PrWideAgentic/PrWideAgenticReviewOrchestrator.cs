@@ -4,6 +4,7 @@
 using System.Text.Json;
 using MeisterProPR.Application.Features.Reviewing.Execution.Models;
 using MeisterProPR.Application.Features.Reviewing.Execution.Ports;
+using MeisterProPR.Application.Features.Reviewing.Execution.Services;
 using MeisterProPR.Application.Features.Reviewing.Execution.Strategies.Ports;
 using MeisterProPR.Application.Interfaces;
 using MeisterProPR.Application.Options;
@@ -39,7 +40,7 @@ public sealed partial class PrWideAgenticReviewOrchestrator(
     ISummaryReconciliationService? summaryReconciliationService = null,
     IReviewFindingVerifier? reviewFindingVerifier = null,
     ISemanticCommentScreener? semanticCommentScreener = null)
-    : IPrWideAgenticReviewOrchestrator
+    : IPrWideAgenticReviewOrchestrator, IPrWideCandidateGenerator
 {
     private static readonly JsonSerializerOptions FinalGateJsonOptions = new(JsonSerializerDefaults.Web);
     private readonly IDeterministicReviewFindingGate? _deterministicReviewFindingGate = deterministicReviewFindingGate;
@@ -159,6 +160,182 @@ public sealed partial class PrWideAgenticReviewOrchestrator(
 
             throw;
         }
+    }
+
+    /// <inheritdoc />
+    public async Task<IReadOnlyList<CandidateReviewFinding>> GenerateCandidatesAsync(
+        ReviewJob job,
+        PullRequest pr,
+        ReviewSystemContext baseContext,
+        IResolvedAiChatRuntime runtime,
+        PrWideGenerationBudget budget,
+        int unionPassIndex,
+        bool shadow,
+        CancellationToken ct)
+    {
+        ArgumentNullException.ThrowIfNull(runtime);
+        ArgumentNullException.ThrowIfNull(budget);
+
+        // Bind generation to the pass's own resolved model and client; the shared disposition path (verify, gate,
+        // reconcile, publish, screen) is deliberately bypassed here — the caller flows the returned candidates
+        // through the synthesis inlet so a job-level pass meets per-file findings at the shared per-finding gate.
+        var passContext = CloneContext(baseContext, baseContext.ActiveProtocolId, baseContext.ProtocolRecorder);
+        passContext.ModelId = runtime.Model.RemoteModelId;
+        var overrideClient = runtime.ChatClient;
+
+        var ownsProtocolPass = false;
+        var totalInputTokens = 0L;
+        var totalOutputTokens = 0L;
+        var totalAiCalls = 0;
+        var totalToolCalls = 0;
+
+        if (passContext.ProtocolRecorder is not null)
+        {
+            try
+            {
+                var protocolId = await passContext.ProtocolRecorder.BeginAsync(
+                    job.Id,
+                    job.RetryCount + 1,
+                    "pr-wide-review",
+                    null,
+                    AiConnectionModelCategory.HighEffort,
+                    runtime.Model.RemoteModelId,
+                    ct);
+                passContext = CloneContext(passContext, protocolId, passContext.ProtocolRecorder);
+                ownsProtocolPass = true;
+            }
+            catch (Exception ex)
+            {
+                LogProtocolBeginFailed(this._logger, job.Id, ex);
+            }
+        }
+
+        try
+        {
+            var (plan, planInputTokens, planOutputTokens, planAiCalls) = await this.CreatePlanAsync(job, pr, passContext, overrideClient, ct);
+            totalInputTokens += planInputTokens;
+            totalOutputTokens += planOutputTokens;
+            totalAiCalls += planAiCalls;
+
+            plan = ApplyBudget(plan, budget);
+
+            var (investigations, investigationInputTokens, investigationOutputTokens, investigationAiCalls, investigationToolCalls) =
+                await this.RunInvestigationsAsync(job, pr, passContext, plan, overrideClient, ct);
+            totalInputTokens += investigationInputTokens;
+            totalOutputTokens += investigationOutputTokens;
+            totalAiCalls += investigationAiCalls;
+            totalToolCalls += investigationToolCalls;
+
+            var (synthesis, synthesisInputTokens, synthesisOutputTokens, synthesisAiCalls) =
+                await this.RecordSynthesisAsync(job, passContext, plan, investigations, overrideClient, ct);
+            totalInputTokens += synthesisInputTokens;
+            totalOutputTokens += synthesisOutputTokens;
+            totalAiCalls += synthesisAiCalls;
+
+            var changedRanges = ReviewDiffProcessor.BuildChangedLineRangesByPath(pr.ChangedFiles);
+            var candidates = synthesis.CandidateFindings
+                .Select((candidate, index) => candidate.ToCandidateReviewFinding(
+                    new CandidateFindingProvenance(
+                        CandidateFindingProvenance.PrWidePassOrigin,
+                        "pr_wide_pass",
+                        reviewPassKind: ReviewPassKind.MultiPassUnion,
+                        unionPassIndex: unionPassIndex,
+                        unionLens: ReviewPassScope.PrWide,
+                        shadow: shadow),
+                    findingId: $"finding-prw-{unionPassIndex:D2}-{index + 1:D3}",
+                    scopeRelation: ClassifyCandidateScope(candidate, changedRanges)))
+                .ToList();
+
+            // A shadow pass runs and records its full generation trace above, but the caller never publishes its
+            // candidates; record its catch count so the shadow pass is visible in the protocol.
+            if (shadow)
+            {
+                await this.RecordShadowPassCompletedAsync(passContext, unionPassIndex, runtime.Model.RemoteModelId, candidates.Count, ct);
+            }
+
+            if (ownsProtocolPass && passContext.ActiveProtocolId.HasValue && passContext.ProtocolRecorder is not null)
+            {
+                await passContext.ProtocolRecorder.SetCompletedAsync(
+                    passContext.ActiveProtocolId.Value,
+                    "Completed",
+                    totalInputTokens,
+                    totalOutputTokens,
+                    totalAiCalls,
+                    totalToolCalls,
+                    null,
+                    ct);
+            }
+
+            return candidates;
+        }
+        catch when (ownsProtocolPass && passContext.ActiveProtocolId.HasValue && passContext.ProtocolRecorder is not null)
+        {
+            await passContext.ProtocolRecorder.SetCompletedAsync(
+                passContext.ActiveProtocolId.Value,
+                "Failed",
+                totalInputTokens,
+                totalOutputTokens,
+                totalAiCalls,
+                totalToolCalls,
+                null,
+                ct);
+
+            throw;
+        }
+    }
+
+    // Trims a generated plan to the caps for a job-level pass so generation stays bounded regardless of what the
+    // planning stage proposed: at most MaxInvestigations tasks, each opening at most MaxSeedFilesPerInvestigation
+    // files with at most MaxToolCallsPerInvestigation bounded tool calls.
+    private static PrWideReviewPlan ApplyBudget(PrWideReviewPlan plan, PrWideGenerationBudget budget)
+    {
+        if (plan.InvestigationTasks.Count == 0)
+        {
+            return plan;
+        }
+
+        var cappedTasks = plan.InvestigationTasks
+            .Take(Math.Max(0, budget.MaxInvestigations))
+            .Select(task => task with
+            {
+                SeedFilePaths = task.SeedFilePaths.Take(Math.Max(0, budget.MaxSeedFilesPerInvestigation)).ToList(),
+                MaxToolCalls = Math.Min(task.MaxToolCalls, Math.Max(0, budget.MaxToolCallsPerInvestigation)),
+            })
+            .ToList();
+
+        return plan with { InvestigationTasks = cappedTasks };
+    }
+
+    private async Task RecordShadowPassCompletedAsync(
+        ReviewSystemContext context,
+        int unionPassIndex,
+        string? modelId,
+        int catchCount,
+        CancellationToken ct)
+    {
+        if (!context.ActiveProtocolId.HasValue || context.ProtocolRecorder is null)
+        {
+            return;
+        }
+
+        await context.ProtocolRecorder.RecordReviewStrategyEventAsync(
+            context.ActiveProtocolId.Value,
+            ReviewProtocolEventNames.PassShadowCompleted,
+            JsonSerializer.Serialize(
+                new
+                {
+                    scope = "pr_wide",
+                    passIndex = unionPassIndex,
+                }),
+            JsonSerializer.Serialize(
+                new
+                {
+                    modelId,
+                    catchCount,
+                    published = false,
+                }),
+            null,
+            ct);
     }
 
     private async Task<(PrWideReviewPlan Plan, long InputTokens, long OutputTokens, int AiCalls)> CreatePlanAsync(
@@ -561,8 +738,6 @@ public sealed partial class PrWideAgenticReviewOrchestrator(
             new
             {
                 delegatedTo = "file_by_file",
-                requestedPublicationMode = job.ReviewPublicationMode.ToString(),
-                comparisonMode = job.ReviewComparisonMode.ToString(),
                 publishableCommentCount,
                 inlineCommentCount,
                 prLevelCommentCount,
@@ -669,8 +844,6 @@ public sealed partial class PrWideAgenticReviewOrchestrator(
             },
             new
             {
-                requestedPublicationMode = job.ReviewPublicationMode.ToString(),
-                comparisonMode = job.ReviewComparisonMode.ToString(),
                 publishableCommentCount,
                 publishableInlineCount = inlineCommentCount,
                 publishablePrLevelCount = prLevelCommentCount,
@@ -820,7 +993,10 @@ public sealed partial class PrWideAgenticReviewOrchestrator(
         candidateFindings = await this.VerifyCandidateFindingsAsync(candidateFindings, baseContext, pr, ct);
 
         var gateDecisions = await this._deterministicReviewFindingGate!.EvaluateAsync(candidateFindings, this._reviewInvariantFacts, ct);
-        var reconciliation = this._summaryReconciliationService!.Reconcile(synthesis.Summary, candidateFindings, gateDecisions);
+        var reconciliation = ReviewSummaryGrounding.Ground(
+            this._summaryReconciliationService!.Reconcile(synthesis.Summary, candidateFindings, gateDecisions),
+            candidateFindings,
+            gateDecisions);
 
         if (baseContext.ActiveProtocolId.HasValue && baseContext.ProtocolRecorder is not null)
         {
@@ -1398,6 +1574,20 @@ public sealed partial class PrWideAgenticReviewOrchestrator(
             && string.Equals(claim.VerificationMode, ClaimDescriptor.DeterministicOnlyMode, StringComparison.Ordinal));
         return hasDeterministicLocalClaim
                && string.Equals(reasonCode, CommentRelevanceReasonCodes.HedgingLanguage, StringComparison.Ordinal);
+    }
+
+    // Deterministically classifies a synthesized candidate's nominated (file, line) anchor against the pull
+    // request's changed-line ranges so the classification survives conversion. A candidate with no file path
+    // carries no relation; the lookup is keyed by normalized path so an AI-emitted path still matches.
+    private static ChangedLineRelation? ClassifyCandidateScope(
+        PrWideCandidateFinding candidate,
+        IReadOnlyDictionary<string, IReadOnlyList<(int Start, int End)>> changedRanges)
+    {
+        return candidate.FilePath is null
+            ? null
+            : ReviewDiffProcessor.ClassifyChangedLineRelation(
+                candidate.LineNumber,
+                changedRanges.TryGetValue(ReviewDiffProcessor.NormalizeReviewPath(candidate.FilePath), out var ranges) ? ranges : null);
     }
 
     private static CandidateReviewFinding NormalizePublicationAnchor(CandidateReviewFinding finding, PullRequest pr)

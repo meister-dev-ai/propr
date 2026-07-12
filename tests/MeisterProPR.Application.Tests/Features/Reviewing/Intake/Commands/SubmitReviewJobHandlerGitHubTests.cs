@@ -60,13 +60,7 @@ public sealed class SubmitReviewJobHandlerGitHubTests
                     && candidate.IterationId == request.IterationId
                     && candidate.CodeReview == request.CodeReview
                     && candidate.ReviewRevision == request.ReviewRevision
-                    && candidate.ResolvedReviewStrategySelection == new ReviewStrategySelection(
-                        ReviewStrategy.FileByFile,
-                        ReviewStrategySelectionSource.FallbackDefault,
-                        ReviewComparisonMode.Single,
-                        ReviewPublicationMode.Publish,
-                        null,
-                        ReviewPipelineProfileCatalog.FileByFileBalancedProfileId)),
+                    && candidate.ResolvedReviewPipelineProfileId == ReviewPipelineProfileCatalog.FileByFileBalancedProfileId),
                 Arg.Any<CancellationToken>())
             .Returns(createdJob);
 

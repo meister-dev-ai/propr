@@ -38,8 +38,6 @@ describe('ClientForm', () => {
 
     expect(wrapper.find('[data-testid="client-tenant-select"]').exists()).toBe(true)
     expect(wrapper.find('input[name="displayName"]').exists()).toBe(true)
-    expect(wrapper.find('[data-testid="client-review-strategy-select"]').exists()).toBe(true)
-    expect(wrapper.text()).toContain('Agentic File-by-File')
     expect(wrapper.find('button[type="submit"]').exists()).toBe(true)
   })
 
@@ -77,7 +75,6 @@ describe('ClientForm', () => {
 
     await wrapper.get('[data-testid="client-tenant-select"]').setValue('tenant-1')
     await wrapper.find('input[name="displayName"]').setValue('Acme')
-    await wrapper.get('[data-testid="client-review-strategy-select"]').setValue('prWideAgentic')
     await wrapper.find('form').trigger('submit.prevent')
     await flushPromises()
 
@@ -85,36 +82,6 @@ describe('ClientForm', () => {
       body: {
         displayName: 'Acme',
         tenantId: 'tenant-1',
-        defaultReviewStrategy: 'prWideAgentic',
-      },
-    })
-    expect(wrapper.emitted('client-created')?.[0]).toEqual([created])
-  })
-
-  it('calls POST /clients with agentic file-by-file strategy on valid submit', async () => {
-    const created = {
-      id: '2',
-      displayName: 'Agentic Acme',
-      isActive: true,
-      createdAt: '2024-01-01T00:00:00Z',
-      tenantId: 'tenant-1',
-      defaultReviewStrategy: 'agenticFileByFile',
-    }
-    mockPost.mockResolvedValue({ data: created, response: { ok: true, status: 201 } })
-
-    const wrapper = await mountClientForm()
-
-    await wrapper.get('[data-testid="client-tenant-select"]').setValue('tenant-1')
-    await wrapper.find('input[name="displayName"]').setValue('Agentic Acme')
-    await wrapper.get('[data-testid="client-review-strategy-select"]').setValue('agenticFileByFile')
-    await wrapper.find('form').trigger('submit.prevent')
-    await flushPromises()
-
-    expect(mockPost).toHaveBeenCalledWith('/clients', {
-      body: {
-        displayName: 'Agentic Acme',
-        tenantId: 'tenant-1',
-        defaultReviewStrategy: 'agenticFileByFile',
       },
     })
     expect(wrapper.emitted('client-created')?.[0]).toEqual([created])

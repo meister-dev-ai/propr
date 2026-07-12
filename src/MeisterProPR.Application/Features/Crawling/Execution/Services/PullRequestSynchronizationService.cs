@@ -167,7 +167,7 @@ public sealed class PullRequestSynchronizationService(
             request.PullRequestId,
             iterationId);
 
-        job.SelectReviewStrategy(await this.ResolveStrategySelectionAsync(request, ct));
+        job.SetReviewPipelineProfile(await this.ResolveReviewPipelineProfileIdAsync(request, ct));
 
         if (request.ReviewTemperature.HasValue)
         {
@@ -1011,66 +1011,19 @@ public sealed class PullRequestSynchronizationService(
                string.Equals(status, "ByDesign", StringComparison.OrdinalIgnoreCase);
     }
 
-    private async Task<ReviewStrategySelection> ResolveStrategySelectionAsync(
+    private async Task<string> ResolveReviewPipelineProfileIdAsync(
         PullRequestSynchronizationRequest request,
         CancellationToken ct)
     {
-        if (request.ReviewStrategy.HasValue)
-        {
-            EnsureStrategySelectable(request.ReviewStrategy.Value, "job override");
-            return new ReviewStrategySelection(
-                request.ReviewStrategy.Value,
-                ReviewStrategySelectionSource.JobOverride,
-                request.ComparisonMode,
-                request.PublicationMode,
-                null,
-                ResolvePipelineProfileId(request.ReviewStrategy.Value, null));
-        }
-
+        string? configuredProfileId = null;
         if (clientRegistry is not null)
         {
-            var clientDefault = await clientRegistry.GetDefaultReviewStrategyAsync(request.ClientId, ct);
-            var clientDefaultProfileId = await clientRegistry.GetDefaultReviewPipelineProfileIdAsync(request.ClientId, ct);
-            if (clientDefault.HasValue)
-            {
-                EnsureStrategySelectable(clientDefault.Value, "client default");
-                return new ReviewStrategySelection(
-                    clientDefault.Value,
-                    ReviewStrategySelectionSource.ClientDefault,
-                    request.ComparisonMode,
-                    request.PublicationMode,
-                    null,
-                    ResolvePipelineProfileId(clientDefault.Value, clientDefaultProfileId));
-            }
-        }
-
-        return new ReviewStrategySelection(
-            ReviewStrategy.FileByFile,
-            ReviewStrategySelectionSource.FallbackDefault,
-            request.ComparisonMode,
-            request.PublicationMode,
-            null,
-            ReviewPipelineProfileCatalog.FileByFileBalancedProfileId);
-    }
-
-    private static string? ResolvePipelineProfileId(ReviewStrategy strategy, string? configuredProfileId)
-    {
-        if (strategy != ReviewStrategy.FileByFile)
-        {
-            return null;
+            configuredProfileId = await clientRegistry.GetDefaultReviewPipelineProfileIdAsync(request.ClientId, ct);
         }
 
         return string.IsNullOrWhiteSpace(configuredProfileId)
             ? ReviewPipelineProfileCatalog.FileByFileBalancedProfileId
             : configuredProfileId;
-    }
-
-    private static void EnsureStrategySelectable(ReviewStrategy strategy, string source)
-    {
-        if (!ReviewStrategyPolicy.IsSelectable(strategy))
-        {
-            throw new InvalidOperationException($"{ReviewStrategyPolicy.GetDisabledSelectionMessage(strategy)} Selection source: {source}.");
-        }
     }
 
     private sealed record ActiveJobReconciliationResult(

@@ -83,6 +83,14 @@ public sealed record ReviewComment
     public string? OriginPassLens { get; init; }
 
     /// <summary>
+    ///     Whether this finding came from a shadow review pass — a pass that runs and is recorded for diagnostics
+    ///     but whose findings are never published. Provenance metadata only: it does not participate in
+    ///     deduplication. Shadow comments are filtered out of the publishable synthesis input while remaining in the
+    ///     persisted per-file result for the trace. <see langword="false" /> for ordinary comments.
+    /// </summary>
+    public bool OriginPassShadow { get; init; }
+
+    /// <summary>
     ///     Deterministic classification of this comment's anchor line relative to the pull request's
     ///     changed-line ranges. Provenance metadata only: it does not participate in deduplication
     ///     (which keys on message text) and is <see langword="null" /> for legacy comments and comments

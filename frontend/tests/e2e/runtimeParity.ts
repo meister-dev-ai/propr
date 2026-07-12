@@ -146,7 +146,6 @@ export async function installLiveRuntimeApiStubs(page: Page, testInfo: TestInfo)
           isActive: body.isActive ?? true,
           createdAt: new Date('2026-05-01T10:00:00Z').toISOString(),
           scmCommentPostingEnabled: body.scmCommentPostingEnabled ?? true,
-          defaultReviewStrategy: body.defaultReviewStrategy ?? 'fileByFile',
         }),
       })
       return
@@ -161,7 +160,6 @@ export async function installLiveRuntimeApiStubs(page: Page, testInfo: TestInfo)
         isActive: true,
         createdAt: new Date('2026-05-01T10:00:00Z').toISOString(),
         scmCommentPostingEnabled: true,
-        defaultReviewStrategy: 'fileByFile',
       }),
     })
   })

@@ -11,7 +11,6 @@ using MeisterProPR.Infrastructure.Features.Reviewing.Execution.Persistence;
 using MeisterProPR.Infrastructure.Features.Reviewing.Execution.ReviewFindingGate;
 using MeisterProPR.Infrastructure.Features.Reviewing.Execution.Screening;
 using MeisterProPR.Infrastructure.Features.Reviewing.Execution.Strategies;
-using MeisterProPR.Infrastructure.Features.Reviewing.Execution.Strategies.AgenticFileByFile;
 using MeisterProPR.Infrastructure.Features.Reviewing.Execution.Strategies.FileByFile;
 using MeisterProPR.Infrastructure.Features.Reviewing.Execution.Verification;
 using MeisterProPR.ProRV.DependencyInjection;
@@ -33,9 +32,6 @@ public static class ReviewingExecutionServiceCollectionExtensions
     {
         services.AddScoped<IReviewJobExecutionStore>(sp =>
             new ReviewJobExecutionStoreAdapter(sp.GetRequiredService<IJobRepository>()));
-        services.AddScoped<IReviewStrategyDispatcher>(sp => new ReviewStrategyDispatcher(
-            sp.GetRequiredService<IFileByFileReviewOrchestrator>(),
-            sp.GetService<IReviewPipelineProfileProvider>()));
         services.AddSingleton<IReviewPipelineProfileProvider, ReviewPipelineProfileProvider>();
         services.AddScoped<IReviewPipeline<PerFileReviewContext>, ReviewPipelineRunner<PerFileReviewContext>>();
         services.AddScoped<IReviewPipelineStage<PerFileReviewContext>, FileByFileContextPrefetchStage>();
@@ -45,8 +41,6 @@ public static class ReviewingExecutionServiceCollectionExtensions
         services.AddSingleton<IReviewPipelineStage<PerFileReviewContext>, FileByFileSelfReflectionRankingStage>();
         services.AddSingleton<IReviewPipelineStage<PerFileReviewContext>, FileByFileConfidenceFloorStage>();
         services.AddSingleton<IReviewPipelineStage<PerFileReviewContext>, FileByFileInfoCommentStripStage>();
-        services.AddSingleton<IReviewPipelineStage<PerFileReviewContext>, AgenticConfidenceFloorStage>();
-        services.AddSingleton<IReviewPipelineStage<PerFileReviewContext>, AgenticInfoCommentStripStage>();
         services.AddTransient<IReviewJobProcessor>(sp => sp.GetRequiredService<ReviewOrchestrationService>());
         services.AddCommentRelevanceFiltering(selectedCommentRelevanceFilterId);
         services.AddSingleton<IDeterministicReviewFindingGate, DeterministicReviewFindingGate>();
@@ -67,10 +61,8 @@ public static class ReviewingExecutionServiceCollectionExtensions
         services.AddSingleton<IReviewEvidenceCollector, ReviewContextEvidenceCollector>();
         services.AddSingleton<PrLevelReviewVerificationExecutor>();
         services.AddSingleton<CandidateFindingFactory>();
-        services.AddSingleton<AgenticCandidateFindingFactory>();
         services.AddSingleton<QualityFilterExecutor>();
         services.AddScoped<FileReviewDispatchPlanner>();
-        services.AddScoped<AgenticFileReviewDispatchPlanner>();
         // Semantic finding dedup = same file + overlapping anchor + AI-judged same defect class, gated per-client
         // via the review context's EnableMultiPassUnion flag (default off). The judge is degraded-safe: when no
         // verification model is bound it returns keep-both, so the deduplicator only ever collapses confirmed
@@ -79,7 +71,6 @@ public static class ReviewingExecutionServiceCollectionExtensions
         services.AddScoped<IFindingDeduplicator, SemanticFindingDeduplicator>();
         services.AddScoped<ISemanticCommentScreener, EmbeddingSemanticCommentScreener>();
         services.AddScoped<ReviewSynthesisExecutor>();
-        services.AddScoped<AgenticReviewSynthesisExecutor>();
         services.AddSingleton<ISummaryReconciliationService, SummaryReconciliationService>();
 
         return services;

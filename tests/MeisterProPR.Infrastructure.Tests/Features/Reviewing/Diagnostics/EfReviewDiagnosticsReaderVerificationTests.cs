@@ -38,12 +38,6 @@ public sealed class EfReviewDiagnosticsReaderVerificationTests
     public async Task GetJobProtocolAsync_WhenAgenticFilePassDegrades_MarksFileOutcomeAsDegraded()
     {
         var job = new ReviewJob(Guid.NewGuid(), Guid.NewGuid(), "https://dev.azure.com/org", "proj", "repo", 9, 1);
-        job.SelectReviewStrategy(
-            ReviewStrategy.AgenticFileByFile,
-            ReviewStrategySelectionSource.JobOverride,
-            ReviewComparisonMode.Single,
-            ReviewPublicationMode.Publish,
-            null);
 
         var fileResult = new ReviewFileResult(job.Id, "src/Bar.cs");
         fileResult.MarkCompleted("Summary", []);
@@ -86,8 +80,6 @@ public sealed class EfReviewDiagnosticsReaderVerificationTests
         var returnedProtocol = Assert.Single(result!.Protocols);
         Assert.NotNull(returnedProtocol.FileOutcome);
         Assert.True(returnedProtocol.FileOutcome!.IsDegraded);
-        Assert.Equal(ReviewStrategy.AgenticFileByFile, returnedProtocol.ResolvedReviewStrategy);
-        Assert.Equal(ReviewStrategySelectionSource.JobOverride, returnedProtocol.StrategySelectionSource);
     }
 
     [Fact]

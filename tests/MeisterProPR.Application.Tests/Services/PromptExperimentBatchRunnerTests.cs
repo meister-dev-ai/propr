@@ -327,12 +327,7 @@ public sealed class PromptExperimentBatchRunnerTests
             fixture.PullRequestSnapshot.CodeReview.Repository.ExternalRepositoryId,
             fixture.PullRequestSnapshot.CodeReview.Number,
             1);
-        job.SelectReviewStrategy(
-            ReviewStrategy.FileByFile,
-            ReviewStrategySelectionSource.JobOverride,
-            ReviewComparisonMode.Single,
-            ReviewPublicationMode.Publish,
-            null);
+        job.SetReviewPipelineProfile(ReviewPipelineProfileCatalog.FileByFileBalancedProfileId);
         return job;
     }
 

@@ -5,7 +5,9 @@ namespace MeisterProPR.Application.ValueObjects;
 
 /// <summary>
 ///     One entry in a client's ordered review-pass list as consumed by the review runtime: the configured model that
-///     runs the pass (its connection implied) and an optional specialist lens. A <see langword="null" /> lens is an
-///     ordinary resample pass; a known lens value selects a specialist prompt scoped to the files that lens targets.
+///     runs the pass (its connection implied), an optional specialist lens, an optional scope, and a shadow flag. A
+///     <see langword="null" /> lens is an ordinary resample pass; a known lens value selects a specialist prompt scoped
+///     to the files that lens targets. A <see langword="null" /> scope is the per-file default; <c>pr_wide</c> runs the
+///     pass at the job level. <paramref name="Shadow" /> is additive metadata the runtime does not act on yet.
 /// </summary>
-public sealed record ReviewPassSpec(Guid ConfiguredModelId, string? Lens = null);
+public sealed record ReviewPassSpec(Guid ConfiguredModelId, string? Lens = null, string? Scope = null, bool Shadow = false);

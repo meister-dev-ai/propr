@@ -45,7 +45,6 @@ public sealed record EvaluationConfigurationMetadata(
     string ConfigurationId,
     string ModelId,
     string DetailMode,
-    ReviewStrategy Strategy,
     IReadOnlyDictionary<string, int> ProvenanceCounts,
     string VariantName,
     IReadOnlyList<string> TargetedStageKeys,

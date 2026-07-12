@@ -20,9 +20,6 @@ public sealed class ClientRecord
     /// </summary>
     public CommentResolutionBehavior CommentResolutionBehavior { get; set; } = CommentResolutionBehavior.Silent;
 
-    /// <summary>Default review strategy used when intake does not provide an override.</summary>
-    public ReviewStrategy DefaultReviewStrategy { get; set; } = ReviewStrategy.FileByFile;
-
     /// <summary>Optional custom AI system message for this client.</summary>
     public string? CustomSystemMessage { get; set; }
 

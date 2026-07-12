@@ -66,16 +66,15 @@ public sealed class ReviewingModuleIntegrationTests(JobsControllerProtocolTests.
         var services = scope.ServiceProvider;
 
         Assert.NotNull(services.GetRequiredService<IFileByFileReviewOrchestrator>());
-        Assert.NotNull(services.GetRequiredService<IAgenticFileByFileReviewOrchestrator>());
         Assert.NotNull(services.GetRequiredService<IPrWideAgenticReviewOrchestrator>());
     }
 
     [Fact]
-    public void ServiceProvider_ResolvesSharedReviewStrategyDispatcher()
+    public void ServiceProvider_ResolvesSharedFileByFileReviewOrchestrator()
     {
         using var scope = factory.Services.CreateScope();
         var services = scope.ServiceProvider;
 
-        Assert.NotNull(services.GetRequiredService<IReviewStrategyDispatcher>());
+        Assert.NotNull(services.GetRequiredService<IFileByFileReviewOrchestrator>());
     }
 }

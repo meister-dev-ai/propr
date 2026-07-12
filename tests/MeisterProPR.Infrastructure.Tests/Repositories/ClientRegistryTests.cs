@@ -418,6 +418,40 @@ public sealed class ClientRegistryTests(PostgresContainerFixture fixture) : IAsy
     }
 
     [Fact]
+    public async Task ReviewPasses_PatchPersistsScopeAndShadow_AndGetEchoesIt()
+    {
+        var client = await this.SeedClientAsync();
+        var adminService = new ClientAdminService(this._dbContext);
+        var perFileModel = await this.SeedChatModelAsync(client.Id);
+        var prWideModel = await this.SeedChatModelAsync(client.Id);
+
+        var updated = await adminService.PatchAsync(
+            client.Id,
+            null,
+            null,
+            reviewPasses: new List<ReviewPassDto>
+            {
+                new(0, perFileModel),
+                new(1, prWideModel, Scope: "pr_wide", Shadow: true),
+            },
+            ct: CancellationToken.None);
+
+        Assert.NotNull(updated);
+        Assert.Equal(
+            new[]
+            {
+                new ReviewPassDto(0, perFileModel),
+                new ReviewPassDto(1, prWideModel, Scope: "pr_wide", Shadow: true),
+            },
+            updated!.ReviewPassesOrEmpty.ToArray());
+
+        // The scope and shadow survive to the review-pipeline projection.
+        var passes = await this._registry.GetReviewPassesAsync(client.Id, CancellationToken.None);
+        Assert.Equal(new[] { null, "pr_wide" }, passes.Select(pass => pass.Scope).ToArray());
+        Assert.Equal(new[] { false, true }, passes.Select(pass => pass.Shadow).ToArray());
+    }
+
+    [Fact]
     public async Task ReviewPasses_PatchReplacesListWholesale()
     {
         var client = await this.SeedClientAsync();

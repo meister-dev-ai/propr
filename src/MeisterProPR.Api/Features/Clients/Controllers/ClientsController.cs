@@ -29,14 +29,13 @@ public sealed class ClientsController(
             client.IsActive,
             client.CreatedAt,
             client.CommentResolutionBehavior,
-            client.DefaultReviewStrategy,
             client.CustomSystemMessage,
             client.ScmCommentPostingEnabled,
             client.EnableEvidenceBackedVerification,
             client.EnableLanguageRobustScreening,
             client.EnableMultiPassUnion,
             client.ReviewPassesOrEmpty
-                .Select(pass => new ReviewPassEntry(pass.Ordinal, pass.ConfiguredModelId, pass.Lens))
+                .Select(pass => new ReviewPassEntry(pass.Ordinal, pass.ConfiguredModelId, pass.Lens, pass.Scope, pass.Shadow))
                 .ToList(),
             client.TenantId,
             client.TenantSlug,
@@ -163,7 +162,6 @@ public sealed class ClientsController(
             var client = await clientAdminService.CreateAsync(
                 request.TenantId,
                 request.DisplayName,
-                request.DefaultReviewStrategy ?? ReviewStrategy.FileByFile,
                 ct);
 
             return this.CreatedAtAction(
@@ -328,9 +326,8 @@ public sealed class ClientsController(
             request.EnableLanguageRobustScreening,
             request.EnableMultiPassUnion,
             request.ReviewPasses?
-                .Select(pass => new ReviewPassDto(pass.Ordinal, pass.ConfiguredModelId, pass.Lens))
+                .Select(pass => new ReviewPassDto(pass.Ordinal, pass.ConfiguredModelId, pass.Lens, pass.Scope, pass.Shadow))
                 .ToList(),
-            request.DefaultReviewStrategy,
             ct);
         return client is null ? this.NotFound() : this.Ok(ToClientResponse(client));
     }
@@ -343,7 +340,6 @@ public sealed record ClientResponse(
     bool IsActive,
     DateTimeOffset CreatedAt,
     CommentResolutionBehavior CommentResolutionBehavior,
-    ReviewStrategy DefaultReviewStrategy,
     string? CustomSystemMessage,
     bool ScmCommentPostingEnabled,
     bool EnableEvidenceBackedVerification,
@@ -363,7 +359,12 @@ public sealed record ClientResponse(
 ///     Optional specialist lens for this pass (e.g. <c>security</c>); <see langword="null" /> is an ordinary
 ///     resample pass. A lens pass runs a specialist prompt scoped to the files that lens targets.
 /// </param>
-public sealed record ReviewPassEntry(int Ordinal, Guid ConfiguredModelId, string? Lens = null);
+/// <param name="Scope">
+///     Optional scope for this pass; <see langword="null" /> is the per-file default and <c>pr_wide</c> runs the pass
+///     at the job level rather than per file.
+/// </param>
+/// <param name="Shadow">Whether this pass runs in shadow mode. Additive metadata the runtime does not act on yet.</param>
+public sealed record ReviewPassEntry(int Ordinal, Guid ConfiguredModelId, string? Lens = null, string? Scope = null, bool Shadow = false);
 
 /// <summary>Crawl configuration response.</summary>
 public sealed record CrawlConfigResponse(
@@ -391,11 +392,7 @@ public sealed record CrawlRepoFilterResponse(
     string? DisplayName = null);
 
 /// <summary>Request body for creating a client.</summary>
-public sealed record CreateClientRequest(string DisplayName, [property: JsonRequired] Guid TenantId)
-{
-    /// <summary>Optional initial default review strategy. Missing defaults to file_by_file.</summary>
-    public ReviewStrategy? DefaultReviewStrategy { get; init; }
-}
+public sealed record CreateClientRequest(string DisplayName, [property: JsonRequired] Guid TenantId);
 
 /// <summary>
 ///     Request body for patching a client. All fields are optional; omitted fields are left unchanged.
@@ -410,5 +407,4 @@ public sealed record PatchClientRequest(
     bool? EnableEvidenceBackedVerification = null,
     bool? EnableLanguageRobustScreening = null,
     bool? EnableMultiPassUnion = null,
-    IReadOnlyList<ReviewPassEntry>? ReviewPasses = null,
-    ReviewStrategy? DefaultReviewStrategy = null);
+    IReadOnlyList<ReviewPassEntry>? ReviewPasses = null);

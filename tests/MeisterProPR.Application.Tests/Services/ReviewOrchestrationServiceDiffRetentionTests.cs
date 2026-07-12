@@ -113,14 +113,13 @@ public sealed class ReviewOrchestrationServiceDiffRetentionTests
             prScanRepository.GetAsync(Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
                 .Returns((ReviewPrScan?)null);
 
-            var dispatcher = Substitute.For<IReviewStrategyDispatcher>();
-            dispatcher.ReviewAsync(
+            var fileByFileReviewOrchestrator = Substitute.For<IFileByFileReviewOrchestrator>();
+            fileByFileReviewOrchestrator.ReviewAsync(
                     Arg.Any<ReviewJob>(),
                     Arg.Any<PullRequest>(),
                     Arg.Any<ReviewSystemContext>(),
                     Arg.Any<CancellationToken>(),
-                    Arg.Any<IChatClient?>(),
-                    Arg.Any<string?>())
+                    Arg.Any<IChatClient?>())
                 .Returns(new ReviewResult("Summary", new List<ReviewComment>().AsReadOnly()));
 
             var providerRegistry = CreateProviderRegistry();
@@ -142,7 +141,7 @@ public sealed class ReviewOrchestrationServiceDiffRetentionTests
                 NullLogger<ReviewOrchestrationService>.Instance,
                 aiRepo,
                 chatFactory,
-                dispatcher,
+                fileByFileReviewOrchestrator,
                 workspaceManager: CreateWorkspaceManager(),
                 scmConnectionRepository: scmConnectionRepository,
                 reviewArchiveIngestionService: this.IngestionService);

@@ -67,12 +67,6 @@ public partial record ReviewJobProtocolDto
     /// <summary>Pull request number for the parent review job.</summary>
     public int PullRequestId { get; init; }
 
-    /// <summary>Resolved review strategy snapshotted on the parent review job.</summary>
-    public ReviewStrategy ResolvedReviewStrategy { get; init; } = ReviewStrategy.FileByFile;
-
-    /// <summary>How the parent review job selected its resolved review strategy.</summary>
-    public ReviewStrategySelectionSource StrategySelectionSource { get; init; } = ReviewStrategySelectionSource.FallbackDefault;
-
     /// <summary>Terminal file outcome associated with this pass, when the protocol belongs to a file result.</summary>
     public ProtocolFileOutcomeDto? FileOutcome { get; init; }
 

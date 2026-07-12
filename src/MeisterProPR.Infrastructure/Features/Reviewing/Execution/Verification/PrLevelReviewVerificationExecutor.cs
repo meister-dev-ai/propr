@@ -154,7 +154,8 @@ internal sealed class PrLevelReviewVerificationExecutor(
                     evidenceBackedWorkItem.ExistingEvidence,
                     effectiveFinding.CandidateSummaryText,
                     effectiveFinding.InvariantCheckContext,
-                    outcome));
+                    outcome,
+                    effectiveFinding.ScopeRelation));
         }
 
         return verified;
@@ -189,7 +190,8 @@ internal sealed class PrLevelReviewVerificationExecutor(
             finding.Evidence,
             finding.CandidateSummaryText,
             finding.InvariantCheckContext,
-            finding.VerificationOutcome)
+            finding.VerificationOutcome,
+            finding.ScopeRelation)
         {
             MergedFinding = finding.MergedFinding,
         };
@@ -521,7 +523,8 @@ internal sealed class PrLevelReviewVerificationExecutor(
                 finding.FindingId,
                 VerificationOutcome.DeterministicRulesEvaluator,
                 ReviewFindingGateReasonCodes.VerificationDegraded,
-                $"PR-level claim extraction degraded: {error}"));
+                $"PR-level claim extraction degraded: {error}"),
+            finding.ScopeRelation);
     }
 
     private static CandidateReviewFinding CreateEvidenceCollectionDegradedFinding(
@@ -544,7 +547,8 @@ internal sealed class PrLevelReviewVerificationExecutor(
                 claim,
                 VerificationOutcome.AiMicroVerifierEvaluator,
                 ReviewFindingGateReasonCodes.VerificationDegraded,
-                $"PR-level evidence collection degraded: {error}"));
+                $"PR-level evidence collection degraded: {error}"),
+            finding.ScopeRelation);
     }
 
     private static EvidenceReference BuildUpdatedEvidence(CandidateReviewFinding finding, EvidenceBundle evidence)

@@ -240,8 +240,7 @@ public sealed partial class JobRepository(
                 j.PrSourceBranch,
                 j.PrTargetBranch,
                 j.PrRepositoryName,
-                j.AiModel,
-                j.ReviewStrategy))
+                j.AiModel))
             .ToListAsync(ct)
             .ConfigureAwait(false);
 

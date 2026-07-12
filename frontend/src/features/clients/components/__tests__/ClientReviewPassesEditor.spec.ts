@@ -98,7 +98,7 @@ describe('ClientReviewPassesEditor lens selector', () => {
         await wrapper.find('[data-testid="review-pass-lens"]').setValue('security')
 
         const emitted = lastEmittedPasses(wrapper)
-        expect(emitted).toEqual([{ ordinal: 0, configuredModelId: 'm1', lens: 'security' }])
+        expect(emitted).toEqual([{ ordinal: 0, configuredModelId: 'm1', lens: 'security', scope: null, shadow: false }])
     })
 
     it('emits a null lens when a pass is switched back to None', async () => {
@@ -111,7 +111,7 @@ describe('ClientReviewPassesEditor lens selector', () => {
 
         await wrapper.find('[data-testid="review-pass-lens"]').setValue('')
 
-        expect(lastEmittedPasses(wrapper)).toEqual([{ ordinal: 0, configuredModelId: 'm1', lens: null }])
+        expect(lastEmittedPasses(wrapper)).toEqual([{ ordinal: 0, configuredModelId: 'm1', lens: null, scope: null, shadow: false }])
     })
 
     it('hydrates the lens from the persisted value', () => {
@@ -123,5 +123,57 @@ describe('ClientReviewPassesEditor lens selector', () => {
         })
 
         expect((wrapper.find('[data-testid="review-pass-lens"]').element as HTMLSelectElement).value).toBe('security')
+    })
+})
+
+describe('ClientReviewPassesEditor scope and shadow', () => {
+    it('offers Per-file and PR-wide scope options per row', () => {
+        const wrapper = mount(ClientReviewPassesEditor, {
+            props: { modelValue: [{ ordinal: 0, configuredModelId: 'm1' }] as ReviewPassEntry[], connections },
+        })
+
+        const scopeOptions = wrapper
+            .find('[data-testid="review-pass-scope"]')
+            .findAll('option')
+            .map(option => option.attributes('value') ?? '')
+        expect(scopeOptions).toEqual(['', 'pr_wide'])
+    })
+
+    it('emits pr_wide scope and the shadow flag on the entry', async () => {
+        const wrapper = mount(ClientReviewPassesEditor, {
+            props: { modelValue: [{ ordinal: 0, configuredModelId: 'm1' }] as ReviewPassEntry[], connections },
+        })
+
+        await wrapper.find('[data-testid="review-pass-scope"]').setValue('pr_wide')
+        await wrapper.find('[data-testid="review-pass-shadow"]').setValue(true)
+
+        expect(lastEmittedPasses(wrapper)).toEqual([
+            { ordinal: 0, configuredModelId: 'm1', lens: null, scope: 'pr_wide', shadow: true },
+        ])
+    })
+
+    it('emits a null scope when a pass is switched back to Per-file', async () => {
+        const wrapper = mount(ClientReviewPassesEditor, {
+            props: {
+                modelValue: [{ ordinal: 0, configuredModelId: 'm1', scope: 'pr_wide' }] as ReviewPassEntry[],
+                connections,
+            },
+        })
+
+        await wrapper.find('[data-testid="review-pass-scope"]').setValue('')
+
+        expect(lastEmittedPasses(wrapper)).toEqual([{ ordinal: 0, configuredModelId: 'm1', lens: null, scope: null, shadow: false }])
+    })
+
+    it('hydrates scope and shadow from the persisted value', () => {
+        const wrapper = mount(ClientReviewPassesEditor, {
+            props: {
+                modelValue: [{ ordinal: 0, configuredModelId: 'm1', scope: 'pr_wide', shadow: true }] as ReviewPassEntry[],
+                connections,
+            },
+        })
+
+        expect((wrapper.find('[data-testid="review-pass-scope"]').element as HTMLSelectElement).value).toBe('pr_wide')
+        expect((wrapper.find('[data-testid="review-pass-shadow"]').element as HTMLInputElement).checked).toBe(true)
     })
 })

@@ -78,6 +78,11 @@ public sealed class DeterministicReviewFindingGate : IDeterministicReviewFinding
                 null);
         }
 
+        if (string.Equals(finding.Provenance.OriginKind, CandidateFindingProvenance.PrWidePassOrigin, StringComparison.Ordinal))
+        {
+            return EvaluatePrWideFinding(finding);
+        }
+
         if (finding.VerificationOutcome is not null)
         {
             return EvaluateVerifiedFinding(finding);
@@ -139,6 +144,49 @@ public sealed class DeterministicReviewFindingGate : IDeterministicReviewFinding
             [],
             finding.Evidence,
             null);
+    }
+
+    // Evaluates a job-level PR-wide-pass finding. Unlike file-by-file cross-cutting findings — which always stay
+    // summary-only as a precision guard — a PR-wide finding publishes when it is both earned (the bounded
+    // PR-verifier recommended publication) and located (its anchor sits on or next to a changed line). The
+    // verifier already weighs the retrieved evidence, so resolved evidence does NOT override a verdict that
+    // declined the claim. Every other PR-wide finding stays summary-only. The invariant-contradiction drop has
+    // already run before this branch, so a PR-wide finding contradicting an invariant never reaches here.
+    private static FinalGateDecision EvaluatePrWideFinding(CandidateReviewFinding finding)
+    {
+        var hasAnchor = finding.ScopeRelation is ChangedLineRelation.OnChangedLine or ChangedLineRelation.AdjacentToChange;
+        var verifierApproved = finding.VerificationOutcome is not null &&
+                               string.Equals(
+                                   finding.VerificationOutcome.RecommendedDisposition, FinalGateDecision.PublishDisposition, StringComparison.Ordinal);
+
+        if (verifierApproved && hasAnchor)
+        {
+            return new FinalGateDecision(
+                finding.FindingId,
+                FinalGateDecision.PublishDisposition,
+                [ReviewFindingGateReasonCodes.PrWideAnchoredVerifiedClaim],
+                "pr_wide_anchored_verified_rules",
+                [],
+                finding.Evidence,
+                null);
+        }
+
+        // Distinguish the two suppression causes for accurate triage/telemetry: a verifier-approved finding held
+        // here lacks a changed-line anchor for an inline thread; every other finding is held because the bounded
+        // verifier did not recommend publication.
+        var reasonCode = verifierApproved
+            ? ReviewFindingGateReasonCodes.PrWideMissingChangedLineAnchor
+            : ReviewFindingGateReasonCodes.MissingVerifiedClaimSupport;
+
+        return new FinalGateDecision(
+            finding.FindingId,
+            FinalGateDecision.SummaryOnlyDisposition,
+            [reasonCode],
+            "pr_wide_summary_rules",
+            [],
+            finding.Evidence,
+            finding.CandidateSummaryText ??
+            "Potential cross-cutting concern noted, but it was not verified for publication as a review thread.");
     }
 
     private static FinalGateDecision EvaluateVerifiedFinding(CandidateReviewFinding finding)

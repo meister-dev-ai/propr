@@ -39,12 +39,6 @@ internal sealed class ClientEntityTypeConfiguration : IEntityTypeConfiguration<C
             .HasDefaultValue(CommentResolutionBehavior.Silent)
             .HasSentinel(CommentResolutionBehavior.Silent);
 
-        builder.Property(c => c.DefaultReviewStrategy)
-            .HasColumnName("default_review_strategy")
-            .HasConversion<int>()
-            .HasDefaultValue(ReviewStrategy.FileByFile)
-            .HasSentinel(ReviewStrategy.FileByFile);
-
         builder.Property(c => c.CustomSystemMessage)
             .HasColumnName("custom_system_message")
             .IsRequired(false);

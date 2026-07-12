@@ -7,7 +7,6 @@ export type ReviewJobProtocolDto = components['schemas']['ReviewJobProtocolDto']
 export type ProtocolEventDto = components['schemas']['ProtocolEventDto']
 export type ProtocolEventPhaseTimingDto = components['schemas']['ProtocolEventPhaseTimingDto']
 export type ReviewJobResultDto = components['schemas']['ReviewJobResultDto']
-export type ReviewStrategy = components['schemas']['ReviewStrategy']
 export type ReviewJobProtocolPassResponse = components['schemas']['ReviewJobProtocolDto']
 export type FileDiffDto = components['schemas']['FileDiffDto']
 export type ReviewCommentDto = components['schemas']['ReviewCommentDto']
@@ -342,8 +341,6 @@ export type ReviewProtocolPass = ReviewJobProtocolDto & {
     passKind?: string | null
     /** Human-readable reason this pass ran (e.g. a high-risk augmentation re-review); null for baseline/legacy. */
     reason?: string | null
-    resolvedReviewStrategy?: ReviewStrategy | null
-    strategySelectionSource?: string | null
     fileOutcome?: ProtocolFileOutcome | null
     followUp?: ProtocolFollowUp | null
     repeatedJudgment?: ProtocolRepeatedJudgment | null

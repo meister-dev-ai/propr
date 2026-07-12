@@ -160,17 +160,8 @@ public sealed class DbClientRegistry(
         return await dbContext.ClientReviewPasses
             .Where(pass => pass.ClientId == clientId)
             .OrderBy(pass => pass.Ordinal)
-            .Select(pass => new ReviewPassSpec(pass.ConfiguredModelId, pass.Lens))
+            .Select(pass => new ReviewPassSpec(pass.ConfiguredModelId, pass.Lens, pass.Scope, pass.Shadow))
             .ToListAsync(ct);
-    }
-
-    /// <inheritdoc />
-    public async Task<ReviewStrategy?> GetDefaultReviewStrategyAsync(Guid clientId, CancellationToken ct = default)
-    {
-        return await dbContext.Clients
-            .Where(c => c.Id == clientId)
-            .Select(c => (ReviewStrategy?)c.DefaultReviewStrategy)
-            .FirstOrDefaultAsync(ct);
     }
 
     /// <inheritdoc />

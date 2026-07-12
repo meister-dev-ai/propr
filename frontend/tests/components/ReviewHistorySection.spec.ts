@@ -55,7 +55,6 @@ const jobsPayload = {
       prRepositoryName: 'repo-a',
       prSourceBranch: 'feature/test',
       prTargetBranch: 'main',
-      resolvedReviewStrategy: 'fileByFile',
     },
   ],
 }
@@ -106,21 +105,5 @@ describe('ReviewHistorySection', () => {
 
     expect(wrapper.find('.protocol-btn').exists()).toBe(false)
     expect(wrapper.find('.pr-view-btn').exists()).toBe(false)
-  })
-
-  it('shows a distinct strategy label for agentic file-by-file reviews', async () => {
-    listJobsMock.mockResolvedValue({
-      items: [
-        {
-          ...jobsPayload.items[0],
-          resolvedReviewStrategy: 'agenticFileByFile',
-        },
-      ],
-    })
-
-    const wrapper = await mountSection()
-    await flushPromises()
-
-    expect(wrapper.text()).toContain('Agentic File-by-File')
   })
 })

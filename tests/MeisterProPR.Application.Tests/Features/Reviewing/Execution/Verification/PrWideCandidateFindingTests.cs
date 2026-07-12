@@ -65,4 +65,41 @@ public sealed class PrWideCandidateFindingTests
         Assert.Equal("Potential cross-file ordering issue noted.", finding.CandidateSummaryText);
         Assert.Equal(CandidateFindingProvenance.SynthesizedCrossCuttingOrigin, finding.Provenance.OriginKind);
     }
+
+    [Fact]
+    public void ToCandidateReviewFinding_ForwardsScopeRelationToConvertedFinding()
+    {
+        var candidate = new PrWideCandidateFinding(
+            "candidate-003",
+            "Publisher writes before the aggregator finishes.",
+            CandidateReviewFinding.CrossCuttingCategory,
+            new ConfidenceScore("cross_file_reasoning", 84),
+            new EvidenceReference([], ["src/Core/Aggregator.cs", "src/Api/PublishController.cs"], EvidenceReference.ResolvedState, "pr_wide_synthesis"),
+            ["src/Core/Aggregator.cs", "src/Api/PublishController.cs"],
+            CommentSeverity.Warning,
+            "src/Core/Aggregator.cs",
+            12);
+
+        var finding = candidate.ToCandidateReviewFinding(
+            new CandidateFindingProvenance(CandidateFindingProvenance.PrWidePassOrigin, "pr_wide_pass"),
+            scopeRelation: ChangedLineRelation.OnChangedLine);
+
+        Assert.Equal(ChangedLineRelation.OnChangedLine, finding.ScopeRelation);
+    }
+
+    [Fact]
+    public void ToCandidateReviewFinding_WithoutScopeRelation_LeavesRelationNull()
+    {
+        var candidate = new PrWideCandidateFinding(
+            "candidate-004",
+            "Cross-file ordering can publish the stale aggregate summary.",
+            CandidateReviewFinding.CrossCuttingCategory,
+            new ConfidenceScore("cross_file_reasoning", 76),
+            new EvidenceReference([], ["src/Core/Aggregator.cs"], EvidenceReference.PartialState, "pr_wide_synthesis"),
+            ["src/Core/Aggregator.cs"]);
+
+        var finding = candidate.ToCandidateReviewFinding(new CandidateFindingProvenance(CandidateFindingProvenance.PrWidePassOrigin, "pr_wide_pass"));
+
+        Assert.Null(finding.ScopeRelation);
+    }
 }

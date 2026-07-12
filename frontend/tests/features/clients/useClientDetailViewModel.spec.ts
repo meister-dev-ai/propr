@@ -39,7 +39,6 @@ const sampleClient = {
   displayName: 'Acme Review Team',
   isActive: true,
   createdAt: '2026-04-25T10:00:00Z',
-  defaultReviewStrategy: 'fileByFile',
   defaultReviewPipelineProfileId: 'file-by-file-balanced',
   defaultReviewPipelineProfileUpdatedAtUtc: null,
   scmCommentPostingEnabled: true,
@@ -130,19 +129,18 @@ describe('useClientDetailViewModel (FR-007, FR-008, FR-012)', () => {
     expect(vm.client.value?.displayName).toBe('New Name')
   })
 
-  it('saves advanced settings with strategy and scm posting state', async () => {
+  it('saves advanced settings with scm posting state', async () => {
     mockGet.mockReset()
     mockGet
       .mockResolvedValueOnce({ data: sampleClient, response: { status: 200, ok: true } })
       .mockResolvedValueOnce({ data: sampleReviewProfiles, response: { status: 200, ok: true } })
       .mockResolvedValueOnce({ data: sampleClientReviewProfile, response: { status: 200, ok: true } })
     mockPatch.mockResolvedValue({
-      data: { ...sampleClient, defaultReviewStrategy: 'prWideAgentic', scmCommentPostingEnabled: false },
+      data: { ...sampleClient, scmCommentPostingEnabled: false },
       response: { ok: true },
     })
     const vm = useClientDetailViewModel({ autoLoad: false })
     await vm.loadClient()
-    vm.editedDefaultReviewStrategy.value = 'prWideAgentic'
     vm.editedScmCommentPostingEnabled.value = false
 
     await vm.saveAdvancedSettings()
@@ -152,7 +150,6 @@ describe('useClientDetailViewModel (FR-007, FR-008, FR-012)', () => {
     expect(mockPatch).toHaveBeenCalledWith('/clients/{clientId}', {
       params: { path: { clientId: 'client-1' } },
       body: {
-        defaultReviewStrategy: 'prWideAgentic',
         scmCommentPostingEnabled: false,
         enableEvidenceBackedVerification: false,
         enableMultiPassUnion: false,
@@ -179,7 +176,7 @@ describe('useClientDetailViewModel (FR-007, FR-008, FR-012)', () => {
     await vm.saveAdvancedSettings()
 
     const body = mockPatch.mock.calls[0][1].body as Record<string, unknown>
-    expect(body.reviewPasses).toEqual([{ ordinal: 0, configuredModelId: 'model-x', lens: null }])
+    expect(body.reviewPasses).toEqual([{ ordinal: 0, configuredModelId: 'model-x', lens: null, scope: null, shadow: false }])
   })
 
   it('saves review aggressiveness through the dedicated review-profile endpoint', async () => {

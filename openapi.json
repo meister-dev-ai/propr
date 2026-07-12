@@ -15856,9 +15856,6 @@
           "commentResolutionBehavior": {
             "$ref": "#/components/schemas/CommentResolutionBehavior"
           },
-          "defaultReviewStrategy": {
-            "$ref": "#/components/schemas/ReviewStrategy"
-          },
           "customSystemMessage": {
             "type": "string",
             "nullable": true
@@ -16659,9 +16656,6 @@
           "tenantId": {
             "type": "string",
             "format": "uuid"
-          },
-          "defaultReviewStrategy": {
-            "$ref": "#/components/schemas/ReviewStrategy"
           }
         },
         "additionalProperties": false,
@@ -17073,9 +17067,6 @@
           "aiModel": {
             "type": "string",
             "nullable": true
-          },
-          "resolvedReviewStrategy": {
-            "$ref": "#/components/schemas/ReviewStrategy"
           }
         },
         "additionalProperties": false,
@@ -17473,9 +17464,6 @@
               "$ref": "#/components/schemas/ReviewPassEntry"
             },
             "nullable": true
-          },
-          "defaultReviewStrategy": {
-            "$ref": "#/components/schemas/ReviewStrategy"
           }
         },
         "additionalProperties": false,
@@ -17535,9 +17523,6 @@
               "$ref": "#/components/schemas/TokenBreakdownEntry"
             },
             "nullable": true
-          },
-          "resolvedReviewStrategy": {
-            "$ref": "#/components/schemas/ReviewStrategy"
           }
         },
         "additionalProperties": false,
@@ -19869,16 +19854,6 @@
         "type": "string",
         "description": "Deterministic classification of where a review comment's anchor line falls relative to the\npull request's changed-line ranges for its file. Provenance metadata only — it does not\nparticipate in deduplication and is null when the comment could not be\nclassified (unknown line or a file with no resolvable changed ranges)."
       },
-      "ReviewComparisonMode": {
-        "enum": [
-          "single",
-          "sideBySideInternal",
-          "shadow",
-          "replay"
-        ],
-        "type": "string",
-        "description": "Controls whether one or more review strategies execute against a PR snapshot."
-      },
       "ReviewJobAcceptedResponse": {
         "type": "object",
         "properties": {
@@ -19905,24 +19880,6 @@
           },
           "reviewRevision": {
             "$ref": "#/components/schemas/ReviewRevisionRefDto"
-          },
-          "resolvedReviewStrategy": {
-            "$ref": "#/components/schemas/ReviewStrategy"
-          },
-          "strategySelectionSource": {
-            "$ref": "#/components/schemas/ReviewStrategySelectionSource"
-          },
-          "comparisonMode": {
-            "$ref": "#/components/schemas/ReviewComparisonMode"
-          },
-          "publicationMode": {
-            "$ref": "#/components/schemas/ReviewPublicationMode"
-          },
-          "comparisonGroupId": {
-            "type": "string",
-            "description": "Comparison group identifier when this job participates in one.",
-            "format": "uuid",
-            "nullable": true
           }
         },
         "additionalProperties": false,
@@ -20055,12 +20012,6 @@
             "description": "Pull request number for the parent review job.",
             "format": "int32"
           },
-          "resolvedReviewStrategy": {
-            "$ref": "#/components/schemas/ReviewStrategy"
-          },
-          "strategySelectionSource": {
-            "$ref": "#/components/schemas/ReviewStrategySelectionSource"
-          },
           "fileOutcome": {
             "$ref": "#/components/schemas/ProtocolFileOutcomeDto"
           },
@@ -20097,7 +20048,7 @@
           },
           "passKind": {
             "type": "string",
-            "description": "The kind of review pass — the `ReviewPassKind` name (e.g. `\"Baseline\"`,\n`\"ProRVAugmentation\"`). null for legacy rows and passes with no\nmeaningful kind (e.g. synthesis, which the UI derives from MeisterProPR.Application.DTOs.ReviewJobProtocolDto.Label).",
+            "description": "The kind of review pass — the `ReviewPassKind` name (e.g. `\"Baseline\"`,\n`\"MultiPassUnion\"`). null for legacy rows and passes with no\nmeaningful kind (e.g. synthesis, which the UI derives from MeisterProPR.Application.DTOs.ReviewJobProtocolDto.Label).",
             "nullable": true
           },
           "reason": {
@@ -20238,6 +20189,15 @@
             "type": "string",
             "description": "Optional specialist lens for this pass (e.g. `security`); null is an ordinary\nresample pass. A lens pass runs a specialist prompt scoped to the files that lens targets.",
             "nullable": true
+          },
+          "scope": {
+            "type": "string",
+            "description": "Optional scope for this pass; null is the per-file default and `pr_wide` runs the pass\nat the job level rather than per file.",
+            "nullable": true
+          },
+          "shadow": {
+            "type": "boolean",
+            "description": "Whether this pass runs in shadow mode. Additive metadata the runtime does not act on yet."
           }
         },
         "additionalProperties": false,
@@ -20282,15 +20242,6 @@
         ],
         "type": "string",
         "description": "Indicates whether the effective review profile comes from the client or the system default."
-      },
-      "ReviewPublicationMode": {
-        "enum": [
-          "publish",
-          "dryRun",
-          "internalOnly"
-        ],
-        "type": "string",
-        "description": "Controls whether a strategy run is allowed to publish review findings."
       },
       "ReviewRepositoryRefDto": {
         "type": "object",
@@ -20444,49 +20395,12 @@
           "reviewRevision": {
             "$ref": "#/components/schemas/ReviewRevisionRefDto"
           },
-          "resolvedReviewStrategy": {
-            "$ref": "#/components/schemas/ReviewStrategy"
-          },
-          "strategySelectionSource": {
-            "$ref": "#/components/schemas/ReviewStrategySelectionSource"
-          },
-          "comparisonMode": {
-            "$ref": "#/components/schemas/ReviewComparisonMode"
-          },
-          "publicationMode": {
-            "$ref": "#/components/schemas/ReviewPublicationMode"
-          },
-          "comparisonGroupId": {
-            "type": "string",
-            "description": "Comparison group identifier when this job participates in one.",
-            "format": "uuid",
-            "nullable": true
-          },
           "workspace": {
             "$ref": "#/components/schemas/ReviewWorkspaceStatusDto"
           }
         },
         "additionalProperties": false,
         "description": "Detailed status response for a review job."
-      },
-      "ReviewStrategy": {
-        "enum": [
-          "fileByFile",
-          "prWideAgentic",
-          "agenticFileByFile"
-        ],
-        "type": "string",
-        "description": "Selectable strategy used to generate review findings for a job."
-      },
-      "ReviewStrategySelectionSource": {
-        "enum": [
-          "fallbackDefault",
-          "clientDefault",
-          "jobOverride",
-          "fallback"
-        ],
-        "type": "string",
-        "description": "Explains why a review job selected its final review strategy."
       },
       "ReviewWorkspaceStatusDto": {
         "type": "object",
@@ -20599,15 +20513,6 @@
           },
           "requestedReviewerIdentity": {
             "$ref": "#/components/schemas/ReviewReviewerIdentityDto"
-          },
-          "reviewStrategy": {
-            "$ref": "#/components/schemas/ReviewStrategy"
-          },
-          "comparisonMode": {
-            "$ref": "#/components/schemas/ReviewComparisonMode"
-          },
-          "publicationMode": {
-            "$ref": "#/components/schemas/ReviewPublicationMode"
           }
         },
         "additionalProperties": false,

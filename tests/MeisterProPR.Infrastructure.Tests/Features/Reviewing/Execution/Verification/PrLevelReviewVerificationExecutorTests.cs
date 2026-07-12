@@ -269,6 +269,65 @@ public sealed class PrLevelReviewVerificationExecutorTests
         Assert.Equal("Variant verification user", userMessage.Text);
     }
 
+    [Fact]
+    public async Task ApplyAsync_WhenVerifierRuns_PreservesScopeRelationOnRebuiltFinding()
+    {
+        // The executor rebuilds each finding to attach its VerificationOutcome. The changed-line ScopeRelation must
+        // survive that rebuild: dropping it strips the anchor the PR-wide gate needs to publish, which silently
+        // demotes every verified PR-wide finding to summary-only. This exercises the real rebuild path (>=1 claim,
+        // evidence collected, verifier invoked) rather than the empty-claim short-circuit that returns the input
+        // untouched — the NotNull outcome and NotSame assertions below confirm the finding was reconstructed.
+        var claim = CreateClaim("finding-scope-001");
+        var extractor = Substitute.For<IReviewClaimExtractor>();
+        extractor.ExtractClaims(Arg.Any<CandidateReviewFinding>()).Returns([claim]);
+
+        var collector = Substitute.For<IReviewEvidenceCollector>();
+        collector.CollectEvidenceAsync(Arg.Any<VerificationWorkItem>(), Arg.Any<IReviewContextTools?>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns(
+                new EvidenceBundle(
+                    claim.ClaimId,
+                    [
+                        new EvidenceItem("file_content", "Foo registration", "src/Foo.cs"),
+                        new EvidenceItem("file_content", "Bar registration", "src/Bar.cs"),
+                    ],
+                    EvidenceBundle.CompleteCoverage));
+
+        var chatClient = Substitute.For<IChatClient>();
+        chatClient.GetResponseAsync(Arg.Any<IList<ChatMessage>>(), Arg.Any<ChatOptions?>(), Arg.Any<CancellationToken>())
+            .Returns(
+                new ChatResponse(
+                    new ChatMessage(
+                        ChatRole.Assistant,
+                        "{\"verdict\":\"supported\",\"recommended_disposition\":\"Publish\",\"summary\":\"Repository evidence confirms the claim.\"}")));
+
+        var sut = new PrLevelReviewVerificationExecutor(extractor, collector, CreateProtocolRecorder(), new AiReviewOptions { ModelId = "fallback-model" });
+        var reviewContext = new ReviewSystemContext(null, [], null)
+        {
+            DefaultReviewChatClient = chatClient,
+            DefaultReviewModelId = "micro-model",
+        };
+
+        var finding = new CandidateReviewFinding(
+            "finding-scope-001",
+            new CandidateFindingProvenance(CandidateFindingProvenance.PrWidePassOrigin, "pr_wide_pass"),
+            CommentSeverity.Warning,
+            "Cross-file registration is missing on a changed line.",
+            CandidateReviewFinding.CrossCuttingCategory,
+            "src/Foo.cs",
+            12,
+            new EvidenceReference([], ["src/Foo.cs"], EvidenceReference.PartialState, "pr_wide_synthesis"),
+            "Potential cross-file registration gap.",
+            scopeRelation: ChangedLineRelation.OnChangedLine);
+
+        var result = await sut.ApplyAsync([finding], reviewContext, "feature/x", null, null, CancellationToken.None);
+
+        var verifiedFinding = Assert.Single(result);
+        Assert.Equal(ChangedLineRelation.OnChangedLine, verifiedFinding.ScopeRelation);
+        Assert.NotNull(verifiedFinding.VerificationOutcome);
+        Assert.Equal(FinalGateDecision.PublishDisposition, verifiedFinding.VerificationOutcome!.RecommendedDisposition);
+        Assert.NotSame(finding, verifiedFinding);
+    }
+
     private static ClaimDescriptor CreateClaim(string findingId)
     {
         return new ClaimDescriptor(

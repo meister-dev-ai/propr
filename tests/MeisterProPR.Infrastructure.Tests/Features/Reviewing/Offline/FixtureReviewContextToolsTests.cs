@@ -338,7 +338,7 @@ public sealed class FixtureReviewContextToolsTests
         using var provider = services.BuildServiceProvider();
         using var scope = provider.CreateScope();
 
-        Assert.NotNull(scope.ServiceProvider.GetRequiredService<IReviewStrategyDispatcher>());
+        Assert.NotNull(scope.ServiceProvider.GetRequiredService<IFileByFileReviewOrchestrator>());
         Assert.NotNull(scope.ServiceProvider.GetRequiredService<IReviewPipelineProfileProvider>());
     }
 

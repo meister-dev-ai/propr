@@ -10,7 +10,5 @@ public static class ReviewPipelineProfileCatalog
     public const string FileByFileCalmProfileId = "file-by-file-calm";
     public const string FileByFileBalancedProfileId = "file-by-file-balanced";
     public const string FileByFileAssertiveProfileId = "file-by-file-assertive";
-    public const string AgenticBaselineProfileId = "agentic-baseline";
-    public const string AgenticExperimentalProfileId = "agentic-experimental";
     public const string PrWideBaselineProfileId = "pr-wide-baseline";
 }

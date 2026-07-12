@@ -125,7 +125,7 @@ public sealed partial class PrCrawlService(
                 pr.CodeReview.Number,
                 pr.RevisionId);
 
-            job.SelectReviewStrategy(await this.ResolveStrategySelectionAsync(config.ClientId, cancellationToken));
+            job.SetReviewPipelineProfile(await this.ResolveReviewPipelineProfileIdAsync(config.ClientId, cancellationToken));
 
             if (config.ReviewTemperature.HasValue)
             {
@@ -460,46 +460,17 @@ public sealed partial class PrCrawlService(
         return new ResolvedReviewer(configuredTriggerReviewer, ResolveReviewerId(effectiveReviewer));
     }
 
-    private async Task<ReviewStrategySelection> ResolveStrategySelectionAsync(Guid clientId, CancellationToken ct)
+    private async Task<string> ResolveReviewPipelineProfileIdAsync(Guid clientId, CancellationToken ct)
     {
+        string? configuredProfileId = null;
         if (clientRegistry is not null)
         {
-            var clientDefault = await clientRegistry.GetDefaultReviewStrategyAsync(clientId, ct);
-            var clientDefaultProfileId = await clientRegistry.GetDefaultReviewPipelineProfileIdAsync(clientId, ct);
-            if (clientDefault.HasValue)
-            {
-                EnsureStrategySelectable(clientDefault.Value, "client default");
-                return new ReviewStrategySelection(
-                    clientDefault.Value,
-                    ReviewStrategySelectionSource.ClientDefault,
-                    ReviewComparisonMode.Single,
-                    ReviewPublicationMode.Publish,
-                    null,
-                    ResolvePipelineProfileId(clientDefault.Value, clientDefaultProfileId));
-            }
-        }
-
-        return ReviewStrategySelection.Default with { PipelineProfileId = ReviewPipelineProfileCatalog.FileByFileBalancedProfileId };
-    }
-
-    private static string? ResolvePipelineProfileId(ReviewStrategy strategy, string? configuredProfileId)
-    {
-        if (strategy != ReviewStrategy.FileByFile)
-        {
-            return null;
+            configuredProfileId = await clientRegistry.GetDefaultReviewPipelineProfileIdAsync(clientId, ct);
         }
 
         return string.IsNullOrWhiteSpace(configuredProfileId)
             ? ReviewPipelineProfileCatalog.FileByFileBalancedProfileId
             : configuredProfileId;
-    }
-
-    private static void EnsureStrategySelectable(ReviewStrategy strategy, string source)
-    {
-        if (!ReviewStrategyPolicy.IsSelectable(strategy))
-        {
-            throw new InvalidOperationException($"{ReviewStrategyPolicy.GetDisabledSelectionMessage(strategy)} Selection source: {source}.");
-        }
     }
 
     private static Guid? ResolveReviewerId(ReviewerIdentity? reviewer)

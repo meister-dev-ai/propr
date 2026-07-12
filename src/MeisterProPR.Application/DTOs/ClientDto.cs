@@ -15,7 +15,6 @@ public sealed record ClientDto(
     bool IsActive,
     DateTimeOffset CreatedAt,
     CommentResolutionBehavior CommentResolutionBehavior,
-    ReviewStrategy DefaultReviewStrategy,
     string? CustomSystemMessage,
     string? DefaultReviewPipelineProfileId,
     DateTimeOffset? DefaultReviewPipelineProfileUpdatedAtUtc,
@@ -34,7 +33,9 @@ public sealed record ClientDto(
 
 /// <summary>
 ///     One entry in a client's ordered review-pass list: an additional multi-pass union pass bound to a configured
-///     model, with an optional specialist lens. <see cref="Ordinal" /> is the zero-based position after the implicit
-///     tier baseline pass; <see cref="Lens" /> is <see langword="null" /> for an ordinary resample pass.
+///     model, with an optional specialist lens, an optional scope, and a shadow flag. <see cref="Ordinal" /> is the
+///     zero-based position after the implicit tier baseline pass; <see cref="Lens" /> is <see langword="null" /> for an
+///     ordinary resample pass; <see cref="Scope" /> is <see langword="null" /> for the per-file default; <see
+///     cref="Shadow" /> is additive metadata the runtime does not act on yet.
 /// </summary>
-public sealed record ReviewPassDto(int Ordinal, Guid ConfiguredModelId, string? Lens = null);
+public sealed record ReviewPassDto(int Ordinal, Guid ConfiguredModelId, string? Lens = null, string? Scope = null, bool Shadow = false);

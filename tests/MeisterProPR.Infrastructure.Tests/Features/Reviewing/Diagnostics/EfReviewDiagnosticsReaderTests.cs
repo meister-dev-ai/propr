@@ -9,7 +9,6 @@ using MeisterProPR.Domain.ValueObjects;
 using MeisterProPR.Infrastructure.Data;
 using MeisterProPR.Infrastructure.Features.Reviewing.Diagnostics.Persistence;
 using MeisterProPR.Infrastructure.Features.Reviewing.Execution.Strategies;
-using MeisterProPR.Infrastructure.Features.Reviewing.Execution.Strategies.AgenticFileByFile;
 using MeisterProPR.Infrastructure.Repositories;
 using MeisterProPR.Infrastructure.Tests.Fixtures;
 using Microsoft.EntityFrameworkCore;
@@ -24,12 +23,6 @@ public sealed class EfReviewDiagnosticsReaderTests
     public async Task GetJobProtocolAsync_WhenJobUsesAgenticFileByFile_ProjectsStrategyContextAndFileOutcome()
     {
         var job = new ReviewJob(Guid.NewGuid(), Guid.NewGuid(), "https://dev.azure.com/org", "proj", "repo", 11, 2);
-        job.SelectReviewStrategy(
-            ReviewStrategy.AgenticFileByFile,
-            ReviewStrategySelectionSource.ClientDefault,
-            ReviewComparisonMode.Single,
-            ReviewPublicationMode.Publish,
-            null);
 
         var fileResult = new ReviewFileResult(job.Id, "src/Foo.cs");
         fileResult.MarkCompleted("Per-file summary", []);
@@ -82,8 +75,6 @@ public sealed class EfReviewDiagnosticsReaderTests
 
         Assert.NotNull(result);
         var returnedProtocol = Assert.Single(result!.Protocols);
-        Assert.Equal(ReviewStrategy.AgenticFileByFile, returnedProtocol.ResolvedReviewStrategy);
-        Assert.Equal(ReviewStrategySelectionSource.ClientDefault, returnedProtocol.StrategySelectionSource);
         Assert.Equal(ScmProvider.AzureDevOps, returnedProtocol.Provider);
         Assert.Equal("https://dev.azure.com/org", returnedProtocol.ProviderScopePath);
         Assert.Equal("proj", returnedProtocol.ProviderProjectKey);
@@ -381,12 +372,6 @@ public sealed class EfReviewDiagnosticsReaderTests
     public async Task GetJobProtocolAsync_WhenAgenticStageBTraceIncludesRuntimeStatuses_PreservesStatusPayload(string runtimeStatus)
     {
         var job = new ReviewJob(Guid.NewGuid(), Guid.NewGuid(), "https://dev.azure.com/org", "proj", "repo", 12, 1);
-        job.SelectReviewStrategy(
-            ReviewStrategy.AgenticFileByFile,
-            ReviewStrategySelectionSource.ClientDefault,
-            ReviewComparisonMode.Single,
-            ReviewPublicationMode.Publish,
-            null);
 
         var fileResult = new ReviewFileResult(job.Id, "src/Foo.cs");
         fileResult.MarkCompleted("Per-file summary", []);
@@ -437,12 +422,6 @@ public sealed class EfReviewDiagnosticsReaderTests
     public async Task GetJobProtocolAsync_WhenFileProtocolContainsFollowUpEvents_ProjectsFollowUpUsageTriggerCompletionAndDependency()
     {
         var job = new ReviewJob(Guid.NewGuid(), Guid.NewGuid(), "https://dev.azure.com/org", "proj", "repo", 15, 1);
-        job.SelectReviewStrategy(
-            ReviewStrategy.AgenticFileByFile,
-            ReviewStrategySelectionSource.ClientDefault,
-            ReviewComparisonMode.Single,
-            ReviewPublicationMode.Publish,
-            null);
 
         var fileResult = new ReviewFileResult(job.Id, "src/Foo.cs");
         fileResult.MarkCompleted("Per-file summary", []);
@@ -522,12 +501,6 @@ public sealed class EfReviewDiagnosticsReaderTests
     public async Task GetJobProtocolAsync_WhenProtocolContainsRepeatedJudgmentDecision_ProjectsDecisionDetails()
     {
         var job = new ReviewJob(Guid.NewGuid(), Guid.NewGuid(), "https://dev.azure.com/org", "proj", "repo", 16, 1);
-        job.SelectReviewStrategy(
-            ReviewStrategy.AgenticFileByFile,
-            ReviewStrategySelectionSource.ClientDefault,
-            ReviewComparisonMode.Single,
-            ReviewPublicationMode.Publish,
-            null);
 
         var protocol = new ReviewJobProtocol
         {
@@ -579,13 +552,6 @@ public sealed class EfReviewDiagnosticsReaderTests
     public async Task GetJobProtocolAsync_WhenProtocolContainsProRvEvents_ProjectsProRvVisibility()
     {
         var job = new ReviewJob(Guid.NewGuid(), Guid.NewGuid(), "https://dev.azure.com/org", "proj", "repo", 17, 1);
-        job.SelectReviewStrategy(
-            ReviewStrategy.AgenticFileByFile,
-            ReviewStrategySelectionSource.ClientDefault,
-            ReviewComparisonMode.Single,
-            ReviewPublicationMode.Publish,
-            null,
-            ReviewPipelineProfileProvider.AgenticBaselineProfileId);
 
         var fileResult = new ReviewFileResult(job.Id, "src/Foo.cs");
         fileResult.MarkCompleted("Per-file summary", []);
@@ -613,7 +579,7 @@ public sealed class EfReviewDiagnosticsReaderTests
                 OccurredAt = DateTimeOffset.UtcNow.AddSeconds(-4),
                 InputTextSample = "{\"filePath\":\"src/Foo.cs\",\"profileId\":\"agentic-baseline\",\"strategy\":\"AgenticFileByFile\"}",
                 OutputSummary =
-                    $"{{\"profileId\":\"agentic-baseline\",\"dispatchStageIds\":[\"{"agentic.prorv-prefilter"}\"],\"perFileStageIds\":[\"{AgenticConfidenceFloorStage.StageIdConstant}\"],\"finalizationStageIds\":[\"{ReviewPipelineProfileProvider.FinalizeStageFamilyId}\"]}}",
+                    $"{{\"profileId\":\"agentic-baseline\",\"dispatchStageIds\":[\"{"agentic.prorv-prefilter"}\"],\"perFileStageIds\":[\"agentic.confidence-floor\"],\"finalizationStageIds\":[\"{ReviewPipelineProfileProvider.FinalizeStageFamilyId}\"]}}",
             });
         protocol.Events.Add(
             new ProtocolEvent
@@ -695,12 +661,6 @@ public sealed class EfReviewDiagnosticsReaderTests
     public async Task GetJobProtocolAsync_WhenCurrentJobContainsResumedFileResult_IncludesInheritedSourceProtocol()
     {
         var sourceJob = new ReviewJob(Guid.NewGuid(), Guid.NewGuid(), "https://dev.azure.com/org", "proj", "repo", 27, 3);
-        sourceJob.SelectReviewStrategy(
-            ReviewStrategy.AgenticFileByFile,
-            ReviewStrategySelectionSource.ClientDefault,
-            ReviewComparisonMode.Single,
-            ReviewPublicationMode.Publish,
-            null);
 
         var sourceFileResult = new ReviewFileResult(sourceJob.Id, "src/Inherited.cs");
         sourceFileResult.MarkCompleted(
@@ -764,12 +724,6 @@ public sealed class EfReviewDiagnosticsReaderTests
         sourceJob.Protocols.Add(sourceProtocol);
 
         var currentJob = new ReviewJob(Guid.NewGuid(), sourceJob.ClientId, "https://dev.azure.com/org", "proj", "repo", 27, 3);
-        currentJob.SelectReviewStrategy(
-            ReviewStrategy.AgenticFileByFile,
-            ReviewStrategySelectionSource.ClientDefault,
-            ReviewComparisonMode.Single,
-            ReviewPublicationMode.Publish,
-            null);
 
         var freshProtocol = new ReviewJobProtocol
         {
@@ -883,12 +837,6 @@ public sealed class EfReviewDiagnosticsReaderTests
         }
 
         var currentJob = new ReviewJob(currentJobId, currentClientId, "https://dev.azure.com/org", "proj", "repo", 55, 1);
-        currentJob.SelectReviewStrategy(
-            ReviewStrategy.AgenticFileByFile,
-            ReviewStrategySelectionSource.ClientDefault,
-            ReviewComparisonMode.Single,
-            ReviewPublicationMode.Publish,
-            null);
 
         var freshProtocol = new ReviewJobProtocol
         {
@@ -1167,12 +1115,6 @@ public sealed class EfReviewDiagnosticsReaderTests
         await using (var seedDb = new MeisterProPRDbContext(options))
         {
             var job = new ReviewJob(jobId, clientId, "https://dev.azure.com/org", "proj", "repo", 91, 1);
-            job.SelectReviewStrategy(
-                ReviewStrategy.AgenticFileByFile,
-                ReviewStrategySelectionSource.ClientDefault,
-                ReviewComparisonMode.Single,
-                ReviewPublicationMode.Publish,
-                null);
             seedDb.ReviewJobs.Add(job);
 
             seedDb.ReviewJobProtocols.Add(

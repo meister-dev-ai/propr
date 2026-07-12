@@ -218,8 +218,7 @@ public sealed class InMemoryReviewJobRepository : IJobRepository
                 job.PrSourceBranch,
                 job.PrTargetBranch,
                 job.PrRepositoryName,
-                job.AiModel,
-                job.ReviewStrategy))
+                job.AiModel))
             .ToList()
             .AsReadOnly();
         return Task.FromResult<(int total, IReadOnlyList<JobListPageItemDto> items)>((ordered.Count, page));

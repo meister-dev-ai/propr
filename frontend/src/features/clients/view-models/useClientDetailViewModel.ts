@@ -21,7 +21,6 @@ const detailTabs = [
 ] as const
 
 export type DetailTab = (typeof detailTabs)[number]
-type ReviewStrategy = components['schemas']['ReviewStrategy']
 export type ReviewPassEntry = components['schemas']['ReviewPassEntry']
 
 export interface ClientDetailDto {
@@ -29,7 +28,6 @@ export interface ClientDetailDto {
   displayName: string
   isActive: boolean
   createdAt: string
-  defaultReviewStrategy?: ReviewStrategy
   defaultReviewPipelineProfileId?: string | null
   defaultReviewPipelineProfileUpdatedAtUtc?: string | null
   scmCommentPostingEnabled: boolean
@@ -62,7 +60,6 @@ export interface ClientDetailViewModel {
   saveError: Ref<string>
   showDeleteDialog: Ref<boolean>
   editedDisplayName: Ref<string>
-  editedDefaultReviewStrategy: Ref<ReviewStrategy>
   editedDefaultReviewPipelineProfileId: Ref<string>
   editedScmCommentPostingEnabled: Ref<boolean>
   editedEnableEvidenceBackedVerification: Ref<boolean>
@@ -151,15 +148,22 @@ function isDetailTab(value: string): value is DetailTab {
 
 /** Normalizes a persisted review-pass list into a stable, ordinal-sorted list with
  * contiguous zero-based ordinals so the edited list and the server echo compare cleanly.
- * Each pass keeps its optional lens (null is an ordinary resample pass) so the lens is
- * sent to the server and counts toward the dirty check. Entries with an empty/missing
- * configuredModelId are dropped — a half-configured row is never sent to the server
- * (which would reject it) and never counts toward the dirty check. */
+ * Each pass keeps its optional lens (null is an ordinary resample pass), optional scope
+ * (null is the per-file default), and shadow flag so all three are sent to the server and
+ * count toward the dirty check. Entries with an empty/missing configuredModelId are dropped
+ * — a half-configured row is never sent to the server (which would reject it) and never
+ * counts toward the dirty check. */
 export function normalizeReviewPasses(passes: ReviewPassEntry[] | null | undefined): ReviewPassEntry[] {
   return [...(passes ?? [])]
     .filter((pass) => (pass.configuredModelId ?? '') !== '')
     .sort((left, right) => (left.ordinal ?? 0) - (right.ordinal ?? 0))
-    .map((pass, index) => ({ ordinal: index, configuredModelId: pass.configuredModelId ?? '', lens: pass.lens ?? null }))
+    .map((pass, index) => ({
+      ordinal: index,
+      configuredModelId: pass.configuredModelId ?? '',
+      lens: pass.lens ?? null,
+      scope: pass.scope ?? null,
+      shadow: pass.shadow ?? false,
+    }))
 }
 
 /** Pulls a human-readable message out of an ASP.NET ValidationProblem body, preferring the specific
@@ -197,7 +201,7 @@ function isFailedPatch(result: { data?: unknown; error?: unknown; response?: Res
   return !!result.error || !result.data || (result.response !== undefined && result.response.ok === false)
 }
 
-/** Two pass lists are equal when they carry the same ordered (configured-model id, lens) pairs. */
+/** Two pass lists are equal when they carry the same ordered (configured-model id, lens, scope, shadow) tuples. */
 export function reviewPassesEqual(left: ReviewPassEntry[], right: ReviewPassEntry[]): boolean {
   if (left.length !== right.length) {
     return false
@@ -206,7 +210,9 @@ export function reviewPassesEqual(left: ReviewPassEntry[], right: ReviewPassEntr
   return left.every(
     (pass, index) =>
       (pass.configuredModelId ?? '') === (right[index]?.configuredModelId ?? '') &&
-      (pass.lens ?? null) === (right[index]?.lens ?? null),
+      (pass.lens ?? null) === (right[index]?.lens ?? null) &&
+      (pass.scope ?? null) === (right[index]?.scope ?? null) &&
+      (pass.shadow ?? false) === (right[index]?.shadow ?? false),
   )
 }
 
@@ -232,7 +238,6 @@ export function useClientDetailViewModel(options: UseClientDetailViewModelOption
   const saveError = ref('')
   const showDeleteDialog = ref(false)
   const editedDisplayName = ref('')
-  const editedDefaultReviewStrategy = ref<ReviewStrategy>('fileByFile')
   const editedDefaultReviewPipelineProfileId = ref('file-by-file-balanced')
   const editedScmCommentPostingEnabled = ref(true)
   const editedEnableEvidenceBackedVerification = ref(false)
@@ -282,7 +287,6 @@ export function useClientDetailViewModel(options: UseClientDetailViewModelOption
 
     client.value = nextClient
     editedDisplayName.value = nextClient.displayName
-    editedDefaultReviewStrategy.value = nextClient.defaultReviewStrategy ?? 'fileByFile'
     editedDefaultReviewPipelineProfileId.value = nextClient.defaultReviewPipelineProfileId ?? 'file-by-file-balanced'
     editedScmCommentPostingEnabled.value = Boolean(nextClient.scmCommentPostingEnabled)
     editedEnableEvidenceBackedVerification.value = Boolean(nextClient.enableEvidenceBackedVerification)
@@ -442,7 +446,6 @@ export function useClientDetailViewModel(options: UseClientDetailViewModelOption
     saveError.value = ''
     try {
       const patchBody: Record<string, unknown> = {
-        defaultReviewStrategy: editedDefaultReviewStrategy.value,
         scmCommentPostingEnabled: editedScmCommentPostingEnabled.value,
         enableEvidenceBackedVerification: editedEnableEvidenceBackedVerification.value,
         enableMultiPassUnion: editedEnableMultiPassUnion.value,
@@ -505,8 +508,7 @@ export function useClientDetailViewModel(options: UseClientDetailViewModelOption
         editedEnableEvidenceBackedVerification.value !== Boolean(client.value.enableEvidenceBackedVerification) ||
         editedEnableMultiPassUnion.value !== Boolean(client.value.enableMultiPassUnion) ||
         editedEnableLanguageRobustScreening.value !== Boolean(client.value.enableLanguageRobustScreening) ||
-        !reviewPassesEqual(editedReviewPasses.value, normalizeReviewPasses(client.value.reviewPasses)) ||
-        editedDefaultReviewStrategy.value !== (client.value.defaultReviewStrategy ?? 'fileByFile')
+        !reviewPassesEqual(editedReviewPasses.value, normalizeReviewPasses(client.value.reviewPasses))
       )
     )
   }
@@ -539,7 +541,6 @@ export function useClientDetailViewModel(options: UseClientDetailViewModelOption
     saveError,
     showDeleteDialog,
     editedDisplayName,
-    editedDefaultReviewStrategy,
     editedDefaultReviewPipelineProfileId,
     editedScmCommentPostingEnabled,
     editedEnableEvidenceBackedVerification,

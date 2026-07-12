@@ -61,6 +61,7 @@ public sealed class ReviewPromptsTemplateBackedPrWideTests
 
         Assert.Contains("Stage C of a PR-wide agentic review workflow", prompt, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("candidate_summary_text", prompt, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("name those other files", prompt, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]

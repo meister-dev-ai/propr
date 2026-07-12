@@ -15,6 +15,7 @@ public static class ReviewProtocolEventNames
     public const string MultiPassUnionCompleted = "multi_pass_union_completed";
     public const string MultiPassUnionSkipped = "multi_pass_union_skipped";
     public const string MultiPassUnionPassSkipped = "multi_pass_union_pass_skipped";
+    public const string PassShadowCompleted = "pass_shadow_completed";
     public const string CommentScreeningDisposition = "comment_screening_disposition";
     public const string CommentScreeningDegraded = "comment_screening_degraded";
     public const string CommentInfoStripped = "comment_info_stripped";

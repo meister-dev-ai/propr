@@ -4,6 +4,7 @@
 using MeisterProPR.Application.Features.Reviewing.Diagnostics.Ports;
 using MeisterProPR.Application.Features.Reviewing.Execution.Models;
 using MeisterProPR.Application.Features.Reviewing.Execution.Ports;
+using MeisterProPR.Application.Features.Reviewing.Execution.Strategies.Ports;
 using MeisterProPR.Application.Interfaces;
 using MeisterProPR.Application.ValueObjects;
 using MeisterProPR.Domain.Entities;
@@ -26,7 +27,7 @@ public sealed class ReviewWorkflowRunner(
     IRepositoryInstructionFetcher instructionFetcher,
     IRepositoryExclusionFetcher exclusionFetcher,
     IRepositoryInstructionEvaluator instructionEvaluator,
-    IReviewStrategyDispatcher reviewStrategyDispatcher,
+    IFileByFileReviewOrchestrator fileByFileReviewOrchestrator,
     IReviewRepositoryWorkspaceManager? workspaceManager = null,
     IEnumerable<BoundaryIssueReport>? boundaryIssues = null,
     IOfflineTierModelAccessor? tierModelAccessor = null) : IReviewWorkflowRunner
@@ -173,16 +174,20 @@ public sealed class ReviewWorkflowRunner(
                     request.Configuration?.ModelSelection.ModelId);
             }
 
+            if (!string.IsNullOrWhiteSpace(request.PipelineProfileId))
+            {
+                job.SetReviewPipelineProfile(request.PipelineProfileId);
+            }
+
             ReviewResult result;
             try
             {
-                result = await reviewStrategyDispatcher.ReviewAsync(
+                result = await fileByFileReviewOrchestrator.ReviewAsync(
                     job,
                     pullRequest,
                     context,
                     cancellationToken,
-                    request.ChatClient,
-                    request.PipelineProfileId);
+                    request.ChatClient);
             }
             finally
             {

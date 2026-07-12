@@ -207,11 +207,6 @@ public sealed partial class ReviewJobsController(
             Repository = MapRepository(status.Repository),
             CodeReview = MapCodeReview(status.CodeReview),
             ReviewRevision = MapReviewRevision(status.ReviewRevision),
-            ResolvedReviewStrategy = status.ResolvedReviewStrategy,
-            StrategySelectionSource = status.StrategySelectionSource,
-            ComparisonMode = status.ComparisonMode,
-            PublicationMode = status.PublicationMode,
-            ComparisonGroupId = status.ComparisonGroupId,
             Workspace = status.Workspace is null
                 ? null
                 : new ReviewWorkspaceStatusDto(
@@ -236,14 +231,7 @@ public sealed partial class ReviewJobsController(
             request.Host?.HostBaseUrl,
             MapRepository(request.Repository),
             MapCodeReview(request.CodeReview),
-            MapReviewRevision(request.ReviewRevision))
-        {
-            ResolvedReviewStrategy = result.ResolvedReviewStrategy,
-            StrategySelectionSource = result.StrategySelectionSource,
-            ComparisonMode = result.ComparisonMode,
-            PublicationMode = result.PublicationMode,
-            ComparisonGroupId = result.ComparisonGroupId,
-        };
+            MapReviewRevision(request.ReviewRevision));
     }
 
     private static bool TryMapRequest(
@@ -302,12 +290,6 @@ public sealed partial class ReviewJobsController(
         if (request.CodeReview is null)
         {
             validationError = "Code review details are required.";
-            return false;
-        }
-
-        if (request.ReviewStrategy.HasValue && !ReviewStrategyPolicy.IsSelectable(request.ReviewStrategy.Value))
-        {
-            validationError = ReviewStrategyPolicy.GetDisabledSelectionMessage(request.ReviewStrategy.Value);
             return false;
         }
 
@@ -375,9 +357,6 @@ public sealed partial class ReviewJobsController(
             CodeReview = codeReview,
             ReviewRevision = reviewRevision,
             RequestedReviewerIdentity = requestedReviewerIdentity,
-            ReviewStrategy = request.ReviewStrategy,
-            ComparisonMode = request.ComparisonMode,
-            PublicationMode = request.PublicationMode,
         };
 
         return true;

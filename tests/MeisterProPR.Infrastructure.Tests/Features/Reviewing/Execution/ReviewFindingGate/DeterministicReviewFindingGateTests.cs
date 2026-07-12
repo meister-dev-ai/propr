@@ -39,6 +39,216 @@ public sealed class DeterministicReviewFindingGateTests
             scopeRelation: scopeRelation);
     }
 
+    private static CandidateReviewFinding CreatePrWideFinding(
+        string findingId,
+        string message,
+        EvidenceReference? evidence = null,
+        string? candidateSummaryText = null,
+        string? filePath = null,
+        int? lineNumber = null,
+        VerificationOutcome? verificationOutcome = null,
+        ChangedLineRelation? scopeRelation = null,
+        IReadOnlyDictionary<string, string>? invariantCheckContext = null)
+    {
+        return new CandidateReviewFinding(
+            findingId,
+            new CandidateFindingProvenance(CandidateFindingProvenance.PrWidePassOrigin, "pr_wide_pass"),
+            CommentSeverity.Warning,
+            message,
+            CandidateReviewFinding.CrossCuttingCategory,
+            filePath,
+            lineNumber,
+            evidence,
+            candidateSummaryText,
+            invariantCheckContext,
+            verificationOutcome,
+            scopeRelation);
+    }
+
+    [Fact]
+    public async Task EvaluateAsync_PrWideVerifierDeclinedWithResolvedEvidenceAndAnchor_AssignsSummaryOnly()
+    {
+        // Regression guard: resolved multi-file evidence must NOT override a declining verifier. Only the bounded
+        // PR-verifier's Publish verdict earns publication, so a declining verdict stays summary-only even with two
+        // supporting files and a changed-line anchor.
+        var sut = new DeterministicReviewFindingGate();
+        var outcome = new VerificationOutcome(
+            "claim-prw-001",
+            "finding-prw-02-001",
+            VerificationOutcome.UnresolvedKind,
+            FinalGateDecision.SummaryOnlyDisposition,
+            [ReviewFindingGateReasonCodes.MissingVerifiedClaimSupport],
+            [],
+            VerificationOutcome.WeakEvidence,
+            "The retrieved repository evidence did not independently support the cross-file claim.",
+            VerificationOutcome.AiMicroVerifierEvaluator,
+            false);
+
+        var finding = CreatePrWideFinding(
+            "finding-prw-02-001",
+            "Publisher writes before the aggregator finishes, also affecting src/Api/PublishController.cs.",
+            new EvidenceReference([], ["src/Core/Aggregator.cs", "src/Api/PublishController.cs"], EvidenceReference.ResolvedState, "pr_wide_synthesis"),
+            "Potential cross-file ordering issue noted.",
+            "src/Core/Aggregator.cs",
+            12,
+            outcome,
+            ChangedLineRelation.OnChangedLine);
+
+        var decision = Assert.Single(await sut.EvaluateAsync([finding], []));
+
+        Assert.Equal(FinalGateDecision.SummaryOnlyDisposition, decision.Disposition);
+        Assert.Contains(ReviewFindingGateReasonCodes.MissingVerifiedClaimSupport, decision.ReasonCodes);
+        Assert.Equal("pr_wide_summary_rules", decision.RuleSource);
+        Assert.NotNull(decision.SummaryText);
+    }
+
+    [Fact]
+    public async Task EvaluateAsync_PrWideVerifierPublishWithAdjacentAnchor_AssignsPublish()
+    {
+        var sut = new DeterministicReviewFindingGate();
+        var outcome = new VerificationOutcome(
+            "claim-prw-001",
+            "finding-prw-02-002",
+            VerificationOutcome.SupportedKind,
+            FinalGateDecision.PublishDisposition,
+            [ReviewFindingGateReasonCodes.VerifiedBoundedClaimSupport],
+            [],
+            VerificationOutcome.StrongEvidence,
+            "The retrieved repository evidence supports the cross-file claim.",
+            VerificationOutcome.AiMicroVerifierEvaluator,
+            false);
+
+        var finding = CreatePrWideFinding(
+            "finding-prw-02-002",
+            "Cross-file registration ordering can still publish stale results.",
+            filePath: "src/Core/Aggregator.cs",
+            lineNumber: 12,
+            verificationOutcome: outcome,
+            scopeRelation: ChangedLineRelation.AdjacentToChange);
+
+        var decision = Assert.Single(await sut.EvaluateAsync([finding], []));
+
+        Assert.Equal(FinalGateDecision.PublishDisposition, decision.Disposition);
+        Assert.Contains(ReviewFindingGateReasonCodes.PrWideAnchoredVerifiedClaim, decision.ReasonCodes);
+        Assert.Equal("pr_wide_anchored_verified_rules", decision.RuleSource);
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData(ChangedLineRelation.OutsideChange)]
+    public async Task EvaluateAsync_PrWideVerifierPublishWithoutInScopeAnchor_AssignsSummaryOnly(ChangedLineRelation? scopeRelation)
+    {
+        // The verifier approved publication, so the ONLY disqualifier is the missing changed-line anchor. The
+        // reason code must distinguish this location shortfall from a verification gap.
+        var sut = new DeterministicReviewFindingGate();
+        var outcome = new VerificationOutcome(
+            "claim-prw-003",
+            "finding-prw-02-003",
+            VerificationOutcome.SupportedKind,
+            FinalGateDecision.PublishDisposition,
+            [ReviewFindingGateReasonCodes.VerifiedBoundedClaimSupport],
+            [],
+            VerificationOutcome.StrongEvidence,
+            "The retrieved repository evidence supports the cross-file claim.",
+            VerificationOutcome.AiMicroVerifierEvaluator,
+            false);
+
+        var finding = CreatePrWideFinding(
+            "finding-prw-02-003",
+            "Cross-file concern spanning multiple files.",
+            new EvidenceReference([], ["src/Core/Aggregator.cs", "src/Api/PublishController.cs"], EvidenceReference.ResolvedState, "pr_wide_synthesis"),
+            "Potential cross-file ordering issue noted.",
+            "src/Core/Aggregator.cs",
+            244,
+            outcome,
+            scopeRelation);
+
+        var decision = Assert.Single(await sut.EvaluateAsync([finding], []));
+
+        Assert.Equal(FinalGateDecision.SummaryOnlyDisposition, decision.Disposition);
+        Assert.Contains(ReviewFindingGateReasonCodes.PrWideMissingChangedLineAnchor, decision.ReasonCodes);
+        Assert.Equal("pr_wide_summary_rules", decision.RuleSource);
+        Assert.NotNull(decision.SummaryText);
+    }
+
+    [Fact]
+    public async Task EvaluateAsync_PrWideLocatedButNotEarned_AssignsSummaryOnly()
+    {
+        var sut = new DeterministicReviewFindingGate();
+        var finding = CreatePrWideFinding(
+            "finding-prw-02-004",
+            "Cross-file concern that lacks resolved multi-file evidence.",
+            new EvidenceReference([], ["src/Core/Aggregator.cs"], EvidenceReference.ResolvedState, "pr_wide_synthesis"),
+            "Potential cross-file ordering issue noted.",
+            "src/Core/Aggregator.cs",
+            12,
+            scopeRelation: ChangedLineRelation.OnChangedLine);
+
+        var decision = Assert.Single(await sut.EvaluateAsync([finding], []));
+
+        Assert.Equal(FinalGateDecision.SummaryOnlyDisposition, decision.Disposition);
+        Assert.Contains(ReviewFindingGateReasonCodes.MissingVerifiedClaimSupport, decision.ReasonCodes);
+        Assert.Equal("pr_wide_summary_rules", decision.RuleSource);
+        Assert.NotNull(decision.SummaryText);
+    }
+
+    [Fact]
+    public async Task EvaluateAsync_PrWideContradictingInvariant_AssignsDrop()
+    {
+        var sut = new DeterministicReviewFindingGate();
+        var invariantFacts = new[]
+        {
+            new InvariantFact(
+                InvariantFact.ReviewCommentMessageRequiredInvariantId,
+                InvariantFact.DomainFamily,
+                "Review comment message required",
+                "domain_model",
+                "true",
+                "A review comment message is always required."),
+        };
+        var finding = CreatePrWideFinding(
+            "finding-prw-02-005",
+            "ReviewComment.Message may be null when the model omits a message.",
+            new EvidenceReference([], ["src/Core/Aggregator.cs", "src/Api/PublishController.cs"], EvidenceReference.ResolvedState, "pr_wide_synthesis"),
+            filePath: "src/Core/Aggregator.cs",
+            lineNumber: 12,
+            scopeRelation: ChangedLineRelation.OnChangedLine,
+            invariantCheckContext: new Dictionary<string, string>(StringComparer.Ordinal)
+            {
+                [CandidateReviewFinding.ClaimKindContextKey] = CandidateReviewFinding.ReviewCommentMessageNullableClaimKind,
+            });
+
+        var decision = Assert.Single(await sut.EvaluateAsync([finding], invariantFacts));
+
+        Assert.Equal(FinalGateDecision.DropDisposition, decision.Disposition);
+        Assert.Contains(ReviewFindingGateReasonCodes.InvariantContradiction, decision.ReasonCodes);
+        Assert.Equal("invariant_contradiction_rules", decision.RuleSource);
+    }
+
+    [Fact]
+    public async Task EvaluateAsync_NonPrWideCrossCuttingWithResolvedEvidenceAndAnchor_RemainsSummaryOnly()
+    {
+        // Precision guard: a file-by-file (non-PR-wide) cross-cutting finding stays summary-only even with
+        // resolved multi-file evidence and an in-scope anchor. The PR-wide publish branch must not touch it.
+        var sut = new DeterministicReviewFindingGate();
+        var finding = CreateFinding(
+            "finding-cc-regression",
+            "Missing DI registration in multiple files.",
+            CandidateReviewFinding.CrossCuttingCategory,
+            new EvidenceReference([], ["src/Foo.cs", "src/Bar.cs"], EvidenceReference.ResolvedState, "synthesis_payload"),
+            "Potential DI registration gap spans multiple files.",
+            filePath: "src/Foo.cs",
+            lineNumber: 12,
+            scopeRelation: ChangedLineRelation.OnChangedLine);
+
+        var decision = Assert.Single(await sut.EvaluateAsync([finding], []));
+
+        Assert.Equal(FinalGateDecision.SummaryOnlyDisposition, decision.Disposition);
+        Assert.Contains(ReviewFindingGateReasonCodes.MissingVerifiedClaimSupport, decision.ReasonCodes);
+        Assert.Equal("cross_cutting_claim_support_rules", decision.RuleSource);
+        Assert.DoesNotContain(ReviewFindingGateReasonCodes.PrWideAnchoredVerifiedClaim, decision.ReasonCodes);
+    }
+
     [Fact]
     public async Task EvaluateAsync_OutsideChangeDefaultPublish_AttachesReasonCodeWithoutChangingDisposition()
     {

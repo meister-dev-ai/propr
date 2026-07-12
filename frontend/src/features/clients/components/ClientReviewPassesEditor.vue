@@ -35,6 +35,8 @@
         <span class="review-pass-col-label">Connection</span>
         <span class="review-pass-col-label">Model</span>
         <span class="review-pass-col-label">Lens</span>
+        <span class="review-pass-col-label">Scope</span>
+        <span class="review-pass-col-label">Shadow</span>
         <span></span>
       </div>
 
@@ -82,6 +84,28 @@
               {{ option.label }}
             </option>
           </select>
+
+          <select
+            v-model="row.scope"
+            class="form-input-sm review-pass-input"
+            aria-label="Scope"
+            data-testid="review-pass-scope"
+            @change="emitChange"
+          >
+            <option v-for="option in SCOPE_OPTIONS" :key="option.value" :value="option.value">
+              {{ option.label }}
+            </option>
+          </select>
+
+          <div class="review-pass-shadow">
+            <input
+              v-model="row.shadow"
+              type="checkbox"
+              aria-label="Shadow"
+              data-testid="review-pass-shadow"
+              @change="emitChange"
+            />
+          </div>
 
           <div class="review-pass-actions">
             <button
@@ -142,12 +166,14 @@ import type { components } from '@/types'
 type ReviewPassEntry = components['schemas']['ReviewPassEntry']
 
 // The connection is only a UI convenience for narrowing the model dropdown; the persisted value per
-// pass is the configured-model id and an optional lens, so each editable row tracks the chosen
-// connection alongside them.
+// pass is the configured-model id, an optional lens, an optional scope, and a shadow flag, so each
+// editable row tracks the chosen connection alongside them.
 interface PassRow {
   connectionId: string
   configuredModelId: string
   lens: string
+  scope: string
+  shadow: boolean
 }
 
 const MAX_PASSES = 4
@@ -158,6 +184,13 @@ const LENS_OPTIONS: { value: string; label: string }[] = [
   { value: '', label: 'None (resample)' },
   { value: 'security', label: 'Security' },
   { value: 'prorv', label: 'ProRV' },
+]
+
+// The closed scope vocabulary offered per pass. '' is the per-file default (persisted as null); a value
+// runs the pass elsewhere relative to the change set. Mirrors the backend ReviewPassScope set.
+const SCOPE_OPTIONS: { value: string; label: string }[] = [
+  { value: '', label: 'Per-file' },
+  { value: 'pr_wide', label: 'PR-wide' },
 ]
 
 const props = defineProps<{
@@ -185,10 +218,10 @@ const chatModelsFor = (connectionId: string): AiConfiguredModelDto[] => {
 }
 
 // Models offered in one row's dropdown: the connection's chat models minus any model already bound by ANOTHER
-// row UNDER THE SAME LENS. The row's own current selection stays selectable so it renders as chosen. A distinct
-// (model, lens) pair is required — the same model twice under one lens is redundant resampling, which the server
-// rejects with a 400; the same model under different lenses (e.g. a plain resample plus a security-lens pass) is
-// allowed, so greying keys on the tuple, not the model alone.
+// row UNDER THE SAME (lens, scope, shadow) TUPLE. The row's own current selection stays selectable so it renders
+// as chosen. A distinct (model, lens, scope, shadow) tuple is required — the same model twice under one tuple is
+// redundant resampling, which the server rejects with a 400; the same model under a different lens/scope/shadow
+// (e.g. a plain resample plus a security-lens pass) is allowed, so greying keys on the tuple, not the model alone.
 const modelsForRow = (index: number): AiConfiguredModelDto[] => {
   const row = rows.value[index]
   if (!row) {
@@ -197,7 +230,13 @@ const modelsForRow = (index: number): AiConfiguredModelDto[] => {
 
   const takenByOtherRows = new Set(
     rows.value
-      .filter((otherRow, rowIndex) => rowIndex !== index && otherRow.lens === row.lens)
+      .filter(
+        (otherRow, rowIndex) =>
+          rowIndex !== index &&
+          otherRow.lens === row.lens &&
+          otherRow.scope === row.scope &&
+          otherRow.shadow === row.shadow,
+      )
       .map((otherRow) => otherRow.configuredModelId)
       .filter((modelId) => modelId !== ''),
   )
@@ -241,16 +280,22 @@ const completeEntries = (source: PassRow[]): ReviewPassEntry[] =>
       ordinal: index,
       configuredModelId: row.configuredModelId,
       lens: row.lens ? row.lens : null,
+      scope: row.scope ? row.scope : null,
+      shadow: row.shadow,
     }))
 
 const entriesKey = (entries: ReviewPassEntry[]): string =>
-  entries.map((entry) => `${entry.configuredModelId ?? ''}:${entry.lens ?? ''}`).join('|')
+  entries
+    .map((entry) => `${entry.configuredModelId ?? ''}:${entry.lens ?? ''}:${entry.scope ?? ''}:${entry.shadow ? '1' : '0'}`)
+    .join('|')
 
 const syncRowsFromModelValue = (): void => {
   rows.value = (props.modelValue ?? []).map((entry) => ({
     connectionId: connectionIdForModel(entry.configuredModelId ?? ''),
     configuredModelId: entry.configuredModelId ?? '',
     lens: entry.lens ?? '',
+    scope: entry.scope === 'pr_wide' ? 'pr_wide' : '',
+    shadow: entry.shadow ?? false,
   }))
 }
 
@@ -291,7 +336,7 @@ const addRow = (): void => {
     return
   }
 
-  rows.value.push({ connectionId: '', configuredModelId: '', lens: '' })
+  rows.value.push({ connectionId: '', configuredModelId: '', lens: '', scope: '', shadow: false })
   emitChange()
 }
 
@@ -323,8 +368,8 @@ const onConnectionChange = (index: number): void => {
   /* Shared column template: fixed ordinal + fixed actions so the header row and every pass row size their
      two flexible middle columns identically — the "Connection"/"Model" headers then line up above the selects.
      The actions column is wide enough to hold the two reorder buttons plus Remove so they never overflow left
-     onto the Lens cell. */
-  --review-pass-cols: 4.5rem minmax(0, 1fr) minmax(0, 1fr) 9rem 10.5rem;
+     onto the Shadow cell. */
+  --review-pass-cols: 4.5rem minmax(0, 1fr) minmax(0, 1fr) 9rem 8rem 4.5rem 10.5rem;
   border: 1px solid var(--color-border);
   border-radius: var(--radius-lg);
   background: var(--color-surface);
@@ -400,6 +445,12 @@ const onConnectionChange = (index: number): void => {
 
 .review-pass-input {
   width: 100%;
+}
+
+.review-pass-shadow {
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .review-pass-actions {

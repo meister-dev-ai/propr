@@ -271,6 +271,12 @@ public sealed class FileByFileReviewOrchestratorSummaryReconciliationTests
 
         Assert.Contains("1 publishable finding", result.Summary);
         Assert.Contains("Potential architecture concern noted", result.Summary);
+
+        // The deterministic footer must be assembled exactly once. Reconciliation and the grounding
+        // step both used to append it, producing a duplicated "Summary-only findings" block.
+        Assert.Equal(1, CountOccurrences(result.Summary, "Summary-only findings:"));
+        Assert.Equal(1, CountOccurrences(result.Summary, "Potential architecture concern noted"));
+
         await protocolRecorder.Received()
             .RecordVerificationEventAsync(
                 Arg.Any<Guid>(),
@@ -412,6 +418,19 @@ public sealed class FileByFileReviewOrchestratorSummaryReconciliationTests
                 Arg.Any<string?>(),
                 Arg.Any<string?>(),
                 Arg.Any<CancellationToken>());
+    }
+
+    private static int CountOccurrences(string haystack, string needle)
+    {
+        var count = 0;
+        var index = 0;
+        while ((index = haystack.IndexOf(needle, index, StringComparison.Ordinal)) >= 0)
+        {
+            count++;
+            index += needle.Length;
+        }
+
+        return count;
     }
 
     private static ReviewJob BuildJobWithResults(ReviewJob original, IEnumerable<ReviewFileResult> results)

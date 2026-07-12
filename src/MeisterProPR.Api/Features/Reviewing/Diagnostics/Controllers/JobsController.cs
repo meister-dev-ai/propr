@@ -114,10 +114,7 @@ public sealed class JobsController(
                         j.PrSourceBranch,
                         j.PrTargetBranch,
                         j.PrRepositoryName,
-                        j.AiModel)
-                    {
-                        ResolvedReviewStrategy = j.ReviewStrategy,
-                    })
+                        j.AiModel))
                     .ToList()));
     }
 
@@ -396,11 +393,7 @@ public sealed class JobsController(
         string? PrSourceBranch = null,
         string? PrTargetBranch = null,
         string? PrRepositoryName = null,
-        string? AiModel = null)
-    {
-        /// <summary>Resolved review strategy snapshotted on the review job.</summary>
-        public ReviewStrategy ResolvedReviewStrategy { get; init; } = ReviewStrategy.FileByFile;
-    }
+        string? AiModel = null);
 
     /// <summary>Response for the job list endpoint.</summary>
     public sealed record JobListResponse(int Total, IReadOnlyList<JobListItem> Items);

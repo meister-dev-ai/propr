@@ -1886,7 +1886,7 @@ internal sealed partial class ToolAwareAiReviewCore(
     }
 
     /// <summary>
-    ///     Deserialises a JSON array of <see cref="ConfidenceEvaluationDto" /> objects while
+    ///     Deserializes a JSON array of <see cref="ConfidenceEvaluationDto" /> objects while
     ///     tolerating elements that are not objects (e.g. plain strings like <c>"correctness: 85"</c>).
     ///     Non-object elements are silently skipped so the rest of the array is still usable.
     /// </summary>

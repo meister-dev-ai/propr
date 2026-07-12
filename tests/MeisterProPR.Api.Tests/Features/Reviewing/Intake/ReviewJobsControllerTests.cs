@@ -129,102 +129,6 @@ public sealed class ReviewJobsControllerTests
     }
 
     [Fact]
-    public async Task SubmitReview_WithDisabledPrWideStrategyOverride_ReturnsBadRequest()
-    {
-        var clientId = Guid.NewGuid();
-        var store = Substitute.For<IReviewJobIntakeStore>();
-        var queue = Substitute.For<IReviewExecutionQueue>();
-        var request = CreateAzureDevOpsRequest() with
-        {
-            ReviewStrategy = ReviewStrategy.PrWideAgentic,
-            ComparisonMode = ReviewComparisonMode.Single,
-            PublicationMode = ReviewPublicationMode.DryRun,
-        };
-
-        var controller = CreateController(store, clientId, ClientRole.ClientAdministrator, queue);
-
-        var result = await controller.SubmitReview(clientId, request, CancellationToken.None);
-
-        var badRequest = Assert.IsType<BadRequestObjectResult>(result);
-        Assert.Equal(StatusCodes.Status400BadRequest, badRequest.StatusCode);
-    }
-
-    [Fact]
-    public async Task SubmitReview_WithDisabledAgenticFileByFileOverride_ReturnsBadRequest()
-    {
-        var clientId = Guid.NewGuid();
-        var store = Substitute.For<IReviewJobIntakeStore>();
-        var queue = Substitute.For<IReviewExecutionQueue>();
-        var request = CreateAzureDevOpsRequest() with
-        {
-            ReviewStrategy = ReviewStrategy.AgenticFileByFile,
-            ComparisonMode = ReviewComparisonMode.Single,
-            PublicationMode = ReviewPublicationMode.Publish,
-        };
-
-        var controller = CreateController(store, clientId, ClientRole.ClientAdministrator, queue);
-
-        var result = await controller.SubmitReview(clientId, request, CancellationToken.None);
-
-        var badRequest = Assert.IsType<BadRequestObjectResult>(result);
-        Assert.Equal(StatusCodes.Status400BadRequest, badRequest.StatusCode);
-    }
-
-    [Fact]
-    public async Task GetReview_ReturnsStrategySnapshotFields()
-    {
-        var jobId = Guid.NewGuid();
-        var clientId = Guid.NewGuid();
-        var comparisonGroupId = Guid.NewGuid();
-        var store = Substitute.For<IReviewJobIntakeStore>();
-        var job = new ReviewJob(jobId, clientId, "https://dev.azure.com/org", "proj", "repo", 42, 1);
-        job.SelectReviewStrategy(
-            ReviewStrategy.PrWideAgentic,
-            ReviewStrategySelectionSource.ClientDefault,
-            ReviewComparisonMode.Single,
-            ReviewPublicationMode.InternalOnly,
-            comparisonGroupId);
-        store.GetByIdAsync(jobId, Arg.Any<CancellationToken>()).Returns(job);
-
-        var controller = CreateController(store, clientId, ClientRole.ClientUser);
-
-        var result = await controller.GetReview(jobId, CancellationToken.None);
-
-        var ok = Assert.IsType<OkObjectResult>(result);
-        var payload = Assert.IsType<ReviewStatusResponse>(ok.Value);
-        Assert.Equal(ReviewStrategy.PrWideAgentic, payload.ResolvedReviewStrategy);
-        Assert.Equal(ReviewStrategySelectionSource.ClientDefault, payload.StrategySelectionSource);
-        Assert.Equal(ReviewPublicationMode.InternalOnly, payload.PublicationMode);
-        Assert.Equal(comparisonGroupId, payload.ComparisonGroupId);
-    }
-
-    [Fact]
-    public async Task GetReview_ReturnsAgenticFileByFileStrategySnapshotFields()
-    {
-        var jobId = Guid.NewGuid();
-        var clientId = Guid.NewGuid();
-        var store = Substitute.For<IReviewJobIntakeStore>();
-        var job = new ReviewJob(jobId, clientId, "https://dev.azure.com/org", "proj", "repo", 42, 1);
-        job.SelectReviewStrategy(
-            ReviewStrategy.AgenticFileByFile,
-            ReviewStrategySelectionSource.ClientDefault,
-            ReviewComparisonMode.Single,
-            ReviewPublicationMode.Publish,
-            null);
-        store.GetByIdAsync(jobId, Arg.Any<CancellationToken>()).Returns(job);
-
-        var controller = CreateController(store, clientId, ClientRole.ClientUser);
-
-        var result = await controller.GetReview(jobId, CancellationToken.None);
-
-        var ok = Assert.IsType<OkObjectResult>(result);
-        var payload = Assert.IsType<ReviewStatusResponse>(ok.Value);
-        Assert.Equal(ReviewStrategy.AgenticFileByFile, payload.ResolvedReviewStrategy);
-        Assert.Equal(ReviewStrategySelectionSource.ClientDefault, payload.StrategySelectionSource);
-        Assert.Equal(ReviewPublicationMode.Publish, payload.PublicationMode);
-    }
-
-    [Fact]
     public async Task GetReview_WithPrLevelPublishableFinding_PreservesNullAnchorInStatusResponse()
     {
         var jobId = Guid.NewGuid();
@@ -239,12 +143,6 @@ public sealed class ReviewJobsControllerTests
             new ReviewResult(
                 "PR-wide review identified one publishable cross-file finding.",
                 [new ReviewComment(null, null, CommentSeverity.Warning, "Cross-file registration ordering can still publish stale results.")]));
-        job.SelectReviewStrategy(
-            ReviewStrategy.PrWideAgentic,
-            ReviewStrategySelectionSource.ClientDefault,
-            ReviewComparisonMode.Single,
-            ReviewPublicationMode.Publish,
-            null);
         store.GetByIdAsync(jobId, Arg.Any<CancellationToken>()).Returns(job);
 
         var controller = CreateController(store, clientId, ClientRole.ClientUser);
@@ -258,7 +156,6 @@ public sealed class ReviewJobsControllerTests
         Assert.Null(comment.LineNumber);
         Assert.Equal(CommentSeverity.Warning, comment.Severity);
         Assert.Equal("Cross-file registration ordering can still publish stale results.", comment.Message);
-        Assert.Equal(ReviewStrategy.PrWideAgentic, payload.ResolvedReviewStrategy);
     }
 
     [Fact]

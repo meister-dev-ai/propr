@@ -200,8 +200,6 @@ public sealed class PullRequestSynchronizationServiceThreadRetentionTests
             var scanRepository = Substitute.For<IReviewPrScanRepository>();
             var clientRegistry = Substitute.For<IClientRegistry>();
 
-            clientRegistry.GetDefaultReviewStrategyAsync(ClientId, Arg.Any<CancellationToken>())
-                .Returns(ReviewStrategy.FileByFile);
             clientRegistry.GetDefaultReviewPipelineProfileIdAsync(ClientId, Arg.Any<CancellationToken>())
                 .Returns(ReviewPipelineProfileCatalog.FileByFileBalancedProfileId);
 

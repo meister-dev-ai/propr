@@ -78,4 +78,16 @@ public static class ReviewFindingGateReasonCodes
     ///     ranges (pre-existing code). It is a label only and never changes the finding's disposition.
     /// </summary>
     public const string OutsideChangedLines = "outside_changed_lines";
+
+    /// <summary>
+    ///     Reason code used when a job-level PR-wide finding earns publication because the bounded PR-verifier
+    ///     recommended publication and the finding is anchored on or adjacent to a changed line.
+    /// </summary>
+    public const string PrWideAnchoredVerifiedClaim = "pr_wide_anchored_verified";
+
+    /// <summary>
+    ///     Reason code used when a verifier-approved PR-wide finding is held to summary-only because it has no
+    ///     changed-line anchor for an inline thread. Distinguishes a location shortfall from a verification one.
+    /// </summary>
+    public const string PrWideMissingChangedLineAnchor = "pr_wide_missing_changed_line_anchor";
 }

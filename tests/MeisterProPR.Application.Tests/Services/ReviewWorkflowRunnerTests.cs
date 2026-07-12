@@ -31,7 +31,7 @@ public sealed class ReviewWorkflowRunnerTests
         var instructionFetcher = Substitute.For<IRepositoryInstructionFetcher>();
         var exclusionFetcher = Substitute.For<IRepositoryExclusionFetcher>();
         var instructionEvaluator = Substitute.For<IRepositoryInstructionEvaluator>();
-        var reviewStrategyDispatcher = Substitute.For<IReviewStrategyDispatcher>();
+        var fileByFileReviewOrchestrator = Substitute.For<IFileByFileReviewOrchestrator>();
 
         var fixture = CreateFixture();
         var job = new ReviewJob(
@@ -42,12 +42,6 @@ public sealed class ReviewWorkflowRunnerTests
             fixture.PullRequestSnapshot.CodeReview.Repository.ExternalRepositoryId,
             fixture.PullRequestSnapshot.CodeReview.Number,
             1);
-        job.SelectReviewStrategy(
-            ReviewStrategy.PrWideAgentic,
-            ReviewStrategySelectionSource.JobOverride,
-            ReviewComparisonMode.Single,
-            ReviewPublicationMode.Publish,
-            null);
 
         var configuration = new EvaluationConfiguration(
             "baseline",
@@ -88,7 +82,7 @@ public sealed class ReviewWorkflowRunnerTests
             .Returns(ReviewExclusionRules.Default);
         diagnosticsReader.GetJobProtocolAsync(job.Id, ct: Arg.Any<CancellationToken>())
             .Returns(new GetReviewJobProtocolResult(job.Id, []));
-        reviewStrategyDispatcher.ReviewAsync(
+        fileByFileReviewOrchestrator.ReviewAsync(
                 job,
                 pullRequest,
                 Arg.Any<ReviewSystemContext>(),
@@ -107,12 +101,12 @@ public sealed class ReviewWorkflowRunnerTests
             instructionFetcher,
             exclusionFetcher,
             instructionEvaluator,
-            reviewStrategyDispatcher);
+            fileByFileReviewOrchestrator);
 
         var result = await sut.RunAsync(request, CancellationToken.None);
 
         Assert.Same(expectedReviewResult, result.FinalResult);
-        await reviewStrategyDispatcher.Received(1).ReviewAsync(
+        await fileByFileReviewOrchestrator.Received(1).ReviewAsync(
             job,
             pullRequest,
             Arg.Is<ReviewSystemContext>(context =>
@@ -135,7 +129,7 @@ public sealed class ReviewWorkflowRunnerTests
         var instructionFetcher = Substitute.For<IRepositoryInstructionFetcher>();
         var exclusionFetcher = Substitute.For<IRepositoryExclusionFetcher>();
         var instructionEvaluator = Substitute.For<IRepositoryInstructionEvaluator>();
-        var reviewStrategyDispatcher = Substitute.For<IReviewStrategyDispatcher>();
+        var fileByFileReviewOrchestrator = Substitute.For<IFileByFileReviewOrchestrator>();
 
         var fixture = CreateFixture();
         var selectedSourceId = Guid.NewGuid();
@@ -184,7 +178,7 @@ public sealed class ReviewWorkflowRunnerTests
             .Returns(ReviewExclusionRules.Default);
         diagnosticsReader.GetJobProtocolAsync(job.Id, ct: Arg.Any<CancellationToken>())
             .Returns(new GetReviewJobProtocolResult(job.Id, []));
-        reviewStrategyDispatcher.ReviewAsync(
+        fileByFileReviewOrchestrator.ReviewAsync(
                 job,
                 pullRequest,
                 Arg.Any<ReviewSystemContext>(),
@@ -203,7 +197,7 @@ public sealed class ReviewWorkflowRunnerTests
             instructionFetcher,
             exclusionFetcher,
             instructionEvaluator,
-            reviewStrategyDispatcher);
+            fileByFileReviewOrchestrator);
 
         await sut.RunAsync(request, CancellationToken.None);
 
@@ -231,7 +225,7 @@ public sealed class ReviewWorkflowRunnerTests
         var instructionFetcher = Substitute.For<IRepositoryInstructionFetcher>();
         var exclusionFetcher = Substitute.For<IRepositoryExclusionFetcher>();
         var instructionEvaluator = Substitute.For<IRepositoryInstructionEvaluator>();
-        var reviewStrategyDispatcher = Substitute.For<IReviewStrategyDispatcher>();
+        var fileByFileReviewOrchestrator = Substitute.For<IFileByFileReviewOrchestrator>();
 
         var fixture = CreateFixture().WithScenario("instructions-good");
         var job = new ReviewJob(
@@ -276,7 +270,7 @@ public sealed class ReviewWorkflowRunnerTests
             .Returns(ReviewExclusionRules.Default);
         diagnosticsReader.GetJobProtocolAsync(job.Id, ct: Arg.Any<CancellationToken>())
             .Returns(new GetReviewJobProtocolResult(job.Id, []));
-        reviewStrategyDispatcher.ReviewAsync(
+        fileByFileReviewOrchestrator.ReviewAsync(
                 job,
                 pullRequest,
                 Arg.Any<ReviewSystemContext>(),
@@ -295,7 +289,7 @@ public sealed class ReviewWorkflowRunnerTests
             instructionFetcher,
             exclusionFetcher,
             instructionEvaluator,
-            reviewStrategyDispatcher);
+            fileByFileReviewOrchestrator);
 
         await sut.RunAsync(request, CancellationToken.None);
 
@@ -321,7 +315,7 @@ public sealed class ReviewWorkflowRunnerTests
         var instructionFetcher = Substitute.For<IRepositoryInstructionFetcher>();
         var exclusionFetcher = Substitute.For<IRepositoryExclusionFetcher>();
         var instructionEvaluator = Substitute.For<IRepositoryInstructionEvaluator>();
-        var reviewStrategyDispatcher = Substitute.For<IReviewStrategyDispatcher>();
+        var fileByFileReviewOrchestrator = Substitute.For<IFileByFileReviewOrchestrator>();
 
         var fixture = CreateFixture();
         var job = new ReviewJob(
@@ -332,14 +326,6 @@ public sealed class ReviewWorkflowRunnerTests
             fixture.PullRequestSnapshot.CodeReview.Repository.ExternalRepositoryId,
             fixture.PullRequestSnapshot.CodeReview.Number,
             1);
-        job.SelectReviewStrategy(
-            new ReviewStrategySelection(
-                ReviewStrategy.AgenticFileByFile,
-                ReviewStrategySelectionSource.JobOverride,
-                ReviewComparisonMode.Single,
-                ReviewPublicationMode.Publish,
-                null,
-                "agentic-experimental"));
 
         var request = new ReviewWorkflowRequest(
             job,
@@ -385,13 +371,12 @@ public sealed class ReviewWorkflowRunnerTests
             .Returns(ReviewExclusionRules.Default);
         diagnosticsReader.GetJobProtocolAsync(job.Id, ct: Arg.Any<CancellationToken>())
             .Returns(new GetReviewJobProtocolResult(job.Id, []));
-        reviewStrategyDispatcher.ReviewAsync(
+        fileByFileReviewOrchestrator.ReviewAsync(
                 job,
                 pullRequest,
                 Arg.Any<ReviewSystemContext>(),
                 Arg.Any<CancellationToken>(),
-                request.ChatClient,
-                "agentic-experimental")
+                request.ChatClient)
             .Returns(expectedReviewResult);
 
         var sut = new ReviewWorkflowRunner(
@@ -405,18 +390,17 @@ public sealed class ReviewWorkflowRunnerTests
             instructionFetcher,
             exclusionFetcher,
             instructionEvaluator,
-            reviewStrategyDispatcher);
+            fileByFileReviewOrchestrator);
 
         var result = await sut.RunAsync(request, CancellationToken.None);
 
         Assert.Same(expectedReviewResult, result.FinalResult);
-        await reviewStrategyDispatcher.Received(1).ReviewAsync(
+        await fileByFileReviewOrchestrator.Received(1).ReviewAsync(
             job,
             pullRequest,
             Arg.Any<ReviewSystemContext>(),
             Arg.Any<CancellationToken>(),
-            request.ChatClient,
-            "agentic-experimental");
+            request.ChatClient);
     }
 
     [Fact]
@@ -432,7 +416,7 @@ public sealed class ReviewWorkflowRunnerTests
         var instructionFetcher = Substitute.For<IRepositoryInstructionFetcher>();
         var exclusionFetcher = Substitute.For<IRepositoryExclusionFetcher>();
         var instructionEvaluator = Substitute.For<IRepositoryInstructionEvaluator>();
-        var reviewStrategyDispatcher = Substitute.For<IReviewStrategyDispatcher>();
+        var fileByFileReviewOrchestrator = Substitute.For<IFileByFileReviewOrchestrator>();
 
         var fixture = CreateFixture();
         var job = new ReviewJob(
@@ -482,7 +466,7 @@ public sealed class ReviewWorkflowRunnerTests
             .Returns(ReviewExclusionRules.Default);
         diagnosticsReader.GetJobProtocolAsync(job.Id, ct: Arg.Any<CancellationToken>())
             .Returns(new GetReviewJobProtocolResult(job.Id, []));
-        reviewStrategyDispatcher.ReviewAsync(
+        fileByFileReviewOrchestrator.ReviewAsync(
                 job,
                 pullRequest,
                 Arg.Any<ReviewSystemContext>(),
@@ -501,11 +485,11 @@ public sealed class ReviewWorkflowRunnerTests
             instructionFetcher,
             exclusionFetcher,
             instructionEvaluator,
-            reviewStrategyDispatcher);
+            fileByFileReviewOrchestrator);
 
         await sut.RunAsync(request, CancellationToken.None);
 
-        await reviewStrategyDispatcher.Received(1).ReviewAsync(
+        await fileByFileReviewOrchestrator.Received(1).ReviewAsync(
             job,
             pullRequest,
             Arg.Is<ReviewSystemContext>(context => context.SkippedSteps.Contains(FileByFileReviewStepIds.PrVerification)),
@@ -526,7 +510,7 @@ public sealed class ReviewWorkflowRunnerTests
         var instructionFetcher = Substitute.For<IRepositoryInstructionFetcher>();
         var exclusionFetcher = Substitute.For<IRepositoryExclusionFetcher>();
         var instructionEvaluator = Substitute.For<IRepositoryInstructionEvaluator>();
-        var reviewStrategyDispatcher = Substitute.For<IReviewStrategyDispatcher>();
+        var fileByFileReviewOrchestrator = Substitute.For<IFileByFileReviewOrchestrator>();
         var boundaryIssue = BoundaryIssueReport.CreateDeferred(
             "reviewing.test-boundary-issue",
             "ReviewWorkflowRunnerTests",
@@ -578,7 +562,7 @@ public sealed class ReviewWorkflowRunnerTests
             .Returns(ReviewExclusionRules.Default);
         diagnosticsReader.GetJobProtocolAsync(job.Id, ct: Arg.Any<CancellationToken>())
             .Returns(new GetReviewJobProtocolResult(job.Id, []));
-        reviewStrategyDispatcher.ReviewAsync(
+        fileByFileReviewOrchestrator.ReviewAsync(
                 job,
                 pullRequest,
                 Arg.Any<ReviewSystemContext>(),
@@ -597,7 +581,7 @@ public sealed class ReviewWorkflowRunnerTests
             instructionFetcher,
             exclusionFetcher,
             instructionEvaluator,
-            reviewStrategyDispatcher,
+            fileByFileReviewOrchestrator,
             null,
             [boundaryIssue]);
 

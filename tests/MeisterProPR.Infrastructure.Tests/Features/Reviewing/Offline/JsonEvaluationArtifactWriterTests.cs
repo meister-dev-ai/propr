@@ -27,7 +27,6 @@ public sealed class JsonEvaluationArtifactWriterTests
                 "config-a",
                 "gpt-5.4",
                 "full",
-                ReviewStrategy.FileByFile,
                 new Dictionary<string, int>(StringComparer.Ordinal)
                 {
                     ["baselineOnly"] = 0,
@@ -123,7 +122,6 @@ public sealed class JsonEvaluationArtifactWriterTests
                 "config-a",
                 "gpt-5.4",
                 "full",
-                ReviewStrategy.FileByFile,
                 new Dictionary<string, int>(StringComparer.Ordinal)
                 {
                     ["baselineOnly"] = 0,

@@ -77,7 +77,6 @@ import {
     formatPhaseDuration,
     formatPhaseTitle,
     formatRepeatedJudgmentStatus,
-    formatReviewStrategy,
     formatStringList,
     formatTemperature,
     formatTimingAvailability,
@@ -1289,12 +1288,6 @@ export function useJobProtocolViewModel() {
     })
 
     const reviewModelDisplay = computed(() => jobDetail.value?.aiModel?.trim() || 'Default')
-    const reviewStrategyDisplay = computed(() =>
-        formatReviewStrategy(protocols.value[0]?.resolvedReviewStrategy),
-    )
-    const activePassReviewStrategyDisplay = computed(() =>
-        formatReviewStrategy(activePass.value?.resolvedReviewStrategy ?? protocols.value[0]?.resolvedReviewStrategy),
-    )
     const activePassFileOutcome = computed<ProtocolFileOutcome | null>(() => activePass.value?.fileOutcome ?? null)
     const activePassFollowUp = computed<ProtocolFollowUp | null>(() => activePass.value?.followUp ?? null)
     const activePassRepeatedJudgment = computed<ProtocolRepeatedJudgment | null>(() => activePass.value?.repeatedJudgment ?? null)
@@ -2171,8 +2164,6 @@ export function useJobProtocolViewModel() {
         totalEffectiveInputTokens,
         overallDuration,
         reviewModelDisplay,
-        reviewStrategyDisplay,
-        activePassReviewStrategyDisplay,
         activePassFileOutcome,
         activePassFollowUp,
         activePassRepeatedJudgment,
@@ -2244,7 +2235,6 @@ export function useJobProtocolViewModel() {
         statusIconClass,
         statusBadgeClass,
         formatDate,
-        formatReviewStrategy,
         formatFileOutcomeStatus,
         formatFollowUpStatus,
         formatRepeatedJudgmentStatus,

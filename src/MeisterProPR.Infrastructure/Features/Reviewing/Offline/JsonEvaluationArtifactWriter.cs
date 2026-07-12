@@ -57,7 +57,6 @@ public sealed class JsonEvaluationArtifactWriter : IEvaluationArtifactWriter
                 configurationId = artifact.Configuration.ConfigurationId,
                 modelId = artifact.Configuration.ModelId,
                 detailMode = artifact.Configuration.DetailMode,
-                strategy = artifact.Configuration.Strategy,
                 provenanceCounts = artifact.Configuration.ProvenanceCounts,
                 variantName = artifact.Configuration.VariantName,
                 targetedStageKeys = artifact.Configuration.TargetedStageKeys,

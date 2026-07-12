@@ -138,7 +138,6 @@ public sealed class ReviewEvaluationModelsTests
                 "baseline",
                 "gpt-4o",
                 "full",
-                ReviewStrategy.PrWideAgentic,
                 new Dictionary<string, int>(StringComparer.Ordinal)
                 {
                     ["baselineOnly"] = 0,
@@ -193,7 +192,6 @@ public sealed class ReviewEvaluationModelsTests
         Assert.Equal("completed", artifact.Run.Outcome);
         Assert.Equal("fixture-sample", artifact.Fixture.FixtureId);
         Assert.Equal("baseline", artifact.Configuration.ConfigurationId);
-        Assert.Equal(ReviewStrategy.PrWideAgentic, artifact.Configuration.Strategy);
         Assert.Single(artifact.FinalResult.Comments);
         Assert.Single(artifact.Stages);
         Assert.Equal(20, artifact.TokenUsage.TotalInputTokens);

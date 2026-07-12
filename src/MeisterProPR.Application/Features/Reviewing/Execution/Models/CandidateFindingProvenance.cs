@@ -47,6 +47,14 @@ public sealed record CandidateFindingProvenance
     public const string RepeatedJudgmentOrigin = "repeated_judgment";
 
     /// <summary>
+    ///     Origin kind used for findings produced by a job-level PR-wide review pass. Distinct from
+    ///     <see cref="SynthesizedCrossCuttingOrigin" /> so that <see cref="ResolveOriginPassKindName" /> resolves the
+    ///     producing pass through the multi-pass-union branch (the finding renders as "Pass N") rather than returning
+    ///     <see langword="null" /> and rendering no badge.
+    /// </summary>
+    public const string PrWidePassOrigin = "pr_wide_pass";
+
+    /// <summary>
     ///     Initializes stable provenance metadata for a candidate finding.
     /// </summary>
     /// <param name="originKind">Kind of source that produced the finding.</param>
@@ -71,6 +79,10 @@ public sealed record CandidateFindingProvenance
     ///     Specialist lens of the multi-pass union pass that produced the finding (e.g. <c>security</c>), or
     ///     <see langword="null" /> for the baseline, ordinary resample passes, and non-union findings.
     /// </param>
+    /// <param name="shadow">
+    ///     Whether the finding came from a shadow pass — a pass that runs and is recorded for diagnostics but whose
+    ///     findings are never published. <see langword="false" /> for ordinary findings.
+    /// </param>
     public CandidateFindingProvenance(
         string originKind,
         string generatedByStage,
@@ -84,7 +96,8 @@ public sealed record CandidateFindingProvenance
         FindingProvenanceKind findingProvenanceKind = FindingProvenanceKind.BaselineOnly,
         int? unionPassIndex = null,
         string? unionArmLabel = null,
-        string? unionLens = null)
+        string? unionLens = null,
+        bool shadow = false)
     {
         if (string.IsNullOrWhiteSpace(originKind))
         {
@@ -109,6 +122,7 @@ public sealed record CandidateFindingProvenance
         this.UnionPassIndex = unionPassIndex;
         this.UnionArmLabel = string.IsNullOrWhiteSpace(unionArmLabel) ? null : unionArmLabel;
         this.UnionLens = string.IsNullOrWhiteSpace(unionLens) ? null : unionLens;
+        this.Shadow = shadow;
     }
 
     /// <summary>
@@ -178,6 +192,12 @@ public sealed record CandidateFindingProvenance
     ///     or <see langword="null" /> for the baseline, ordinary resample passes, and non-union findings.
     /// </summary>
     public string? UnionLens { get; }
+
+    /// <summary>
+    ///     Gets a value indicating whether the finding came from a shadow pass — a pass that runs and is recorded for
+    ///     diagnostics but whose findings are never published.
+    /// </summary>
+    public bool Shadow { get; }
 
     /// <summary>
     ///     Resolves the single producing review pass for a published finding as a <see cref="ReviewPassKind" />

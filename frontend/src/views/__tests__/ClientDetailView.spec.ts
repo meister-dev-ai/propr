@@ -107,7 +107,6 @@ describe('ClientDetailView', () => {
         enableEvidenceBackedVerification: false,
         enableMultiPassUnion: false,
         enableLanguageRobustScreening: false,
-        defaultReviewStrategy: 'fileByFile',
       },
     })
   })
@@ -171,7 +170,6 @@ describe('ClientDetailView', () => {
     expect(patchClientMock).toHaveBeenCalledWith('/clients/{clientId}', {
       params: { path: { clientId: 'client-1' } },
       body: {
-        defaultReviewStrategy: 'fileByFile',
         scmCommentPostingEnabled: true,
         enableEvidenceBackedVerification: true,
         enableMultiPassUnion: false,
@@ -193,7 +191,6 @@ describe('ClientDetailView', () => {
     expect(patchClientMock).toHaveBeenCalledWith('/clients/{clientId}', {
       params: { path: { clientId: 'client-1' } },
       body: {
-        defaultReviewStrategy: 'fileByFile',
         scmCommentPostingEnabled: true,
         enableEvidenceBackedVerification: false,
         enableMultiPassUnion: true,
@@ -215,7 +212,6 @@ describe('ClientDetailView', () => {
     expect(patchClientMock).toHaveBeenCalledWith('/clients/{clientId}', {
       params: { path: { clientId: 'client-1' } },
       body: {
-        defaultReviewStrategy: 'fileByFile',
         scmCommentPostingEnabled: true,
         enableEvidenceBackedVerification: false,
         enableMultiPassUnion: false,

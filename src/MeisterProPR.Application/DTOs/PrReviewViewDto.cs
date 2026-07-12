@@ -32,11 +32,7 @@ public sealed record PrJobSummaryDto(
     int? FindingCount,
     long? TotalInputTokens,
     long? TotalOutputTokens,
-    IReadOnlyList<TokenBreakdownEntry> TokenBreakdown)
-{
-    /// <summary>Resolved review strategy snapshotted on this review job.</summary>
-    public ReviewStrategy ResolvedReviewStrategy { get; init; } = ReviewStrategy.FileByFile;
-}
+    IReadOnlyList<TokenBreakdownEntry> TokenBreakdown);
 
 /// <summary>Summary of a thread memory record that originated from this pull request.</summary>
 public sealed record ThreadMemorySummaryDto(

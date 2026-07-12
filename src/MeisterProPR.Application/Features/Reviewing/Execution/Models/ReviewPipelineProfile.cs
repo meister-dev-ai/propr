@@ -6,7 +6,7 @@ using MeisterProPR.Domain.Enums;
 namespace MeisterProPR.Application.Features.Reviewing.Execution.Models;
 
 /// <summary>
-///     Represents one named Reviewing pipeline composition bound to an existing persisted review strategy.
+///     Represents one named file-by-file Reviewing pipeline composition.
 /// </summary>
 public sealed record ReviewPipelineProfile
 {
@@ -16,7 +16,6 @@ public sealed record ReviewPipelineProfile
     public ReviewPipelineProfile(
         string profileId,
         string displayName,
-        ReviewStrategy strategy,
         IReadOnlyList<string>? dispatchStageIds,
         IReadOnlyList<string>? perFileStageIds,
         IReadOnlyList<string>? finalizationStageIds,
@@ -36,7 +35,6 @@ public sealed record ReviewPipelineProfile
 
         this.ProfileId = profileId;
         this.DisplayName = displayName;
-        this.Strategy = strategy;
         this.DispatchStageIds = NormalizeStageIds(dispatchStageIds);
         this.PerFileStageIds = NormalizeStageIds(perFileStageIds);
         this.FinalizationStageIds = NormalizeStageIds(finalizationStageIds);
@@ -51,9 +49,6 @@ public sealed record ReviewPipelineProfile
     /// <summary>Human-readable profile name.</summary>
     public string DisplayName { get; }
 
-    /// <summary>Persisted review strategy that owns this profile.</summary>
-    public ReviewStrategy Strategy { get; }
-
     /// <summary>Ordered dispatch-stage identifiers.</summary>
     public IReadOnlyList<string> DispatchStageIds { get; }
 
@@ -63,7 +58,7 @@ public sealed record ReviewPipelineProfile
     /// <summary>Ordered finalization-stage identifiers.</summary>
     public IReadOnlyList<string> FinalizationStageIds { get; }
 
-    /// <summary>True when this profile is the trusted baseline for its strategy.</summary>
+    /// <summary>True when this profile is the trusted baseline.</summary>
     public bool IsBaseline { get; }
 
     /// <summary>

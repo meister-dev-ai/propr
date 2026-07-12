@@ -68,10 +68,6 @@
                                 <span class="overview-metadata-value monospace-value">{{ vm.reviewModelDisplay }}</span>
                             </div>
                             <div class="overview-metadata-item">
-                                <span class="overview-metadata-label">Strategy</span>
-                                <span class="overview-metadata-value">{{ vm.reviewStrategyDisplay }}</span>
-                            </div>
-                            <div class="overview-metadata-item">
                                 <span class="overview-metadata-label">Temperature</span>
                                 <span class="overview-metadata-value">{{ vm.reviewTemperatureDisplay }}</span>
                             </div>

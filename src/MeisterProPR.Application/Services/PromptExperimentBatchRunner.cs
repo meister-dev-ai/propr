@@ -112,13 +112,7 @@ public sealed class PromptExperimentBatchRunner(
             template.RepositoryId,
             template.PullRequestId,
             template.IterationId);
-        clone.SelectReviewStrategy(
-            template.ReviewStrategy,
-            template.ReviewStrategySelectionSource,
-            template.ReviewComparisonMode,
-            template.ReviewPublicationMode,
-            template.ComparisonGroupId,
-            template.ReviewPipelineProfileId);
+        clone.SetReviewPipelineProfile(template.ReviewPipelineProfileId);
         clone.SetPrContext(template.PrTitle, template.PrRepositoryName, template.PrSourceBranch, template.PrTargetBranch);
         clone.SetReviewRevision(template.ReviewRevisionReference);
         clone.SetProviderReviewContext(template.CodeReviewReference);
@@ -158,7 +152,6 @@ public sealed class PromptExperimentBatchRunner(
                 configuration.ConfigurationId,
                 configuration.ModelSelection.ModelId,
                 configuration.Output.DetailMode,
-                job.ReviewStrategy,
                 CreateDefaultProvenanceCounts(),
                 promptExperiment.VariantName,
                 promptExperiment.ActiveStageKeys,

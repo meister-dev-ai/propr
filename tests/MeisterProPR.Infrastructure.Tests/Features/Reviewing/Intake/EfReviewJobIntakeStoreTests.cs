@@ -1,6 +1,7 @@
 // Copyright (c) Andreas Rain.
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
+using MeisterProPR.Application.Features.Reviewing.Execution.Models;
 using MeisterProPR.Application.Features.Reviewing.Intake.Dtos;
 using MeisterProPR.Domain.Enums;
 using MeisterProPR.Domain.ValueObjects;
@@ -53,31 +54,22 @@ public sealed class EfReviewJobIntakeStoreTests(PostgresContainerFixture fixture
     }
 
     [Fact]
-    public async Task CreatePendingJobAsync_PersistsReviewStrategySnapshot()
+    public async Task CreatePendingJobAsync_PersistsResolvedPipelineProfileSnapshot()
     {
-        var comparisonGroupId = Guid.NewGuid();
         var request = new SubmitReviewJobRequestDto("https://dev.azure.com/org", "proj", "repo", 10, 1)
         {
-            ResolvedReviewStrategySelection = new ReviewStrategySelection(
-                ReviewStrategy.PrWideAgentic,
-                ReviewStrategySelectionSource.ClientDefault,
-                ReviewComparisonMode.Single,
-                ReviewPublicationMode.InternalOnly,
-                comparisonGroupId),
+            ResolvedReviewPipelineProfileId = ReviewPipelineProfileCatalog.FileByFileAssertiveProfileId,
         };
 
         var job = await this._store.CreatePendingJobAsync(Guid.NewGuid(), request);
 
         var persisted = await this._dbContext.ReviewJobs.FirstOrDefaultAsync(candidate => candidate.Id == job.Id);
         Assert.NotNull(persisted);
-        Assert.Equal(ReviewStrategy.PrWideAgentic, persisted!.ReviewStrategy);
-        Assert.Equal(ReviewStrategySelectionSource.ClientDefault, persisted.ReviewStrategySelectionSource);
-        Assert.Equal(ReviewPublicationMode.InternalOnly, persisted.ReviewPublicationMode);
-        Assert.Equal(comparisonGroupId, persisted.ComparisonGroupId);
+        Assert.Equal(ReviewPipelineProfileCatalog.FileByFileAssertiveProfileId, persisted!.ReviewPipelineProfileId);
     }
 
     [Fact]
-    public async Task CreatePendingJobAsync_WithoutResolvedStrategy_PersistsFallbackDefaults()
+    public async Task CreatePendingJobAsync_WithoutResolvedProfile_PersistsBalancedFallback()
     {
         var request = new SubmitReviewJobRequestDto("https://dev.azure.com/org", "proj", "repo", 10, 1);
 
@@ -85,11 +77,7 @@ public sealed class EfReviewJobIntakeStoreTests(PostgresContainerFixture fixture
 
         var persisted = await this._dbContext.ReviewJobs.FirstOrDefaultAsync(candidate => candidate.Id == job.Id);
         Assert.NotNull(persisted);
-        Assert.Equal(ReviewStrategy.FileByFile, persisted!.ReviewStrategy);
-        Assert.Equal(ReviewStrategySelectionSource.FallbackDefault, persisted.ReviewStrategySelectionSource);
-        Assert.Equal(ReviewComparisonMode.Single, persisted.ReviewComparisonMode);
-        Assert.Equal(ReviewPublicationMode.Publish, persisted.ReviewPublicationMode);
-        Assert.Null(persisted.ComparisonGroupId);
+        Assert.Equal(ReviewPipelineProfileCatalog.FileByFileBalancedProfileId, persisted!.ReviewPipelineProfileId);
     }
 
     [Fact]

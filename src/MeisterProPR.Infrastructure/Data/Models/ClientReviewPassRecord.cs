@@ -21,5 +21,17 @@ public sealed class ClientReviewPassRecord
     /// </summary>
     public string? Lens { get; set; }
 
+    /// <summary>
+    ///     Optional scope for this pass. <see langword="null" /> is the per-file default; a known scope value
+    ///     (e.g. <c>pr_wide</c>) selects where the pass runs relative to the change set.
+    /// </summary>
+    public string? Scope { get; set; }
+
+    /// <summary>
+    ///     Whether this pass runs in shadow mode. Shadow passes are additive metadata for now; the review runtime does
+    ///     not act on the flag yet.
+    /// </summary>
+    public bool Shadow { get; set; }
+
     public ClientRecord? Client { get; set; }
 }

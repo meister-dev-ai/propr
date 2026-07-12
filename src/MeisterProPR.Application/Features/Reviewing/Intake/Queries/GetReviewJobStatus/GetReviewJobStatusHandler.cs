@@ -51,11 +51,6 @@ public sealed class GetReviewJobStatusHandler(IReviewJobIntakeStore intakeStore)
             Repository = job.RepositoryReference,
             CodeReview = job.CodeReviewReference,
             ReviewRevision = job.ReviewRevisionReference,
-            ResolvedReviewStrategy = job.ReviewStrategy,
-            StrategySelectionSource = job.ReviewStrategySelectionSource,
-            ComparisonMode = job.ReviewComparisonMode,
-            PublicationMode = job.ReviewPublicationMode,
-            ComparisonGroupId = job.ComparisonGroupId,
             Workspace = ResolveWorkspace(job),
         };
     }

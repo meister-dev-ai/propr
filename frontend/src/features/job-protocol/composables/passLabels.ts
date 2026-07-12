@@ -55,9 +55,16 @@ export function passKindLabel(
     return 'Initial review'
 }
 
-/** Title-cased display name for a review-pass lens (e.g. "security" -> "Security"). */
+// Display names for markers that carry through the lens channel but do not read as a plain title-cased word.
+// A job-level PR-wide pass marks its findings with the `pr_wide` scope marker, which must render "PR-wide"
+// rather than the title-caser's "Pr_wide".
+const LENS_LABELS: Record<string, string> = {
+    pr_wide: 'PR-wide',
+}
+
+/** Display name for a review-pass lens marker (e.g. "security" -> "Security", "pr_wide" -> "PR-wide"). */
 function lensLabel(lens: string): string {
-    return lens.charAt(0).toUpperCase() + lens.slice(1)
+    return LENS_LABELS[lens] ?? lens.charAt(0).toUpperCase() + lens.slice(1)
 }
 
 /**

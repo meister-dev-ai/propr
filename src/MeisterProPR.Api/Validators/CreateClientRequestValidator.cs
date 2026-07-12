@@ -3,7 +3,6 @@
 
 using FluentValidation;
 using MeisterProPR.Api.Controllers;
-using MeisterProPR.Domain.Enums;
 
 namespace MeisterProPR.Api.Validators;
 
@@ -20,9 +19,5 @@ public sealed class CreateClientRequestValidator : AbstractValidator<CreateClien
         this.RuleFor(r => r.TenantId)
             .NotEmpty()
             .WithMessage("TenantId is required.");
-
-        this.RuleFor(r => r.DefaultReviewStrategy)
-            .Must(strategy => !strategy.HasValue || ReviewStrategyPolicy.IsSelectable(strategy.Value))
-            .WithMessage(request => ReviewStrategyPolicy.GetDisabledSelectionMessage(request.DefaultReviewStrategy ?? ReviewStrategy.FileByFile));
     }
 }

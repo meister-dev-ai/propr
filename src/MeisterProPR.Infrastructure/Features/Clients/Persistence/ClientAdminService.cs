@@ -43,23 +43,12 @@ public sealed class ClientAdminService(
     /// <inheritdoc />
     public async Task<ClientDto> CreateAsync(Guid tenantId, string displayName, CancellationToken ct = default)
     {
-        return await this.CreateAsync(tenantId, displayName, ReviewStrategy.FileByFile, ct);
-    }
-
-    /// <inheritdoc />
-    public async Task<ClientDto> CreateAsync(
-        Guid tenantId,
-        string displayName,
-        ReviewStrategy defaultReviewStrategy,
-        CancellationToken ct = default)
-    {
         var client = new ClientRecord
         {
             Id = Guid.NewGuid(),
             TenantId = tenantId,
             DisplayName = displayName,
             IsActive = true,
-            DefaultReviewStrategy = defaultReviewStrategy,
             CreatedAt = DateTimeOffset.UtcNow,
         };
         dbContext.Clients.Add(client);
@@ -82,7 +71,6 @@ public sealed class ClientAdminService(
         bool? enableLanguageRobustScreening = null,
         bool? enableMultiPassUnion = null,
         IReadOnlyList<ReviewPassDto>? reviewPasses = null,
-        ReviewStrategy? defaultReviewStrategy = null,
         CancellationToken ct = default)
     {
         var isCommunityEdition = await this.IsCommunityEditionAsync(ct);
@@ -112,11 +100,6 @@ public sealed class ClientAdminService(
         if (commentResolutionBehavior.HasValue)
         {
             client.CommentResolutionBehavior = commentResolutionBehavior.Value;
-        }
-
-        if (defaultReviewStrategy.HasValue)
-        {
-            client.DefaultReviewStrategy = defaultReviewStrategy.Value;
         }
 
         if (customSystemMessage is not null)
@@ -166,6 +149,8 @@ public sealed class ClientAdminService(
                         Ordinal = ordinal++,
                         ConfiguredModelId = pass.ConfiguredModelId,
                         Lens = pass.Lens,
+                        Scope = pass.Scope,
+                        Shadow = pass.Shadow,
                     });
             }
         }
@@ -265,7 +250,7 @@ public sealed class ClientAdminService(
     /// <inheritdoc />
     public Task<IReadOnlyList<ReviewPipelineProfile>> GetSelectableReviewPipelineProfilesAsync(CancellationToken ct = default)
     {
-        var profiles = (reviewPipelineProfileProvider?.GetProfiles(ReviewStrategy.FileByFile) ?? [])
+        var profiles = (reviewPipelineProfileProvider?.GetProfiles() ?? [])
             .Where(profile =>
                 string.Equals(profile.ProfileId, ReviewPipelineProfileCatalog.FileByFileCalmProfileId, StringComparison.Ordinal)
                 || string.Equals(profile.ProfileId, ReviewPipelineProfileCatalog.FileByFileBalancedProfileId, StringComparison.Ordinal)
@@ -345,7 +330,7 @@ public sealed class ClientAdminService(
 
         var reviewPasses = client.ReviewPasses
             .OrderBy(pass => pass.Ordinal)
-            .Select(pass => new ReviewPassDto(pass.Ordinal, pass.ConfiguredModelId, pass.Lens))
+            .Select(pass => new ReviewPassDto(pass.Ordinal, pass.ConfiguredModelId, pass.Lens, pass.Scope, pass.Shadow))
             .ToList()
             .AsReadOnly();
 
@@ -355,7 +340,6 @@ public sealed class ClientAdminService(
             client.IsActive,
             client.CreatedAt,
             client.CommentResolutionBehavior,
-            client.DefaultReviewStrategy,
             client.CustomSystemMessage,
             client.DefaultReviewPipelineProfileId,
             client.DefaultReviewPipelineProfileUpdatedAtUtc,

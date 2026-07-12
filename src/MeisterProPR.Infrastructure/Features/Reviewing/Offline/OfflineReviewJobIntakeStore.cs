@@ -1,10 +1,10 @@
 // Copyright (c) Andreas Rain.
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
+using MeisterProPR.Application.Features.Reviewing.Execution.Models;
 using MeisterProPR.Application.Features.Reviewing.Intake.Dtos;
 using MeisterProPR.Application.Features.Reviewing.Intake.Ports;
 using MeisterProPR.Domain.Entities;
-using MeisterProPR.Domain.ValueObjects;
 
 namespace MeisterProPR.Infrastructure.Features.Reviewing.Offline;
 
@@ -41,7 +41,10 @@ public sealed class OfflineReviewJobIntakeStore(InMemoryReviewJobRepository jobs
             request.PullRequestId,
             request.IterationId);
 
-        job.SelectReviewStrategy(request.ResolvedReviewStrategySelection ?? ReviewStrategySelection.Default);
+        job.SetReviewPipelineProfile(
+            string.IsNullOrWhiteSpace(request.ResolvedReviewPipelineProfileId)
+                ? ReviewPipelineProfileCatalog.FileByFileBalancedProfileId
+                : request.ResolvedReviewPipelineProfileId);
 
         if (request.ReviewTemperature.HasValue)
         {
