@@ -24,8 +24,10 @@ public sealed class ThreadMemoryServiceTests
     private static readonly Guid ClientId = Guid.Parse("aaaaaaaa-0000-0000-0000-000000000001");
     private static readonly Guid ProtocolId = Guid.Parse("bbbbbbbb-0000-0000-0000-000000000001");
 
-    [Fact]
-    public async Task HandleThreadResolvedAsync_NormalCase_StoresEmbeddingAndAppendsActivityLogEntry()
+    [Theory]
+    [InlineData(ResolutionClarity.ResolvedByChange)]
+    [InlineData(ResolutionClarity.AcceptedWithoutChange)]
+    public async Task HandleThreadResolvedAsync_DeterminableResolution_StoresEmbeddingAndAppendsStoredEntry(ResolutionClarity clarity)
     {
         var (embedder, repo, _, activityLog, service) = CreateService();
         var vector = new[] { 0.1f, 0.2f };
@@ -35,25 +37,18 @@ public sealed class ThreadMemoryServiceTests
                 Arg.Any<string>(),
                 Arg.Any<Guid>(),
                 Arg.Any<CancellationToken>())
-            .Returns("Resolution summary.");
+            .Returns(new ThreadResolutionSummary("Resolution summary.", clarity));
         embedder.GenerateEmbeddingAsync(Arg.Any<string>(), Arg.Any<Guid>(), Arg.Any<CancellationToken>())
             .Returns(vector);
 
-        var evt = new ThreadResolvedDomainEvent(
-            ClientId,
-            "repo-1",
-            42,
-            7,
-            "src/Foo.cs",
-            "diff",
-            "comment history",
-            DateTimeOffset.UtcNow);
+        var evt = ResolvedEvent("comment history");
         await service.HandleThreadResolvedAsync(evt);
 
         await repo.Received(1)
             .UpsertAsync(
                 Arg.Is<ThreadMemoryRecord>(r =>
-                    r.ClientId == ClientId && r.ThreadId == 7 && r.RepositoryId == "repo-1"),
+                    r.ClientId == ClientId && r.ThreadId == 7 && r.RepositoryId == "repo-1" &&
+                    r.ResolutionSummary == "Resolution summary."),
                 Arg.Any<CancellationToken>());
         await activityLog.Received(1)
             .AppendAsync(
@@ -64,7 +59,34 @@ public sealed class ThreadMemoryServiceTests
     }
 
     [Fact]
-    public async Task HandleThreadResolvedAsync_EmbedderThrows_AppendsStoredEntryWithErrorReasonAndDoesNotThrow()
+    public async Task HandleThreadResolvedAsync_EmptyCommentHistory_SkipsWithoutAiCallAndRecordsNoOp()
+    {
+        var (embedder, repo, _, activityLog, service) = CreateService();
+
+        var evt = ResolvedEvent("   ");
+        var ex = await Record.ExceptionAsync(() => service.HandleThreadResolvedAsync(evt));
+
+        Assert.Null(ex);
+        await embedder.DidNotReceive().GenerateResolutionSummaryAsync(
+            Arg.Any<string?>(),
+            Arg.Any<string?>(),
+            Arg.Any<string>(),
+            Arg.Any<Guid>(),
+            Arg.Any<CancellationToken>());
+        await embedder.DidNotReceive().GenerateEmbeddingAsync(
+            Arg.Any<string>(),
+            Arg.Any<Guid>(),
+            Arg.Any<CancellationToken>());
+        await repo.DidNotReceive().UpsertAsync(Arg.Any<ThreadMemoryRecord>(), Arg.Any<CancellationToken>());
+        await AssertNoOpAsync(activityLog, "empty_comment_history");
+    }
+
+    [Theory]
+    [InlineData(ResolutionClarity.ClosedWithoutResolution, "closed_without_resolution")]
+    [InlineData(ResolutionClarity.Undetermined, "undetermined")]
+    public async Task HandleThreadResolvedAsync_NonStorableResolution_SkipsStorageAndRecordsNoOp(
+        ResolutionClarity clarity,
+        string expectedReason)
     {
         var (embedder, repo, _, activityLog, service) = CreateService();
         embedder.GenerateResolutionSummaryAsync(
@@ -73,28 +95,101 @@ public sealed class ThreadMemoryServiceTests
                 Arg.Any<string>(),
                 Arg.Any<Guid>(),
                 Arg.Any<CancellationToken>())
-            .Returns("Summary.");
+            .Returns(new ThreadResolutionSummary("A real but inconclusive summary.", clarity));
+
+        var evt = ResolvedEvent("comment history");
+        await service.HandleThreadResolvedAsync(evt);
+
+        await embedder.DidNotReceive().GenerateEmbeddingAsync(
+            Arg.Any<string>(),
+            Arg.Any<Guid>(),
+            Arg.Any<CancellationToken>());
+        await repo.DidNotReceive().UpsertAsync(Arg.Any<ThreadMemoryRecord>(), Arg.Any<CancellationToken>());
+        await AssertNoOpAsync(activityLog, expectedReason);
+    }
+
+    [Fact]
+    public async Task HandleThreadResolvedAsync_SummaryGenerationFailedPlaceholder_SkipsWithSpecificReason()
+    {
+        var (embedder, repo, _, activityLog, service) = CreateService();
+        embedder.GenerateResolutionSummaryAsync(
+                Arg.Any<string?>(),
+                Arg.Any<string?>(),
+                Arg.Any<string>(),
+                Arg.Any<Guid>(),
+                Arg.Any<CancellationToken>())
+            .Returns(
+                new ThreadResolutionSummary(
+                    ThreadResolutionSummary.GenerationFailedSummary,
+                    ResolutionClarity.Undetermined));
+
+        var evt = ResolvedEvent("comment history");
+        await service.HandleThreadResolvedAsync(evt);
+
+        await repo.DidNotReceive().UpsertAsync(Arg.Any<ThreadMemoryRecord>(), Arg.Any<CancellationToken>());
+        await AssertNoOpAsync(activityLog, "summary_generation_failed");
+    }
+
+    [Fact]
+    public async Task HandleThreadResolvedAsync_EmbeddingFails_SkipsStorageAndRecordsNoOpWithoutThrowing()
+    {
+        var (embedder, repo, _, activityLog, service) = CreateService();
+        embedder.GenerateResolutionSummaryAsync(
+                Arg.Any<string?>(),
+                Arg.Any<string?>(),
+                Arg.Any<string>(),
+                Arg.Any<Guid>(),
+                Arg.Any<CancellationToken>())
+            .Returns(new ThreadResolutionSummary("Summary.", ResolutionClarity.ResolvedByChange));
         embedder.GenerateEmbeddingAsync(Arg.Any<string>(), Arg.Any<Guid>(), Arg.Any<CancellationToken>())
             .ThrowsAsync(new InvalidOperationException("no embedding connection"));
 
-        var evt = new ThreadResolvedDomainEvent(
-            ClientId,
-            "repo-1",
-            42,
-            7,
-            null,
-            null,
-            "history",
-            DateTimeOffset.UtcNow);
+        var evt = ResolvedEvent("history");
         var ex = await Record.ExceptionAsync(() => service.HandleThreadResolvedAsync(evt));
 
         Assert.Null(ex);
         await repo.DidNotReceive().UpsertAsync(Arg.Any<ThreadMemoryRecord>(), Arg.Any<CancellationToken>());
+        await AssertNoOpAsync(activityLog, "embedding_failed");
+    }
+
+    [Fact]
+    public async Task HandleThreadResolvedAsync_BotOnlyThread_PassesHeuristicAndStoresWhenDeterminable()
+    {
+        var (embedder, repo, _, activityLog, service) = CreateService();
+        embedder.GenerateResolutionSummaryAsync(
+                Arg.Any<string?>(),
+                Arg.Any<string?>(),
+                Arg.Any<string>(),
+                Arg.Any<Guid>(),
+                Arg.Any<CancellationToken>())
+            .Returns(new ThreadResolutionSummary("Fixed by the follow-up commit.", ResolutionClarity.ResolvedByChange));
+        embedder.GenerateEmbeddingAsync(Arg.Any<string>(), Arg.Any<Guid>(), Arg.Any<CancellationToken>())
+            .Returns(new[] { 0.1f });
+
+        // A thread whose only comment is the review bot's own finding is non-empty, so it must pass the
+        // whitespace pre-gate and reach the classifier rather than being skipped outright.
+        var evt = ResolvedEvent("ProPR bot: Potential null dereference before the guard clause.");
+        await service.HandleThreadResolvedAsync(evt);
+
+        await embedder.Received(1).GenerateResolutionSummaryAsync(
+            Arg.Any<string?>(),
+            Arg.Any<string?>(),
+            Arg.Any<string>(),
+            Arg.Any<Guid>(),
+            Arg.Any<CancellationToken>());
+        await repo.Received(1).UpsertAsync(Arg.Any<ThreadMemoryRecord>(), Arg.Any<CancellationToken>());
+    }
+
+    private static ThreadResolvedDomainEvent ResolvedEvent(string commentHistory) =>
+        new(ClientId, "repo-1", 42, 7, "src/Foo.cs", "diff", commentHistory, DateTimeOffset.UtcNow);
+
+    private static async Task AssertNoOpAsync(IMemoryActivityLog activityLog, string expectedReason)
+    {
         await activityLog.Received(1)
             .AppendAsync(
                 Arg.Is<MemoryActivityLogEntry>(e =>
-                    e.Action == MemoryActivityAction.Stored && e.Reason != null &&
-                    e.Reason.Contains("no embedding connection")),
+                    e.ClientId == ClientId && e.ThreadId == 7 && e.Action == MemoryActivityAction.NoOp &&
+                    e.CurrentStatus == "resolved" && e.Reason == expectedReason),
                 Arg.Any<CancellationToken>());
     }
 

@@ -1,6 +1,8 @@
 // Copyright (c) Andreas Rain.
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
+using MeisterProPR.Application.DTOs;
+
 namespace MeisterProPR.Application.Interfaces;
 
 /// <summary>
@@ -23,16 +25,20 @@ public interface IThreadMemoryEmbedder
     Task<float[]> GenerateEmbeddingAsync(string compositeText, Guid clientId, CancellationToken ct = default);
 
     /// <summary>
-    ///     Generates a 2–4 sentence AI summary describing how and why the given thread was resolved.
-    ///     Never throws — returns a placeholder summary on failure.
+    ///     Generates an AI summary describing how and why the given thread was resolved, together with a
+    ///     classification of how clearly the thread expresses an actual resolution.
+    ///     Never throws — on failure returns a placeholder summary classified
+    ///     <see cref="MeisterProPR.Domain.Enums.ResolutionClarity.Undetermined" />.
     /// </summary>
     /// <param name="filePath">File the thread was anchored to (null for PR-level threads).</param>
     /// <param name="changeExcerpt">Diff excerpt relevant to the thread.</param>
     /// <param name="commentHistory">Full comment history of the thread.</param>
     /// <param name="clientId">The client whose active AI connection should be used for summary generation.</param>
     /// <param name="ct">Cancellation token.</param>
-    /// <returns>A non-empty resolution summary string.</returns>
-    Task<string> GenerateResolutionSummaryAsync(
+    /// <returns>
+    ///     A <see cref="ThreadResolutionSummary" /> with a non-empty summary and a resolution classification.
+    /// </returns>
+    Task<ThreadResolutionSummary> GenerateResolutionSummaryAsync(
         string? filePath,
         string? changeExcerpt,
         string commentHistory,

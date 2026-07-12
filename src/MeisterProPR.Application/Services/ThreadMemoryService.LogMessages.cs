@@ -19,6 +19,11 @@ public sealed partial class ThreadMemoryService
     private static partial void LogEmbeddingRemoved(ILogger logger, long threadId, Guid clientId, string outcome);
 
     [LoggerMessage(
+        Level = LogLevel.Information,
+        Message = "Memory storage skipped for thread {ThreadId} client {ClientId}: {Reason}")]
+    private static partial void LogResolvedSkippedCore(ILogger logger, long threadId, Guid clientId, string reason);
+
+    [LoggerMessage(
         Level = LogLevel.Warning,
         Message = "Failed to process resolved thread {ThreadId} for client {ClientId}")]
     private static partial void LogProcessResolvedFailedCore(
@@ -98,6 +103,11 @@ public sealed partial class ThreadMemoryService
     private static void LogRecordNoOpFailed(ILogger logger, long threadId, Guid clientId, Exception exception)
     {
         LogRecordNoOpFailedCore(logger, exception, threadId, clientId);
+    }
+
+    private static void LogResolvedSkipped(ILogger logger, long threadId, Guid clientId, string reason)
+    {
+        LogResolvedSkippedCore(logger, threadId, clientId, SanitizeForLog(reason));
     }
 
     private static void LogRetrieveAndReconsiderFailed(

@@ -45,16 +45,40 @@ public sealed partial class ThreadMemoryService(
     /// <inheritdoc />
     public async Task HandleThreadResolvedAsync(ThreadResolvedDomainEvent evt, CancellationToken ct = default)
     {
+        // Heuristic pre-gate: a thread with no discussion carries no resolution to learn from.
+        // Skip before spending any AI call. Threads with any content (including a lone bot finding)
+        // fall through to the model, which decides whether a resolution is determinable.
+        if (string.IsNullOrWhiteSpace(evt.CommentHistory))
+        {
+            await this.RecordResolvedSkipAsync(evt, "empty_comment_history", ct);
+            return;
+        }
+
         try
         {
-            var summary = await embedder.GenerateResolutionSummaryAsync(
+            var resolution = await embedder.GenerateResolutionSummaryAsync(
                 evt.FilePath,
                 evt.ChangeExcerpt,
                 evt.CommentHistory,
                 evt.ClientId,
                 ct);
 
-            var compositeText = BuildCompositeText(evt.FilePath, evt.ChangeExcerpt, evt.CommentHistory, summary);
+            // Clarity gate: only store a genuine, determinable resolution. Threads closed without a
+            // conclusion, and threads the model could not classify (including a failed summary call),
+            // are skipped so speculative or placeholder "resolutions" never reach a future review.
+            if (!resolution.IsStorable)
+            {
+                var reason = ClassifySkipReason(resolution);
+                await this.RecordResolvedSkipAsync(evt, reason, ct);
+                LogResolvedSkipped(logger, evt.ThreadId, evt.ClientId, reason);
+                return;
+            }
+
+            var compositeText = BuildCompositeText(
+                evt.FilePath,
+                evt.ChangeExcerpt,
+                evt.CommentHistory,
+                resolution.Summary);
             var vector = await embedder.GenerateEmbeddingAsync(compositeText, evt.ClientId, ct);
 
             var now = DateTimeOffset.UtcNow;
@@ -68,7 +92,7 @@ public sealed partial class ThreadMemoryService(
                 FilePath = evt.FilePath,
                 ChangeExcerpt = TruncateExcerpt(evt.ChangeExcerpt),
                 CommentHistoryDigest = evt.CommentHistory,
-                ResolutionSummary = summary,
+                ResolutionSummary = resolution.Summary,
                 EmbeddingVector = vector,
                 CreatedAt = now,
                 UpdatedAt = now,
@@ -96,23 +120,43 @@ public sealed partial class ThreadMemoryService(
         }
         catch (Exception ex)
         {
+            // A determinable resolution whose embedding or persistence failed: nothing is stored, so
+            // record the skip rather than a phantom "Stored" entry.
             LogProcessResolvedFailed(logger, evt.ThreadId, evt.ClientId, ex);
-            await activityLog.AppendAsync(
-                new MemoryActivityLogEntry
-                {
-                    Id = Guid.NewGuid(),
-                    ClientId = evt.ClientId,
-                    ThreadId = evt.ThreadId,
-                    RepositoryId = evt.RepositoryId,
-                    PullRequestId = evt.PullRequestId,
-                    Action = MemoryActivityAction.Stored,
-                    PreviousStatus = null,
-                    CurrentStatus = "resolved",
-                    Reason = ex.Message,
-                    OccurredAt = DateTimeOffset.UtcNow,
-                },
-                ct);
+            await this.RecordResolvedSkipAsync(evt, "embedding_failed", ct);
         }
+    }
+
+    /// <summary>
+    ///     Maps a non-storable resolution to an audit reason, distinguishing a failed summary call
+    ///     (placeholder text) from a genuine model classification.
+    /// </summary>
+    private static string ClassifySkipReason(ThreadResolutionSummary resolution)
+    {
+        if (resolution.Clarity == ResolutionClarity.ClosedWithoutResolution)
+        {
+            return "closed_without_resolution";
+        }
+
+        return resolution.Summary == ThreadResolutionSummary.GenerationFailedSummary
+            ? "summary_generation_failed"
+            : "undetermined";
+    }
+
+    /// <summary>
+    ///     Records that a resolved thread was intentionally not stored, as a <c>NoOp</c> activity entry.
+    /// </summary>
+    private Task RecordResolvedSkipAsync(ThreadResolvedDomainEvent evt, string reason, CancellationToken ct)
+    {
+        return this.RecordNoOpAsync(
+            evt.ClientId,
+            evt.RepositoryId,
+            evt.PullRequestId,
+            evt.ThreadId,
+            previousStatus: null,
+            currentStatus: "resolved",
+            reason: reason,
+            ct);
     }
 
     /// <inheritdoc />
