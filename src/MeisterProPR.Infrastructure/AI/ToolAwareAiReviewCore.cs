@@ -135,6 +135,42 @@ internal sealed partial class ToolAwareAiReviewCore(
             Tools = transportTools.Count > 0 ? [.. transportTools] : null,
         };
 
+        // Pre-flight context-window budgeting: estimate the assembled payload against the model's context
+        // window and degrade to diff-only, or skip, rather than send the provider a context that is too large.
+        var reservedOutputTokens = chatOptions.MaxOutputTokens ?? 0;
+        var maxContextTokens = ReviewContextBudget.ResolveMaxContextTokens(systemContext.MaxContextTokens);
+        var inputBudget = ReviewContextBudget.ComputeInputBudget(maxContextTokens, reservedOutputTokens);
+        var budgetTokenizer = systemContext.TokenizerName;
+        var budgetFileLabel = systemContext.PerFileHint?.FilePath ?? "whole-pr";
+
+        var preflight = ReviewContextBudget.ClassifyInitialPayload(state.Messages, budgetTokenizer, inputBudget, maxContextTokens);
+        if (preflight.Classification == ContextBudgetClassification.Skipped)
+        {
+            systemContext.ContextBudgetOutcome = ReviewContextBudgetOutcome.Skipped;
+            LogContextBudgetFileSkipped(logger, budgetFileLabel, preflight.EstimatedInputTokens, inputBudget);
+            await this.RecordContextBudgetEventAsync(
+                systemContext,
+                ReviewProtocolEventNames.ContextBudgetFileSkipped,
+                BuildContextBudgetDetails(budgetFileLabel, preflight),
+                cancellationToken);
+            return new ReviewResult(
+                $"Skipped: '{budgetFileLabel}' exceeds the model context window " +
+                $"(~{preflight.EstimatedInputTokens} input tokens over the {inputBudget}-token budget). The file was not reviewed.",
+                []);
+        }
+
+        if (preflight.Classification == ContextBudgetClassification.DegradedDiffOnly)
+        {
+            DegradeToDiffOnly(state, systemContext, budgetTokenizer, inputBudget);
+            systemContext.ContextBudgetOutcome = ReviewContextBudgetOutcome.DegradedDiffOnly;
+            LogContextBudgetFileDegraded(logger, budgetFileLabel, preflight.EstimatedInputTokens, inputBudget);
+            await this.RecordContextBudgetEventAsync(
+                systemContext,
+                ReviewProtocolEventNames.ContextBudgetFileDegraded,
+                BuildContextBudgetDetails(budgetFileLabel, preflight),
+                cancellationToken);
+        }
+
         state.InitializeSession(ResolveInitialSessionMode(systemContext));
         systemContext.ReviewSession = state.Session;
 
@@ -159,11 +195,20 @@ internal sealed partial class ToolAwareAiReviewCore(
             ? (managedSessionTransportFactory ?? new ManagedReviewSessionTransportFactory()).Create(effectiveClient, transportTools)
             : null;
 
-        Task<ChatResponse> GetResponseAsync(IEnumerable<ChatMessage> messages, ChatOptions responseOptions)
+        async Task<ChatResponse> GetResponseAsync(IEnumerable<ChatMessage> messages, ChatOptions responseOptions)
         {
-            return ShouldUseAgentFrameworkManagedSession(state, systemContext, managedSessionTransport)
-                ? managedSessionTransport!.GetResponseAsync(messages, responseOptions, cancellationToken)
-                : effectiveClient.GetResponseAsync(messages, responseOptions, cancellationToken);
+            // Choke point for every provider call in the loop: trim accumulated tool-result history to fit the
+            // input budget before sending, so a growing transcript never overflows the model context window.
+            var toSend = await this.ApplyPerTurnContextBudgetAsync(
+                messages as IReadOnlyList<ChatMessage> ?? messages.ToList(),
+                systemContext,
+                budgetTokenizer,
+                inputBudget,
+                state.Iteration,
+                cancellationToken);
+            return await (ShouldUseAgentFrameworkManagedSession(state, systemContext, managedSessionTransport)
+                ? managedSessionTransport!.GetResponseAsync(toSend, responseOptions, cancellationToken)
+                : effectiveClient.GetResponseAsync(toSend, responseOptions, cancellationToken));
         }
 
         using var activity = ActivitySource.StartActivity("ReviewLoop");
@@ -473,17 +518,30 @@ internal sealed partial class ToolAwareAiReviewCore(
 
         var correctionOptions = new ChatOptions
             { MaxOutputTokens = chatOptions.MaxOutputTokens, ModelId = effectiveModelId, Temperature = systemContext.Temperature };
+
+        // Apply the same context-window budget to the schema-repair call, which sends the accumulated transcript
+        // directly rather than through the loop's choke point.
+        var repairMaxContextTokens = ReviewContextBudget.ResolveMaxContextTokens(systemContext.MaxContextTokens);
+        var repairInputBudget = ReviewContextBudget.ComputeInputBudget(repairMaxContextTokens, chatOptions.MaxOutputTokens ?? 0);
+        var repairMessages = await this.ApplyPerTurnContextBudgetAsync(
+            state.Messages,
+            systemContext,
+            systemContext.TokenizerName,
+            repairInputBudget,
+            state.Iteration,
+            cancellationToken);
+
         ChatResponse correctionResponse;
         try
         {
             correctionResponse = ShouldUseAgentFrameworkManagedSession(state, systemContext, managedSessionTransport)
-                ? await managedSessionTransport!.GetResponseAsync(state.Messages, correctionOptions, cancellationToken)
-                : await effectiveClient.GetResponseAsync(state.Messages, correctionOptions, cancellationToken);
+                ? await managedSessionTransport!.GetResponseAsync(repairMessages, correctionOptions, cancellationToken)
+                : await effectiveClient.GetResponseAsync(repairMessages, correctionOptions, cancellationToken);
         }
         catch (Exception ex) when (this.TryDowngradeProviderManagedSession(state, systemContext, ex))
         {
             systemContext.ReviewSession = state.Session;
-            correctionResponse = await effectiveClient.GetResponseAsync(state.Messages, correctionOptions, cancellationToken);
+            correctionResponse = await effectiveClient.GetResponseAsync(repairMessages, correctionOptions, cancellationToken);
         }
 
         var correctionCachedInputTokens = correctionResponse.Usage?.CachedInputTokenCount;
@@ -627,6 +685,122 @@ internal sealed partial class ToolAwareAiReviewCore(
         }
 
         return Math.Max(1, text.Length / 4);
+    }
+
+    /// <summary>
+    ///     Trims accumulated tool-result history in the outgoing message list to fit the input budget, and
+    ///     records a protocol event and log marker when trimming occurs. Returns the message list to send.
+    /// </summary>
+    private async Task<IReadOnlyList<ChatMessage>> ApplyPerTurnContextBudgetAsync(
+        IReadOnlyList<ChatMessage> messages,
+        ReviewSystemContext systemContext,
+        string? tokenizerName,
+        int inputBudget,
+        int iteration,
+        CancellationToken ct)
+    {
+        var trim = ReviewContextBudget.TrimToolHistoryToBudget(messages, tokenizerName, inputBudget);
+        if (!trim.Trimmed)
+        {
+            return trim.Messages;
+        }
+
+        var fileLabel = systemContext.PerFileHint?.FilePath ?? "whole-pr";
+        LogContextBudgetTrimmed(logger, fileLabel, iteration, trim.EstimatedTokensBefore, trim.EstimatedTokensAfter);
+        await this.RecordContextBudgetEventAsync(
+            systemContext,
+            ReviewProtocolEventNames.ContextBudgetTrimmed,
+            JsonSerializer.Serialize(
+                new
+                {
+                    filePath = fileLabel,
+                    iteration,
+                    inputBudget,
+                    estimatedTokensBefore = trim.EstimatedTokensBefore,
+                    estimatedTokensAfter = trim.EstimatedTokensAfter,
+                    compactedToolMessages = trim.CompactedMessageCount,
+                },
+                JsonOptions),
+            ct);
+        return trim.Messages;
+    }
+
+    /// <summary>
+    ///     Degrades the assembled per-file payload to diff-only. Preferentially drops just the prefetched
+    ///     file-content windows and rebuilds the per-file context message so the persona, per-file framing, and
+    ///     output-schema reminder survive (keeping two system messages so continuation turns still carry system
+    ///     guidance). Falls back to dropping the whole per-file context message when the lean payload still would
+    ///     not fit, or when there is no per-file context to slim (whole-PR path).
+    /// </summary>
+    private static void DegradeToDiffOnly(
+        ReviewLoopState state,
+        ReviewSystemContext systemContext,
+        string? tokenizerName,
+        int inputBudget)
+    {
+        if (systemContext.PerFileHint is { } hint && hint.PrefetchedContextEvidence.Count > 0)
+        {
+            var secondSystemIndex = -1;
+            var systemSeen = 0;
+            for (var i = 0; i < state.Messages.Count; i++)
+            {
+                if (state.Messages[i].Role == ChatRole.System && ++systemSeen == 2)
+                {
+                    secondSystemIndex = i;
+                    break;
+                }
+            }
+
+            if (secondSystemIndex >= 0)
+            {
+                systemContext.PerFileHint = hint with { PrefetchedContextEvidence = [] };
+                var leanContext = ReviewPrompts.BuildPerFileContextPrompt(systemContext, hint.FilePath, hint.FileIndex, hint.TotalFiles);
+                var candidate = state.Messages.ToList();
+                candidate[secondSystemIndex] = new ChatMessage(ChatRole.System, leanContext);
+
+                if (ReviewContextBudget.EstimateMessagesTokens(tokenizerName, candidate) <= inputBudget)
+                {
+                    state.Messages[secondSystemIndex] = candidate[secondSystemIndex];
+                    state.SetPersistentMessages(state.Messages.Where(message => message.Role == ChatRole.System));
+                    return;
+                }
+            }
+        }
+
+        // No per-file context message to slim, or the lean payload still exceeds the budget: keep only the
+        // first system message and the diff so the initial send is guaranteed to fit.
+        var diffOnly = ReviewContextBudget.ToDiffOnly(state.Messages);
+        state.Messages.Clear();
+        state.Messages.AddRange(diffOnly);
+        state.SetPersistentMessages(diffOnly.Where(message => message.Role == ChatRole.System));
+    }
+
+    private async Task RecordContextBudgetEventAsync(
+        ReviewSystemContext systemContext,
+        string eventName,
+        string details,
+        CancellationToken ct)
+    {
+        if (systemContext.ActiveProtocolId is not { } protocolId || systemContext.ProtocolRecorder is null)
+        {
+            return;
+        }
+
+        await systemContext.ProtocolRecorder.RecordReviewStrategyEventAsync(protocolId, eventName, details, output: null, error: null, ct);
+    }
+
+    private static string BuildContextBudgetDetails(string fileLabel, ContextBudgetPreflight preflight)
+    {
+        return JsonSerializer.Serialize(
+            new
+            {
+                filePath = fileLabel,
+                classification = preflight.Classification.ToString(),
+                maxContextTokens = preflight.MaxContextTokens,
+                inputBudget = preflight.InputBudgetTokens,
+                estimatedInputTokens = preflight.EstimatedInputTokens,
+            },
+            JsonOptions);
     }
 
     private static bool ShouldUseAgentFrameworkManagedSession(ReviewSystemContext systemContext)
@@ -1808,6 +1982,22 @@ internal sealed partial class ToolAwareAiReviewCore(
         Level = LogLevel.Warning,
         Message = "Provider-managed agent session downgraded at iteration {Iteration}: {Reason}")]
     private static partial void LogProviderManagedSessionDowngraded(ILogger logger, int iteration, string reason);
+
+    [LoggerMessage(
+        Level = LogLevel.Warning,
+        Message = "Context budget: skipped review of {FilePath} — estimated {EstimatedTokens} input tokens exceed the {InputBudget}-token budget")]
+    private static partial void LogContextBudgetFileSkipped(ILogger logger, string filePath, int estimatedTokens, int inputBudget);
+
+    [LoggerMessage(
+        Level = LogLevel.Warning,
+        Message =
+            "Context budget: degraded review of {FilePath} to diff-only — estimated {EstimatedTokens} input tokens exceed the {InputBudget}-token budget")]
+    private static partial void LogContextBudgetFileDegraded(ILogger logger, string filePath, int estimatedTokens, int inputBudget);
+
+    [LoggerMessage(
+        Level = LogLevel.Debug,
+        Message = "Context budget: trimmed tool history for {FilePath} at iteration {Iteration} ({TokensBefore} -> {TokensAfter} tokens)")]
+    private static partial void LogContextBudgetTrimmed(ILogger logger, string filePath, int iteration, int tokensBefore, int tokensAfter);
 
     [LoggerMessage(
         Level = LogLevel.Debug,

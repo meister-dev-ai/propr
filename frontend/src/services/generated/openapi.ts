@@ -10345,6 +10345,8 @@ export interface components {
             inputCostPer1MUsd?: number | null;
             /** Format: double */
             outputCostPer1MUsd?: number | null;
+            /** Format: int32 */
+            maxContextTokens?: number | null;
             /** @description Returns true when the model supports chat workloads. */
             readonly supportsChat?: boolean;
             /** @description Returns true when the model supports embeddings. */
@@ -10372,6 +10374,8 @@ export interface components {
             inputCostPer1MUsd?: number | null;
             /** Format: double */
             outputCostPer1MUsd?: number | null;
+            /** Format: int32 */
+            maxContextTokens?: number | null;
         };
         /**
          * @description Origin of a configured model entry.

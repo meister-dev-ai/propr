@@ -73,4 +73,7 @@ public static class ReviewProtocolEventNames
     public const string LocalWorkspacePrepared = "local_workspace_prepared";
     public const string LocalWorkspaceFailed = "local_workspace_failed";
     public const string LocalWorkspaceFallbackApplied = "local_workspace_fallback_applied";
+    public const string ContextBudgetTrimmed = "context_budget_trimmed";
+    public const string ContextBudgetFileDegraded = "context_budget_file_degraded";
+    public const string ContextBudgetFileSkipped = "context_budget_file_skipped";
 }

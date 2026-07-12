@@ -451,7 +451,8 @@ public sealed class AiConnectionRepository(
             Enum.Parse<AiConfiguredModelSource>(record.Source, true),
             record.LastSeenAt,
             record.InputCostPer1MUsd,
-            record.OutputCostPer1MUsd);
+            record.OutputCostPer1MUsd,
+            record.MaxContextTokens);
     }
 
     private static AiPurposeBindingDto ToBindingDto(AiPurposeBindingRecord record, AiConfiguredModelRecord model)
@@ -530,6 +531,7 @@ public sealed class AiConnectionRepository(
                     SupportedProtocolModes = model.SupportedProtocolModes.Select(mode => mode.ToString()).Distinct(StringComparer.Ordinal).ToArray(),
                     TokenizerName = string.IsNullOrWhiteSpace(model.TokenizerName) ? null : model.TokenizerName.Trim(),
                     MaxInputTokens = model.MaxInputTokens,
+                    MaxContextTokens = model.MaxContextTokens,
                     EmbeddingDimensions = model.EmbeddingDimensions,
                     SupportsStructuredOutput = model.SupportsStructuredOutput,
                     SupportsToolUse = model.SupportsToolUse,
@@ -715,6 +717,7 @@ public sealed class AiConnectionRepository(
                 !SequenceEqual(existing.SupportedProtocolModes, model.SupportedProtocolModes) ||
                 !string.Equals(existing.TokenizerName, model.TokenizerName, StringComparison.Ordinal) ||
                 existing.MaxInputTokens != model.MaxInputTokens ||
+                existing.MaxContextTokens != model.MaxContextTokens ||
                 existing.EmbeddingDimensions != model.EmbeddingDimensions ||
                 existing.SupportsStructuredOutput != model.SupportsStructuredOutput ||
                 existing.SupportsToolUse != model.SupportsToolUse ||

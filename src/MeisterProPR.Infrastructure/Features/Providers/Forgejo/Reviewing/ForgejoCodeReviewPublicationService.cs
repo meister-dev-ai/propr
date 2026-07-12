@@ -12,6 +12,7 @@ using MeisterProPR.Application.Features.Reviewing.Execution.Models;
 using MeisterProPR.Application.Interfaces;
 using MeisterProPR.Domain.Enums;
 using MeisterProPR.Domain.ValueObjects;
+using MeisterProPR.Infrastructure.Features.Providers.Common;
 using MeisterProPR.Infrastructure.Features.Providers.Forgejo.Security;
 
 namespace MeisterProPR.Infrastructure.Features.Providers.Forgejo.Reviewing;
@@ -230,6 +231,8 @@ internal sealed class ForgejoCodeReviewPublicationService(
                 summaryBuilder.AppendLine($"- {FormatSeverity(comment.Severity)}: {comment.Message}");
             }
         }
+
+        ContextBudgetSummarySections.Append(summaryBuilder, result);
 
         return new ForgejoCreatePullReviewRequest(
             summaryBuilder.ToString().Trim(),

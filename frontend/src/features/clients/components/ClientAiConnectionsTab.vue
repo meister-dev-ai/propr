@@ -269,6 +269,11 @@
                     </template>
 
                     <template v-else>
+                      <label class="form-field">
+                        <span>Max Context Tokens</span>
+                        <input v-model="model.maxContextTokens" type="number" min="1" placeholder="128000 (default)" />
+                      </label>
+
                       <div class="form-field checkbox-group-field">
                         <span style="visibility: hidden">Options</span>
                         <div class="checkboxes-wrapper">

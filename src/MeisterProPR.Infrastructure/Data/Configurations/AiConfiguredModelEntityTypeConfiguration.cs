@@ -33,6 +33,7 @@ internal sealed class AiConfiguredModelEntityTypeConfiguration : IEntityTypeConf
         builder.Property(x => x.SupportedProtocolModes).IsRequired();
         builder.Property(x => x.TokenizerName).HasColumnName("tokenizer_name").HasMaxLength(50);
         builder.Property(x => x.MaxInputTokens).HasColumnName("max_input_tokens");
+        builder.Property(x => x.MaxContextTokens).HasColumnName("max_context_tokens");
         builder.Property(x => x.EmbeddingDimensions).HasColumnName("embedding_dimensions");
         builder.Property(x => x.SupportsStructuredOutput).HasColumnName("supports_structured_output").IsRequired();
         builder.Property(x => x.SupportsToolUse).HasColumnName("supports_tool_use").IsRequired();

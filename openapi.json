@@ -15267,6 +15267,11 @@
             "format": "double",
             "nullable": true
           },
+          "maxContextTokens": {
+            "type": "integer",
+            "format": "int32",
+            "nullable": true
+          },
           "supportsChat": {
             "type": "boolean",
             "description": "Returns true when the model supports chat workloads.",
@@ -15347,6 +15352,11 @@
           "outputCostPer1MUsd": {
             "type": "number",
             "format": "double",
+            "nullable": true
+          },
+          "maxContextTokens": {
+            "type": "integer",
+            "format": "int32",
             "nullable": true
           }
         },

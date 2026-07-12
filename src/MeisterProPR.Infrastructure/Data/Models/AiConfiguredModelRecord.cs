@@ -24,6 +24,8 @@ public sealed class AiConfiguredModelRecord
 
     public int? MaxInputTokens { get; set; }
 
+    public int? MaxContextTokens { get; set; }
+
     public int? EmbeddingDimensions { get; set; }
 
     public bool SupportsStructuredOutput { get; set; }

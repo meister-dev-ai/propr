@@ -13,6 +13,7 @@ using MeisterProPR.Application.Features.Reviewing.Execution.Models;
 using MeisterProPR.Application.Interfaces;
 using MeisterProPR.Domain.Enums;
 using MeisterProPR.Domain.ValueObjects;
+using MeisterProPR.Infrastructure.Features.Providers.Common;
 using MeisterProPR.Infrastructure.Features.Providers.GitLab.Security;
 using MeisterProPR.Infrastructure.Utilities;
 
@@ -201,6 +202,8 @@ internal sealed class GitLabCodeReviewPublicationService(
             summaryBuilder.AppendLine();
             summaryBuilder.AppendLine($"- {FormatSeverity(comment.Severity)}: {comment.Message}");
         }
+
+        ContextBudgetSummarySections.Append(summaryBuilder, result);
 
         return summaryBuilder.ToString().Trim();
     }

@@ -192,6 +192,27 @@ public sealed class AdoCommentPoster(
             }
         }
 
+        if (result.ContextDegradedFilePaths.Count > 0)
+        {
+            sb.Append(
+                $"\n\n**Reviewed diff-only** ({result.ContextDegradedFilePaths.Count} files — too large for full context, reviewed from the diff alone)\n\n");
+            foreach (var path in result.ContextDegradedFilePaths)
+            {
+                var renderedPath = HtmlSanitizer.RenderForDisplay(path, ReviewBodyRenderingMode.Summary).RenderedText;
+                sb.Append($"- {renderedPath}\n");
+            }
+        }
+
+        if (result.ContextSkippedFilePaths.Count > 0)
+        {
+            sb.Append($"\n\n**Skipped — exceeds model context window** ({result.ContextSkippedFilePaths.Count} files — not reviewed)\n\n");
+            foreach (var path in result.ContextSkippedFilePaths)
+            {
+                var renderedPath = HtmlSanitizer.RenderForDisplay(path, ReviewBodyRenderingMode.Summary).RenderedText;
+                sb.Append($"- {renderedPath}\n");
+            }
+        }
+
         return sb.ToString();
     }
 

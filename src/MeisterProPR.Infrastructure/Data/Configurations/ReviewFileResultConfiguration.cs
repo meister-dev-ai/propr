@@ -3,6 +3,7 @@
 
 using System.Text.Json;
 using MeisterProPR.Domain.Entities;
+using MeisterProPR.Domain.Enums;
 using MeisterProPR.Domain.ValueObjects;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
@@ -63,6 +64,13 @@ internal sealed class ReviewFileResultConfiguration : IEntityTypeConfiguration<R
         builder.Property(r => r.PerFileSummary)
             .HasColumnName("per_file_summary")
             .IsRequired(false);
+
+        builder.Property(r => r.ContextBudgetOutcome)
+            .HasColumnName("context_budget_outcome")
+            .HasConversion<string>()
+            .HasMaxLength(32)
+            .IsRequired()
+            .HasDefaultValue(ReviewContextBudgetOutcome.Normal);
 
         builder.Property(r => r.Comments)
             .HasColumnName("comments_json")

@@ -1,6 +1,7 @@
 // Copyright (c) Andreas Rain.
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
+using MeisterProPR.Domain.Enums;
 using MeisterProPR.Domain.ValueObjects;
 
 namespace MeisterProPR.Domain.Entities;
@@ -76,6 +77,12 @@ public class ReviewFileResult
 
     /// <summary>The AI review comments for this file, or null until completion.</summary>
     public IReadOnlyList<ReviewComment>? Comments { get; private set; }
+
+    /// <summary>
+    ///     How pre-flight context-window budgeting treated this file: reviewed normally, degraded to
+    ///     diff-only, or skipped because even the minimal payload exceeded the model window.
+    /// </summary>
+    public ReviewContextBudgetOutcome ContextBudgetOutcome { get; private set; } = ReviewContextBudgetOutcome.Normal;
 
     /// <summary>
     ///     Creates a <see cref="ReviewFileResult" /> that carries forward the result from a prior
@@ -175,6 +182,16 @@ public class ReviewFileResult
     }
 
     /// <summary>
+    ///     Records how pre-flight context-window budgeting treated this file's review. Degraded files still
+    ///     complete with (diff-only) comments; skipped files complete without a review.
+    /// </summary>
+    /// <param name="outcome">The budgeting outcome to record for this file.</param>
+    public void MarkContextBudgetOutcome(ReviewContextBudgetOutcome outcome)
+    {
+        this.ContextBudgetOutcome = outcome;
+    }
+
+    /// <summary>
     ///     Resets a non-terminal result (interrupted mid-flight or previously failed) so it can be
     ///     re-attempted.  Safe to call on any row that has <see cref="IsComplete" /> equal to
     ///     <see langword="false" />, which covers both killed-in-progress and failed rows.
@@ -186,5 +203,6 @@ public class ReviewFileResult
         this.ErrorMessage = null;
         this.PerFileSummary = null;
         this.Comments = null;
+        this.ContextBudgetOutcome = ReviewContextBudgetOutcome.Normal;
     }
 }

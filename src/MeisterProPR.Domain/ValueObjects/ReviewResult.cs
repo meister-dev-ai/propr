@@ -23,4 +23,16 @@ public sealed record ReviewResult(
     ///     carried-forward file results rather than a fresh review pass.
     /// </summary>
     public int CarriedForwardCandidatesSkipped { get; init; }
+
+    /// <summary>
+    ///     File paths reviewed diff-only because their full context exceeded the model's context window.
+    ///     Surfaced in the review summary so a degraded review is never silently presented as a full one.
+    /// </summary>
+    public IReadOnlyList<string> ContextDegradedFilePaths { get; init; } = [];
+
+    /// <summary>
+    ///     File paths skipped without a review because even their minimal payload exceeded the model's
+    ///     context window. Surfaced in the review summary so a skipped file is visible rather than missing.
+    /// </summary>
+    public IReadOnlyList<string> ContextSkippedFilePaths { get; init; } = [];
 }

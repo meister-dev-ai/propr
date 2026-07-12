@@ -70,8 +70,20 @@ internal sealed class ReviewSynthesisExecutor(
             .Where(r => r.IsComplete && r.IsCarriedForward && r.Comments is not null)
             .Sum(r => r.Comments!.Count);
 
+        // Files that pre-flight context-window budgeting degraded to diff-only or skipped. Degraded files were
+        // still reviewed and flow through synthesis normally; skipped files were never reviewed, so their
+        // placeholder summary is kept out of the synthesis input and both are surfaced in the final summary.
+        var contextDegradedFilePaths = freshResults
+            .Where(r => r.ContextBudgetOutcome == ReviewContextBudgetOutcome.DegradedDiffOnly)
+            .Select(r => r.FilePath)
+            .ToList();
+        var contextSkippedFilePaths = freshResults
+            .Where(r => r.ContextBudgetOutcome == ReviewContextBudgetOutcome.Skipped)
+            .Select(r => r.FilePath)
+            .ToList();
+
         var perFileSummaries = freshResults
-            .Where(r => r.IsComplete && r.PerFileSummary != null)
+            .Where(r => r.IsComplete && r.PerFileSummary != null && r.ContextBudgetOutcome != ReviewContextBudgetOutcome.Skipped)
             .Select(r => (r.FilePath, Summary: r.PerFileSummary!))
             .ToList();
 
@@ -151,6 +163,8 @@ internal sealed class ReviewSynthesisExecutor(
             return new ReviewResult(synthesisOutcome.FinalSummary, combinedComments)
             {
                 CarriedForwardCandidatesSkipped = carriedForwardCandidatesSkipped,
+                ContextDegradedFilePaths = contextDegradedFilePaths,
+                ContextSkippedFilePaths = contextSkippedFilePaths,
             };
         }
 
@@ -226,6 +240,8 @@ internal sealed class ReviewSynthesisExecutor(
         return new ReviewResult(reconciliation.FinalSummary, publishedComments)
         {
             CarriedForwardCandidatesSkipped = carriedForwardCandidatesSkipped,
+            ContextDegradedFilePaths = contextDegradedFilePaths,
+            ContextSkippedFilePaths = contextSkippedFilePaths,
         };
     }
 

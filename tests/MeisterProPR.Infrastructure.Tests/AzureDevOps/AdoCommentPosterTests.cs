@@ -405,6 +405,34 @@ public class AdoCommentPosterTests
         Assert.DoesNotContain("&quot;", summary);
     }
 
+    [Fact]
+    public void BuildSummaryText_MarksContextDegradedAndSkippedFiles()
+    {
+        var result = new ReviewResult("Overall summary.", [])
+        {
+            ContextDegradedFilePaths = ["src/BigService.cs"],
+            ContextSkippedFilePaths = ["src/Generated/Huge.g.cs"],
+        };
+
+        var summary = AdoCommentPoster.BuildSummaryText(result);
+
+        Assert.Contains("Reviewed diff-only", summary);
+        Assert.Contains("src/BigService.cs", summary);
+        Assert.Contains("Skipped — exceeds model context window", summary);
+        Assert.Contains("src/Generated/Huge.g.cs", summary);
+    }
+
+    [Fact]
+    public void BuildSummaryText_OmitsContextBudgetSectionsWhenNoneApply()
+    {
+        var result = new ReviewResult("Overall summary.", []);
+
+        var summary = AdoCommentPoster.BuildSummaryText(result);
+
+        Assert.DoesNotContain("Reviewed diff-only", summary);
+        Assert.DoesNotContain("Skipped — exceeds model context window", summary);
+    }
+
     [Theory]
     [InlineData(CommentSeverity.Error, "ERROR")]
     [InlineData(CommentSeverity.Warning, "WARNING")]

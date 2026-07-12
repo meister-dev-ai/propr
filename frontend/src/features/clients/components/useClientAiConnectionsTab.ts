@@ -143,6 +143,7 @@ export function useClientAiConnectionsTab(props: { clientId: string }) {
       kind: model.supportsEmbedding ? 'embedding' : 'chat',
       tokenizerName: model.tokenizerName ?? '',
       maxInputTokens: model.maxInputTokens == null ? '' : String(model.maxInputTokens),
+      maxContextTokens: model.maxContextTokens == null ? '' : String(model.maxContextTokens),
       embeddingDimensions: model.embeddingDimensions == null ? '' : String(model.embeddingDimensions),
       supportsStructuredOutput: Boolean(model.supportsStructuredOutput),
       supportsToolUse: Boolean(model.supportsToolUse),
@@ -203,6 +204,7 @@ export function useClientAiConnectionsTab(props: { clientId: string }) {
       kind: 'chat',
       tokenizerName: '',
       maxInputTokens: '',
+      maxContextTokens: '',
       embeddingDimensions: '',
       supportsStructuredOutput: true,
       supportsToolUse: true,
@@ -233,6 +235,7 @@ export function useClientAiConnectionsTab(props: { clientId: string }) {
     existing.kind = discovered.supportsEmbedding ? 'embedding' : 'chat'
     existing.tokenizerName = discovered.tokenizerName ?? existing.tokenizerName
     existing.maxInputTokens = discovered.maxInputTokens == null ? existing.maxInputTokens : String(discovered.maxInputTokens)
+    existing.maxContextTokens = discovered.maxContextTokens == null ? existing.maxContextTokens : String(discovered.maxContextTokens)
     existing.embeddingDimensions = discovered.embeddingDimensions == null ? existing.embeddingDimensions : String(discovered.embeddingDimensions)
     existing.supportsStructuredOutput = Boolean(discovered.supportsStructuredOutput)
     existing.supportsToolUse = Boolean(discovered.supportsToolUse)
@@ -246,6 +249,7 @@ export function useClientAiConnectionsTab(props: { clientId: string }) {
     kind: discovered.supportsEmbedding ? 'embedding' : 'chat',
     tokenizerName: discovered.tokenizerName ?? '',
     maxInputTokens: discovered.maxInputTokens == null ? '' : String(discovered.maxInputTokens),
+    maxContextTokens: discovered.maxContextTokens == null ? '' : String(discovered.maxContextTokens),
     embeddingDimensions: discovered.embeddingDimensions == null ? '' : String(discovered.embeddingDimensions),
     supportsStructuredOutput: Boolean(discovered.supportsStructuredOutput),
     supportsToolUse: Boolean(discovered.supportsToolUse),
@@ -307,6 +311,7 @@ export function useClientAiConnectionsTab(props: { clientId: string }) {
         : ['auto', 'responses', 'chatCompletions'],
       tokenizerName: model.kind === 'embedding' ? model.tokenizerName.trim() : undefined,
       maxInputTokens: model.kind === 'embedding' && model.maxInputTokens ? Number(model.maxInputTokens) : undefined,
+      maxContextTokens: model.kind === 'chat' && model.maxContextTokens ? Number(model.maxContextTokens) : undefined,
       embeddingDimensions: model.kind === 'embedding' && model.embeddingDimensions ? Number(model.embeddingDimensions) : undefined,
       supportsStructuredOutput: model.kind === 'chat' ? model.supportsStructuredOutput : false,
       supportsToolUse: model.kind === 'chat' ? model.supportsToolUse : false,

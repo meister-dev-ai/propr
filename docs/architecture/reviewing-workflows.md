@@ -554,6 +554,34 @@ event. Recorder sanitization strips embedded null bytes so PostgreSQL can safely
 content, but the persisted samples are no longer truncated before they reach the diagnostics API or
 admin UI.
 
+### 7 - Context-Window Budgeting
+
+Each configured model carries an optional context-window size (`maxContextTokens`, editable in the
+admin AI-connection model configuration). When it is unset a conservative built-in default of
+128,000 tokens applies, so budgeting always has a number to work with. Before every provider call,
+`ToolAwareAiReviewCore` estimates the assembled prompt against an input budget of
+`maxContextTokens − reservedOutputTokens − safetyMargin`. Token estimation reuses the model's
+tokenizer when it maps to a supported encoding and falls back to a char-based heuristic otherwise
+(`ReviewContextBudget`).
+
+The budget is enforced at two points so an oversized file never produces a provider
+context-length error:
+
+1. **Per-turn trimming.** At the single call choke point, accumulated tool-result history is
+   compacted oldest-first — each compacted result keeps its call identity but replaces the payload
+   with a short refreshable placeholder — until the outgoing message list fits the budget. Each trim
+   is recorded as a `context_budget_trimmed` protocol event.
+2. **Pre-flight degrade or skip.** Before the loop, the initial payload is classified. A file whose
+   full payload overflows but whose minimal payload (system prompt + diff) fits is reviewed
+   **diff-only**: the file-content windows are dropped and the file is marked degraded
+   (`context_budget_file_degraded`). A file whose minimal payload still overflows is **skipped**
+   without a provider call and marked skipped (`context_budget_file_skipped`).
+
+The per-file outcome is persisted on `ReviewFileResult` and surfaced in the review summary: degraded
+files are listed under "Reviewed diff-only" and skipped files under "Skipped — exceeds model context
+window", so a degraded or skipped review is never silently presented as a complete one. Automatic
+retrieval of the context window from the provider is out of scope; the value is configured per model.
+
 ## Unified Code Analysis And Cross-file References
 
 Review-time code analysis is served by a single abstraction in the `MeisterProPR.CodeAnalysis` project:

@@ -13,6 +13,7 @@ export type EditableModel = {
   kind: ModelKind
   tokenizerName: string
   maxInputTokens: string
+  maxContextTokens: string
   embeddingDimensions: string
   supportsStructuredOutput: boolean
   supportsToolUse: boolean

@@ -123,7 +123,8 @@ internal sealed partial class FileReviewer(
 
         var tierPurpose = GetTierPurpose(tier);
 
-        var (tierClient, tierModelId, tierCapabilities) = await this.ResolveTierClientAsync(job, tierCategory, tierPurpose, ct);
+        var (tierClient, tierModelId, tierCapabilities, tierMaxContextTokens, tierTokenizerName) =
+            await this.ResolveTierClientAsync(job, tierCategory, tierPurpose, ct);
 
         var protocolId = await this.BeginNewProtocolAsync(job, file, fileResult, tierCategory, tierModelId, ct);
 
@@ -159,6 +160,8 @@ internal sealed partial class FileReviewer(
                 tierModelId,
                 tierClient,
                 tierCapabilities,
+                tierMaxContextTokens,
+                tierTokenizerName,
                 effectiveClient,
                 []);
 
@@ -271,6 +274,8 @@ internal sealed partial class FileReviewer(
         string? tierModelId,
         IChatClient? tierClient,
         AgentReviewRuntimeCapabilities? tierCapabilities,
+        int? tierMaxContextTokens,
+        string? tierTokenizerName,
         IChatClient effectiveClient,
         IReadOnlyList<FocusedReviewGuidanceItem> focusedReviewGuidance)
     {
@@ -309,6 +314,8 @@ internal sealed partial class FileReviewer(
             ExclusionRules = baseContext.ExclusionRules,
             DismissedPatterns = baseContext.DismissedPatterns,
             ModelId = tierModelId ?? baseContext.ModelId,
+            MaxContextTokens = tierMaxContextTokens ?? baseContext.MaxContextTokens,
+            TokenizerName = tierTokenizerName ?? baseContext.TokenizerName,
             RuntimeCapabilities = tierCapabilities ?? baseContext.RuntimeCapabilities,
             Temperature = baseContext.Temperature,
             EnableEvidenceBackedVerification = baseContext.EnableEvidenceBackedVerification,
@@ -399,6 +406,8 @@ internal sealed partial class FileReviewer(
                     diversity,
                     new MultiPassArm(plannedPass.Label, plannedPass.ModelId, plannedPass.Lens),
                     inputs.PipelineProfile,
+                    plannedPass.MaxContextTokens,
+                    plannedPass.TokenizerName,
                     inputs.Ct));
 
             unionComments.AddRange(StampUnionOrigin(passResult.Comments, plannedPass.PassIndex, plannedPass.Lens, plannedPass.Shadow));
@@ -552,7 +561,9 @@ internal sealed partial class FileReviewer(
                         runtime.ChatClient,
                         runtime.Capabilities,
                         pass.Lens,
-                        pass.Shadow));
+                        pass.Shadow,
+                        runtime.Model.MaxContextTokens,
+                        runtime.Model.TokenizerName));
             }
 
             passIndex++;
@@ -648,6 +659,8 @@ internal sealed partial class FileReviewer(
                 inputs.PassModelId,
                 inputs.PassClient,
                 inputs.PassCapabilities,
+                inputs.PassMaxContextTokens ?? inputs.FileContext.MaxContextTokens,
+                inputs.PassTokenizerName ?? inputs.FileContext.TokenizerName,
                 inputs.EffectiveClient,
                 focusedGuidance);
 
@@ -1246,6 +1259,11 @@ internal sealed partial class FileReviewer(
         CancellationToken ct)
     {
         fileResult.MarkCompleted(result.Summary, result.Comments);
+        if (fileContext.ContextBudgetOutcome != ReviewContextBudgetOutcome.Normal)
+        {
+            fileResult.MarkContextBudgetOutcome(fileContext.ContextBudgetOutcome);
+        }
+
         await jobRepository.UpdateFileResultAsync(fileResult, ct);
 
         if (protocolId.HasValue && fileContext.LoopMetrics is not null)
@@ -1439,7 +1457,8 @@ internal sealed partial class FileReviewer(
         };
     }
 
-    private async Task<(IChatClient? tierClient, string? tierModelId, AgentReviewRuntimeCapabilities? tierCapabilities)> ResolveTierClientAsync(
+    private async Task<(IChatClient? tierClient, string? tierModelId, AgentReviewRuntimeCapabilities? tierCapabilities, int? tierMaxContextTokens, string?
+        tierTokenizerName)> ResolveTierClientAsync(
         ReviewJob job,
         AiConnectionModelCategory tierCategory,
         AiPurpose tierPurpose,
@@ -1448,6 +1467,8 @@ internal sealed partial class FileReviewer(
         IChatClient? tierClient = null;
         string? tierModelId = null;
         AgentReviewRuntimeCapabilities? tierCapabilities = null;
+        int? tierMaxContextTokens = null;
+        string? tierTokenizerName = null;
 
         if (aiRuntimeResolver is not null)
         {
@@ -1457,12 +1478,16 @@ internal sealed partial class FileReviewer(
                 tierClient = tierRuntime.ChatClient;
                 tierModelId = tierRuntime.Model.RemoteModelId;
                 tierCapabilities = tierRuntime.Capabilities;
+                tierMaxContextTokens = tierRuntime.Model.MaxContextTokens;
+                tierTokenizerName = tierRuntime.Model.TokenizerName;
             }
             catch
             {
                 tierClient = null;
                 tierModelId = null;
                 tierCapabilities = null;
+                tierMaxContextTokens = null;
+                tierTokenizerName = null;
             }
         }
         else if (aiConnectionRepository is not null && aiClientFactory is not null)
@@ -1471,12 +1496,19 @@ internal sealed partial class FileReviewer(
             if (tierDto is not null)
             {
                 tierClient = aiClientFactory.CreateClient(tierDto.BaseUrl, tierDto.Secret);
-                tierModelId = tierDto.GetBoundModelId(tierPurpose)
-                              ?? tierDto.ConfiguredModels.FirstOrDefault(model => model.SupportsChat)?.RemoteModelId;
+                var boundModelId = tierDto.GetBoundModelId(tierPurpose);
+                var tierModel = (boundModelId is not null
+                                    ? tierDto.ConfiguredModels.FirstOrDefault(model => string.Equals(
+                                        model.RemoteModelId, boundModelId, StringComparison.OrdinalIgnoreCase))
+                                    : null)
+                                ?? tierDto.ConfiguredModels.FirstOrDefault(model => model.SupportsChat);
+                tierModelId = boundModelId ?? tierModel?.RemoteModelId;
+                tierMaxContextTokens = tierModel?.MaxContextTokens;
+                tierTokenizerName = tierModel?.TokenizerName;
             }
         }
 
-        return (tierClient, tierModelId, tierCapabilities);
+        return (tierClient, tierModelId, tierCapabilities, tierMaxContextTokens, tierTokenizerName);
     }
 
     private static IReadOnlyList<PrCommentThread> FilterThreadsForFile(
@@ -1572,7 +1604,9 @@ internal sealed partial class FileReviewer(
         IChatClient? Client,
         AgentReviewRuntimeCapabilities? Capabilities,
         string? Lens = null,
-        bool Shadow = false);
+        bool Shadow = false,
+        int? MaxContextTokens = null,
+        string? TokenizerName = null);
 
     private sealed record MultiPassUnionCompletion(
         Guid? ProtocolId,
@@ -1621,5 +1655,7 @@ internal sealed partial class FileReviewer(
         MultiPassDiversity Diversity,
         MultiPassArm PassArm,
         ReviewPipelineProfile PipelineProfile,
+        int? PassMaxContextTokens,
+        string? PassTokenizerName,
         CancellationToken Ct);
 }

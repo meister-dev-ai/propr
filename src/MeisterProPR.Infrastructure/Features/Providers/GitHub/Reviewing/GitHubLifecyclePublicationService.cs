@@ -11,6 +11,7 @@ using MeisterProPR.Application.DTOs;
 using MeisterProPR.Application.Features.Reviewing.Execution.Models;
 using MeisterProPR.Domain.Enums;
 using MeisterProPR.Domain.ValueObjects;
+using MeisterProPR.Infrastructure.Features.Providers.Common;
 using MeisterProPR.Infrastructure.Features.Providers.GitHub.Security;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -179,6 +180,8 @@ internal sealed partial class GitHubLifecyclePublicationService(
                 summaryBuilder.AppendLine($"- {FormatSeverity(comment.Severity)}: {comment.Message}");
             }
         }
+
+        ContextBudgetSummarySections.Append(summaryBuilder, result);
 
         return new GitHubReviewRequest(
             revision.HeadSha,

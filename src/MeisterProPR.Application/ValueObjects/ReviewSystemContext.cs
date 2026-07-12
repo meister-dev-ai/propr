@@ -4,6 +4,7 @@
 using MeisterProPR.Application.Features.Reviewing.Execution.Models;
 using MeisterProPR.Application.Features.Reviewing.Execution.Ports;
 using MeisterProPR.Application.Interfaces;
+using MeisterProPR.Domain.Enums;
 using MeisterProPR.Domain.ValueObjects;
 using Microsoft.Extensions.AI;
 
@@ -54,6 +55,14 @@ public sealed class ReviewSystemContext
     ///     May be <see langword="null" /> for non-agentic reviews or when no metrics were collected.
     /// </summary>
     public ReviewLoopMetrics? LoopMetrics { get; set; }
+
+    /// <summary>
+    ///     Populated by <c>ToolAwareAiReviewCore</c> during pre-flight context-window budgeting: whether the
+    ///     file was reviewed normally, degraded to diff-only, or skipped because even the minimal payload
+    ///     exceeded the model window. Read after <see cref="MeisterProPR.Application.Interfaces.IAiReviewCore.ReviewAsync" />
+    ///     returns to mark the file's outcome in the review summary.
+    /// </summary>
+    public ReviewContextBudgetOutcome ContextBudgetOutcome { get; set; } = ReviewContextBudgetOutcome.Normal;
 
     /// <summary>
     ///     The identifier of the active <c>ReviewJobProtocol</c> record created before the review started.
@@ -110,6 +119,19 @@ public sealed class ReviewSystemContext
     ///     global fallback configured in <c>AiReviewOptions</c>.
     /// </summary>
     public string? ModelId { get; set; }
+
+    /// <summary>
+    ///     The context-window size (in tokens) of the resolved model for this review stage, used to
+    ///     budget and trim the prompt before each provider call. <see langword="null" /> when the model
+    ///     has no configured context window; a conservative built-in default is applied in that case.
+    /// </summary>
+    public int? MaxContextTokens { get; set; }
+
+    /// <summary>
+    ///     The tokenizer family name of the resolved model, used for exact pre-flight token estimation
+    ///     when it maps to a supported encoding. <see langword="null" /> falls back to a char-based heuristic.
+    /// </summary>
+    public string? TokenizerName { get; set; }
 
     /// <summary>
     ///     The client-scoped default review chat client resolved before any tier-specific override is applied.
