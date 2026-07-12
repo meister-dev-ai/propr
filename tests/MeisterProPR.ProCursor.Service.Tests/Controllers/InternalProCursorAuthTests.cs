@@ -30,4 +30,18 @@ public sealed class InternalProCursorAuthTests(ProCursorServiceFactory factory)
 
         Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
     }
+
+    [Fact]
+    public async Task InternalEndpoint_WithSameLengthWrongSharedKey_Returns401()
+    {
+        // A wrong key of the SAME length as the configured key exercises the constant-time byte comparison
+        // itself (not just the length mismatch), guarding against a regression in the FixedTimeEquals check.
+        var wrongKey = new string('x', ProCursorServiceFactory.SharedKey.Length);
+        var client = factory.CreateClient();
+        client.DefaultRequestHeaders.Add(ProCursorSharedKeyAuthenticationDefaults.HeaderName, wrongKey);
+
+        var response = await client.GetAsync($"/internal/procursor/clients/{Guid.NewGuid():D}/sources");
+
+        Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+    }
 }

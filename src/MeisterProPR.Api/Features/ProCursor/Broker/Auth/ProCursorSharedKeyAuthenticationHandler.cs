@@ -2,6 +2,8 @@
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
 using System.Security.Claims;
+using System.Security.Cryptography;
+using System.Text;
 using System.Text.Encodings.Web;
 using MeisterProPR.Application.Options;
 using MeisterProPR.Infrastructure.Features.ProCursor.Remote;
@@ -34,8 +36,11 @@ public sealed class ProCursorSharedKeyAuthenticationHandler(
             return Task.FromResult(AuthenticateResult.Fail("Missing ProCursor shared key."));
         }
 
-        var providedKey = headerValues.FirstOrDefault();
-        if (!string.Equals(providedKey, configuredKey, StringComparison.Ordinal))
+        // Constant-time comparison so a timing side-channel cannot be used to recover the shared key
+        // (mirrors the webhook verifiers). FixedTimeEquals also handles the length mismatch internally.
+        var providedKeyBytes = Encoding.UTF8.GetBytes(headerValues.FirstOrDefault() ?? string.Empty);
+        var configuredKeyBytes = Encoding.UTF8.GetBytes(configuredKey);
+        if (!CryptographicOperations.FixedTimeEquals(providedKeyBytes, configuredKeyBytes))
         {
             return Task.FromResult(AuthenticateResult.Fail("Invalid ProCursor shared key."));
         }
