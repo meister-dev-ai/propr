@@ -11,11 +11,14 @@ using MeisterProPR.Application.Features.Licensing.Models;
 using MeisterProPR.Application.Features.Licensing.Ports;
 using MeisterProPR.Application.Features.Licensing.Support;
 using MeisterProPR.Application.Interfaces;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace MeisterProPR.Api.Controllers;
 
 /// <summary>Tenant-scoped login discovery and sign-in endpoints.</summary>
+// Pre-authentication endpoints: login discovery and sign-in must be reachable without a user identity.
+[AllowAnonymous]
 [ApiController]
 [Route("auth")]
 public sealed class TenantAuthController(

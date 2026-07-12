@@ -91,7 +91,7 @@ public sealed class WebhookReviewActivationIntegrationTests(WebhookReviewActivat
     }
 
     [Fact]
-    public async Task Receive_LegacyAdoRoute_ReturnsNotFound()
+    public async Task Receive_LegacyAdoRoute_IsNotServed()
     {
         await factory.ResetDeliveryLogsAsync();
         factory.ConfigureActivationScenario();
@@ -110,7 +110,10 @@ public sealed class WebhookReviewActivationIntegrationTests(WebhookReviewActivat
 
         var response = await client.SendAsync(request);
 
-        Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
+        // The legacy route shape matches no endpoint. With deny-by-default authorization, an unauthenticated
+        // request to an unmatched route is rejected before it could be mistaken for a real delivery, so no
+        // webhook is processed. (Only the current /webhooks/v1/providers/{provider}/{pathKey} route is served.)
+        Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
         Assert.Null(await factory.GetLatestDeliveryAsync());
     }
 

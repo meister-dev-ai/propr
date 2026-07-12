@@ -3,7 +3,7 @@
 
 using System.Security.Claims;
 using MeisterProPR.Api.Extensions;
-using MeisterProPR.Api.Middleware;
+using MeisterProPR.Api.Features.IdentityAndAccess.Authentication;
 using MeisterProPR.Application.Features.Licensing.Dtos;
 using MeisterProPR.Application.Features.Licensing.Models;
 using MeisterProPR.Application.Features.Licensing.Ports;
@@ -20,10 +20,10 @@ using NSubstitute;
 
 namespace MeisterProPR.Api.Tests.IdentityAndAccess;
 
-public sealed class TenantAuthMiddlewareTests
+public sealed class CallerIdentityResolverTests
 {
     [Fact]
-    public async Task InvokeAsync_WithValidatedJwt_PopulatesTenantRolesInHttpContext()
+    public async Task ResolveAsync_WithValidatedJwt_PopulatesTenantRolesInHttpContext()
     {
         var userId = Guid.NewGuid();
         var tenantId = Guid.NewGuid();
@@ -79,10 +79,9 @@ public sealed class TenantAuthMiddlewareTests
         var context = new DefaultHttpContext { RequestServices = services };
         context.Request.Headers.Authorization = "Bearer valid-token";
 
-        var middleware = new AuthMiddleware(_ => Task.CompletedTask);
+        var resolution = await CallerIdentityResolver.ResolveAsync(context, UserAuthenticationDefaults.Scheme);
 
-        await middleware.InvokeAsync(context);
-
+        Assert.NotNull(resolution.Principal);
         var clientRoles = Assert.IsType<Dictionary<Guid, ClientRole>>(context.Items["ClientRoles"]);
         Assert.Equal(ClientRole.ClientAdministrator, clientRoles[clientId]);
         var tenantRoles = Assert.IsType<Dictionary<Guid, TenantRole>>(context.Items["TenantRoles"]);
@@ -91,7 +90,7 @@ public sealed class TenantAuthMiddlewareTests
     }
 
     [Fact]
-    public async Task InvokeAsync_WithPat_PopulatesRoleDictionariesFromLoadedUserAndUsesRequestCancellation()
+    public async Task ResolveAsync_WithPat_PopulatesRoleDictionariesFromLoadedUserAndUsesRequestCancellation()
     {
         var userId = Guid.NewGuid();
         var tenantId = Guid.NewGuid();
@@ -149,10 +148,9 @@ public sealed class TenantAuthMiddlewareTests
         context.Request.Headers["X-User-Pat"] = "valid-pat";
         context.RequestAborted = cts.Token;
 
-        var middleware = new AuthMiddleware(_ => Task.CompletedTask);
+        var resolution = await CallerIdentityResolver.ResolveAsync(context, UserAuthenticationDefaults.Scheme);
 
-        await middleware.InvokeAsync(context);
-
+        Assert.NotNull(resolution.Principal);
         var clientRoles = Assert.IsType<Dictionary<Guid, ClientRole>>(context.Items["ClientRoles"]);
         Assert.Equal(ClientRole.ClientUser, clientRoles[clientId]);
         var tenantRoles = Assert.IsType<Dictionary<Guid, TenantRole>>(context.Items["TenantRoles"]);
@@ -163,7 +161,7 @@ public sealed class TenantAuthMiddlewareTests
     }
 
     [Fact]
-    public async Task InvokeAsync_WithCommunityEditionAndHiddenTenant_DoesNotDeriveClientRoles()
+    public async Task ResolveAsync_WithCommunityEditionAndHiddenTenant_DoesNotDeriveClientRoles()
     {
         var userId = Guid.NewGuid();
         var hiddenTenantId = Guid.NewGuid();
@@ -233,10 +231,9 @@ public sealed class TenantAuthMiddlewareTests
         var context = new DefaultHttpContext { RequestServices = requestScope.ServiceProvider };
         context.Request.Headers.Authorization = "Bearer valid-token";
 
-        var middleware = new AuthMiddleware(_ => Task.CompletedTask);
+        var resolution = await CallerIdentityResolver.ResolveAsync(context, UserAuthenticationDefaults.Scheme);
 
-        await middleware.InvokeAsync(context);
-
+        Assert.NotNull(resolution.Principal);
         var clientRoles = Assert.IsType<Dictionary<Guid, ClientRole>>(context.Items["ClientRoles"]);
         Assert.Empty(clientRoles);
         var tenantRoles = Assert.IsType<Dictionary<Guid, TenantRole>>(context.Items["TenantRoles"]);

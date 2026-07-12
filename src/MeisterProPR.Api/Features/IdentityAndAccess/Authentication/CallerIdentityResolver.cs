@@ -1,6 +1,7 @@
 // Copyright (c) Andreas Rain.
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
+using System.Security.Claims;
 using MeisterProPR.Application.Features.Licensing.Models;
 using MeisterProPR.Application.Features.Licensing.Ports;
 using MeisterProPR.Application.Interfaces;
@@ -10,86 +11,79 @@ using MeisterProPR.Infrastructure.Data;
 using MeisterProPR.Infrastructure.Features.IdentityAndAccess;
 using Microsoft.EntityFrameworkCore;
 
-namespace MeisterProPR.Api.Middleware;
+namespace MeisterProPR.Api.Features.IdentityAndAccess.Authentication;
 
 /// <summary>
-///     Resolves the caller identity and sets <c>context.Items["IsAdmin"]</c>,
-///     <c>context.Items["UserId"]</c>, <c>context.Items["ClientRoles"]</c>, and
-///     <c>context.Items["TenantRoles"]</c>
-///     by evaluating two credential paths in order:
+///     Resolves the caller identity by evaluating two credential paths in order:
 ///     <list type="number">
 ///         <item>
 ///             <description><c>Authorization: Bearer {jwt}</c> — validated locally.</description>
 ///         </item>
 ///         <item>
-///             <description><c>X-User-Pat</c> header — BCrypt-verified against stored PAT hashes.</description>
+///             <description><c>X-User-Pat</c> header — verified against stored PAT hashes.</description>
 ///         </item>
 ///     </list>
+///     On success it populates <c>context.Items["IsAdmin"]</c>, <c>["UserId"]</c>, <c>["ClientRoles"]</c>, and
+///     <c>["TenantRoles"]</c> (the contract <see cref="MeisterProPR.Api.Extensions.AuthHelpers" /> reads) and
+///     yields an authenticated <see cref="ClaimsPrincipal" /> so framework authorization can see the caller.
 /// </summary>
-public sealed class AuthMiddleware(RequestDelegate next)
+public static class CallerIdentityResolver
 {
     private const string PatHeader = "X-User-Pat";
 
-    /// <inheritdoc cref="IMiddleware.InvokeAsync" />
-    public async Task InvokeAsync(HttpContext context)
+    /// <summary>
+    ///     Resolves the caller and populates the per-request authorization context. Always writes the
+    ///     default (empty) role maps first so downstream helpers observe a consistent shape.
+    /// </summary>
+    /// <param name="context">The current HTTP context.</param>
+    /// <param name="authenticationScheme">Scheme name stamped on any principal this resolver mints.</param>
+    public static async Task<CallerIdentityResolution> ResolveAsync(HttpContext context, string authenticationScheme)
     {
         context.Items["IsAdmin"] = false;
         context.Items["ClientRoles"] = new Dictionary<Guid, ClientRole>();
         context.Items["TenantRoles"] = new Dictionary<Guid, TenantRole>();
 
-        var bearerOutcome = await TryAuthenticateBearerAsync(context);
-        if (bearerOutcome == AuthOutcome.Rejected)
+        var bearer = await TryAuthenticateBearerAsync(context);
+        if (bearer is not null)
         {
-            return;
+            return bearer.Value;
         }
 
-        if (bearerOutcome == AuthOutcome.Authenticated)
+        var pat = await TryAuthenticatePatAsync(context, authenticationScheme);
+        if (pat is not null)
         {
-            await next(context);
-            return;
+            return pat.Value;
         }
 
-        var patOutcome = await TryAuthenticatePatAsync(context);
-        if (patOutcome == AuthOutcome.Rejected)
-        {
-            return;
-        }
-
-        if (patOutcome == AuthOutcome.Authenticated)
-        {
-            await next(context);
-            return;
-        }
-
-        await next(context);
+        return CallerIdentityResolution.Anonymous;
     }
 
-    private static async Task<AuthOutcome> TryAuthenticateBearerAsync(HttpContext context)
+    private static async Task<CallerIdentityResolution?> TryAuthenticateBearerAsync(HttpContext context)
     {
         var authHeader = context.Request.Headers.Authorization.FirstOrDefault();
         if (authHeader?.StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase) != true)
         {
-            return AuthOutcome.NotAttempted;
+            return null;
         }
 
         var token = authHeader["Bearer ".Length..].Trim();
         var jwtService = context.RequestServices.GetService<IJwtTokenService>();
         if (jwtService is null)
         {
-            return AuthOutcome.NotAttempted;
+            return null;
         }
 
         var principal = jwtService.ValidateAccessToken(token);
         if (principal is null)
         {
-            return AuthOutcome.NotAttempted;
+            return null;
         }
 
         var sub = principal.FindFirst("sub")?.Value;
         var role = principal.FindFirst("global_role")?.Value;
         if (string.IsNullOrEmpty(sub))
         {
-            return AuthOutcome.Authenticated;
+            return CallerIdentityResolution.ForPrincipal(principal);
         }
 
         context.Items["UserId"] = sub;
@@ -97,13 +91,13 @@ public sealed class AuthMiddleware(RequestDelegate next)
 
         if (!Guid.TryParse(sub, out var userId))
         {
-            return AuthOutcome.Authenticated;
+            return CallerIdentityResolution.ForPrincipal(principal);
         }
 
         var userRepo = context.RequestServices.GetService<IUserRepository>();
         if (userRepo is null)
         {
-            return AuthOutcome.Authenticated;
+            return CallerIdentityResolution.ForPrincipal(principal);
         }
 
         var user = await userRepo.GetByIdWithAssignmentsAsync(userId, context.RequestAborted);
@@ -113,8 +107,7 @@ public sealed class AuthMiddleware(RequestDelegate next)
         // closes the same gap for bearer JWTs.
         if (user is not null && !user.IsActive)
         {
-            await WriteNotActiveAsync(context);
-            return AuthOutcome.Rejected;
+            return CallerIdentityResolution.DisabledAccount;
         }
 
         var explicitClientRoles = user is not null
@@ -130,28 +123,30 @@ public sealed class AuthMiddleware(RequestDelegate next)
 
         context.Items["TenantRoles"] = tenantRoles;
 
-        return AuthOutcome.Authenticated;
+        return CallerIdentityResolution.ForPrincipal(principal);
     }
 
-    private static async Task<AuthOutcome> TryAuthenticatePatAsync(HttpContext context)
+    private static async Task<CallerIdentityResolution?> TryAuthenticatePatAsync(
+        HttpContext context,
+        string authenticationScheme)
     {
         var pat = context.Request.Headers[PatHeader].FirstOrDefault();
         if (string.IsNullOrWhiteSpace(pat))
         {
-            return AuthOutcome.NotAttempted;
+            return null;
         }
 
         var patRepo = context.RequestServices.GetService<IUserPatRepository>();
         var userRepo = context.RequestServices.GetService<IUserRepository>();
         if (patRepo is null || userRepo is null)
         {
-            return AuthOutcome.NotAttempted;
+            return null;
         }
 
         var patEntity = await patRepo.GetActiveByRawTokenAsync(pat, context.RequestAborted);
         if (patEntity is null)
         {
-            return AuthOutcome.NotAttempted;
+            return null;
         }
 
         var user = await userRepo.GetByIdWithAssignmentsAsync(patEntity.UserId, context.RequestAborted);
@@ -164,24 +159,29 @@ public sealed class AuthMiddleware(RequestDelegate next)
             context.Items["ClientRoles"] =
                 await BuildEffectiveClientRolesAsync(context, explicitClientRoles, tenantRoles, context.RequestAborted);
             context.Items["TenantRoles"] = tenantRoles;
-            return AuthOutcome.Authenticated;
+            return CallerIdentityResolution.ForPrincipal(BuildPatPrincipal(user, authenticationScheme));
         }
 
         // Defense in depth: PATs are revoked when a user is disabled, so this should not
         // normally fire, but reject explicitly if a live PAT ever outlives the account.
         if (user is not null && !user.IsActive)
         {
-            await WriteNotActiveAsync(context);
-            return AuthOutcome.Rejected;
+            return CallerIdentityResolution.DisabledAccount;
         }
 
-        return AuthOutcome.NotAttempted;
+        return null;
     }
 
-    private static Task WriteNotActiveAsync(HttpContext context)
+    private static ClaimsPrincipal BuildPatPrincipal(AppUser user, string authenticationScheme)
     {
-        context.Response.StatusCode = StatusCodes.Status401Unauthorized;
-        return context.Response.WriteAsJsonAsync(new { error = "User account is not active." });
+        var identity = new ClaimsIdentity(
+            [
+                new Claim("sub", user.Id.ToString()),
+                new Claim(ClaimTypes.NameIdentifier, user.Id.ToString()),
+                new Claim("global_role", user.GlobalRole.ToString()),
+            ],
+            authenticationScheme);
+        return new ClaimsPrincipal(identity);
     }
 
     private static Dictionary<Guid, ClientRole> CreateExplicitClientRoles(AppUser user)
@@ -290,11 +290,35 @@ public sealed class AuthMiddleware(RequestDelegate next)
         var summary = await summaryTask;
         return summary?.Edition == InstallationEdition.Community;
     }
+}
 
-    private enum AuthOutcome
+/// <summary>
+///     Outcome of <see cref="CallerIdentityResolver.ResolveAsync" />: an authenticated principal,
+///     an anonymous request, or a recognized-but-disabled account.
+/// </summary>
+public readonly record struct CallerIdentityResolution
+{
+    private CallerIdentityResolution(ClaimsPrincipal? principal, bool accountDisabled)
     {
-        NotAttempted,
-        Authenticated,
-        Rejected,
+        this.Principal = principal;
+        this.AccountDisabled = accountDisabled;
+    }
+
+    /// <summary>No usable credential was presented.</summary>
+    public static CallerIdentityResolution Anonymous => new(null, false);
+
+    /// <summary>A credential resolved to a user whose account is disabled; the request must be rejected.</summary>
+    public static CallerIdentityResolution DisabledAccount => new(null, true);
+
+    /// <summary>The authenticated principal, or <see langword="null" /> when anonymous or disabled.</summary>
+    public ClaimsPrincipal? Principal { get; }
+
+    /// <summary>True when a credential matched a disabled account.</summary>
+    public bool AccountDisabled { get; }
+
+    /// <summary>Wraps an authenticated principal as a successful resolution.</summary>
+    public static CallerIdentityResolution ForPrincipal(ClaimsPrincipal principal)
+    {
+        return new CallerIdentityResolution(principal, false);
     }
 }

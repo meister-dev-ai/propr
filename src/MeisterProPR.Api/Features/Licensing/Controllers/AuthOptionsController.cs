@@ -5,11 +5,14 @@ using MeisterProPR.Api.Extensions;
 using MeisterProPR.Application.Features.Licensing.Dtos;
 using MeisterProPR.Application.Features.Licensing.Models;
 using MeisterProPR.Application.Features.Licensing.Ports;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace MeisterProPR.Api.Features.Licensing.Controllers;
 
 /// <summary>Public bootstrap endpoints for login-time licensing awareness.</summary>
+// Serves sign-in options before the user has any credentials, so it must be reachable anonymously.
+[AllowAnonymous]
 [ApiController]
 [Route("auth/options")]
 public sealed class AuthOptionsController(

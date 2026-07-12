@@ -10,13 +10,13 @@ using MeisterProPR.Api.Controllers;
 using MeisterProPR.Api.Extensions;
 using MeisterProPR.Api.Features.Clients.Controllers;
 using MeisterProPR.Api.Features.Crawling.Webhooks.Validators;
+using MeisterProPR.Api.Features.IdentityAndAccess.Authentication;
 using MeisterProPR.Api.Features.IdentityAndAccess.Validators;
 using MeisterProPR.Api.Features.Licensing;
 using MeisterProPR.Api.Features.ProCursor;
 using MeisterProPR.Api.Features.ProCursor.Broker.Auth;
 using MeisterProPR.Api.Features.ProCursor.Broker.Services;
 using MeisterProPR.Api.HealthChecks;
-using MeisterProPR.Api.Middleware;
 using MeisterProPR.Api.Telemetry;
 using MeisterProPR.Api.Validators;
 using MeisterProPR.Api.Workers;
@@ -42,6 +42,7 @@ using MeisterProPR.Infrastructure.Features.UsageReporting;
 using MeisterProPR.Infrastructure.Repositories;
 using MeisterProPR.Infrastructure.Services;
 using Microsoft.AspNetCore.Authentication;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using Microsoft.AspNetCore.HttpOverrides;
@@ -196,11 +197,26 @@ try
         builder.Services.AddScoped<IProCursorKnowledgeSourceRepository, ProCursorKnowledgeSourceRepository>();
     }
 
-    builder.Services.AddAuthentication(ProCursorSharedKeyAuthenticationDefaults.Scheme)
+    // The interactive-user scheme is the default: it authenticates bearer JWTs and X-User-Pat
+    // credentials into HttpContext.User so the deny-by-default fallback below can see the caller.
+    // The internal ProCursor shared-key scheme stays registered and is pinned explicitly on its own
+    // endpoints, so making the user scheme the default does not affect it.
+    builder.Services.AddAuthentication(UserAuthenticationDefaults.Scheme)
+        .AddScheme<AuthenticationSchemeOptions, UserAuthenticationHandler>(
+            UserAuthenticationDefaults.Scheme,
+            _ => { })
         .AddScheme<AuthenticationSchemeOptions, ProCursorSharedKeyAuthenticationHandler>(
             ProCursorSharedKeyAuthenticationDefaults.Scheme,
             _ => { });
-    builder.Services.AddAuthorization();
+
+    // Deny by default: every endpoint without an explicit [Authorize]/[AllowAnonymous] (or in-code gate)
+    // requires an authenticated caller. Intentionally-public endpoints opt out with [AllowAnonymous].
+    builder.Services.AddAuthorization(options =>
+    {
+        options.FallbackPolicy = new AuthorizationPolicyBuilder()
+            .RequireAuthenticatedUser()
+            .Build();
+    });
 
     if (hasDatabaseConnectionString)
     {
@@ -504,25 +520,27 @@ try
     });
 
     app.UseCors();
+    // Authenticates the caller into HttpContext.User (and the AuthHelpers Items contract) before
+    // authorization evaluates the deny-by-default fallback policy.
     app.UseAuthentication();
-    // Populate admin, client-role, and tenant-role auth context before controller dispatch.
-    app.UseMiddleware<AuthMiddleware>();
     app.UseAuthorization();
     app.MapControllers();
     app.MapHealthChecks(
-        "/livez",
-        new HealthCheckOptions
-        {
-            Predicate = _ => false,
-            ResponseWriter = WriteHealthResponse,
-        });
+            "/livez",
+            new HealthCheckOptions
+            {
+                Predicate = _ => false,
+                ResponseWriter = WriteHealthResponse,
+            })
+        .AllowAnonymous();
     app.MapHealthChecks(
-        "/healthz",
-        new HealthCheckOptions
-        {
-            ResponseWriter = WriteHealthResponse,
-        });
-    app.MapPrometheusScrapingEndpoint();
+            "/healthz",
+            new HealthCheckOptions
+            {
+                ResponseWriter = WriteHealthResponse,
+            })
+        .AllowAnonymous();
+    app.MapPrometheusScrapingEndpoint().AllowAnonymous();
 
     await app.RunAsync();
 }

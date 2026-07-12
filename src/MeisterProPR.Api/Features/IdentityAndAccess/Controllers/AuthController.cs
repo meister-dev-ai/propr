@@ -10,6 +10,7 @@ using MeisterProPR.Application.Features.Licensing.Models;
 using MeisterProPR.Application.Features.Licensing.Ports;
 using MeisterProPR.Application.Interfaces;
 using MeisterProPR.Domain.Entities;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace MeisterProPR.Api.Controllers;
@@ -25,6 +26,7 @@ public sealed class AuthController(
     ILicensingCapabilityService? licensingCapabilityService = null) : ControllerBase
 {
     /// <summary>Authenticate with username and password; returns a JWT access token and refresh token.</summary>
+    [AllowAnonymous]
     [HttpPost("login")]
     public async Task<IActionResult> Login([FromBody] LoginRequest request, CancellationToken ct)
     {
@@ -70,6 +72,7 @@ public sealed class AuthController(
     }
 
     /// <summary>Exchange the refresh-token cookie (or body, for legacy callers) for a new JWT access token.</summary>
+    [AllowAnonymous]
     [HttpPost("refresh")]
     public async Task<IActionResult> Refresh([FromBody] RefreshRequest? request = null, CancellationToken ct = default)
     {
@@ -104,6 +107,7 @@ public sealed class AuthController(
     }
 
     /// <summary>Revokes the caller's refresh tokens and clears the session cookie.</summary>
+    [AllowAnonymous]
     [HttpPost("logout")]
     public async Task<IActionResult> Logout(CancellationToken ct = default)
     {

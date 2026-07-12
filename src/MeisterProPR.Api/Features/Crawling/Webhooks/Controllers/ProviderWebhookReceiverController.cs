@@ -4,6 +4,7 @@
 using System.Text.Json;
 using MeisterProPR.Application.Features.Crawling.Webhooks.Commands.HandleProviderWebhookDelivery;
 using MeisterProPR.Domain.Enums;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace MeisterProPR.Api.Controllers;
@@ -12,6 +13,9 @@ namespace MeisterProPR.Api.Controllers;
 ///     Receives provider-scoped webhook deliveries and routes supported providers through the shared provider-neutral
 ///     handler.
 /// </summary>
+// Deliveries authenticate by per-configuration HMAC/signature (verified inside the handler), not by a
+// user identity, so this endpoint must be reachable without an authenticated caller.
+[AllowAnonymous]
 [ApiController]
 [Route("webhooks/v1/providers/{provider}/{pathKey}")]
 public sealed partial class ProviderWebhookReceiverController(

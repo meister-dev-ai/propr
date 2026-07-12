@@ -11,7 +11,7 @@ namespace MeisterProPR.Api.Extensions;
 /// <summary>
 ///     Helpers for per-client role enforcement using <c>HttpContext.Items["ClientRoles"]</c>
 ///     plus tenant role enforcement using <c>HttpContext.Items["TenantRoles"]</c>, all populated by
-///     <see cref="MeisterProPR.Api.Middleware.AuthMiddleware" />.
+///     <see cref="MeisterProPR.Api.Features.IdentityAndAccess.Authentication.CallerIdentityResolver" />.
 /// </summary>
 public static class AuthHelpers
 {

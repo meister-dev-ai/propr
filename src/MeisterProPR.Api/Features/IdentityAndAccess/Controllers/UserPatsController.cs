@@ -2,6 +2,7 @@
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
 using System.Security.Cryptography;
+using MeisterProPR.Api.Extensions;
 using MeisterProPR.Application.Interfaces;
 using MeisterProPR.Domain.Entities;
 using Microsoft.AspNetCore.Mvc;
@@ -93,10 +94,7 @@ public sealed class UserPatsController(IUserPatRepository userPatRepository) : C
 
     private Guid? GetCurrentUserId()
     {
-        var claim = this.HttpContext.Items["UserId"]?.ToString() ??
-                    this.User.FindFirst("sub")?.Value;
-
-        return Guid.TryParse(claim, out var id) ? id : null;
+        return AuthHelpers.GetUserId(this.HttpContext);
     }
 }
 
