@@ -16976,6 +16976,15 @@
           "breakdownConsistent": {
             "type": "boolean",
             "nullable": true
+          },
+          "filesReviewed": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "filesInScope": {
+            "type": "integer",
+            "format": "int32",
+            "nullable": true
           }
         },
         "additionalProperties": false,
@@ -17066,6 +17075,15 @@
           },
           "aiModel": {
             "type": "string",
+            "nullable": true
+          },
+          "filesReviewed": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "filesInScope": {
+            "type": "integer",
+            "format": "int32",
             "nullable": true
           }
         },

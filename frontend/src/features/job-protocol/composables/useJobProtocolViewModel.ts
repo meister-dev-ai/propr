@@ -14,6 +14,7 @@ import { useFileDiff } from './useFileDiff'
 import { useTokenTotals } from './useTokenTotals'
 import { useTraceSearch } from './useTraceSearch'
 import { parseTraceChipParam, serializeTraceChips } from './traceQuickFilters'
+import { formatFilesReviewed } from '@/utils/reviewProgress'
 import type {
     AgenticInvestigationOutputRecord,
     CommentGroupComment,
@@ -613,6 +614,12 @@ export function useJobProtocolViewModel() {
         hasActiveTraceFilters.value || traceFindingsOnly.value
             ? treeVisiblePasses.value.length
             : protocols.value.length,
+    )
+
+    // "X/Y files reviewed" progress. The in-scope denominator is null until dispatch planning fixes it;
+    // formatFilesReviewed returns null so the stat strip can hide the pill rather than show "0/0".
+    const filesReviewedLabel = computed<string | null>(() =>
+        formatFilesReviewed(jobDetail.value?.filesReviewed, jobDetail.value?.filesInScope),
     )
 
     const commentSidebarItems = computed<CommentSidebarItem[]>(() => {
@@ -1705,6 +1712,8 @@ export function useJobProtocolViewModel() {
                     submittedAt: detail.submittedAt ?? null,
                     processingStartedAt: detail.processingStartedAt ?? null,
                     completedAt: detail.completedAt ?? null,
+                    filesReviewed: detail.filesReviewed ?? 0,
+                    filesInScope: detail.filesInScope ?? null,
                 }
             }
             if (!activePassId.value && normalizedProtocols.length > 0 && normalizedProtocols[0].id) {
@@ -2133,6 +2142,7 @@ export function useJobProtocolViewModel() {
         traceSuggestions,
         treeVisiblePasses,
         visiblePassCount,
+        filesReviewedLabel,
         sidebarItems,
         commentSidebarItems,
         groupedReviewComments,

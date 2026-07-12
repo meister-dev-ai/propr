@@ -204,6 +204,87 @@ public class FileByFileReviewOrchestratorTests
     }
 
     [Fact]
+    public async Task ReviewAsync_FixesInScopeChangedFileCount_FromDedupedChangedFiles()
+    {
+        var aiCore = Substitute.For<IAiReviewCore>();
+        aiCore.ReviewAsync(Arg.Any<PullRequest>(), Arg.Any<ReviewSystemContext>(), Arg.Any<CancellationToken>())
+            .Returns(CreateResult());
+
+        var job = CreateJob();
+        // Azure DevOps can repeat a path within one iteration; the denominator counts deduped changed
+        // files (a.cs, b.cs) after exclusions — here 2, not 3.
+        var pr = CreatePr(CreateFile("a.cs"), CreateFile("a.cs"), CreateFile("b.cs"));
+
+        var repo = CreateJobRepo();
+        repo.GetByIdWithFileResultsAsync(job.Id, Arg.Any<CancellationToken>())
+            .Returns(job);
+
+        var chatClient = Substitute.For<IChatClient>();
+        chatClient.GetResponseAsync(
+                Arg.Any<IList<ChatMessage>>(),
+                Arg.Any<ChatOptions?>(),
+                Arg.Any<CancellationToken>())
+            .Returns(new ChatResponse(new ChatMessage(ChatRole.Assistant, "synthesis")));
+        var sut = CreateOrchestrator(aiCore, CreateProtocolRecorder(), repo, chatClient);
+
+        await sut.ReviewAsync(job, pr, CreateContext(), CancellationToken.None);
+
+        await repo.Received(1).UpdateInScopeChangedFileCountAsync(job.Id, 2, Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task ReviewAsync_InScopeChangedFileCount_ExcludesMatchingFiles_AndStaysStableAcrossRetry()
+    {
+        // Regression: on a retry the prior attempt's excluded rows are IsComplete and drop out of the
+        // fresh selection (selection.ExcludedFiles collapses to 0). The denominator must therefore be
+        // derived from the exclusion rules over the frozen changed set — README.md excluded ⇒ 2 — not
+        // from selection.ExcludedFiles, which would inflate it to 3 (allChanged − 0).
+        var aiCore = Substitute.For<IAiReviewCore>();
+        aiCore.ReviewAsync(Arg.Any<PullRequest>(), Arg.Any<ReviewSystemContext>(), Arg.Any<CancellationToken>())
+            .Returns(CreateResult());
+
+        var job = CreateJob();
+        var pr = CreatePr(CreateFile("a.cs"), CreateFile("b.cs"), CreateFile("README.md"));
+
+        // Prior attempt already excluded README.md (persisted IsComplete + IsExcluded).
+        var priorExcluded = new ReviewFileResult(job.Id, "README.md");
+        priorExcluded.MarkExcluded("**/*.md");
+
+        var repo = CreateJobRepo();
+        repo.GetByIdWithFileResultsAsync(job.Id, Arg.Any<CancellationToken>())
+            .Returns(_ =>
+            {
+                var priorJob = new ReviewJob(
+                    job.Id,
+                    job.ClientId,
+                    job.OrganizationUrl,
+                    job.ProjectId,
+                    job.RepositoryId,
+                    job.PullRequestId,
+                    job.IterationId);
+                priorJob.FileReviewResults.Add(priorExcluded);
+                return Task.FromResult<ReviewJob?>(priorJob);
+            });
+
+        var chatClient = Substitute.For<IChatClient>();
+        chatClient.GetResponseAsync(
+                Arg.Any<IList<ChatMessage>>(),
+                Arg.Any<ChatOptions?>(),
+                Arg.Any<CancellationToken>())
+            .Returns(new ChatResponse(new ChatMessage(ChatRole.Assistant, "synthesis")));
+
+        var context = new ReviewSystemContext(null, [], null)
+        {
+            ExclusionRules = ReviewExclusionRules.FromPatterns(["**/*.md"]),
+        };
+        var sut = CreateOrchestrator(aiCore, CreateProtocolRecorder(), repo, chatClient);
+
+        await sut.ReviewAsync(job, pr, context, CancellationToken.None);
+
+        await repo.Received(1).UpdateInScopeChangedFileCountAsync(job.Id, 2, Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
     public async Task ReviewAsync_FileByFileStrategy_DoesNotTraverseAgenticPlanningPath()
     {
         var aiCore = Substitute.For<IAiReviewCore>();

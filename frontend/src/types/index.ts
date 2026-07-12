@@ -10974,6 +10974,10 @@ export interface components {
             reviewTemperature?: number | null;
             tokenBreakdown?: components["schemas"]["TokenBreakdownEntry"][] | null;
             breakdownConsistent?: boolean | null;
+            /** Format: int32 */
+            filesReviewed?: number;
+            /** Format: int32 */
+            filesInScope?: number | null;
         };
         /** @description Single job item in the list response. */
         JobListItem: {
@@ -11006,6 +11010,10 @@ export interface components {
             prTargetBranch?: string | null;
             prRepositoryName?: string | null;
             aiModel?: string | null;
+            /** Format: int32 */
+            filesReviewed?: number;
+            /** Format: int32 */
+            filesInScope?: number | null;
         };
         /** @description Response for the job list endpoint. */
         JobListResponse: {

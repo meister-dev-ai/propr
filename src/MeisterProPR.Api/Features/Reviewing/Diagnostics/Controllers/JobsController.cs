@@ -114,12 +114,15 @@ public sealed class JobsController(
                         j.PrSourceBranch,
                         j.PrTargetBranch,
                         j.PrRepositoryName,
-                        j.AiModel))
+                        j.AiModel,
+                        j.FilesReviewed,
+                        j.FilesInScope))
                     .ToList()));
     }
 
     /// <summary>Returns detail for a single review job including per-tier token breakdown.</summary>
     /// <param name="id">The review job identifier.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>Job detail with token breakdown, or 404 if not found.</returns>
     /// <response code="200">Job detail returned.</response>
     /// <response code="401">Missing or invalid credentials.</response>
@@ -129,7 +132,7 @@ public sealed class JobsController(
     [ProducesResponseType(typeof(JobDetailResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
-    public IActionResult GetJob(Guid id)
+    public async Task<IActionResult> GetJob(Guid id, CancellationToken cancellationToken = default)
     {
         var auth = AuthHelpers.RequireAuthenticated(this.HttpContext);
         if (auth is not null)
@@ -159,6 +162,10 @@ public sealed class JobsController(
                                   && breakdownOutput == (job.TotalOutputTokensAggregated ?? 0);
         }
 
+        // Progress metric: live numerator via a projection-only count (no file-result text), fixed
+        // denominator from the job's snapshotted column.
+        var filesReviewed = await jobRepository.CountReviewedFilesAsync(id, cancellationToken);
+
         return this.Ok(
             new JobDetailResponse(
                 job.Id,
@@ -173,7 +180,9 @@ public sealed class JobsController(
                 job.AiModel,
                 job.ReviewTemperature,
                 breakdown,
-                breakdownConsistent));
+                breakdownConsistent,
+                filesReviewed,
+                job.InScopeChangedFileCount));
     }
 
     /// <summary>Returns the review result (summary and comments) for a completed job.</summary>
@@ -393,7 +402,9 @@ public sealed class JobsController(
         string? PrSourceBranch = null,
         string? PrTargetBranch = null,
         string? PrRepositoryName = null,
-        string? AiModel = null);
+        string? AiModel = null,
+        int FilesReviewed = 0,
+        int? FilesInScope = null);
 
     /// <summary>Response for the job list endpoint.</summary>
     public sealed record JobListResponse(int Total, IReadOnlyList<JobListItem> Items);
@@ -412,7 +423,9 @@ public sealed class JobsController(
         string? AiModel,
         float? ReviewTemperature,
         IReadOnlyList<TokenBreakdownEntry> TokenBreakdown,
-        bool? BreakdownConsistent);
+        bool? BreakdownConsistent,
+        int FilesReviewed = 0,
+        int? FilesInScope = null);
 
     /// <summary>Response for the job result endpoint, combining status metadata with the review result.</summary>
     public sealed record ReviewJobResultDto(

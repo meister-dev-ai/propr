@@ -31,6 +31,14 @@ namespace MeisterProPR.Application.DTOs;
 /// <param name="PrTargetBranch">Target branch display name, if known.</param>
 /// <param name="PrRepositoryName">Repository display name, if known.</param>
 /// <param name="AiModel">Snapshotted AI model used for the review, if known.</param>
+/// <param name="FilesReviewed">
+///     Count of per-file results that reached a terminal successful state (the live numerator of the
+///     "files reviewed" progress metric). Excludes excluded, failed, and carried-forward files.
+/// </param>
+/// <param name="FilesInScope">
+///     In-scope changed files after exclusions, fixed at job start (the progress denominator);
+///     null until dispatch planning runs.
+/// </param>
 public sealed record JobListPageItemDto(
     Guid Id,
     Guid? ClientId,
@@ -51,4 +59,6 @@ public sealed record JobListPageItemDto(
     string? PrSourceBranch,
     string? PrTargetBranch,
     string? PrRepositoryName,
-    string? AiModel);
+    string? AiModel,
+    int FilesReviewed,
+    int? FilesInScope);

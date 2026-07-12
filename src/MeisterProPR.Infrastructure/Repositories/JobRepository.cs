@@ -240,11 +240,39 @@ public sealed partial class JobRepository(
                 j.PrSourceBranch,
                 j.PrTargetBranch,
                 j.PrRepositoryName,
-                j.AiModel))
+                j.AiModel,
+                // Live numerator: files whose review reached a terminal successful state. Correlated Count
+                // over boolean columns only — no file-result text is materialized. Mirrors the "reviewed"
+                // predicate reused across this repository (excludes excluded, failed, and carried-forward).
+                j.FileReviewResults.Count(r => r.IsComplete && !r.IsFailed && !r.IsExcluded && !r.IsCarriedForward),
+                j.InScopeChangedFileCount))
             .ToListAsync(ct)
             .ConfigureAwait(false);
 
         return (total, items);
+    }
+
+    /// <inheritdoc />
+    public async Task UpdateInScopeChangedFileCountAsync(Guid id, int count, CancellationToken ct = default)
+    {
+        var job = await dbContext.ReviewJobs.FindAsync([id], ct).ConfigureAwait(false);
+        if (job is null)
+        {
+            return;
+        }
+
+        job.SetInScopeChangedFileCount(count);
+        await dbContext.SaveChangesAsync(ct).ConfigureAwait(false);
+    }
+
+    /// <inheritdoc />
+    public Task<int> CountReviewedFilesAsync(Guid jobId, CancellationToken ct = default)
+    {
+        // Index-backed COUNT over review_file_results boolean columns (ix_review_file_results_job_id):
+        // projection-only, loads no file-result text. Same "reviewed" predicate as the list projection.
+        return dbContext.ReviewFileResults
+            .Where(r => r.JobId == jobId && r.IsComplete && !r.IsFailed && !r.IsExcluded && !r.IsCarriedForward)
+            .CountAsync(ct);
     }
 
     /// <inheritdoc />

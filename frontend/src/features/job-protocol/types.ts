@@ -71,6 +71,8 @@ export interface JobDetail {
     submittedAt?: string | null
     processingStartedAt?: string | null
     completedAt?: string | null
+    filesReviewed?: number
+    filesInScope?: number | null
 }
 
 export interface CommentRelevanceEventDetails {

@@ -873,6 +873,127 @@ public sealed class JobRepositoryTests(PostgresContainerFixture fixture) : IAsyn
         Assert.Equal("after resume", fetched.ResultSummary);
     }
 
+    // ---- Progress metric: "X/Y files reviewed" ----
+
+    private static ReviewFileResult ExcludedFileResult(Guid jobId, string path)
+    {
+        var result = new ReviewFileResult(jobId, path);
+        result.MarkExcluded("*.md");
+        return result;
+    }
+
+    private static ReviewFileResult FailedFileResult(Guid jobId, string path)
+    {
+        var result = new ReviewFileResult(jobId, path);
+        result.MarkFailed("boom");
+        return result;
+    }
+
+    private static ReviewFileResult CarriedForwardFileResult(Guid jobId, string path)
+    {
+        var prior = new ReviewFileResult(Guid.NewGuid(), path);
+        prior.MarkCompleted("prior", []);
+        return ReviewFileResult.CreateCarriedForward(jobId, prior);
+    }
+
+    private static ReviewFileResult ResumedFileResult(Guid jobId, string path)
+    {
+        var prior = new ReviewFileResult(Guid.NewGuid(), path);
+        prior.MarkCompleted("prior", []);
+        return ReviewFileResult.CreateResumed(jobId, prior);
+    }
+
+    private async Task SeedFileResultsAsync(params ReviewFileResult[] results)
+    {
+        this._dbContext.ReviewFileResults.AddRange(results);
+        await this._dbContext.SaveChangesAsync();
+    }
+
+    [Fact]
+    public async Task CountReviewedFilesAsync_CountsSuccessfulAndResumed_ExcludesExcludedFailedAndCarriedForward()
+    {
+        var job = MakeJob(prId: 940);
+        await this._repo.AddAsync(job);
+        await this.SeedFileResultsAsync(
+            CreateCompletedFileResult(job.Id, "a.cs"),
+            CreateCompletedFileResult(job.Id, "b.cs"),
+            ResumedFileResult(job.Id, "c.cs"), // resumed same-revision file counts as reviewed
+            CarriedForwardFileResult(job.Id, "d.cs"), // carried-forward does NOT (current-iteration semantics)
+            ExcludedFileResult(job.Id, "e.md"), // excluded does NOT
+            FailedFileResult(job.Id, "f.cs")); // failed does NOT
+
+        var reviewed = await this._repo.CountReviewedFilesAsync(job.Id);
+
+        Assert.Equal(3, reviewed);
+    }
+
+    [Fact]
+    public async Task CountReviewedFilesAsync_IgnoresProtocolRows_SoMultiPassAndPrWideDoNotInflate()
+    {
+        // One reviewed file, but several protocol passes (baseline + multi-pass + pr-wide) — the counter
+        // is over file-result rows only, so it stays at 1.
+        var job = MakeJob(prId: 941);
+        await this._repo.AddAsync(job);
+        await this.SeedFileResultsAsync(CreateCompletedFileResult(job.Id, "a.cs"));
+        this._dbContext.ReviewJobProtocols.AddRange(
+            MakeProtocol(job.Id, DateTimeOffset.UtcNow, "Completed"),
+            MakeProtocol(job.Id, DateTimeOffset.UtcNow, "Completed"),
+            MakeProtocol(job.Id, DateTimeOffset.UtcNow, "Completed"));
+        await this._dbContext.SaveChangesAsync();
+
+        Assert.Equal(1, await this._repo.CountReviewedFilesAsync(job.Id));
+    }
+
+    [Fact]
+    public async Task CountReviewedFilesAsync_UnknownJob_ReturnsZero()
+    {
+        Assert.Equal(0, await this._repo.CountReviewedFilesAsync(Guid.NewGuid()));
+    }
+
+    [Fact]
+    public async Task UpdateInScopeChangedFileCountAsync_PersistsDenominator_AndClampsNegative()
+    {
+        var job = MakeJob(prId: 942);
+        await this._repo.AddAsync(job);
+
+        await this._repo.UpdateInScopeChangedFileCountAsync(job.Id, 40);
+        Assert.Equal(40, this._repo.GetById(job.Id)!.InScopeChangedFileCount);
+
+        await this._repo.UpdateInScopeChangedFileCountAsync(job.Id, -5);
+        Assert.Equal(0, this._repo.GetById(job.Id)!.InScopeChangedFileCount);
+    }
+
+    [Fact]
+    public async Task GetJobListPageAsync_ProjectsFilesReviewedAndInScope()
+    {
+        var job = MakeJob(prId: 943);
+        await this._repo.AddAsync(job);
+        await this._repo.UpdateInScopeChangedFileCountAsync(job.Id, 3);
+        await this.SeedFileResultsAsync(
+            CreateCompletedFileResult(job.Id, "a.cs"),
+            CreateCompletedFileResult(job.Id, "b.cs"),
+            FailedFileResult(job.Id, "c.cs"));
+
+        var (_, items) = await this._repo.GetJobListPageAsync(100, 0, null);
+        var dto = items.Single(i => i.Id == job.Id);
+
+        Assert.Equal(2, dto.FilesReviewed);
+        Assert.Equal(3, dto.FilesInScope);
+    }
+
+    [Fact]
+    public async Task GetJobListPageAsync_FilesInScope_NullBeforeDispatchPlanning()
+    {
+        var job = MakeJob(prId: 944);
+        await this._repo.AddAsync(job);
+
+        var (_, items) = await this._repo.GetJobListPageAsync(100, 0, null);
+        var dto = items.Single(i => i.Id == job.Id);
+
+        Assert.Null(dto.FilesInScope);
+        Assert.Equal(0, dto.FilesReviewed);
+    }
+
     [Fact]
     public async Task BackfillSql_PopulatesResultSummaryFromPascalCaseSummaryKey()
     {

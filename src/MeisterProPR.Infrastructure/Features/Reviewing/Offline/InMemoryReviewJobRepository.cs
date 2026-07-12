@@ -218,7 +218,9 @@ public sealed class InMemoryReviewJobRepository : IJobRepository
                 job.PrSourceBranch,
                 job.PrTargetBranch,
                 job.PrRepositoryName,
-                job.AiModel))
+                job.AiModel,
+                job.FileReviewResults.Count(r => r.IsComplete && !r.IsFailed && !r.IsExcluded && !r.IsCarriedForward),
+                job.InScopeChangedFileCount))
             .ToList()
             .AsReadOnly();
         return Task.FromResult<(int total, IReadOnlyList<JobListPageItemDto> items)>((ordered.Count, page));
@@ -286,6 +288,24 @@ public sealed class InMemoryReviewJobRepository : IJobRepository
         }
 
         return Task.CompletedTask;
+    }
+
+    public Task UpdateInScopeChangedFileCountAsync(Guid id, int count, CancellationToken ct = default)
+    {
+        if (this._jobs.TryGetValue(id, out var job))
+        {
+            job.SetInScopeChangedFileCount(count);
+        }
+
+        return Task.CompletedTask;
+    }
+
+    public Task<int> CountReviewedFilesAsync(Guid jobId, CancellationToken ct = default)
+    {
+        var count = this._jobs.TryGetValue(jobId, out var job)
+            ? job.FileReviewResults.Count(r => r.IsComplete && !r.IsFailed && !r.IsExcluded && !r.IsCarriedForward)
+            : 0;
+        return Task.FromResult(count);
     }
 
     public Task SetFailedAsync(Guid id, string errorMessage, CancellationToken ct = default)

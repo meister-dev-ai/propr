@@ -248,6 +248,12 @@ public sealed class ReviewJob
     public long? TotalOutputTokensAggregated { get; private set; }
 
     /// <summary>
+    ///     The number of in-scope changed files after exclusions for this iteration, fixed once at dispatch
+    ///     planning. Null until dispatch planning runs. Denominator of the "files reviewed" progress metric.
+    /// </summary>
+    public int? InScopeChangedFileCount { get; private set; }
+
+    /// <summary>
     ///     Per-tier token cost breakdown. Serialised as JSONB.
     ///     Each entry represents one (effort tier, model ID) combination observed across all protocols in this job.
     /// </summary>
@@ -338,6 +344,16 @@ public sealed class ReviewJob
     public void SetReviewPipelineProfile(string? pipelineProfileId)
     {
         this.ReviewPipelineProfileId = string.IsNullOrWhiteSpace(pipelineProfileId) ? null : pipelineProfileId;
+    }
+
+    /// <summary>
+    ///     Records the count of in-scope changed files after exclusions, computed once at dispatch planning.
+    ///     Deterministic per job/iteration, so re-running dispatch on a retry recomputes the same value.
+    /// </summary>
+    /// <param name="count">The in-scope changed-file count; negative inputs are clamped to zero.</param>
+    public void SetInScopeChangedFileCount(int count)
+    {
+        this.InScopeChangedFileCount = count < 0 ? 0 : count;
     }
 
     /// <summary>Records the PR context snapshot captured from ADO at job-creation time.</summary>

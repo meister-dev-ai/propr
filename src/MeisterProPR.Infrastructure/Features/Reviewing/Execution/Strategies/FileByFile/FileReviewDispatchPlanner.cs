@@ -55,6 +55,15 @@ internal sealed class FileReviewDispatchPlanner(
             await this.MarkFileExcludedAsync(job, excludedFile, executionContext, existingExcluded, ct);
         }
 
+        // Fix the "files reviewed" progress denominator: deduped in-scope changed files after exclusions
+        // for this iteration. Derived from the frozen changed set and the exclusion rules — NOT from
+        // selection.ExcludedFiles, which drops already-complete excluded rows on a retry and would inflate
+        // the denominator. Computing it from the rules keeps it stable across re-dispatch. Persisted before
+        // the zero-files early return below so the denominator exists even when nothing needs review.
+        var exclusionRules = executionContext.ExclusionRules;
+        var inScopeChangedFileCount = allChangedFiles.Count(f => !exclusionRules.Matches(f.Path));
+        await jobRepository.UpdateInScopeChangedFileCountAsync(job.Id, inScopeChangedFileCount, ct);
+
         filesToReview =
         [
             .. filesToReview

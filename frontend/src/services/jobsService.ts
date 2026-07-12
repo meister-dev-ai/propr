@@ -55,6 +55,8 @@ export interface JobListItem {
   prTargetBranch: string | null
   prRepositoryName: string | null
   aiModel: string | null
+  filesReviewed: number
+  filesInScope: number | null
 }
 
 export interface JobListResponse {

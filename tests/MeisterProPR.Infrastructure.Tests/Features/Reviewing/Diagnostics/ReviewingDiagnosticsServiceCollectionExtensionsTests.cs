@@ -167,6 +167,16 @@ public sealed class ReviewingDiagnosticsServiceCollectionExtensionsTests
             return Task.CompletedTask;
         }
 
+        public Task UpdateInScopeChangedFileCountAsync(Guid id, int count, CancellationToken ct = default)
+        {
+            return Task.CompletedTask;
+        }
+
+        public Task<int> CountReviewedFilesAsync(Guid jobId, CancellationToken ct = default)
+        {
+            return Task.FromResult(0);
+        }
+
         public Task SetFailedAsync(Guid id, string errorMessage, CancellationToken ct = default)
         {
             return Task.CompletedTask;

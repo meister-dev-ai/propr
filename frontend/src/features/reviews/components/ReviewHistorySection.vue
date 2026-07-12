@@ -88,13 +88,13 @@
                                     >
                                         <ProgressOrb class="chip-orb" />
                                         <span class="chip-label">
-                                            {{ processingProtocols[item.id].length }} Reviews
+                                            {{ filesProgressLabel(item) }}
                                         </span>
                                     </RouterLink>
                                     <span v-else class="chip-processing">
                                         <ProgressOrb class="chip-orb" />
                                         <span class="chip-label">
-                                            {{ processingProtocols[item.id].length }} Reviews
+                                            {{ filesProgressLabel(item) }}
                                         </span>
                                     </span>
                                 </div>
@@ -166,6 +166,7 @@ import { RouterLink } from 'vue-router'
 import ModalDialog from '@/components/dialogs/ModalDialog.vue'
 import ProgressOrb from '@/components/ProgressOrb.vue'
 import { useReviewHistoryViewModel, type PrGroup } from '@/features/reviews/view-models/useReviewHistoryViewModel'
+import { formatFilesReviewed } from '@/utils/reviewProgress'
 import type { components } from '@/types'
 import MarkdownIt from 'markdown-it'
 import DOMPurify from 'dompurify'
@@ -224,6 +225,13 @@ function formatItemDate(item: JobListItem): string {
         return item.submittedAt ? `Queued ${formatDate(item.submittedAt)}` : 'Queued'
     }
     return formatDate(item.completedAt)
+}
+
+// Reliable per-file progress for a running review. The in-scope denominator is null until dispatch
+// planning fixes it, so fall back to a neutral label rather than showing "0/0".
+function filesProgressLabel(item: JobListItem): string {
+    const fraction = formatFilesReviewed(item.filesReviewed, item.filesInScope)
+    return fraction ? `${fraction} files reviewed` : 'Reviewing…'
 }
 
 function formatDate(iso: string | null | undefined): string {

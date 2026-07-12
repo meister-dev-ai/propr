@@ -97,6 +97,19 @@ public interface IJobRepository
     /// <summary>Updates the retry count for a review job.</summary>
     Task UpdateRetryCountAsync(Guid id, int retryCount, CancellationToken ct = default);
 
+    /// <summary>
+    ///     Persists the in-scope changed-file count (denominator of the "files reviewed" progress metric),
+    ///     fixed once at dispatch planning. No-op if the job does not exist.
+    /// </summary>
+    Task UpdateInScopeChangedFileCountAsync(Guid id, int count, CancellationToken ct = default);
+
+    /// <summary>
+    ///     Counts the per-file results for a job that reached a terminal successful state — the live numerator
+    ///     of the "files reviewed" progress metric. Excludes excluded, failed, and carried-forward files, and is a
+    ///     projection-only count that never materializes file-result text. Returns 0 when the job has no results.
+    /// </summary>
+    Task<int> CountReviewedFilesAsync(Guid jobId, CancellationToken ct = default);
+
     /// <summary>Marks the job as failed with an error message.</summary>
     Task SetFailedAsync(Guid id, string errorMessage, CancellationToken ct = default);
 

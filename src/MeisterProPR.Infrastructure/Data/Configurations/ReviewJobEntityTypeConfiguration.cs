@@ -160,6 +160,10 @@ internal sealed class ReviewJobEntityTypeConfiguration : IEntityTypeConfiguratio
             .HasColumnName("total_output_tokens_aggregated")
             .IsRequired(false);
 
+        builder.Property(j => j.InScopeChangedFileCount)
+            .HasColumnName("in_scope_changed_file_count")
+            .IsRequired(false);
+
         builder.Property(j => j.AiConnectionId)
             .HasColumnName("ai_connection_id")
             .IsRequired(false);
