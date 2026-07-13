@@ -16,10 +16,8 @@ namespace MeisterProPR.Infrastructure.Tests.Features.IdentityAndAccess.Auth;
 public sealed class TenantOidcTokenValidatorTests
 {
     private const string TestAudience = "test-client-id";
-    private const string MetadataAddress = "https://login.microsoftonline.com/common/v2.0/.well-known/openid-configuration";
     private const string SingleTenantIssuer = "https://login.microsoftonline.com/11111111-1111-1111-1111-111111111111/v2.0";
-    private const string MultiTenantIssuerTemplate = "https://login.microsoftonline.com/{tenantid}/v2.0";
-    private const string TenantId = "22222222-2222-2222-2222-222222222222";
+    private const string MetadataAddress = SingleTenantIssuer + "/.well-known/openid-configuration";
 
     [Fact]
     public async Task ValidateAsync_WithCorrectlySignedSingleTenantToken_Succeeds()
@@ -56,48 +54,6 @@ public sealed class TenantOidcTokenValidatorTests
         var key = CreateRsaKey("k1");
         var validator = CreateValidator(SingleTenantIssuer, key);
         var token = CreateSignedToken(SigningCredentialsFor(key), "https://login.microsoftonline.com/other-tenant/v2.0", TestAudience, "user-1");
-
-        var result = await validator.ValidateAsync(new OidcTokenValidationRequest(token, MetadataAddress, TestAudience));
-
-        Assert.False(result.IsValid);
-        Assert.Equal("unexpected_token_issuer", result.FailureCode);
-    }
-
-    [Fact]
-    public async Task ValidateAsync_WithMultiTenantTemplatedIssuerMatchingTid_Succeeds()
-    {
-        var key = CreateRsaKey("k1");
-        var validator = CreateValidator(MultiTenantIssuerTemplate, key);
-        var tokenIssuer = $"https://login.microsoftonline.com/{TenantId}/v2.0";
-        var token = CreateSignedToken(SigningCredentialsFor(key), tokenIssuer, TestAudience, "user-1", tenantId: TenantId);
-
-        var result = await validator.ValidateAsync(new OidcTokenValidationRequest(token, MetadataAddress, TestAudience));
-
-        Assert.True(result.IsValid);
-        Assert.Equal(tokenIssuer, result.Issuer);
-    }
-
-    [Fact]
-    public async Task ValidateAsync_WithMultiTenantTokenMissingTid_RejectsIssuer()
-    {
-        var key = CreateRsaKey("k1");
-        var validator = CreateValidator(MultiTenantIssuerTemplate, key);
-        var tokenIssuer = $"https://login.microsoftonline.com/{TenantId}/v2.0";
-        var token = CreateSignedToken(SigningCredentialsFor(key), tokenIssuer, TestAudience, "user-1");
-
-        var result = await validator.ValidateAsync(new OidcTokenValidationRequest(token, MetadataAddress, TestAudience));
-
-        Assert.False(result.IsValid);
-        Assert.Equal("unexpected_token_issuer", result.FailureCode);
-    }
-
-    [Fact]
-    public async Task ValidateAsync_WithMultiTenantIssuerOnUnexpectedHost_RejectsIssuer()
-    {
-        var key = CreateRsaKey("k1");
-        var validator = CreateValidator(MultiTenantIssuerTemplate, key);
-        var tokenIssuer = $"https://attacker.example.com/{TenantId}/v2.0";
-        var token = CreateSignedToken(SigningCredentialsFor(key), tokenIssuer, TestAudience, "user-1", tenantId: TenantId);
 
         var result = await validator.ValidateAsync(new OidcTokenValidationRequest(token, MetadataAddress, TestAudience));
 
@@ -155,15 +111,10 @@ public sealed class TenantOidcTokenValidatorTests
         string issuer,
         string audience,
         string subject,
-        string? tenantId = null,
         DateTime? notBefore = null,
         DateTime? expires = null)
     {
         var claims = new List<Claim> { new("sub", subject) };
-        if (tenantId is not null)
-        {
-            claims.Add(new Claim("tid", tenantId));
-        }
 
         var token = new JwtSecurityToken(
             issuer,

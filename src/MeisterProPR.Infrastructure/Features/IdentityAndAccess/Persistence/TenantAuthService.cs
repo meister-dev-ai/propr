@@ -380,12 +380,12 @@ public sealed class TenantAuthService(
         var existingUser = await userRepository.GetByNormalizedEmailAsync(normalizedEmail, ct);
         if (existingUser is not null)
         {
-            // Never silently bind an external identity to a pre-existing account when the email claim is
-            // not a trustworthy account key. That holds when (a) the account uses local-password sign-in,
-            // or (b) the provider authority is multi-tenant, where a foreign Microsoft tenant can assert an
-            // arbitrary email in a genuinely signed token. Require an explicit, authenticated link instead.
-            // (Brand-new users are still auto-provisioned below; only linking to an existing account is gated.)
-            if (!string.IsNullOrWhiteSpace(existingUser.PasswordHash) || IsMultiTenantAuthority(provider))
+            // Never silently bind an external identity to a pre-existing local-password account: the email
+            // claim is not a trustworthy key for an account whose owner controls a password. Require an
+            // explicit, authenticated link instead. (Brand-new users are still auto-provisioned below; only
+            // linking to an existing account is gated. Multi-tenant authorities, where a foreign tenant could
+            // assert an arbitrary email, are refused outright at provider configuration and sign-in.)
+            if (!string.IsNullOrWhiteSpace(existingUser.PasswordHash))
             {
                 logger.LogWarning(
                     "TenantExternalSignInRejected TenantId={TenantId} ProviderId={ProviderId} Reason={Reason} UserId={UserId}",
@@ -974,6 +974,15 @@ public sealed class TenantAuthService(
             return null;
         }
 
+        // Multi-tenant Entra authorities (common/organizations/consumers) accept genuinely-signed tokens from
+        // any Microsoft tenant, so their email claim cannot be trusted as an account key. They are unsupported:
+        // each tenant is configured against its own specific authority. Fail closed so a legacy or directly
+        // inserted multi-tenant row cannot be used to sign in.
+        if (IsMultiTenantEntraAuthority(authority))
+        {
+            return null;
+        }
+
         var builder = new UriBuilder(authority);
         var basePath = builder.Path.TrimEnd('/');
         if (string.IsNullOrWhiteSpace(basePath))
@@ -1131,17 +1140,11 @@ public sealed class TenantAuthService(
         return $"{issuer.TrimEnd('/')}/.well-known/openid-configuration";
     }
 
-    private static bool IsMultiTenantAuthority(TenantSsoProviderRecord provider)
+    private static bool IsMultiTenantEntraAuthority(Uri authority)
     {
-        if (NormalizeProviderKey(provider.ProviderKind) != "entraid"
-            || !Uri.TryCreate(provider.IssuerOrAuthorityUrl, UriKind.Absolute, out var authority))
-        {
-            return false;
-        }
-
         // Entra multi-tenant authorities route through the /common, /organizations, or /consumers tenant
-        // segment and accept tokens from any Microsoft tenant, so their email claim is not a trustworthy
-        // key for matching a pre-existing account.
+        // segment and accept tokens from any Microsoft tenant. Callers reach this only on the Entra branch,
+        // so the provider kind is already known.
         var firstSegment = authority.AbsolutePath.Split('/', StringSplitOptions.RemoveEmptyEntries).FirstOrDefault();
         return firstSegment is not null
                && (firstSegment.Equals("common", StringComparison.OrdinalIgnoreCase)

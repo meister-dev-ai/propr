@@ -14,15 +14,14 @@ namespace MeisterProPR.Infrastructure.Auth;
 ///     signature, audience, lifetime, and issuer before any claim is trusted.
 /// </summary>
 /// <remarks>
-///     Issuer handling supports both single- and multi-tenant authorities. When the discovery issuer is a
-///     concrete value (single-tenant), it is pinned exactly. When the discovery issuer is templated with
-///     <c>{tenantid}</c> (Microsoft Entra <c>common</c>/<c>organizations</c>/<c>consumers</c> authorities),
-///     the token's own <c>tid</c> claim is substituted and the resulting issuer is required to match — so a
-///     multi-tenant authority still only accepts Microsoft-signed tokens with a coherent tenant/issuer pair.
+///     The issuer is pinned to the concrete issuer published by the authority's discovery document, so a
+///     token is accepted only when its <c>iss</c> exactly matches that authority. Multi-tenant Microsoft
+///     Entra authorities (<c>common</c>/<c>organizations</c>/<c>consumers</c>) are not supported: they are
+///     rejected before reaching this validator, because each tenant is configured against its own specific
+///     authority.
 /// </remarks>
 public sealed class TenantOidcTokenValidator : ITenantOidcTokenValidator
 {
-    private const string EntraTenantIdTemplate = "{tenantid}";
     private static readonly TimeSpan AllowedClockSkew = TimeSpan.FromSeconds(60);
 
     private readonly Func<string, BaseConfigurationManager> _configurationManagerFactory;
@@ -82,7 +81,7 @@ public sealed class TenantOidcTokenValidator : ITenantOidcTokenValidator
             // JWKS refresh-and-retry instead of failing every login until the periodic refresh fires.
             ConfigurationManager = configurationManager,
             ValidateIssuer = true,
-            IssuerValidator = (issuer, securityToken, _) => ValidateIssuer(issuer, securityToken, discoveryIssuer),
+            ValidIssuer = discoveryIssuer,
             ValidateAudience = true,
             ValidAudience = request.ExpectedAudience,
             ValidateLifetime = true,
@@ -119,37 +118,5 @@ public sealed class TenantOidcTokenValidator : ITenantOidcTokenValidator
         {
             return OidcTokenValidationResult.Failure("invalid_id_token");
         }
-    }
-
-    private static string ValidateIssuer(string issuer, SecurityToken securityToken, string? discoveryIssuer)
-    {
-        if (string.IsNullOrWhiteSpace(discoveryIssuer) || string.IsNullOrWhiteSpace(issuer))
-        {
-            throw new SecurityTokenInvalidIssuerException("The token issuer or discovery issuer is missing.");
-        }
-
-        string expectedIssuer;
-        if (discoveryIssuer.Contains(EntraTenantIdTemplate, StringComparison.OrdinalIgnoreCase))
-        {
-            var tenantId = (securityToken as JwtSecurityToken)?.Claims
-                .FirstOrDefault(claim => claim.Type == "tid")?.Value;
-            if (string.IsNullOrWhiteSpace(tenantId))
-            {
-                throw new SecurityTokenInvalidIssuerException("A multi-tenant authority token is missing its 'tid' claim.");
-            }
-
-            expectedIssuer = discoveryIssuer.Replace(EntraTenantIdTemplate, tenantId, StringComparison.OrdinalIgnoreCase);
-        }
-        else
-        {
-            expectedIssuer = discoveryIssuer;
-        }
-
-        if (!string.Equals(issuer, expectedIssuer, StringComparison.Ordinal))
-        {
-            throw new SecurityTokenInvalidIssuerException($"The token issuer '{issuer}' does not match the expected issuer.");
-        }
-
-        return issuer;
     }
 }

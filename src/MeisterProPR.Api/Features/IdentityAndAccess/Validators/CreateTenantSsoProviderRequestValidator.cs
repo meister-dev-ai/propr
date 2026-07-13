@@ -39,6 +39,16 @@ public sealed class CreateTenantSsoProviderRequestValidator : AbstractValidator<
             .Must(BeAbsoluteHttpsUri)
             .WithMessage("IssuerOrAuthorityUrl must be a valid HTTPS URL.");
 
+        // Entra multi-tenant authorities accept genuinely-signed tokens from any Microsoft tenant, so their
+        // email claim cannot be trusted as an account key. Each tenant must be configured against its own
+        // specific authority (e.g. https://login.microsoftonline.com/<tenant-id>/v2.0).
+        this.RuleFor(request => request.IssuerOrAuthorityUrl)
+            .Must(NotBeMultiTenantEntraAuthority)
+            .When(request => string.Equals(request.ProviderKind, "EntraId", StringComparison.Ordinal))
+            .WithMessage(
+                "Multi-tenant Entra authorities (common/organizations/consumers) are not supported. "
+                + "Configure the authority for a specific tenant, e.g. https://login.microsoftonline.com/<tenant-id>/v2.0.");
+
         this.RuleFor(request => request.ClientId)
             .NotEmpty()
             .WithMessage("ClientId is required.")
@@ -55,5 +65,20 @@ public sealed class CreateTenantSsoProviderRequestValidator : AbstractValidator<
     private static bool BeAbsoluteHttpsUri(string? value)
     {
         return Uri.TryCreate(value, UriKind.Absolute, out var uri) && uri.Scheme == Uri.UriSchemeHttps;
+    }
+
+    private static bool NotBeMultiTenantEntraAuthority(string? value)
+    {
+        if (!Uri.TryCreate(value, UriKind.Absolute, out var uri))
+        {
+            // URL shape is enforced by the HTTPS rule above; don't double-report here.
+            return true;
+        }
+
+        var firstSegment = uri.AbsolutePath.Split('/', StringSplitOptions.RemoveEmptyEntries).FirstOrDefault();
+        return firstSegment is null
+               || !(firstSegment.Equals("common", StringComparison.OrdinalIgnoreCase)
+                    || firstSegment.Equals("organizations", StringComparison.OrdinalIgnoreCase)
+                    || firstSegment.Equals("consumers", StringComparison.OrdinalIgnoreCase));
     }
 }

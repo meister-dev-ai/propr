@@ -62,7 +62,7 @@ public sealed class TenantSsoProvidersControllerTests(TenantAdministrationApiFac
                 displayName = "Acme Entra",
                 providerKind = "EntraId",
                 protocolKind = "Oidc",
-                issuerOrAuthorityUrl = "https://login.microsoftonline.com/common/v2.0",
+                issuerOrAuthorityUrl = "https://login.microsoftonline.com/11111111-1111-1111-1111-111111111111/v2.0",
                 clientId = "acme-client-id",
                 clientSecret = "super-secret",
                 scopes = new[] { "openid", "profile", "email" },
@@ -78,6 +78,44 @@ public sealed class TenantSsoProvidersControllerTests(TenantAdministrationApiFac
         Assert.Equal("Acme Entra", body.GetProperty("displayName").GetString());
         Assert.True(body.GetProperty("secretConfigured").GetBoolean());
         Assert.False(body.TryGetProperty("clientSecret", out _));
+    }
+
+    [Fact]
+    public async Task PostProvider_WithMultiTenantEntraAuthority_Returns400()
+    {
+        factory.ResetLicensing();
+
+        var tenantId = await factory.SeedTenantAsync($"acme-{Guid.NewGuid():N}", "Acme Corp");
+        var userId = await factory.SeedUserAsync($"tenant.admin.{Guid.NewGuid():N}", $"tenant.admin.{Guid.NewGuid():N}@acme.test");
+        await factory.SeedTenantMembershipAsync(tenantId, userId, TenantRole.TenantAdministrator);
+
+        var httpClient = factory.CreateClient();
+        using var request = new HttpRequestMessage(HttpMethod.Post, $"/admin/tenants/{tenantId}/sso-providers");
+        request.Headers.Authorization = new AuthenticationHeaderValue(
+            "Bearer",
+            factory.GenerateToken(userId, AppUserRole.User));
+        request.Content = JsonContent.Create(
+            new
+            {
+                displayName = "Acme Entra",
+                providerKind = "EntraId",
+                protocolKind = "Oidc",
+                issuerOrAuthorityUrl = "https://login.microsoftonline.com/common/v2.0",
+                clientId = "acme-client-id",
+                clientSecret = "super-secret",
+                scopes = new[] { "openid", "profile", "email" },
+                allowedEmailDomains = new[] { "acme.test" },
+                isEnabled = true,
+                autoCreateUsers = true,
+            });
+
+        var response = await httpClient.SendAsync(request);
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.Contains(
+            "Multi-tenant Entra authorities",
+            await response.Content.ReadAsStringAsync(),
+            StringComparison.Ordinal);
     }
 
     [Fact]
@@ -185,7 +223,7 @@ public sealed class TenantSsoProvidersControllerTests(TenantAdministrationApiFac
                 displayName = "System Entra",
                 providerKind = "EntraId",
                 protocolKind = "Oidc",
-                issuerOrAuthorityUrl = "https://login.microsoftonline.com/common/v2.0",
+                issuerOrAuthorityUrl = "https://login.microsoftonline.com/11111111-1111-1111-1111-111111111111/v2.0",
                 clientId = "system-client-id",
                 clientSecret = "super-secret",
                 scopes = new[] { "openid", "profile", "email" },
