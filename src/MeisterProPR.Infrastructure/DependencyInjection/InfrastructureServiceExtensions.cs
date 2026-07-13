@@ -163,8 +163,14 @@ public static class InfrastructureServiceExtensions
         services.AddSingleton<OpenAiCompatibleRequestFactory>();
         services.AddSingleton<OpenAiCompatibleTransport>();
         services.AddSingleton<IAiProviderDriver, AzureOpenAiProviderDriver>();
-        services.AddSingleton<IAiProviderDriver, OpenAiProviderDriver>();
-        services.AddSingleton<IAiProviderDriver, LiteLlmProviderDriver>();
+        services.AddSingleton<IAiProviderDriver>(serviceProvider => new OpenAiProviderDriver(
+            serviceProvider.GetRequiredService<OpenAiCompatibleTransport>(),
+            serviceProvider.GetRequiredService<IHttpClientFactory>(),
+            allowPrivateEgress));
+        services.AddSingleton<IAiProviderDriver>(serviceProvider => new LiteLlmProviderDriver(
+            serviceProvider.GetRequiredService<OpenAiCompatibleTransport>(),
+            serviceProvider.GetRequiredService<IHttpClientFactory>(),
+            allowPrivateEgress));
         services.AddSingleton<IAiProviderDriverRegistry, AiProviderRegistry>();
         services.AddSingleton<IAiChatClientFactory, AiChatClientFactory>();
 

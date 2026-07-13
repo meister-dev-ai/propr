@@ -1,12 +1,13 @@
 // Copyright (c) Andreas Rain.
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
-namespace MeisterProPR.Application.Networking;
+namespace MeisterProPR.Infrastructure.AI;
 
 /// <summary>
 ///     Identifies Microsoft-controlled Azure AI hostnames. Azure OpenAI / Azure AI Foundry endpoints — including
-///     private endpoints — always use these hostnames, so restricting an admin-supplied Azure <c>baseUrl</c> to
-///     them stops the Azure SDK (which has no connect-time egress guard) from being pointed at an internal host.
+///     private endpoints — always use these hostnames, so restricting an Azure connection's <c>baseUrl</c> to them
+///     stops the Azure SDK (which has no connect-time egress guard) from being pointed at an internal host. Kept in
+///     Infrastructure alongside the Azure provider driver and client factory, since it is Azure-provider knowledge.
 /// </summary>
 public static class AzureAiHostPolicy
 {

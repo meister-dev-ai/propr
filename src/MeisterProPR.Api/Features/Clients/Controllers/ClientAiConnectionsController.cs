@@ -5,11 +5,9 @@ using System.Text.Json.Serialization;
 using MeisterProPR.Api.Extensions;
 using MeisterProPR.Application.DTOs;
 using MeisterProPR.Application.Interfaces;
-using MeisterProPR.Application.Networking;
 using MeisterProPR.Domain.Enums;
 using MeisterProPR.Infrastructure.AI.Providers;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.Extensions.Hosting;
 
 namespace MeisterProPR.Api.Controllers;
 
@@ -19,7 +17,6 @@ namespace MeisterProPR.Api.Controllers;
 public sealed partial class ClientAiConnectionsController(
     IAiConnectionRepository aiConnections,
     IAiProviderDriverRegistry providerDrivers,
-    IHostEnvironment hostEnvironment,
     ILogger<ClientAiConnectionsController> logger) : ControllerBase
 {
     private const string RequestModelsPropertyName = "requestModels";
@@ -248,19 +245,17 @@ public sealed partial class ClientAiConnectionsController(
             return this.NotFound();
         }
 
-        // Re-validate the stored baseUrl before probing: a row saved before this guard existed (or saved in a
-        // Development environment) could still carry an internal host that the Azure SDK path would reach.
-        if (Uri.TryCreate(existing.BaseUrl, UriKind.Absolute, out var existingBaseUri))
+        var driver = providerDrivers.GetRequired(existing.ProviderKind);
+
+        // Re-validate the stored target before probing: a row saved before this guard existed (or saved in a
+        // Development environment) could still carry a target the provider driver now rejects.
+        var targetError = driver.ValidateProbeTarget(new AiProbeTarget(existing.BaseUrl, existing.AuthMode, !string.IsNullOrWhiteSpace(existing.Secret)));
+        if (targetError is not null)
         {
-            var egressError = this.ValidateProbeEgress(existing.ProviderKind, existingBaseUri);
-            if (egressError is not null)
-            {
-                this.ModelState.AddModelError("baseUrl", egressError);
-                return this.ValidationProblem();
-            }
+            this.ModelState.AddModelError("baseUrl", targetError);
+            return this.ValidationProblem();
         }
 
-        var driver = providerDrivers.GetRequired(existing.ProviderKind);
         var verification = await driver.VerifyAsync(ToProbeOptions(existing), ct);
 
         if (verification.Status == AiVerificationStatus.Verified)
@@ -491,24 +486,9 @@ public sealed partial class ClientAiConnectionsController(
         IReadOnlyDictionary<string, string>? defaultHeaders,
         IReadOnlyDictionary<string, string>? defaultQueryParams)
     {
-        if (string.IsNullOrWhiteSpace(baseUrl) || baseUrl.Length > 1000 || !Uri.TryCreate(baseUrl, UriKind.Absolute, out var baseUri))
+        if (string.IsNullOrWhiteSpace(baseUrl) || baseUrl.Length > 1000 || !Uri.TryCreate(baseUrl, UriKind.Absolute, out _))
         {
             this.ModelState.AddModelError(nameof(baseUrl), "baseUrl is required, must be an absolute URL, and must be 1000 characters or fewer.");
-            return null;
-        }
-
-        var egressError = this.ValidateProbeEgress(providerKind, baseUri);
-        if (egressError is not null)
-        {
-            this.ModelState.AddModelError(nameof(baseUrl), egressError);
-            return null;
-        }
-
-        if (providerKind == AiProviderKind.OpenAi && IsAzureHostedOpenAiEndpoint(baseUrl))
-        {
-            this.ModelState.AddModelError(
-                nameof(baseUrl),
-                "Azure-hosted OpenAI endpoints, including Azure AI Foundry OpenAI endpoints, must use providerKind 'azureOpenAi' instead of 'openAi'.");
             return null;
         }
 
@@ -518,73 +498,24 @@ public sealed partial class ClientAiConnectionsController(
             return null;
         }
 
-        if (providerKind == AiProviderKind.AzureOpenAi && auth.Mode == AiAuthMode.AzureIdentity)
+        // Provider-specific base-URL / SSRF-egress / auth-shape validation lives behind the driver seam,
+        // so the controller does not branch on provider kind.
+        var targetError = providerDrivers.GetRequired(providerKind)
+            .ValidateProbeTarget(new AiProbeTarget(baseUrl.Trim(), auth.Mode, !string.IsNullOrWhiteSpace(auth.ApiKey)));
+        if (targetError is not null)
         {
-            return new AiConnectionProbeOptionsDto(
-                providerKind,
-                baseUrl.Trim(),
-                auth.Mode,
-                null,
-                NormalizeMap(defaultHeaders),
-                NormalizeMap(defaultQueryParams));
-        }
-
-        if (auth.Mode != AiAuthMode.ApiKey || string.IsNullOrWhiteSpace(auth.ApiKey))
-        {
-            this.ModelState.AddModelError(nameof(auth.ApiKey), "An API key is required for this provider and auth mode.");
+            this.ModelState.AddModelError(nameof(baseUrl), targetError);
             return null;
         }
 
+        var secret = auth.Mode == AiAuthMode.ApiKey ? auth.ApiKey?.Trim() : null;
         return new AiConnectionProbeOptionsDto(
             providerKind,
             baseUrl.Trim(),
             auth.Mode,
-            auth.ApiKey.Trim(),
+            secret,
             NormalizeMap(defaultHeaders),
             NormalizeMap(defaultQueryParams));
-    }
-
-    private static bool IsAzureHostedOpenAiEndpoint(string baseUrl)
-    {
-        if (!Uri.TryCreate(baseUrl, UriKind.Absolute, out var uri))
-        {
-            return false;
-        }
-
-        return uri.Host.EndsWith(".openai.azure.com", StringComparison.OrdinalIgnoreCase) ||
-               uri.Host.EndsWith(".services.ai.azure.com", StringComparison.OrdinalIgnoreCase);
-    }
-
-    // Shared egress validation for both the create/update/discover path (TryBuildProbeOptions) and the verify
-    // path (which re-derives from the saved row). Returns an error message, or null when the target is allowed.
-    private string? ValidateProbeEgress(AiProviderKind providerKind, Uri baseUri)
-    {
-        // Azure connections reach the provider through the Azure SDK, which has no connect-time egress guard,
-        // so their baseUrl is always locked to Microsoft-controlled Azure AI hosts (private endpoints use these
-        // hostnames too) — enforced even in Development, since a non-Azure Azure host is never legitimate.
-        if (providerKind == AiProviderKind.AzureOpenAi && !AzureAiHostPolicy.IsAzureAiHost(baseUri.Host))
-        {
-            return "Azure OpenAI connections must target an Azure AI host (*.openai.azure.com, *.services.ai.azure.com, or *.cognitiveservices.azure.com).";
-        }
-
-        // Localhost / private egress for OpenAI/LiteLLM is permitted only in Development so a local provider
-        // (e.g. a localhost LiteLLM) stays reachable there.
-        if (hostEnvironment.IsDevelopment())
-        {
-            return null;
-        }
-
-        if (!string.Equals(baseUri.Scheme, Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase))
-        {
-            return "baseUrl must use https.";
-        }
-
-        if (EgressAddressPolicy.IsBlockedEgressHost(baseUri.Host))
-        {
-            return "baseUrl must not target a private, loopback, or link-local address.";
-        }
-
-        return null;
     }
 
     private IReadOnlyList<AiConfiguredModelDto> NormalizeConfiguredModels(IReadOnlyList<AiConfiguredModelRequest>? requestModels)

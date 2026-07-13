@@ -61,7 +61,8 @@ public sealed class ProviderRuntimeCapabilityTests
                 HttpStatusCode.OK, """
                                    {"data":[{"id":"gpt-5.4-mini"}]}
                                    """),
-            CreateHttpClientFactory());
+            CreateHttpClientFactory(),
+            allowPrivateEgress: false);
         var model = AiConnectionTestFactory.CreateChatModel("gpt-5.4-mini");
         var binding = AiConnectionTestFactory.CreateBinding(AiPurpose.ReviewDefault, model, protocolMode);
         var connection = AiConnectionTestFactory.CreateConnection(
@@ -91,7 +92,8 @@ public sealed class ProviderRuntimeCapabilityTests
                 HttpStatusCode.OK, """
                                    {"data":[{"id":"gpt-4o-mini"}]}
                                    """),
-            CreateHttpClientFactory());
+            CreateHttpClientFactory(),
+            allowPrivateEgress: false);
         var model = AiConnectionTestFactory.CreateChatModel("gpt-4o-mini");
         var binding = AiConnectionTestFactory.CreateBinding(AiPurpose.ReviewDefault, model, AiProtocolMode.Responses);
         var connection = AiConnectionTestFactory.CreateConnection(Guid.NewGuid(), [model], [binding]) with

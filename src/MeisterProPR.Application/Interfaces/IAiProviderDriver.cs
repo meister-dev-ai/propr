@@ -16,6 +16,12 @@ public interface IAiProviderDriver
     /// <summary>Gets the provider family handled by this driver.</summary>
     AiProviderKind ProviderKind { get; }
 
+    /// <summary>
+    ///     Validates a probe/verify target against this provider's base-URL, SSRF-egress, and auth-shape rules.
+    ///     Returns a user-facing error message when the target is rejected, or <c>null</c> when it is acceptable.
+    /// </summary>
+    string? ValidateProbeTarget(AiProbeTarget target);
+
     /// <summary>Discovers provider models using the supplied connection settings.</summary>
     Task<AiModelDiscoveryResultDto> DiscoverModelsAsync(
         AiConnectionProbeOptionsDto options,

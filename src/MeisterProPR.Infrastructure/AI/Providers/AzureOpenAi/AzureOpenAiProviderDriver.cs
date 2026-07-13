@@ -19,6 +19,11 @@ public sealed class AzureOpenAiProviderDriver : IAiProviderDriver
 {
     public AiProviderKind ProviderKind => AiProviderKind.AzureOpenAi;
 
+    public string? ValidateProbeTarget(AiProbeTarget target)
+    {
+        return AiProbeTargetValidation.ForAzureOpenAi(target);
+    }
+
     public async Task<AiModelDiscoveryResultDto> DiscoverModelsAsync(
         AiConnectionProbeOptionsDto options,
         CancellationToken ct = default)

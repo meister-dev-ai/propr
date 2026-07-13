@@ -6,7 +6,6 @@ using System.ClientModel.Primitives;
 using Azure.AI.OpenAI;
 using Azure.Identity;
 using MeisterProPR.Application.Interfaces;
-using MeisterProPR.Application.Networking;
 using MeisterProPR.Domain.Enums;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Logging;
