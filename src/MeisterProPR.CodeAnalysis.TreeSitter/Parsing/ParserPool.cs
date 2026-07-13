@@ -111,7 +111,7 @@ internal sealed class ParserPool : IDisposable
         //     only after the in-flight native parse has actually finished.
         // ParseAsync MUST NOT dispose the parser or release the gate after handing off:
         // doing so on the timeout path would free the parser while ts_parser_parse is
-        // still running on the Task.Run thread (native double-free / subtree refcount
+        // still running on the parse thread (native double-free / subtree refcount
         // corruption) and over-release the semaphore.
         TS.Parser parser;
         try
@@ -127,12 +127,47 @@ internal sealed class ParserPool : IDisposable
         return await this.ParseWithTimeoutAsync(parser, source).ConfigureAwait(false);
     }
 
+    /// <summary>
+    ///     Primes the native parse path once, best-effort, on a background thread: loads each
+    ///     supported grammar and runs a trivial parse so the managed JIT and per-language native
+    ///     initialization are paid up front rather than inside the deadline of the first real parse
+    ///     (the production budget is only <c>StructuralParseTimeoutMs</c>). Never throws; if native
+    ///     libraries are unavailable each attempt simply falls back to a no-op.
+    /// </summary>
+    public void WarmUp()
+    {
+        _ = Task.Run(async () =>
+        {
+            foreach (var language in Enum.GetValues<SupportedLanguage>())
+            {
+                try
+                {
+                    var result = await this.ParseAsync(language, "\n", CancellationToken.None).ConfigureAwait(false);
+                    result.Tree?.Dispose();
+                }
+                catch
+                {
+                    // Warm-up is best-effort; a failure just means the first real parse pays the cost.
+                }
+            }
+        });
+    }
+
     private async Task<PooledParseResult> ParseWithTimeoutAsync(TS.Parser parser, string source)
     {
         // Ownership of `parser` and the gate slot transfers into this method. Either we
         // dispose+release inline (success) or a continuation disposes+releases (timeout).
         TS.Tree? tree = null;
-        var parseTask = Task.Run(
+
+        // Run the native parse on a DEDICATED thread (LongRunning), NOT the shared thread pool.
+        // The wall-clock deadline below would otherwise count thread-pool *scheduling* latency:
+        // under load (e.g. many files reviewed concurrently, or a parallel test run) the pool can be
+        // saturated, so a pool-scheduled parse delegate waits in the queue while Task.Delay fires on the
+        // timer regardless — producing spurious ParseTimeout fallbacks even though the parse itself
+        // is fast. A dedicated thread starts immediately, so the timeout measures parse work rather
+        // than queueing. Concurrency is already bounded by the gate, so at most maxConcurrency of
+        // these threads exist at once.
+        var parseTask = Task.Factory.StartNew(
             () =>
             {
                 try
@@ -142,9 +177,12 @@ internal sealed class ParserPool : IDisposable
                 catch
                 {
                     // Contain any native/managed parse fault (FR-010). Caller falls back to heuristic.
-                    return null;
+                    return (TS.Tree?)null;
                 }
-            }, CancellationToken.None);
+            },
+            CancellationToken.None,
+            TaskCreationOptions.LongRunning | TaskCreationOptions.DenyChildAttach,
+            TaskScheduler.Default);
 
         using var timeoutCts = new CancellationTokenSource(this._parseTimeoutMs);
         var timeoutTask = Task.Delay(Timeout.Infinite, timeoutCts.Token);
@@ -160,7 +198,7 @@ internal sealed class ParserPool : IDisposable
             }
             catch
             {
-                // Should not happen — the Task.Run wrapper swallows. Defensive.
+                // Should not happen — the StartNew wrapper swallows. Defensive.
             }
 
             try
