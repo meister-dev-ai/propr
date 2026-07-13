@@ -83,6 +83,12 @@ public interface IClientRegistry
     Task<bool> GetMultiPassUnionEnabledAsync(Guid clientId, CancellationToken ct = default);
 
     /// <summary>
+    ///     Returns whether linked work items / issues should be fetched and included in the review context
+    ///     for the given client. Defaults to <see langword="true" /> if the client does not exist.
+    /// </summary>
+    Task<bool> GetIncludeLinkedItemsInContextEnabledAsync(Guid clientId, CancellationToken ct = default);
+
+    /// <summary>
     ///     Returns the ordered per-client review-pass list — each configured model (in ordinal order) with its optional
     ///     specialist lens — that runs one additional multi-pass union pass after the implicit tier baseline. Empty
     ///     when the client has configured no additional passes (multi-pass union then degrades to a single baseline pass).

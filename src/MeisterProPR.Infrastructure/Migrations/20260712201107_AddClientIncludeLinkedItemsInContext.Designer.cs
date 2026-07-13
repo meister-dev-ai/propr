@@ -3,6 +3,7 @@ using System;
 using MeisterProPR.Infrastructure.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 using Pgvector;
@@ -12,9 +13,11 @@ using Pgvector;
 namespace MeisterProPR.Infrastructure.Migrations
 {
     [DbContext(typeof(MeisterProPRDbContext))]
-    partial class MeisterProPRDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260712201107_AddClientIncludeLinkedItemsInContext")]
+    partial class AddClientIncludeLinkedItemsInContext
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -900,14 +903,6 @@ namespace MeisterProPR.Infrastructure.Migrations
                         .HasColumnType("jsonb")
                         .HasColumnName("comments_json");
 
-                    b.Property<string>("ContextBudgetOutcome")
-                        .IsRequired()
-                        .ValueGeneratedOnAdd()
-                        .HasMaxLength(32)
-                        .HasColumnType("character varying(32)")
-                        .HasDefaultValue("Normal")
-                        .HasColumnName("context_budget_outcome");
-
                     b.Property<string>("ErrorMessage")
                         .HasColumnType("text")
                         .HasColumnName("error_message");
@@ -1017,10 +1012,6 @@ namespace MeisterProPR.Infrastructure.Migrations
                         .HasMaxLength(512)
                         .HasColumnType("character varying(512)")
                         .HasColumnName("host_base_url");
-
-                    b.Property<int?>("InScopeChangedFileCount")
-                        .HasColumnType("integer")
-                        .HasColumnName("in_scope_changed_file_count");
 
                     b.Property<int>("IterationId")
                         .HasColumnType("integer")
@@ -1446,10 +1437,6 @@ namespace MeisterProPR.Infrastructure.Migrations
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("last_seen_at");
 
-                    b.Property<int?>("MaxContextTokens")
-                        .HasColumnType("integer")
-                        .HasColumnName("max_context_tokens");
-
                     b.Property<int?>("MaxInputTokens")
                         .HasColumnType("integer")
                         .HasColumnName("max_input_tokens");
@@ -1815,12 +1802,6 @@ namespace MeisterProPR.Infrastructure.Migrations
                         .HasColumnType("text")
                         .HasColumnName("email");
 
-                    b.Property<int>("FailedLoginAttempts")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("integer")
-                        .HasDefaultValue(0)
-                        .HasColumnName("failed_login_attempts");
-
                     b.Property<string>("GlobalRole")
                         .IsRequired()
                         .HasColumnType("text")
@@ -1831,10 +1812,6 @@ namespace MeisterProPR.Infrastructure.Migrations
                         .HasColumnType("boolean")
                         .HasDefaultValue(true)
                         .HasColumnName("is_active");
-
-                    b.Property<DateTimeOffset?>("LockoutEndAt")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("lockout_end_at");
 
                     b.Property<string>("NormalizedEmail")
                         .HasColumnType("text")
@@ -2669,10 +2646,6 @@ namespace MeisterProPR.Infrastructure.Migrations
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("expires_at");
 
-                    b.Property<DateTimeOffset>("LastUsedAt")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("last_used_at");
-
                     b.Property<DateTimeOffset?>("RevokedAt")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("revoked_at");
@@ -2993,10 +2966,6 @@ namespace MeisterProPR.Infrastructure.Migrations
                         .HasColumnType("text")
                         .HasColumnName("token_hash");
 
-                    b.Property<string>("TokenLookupHash")
-                        .HasColumnType("text")
-                        .HasColumnName("token_lookup_hash");
-
                     b.Property<Guid>("UserId")
                         .HasColumnType("uuid")
                         .HasColumnName("user_id");
@@ -3005,9 +2974,6 @@ namespace MeisterProPR.Infrastructure.Migrations
 
                     b.HasIndex("TokenHash")
                         .HasDatabaseName("ix_user_pats_token_hash");
-
-                    b.HasIndex("TokenLookupHash")
-                        .HasDatabaseName("ix_user_pats_token_lookup_hash");
 
                     b.HasIndex("UserId");
 

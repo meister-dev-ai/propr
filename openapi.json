@@ -15882,6 +15882,9 @@
           "enableMultiPassUnion": {
             "type": "boolean"
           },
+          "includeLinkedItemsInContext": {
+            "type": "boolean"
+          },
           "reviewPasses": {
             "type": "array",
             "items": {
@@ -17483,6 +17486,10 @@
             "nullable": true
           },
           "enableMultiPassUnion": {
+            "type": "boolean",
+            "nullable": true
+          },
+          "includeLinkedItemsInContext": {
             "type": "boolean",
             "nullable": true
           },

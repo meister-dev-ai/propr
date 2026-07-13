@@ -27,6 +27,9 @@ public sealed class BoundedReviewContextTools : IReviewContextTools
     public const string GetFileNeighborhoodToolName = "get_file_neighborhood";
     public const string AskProCursorKnowledgeToolName = "ask_procursor_knowledge";
     public const string GetProCursorSymbolInfoToolName = "get_procursor_symbol_info";
+    public const string GetLinkedItemDetailsToolName = "get_linked_item_details";
+    public const string GetLinkedItemDiscussionToolName = "get_linked_item_discussion";
+    public const string ResolveLinkedItemToolName = "resolve_linked_item";
 
     public const string SuccessStatus = "success";
     public const string BlockedNotAllowedStatus = "blocked_not_allowed";
@@ -210,6 +213,39 @@ public sealed class BoundedReviewContextTools : IReviewContextTools
     public Task<DefinitionLookupResult> GetDefinitionAsync(SymbolReferenceQuery query, CancellationToken ct)
     {
         return this._inner.GetDefinitionAsync(query, ct);
+    }
+
+    /// <inheritdoc />
+    public Task<LinkedItemDetails?> GetLinkedItemDetailsAsync(string providerKey, CancellationToken ct)
+    {
+        if (!this.TryEnterCall(GetLinkedItemDetailsToolName, providerKey, out _))
+        {
+            return Task.FromResult<LinkedItemDetails?>(null);
+        }
+
+        return this.ExecuteAsync(GetLinkedItemDetailsToolName, providerKey, () => this._inner.GetLinkedItemDetailsAsync(providerKey, ct));
+    }
+
+    /// <inheritdoc />
+    public Task<IReadOnlyList<LinkedItemComment>> GetLinkedItemDiscussionAsync(string providerKey, CancellationToken ct)
+    {
+        if (!this.TryEnterCall(GetLinkedItemDiscussionToolName, providerKey, out _))
+        {
+            return Task.FromResult<IReadOnlyList<LinkedItemComment>>([]);
+        }
+
+        return this.ExecuteAsync(GetLinkedItemDiscussionToolName, providerKey, () => this._inner.GetLinkedItemDiscussionAsync(providerKey, ct));
+    }
+
+    /// <inheritdoc />
+    public Task<LinkedItem?> ResolveLinkedItemAsync(string relatedTargetKey, CancellationToken ct)
+    {
+        if (!this.TryEnterCall(ResolveLinkedItemToolName, relatedTargetKey, out _))
+        {
+            return Task.FromResult<LinkedItem?>(null);
+        }
+
+        return this.ExecuteAsync(ResolveLinkedItemToolName, relatedTargetKey, () => this._inner.ResolveLinkedItemAsync(relatedTargetKey, ct));
     }
 
     private bool TryEnterCall(string toolName, string? target, out object? blockedResult)

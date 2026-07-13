@@ -59,6 +59,13 @@ public sealed class ClientRecord
     /// </summary>
     public bool EnableMultiPassUnion { get; set; } = false;
 
+    /// <summary>
+    ///     Controls whether the work items (Azure DevOps) or issues (GitHub, GitLab, Forgejo) linked to a
+    ///     pull request are fetched and included in the review context for this client. Defaults to
+    ///     <see langword="true" /> so the review can judge changes against their intended direction.
+    /// </summary>
+    public bool IncludeLinkedItemsInContext { get; set; } = true;
+
     public TenantRecord? Tenant { get; set; }
 
     public ICollection<ClientScmConnectionRecord> ScmConnections { get; set; } = [];

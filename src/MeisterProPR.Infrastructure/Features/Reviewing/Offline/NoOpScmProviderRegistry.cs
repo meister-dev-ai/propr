@@ -71,6 +71,11 @@ public sealed class NoOpScmProviderRegistry : IScmProviderRegistry
         throw CreateUnavailableException(provider);
     }
 
+    public ILinkedItemProvider GetLinkedItemProvider(ScmProvider provider)
+    {
+        throw CreateUnavailableException(provider);
+    }
+
     private static InvalidOperationException CreateUnavailableException(ScmProvider provider)
     {
         return new InvalidOperationException($"Provider registry access for '{provider}' is unavailable in offline review-evaluation mode.");

@@ -70,6 +70,7 @@ public sealed class ClientAdminService(
         bool? enableEvidenceBackedVerification = null,
         bool? enableLanguageRobustScreening = null,
         bool? enableMultiPassUnion = null,
+        bool? includeLinkedItemsInContext = null,
         IReadOnlyList<ReviewPassDto>? reviewPasses = null,
         CancellationToken ct = default)
     {
@@ -131,6 +132,11 @@ public sealed class ClientAdminService(
         if (enableMultiPassUnion.HasValue)
         {
             client.EnableMultiPassUnion = enableMultiPassUnion.Value;
+        }
+
+        if (includeLinkedItemsInContext.HasValue)
+        {
+            client.IncludeLinkedItemsInContext = includeLinkedItemsInContext.Value;
         }
 
         if (reviewPasses is not null)
@@ -347,6 +353,7 @@ public sealed class ClientAdminService(
             client.EnableEvidenceBackedVerification,
             client.EnableLanguageRobustScreening,
             client.EnableMultiPassUnion,
+            client.IncludeLinkedItemsInContext,
             reviewPasses,
             tenantId,
             tenantSlug,

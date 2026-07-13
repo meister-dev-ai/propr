@@ -155,6 +155,16 @@ public sealed class DbClientRegistry(
     }
 
     /// <inheritdoc />
+    public async Task<bool> GetIncludeLinkedItemsInContextEnabledAsync(Guid clientId, CancellationToken ct = default)
+    {
+        return await dbContext.Clients
+                   .Where(c => c.Id == clientId)
+                   .Select(c => (bool?)c.IncludeLinkedItemsInContext)
+                   .FirstOrDefaultAsync(ct)
+               ?? true;
+    }
+
+    /// <inheritdoc />
     public async Task<IReadOnlyList<ReviewPassSpec>> GetReviewPassesAsync(Guid clientId, CancellationToken ct = default)
     {
         return await dbContext.ClientReviewPasses

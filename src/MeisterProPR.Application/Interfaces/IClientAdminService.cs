@@ -45,6 +45,7 @@ public interface IClientAdminService
     /// <param name="enableEvidenceBackedVerification">When non-null, sets whether evidence-backed local verification runs for new reviews.</param>
     /// <param name="enableLanguageRobustScreening">When non-null, sets whether language-robust evidence-based comment screening runs for new reviews.</param>
     /// <param name="enableMultiPassUnion">When non-null, sets whether multi-pass union generation runs for new reviews.</param>
+    /// <param name="includeLinkedItemsInContext">When non-null, sets whether linked work items / issues are included in the review context.</param>
     /// <param name="reviewPasses">
     ///     When non-null, replaces the client's ordered review-pass list wholesale (an empty list clears it).
     ///     Each entry binds one additional multi-pass union pass to a configured model.
@@ -61,6 +62,7 @@ public interface IClientAdminService
         bool? enableEvidenceBackedVerification = null,
         bool? enableLanguageRobustScreening = null,
         bool? enableMultiPassUnion = null,
+        bool? includeLinkedItemsInContext = null,
         IReadOnlyList<ReviewPassDto>? reviewPasses = null,
         CancellationToken ct = default);
 

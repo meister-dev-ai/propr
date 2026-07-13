@@ -6,6 +6,7 @@ using System.Text.Json;
 using MeisterProPR.Application.DTOs;
 using MeisterProPR.Application.Exceptions;
 using MeisterProPR.Application.Features.ReviewArchive;
+using MeisterProPR.Application.Features.Reviewing.Execution;
 using MeisterProPR.Application.Features.Reviewing.Execution.Models;
 using MeisterProPR.Application.Features.Reviewing.Execution.Ports;
 using MeisterProPR.Application.Features.Reviewing.Execution.Strategies.Ports;
@@ -205,6 +206,8 @@ public sealed partial class ReviewOrchestrationService(
             await this.SaveScanAndDeleteJobAsync(job, pr, reviewerId, ct);
             return null;
         }
+
+        pr = await this.AttachLinkedItemsAsync(job, pr, systemContext, ct);
 
         if (jobs.GetById(job.Id)?.Status == JobStatus.Cancelled)
         {
@@ -776,6 +779,7 @@ public sealed partial class ReviewOrchestrationService(
         var enableEvidenceBackedVerification = await clientRegistry.GetEvidenceBackedVerificationEnabledAsync(job.ClientId, ct);
         var enableLanguageRobustScreening = await clientRegistry.GetLanguageRobustScreeningEnabledAsync(job.ClientId, ct);
         var enableMultiPassUnion = await clientRegistry.GetMultiPassUnionEnabledAsync(job.ClientId, ct);
+        var includeLinkedItemsInContext = await clientRegistry.GetIncludeLinkedItemsInContextEnabledAsync(job.ClientId, ct);
         var reviewPasses = await clientRegistry.GetReviewPassesAsync(job.ClientId, ct);
 
         var workspacePreparation = preparedWorkspace;
@@ -843,6 +847,7 @@ public sealed partial class ReviewOrchestrationService(
             EnableEvidenceBackedVerification = enableEvidenceBackedVerification,
             EnableLanguageRobustScreening = enableLanguageRobustScreening,
             EnableMultiPassUnion = enableMultiPassUnion,
+            IncludeLinkedItemsInContext = includeLinkedItemsInContext,
             ReviewPasses = reviewPasses,
             ExclusionRules = exclusionRules,
             ModelId = job.AiModel,
@@ -854,6 +859,61 @@ public sealed partial class ReviewOrchestrationService(
 
         return (systemContext, carriedForwardPaths);
     }
+
+    // Discovers the work items / issues linked to the pull request (when the client opted in) and attaches a
+    // bounded, deduplicated summary to the PullRequest so it renders into the review prompt. Fail-soft: any
+    // discovery error leaves the review to proceed without linked-item context. Never logs item titles/bodies.
+    private async Task<PullRequest> AttachLinkedItemsAsync(
+        ReviewJob job,
+        PullRequest pr,
+        ReviewSystemContext systemContext,
+        CancellationToken ct)
+    {
+        if (!systemContext.IncludeLinkedItemsInContext)
+        {
+            return pr;
+        }
+
+        try
+        {
+            var provider = providerRegistry.GetLinkedItemProvider(job.Provider);
+            var discovered = await provider.DiscoverLinkedItemsAsync(job.ClientId, pr, ct);
+            var bounded = LinkedItemContextBounding.Bound(
+                discovered,
+                this._opts.MaxLinkedItemsInContext,
+                this._opts.MaxLinkedItemDescriptionChars,
+                out var droppedCount);
+
+            if (bounded.Count == 0)
+            {
+                return pr;
+            }
+
+            LogLinkedItemsAttached(logger, job.Id, discovered.Count, bounded.Count, droppedCount);
+            return pr with { LinkedItems = bounded };
+        }
+        catch (Exception ex)
+        {
+            LogLinkedItemsSkipped(logger, job.Id, ex);
+            return pr;
+        }
+    }
+
+    [LoggerMessage(
+        Level = LogLevel.Information,
+        Message =
+            "Attached linked items to the review context for job {JobId}: {DiscoveredCount} discovered, {InjectedCount} injected, {DroppedCount} dropped by cap.")]
+    private static partial void LogLinkedItemsAttached(
+        ILogger logger,
+        Guid jobId,
+        int discoveredCount,
+        int injectedCount,
+        int droppedCount);
+
+    [LoggerMessage(
+        Level = LogLevel.Information,
+        Message = "Linked-item discovery unavailable for job {JobId}; proceeding without linked-item context.")]
+    private static partial void LogLinkedItemsSkipped(ILogger logger, Guid jobId, Exception ex);
 
     // Carries forward file results from the prior baseline job for files that are no longer
     // part of the current change set, persisting a carried-forward copy under the current job.

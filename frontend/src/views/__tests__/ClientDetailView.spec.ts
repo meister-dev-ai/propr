@@ -93,6 +93,7 @@ describe('ClientDetailView', () => {
         scmCommentPostingEnabled: true,
         enableEvidenceBackedVerification: false,
         enableMultiPassUnion: false,
+        includeLinkedItemsInContext: true,
         enableLanguageRobustScreening: false,
       },
       response: { status: 200 },
@@ -106,6 +107,7 @@ describe('ClientDetailView', () => {
         scmCommentPostingEnabled: true,
         enableEvidenceBackedVerification: false,
         enableMultiPassUnion: false,
+        includeLinkedItemsInContext: true,
         enableLanguageRobustScreening: false,
       },
     })
@@ -173,6 +175,7 @@ describe('ClientDetailView', () => {
         scmCommentPostingEnabled: true,
         enableEvidenceBackedVerification: true,
         enableMultiPassUnion: false,
+        includeLinkedItemsInContext: true,
         enableLanguageRobustScreening: false,
       },
     })
@@ -194,6 +197,7 @@ describe('ClientDetailView', () => {
         scmCommentPostingEnabled: true,
         enableEvidenceBackedVerification: false,
         enableMultiPassUnion: true,
+        includeLinkedItemsInContext: true,
         enableLanguageRobustScreening: false,
       },
     })
@@ -215,6 +219,7 @@ describe('ClientDetailView', () => {
         scmCommentPostingEnabled: true,
         enableEvidenceBackedVerification: false,
         enableMultiPassUnion: false,
+        includeLinkedItemsInContext: true,
         enableLanguageRobustScreening: true,
       },
     })

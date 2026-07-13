@@ -5,6 +5,7 @@ Anchor file: {{anchorFilePath}}
 {{#if description}}
 Description: {{description}}
 {{/if}}
+{{> linked-items hasLinkedItems=hasLinkedItems linkedItems=linkedItems}}
 
 {{> file-manifest heading="Changed file manifest:" manifestItems=manifestItems}}
 

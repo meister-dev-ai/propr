@@ -326,7 +326,8 @@ public sealed class ReviewOrchestrationServiceProCursorIntegrationTests
         var reviewContextToolsFactory = new AdoReviewContextToolsFactory(
             proCursorGateway,
             Microsoft.Extensions.Options.Options.Create(new AiReviewOptions { MaxFileSizeBytes = 1024 * 1024, ModelId = "gpt-4o" }),
-            NullLoggerFactory.Instance);
+            NullLoggerFactory.Instance,
+            providerRegistry);
         var service = new ReviewOrchestrationService(
             jobs,
             prFetcher,
@@ -498,7 +499,8 @@ public sealed class ReviewOrchestrationServiceProCursorIntegrationTests
         var reviewContextToolsFactory = new AdoReviewContextToolsFactory(
             proCursorGateway,
             Microsoft.Extensions.Options.Options.Create(new AiReviewOptions { MaxFileSizeBytes = 1024 * 1024, ModelId = "gpt-4o" }),
-            NullLoggerFactory.Instance);
+            NullLoggerFactory.Instance,
+            providerRegistry);
         return new ReviewOrchestrationService(
             jobs,
             prFetcher,

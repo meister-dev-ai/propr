@@ -10586,6 +10586,7 @@ export interface components {
             enableEvidenceBackedVerification?: boolean;
             enableLanguageRobustScreening?: boolean;
             enableMultiPassUnion?: boolean;
+            includeLinkedItemsInContext?: boolean;
             reviewPasses?: components["schemas"]["ReviewPassEntry"][] | null;
             /** Format: uuid */
             tenantId?: string | null;
@@ -11197,6 +11198,7 @@ export interface components {
             enableEvidenceBackedVerification?: boolean | null;
             enableLanguageRobustScreening?: boolean | null;
             enableMultiPassUnion?: boolean | null;
+            includeLinkedItemsInContext?: boolean | null;
             reviewPasses?: components["schemas"]["ReviewPassEntry"][] | null;
         };
         /** @description Patch payload for one premium capability override. */

@@ -213,6 +213,14 @@ public static class InfrastructureServiceExtensions
         opts.MaxReferenceResults = TryGetInt(configuration, "AI_MAX_REFERENCE_RESULTS") ?? opts.MaxReferenceResults;
         opts.MaxReferenceResultChars = TryGetInt(configuration, "AI_MAX_REFERENCE_RESULT_CHARS") ?? opts.MaxReferenceResultChars;
         opts.ReferenceResolutionTimeoutMs = TryGetInt(configuration, "AI_REFERENCE_RESOLUTION_TIMEOUT_MS") ?? opts.ReferenceResolutionTimeoutMs;
+
+        // Linked work items / issues in the review context.
+        opts.MaxLinkedItemsInContext = TryGetInt(configuration, "AI_MAX_LINKED_ITEMS_IN_CONTEXT") ?? opts.MaxLinkedItemsInContext;
+        opts.MaxLinkedItemDescriptionChars = TryGetInt(configuration, "AI_MAX_LINKED_ITEM_DESCRIPTION_CHARS") ?? opts.MaxLinkedItemDescriptionChars;
+        opts.EnableLinkedItemTools = TryGetBool(configuration, "AI_ENABLE_LINKED_ITEM_TOOLS") ?? opts.EnableLinkedItemTools;
+        opts.MaxLinkedItemToolCalls = TryGetInt(configuration, "AI_MAX_LINKED_ITEM_TOOL_CALLS") ?? opts.MaxLinkedItemToolCalls;
+        opts.MaxLinkedItemToolResultChars = TryGetInt(configuration, "AI_MAX_LINKED_ITEM_TOOL_RESULT_CHARS") ?? opts.MaxLinkedItemToolResultChars;
+        opts.LinkedItemToolTimeoutMs = TryGetInt(configuration, "AI_LINKED_ITEM_TOOL_TIMEOUT_MS") ?? opts.LinkedItemToolTimeoutMs;
     }
 
     private static int? TryGetInt(IConfiguration configuration, string key)

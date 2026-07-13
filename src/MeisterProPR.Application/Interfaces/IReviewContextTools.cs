@@ -130,4 +130,29 @@ public interface IReviewContextTools
     /// <param name="query">The name-based symbol query.</param>
     /// <param name="ct">Cancellation token.</param>
     Task<DefinitionLookupResult> GetDefinitionAsync(SymbolReferenceQuery query, CancellationToken ct);
+
+    /// <summary>
+    ///     Returns the structured fields (state, acceptance criteria, and other provider fields) of a work
+    ///     item / issue linked to the pull request. Returns <c>null</c> when it cannot be found or accessed.
+    ///     Never throws to the review.
+    /// </summary>
+    /// <param name="providerKey">Provider-native identifier of the linked item (from the eager summary).</param>
+    /// <param name="ct">Cancellation token.</param>
+    Task<LinkedItemDetails?> GetLinkedItemDetailsAsync(string providerKey, CancellationToken ct);
+
+    /// <summary>
+    ///     Returns the discussion/comment thread of a work item / issue linked to the pull request, oldest
+    ///     first. Returns an empty list when there is none or it cannot be accessed. Never throws to the review.
+    /// </summary>
+    /// <param name="providerKey">Provider-native identifier of the linked item (from the eager summary).</param>
+    /// <param name="ct">Cancellation token.</param>
+    Task<IReadOnlyList<LinkedItemComment>> GetLinkedItemDiscussionAsync(string providerKey, CancellationToken ct);
+
+    /// <summary>
+    ///     Resolves a related link surfaced on a linked item into a full linked-item summary. Returns
+    ///     <c>null</c> when the target cannot be found or accessed. Never throws to the review.
+    /// </summary>
+    /// <param name="relatedTargetKey">Provider-native identifier of the related item to resolve.</param>
+    /// <param name="ct">Cancellation token.</param>
+    Task<LinkedItem?> ResolveLinkedItemAsync(string relatedTargetKey, CancellationToken ct);
 }

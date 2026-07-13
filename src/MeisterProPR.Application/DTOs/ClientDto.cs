@@ -22,6 +22,7 @@ public sealed record ClientDto(
     bool EnableEvidenceBackedVerification = false,
     bool EnableLanguageRobustScreening = false,
     bool EnableMultiPassUnion = false,
+    bool IncludeLinkedItemsInContext = true,
     IReadOnlyList<ReviewPassDto>? ReviewPasses = null,
     Guid? TenantId = null,
     string? TenantSlug = null,

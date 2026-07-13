@@ -121,7 +121,11 @@ internal sealed partial class ToolAwareAiReviewCore(
                 cancellationToken);
         }
 
-        var rawTools = BuildTools(systemContext.ReviewTools, options.Value.EnableStructuralReferenceTools, cancellationToken);
+        var rawTools = BuildTools(
+            systemContext.ReviewTools,
+            options.Value.EnableStructuralReferenceTools,
+            systemContext.IncludeLinkedItemsInContext && options.Value.EnableLinkedItemTools,
+            cancellationToken);
         var effectiveModelId = systemContext.ModelId ?? opts.ModelId;
         var usesManagedSessionTransport = ShouldUseAgentFrameworkManagedSession(systemContext);
         var transportTools = usesManagedSessionTransport
@@ -1184,6 +1188,7 @@ internal sealed partial class ToolAwareAiReviewCore(
     private static List<AIFunction> BuildTools(
         IReviewContextTools? reviewTools,
         bool enableStructuralReferenceTools,
+        bool enableLinkedItemTools,
         CancellationToken cancellationToken)
     {
         if (reviewTools is null)
@@ -1386,6 +1391,41 @@ internal sealed partial class ToolAwareAiReviewCore(
                         Name = "get_definition",
                         Description =
                             "Find the definition site(s) of a symbol across the review workspace, for any language. Returns kind, name, file, and 1-based line range for each candidate definition (name-based); bounded with a truncation flag.",
+                    }));
+        }
+
+        // On-demand linked work item / issue tools. Registered only when the client includes linked items
+        // and the kill-switch is on. Fail-soft: each returns empty when the item is missing or inaccessible.
+        if (enableLinkedItemTools)
+        {
+            tools.Add(
+                AIFunctionFactory.Create(
+                    (string itemKey) => reviewTools.GetLinkedItemDetailsAsync(itemKey, cancellationToken),
+                    new AIFunctionFactoryOptions
+                    {
+                        Name = "get_linked_item_details",
+                        Description =
+                            "Fetch the structured fields (state, acceptance criteria, and other provider fields) of a work item or issue linked to this pull request. Pass the item key shown in the Linked Work Items / Issues section. Returns empty when the item cannot be found or accessed.",
+                    }));
+
+            tools.Add(
+                AIFunctionFactory.Create(
+                    (string itemKey) => reviewTools.GetLinkedItemDiscussionAsync(itemKey, cancellationToken),
+                    new AIFunctionFactoryOptions
+                    {
+                        Name = "get_linked_item_discussion",
+                        Description =
+                            "Fetch the discussion/comment thread of a work item or issue linked to this pull request, oldest first. Pass the item key shown in the Linked Work Items / Issues section. Returns empty when there is no discussion or it cannot be accessed.",
+                    }));
+
+            tools.Add(
+                AIFunctionFactory.Create(
+                    (string relatedKey) => reviewTools.ResolveLinkedItemAsync(relatedKey, cancellationToken),
+                    new AIFunctionFactoryOptions
+                    {
+                        Name = "resolve_linked_item",
+                        Description =
+                            "Resolve a related-link key surfaced on a linked item into a full item summary (type, title, description). Returns empty when the target cannot be found or accessed.",
                     }));
         }
 

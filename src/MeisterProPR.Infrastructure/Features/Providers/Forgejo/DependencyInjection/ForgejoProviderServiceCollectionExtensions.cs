@@ -29,6 +29,7 @@ internal static class ForgejoProviderServiceCollectionExtensions
         services.TryAddEnumerable(ServiceDescriptor.Scoped<IProviderReviewerThreadStatusFetcher, ForgejoReviewThreadStatusProvider>());
         services.TryAddEnumerable(ServiceDescriptor.Scoped<IProviderRepositoryExclusionFetcher, ForgejoRepositoryExclusionFetcher>());
         services.TryAddEnumerable(ServiceDescriptor.Scoped<IProviderPullRequestFetcher, ForgejoPullRequestFetcher>());
+        services.TryAddEnumerable(ServiceDescriptor.Scoped<ILinkedItemProvider, ForgejoLinkedItemProvider>());
         services.TryAddEnumerable(ServiceDescriptor.Scoped<IProviderReviewContextToolsFactory, ForgejoReviewContextToolsFactory>());
         services.TryAddEnumerable(ServiceDescriptor.Scoped<IRepositoryDiscoveryProvider, ForgejoDiscoveryService>());
         services.TryAddEnumerable(ServiceDescriptor.Scoped<IReviewerIdentityService, ForgejoReviewerIdentityService>());

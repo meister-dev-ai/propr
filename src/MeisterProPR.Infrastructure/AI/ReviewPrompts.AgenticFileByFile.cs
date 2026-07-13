@@ -41,7 +41,9 @@ internal static partial class ReviewPrompts
                     changedFile.ChangeType.ToString(),
                     false,
                     changedFile.Path == file.Path)).ToList(),
-                file.IsBinary ? "[binary file omitted]" : file.UnifiedDiff));
+                file.IsBinary ? "[binary file omitted]" : file.UnifiedDiff,
+                pr.LinkedItems?.Count > 0,
+                MapLinkedItems(pr.LinkedItems)));
 
         return ComposePrompt(context, PromptStageKeys.AgenticFilePlanningUser, PromptStageRole.User, defaultText);
     }

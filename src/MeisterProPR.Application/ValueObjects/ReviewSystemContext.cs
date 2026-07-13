@@ -181,6 +181,12 @@ public sealed class ReviewSystemContext
     public bool EnableMultiPassUnion { get; set; } = false;
 
     /// <summary>
+    ///     Controls whether the work items / issues linked to the pull request are fetched and rendered into
+    ///     the review context for this execution context. Defaults to <see langword="true" />.
+    /// </summary>
+    public bool IncludeLinkedItemsInContext { get; set; } = true;
+
+    /// <summary>
     ///     Eval-harness-only override for the number of independent per-file passes to run when
     ///     <see cref="EnableMultiPassUnion" /> is enabled and the file's resolved tier is in scope. When set, the
     ///     resample passes are driven by <see cref="MultiPassDiversity" /> arms over the tier connection. Production

@@ -46,4 +46,7 @@ public interface IScmProviderRegistry
 
     /// <summary>Resolves webhook-ingress capabilities for the given provider family.</summary>
     IWebhookIngressService GetWebhookIngressService(ScmProvider provider);
+
+    /// <summary>Resolves linked-work-item / linked-issue retrieval for the given provider family.</summary>
+    ILinkedItemProvider GetLinkedItemProvider(ScmProvider provider);
 }

@@ -34,6 +34,7 @@ public sealed class ClientsController(
             client.EnableEvidenceBackedVerification,
             client.EnableLanguageRobustScreening,
             client.EnableMultiPassUnion,
+            client.IncludeLinkedItemsInContext,
             client.ReviewPassesOrEmpty
                 .Select(pass => new ReviewPassEntry(pass.Ordinal, pass.ConfiguredModelId, pass.Lens, pass.Scope, pass.Shadow))
                 .ToList(),
@@ -325,6 +326,7 @@ public sealed class ClientsController(
             request.EnableEvidenceBackedVerification,
             request.EnableLanguageRobustScreening,
             request.EnableMultiPassUnion,
+            request.IncludeLinkedItemsInContext,
             request.ReviewPasses?
                 .Select(pass => new ReviewPassDto(pass.Ordinal, pass.ConfiguredModelId, pass.Lens, pass.Scope, pass.Shadow))
                 .ToList(),
@@ -345,6 +347,7 @@ public sealed record ClientResponse(
     bool EnableEvidenceBackedVerification,
     bool EnableLanguageRobustScreening,
     bool EnableMultiPassUnion,
+    bool IncludeLinkedItemsInContext,
     IReadOnlyList<ReviewPassEntry> ReviewPasses,
     Guid? TenantId,
     string? TenantSlug,
@@ -407,4 +410,5 @@ public sealed record PatchClientRequest(
     bool? EnableEvidenceBackedVerification = null,
     bool? EnableLanguageRobustScreening = null,
     bool? EnableMultiPassUnion = null,
+    bool? IncludeLinkedItemsInContext = null,
     IReadOnlyList<ReviewPassEntry>? ReviewPasses = null);

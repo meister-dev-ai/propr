@@ -19,7 +19,8 @@ internal sealed class LocalGitReviewContextTools(
     IOptions<AiReviewOptions> options,
     ReviewContextToolsRequest request,
     ILogger logger,
-    IStructuralCodeAnalyzer? structuralAnalyzer = null)
+    IStructuralCodeAnalyzer? structuralAnalyzer = null,
+    IScmProviderRegistry? providerRegistry = null)
     : ProviderReviewContextToolsBase(
         proCursorGateway,
         options,
@@ -32,7 +33,8 @@ internal sealed class LocalGitReviewContextTools(
         request.ProviderScopePath,
         request.TargetBranch,
         request.ChangedPathSnapshots,
-        structuralAnalyzer), IAsyncDisposable
+        structuralAnalyzer,
+        providerRegistry), IAsyncDisposable
 {
     private readonly string? _normalizedTargetBranch = string.IsNullOrWhiteSpace(request.TargetBranch)
         ? null

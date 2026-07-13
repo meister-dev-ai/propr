@@ -38,7 +38,9 @@ internal static partial class ReviewPrompts
                         file.Path,
                         file.IsBinary
                             ? "[binary file omitted]"
-                            : ReviewDiffProcessor.AnnotateUnifiedDiffWithNewLineNumbers(file.UnifiedDiff))).ToList()));
+                            : ReviewDiffProcessor.AnnotateUnifiedDiffWithNewLineNumbers(file.UnifiedDiff))).ToList(),
+                pr.LinkedItems?.Count > 0,
+                MapLinkedItems(pr.LinkedItems)));
     }
 
     internal static string BuildPrWideInvestigationSystemPrompt(ReviewSystemContext? context)

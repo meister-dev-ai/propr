@@ -328,4 +328,53 @@ public sealed class ReviewContextToolsTests
         Assert.Single(result.Limitations);
         Assert.Equal(RepositorySearchLimitationReasons.ResultTruncated, result.Limitations[0].Reason);
     }
+
+    [Fact]
+    public async Task GetLinkedItemDetailsAsync_WhenAllowedAndWithinBudget_DelegatesToInner()
+    {
+        var inner = Substitute.For<IReviewContextTools>();
+        var details = new LinkedItemDetails("42", "Bug", "Broken parser", "body", "Active", new Dictionary<string, string>(), []);
+        inner.GetLinkedItemDetailsAsync("42", Arg.Any<CancellationToken>()).Returns(details);
+        var sut = new BoundedReviewContextTools(
+            inner,
+            [BoundedReviewContextTools.GetLinkedItemDetailsToolName],
+            2);
+
+        var result = await sut.GetLinkedItemDetailsAsync("42", CancellationToken.None);
+
+        Assert.Same(details, result);
+        var attempt = Assert.Single(sut.Attempts);
+        Assert.Equal(BoundedReviewContextTools.SuccessStatus, attempt.Status);
+    }
+
+    [Fact]
+    public async Task GetLinkedItemDetailsAsync_WhenToolNotAllowed_ReturnsNullWithoutCallingInner()
+    {
+        var inner = Substitute.For<IReviewContextTools>();
+        var sut = new BoundedReviewContextTools(inner, [], 2);
+
+        var result = await sut.GetLinkedItemDetailsAsync("42", CancellationToken.None);
+
+        Assert.Null(result);
+        await inner.DidNotReceive().GetLinkedItemDetailsAsync(Arg.Any<string>(), Arg.Any<CancellationToken>());
+        var attempt = Assert.Single(sut.Attempts);
+        Assert.Equal(BoundedReviewContextTools.BlockedNotAllowedStatus, attempt.Status);
+    }
+
+    [Fact]
+    public async Task GetLinkedItemDiscussionAsync_WhenBudgetExhausted_ReturnsEmptyWithoutCallingInner()
+    {
+        var inner = Substitute.For<IReviewContextTools>();
+        var sut = new BoundedReviewContextTools(
+            inner,
+            [BoundedReviewContextTools.GetLinkedItemDiscussionToolName],
+            0);
+
+        var result = await sut.GetLinkedItemDiscussionAsync("42", CancellationToken.None);
+
+        Assert.Empty(result);
+        await inner.DidNotReceive().GetLinkedItemDiscussionAsync(Arg.Any<string>(), Arg.Any<CancellationToken>());
+        var attempt = Assert.Single(sut.Attempts);
+        Assert.Equal(BoundedReviewContextTools.BlockedBudgetExhaustedStatus, attempt.Status);
+    }
 }

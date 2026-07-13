@@ -17,6 +17,7 @@ internal sealed class GitLabReviewContextToolsFactory(
     IProCursorGateway proCursorGateway,
     IOptions<AiReviewOptions> options,
     ILoggerFactory loggerFactory,
+    IScmProviderRegistry providerRegistry,
     IStructuralCodeAnalyzer? structuralAnalyzer = null) : IProviderReviewContextToolsFactory
 {
     public ScmProvider Provider => ScmProvider.GitLab;
@@ -34,6 +35,7 @@ internal sealed class GitLabReviewContextToolsFactory(
             options,
             request,
             loggerFactory.CreateLogger<LocalGitReviewContextTools>(),
-            structuralAnalyzer);
+            structuralAnalyzer,
+            providerRegistry);
     }
 }

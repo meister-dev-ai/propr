@@ -35,6 +35,10 @@ public sealed class PatchClientRequestValidator : AbstractValidator<PatchClientR
             .Must(_ => true)
             .When(r => r.EnableMultiPassUnion.HasValue);
 
+        this.RuleFor(r => r.IncludeLinkedItemsInContext)
+            .Must(_ => true)
+            .When(r => r.IncludeLinkedItemsInContext.HasValue);
+
         this.RuleFor(r => r.ReviewPasses)
             .Must(BeAValidReviewPassList)
             .WithMessage(

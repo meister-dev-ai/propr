@@ -33,6 +33,7 @@ export interface ClientDetailDto {
   scmCommentPostingEnabled: boolean
   enableEvidenceBackedVerification: boolean
   enableMultiPassUnion: boolean
+  includeLinkedItemsInContext: boolean
   enableLanguageRobustScreening: boolean
   reviewPasses?: ReviewPassEntry[] | null
 }
@@ -64,6 +65,7 @@ export interface ClientDetailViewModel {
   editedScmCommentPostingEnabled: Ref<boolean>
   editedEnableEvidenceBackedVerification: Ref<boolean>
   editedEnableMultiPassUnion: Ref<boolean>
+  editedIncludeLinkedItemsInContext: Ref<boolean>
   editedEnableLanguageRobustScreening: Ref<boolean>
   editedReviewPasses: Ref<ReviewPassEntry[]>
   reviewProfiles: Ref<ReviewProfileCatalogItemDto[]>
@@ -242,6 +244,7 @@ export function useClientDetailViewModel(options: UseClientDetailViewModelOption
   const editedScmCommentPostingEnabled = ref(true)
   const editedEnableEvidenceBackedVerification = ref(false)
   const editedEnableMultiPassUnion = ref(false)
+  const editedIncludeLinkedItemsInContext = ref(true)
   const editedEnableLanguageRobustScreening = ref(false)
   const editedReviewPasses = ref<ReviewPassEntry[]>([])
   const reviewProfiles = ref<ReviewProfileCatalogItemDto[]>([])
@@ -291,6 +294,7 @@ export function useClientDetailViewModel(options: UseClientDetailViewModelOption
     editedScmCommentPostingEnabled.value = Boolean(nextClient.scmCommentPostingEnabled)
     editedEnableEvidenceBackedVerification.value = Boolean(nextClient.enableEvidenceBackedVerification)
     editedEnableMultiPassUnion.value = Boolean(nextClient.enableMultiPassUnion)
+    editedIncludeLinkedItemsInContext.value = Boolean(nextClient.includeLinkedItemsInContext)
     editedEnableLanguageRobustScreening.value = Boolean(nextClient.enableLanguageRobustScreening)
     editedReviewPasses.value = normalizeReviewPasses(nextClient.reviewPasses)
   }
@@ -449,6 +453,7 @@ export function useClientDetailViewModel(options: UseClientDetailViewModelOption
         scmCommentPostingEnabled: editedScmCommentPostingEnabled.value,
         enableEvidenceBackedVerification: editedEnableEvidenceBackedVerification.value,
         enableMultiPassUnion: editedEnableMultiPassUnion.value,
+        includeLinkedItemsInContext: editedIncludeLinkedItemsInContext.value,
         enableLanguageRobustScreening: editedEnableLanguageRobustScreening.value,
       }
 
@@ -507,6 +512,7 @@ export function useClientDetailViewModel(options: UseClientDetailViewModelOption
         editedScmCommentPostingEnabled.value !== Boolean(client.value.scmCommentPostingEnabled) ||
         editedEnableEvidenceBackedVerification.value !== Boolean(client.value.enableEvidenceBackedVerification) ||
         editedEnableMultiPassUnion.value !== Boolean(client.value.enableMultiPassUnion) ||
+        editedIncludeLinkedItemsInContext.value !== Boolean(client.value.includeLinkedItemsInContext) ||
         editedEnableLanguageRobustScreening.value !== Boolean(client.value.enableLanguageRobustScreening) ||
         !reviewPassesEqual(editedReviewPasses.value, normalizeReviewPasses(client.value.reviewPasses))
       )
@@ -545,6 +551,7 @@ export function useClientDetailViewModel(options: UseClientDetailViewModelOption
     editedScmCommentPostingEnabled,
     editedEnableEvidenceBackedVerification,
     editedEnableMultiPassUnion,
+    editedIncludeLinkedItemsInContext,
     editedEnableLanguageRobustScreening,
     editedReviewPasses,
     reviewProfiles,

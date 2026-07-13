@@ -45,6 +45,11 @@ namespace MeisterProPR.Domain.ValueObjects;
 ///     fetch and post review correspondence. When populated, reviewer-owned thread detection
 ///     also treats this identity as equivalent to the configured reviewer identity.
 /// </param>
+/// <param name="LinkedItems">
+///     Work items (Azure DevOps) or issues (GitHub, GitLab, Forgejo) linked to the pull request,
+///     discovered and bounded before the review runs so the model can judge the change against its
+///     intended direction. Defaults to <c>null</c> (treated as empty — no linked-item context).
+/// </param>
 public sealed record PullRequest(
     string OrganizationUrl,
     string ProjectId,
@@ -61,7 +66,8 @@ public sealed record PullRequest(
     IReadOnlyList<PrCommentThread>? ExistingThreads = null,
     IReadOnlyList<ChangedFileSummary>? AllChangedFileSummaries = null,
     Guid? AuthorizedIdentityId = null,
-    string? AuthorizedIdentityName = null)
+    string? AuthorizedIdentityName = null,
+    IReadOnlyList<LinkedItem>? LinkedItems = null)
 {
     /// <summary>
     ///     Full manifest of all files changed in the PR since the target branch (path + change type only).

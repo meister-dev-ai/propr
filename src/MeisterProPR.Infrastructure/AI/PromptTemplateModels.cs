@@ -24,7 +24,9 @@ internal static class PromptTemplateModels
         int changedFileCount,
         IReadOnlyList<PromptLegacyChangedFileModel> changedFiles,
         bool hasThreads,
-        IReadOnlyList<PromptThreadModel> threads);
+        IReadOnlyList<PromptThreadModel> threads,
+        bool hasLinkedItems,
+        IReadOnlyList<PromptLinkedItemModel> linkedItems);
 
     internal sealed record QualityFilterSystemModel(bool assertiveQualityFilter = false);
 
@@ -53,7 +55,9 @@ internal static class PromptTemplateModels
         string anchorFilePath,
         string? description,
         IReadOnlyList<PromptFileManifestItem> manifestItems,
-        string anchorFileDiff);
+        string anchorFileDiff,
+        bool hasLinkedItems,
+        IReadOnlyList<PromptLinkedItemModel> linkedItems);
 
     internal sealed record AgenticFileInvestigationUserModel(
         string planId,
@@ -130,7 +134,9 @@ internal static class PromptTemplateModels
         int changedFileCount,
         string? description,
         IReadOnlyList<PromptFileManifestItem> manifestItems,
-        IReadOnlyList<PromptDiffExcerptItem> diffExcerpts);
+        IReadOnlyList<PromptDiffExcerptItem> diffExcerpts,
+        bool hasLinkedItems,
+        IReadOnlyList<PromptLinkedItemModel> linkedItems);
 
     internal sealed record PrWideInvestigationSystemModel;
 
@@ -154,6 +160,15 @@ internal static class PromptTemplateModels
     internal sealed record PromptFileManifestItem(string path, string changeType, bool isCurrentFile, bool isAnchorFile);
 
     internal sealed record PromptLegacyChangedFileModel(string path, string changeType, bool isBinary, string? fullContent, string? unifiedDiff);
+
+    internal sealed record PromptLinkedItemModel(
+        string itemType,
+        string providerKey,
+        string title,
+        bool hasDescription,
+        string? description,
+        bool hasRelatedLinks,
+        IReadOnlyList<string> relatedLinks);
 
     internal sealed record PromptDiffExcerptItem(string path, string diffText);
 

@@ -30,8 +30,12 @@ internal abstract class ProviderReviewContextToolsBase(
     string? providerScopePath = null,
     string? targetBranch = null,
     IReadOnlyList<ChangedPathSnapshot>? changedPathSnapshots = null,
-    IStructuralCodeAnalyzer? structuralAnalyzer = null) : IReviewContextTools, IProCursorAvailabilityAware
+    IStructuralCodeAnalyzer? structuralAnalyzer = null,
+    IScmProviderRegistry? providerRegistry = null) : IReviewContextTools, IProCursorAvailabilityAware
 {
+    private readonly IScmProviderRegistry? _providerRegistry = providerRegistry;
+    private int _linkedItemToolCallsUsed;
+
     private readonly IReadOnlyList<ChangedPathSnapshot> _changedPathSnapshots = changedPathSnapshots ?? [];
     private readonly Guid? _clientId = clientId;
     private readonly ConcurrentDictionary<string, string> _fileCache = new(StringComparer.Ordinal);
@@ -622,6 +626,151 @@ internal abstract class ProviderReviewContextToolsBase(
             this._logger.LogWarning(ex, "ProCursor symbol query unavailable during review context execution.");
             return new ProCursorSymbolInsightDto("unavailable", null, false, false, null, [], ex.Message);
         }
+    }
+
+    /// <inheritdoc />
+    public async Task<LinkedItemDetails?> GetLinkedItemDetailsAsync(string providerKey, CancellationToken ct)
+    {
+        var provider = this.TryResolveLinkedItemProvider();
+        if (provider is null || !this._clientId.HasValue || string.IsNullOrWhiteSpace(providerKey) || !this.TryEnterLinkedItemCall())
+        {
+            return null;
+        }
+
+        using var timeout = this.CreateLinkedItemTimeout(ct);
+        var details = await provider.GetItemDetailsAsync(this._clientId.Value, this.BuildLinkedItemContextPr(), providerKey.Trim(), timeout.Token);
+        return details is null ? null : TruncateDetails(details, this._options.MaxLinkedItemToolResultChars);
+    }
+
+    /// <inheritdoc />
+    public async Task<IReadOnlyList<LinkedItemComment>> GetLinkedItemDiscussionAsync(string providerKey, CancellationToken ct)
+    {
+        var provider = this.TryResolveLinkedItemProvider();
+        if (provider is null || !this._clientId.HasValue || string.IsNullOrWhiteSpace(providerKey) || !this.TryEnterLinkedItemCall())
+        {
+            return [];
+        }
+
+        using var timeout = this.CreateLinkedItemTimeout(ct);
+        var discussion = await provider.GetItemDiscussionAsync(this._clientId.Value, this.BuildLinkedItemContextPr(), providerKey.Trim(), timeout.Token);
+        return TruncateDiscussion(discussion, this._options.MaxLinkedItemToolResultChars);
+    }
+
+    /// <inheritdoc />
+    public async Task<LinkedItem?> ResolveLinkedItemAsync(string relatedTargetKey, CancellationToken ct)
+    {
+        var provider = this.TryResolveLinkedItemProvider();
+        if (provider is null || !this._clientId.HasValue || string.IsNullOrWhiteSpace(relatedTargetKey) || !this.TryEnterLinkedItemCall())
+        {
+            return null;
+        }
+
+        using var timeout = this.CreateLinkedItemTimeout(ct);
+        var item = await provider.ResolveRelatedLinkAsync(this._clientId.Value, this.BuildLinkedItemContextPr(), relatedTargetKey.Trim(), timeout.Token);
+        return item is null ? null : item with { Description = TruncateText(item.Description, this._options.MaxLinkedItemToolResultChars) };
+    }
+
+    // Per-review budget for the on-demand linked-item tools (independent of the PR-wide investigation budget).
+    // Returns false once the configured cap is reached so further calls are blocked (empty result).
+    private bool TryEnterLinkedItemCall()
+    {
+        return Interlocked.Increment(ref this._linkedItemToolCallsUsed) <= this._options.MaxLinkedItemToolCalls;
+    }
+
+    private CancellationTokenSource CreateLinkedItemTimeout(CancellationToken ct)
+    {
+        var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        cts.CancelAfter(Math.Max(100, this._options.LinkedItemToolTimeoutMs));
+        return cts;
+    }
+
+    private static LinkedItemDetails TruncateDetails(LinkedItemDetails details, int maxChars)
+    {
+        return details.Description is { Length: > 0 } && details.Description.Length > maxChars
+            ? details with { Description = TruncateText(details.Description, maxChars) }
+            : details;
+    }
+
+    private static IReadOnlyList<LinkedItemComment> TruncateDiscussion(IReadOnlyList<LinkedItemComment> comments, int maxChars)
+    {
+        if (maxChars <= 0 || comments.Count == 0)
+        {
+            return comments;
+        }
+
+        var result = new List<LinkedItemComment>(comments.Count);
+        var used = 0;
+        foreach (var comment in comments)
+        {
+            if (used >= maxChars)
+            {
+                break;
+            }
+
+            var text = comment.Text ?? string.Empty;
+            if (used + text.Length > maxChars)
+            {
+                result.Add(comment with { Text = TruncateText(text, maxChars - used) });
+                break;
+            }
+
+            result.Add(comment);
+            used += text.Length;
+        }
+
+        return result;
+    }
+
+    private static string? TruncateText(string? text, int maxChars)
+    {
+        if (maxChars <= 0 || text is not { Length: > 0 } || text.Length <= maxChars)
+        {
+            return text;
+        }
+
+        var cut = maxChars;
+        if (char.IsHighSurrogate(text[cut - 1]))
+        {
+            cut--;
+        }
+
+        return string.Concat(text.AsSpan(0, cut), "…");
+    }
+
+    private ILinkedItemProvider? TryResolveLinkedItemProvider()
+    {
+        if (this._providerRegistry is null)
+        {
+            return null;
+        }
+
+        try
+        {
+            return this._providerRegistry.GetLinkedItemProvider(this._provider);
+        }
+        catch (Exception ex)
+        {
+            this._logger.LogInformation(ex, "No linked-item provider is registered for {Provider}; linked-item tools return empty.", this._provider);
+            return null;
+        }
+    }
+
+    // The linked-item provider only reads the pull-request coordinates (organization, project, repository, id)
+    // to reach the provider API, so a coordinate-only PullRequest is sufficient for the on-demand tool lookups.
+    private PullRequest BuildLinkedItemContextPr()
+    {
+        return new PullRequest(
+            this._providerScopePath,
+            this._repository.ProjectPath,
+            this._repository.ExternalRepositoryId,
+            this._repository.RepositoryName,
+            this._pullRequestNumber,
+            this._iterationId,
+            string.Empty,
+            null,
+            this._sourceBranch,
+            this._targetBranch ?? string.Empty,
+            []);
     }
 
     protected abstract Task<IReadOnlyList<ChangedFileSummary>> LoadChangedFilesAsync(CancellationToken ct);

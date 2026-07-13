@@ -257,4 +257,46 @@ public sealed class AiReviewOptions
     /// </summary>
     [Range(50, 30000, ErrorMessage = "ReferenceResolutionTimeoutMs must be between 50 and 30000.")]
     public int ReferenceResolutionTimeoutMs { get; set; } = 4000;
+
+    /// <summary>
+    ///     Maximum number of linked work items / issues injected into the eager review context before the
+    ///     rest are dropped (and the drop logged). Bound to <c>AI_MAX_LINKED_ITEMS_IN_CONTEXT</c>.
+    /// </summary>
+    [Range(1, 50, ErrorMessage = "MaxLinkedItemsInContext must be between 1 and 50.")]
+    public int MaxLinkedItemsInContext { get; set; } = 5;
+
+    /// <summary>
+    ///     Maximum character length each linked item's description is truncated to for the eager context.
+    ///     Bound to <c>AI_MAX_LINKED_ITEM_DESCRIPTION_CHARS</c>.
+    /// </summary>
+    [Range(128, 20000, ErrorMessage = "MaxLinkedItemDescriptionChars must be between 128 and 20000.")]
+    public int MaxLinkedItemDescriptionChars { get; set; } = 2000;
+
+    /// <summary>
+    ///     Kill-switch for the on-demand linked-item review tools (<c>get_linked_item_details</c>,
+    ///     <c>get_linked_item_discussion</c>, <c>resolve_linked_item</c>). When <c>false</c> the tools are
+    ///     not registered even for clients that include linked items. Bound to <c>AI_ENABLE_LINKED_ITEM_TOOLS</c>.
+    /// </summary>
+    public bool EnableLinkedItemTools { get; set; } = true;
+
+    /// <summary>
+    ///     Maximum number of on-demand linked-item tool calls allowed per review before further calls are
+    ///     blocked (budget-exhausted). Bound to <c>AI_MAX_LINKED_ITEM_TOOL_CALLS</c>.
+    /// </summary>
+    [Range(0, 100, ErrorMessage = "MaxLinkedItemToolCalls must be between 0 and 100.")]
+    public int MaxLinkedItemToolCalls { get; set; } = 6;
+
+    /// <summary>
+    ///     Maximum character budget for a single serialized linked-item tool result before it is truncated.
+    ///     Bound to <c>AI_MAX_LINKED_ITEM_TOOL_RESULT_CHARS</c>.
+    /// </summary>
+    [Range(256, 64000, ErrorMessage = "MaxLinkedItemToolResultChars must be between 256 and 64000.")]
+    public int MaxLinkedItemToolResultChars { get; set; } = 8000;
+
+    /// <summary>
+    ///     Per-call wall-clock budget for a single on-demand linked-item tool lookup, in milliseconds. On
+    ///     overshoot the call returns empty (fail-soft). Bound to <c>AI_LINKED_ITEM_TOOL_TIMEOUT_MS</c>.
+    /// </summary>
+    [Range(100, 30000, ErrorMessage = "LinkedItemToolTimeoutMs must be between 100 and 30000.")]
+    public int LinkedItemToolTimeoutMs { get; set; } = 5000;
 }

@@ -17,6 +17,7 @@ internal sealed class ForgejoReviewContextToolsFactory(
     IProCursorGateway proCursorGateway,
     IOptions<AiReviewOptions> options,
     ILoggerFactory loggerFactory,
+    IScmProviderRegistry providerRegistry,
     IStructuralCodeAnalyzer? structuralAnalyzer = null) : IProviderReviewContextToolsFactory
 {
     public ScmProvider Provider => ScmProvider.Forgejo;
@@ -34,6 +35,7 @@ internal sealed class ForgejoReviewContextToolsFactory(
             options,
             request,
             loggerFactory.CreateLogger<LocalGitReviewContextTools>(),
-            structuralAnalyzer);
+            structuralAnalyzer,
+            providerRegistry);
     }
 }

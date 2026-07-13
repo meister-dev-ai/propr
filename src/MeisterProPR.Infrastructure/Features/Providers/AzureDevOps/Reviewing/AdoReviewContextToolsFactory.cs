@@ -17,6 +17,7 @@ public sealed class AdoReviewContextToolsFactory(
     IProCursorGateway proCursorGateway,
     IOptions<AiReviewOptions> options,
     ILoggerFactory loggerFactory,
+    IScmProviderRegistry providerRegistry,
     IStructuralCodeAnalyzer? structuralAnalyzer = null) : IReviewContextToolsFactory, IProviderReviewContextToolsFactory
 {
     public ScmProvider Provider => ScmProvider.AzureDevOps;
@@ -35,6 +36,7 @@ public sealed class AdoReviewContextToolsFactory(
             options,
             request,
             loggerFactory.CreateLogger<LocalGitReviewContextTools>(),
-            structuralAnalyzer);
+            structuralAnalyzer,
+            providerRegistry);
     }
 }

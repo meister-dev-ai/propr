@@ -57,6 +57,7 @@ internal static class AzureDevOpsProviderServiceCollectionExtensions
 
         services.TryAddSingleton(_ => new VssConnectionFactory(credential));
         services.TryAddEnumerable(ServiceDescriptor.Scoped<IProviderPullRequestFetcher, AdoPrFetcher>());
+        services.TryAddEnumerable(ServiceDescriptor.Scoped<ILinkedItemProvider, AdoLinkedItemProvider>());
         services.TryAddScoped<IPullRequestFetcher, ProviderPullRequestFetcher>();
         services.TryAddScoped<IAdoCommentPoster, AdoCommentPoster>();
         services.TryAddScoped<IAssignedReviewDiscoveryService, AdoAssignedPrFetcher>();

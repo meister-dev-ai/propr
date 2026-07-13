@@ -17,8 +17,12 @@ internal sealed class ScmProviderRegistry(
     IEnumerable<IReviewThreadStatusWriter> reviewThreadStatusWriters,
     IEnumerable<IReviewThreadReplyPublisher> reviewThreadReplyPublishers,
     IEnumerable<IProviderAdminDiscoveryService> providerAdminDiscoveryServices,
-    IEnumerable<IWebhookIngressService> webhookIngressServices) : IScmProviderRegistry
+    IEnumerable<IWebhookIngressService> webhookIngressServices,
+    IEnumerable<ILinkedItemProvider> linkedItemProviders) : IScmProviderRegistry
 {
+    private readonly IReadOnlyDictionary<ScmProvider, ILinkedItemProvider> _linkedItemProvidersByProvider =
+        linkedItemProviders.ToDictionary(provider => provider.Provider);
+
     private readonly IReadOnlyDictionary<ScmProvider, ICodeReviewPublicationService>
         _codeReviewPublicationServicesByProvider =
             codeReviewPublicationServices.ToDictionary(provider => provider.Provider);
@@ -65,7 +69,7 @@ internal sealed class ScmProviderRegistry(
 
     public IReadOnlyList<string> GetRegisteredCapabilities(ScmProvider provider)
     {
-        var capabilities = new List<string>(10);
+        var capabilities = new List<string>(11);
 
         AddCapability(capabilities, this._repositoryDiscoveryProvidersByProvider, provider, "repositoryDiscovery");
         AddCapability(capabilities, this._codeReviewQueryServicesByProvider, provider, "codeReviewQuery");
@@ -77,6 +81,7 @@ internal sealed class ScmProviderRegistry(
         AddCapability(capabilities, this._reviewThreadReplyPublishersByProvider, provider, "reviewThreadReply");
         AddCapability(capabilities, this._providerAdminDiscoveryServicesByProvider, provider, "providerAdminDiscovery");
         AddCapability(capabilities, this._webhookIngressServicesByProvider, provider, "webhookIngress");
+        AddCapability(capabilities, this._linkedItemProvidersByProvider, provider, "linkedItems");
 
         return capabilities;
     }
@@ -138,6 +143,11 @@ internal sealed class ScmProviderRegistry(
     public IWebhookIngressService GetWebhookIngressService(ScmProvider provider)
     {
         return GetRequired(this._webhookIngressServicesByProvider, provider, nameof(IWebhookIngressService));
+    }
+
+    public ILinkedItemProvider GetLinkedItemProvider(ScmProvider provider)
+    {
+        return GetRequired(this._linkedItemProvidersByProvider, provider, nameof(ILinkedItemProvider));
     }
 
     private static TService GetRequired<TService>(

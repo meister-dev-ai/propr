@@ -100,7 +100,32 @@ internal static partial class ReviewPrompts
                 pr.ExistingThreads?.Select(thread => new PromptTemplateModels.PromptThreadModel(
                         FormatThreadLocation(thread),
                         thread.Comments.Select(comment => new PromptTemplateModels.PromptThreadCommentModel(comment.AuthorName, comment.Content)).ToList()))
-                    .ToList() ?? []));
+                    .ToList() ?? [],
+                pr.LinkedItems?.Count > 0,
+                MapLinkedItems(pr.LinkedItems)));
+    }
+
+    // Projects the bounded linked work items / issues onto the prompt view-model. Related links render as
+    // "kind #targetKey" hints the model can pass to the resolve tool.
+    internal static IReadOnlyList<PromptTemplateModels.PromptLinkedItemModel> MapLinkedItems(IReadOnlyList<LinkedItem>? linkedItems)
+    {
+        if (linkedItems is null || linkedItems.Count == 0)
+        {
+            return [];
+        }
+
+        return linkedItems
+            .Select(item => new PromptTemplateModels.PromptLinkedItemModel(
+                item.ItemType,
+                item.ProviderKey,
+                item.Title,
+                !string.IsNullOrWhiteSpace(item.Description),
+                item.Description,
+                item.RelatedLinks.Count > 0,
+                // Cap the related-link list so an item with many relations (e.g. an ADO work item with
+                // hundreds of links) cannot balloon the eager context into a multi-KB line.
+                item.RelatedLinks.Take(10).Select(link => $"{link.Kind} #{link.TargetKey}").ToList()))
+            .ToList();
     }
 
     /// <summary>

@@ -147,6 +147,7 @@ const sampleClient = {
   scmCommentPostingEnabled: true,
   enableEvidenceBackedVerification: false,
   enableMultiPassUnion: false,
+  includeLinkedItemsInContext: true,
 }
 
 const sampleReviewProfiles = {
@@ -266,7 +267,7 @@ describe('ClientDetailView', () => {
       '/clients/{clientId}',
         expect.objectContaining({
           params: { path: { clientId: 'client-1' } },
-          body: { scmCommentPostingEnabled: false, enableEvidenceBackedVerification: false, enableMultiPassUnion: false, enableLanguageRobustScreening: false },
+          body: { scmCommentPostingEnabled: false, enableEvidenceBackedVerification: false, enableMultiPassUnion: false, includeLinkedItemsInContext: true, enableLanguageRobustScreening: false },
         })
     )
   })
@@ -294,7 +295,7 @@ describe('ClientDetailView', () => {
       '/clients/{clientId}',
         expect.objectContaining({
           params: { path: { clientId: 'client-1' } },
-          body: { scmCommentPostingEnabled: true, enableEvidenceBackedVerification: false, enableMultiPassUnion: false, enableLanguageRobustScreening: false },
+          body: { scmCommentPostingEnabled: true, enableEvidenceBackedVerification: false, enableMultiPassUnion: false, includeLinkedItemsInContext: true, enableLanguageRobustScreening: false },
         })
     )
   })

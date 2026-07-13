@@ -121,5 +121,10 @@ public sealed class ProviderActivationServiceTests
         {
             throw new NotSupportedException();
         }
+
+        public ILinkedItemProvider GetLinkedItemProvider(ScmProvider provider)
+        {
+            throw new NotSupportedException();
+        }
     }
 }

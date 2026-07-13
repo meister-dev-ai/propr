@@ -189,4 +189,22 @@ internal sealed class NullReviewContextTools : IReviewContextTools, IProCursorAv
     {
         return Task.FromResult(DefinitionLookupResult.UnavailableResult);
     }
+
+    /// <inheritdoc />
+    public Task<LinkedItemDetails?> GetLinkedItemDetailsAsync(string providerKey, CancellationToken ct)
+    {
+        return Task.FromResult<LinkedItemDetails?>(null);
+    }
+
+    /// <inheritdoc />
+    public Task<IReadOnlyList<LinkedItemComment>> GetLinkedItemDiscussionAsync(string providerKey, CancellationToken ct)
+    {
+        return Task.FromResult<IReadOnlyList<LinkedItemComment>>([]);
+    }
+
+    /// <inheritdoc />
+    public Task<LinkedItem?> ResolveLinkedItemAsync(string relatedTargetKey, CancellationToken ct)
+    {
+        return Task.FromResult<LinkedItem?>(null);
+    }
 }

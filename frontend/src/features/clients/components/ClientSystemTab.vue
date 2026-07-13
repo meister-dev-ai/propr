@@ -120,6 +120,21 @@
                 </div>
                 <div class="inline-field-row review-publication-row">
                     <div class="form-field flex-1 review-publication-field">
+                        <label class="checkbox-field" for="includeLinkedItemsInContext">
+                            <input id="includeLinkedItemsInContext"
+                                v-model="editedIncludeLinkedItemsInContext"
+                                name="includeLinkedItemsInContext" type="checkbox" />
+                            <strong>Include linked work items and issues</strong>
+                            <p class="muted review-publication-copy">
+                                Fetch the work items (Azure DevOps) or issues (GitHub, GitLab, Forgejo)
+                                linked to a pull request and include their content in the review context,
+                                so the review can judge the change against its intended direction. On by default.
+                            </p>
+                        </label>
+                    </div>
+                </div>
+                <div class="inline-field-row review-publication-row">
+                    <div class="form-field flex-1 review-publication-field">
                         <label class="checkbox-field" for="enableMultiPassUnion">
                             <input id="enableMultiPassUnion"
                                 v-model="editedEnableMultiPassUnion"
@@ -178,6 +193,7 @@ const {
     editedScmCommentPostingEnabled,
     editedEnableEvidenceBackedVerification,
     editedEnableMultiPassUnion,
+    editedIncludeLinkedItemsInContext,
     editedEnableLanguageRobustScreening,
     reviewProfiles,
     clientReviewProfile,

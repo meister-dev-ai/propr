@@ -377,6 +377,25 @@ public sealed class FixtureReviewContextTools(
         return new DefinitionLookupResult(definitions, scanned, truncated, false);
     }
 
+    /// <inheritdoc />
+    public Task<LinkedItemDetails?> GetLinkedItemDetailsAsync(string providerKey, CancellationToken ct)
+    {
+        // Offline fixtures carry no linked-item detail source.
+        return Task.FromResult<LinkedItemDetails?>(null);
+    }
+
+    /// <inheritdoc />
+    public Task<IReadOnlyList<LinkedItemComment>> GetLinkedItemDiscussionAsync(string providerKey, CancellationToken ct)
+    {
+        return Task.FromResult<IReadOnlyList<LinkedItemComment>>([]);
+    }
+
+    /// <inheritdoc />
+    public Task<LinkedItem?> ResolveLinkedItemAsync(string relatedTargetKey, CancellationToken ct)
+    {
+        return Task.FromResult<LinkedItem?>(null);
+    }
+
     private async Task<(bool Truncated, int UsedChars)> AppendReferenceSitesForFileAsync(
         RepositoryFileEntry file,
         SupportedLanguage language,
