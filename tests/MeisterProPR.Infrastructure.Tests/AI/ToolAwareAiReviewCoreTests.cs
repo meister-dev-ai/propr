@@ -563,6 +563,70 @@ public class ToolAwareAiReviewCoreTests
         Assert.Equal("Still investigating.", result.Summary);
     }
 
+    // A repeated assistant turn carrying BOTH text and a tool call breaks the loop with that tool call
+    // left unserviced. When the text is not valid final JSON, the schema-repair step appends more messages
+    // behind the orphaned call and re-sends the whole transcript. Strict providers (Anthropic via LiteLLM)
+    // reject a replay containing a tool_use without a following tool_result, so the orphan must be dropped
+    // from every outgoing payload.
+    [Fact]
+    public async Task ReviewAsync_RepeatedMixedTurnThenRepair_DropsUnansweredToolCallFromReplay()
+    {
+        var capturedMessages = new List<List<ChatMessage>>();
+        var mockClient = Substitute.For<IChatClient>();
+        var mockTools = Substitute.For<IReviewContextTools>();
+        mockTools.GetChangedFilesAsync(Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<IReadOnlyList<ChangedFileSummary>>([]));
+
+        // Non-JSON prose: survives NormalizeJsonPayload but fails final-review parsing, so repair fires.
+        const string nonJsonText = "Let me inspect the delimiter handling before finalizing.";
+
+        mockClient
+            .GetResponseAsync(
+                Arg.Do<IEnumerable<ChatMessage>>(messages => capturedMessages.Add(messages.ToList())),
+                Arg.Any<ChatOptions?>(),
+                Arg.Any<CancellationToken>())
+            .Returns(
+                CreateMixedTextAndFunctionCallResponse(nonJsonText, "call-1", "get_changed_files", "{}"),
+                CreateMixedTextAndFunctionCallResponse(nonJsonText, "call-1", "get_changed_files", "{}"),
+                CreateFinalReviewResponse("Repaired final review."));
+
+        var sut = new ToolAwareAiReviewCore(
+            mockClient,
+            DefaultOptions(10),
+            Substitute.For<ILogger<ToolAwareAiReviewCore>>());
+
+        var result = await sut.ReviewAsync(CreatePullRequest(), CreateContext(mockTools));
+
+        // Two loop turns (the second duplicate breaks the loop) plus the schema-repair send.
+        Assert.Equal(3, capturedMessages.Count);
+
+        // Every send — including the repair replay that used to carry the orphan mid-transcript — must
+        // keep each assistant tool call answered by a tool result in the immediately following message.
+        Assert.All(capturedMessages, AssertEveryToolCallIsAnswered);
+
+        Assert.Equal("Repaired final review.", result.Summary);
+    }
+
+    private static void AssertEveryToolCallIsAnswered(IReadOnlyList<ChatMessage> messages)
+    {
+        for (var i = 0; i < messages.Count; i++)
+        {
+            var calls = messages[i].Contents.OfType<FunctionCallContent>().ToList();
+            if (calls.Count == 0)
+            {
+                continue;
+            }
+
+            var answered = i + 1 < messages.Count
+                ? messages[i + 1].Contents.OfType<FunctionResultContent>()
+                    .Select(result => result.CallId)
+                    .ToHashSet(StringComparer.Ordinal)
+                : new HashSet<string>(StringComparer.Ordinal);
+
+            Assert.All(calls, call => Assert.Contains(call.CallId, answered));
+        }
+    }
+
     [Fact]
     public async Task ReviewAsync_RepeatedToolOnlyTurn_ForcesFinalReviewAfterDuplicateTurn()
     {

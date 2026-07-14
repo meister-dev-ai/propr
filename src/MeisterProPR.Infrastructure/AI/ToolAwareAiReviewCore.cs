@@ -693,7 +693,9 @@ internal sealed partial class ToolAwareAiReviewCore(
 
     /// <summary>
     ///     Trims accumulated tool-result history in the outgoing message list to fit the input budget, and
-    ///     records a protocol event and log marker when trimming occurs. Returns the message list to send.
+    ///     records a protocol event and log marker when trimming occurs. The trimmed list is then run through
+    ///     <see cref="RemoveUnansweredToolCalls" /> so a full-transcript replay never carries an orphaned tool
+    ///     call. Returns the message list to send.
     /// </summary>
     private async Task<IReadOnlyList<ChatMessage>> ApplyPerTurnContextBudgetAsync(
         IReadOnlyList<ChatMessage> messages,
@@ -706,7 +708,7 @@ internal sealed partial class ToolAwareAiReviewCore(
         var trim = ReviewContextBudget.TrimToolHistoryToBudget(messages, tokenizerName, inputBudget);
         if (!trim.Trimmed)
         {
-            return trim.Messages;
+            return RemoveUnansweredToolCalls(trim.Messages);
         }
 
         var fileLabel = systemContext.PerFileHint?.FilePath ?? "whole-pr";
@@ -726,7 +728,80 @@ internal sealed partial class ToolAwareAiReviewCore(
                 },
                 JsonOptions),
             ct);
-        return trim.Messages;
+        return RemoveUnansweredToolCalls(trim.Messages);
+    }
+
+    /// <summary>
+    ///     Removes assistant tool calls that are not answered by a tool result in the immediately following
+    ///     message, returning a sanitized copy of the outgoing list (the input, and thus
+    ///     <see cref="ReviewLoopState.Messages" />, is never mutated). Strict providers — Anthropic reached via
+    ///     the LiteLLM Responses→Anthropic translation — reject a full-transcript replay that contains a
+    ///     <c>tool_use</c> block whose <c>tool_result</c> does not follow it. The review loop can produce exactly
+    ///     that: when it breaks on a repeated assistant turn (see the turn-fingerprint guard) the unserviced tool
+    ///     call is already in the transcript, and the schema-repair step then appends further messages behind it,
+    ///     leaving the call orphaned mid-transcript.
+    ///     <para>
+    ///     Only unanswered tool <em>calls</em> are dropped, never tool <em>results</em>. This is what makes the
+    ///     pass safe across session modes: a provider-managed continuation submits a lone tool result whose call
+    ///     is retained server-side, so results must survive — and because such a delta carries no assistant tool
+    ///     call, this pass is a no-op there. It only ever changes full-replay payloads, where the pairing
+    ///     invariant must hold locally. When a call is removed, any accompanying assistant text is kept; an
+    ///     assistant message left with no content is dropped entirely.
+    ///     </para>
+    /// </summary>
+    private static IReadOnlyList<ChatMessage> RemoveUnansweredToolCalls(IReadOnlyList<ChatMessage> messages)
+    {
+        static HashSet<string> ResultCallIdsAfter(IReadOnlyList<ChatMessage> list, int index) =>
+            index + 1 < list.Count
+                ? list[index + 1].Contents.OfType<FunctionResultContent>()
+                    .Select(result => result.CallId)
+                    .ToHashSet(StringComparer.Ordinal)
+                : new HashSet<string>(StringComparer.Ordinal);
+
+        static bool HasUnansweredCall(IReadOnlyList<ChatMessage> list, int index)
+        {
+            var answered = ResultCallIdsAfter(list, index);
+            return list[index].Contents.OfType<FunctionCallContent>()
+                .Any(call => !answered.Contains(call.CallId));
+        }
+
+        var hasOrphan = false;
+        for (var i = 0; i < messages.Count; i++)
+        {
+            if (HasUnansweredCall(messages, i))
+            {
+                hasOrphan = true;
+                break;
+            }
+        }
+
+        if (!hasOrphan)
+        {
+            return messages;
+        }
+
+        var sanitized = new List<ChatMessage>(messages.Count);
+        for (var i = 0; i < messages.Count; i++)
+        {
+            var message = messages[i];
+            if (!HasUnansweredCall(messages, i))
+            {
+                sanitized.Add(message);
+                continue;
+            }
+
+            var answered = ResultCallIdsAfter(messages, i);
+            var keptContents = message.Contents
+                .Where(content => content is not FunctionCallContent call || answered.Contains(call.CallId))
+                .ToList();
+
+            if (keptContents.Count > 0)
+            {
+                sanitized.Add(new ChatMessage(message.Role, keptContents));
+            }
+        }
+
+        return sanitized;
     }
 
     /// <summary>
