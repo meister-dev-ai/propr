@@ -8695,6 +8695,330 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/admin/tenants/{tenantId}/clients": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Lists the clients that belong to the tenant, for populating member client-access pickers. */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    /** @description Tenant identifier. */
+                    tenantId: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description The tenant's clients. */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["TenantClientSummaryDto"][];
+                        "application/json": components["schemas"]["TenantClientSummaryDto"][];
+                        "text/json": components["schemas"]["TenantClientSummaryDto"][];
+                    };
+                };
+                /** @description The caller is not authenticated. */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description The caller is not an administrator of this tenant. */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description The tenant does not exist. */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/tenants/{tenantId}/memberships/{membershipId}/clients": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Lists a member's client-access assignments within the tenant. */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    /** @description Tenant identifier. */
+                    tenantId: string;
+                    /** @description Membership identifier of the tenant member. */
+                    membershipId: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description The member's client-access assignments. */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["TenantMemberClientAccessDto"][];
+                        "application/json": components["schemas"]["TenantMemberClientAccessDto"][];
+                        "text/json": components["schemas"]["TenantMemberClientAccessDto"][];
+                    };
+                };
+                /** @description The caller is not authenticated. */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description The caller is not an administrator of this tenant. */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description The membership does not exist within the tenant. */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        /** Grants (or updates) a member's role on a client within the tenant. */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    /** @description Tenant identifier. */
+                    tenantId: string;
+                    /** @description Membership identifier of the tenant member. */
+                    membershipId: string;
+                };
+                cookie?: never;
+            };
+            /** @description The client and role to grant. */
+            requestBody?: {
+                content: {
+                    "application/json": components["schemas"]["AssignMemberClientAccessRequest"];
+                    "text/json": components["schemas"]["AssignMemberClientAccessRequest"];
+                    "application/*+json": components["schemas"]["AssignMemberClientAccessRequest"];
+                };
+            };
+            responses: {
+                /** @description The resulting client-access assignment. */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["TenantMemberClientAccessDto"];
+                        "application/json": components["schemas"]["TenantMemberClientAccessDto"];
+                        "text/json": components["schemas"]["TenantMemberClientAccessDto"];
+                    };
+                };
+                /** @description The target client does not belong to this tenant. */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description The caller is not authenticated. */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description The caller is not an administrator of this tenant. */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description The membership does not exist within the tenant. */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description The tenant cannot be modified (System tenant). */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/tenants/{tenantId}/memberships/{membershipId}/clients/{clientId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Revokes a member's access to a client within the tenant. */
+        delete: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    /** @description Tenant identifier. */
+                    tenantId: string;
+                    /** @description Membership identifier of the tenant member. */
+                    membershipId: string;
+                    /** @description Client identifier to revoke. */
+                    clientId: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Access was revoked (idempotent). */
+                204: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description The caller is not authenticated. */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description The caller is not an administrator of this tenant. */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description The membership does not exist within the tenant. */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description The tenant cannot be modified (System tenant). */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+            };
+        };
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/admin/tenants/{tenantId}/memberships": {
         parameters: {
             query?: never;
@@ -10528,6 +10852,12 @@ export interface components {
         AppUserRole: "user" | "admin";
         /** @description Assign-client-role request. */
         AssignClientRoleRequest: {
+            /** Format: uuid */
+            clientId: string;
+            role: components["schemas"]["ClientRole"];
+        };
+        /** @description Request payload to grant a tenant member a role on a client. */
+        AssignMemberClientAccessRequest: {
             /** Format: uuid */
             clientId: string;
             role: components["schemas"]["ClientRole"];
@@ -12457,6 +12787,13 @@ export interface components {
             expiresIn?: number;
             tokenType?: string | null;
         };
+        /** @description Lightweight identity of a client within a tenant, used to populate member client-access pickers. */
+        TenantClientSummaryDto: {
+            /** Format: uuid */
+            id?: string;
+            displayName?: string | null;
+            isActive?: boolean;
+        };
         /** @description Tenant boundary data returned by administration and tenant-auth flows. */
         TenantDto: {
             /** Format: uuid */
@@ -12489,6 +12826,15 @@ export interface components {
             displayName?: string | null;
             providerKind?: string | null;
             providerLabel?: string | null;
+        };
+        /** @description A single client-access assignment held by a tenant member within a tenant. */
+        TenantMemberClientAccessDto: {
+            /** Format: uuid */
+            clientId?: string;
+            clientDisplayName?: string | null;
+            role?: components["schemas"]["ClientRole"];
+            /** Format: date-time */
+            assignedAt?: string;
         };
         /** @description Tenant membership data returned by administration flows. */
         TenantMembershipDto: {

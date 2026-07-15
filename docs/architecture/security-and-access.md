@@ -115,13 +115,15 @@ flowchart TD
 
 `AuthMiddleware` resolves application identity in-process and loads both client roles and tenant roles eagerly so later controllers can enforce authorization without re-deriving user context.
 
+Effective client roles combine explicit per-client assignments with tenant membership. A tenant administrator holds `ClientAdministrator` over every client in their tenant. A regular member of a tenant gains access to a client only through an explicit assignment managed by a tenant administrator — tenant membership alone does not grant client access. The internal System tenant is the exception: its members retain blanket access to System-tenant clients, preserving community/global scope.
+
 Client-specific controller actions must validate the caller against the target client, not just any
 client assignment. For those endpoints, use the requested `clientId` in the authorization check so a
 user with access to one client cannot act on another client by reusing a broad client-admin role.
 Broad client-role checks are only appropriate for collection-level flows that intentionally span
 multiple clients.
 
-Tenant-specific controller actions must likewise validate the caller against the requested tenant. Tenant administrators can manage only their own tenant's memberships, local-login policy, and external providers. Platform administrators remain separate from tenant-local policy and keep the recovery path at `/auth/login`, even if a tenant disables local login or misconfigures all tenant-user external providers.
+Tenant-specific controller actions must likewise validate the caller against the requested tenant. Tenant administrators can manage only their own tenant's memberships, member client access, local-login policy, and external providers. Platform administrators remain separate from tenant-local policy and keep the recovery path at `/auth/login`, even if a tenant disables local login or misconfigures all tenant-user external providers.
 
 ## Downstream Credential Resolution
 

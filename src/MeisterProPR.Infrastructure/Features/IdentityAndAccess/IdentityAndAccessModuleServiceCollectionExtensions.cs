@@ -65,6 +65,7 @@ public static class IdentityAndAccessModuleServiceCollectionExtensions
             services.AddScoped<IRefreshTokenRepository, RefreshTokenRepository>();
             services.AddScoped<IUserPatRepository, UserPatRepository>();
             services.AddScoped<ITenantMembershipService, TenantMembershipService>();
+            services.AddScoped<ITenantMemberClientAccessService, TenantMemberClientAccessService>();
             services.AddScoped<ITenantSsoProviderService, TenantSsoProviderService>();
 
             // OIDC id_token validation resolves and caches each provider's discovery document + JWKS per

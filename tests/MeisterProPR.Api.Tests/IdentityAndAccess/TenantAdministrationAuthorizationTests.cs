@@ -156,13 +156,38 @@ public sealed class TenantAdministrationAuthorizationTests(TenantAdministrationA
     }
 
     [Fact]
-    public async Task GetClients_TenantUserWithoutExplicitAssignment_ReturnsTenantScopedClients()
+    public async Task GetClients_TenantUserWithoutExplicitAssignment_ReturnsNoClients()
     {
         var tenantId = await factory.SeedTenantAsync($"acme-{Guid.NewGuid():N}", "Acme Corp");
         var userId = await factory.SeedUserAsync($"tenant.user.{Guid.NewGuid():N}", $"tenant.user.{Guid.NewGuid():N}@acme.test");
         await factory.SeedTenantMembershipAsync(tenantId, userId, TenantRole.TenantUser);
 
-        var visibleClientId = await factory.SeedClientAsync(tenantId, "Tenant Visible Client");
+        await factory.SeedClientAsync(tenantId, "Tenant Client");
+
+        var httpClient = factory.CreateClient();
+        using var request = new HttpRequestMessage(HttpMethod.Get, "/clients");
+        request.Headers.Authorization = new AuthenticationHeaderValue(
+            "Bearer",
+            factory.GenerateToken(userId, AppUserRole.User));
+
+        var response = await httpClient.SendAsync(request);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var body = await response.Content.ReadFromJsonAsync<List<ClientListItemResponse>>();
+        Assert.NotNull(body);
+        Assert.Empty(body!);
+    }
+
+    [Fact]
+    public async Task GetClients_TenantUserWithExplicitAssignment_ReturnsOnlyTheAssignedClient()
+    {
+        var tenantId = await factory.SeedTenantAsync($"acme-{Guid.NewGuid():N}", "Acme Corp");
+        var userId = await factory.SeedUserAsync($"tenant.user.{Guid.NewGuid():N}", $"tenant.user.{Guid.NewGuid():N}@acme.test");
+        await factory.SeedTenantMembershipAsync(tenantId, userId, TenantRole.TenantUser);
+
+        var assignedClientId = await factory.SeedClientAsync(tenantId, "Assigned Client");
+        await factory.SeedClientAsync(tenantId, "Unassigned Client");
+        await factory.SeedClientAssignmentAsync(userId, assignedClientId, ClientRole.ClientUser);
 
         var httpClient = factory.CreateClient();
         using var request = new HttpRequestMessage(HttpMethod.Get, "/clients");
@@ -176,8 +201,31 @@ public sealed class TenantAdministrationAuthorizationTests(TenantAdministrationA
         var body = await response.Content.ReadFromJsonAsync<List<ClientListItemResponse>>();
         Assert.NotNull(body);
         Assert.Single(body!);
-        Assert.Equal(visibleClientId, body[0].Id);
-        Assert.Equal("Tenant Visible Client", body[0].DisplayName);
+        Assert.Equal(assignedClientId, body[0].Id);
+        Assert.Equal("Assigned Client", body[0].DisplayName);
+    }
+
+    [Fact]
+    public async Task GetClients_TenantAdministrator_RetainsBlanketAccessWithoutExplicitAssignment()
+    {
+        var tenantId = await factory.SeedTenantAsync($"acme-{Guid.NewGuid():N}", "Acme Corp");
+        var adminId = await factory.SeedUserAsync($"tenant.admin.{Guid.NewGuid():N}", $"tenant.admin.{Guid.NewGuid():N}@acme.test");
+        await factory.SeedTenantMembershipAsync(tenantId, adminId, TenantRole.TenantAdministrator);
+        await factory.SeedClientAsync(tenantId, "Client A");
+        await factory.SeedClientAsync(tenantId, "Client B");
+
+        var httpClient = factory.CreateClient();
+        using var request = new HttpRequestMessage(HttpMethod.Get, "/clients");
+        request.Headers.Authorization = new AuthenticationHeaderValue(
+            "Bearer",
+            factory.GenerateToken(adminId, AppUserRole.User));
+
+        var response = await httpClient.SendAsync(request);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var body = await response.Content.ReadFromJsonAsync<List<ClientListItemResponse>>();
+        Assert.NotNull(body);
+        Assert.Equal(2, body!.Count);
     }
 
     [Fact]

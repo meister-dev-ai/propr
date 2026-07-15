@@ -480,6 +480,7 @@ public sealed class TenantAdministrationApiFactory : WebApplicationFactory<Progr
             services.AddScoped<IClientAdminService, ClientAdminService>();
             services.AddScoped<ITenantAdminService, TenantAdminService>();
             services.AddScoped<ITenantMembershipService, TenantMembershipService>();
+            services.AddScoped<ITenantMemberClientAccessService, TenantMemberClientAccessService>();
             services.AddScoped<ITenantSsoProviderService, TenantSsoProviderService>();
             services.AddScoped<ISessionFactory, SessionFactory>();
             services.AddHttpClient("TenantSsoAuth")

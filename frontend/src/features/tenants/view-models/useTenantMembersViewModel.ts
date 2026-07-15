@@ -1,6 +1,7 @@
 import { computed, onMounted, reactive, ref, type ComputedRef, type Ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { UnauthorizedError } from '@/services/api'
+import { TenantApiError } from '@/services/tenantApiClient'
 import { ApiRequestError } from '@/services/userSecurityService'
 import { useNotification } from '@/composables/useNotification'
 import {
@@ -10,6 +11,15 @@ import {
   type TenantRole,
   updateTenantMembership,
 } from '@/services/tenantMembershipService'
+import {
+  assignMemberClientAccess,
+  type ClientRole,
+  listMemberClientAccess,
+  listTenantClients,
+  removeMemberClientAccess,
+  type TenantClientSummaryDto,
+  type TenantMemberClientAccessDto,
+} from '@/services/tenantMemberClientAccessService'
 import {
   empty,
   error as errorState,
@@ -42,12 +52,28 @@ export interface TenantMembersViewModel {
   saveMembershipRole: (membershipId: string) => Promise<void>
   removeMembership: (membershipId: string) => Promise<void>
   formatRole: (role: TenantRole) => string
+  // Client access panel
+  expandedMembershipId: Ref<string | null>
+  accessError: Ref<string>
+  accessBusyMembershipId: Ref<string | null>
+  draftClientId: Record<string, string>
+  draftRole: Record<string, ClientRole>
+  toggleClientAccess: (membershipId: string) => Promise<void>
+  clientAccessFor: (membershipId: string) => TenantMemberClientAccessDto[]
+  assignableClientsFor: (membershipId: string) => TenantClientSummaryDto[]
+  assignClientAccess: (membershipId: string) => Promise<void>
+  removeClientAccess: (membershipId: string, clientId: string) => Promise<void>
+  formatClientRole: (role: ClientRole) => string
 }
 
 export interface TenantMembersService {
   listTenantMemberships: typeof listTenantMemberships
   updateTenantMembership: typeof updateTenantMembership
   deleteTenantMembership: typeof deleteTenantMembership
+  listTenantClients: typeof listTenantClients
+  listMemberClientAccess: typeof listMemberClientAccess
+  assignMemberClientAccess: typeof assignMemberClientAccess
+  removeMemberClientAccess: typeof removeMemberClientAccess
 }
 
 export interface UseTenantMembersViewModelOptions {
@@ -60,14 +86,23 @@ function formatRole(role: TenantRole): string {
   return role === 'tenantAdministrator' ? 'Tenant Administrator' : 'Tenant User'
 }
 
+function formatClientRole(role: ClientRole): string {
+  return role === 'clientAdministrator' ? 'Client Administrator' : 'Client User'
+}
+
 export function useTenantMembersViewModel(options: UseTenantMembersViewModelOptions = {}): TenantMembersViewModel {
   const route = useRoute()
   const router = useRouter()
   const { notify } = useNotification()
   const tenantId = options.tenantId ?? String(route.params.tenantId ?? '')
-  const listTenantMembershipsFn = options.tenantMembersService?.listTenantMemberships ?? listTenantMemberships
-  const updateTenantMembershipFn = options.tenantMembersService?.updateTenantMembership ?? updateTenantMembership
-  const deleteTenantMembershipFn = options.tenantMembersService?.deleteTenantMembership ?? deleteTenantMembership
+  const service = options.tenantMembersService ?? {}
+  const listTenantMembershipsFn = service.listTenantMemberships ?? listTenantMemberships
+  const updateTenantMembershipFn = service.updateTenantMembership ?? updateTenantMembership
+  const deleteTenantMembershipFn = service.deleteTenantMembership ?? deleteTenantMembership
+  const listTenantClientsFn = service.listTenantClients ?? listTenantClients
+  const listMemberClientAccessFn = service.listMemberClientAccess ?? listMemberClientAccess
+  const assignMemberClientAccessFn = service.assignMemberClientAccess ?? assignMemberClientAccess
+  const removeMemberClientAccessFn = service.removeMemberClientAccess ?? removeMemberClientAccess
   const autoLoad = options.autoLoad ?? true
 
   const state = ref<UiState<TenantMembersViewModelData, string>>(loadingState('Loading tenant members...'))
@@ -76,6 +111,15 @@ export function useTenantMembersViewModel(options: UseTenantMembersViewModelOpti
   const deletingMembershipId = ref<string | null>(null)
   const memberError = ref('')
   const editableRoles = reactive<Record<string, TenantMembershipDto['role']>>({})
+
+  const expandedMembershipId = ref<string | null>(null)
+  const accessError = ref('')
+  const accessBusyMembershipId = ref<string | null>(null)
+  const clientAccess = reactive<Record<string, TenantMemberClientAccessDto[]>>({})
+  const tenantClients = ref<TenantClientSummaryDto[]>([])
+  const tenantClientsLoaded = ref(false)
+  const draftClientId = reactive<Record<string, string>>({})
+  const draftRole = reactive<Record<string, ClientRole>>({})
 
   const isSystemTenant = computed(() => tenantId === SYSTEM_TENANT_ID)
   const isLoading = computed(() => state.value.status === 'loading')
@@ -93,11 +137,11 @@ export function useTenantMembersViewModel(options: UseTenantMembersViewModelOpti
         ? empty('No tenant members are assigned yet.')
         : ready({ memberships: loaded })
     } catch (err) {
-      if (err instanceof UnauthorizedError) {
+      if (err instanceof UnauthorizedError || (err instanceof TenantApiError && err.status === 401)) {
         await router.push({ name: 'login' })
         return
       }
-      state.value = errorState(err instanceof ApiRequestError ? err.message : 'Failed to load tenant memberships.')
+      state.value = errorState((err instanceof TenantApiError || err instanceof ApiRequestError) ? err.message : 'Failed to load tenant memberships.')
     }
   }
 
@@ -119,11 +163,11 @@ export function useTenantMembersViewModel(options: UseTenantMembersViewModelOpti
       state.value = success({ memberships: memberships.value }, 'Tenant membership updated.')
       notify('Tenant membership updated.')
     } catch (err) {
-      if (err instanceof UnauthorizedError) {
+      if (err instanceof UnauthorizedError || (err instanceof TenantApiError && err.status === 401)) {
         await router.push({ name: 'login' })
         return
       }
-      memberError.value = err instanceof ApiRequestError ? err.message : 'Failed to update tenant membership.'
+      memberError.value = (err instanceof TenantApiError || err instanceof ApiRequestError) ? err.message : 'Failed to update tenant membership.'
       editableRoles[membershipId] = existing.role
       state.value = errorState(memberError.value)
     } finally {
@@ -140,20 +184,133 @@ export function useTenantMembersViewModel(options: UseTenantMembersViewModelOpti
       await deleteTenantMembershipFn(tenantId, membershipId)
       memberships.value = memberships.value.filter((membership) => membership.id !== membershipId)
       delete editableRoles[membershipId]
+      delete clientAccess[membershipId]
+      if (expandedMembershipId.value === membershipId) {
+        expandedMembershipId.value = null
+      }
       state.value = memberships.value.length === 0
         ? empty('No tenant members are assigned yet.')
         : success({ memberships: memberships.value }, 'Tenant membership removed.')
       notify('Tenant membership removed.')
     } catch (err) {
-      if (err instanceof UnauthorizedError) {
+      if (err instanceof UnauthorizedError || (err instanceof TenantApiError && err.status === 401)) {
         await router.push({ name: 'login' })
         return
       }
-      memberError.value = err instanceof ApiRequestError ? err.message : 'Failed to remove tenant membership.'
+      memberError.value = (err instanceof TenantApiError || err instanceof ApiRequestError) ? err.message : 'Failed to remove tenant membership.'
       state.value = errorState(memberError.value)
     } finally {
       deletingMembershipId.value = null
     }
+  }
+
+  async function toggleClientAccess(membershipId: string): Promise<void> {
+    if (expandedMembershipId.value === membershipId) {
+      expandedMembershipId.value = null
+      return
+    }
+
+    expandedMembershipId.value = membershipId
+    accessError.value = ''
+    draftRole[membershipId] ??= 'clientUser'
+    draftClientId[membershipId] ??= ''
+
+    await ensureTenantClientsLoaded()
+    if (!clientAccess[membershipId]) {
+      await loadMemberAccess(membershipId)
+    }
+  }
+
+  async function ensureTenantClientsLoaded(): Promise<void> {
+    if (tenantClientsLoaded.value) {
+      return
+    }
+
+    try {
+      tenantClients.value = await listTenantClientsFn(tenantId)
+      tenantClientsLoaded.value = true
+    } catch (err) {
+      if (err instanceof UnauthorizedError || (err instanceof TenantApiError && err.status === 401)) {
+        await router.push({ name: 'login' })
+        return
+      }
+      accessError.value = (err instanceof TenantApiError || err instanceof ApiRequestError) ? err.message : 'Failed to load tenant clients.'
+    }
+  }
+
+  async function loadMemberAccess(membershipId: string): Promise<void> {
+    accessBusyMembershipId.value = membershipId
+    accessError.value = ''
+
+    try {
+      clientAccess[membershipId] = await listMemberClientAccessFn(tenantId, membershipId)
+    } catch (err) {
+      if (err instanceof UnauthorizedError || (err instanceof TenantApiError && err.status === 401)) {
+        await router.push({ name: 'login' })
+        return
+      }
+      accessError.value = (err instanceof TenantApiError || err instanceof ApiRequestError) ? err.message : 'Failed to load client access.'
+    } finally {
+      accessBusyMembershipId.value = null
+    }
+  }
+
+  async function assignClientAccess(membershipId: string): Promise<void> {
+    const clientId = draftClientId[membershipId]
+    if (!clientId) {
+      return
+    }
+    const role = draftRole[membershipId] ?? 'clientUser'
+
+    accessBusyMembershipId.value = membershipId
+    accessError.value = ''
+
+    try {
+      const assignment = await assignMemberClientAccessFn(tenantId, membershipId, { clientId, role })
+      const current = clientAccess[membershipId] ?? []
+      clientAccess[membershipId] = [
+        ...current.filter((entry) => entry.clientId !== assignment.clientId),
+        assignment,
+      ].sort((left, right) => left.clientDisplayName.localeCompare(right.clientDisplayName))
+      draftClientId[membershipId] = ''
+      notify('Client access granted.')
+    } catch (err) {
+      if (err instanceof UnauthorizedError || (err instanceof TenantApiError && err.status === 401)) {
+        await router.push({ name: 'login' })
+        return
+      }
+      accessError.value = (err instanceof TenantApiError || err instanceof ApiRequestError) ? err.message : 'Failed to grant client access.'
+    } finally {
+      accessBusyMembershipId.value = null
+    }
+  }
+
+  async function removeClientAccess(membershipId: string, clientId: string): Promise<void> {
+    accessBusyMembershipId.value = membershipId
+    accessError.value = ''
+
+    try {
+      await removeMemberClientAccessFn(tenantId, membershipId, clientId)
+      clientAccess[membershipId] = (clientAccess[membershipId] ?? []).filter((entry) => entry.clientId !== clientId)
+      notify('Client access revoked.')
+    } catch (err) {
+      if (err instanceof UnauthorizedError || (err instanceof TenantApiError && err.status === 401)) {
+        await router.push({ name: 'login' })
+        return
+      }
+      accessError.value = (err instanceof TenantApiError || err instanceof ApiRequestError) ? err.message : 'Failed to revoke client access.'
+    } finally {
+      accessBusyMembershipId.value = null
+    }
+  }
+
+  function clientAccessFor(membershipId: string): TenantMemberClientAccessDto[] {
+    return clientAccess[membershipId] ?? []
+  }
+
+  function assignableClientsFor(membershipId: string): TenantClientSummaryDto[] {
+    const assignedIds = new Set(clientAccessFor(membershipId).map((entry) => entry.clientId))
+    return tenantClients.value.filter((client) => !assignedIds.has(client.id))
   }
 
   function syncEditableRoles(items: TenantMembershipDto[]): void {
@@ -182,5 +339,16 @@ export function useTenantMembersViewModel(options: UseTenantMembersViewModelOpti
     saveMembershipRole,
     removeMembership,
     formatRole,
+    expandedMembershipId,
+    accessError,
+    accessBusyMembershipId,
+    draftClientId,
+    draftRole,
+    toggleClientAccess,
+    clientAccessFor,
+    assignableClientsFor,
+    assignClientAccess,
+    removeClientAccess,
+    formatClientRole,
   }
 }

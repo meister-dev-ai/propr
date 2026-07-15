@@ -12,6 +12,7 @@ using MeisterProPR.Domain.Entities;
 using MeisterProPR.Domain.Enums;
 using MeisterProPR.Infrastructure.Data;
 using MeisterProPR.Infrastructure.Data.Models;
+using MeisterProPR.Infrastructure.Features.IdentityAndAccess;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -276,5 +277,113 @@ public sealed class CallerIdentityResolverTests
 
         var objectResult = Assert.IsType<ObjectResult>(result);
         Assert.Equal(StatusCodes.Status403Forbidden, objectResult.StatusCode);
+    }
+
+    [Fact]
+    public async Task ResolveAsync_RegularMemberOfRealTenantWithoutAssignment_DerivesNoClientRole()
+    {
+        var tenantId = Guid.NewGuid();
+        var user = CreateUserWithTenantMembership(tenantId, TenantRole.TenantUser);
+
+        var clientRoles = await ResolveEffectiveClientRolesAsync(user, tenantId, Guid.NewGuid());
+
+        Assert.Empty(clientRoles);
+    }
+
+    [Fact]
+    public async Task ResolveAsync_TenantAdministratorOfRealTenant_DerivesBlanketClientAdministrator()
+    {
+        var tenantId = Guid.NewGuid();
+        var clientId = Guid.NewGuid();
+        var user = CreateUserWithTenantMembership(tenantId, TenantRole.TenantAdministrator);
+
+        var clientRoles = await ResolveEffectiveClientRolesAsync(user, tenantId, clientId);
+
+        Assert.Equal(ClientRole.ClientAdministrator, clientRoles[clientId]);
+    }
+
+    [Fact]
+    public async Task ResolveAsync_RegularMemberOfSystemTenant_StillDerivesBlanketClientUser()
+    {
+        var clientId = Guid.NewGuid();
+        var user = CreateUserWithTenantMembership(TenantCatalog.SystemTenantId, TenantRole.TenantUser);
+
+        var clientRoles = await ResolveEffectiveClientRolesAsync(user, TenantCatalog.SystemTenantId, clientId);
+
+        Assert.Equal(ClientRole.ClientUser, clientRoles[clientId]);
+    }
+
+    private static AppUser CreateUserWithTenantMembership(Guid tenantId, TenantRole role)
+    {
+        var userId = Guid.NewGuid();
+        var user = new AppUser
+        {
+            Id = userId,
+            Username = "tenant.member",
+            GlobalRole = AppUserRole.User,
+            IsActive = true,
+            CreatedAt = DateTimeOffset.UtcNow,
+        };
+        user.TenantMemberships.Add(
+            new TenantMembership
+            {
+                Id = Guid.NewGuid(),
+                TenantId = tenantId,
+                UserId = userId,
+                Role = role,
+                AssignedAt = DateTimeOffset.UtcNow,
+                UpdatedAt = DateTimeOffset.UtcNow,
+            });
+        return user;
+    }
+
+    private static async Task<Dictionary<Guid, ClientRole>> ResolveEffectiveClientRolesAsync(
+        AppUser user,
+        Guid clientTenantId,
+        Guid clientId)
+    {
+        var jwtTokenService = Substitute.For<IJwtTokenService>();
+        jwtTokenService.ValidateAccessToken("valid-token")
+            .Returns(
+                new ClaimsPrincipal(
+                    new ClaimsIdentity(
+                        new[]
+                        {
+                            new Claim("sub", user.Id.ToString()),
+                            new Claim("global_role", AppUserRole.User.ToString()),
+                        },
+                        "Bearer")));
+
+        var userRepository = Substitute.For<IUserRepository>();
+        userRepository.GetByIdWithAssignmentsAsync(user.Id, Arg.Any<CancellationToken>()).Returns(user);
+
+        // No licensing service registered => the resolver treats the installation as Commercial, so the
+        // Community client-visibility filter does not run.
+        var services = new ServiceCollection();
+        services.AddSingleton(jwtTokenService);
+        services.AddSingleton(userRepository);
+        services.AddDbContext<MeisterProPRDbContext>(options =>
+            options.UseInMemoryDatabase($"CallerIdentityResolverTests_{Guid.NewGuid()}"));
+
+        await using var provider = services.BuildServiceProvider();
+        await using var scope = provider.CreateAsyncScope();
+        var dbContext = scope.ServiceProvider.GetRequiredService<MeisterProPRDbContext>();
+        dbContext.Clients.Add(
+            new ClientRecord
+            {
+                Id = clientId,
+                TenantId = clientTenantId,
+                DisplayName = "Client",
+                IsActive = true,
+                CreatedAt = DateTimeOffset.UtcNow,
+            });
+        await dbContext.SaveChangesAsync();
+
+        var context = new DefaultHttpContext { RequestServices = scope.ServiceProvider };
+        context.Request.Headers.Authorization = "Bearer valid-token";
+
+        await CallerIdentityResolver.ResolveAsync(context, UserAuthenticationDefaults.Scheme);
+
+        return Assert.IsType<Dictionary<Guid, ClientRole>>(context.Items["ClientRoles"]);
     }
 }

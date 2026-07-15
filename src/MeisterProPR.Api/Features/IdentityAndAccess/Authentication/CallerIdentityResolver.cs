@@ -263,6 +263,15 @@ public static class CallerIdentityResolver
             return;
         }
 
+        // Tenant administrators retain blanket access to every client in their tenant. Regular members of a
+        // real tenant gain client access only through explicit assignments managed by a tenant administrator;
+        // the System tenant keeps the legacy blanket member projection so community/global access is unchanged.
+        var isSystemScope = clientTenantId == Guid.Empty || TenantCatalog.IsSystemTenant(clientTenantId);
+        if (tenantRole < TenantRole.TenantAdministrator && !isSystemScope)
+        {
+            return;
+        }
+
         var derivedRole = tenantRole >= TenantRole.TenantAdministrator
             ? ClientRole.ClientAdministrator
             : ClientRole.ClientUser;

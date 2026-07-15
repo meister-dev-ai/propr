@@ -177,6 +177,7 @@ public static class ProCursorModuleServiceCollectionExtensions
         services.AddScoped<ProCursorQueryService>();
         services.AddScoped<ProCursorMiniIndexBuilder>();
         services.AddScoped<ProCursorIndexCoordinator>();
+        services.AddScoped<ProCursorRefreshScheduler>();
         services.AddScoped<ProCursorGateway>();
         services.AddScoped<IProCursorGateway>(sp => sp.GetRequiredService<ProCursorGateway>());
 
