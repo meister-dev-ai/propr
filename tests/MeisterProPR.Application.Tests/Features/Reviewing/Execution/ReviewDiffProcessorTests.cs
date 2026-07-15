@@ -9,7 +9,10 @@ using MeisterProPR.Domain.ValueObjects;
 namespace MeisterProPR.Application.Tests.Features.Reviewing.Execution;
 
 /// <summary>
-///     Unit tests for <see cref="ReviewDiffProcessor.ExtractChangedNewLineRanges" /> (T102).
+///     Unit tests for the <see cref="ReviewDiffProcessor" /> diff-walking utilities:
+///     <see cref="ReviewDiffProcessor.ClassifyHunkLine" />,
+///     <see cref="ReviewDiffProcessor.GetInsertedNewLineNumbers" />,
+///     <see cref="ReviewDiffProcessor.ExtractChangedNewLineRanges" />, and the annotation helpers.
 /// </summary>
 public sealed class ReviewDiffProcessorTests
 {
@@ -403,5 +406,147 @@ public sealed class ReviewDiffProcessorTests
         Assert.True(lookup.ContainsKey("src/Foo.cs"));
         Assert.False(lookup.ContainsKey("assets/logo.png"));
         Assert.False(lookup.ContainsKey("src/Empty.cs"));
+    }
+
+    [Fact]
+    public void GetInsertedNewLineNumbers_AddedPlusPlusPayload_IsCountedAndKeepsLaterNumbersCorrect()
+    {
+        // The added statement "++i;" renders in the diff as "+++i;". Misreading it as the "+++"
+        // file header skips it without advancing the new-file cursor, shifting every later line.
+        const string diff = "@@ -1,3 +1,4 @@\n a\n+++i;\n+real\n b";
+
+        var inserted = ReviewDiffProcessor.GetInsertedNewLineNumbers(diff);
+
+        // New file: 1=a (context), 2=++i; (added), 3=real (added), 4=b (context).
+        Assert.Equal(2, inserted.Count);
+        Assert.Contains(2, inserted);
+        Assert.Contains(3, inserted);
+    }
+
+    [Fact]
+    public void GetInsertedNewLineNumbers_MultiplePlusPlusPayloads_AccumulateWithoutShift()
+    {
+        const string diff = "@@ -1,5 +1,6 @@\n a\n+++i;\n+mid\n+++j;\n+tail\n b";
+
+        var inserted = ReviewDiffProcessor.GetInsertedNewLineNumbers(diff);
+
+        // New file: 1=a, 2=++i;, 3=mid, 4=++j;, 5=tail, 6=b — the shift must not accumulate.
+        Assert.Equal(4, inserted.Count);
+        Assert.Contains(2, inserted);
+        Assert.Contains(3, inserted);
+        Assert.Contains(4, inserted);
+        Assert.Contains(5, inserted);
+        Assert.DoesNotContain(6, inserted);
+    }
+
+    [Fact]
+    public void GetInsertedNewLineNumbers_RemovedMinusMinusPayload_DoesNotDisturbFollowingNumbers()
+    {
+        // The removed statement "--x" renders as "---x"; a removed line must not advance the
+        // new-file cursor, so the following inserted line keeps its correct number.
+        const string diff = "@@ -1,3 +1,3 @@\n a\n---x\n+kept\n b";
+
+        var inserted = ReviewDiffProcessor.GetInsertedNewLineNumbers(diff);
+
+        // New file: 1=a (context), --x removed (no new-file line), 2=kept (added), 3=b (context).
+        Assert.Single(inserted);
+        Assert.Contains(2, inserted);
+    }
+
+    [Fact]
+    public void GetInsertedNewLineNumbers_MultiHunk_HeaderCheckDoesNotRetriggerInLaterHunks()
+    {
+        const string diff =
+            "@@ -1,2 +1,3 @@\n a\n+++i;\n b\n"
+            + "@@ -20,2 +20,3 @@\n c\n+++j;\n d";
+
+        var inserted = ReviewDiffProcessor.GetInsertedNewLineNumbers(diff);
+
+        // Hunk 1: 1=a, 2=++i; (added), 3=b. Hunk 2: 20=c, 21=++j; (added), 22=d.
+        Assert.Equal(2, inserted.Count);
+        Assert.Contains(2, inserted);
+        Assert.Contains(21, inserted);
+    }
+
+    [Fact]
+    public void ExtractChangedNewLineRanges_AddedPlusPlusPayload_KeepsRangeEndCorrect()
+    {
+        const string diff = "@@ -10,4 +10,5 @@\n ctx\n+++i;\n+add\n ctx2";
+
+        var ranges = ReviewDiffProcessor.ExtractChangedNewLineRanges(diff);
+
+        // New file: 10=ctx, 11=++i;, 12=add, 13=ctx2 — the range must reach 13, not stop short at 12.
+        Assert.Single(ranges);
+        Assert.Equal(10, ranges[0].Start);
+        Assert.Equal(13, ranges[0].End);
+    }
+
+    [Fact]
+    public void ExtractChangedNewLineRanges_MultiHunkWithPlusPlusPayload_NumbersEachHunkCorrectly()
+    {
+        const string diff =
+            "@@ -1,2 +1,3 @@\n a\n+++i;\n b\n"
+            + "@@ -20,2 +20,3 @@\n c\n+++j;\n d";
+
+        var ranges = ReviewDiffProcessor.ExtractChangedNewLineRanges(diff);
+
+        Assert.Equal(2, ranges.Count);
+        Assert.Equal(1, ranges[0].Start);
+        Assert.Equal(3, ranges[0].End);
+        Assert.Equal(20, ranges[1].Start);
+        Assert.Equal(22, ranges[1].End);
+    }
+
+    [Fact]
+    public void ExtractChangedNewLineRanges_RemovedMinusMinusPayload_ExtendsRangeOverDeletion()
+    {
+        // "--x" removed renders as "---x"; the deletion still contributes to the changed range.
+        const string diff = "@@ -5,2 +5,1 @@\n ctx\n---x";
+
+        var ranges = ReviewDiffProcessor.ExtractChangedNewLineRanges(diff);
+
+        Assert.Single(ranges);
+        Assert.Equal(5, ranges[0].Start);
+        Assert.Equal(6, ranges[0].End);
+    }
+
+    [Theory]
+    [InlineData("+added", HunkLineKind.Added)]
+    [InlineData("+++i;", HunkLineKind.Added)]
+    [InlineData("-removed", HunkLineKind.Removed)]
+    [InlineData("---x", HunkLineKind.Removed)]
+    [InlineData(" context", HunkLineKind.Context)]
+    [InlineData("\\ No newline at end of file", HunkLineKind.Marker)]
+    [InlineData("", HunkLineKind.Marker)]
+    public void ClassifyHunkLine_ClassifiesByFirstCharacter(string hunkLine, HunkLineKind expected)
+    {
+        Assert.Equal(expected, ReviewDiffProcessor.ClassifyHunkLine(hunkLine));
+    }
+
+    [Fact]
+    public void GetInsertedNewLineNumbers_FileHeadersBeforeFirstHunk_AreIgnored()
+    {
+        // The "---"/"+++" file headers precede the first hunk header, so they must never be
+        // classified as payload; only the real added line inside the hunk is inserted.
+        const string diff = "--- a/src/Foo.cs\n+++ b/src/Foo.cs\n@@ -1,2 +1,3 @@\n a\n+added\n b";
+
+        var inserted = ReviewDiffProcessor.GetInsertedNewLineNumbers(diff);
+
+        // New file: 1=a (context), 2=added (added), 3=b (context).
+        Assert.Single(inserted);
+        Assert.Contains(2, inserted);
+    }
+
+    [Fact]
+    public void ExtractChangedNewLineRanges_FileHeadersBeforeFirstHunk_AreIgnored()
+    {
+        const string diff = "--- a/src/Foo.cs\n+++ b/src/Foo.cs\n@@ -10,2 +10,3 @@\n ctx\n+added\n ctx2";
+
+        var ranges = ReviewDiffProcessor.ExtractChangedNewLineRanges(diff);
+
+        // Only the hunk body defines the range: 10=ctx, 11=added, 12=ctx2.
+        Assert.Single(ranges);
+        Assert.Equal(10, ranges[0].Start);
+        Assert.Equal(12, ranges[0].End);
     }
 }

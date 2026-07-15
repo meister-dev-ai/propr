@@ -10,10 +10,62 @@ using MeisterProPR.Domain.ValueObjects;
 namespace MeisterProPR.Application.Features.Reviewing.Execution.Services;
 
 /// <summary>
+///     The role of a single line that appears inside a unified-diff hunk body, as returned by
+///     <see cref="ReviewDiffProcessor.ClassifyHunkLine" />.
+/// </summary>
+public enum HunkLineKind
+{
+    /// <summary>An added line (<c>+</c>); it occupies a new-file line, so it advances the new-file cursor.</summary>
+    Added,
+
+    /// <summary>A removed line (<c>-</c>); it occupies no new-file line, so it does not advance the cursor.</summary>
+    Removed,
+
+    /// <summary>An unchanged context line (space); present in the new file, so it advances the cursor.</summary>
+    Context,
+
+    /// <summary>
+    ///     A non-payload line such as the <c>\ No newline at end of file</c> marker or a stray empty
+    ///     element left by a trailing newline; it occupies no new-file line, so it does not advance the cursor.
+    /// </summary>
+    Marker,
+}
+
+/// <summary>
 ///     Provides shared unified-diff processing utilities for Reviewing execution.
 /// </summary>
 public static class ReviewDiffProcessor
 {
+    /// <summary>
+    ///     Classifies a line that occurs inside a unified-diff hunk body by its first character alone.
+    ///     Inside a hunk every line is payload: a leading <c>+</c> is an added line, <c>-</c> is removed,
+    ///     a space is context, and anything else (for example the <c>\ No newline at end of file</c>
+    ///     marker or a stray empty element) is a non-payload marker.
+    ///     <para>
+    ///     Classifying by the first character — rather than testing for the <c>+++</c>/<c>---</c>
+    ///     file-header prefixes — is what lets an added line whose own content begins with <c>++</c>
+    ///     (the C statement <c>++i;</c> renders in a diff as <c>+++i;</c>) be recognized as an addition
+    ///     rather than a file header. This is exact only for single-file diffs, where the
+    ///     <c>+++</c>/<c>---</c> file headers occur solely before the first hunk header; callers must
+    ///     only pass lines that follow a hunk header. Concatenated multi-file diffs are outside this contract.
+    ///     </para>
+    /// </summary>
+    public static HunkLineKind ClassifyHunkLine(string hunkLine)
+    {
+        if (string.IsNullOrEmpty(hunkLine))
+        {
+            return HunkLineKind.Marker;
+        }
+
+        return hunkLine[0] switch
+        {
+            '+' => HunkLineKind.Added,
+            '-' => HunkLineKind.Removed,
+            ' ' => HunkLineKind.Context,
+            _ => HunkLineKind.Marker,
+        };
+    }
+
     /// <summary>
     ///     Number of lines on either side of a changed range that still count as part of the change.
     ///     Context lines immediately adjacent to an edit are effectively touched by it, so a finding
@@ -173,25 +225,20 @@ public static class ReviewDiffProcessor
             return;
         }
 
-        if (diffLine.StartsWith("+++", StringComparison.Ordinal) ||
-            diffLine.StartsWith("---", StringComparison.Ordinal))
+        switch (ClassifyHunkLine(diffLine))
         {
-            return;
+            case HunkLineKind.Added:
+                insertedLines.Add(currentNewLine);
+                currentNewLine++;
+                break;
+            case HunkLineKind.Context:
+                currentNewLine++;
+                break;
+            case HunkLineKind.Removed:
+            case HunkLineKind.Marker:
+                // Removed lines and non-payload markers occupy no new-file line.
+                break;
         }
-
-        if (diffLine.StartsWith("+", StringComparison.Ordinal))
-        {
-            insertedLines.Add(currentNewLine);
-            currentNewLine++;
-            return;
-        }
-
-        if (diffLine.StartsWith("-", StringComparison.Ordinal))
-        {
-            return;
-        }
-
-        currentNewLine++;
     }
 
     /// <summary>
@@ -272,34 +319,26 @@ public static class ReviewDiffProcessor
             return;
         }
 
-        if (diffLine.StartsWith("+++", StringComparison.Ordinal) ||
-            diffLine.StartsWith("---", StringComparison.Ordinal))
+        switch (ClassifyHunkLine(diffLine))
         {
-            return;
+            case HunkLineKind.Added:
+            case HunkLineKind.Context:
+                // Added and context lines both occupy a new-file line and advance the cursor.
+                hunkEnd = currentNewLine;
+                currentNewLine++;
+                break;
+            case HunkLineKind.Removed:
+                // Deleted line — does not advance new-file cursor; ensure range covers at least this position.
+                if (hunkStart.HasValue && currentNewLine > 0)
+                {
+                    hunkEnd = Math.Max(hunkEnd, currentNewLine);
+                }
+
+                break;
+            case HunkLineKind.Marker:
+                // Non-payload marker (e.g. "\ No newline at end of file") — occupies no new-file line.
+                break;
         }
-
-        if (diffLine.StartsWith("+", StringComparison.Ordinal))
-        {
-            // Added line — advances new-file cursor
-            hunkEnd = currentNewLine;
-            currentNewLine++;
-            return;
-        }
-
-        if (diffLine.StartsWith("-", StringComparison.Ordinal))
-        {
-            // Deleted line — does not advance new-file cursor; ensure range covers at least this position
-            if (hunkStart.HasValue && currentNewLine > 0)
-            {
-                hunkEnd = Math.Max(hunkEnd, currentNewLine);
-            }
-
-            return;
-        }
-
-        // Context line — advances cursor
-        hunkEnd = currentNewLine;
-        currentNewLine++;
     }
 
     private static List<(int Start, int End)> MergeAdjacentRanges(List<(int Start, int End)> rawRanges)

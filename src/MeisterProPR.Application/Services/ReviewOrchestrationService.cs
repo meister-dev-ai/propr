@@ -9,6 +9,7 @@ using MeisterProPR.Application.Features.ReviewArchive;
 using MeisterProPR.Application.Features.Reviewing.Execution;
 using MeisterProPR.Application.Features.Reviewing.Execution.Models;
 using MeisterProPR.Application.Features.Reviewing.Execution.Ports;
+using MeisterProPR.Application.Features.Reviewing.Execution.Services;
 using MeisterProPR.Application.Features.Reviewing.Execution.Strategies.Ports;
 using MeisterProPR.Application.Interfaces;
 using MeisterProPR.Application.Options;
@@ -1281,27 +1282,19 @@ public sealed partial class ReviewOrchestrationService(
             return;
         }
 
-        if (diffLine.StartsWith("+++", StringComparison.Ordinal) ||
-            diffLine.StartsWith("---", StringComparison.Ordinal))
+        switch (ReviewDiffProcessor.ClassifyHunkLine(diffLine))
         {
-            return;
-        }
-
-        if (diffLine.StartsWith("+", StringComparison.Ordinal))
-        {
-            insertedLines.Add(currentNewLine);
-            currentNewLine++;
-            return;
-        }
-
-        if (diffLine.StartsWith("-", StringComparison.Ordinal))
-        {
-            return;
-        }
-
-        if (diffLine.StartsWith(" ", StringComparison.Ordinal))
-        {
-            currentNewLine++;
+            case HunkLineKind.Added:
+                insertedLines.Add(currentNewLine);
+                currentNewLine++;
+                break;
+            case HunkLineKind.Context:
+                currentNewLine++;
+                break;
+            case HunkLineKind.Removed:
+            case HunkLineKind.Marker:
+                // Removed lines and non-payload markers occupy no new-file line.
+                break;
         }
     }
 
