@@ -4946,6 +4946,108 @@ public class ReviewOrchestrationServiceTests
     }
 
     [Fact]
+    public async Task ProcessAsync_GitLabJob_PreservesInlineCommentAfterPlusPlusPayloadLine()
+    {
+        var (jobs, prFetcher, orchestrator, commentPoster, reviewerManager, clientRegistry, prScanRepository,
+            instructionFetcher, instructionEvaluator, logger) = CreateDeps();
+        var job = CreateJob();
+        job.SetProviderReviewContext(
+            new CodeReviewRef(
+                new RepositoryRef(
+                    new ProviderHostRef(ScmProvider.GitLab, "https://gitlab.example.com"),
+                    "repo",
+                    "acme",
+                    "acme/repo"),
+                CodeReviewPlatformKind.MergeRequest,
+                "4201",
+                job.PullRequestId));
+
+        job.SetReviewRevision(new ReviewRevision("head-sha", "base-sha", null, "4201", null));
+
+        SetupReviewerIdReturns(clientRegistry, job, Guid.NewGuid());
+
+        // The added statement "++count;" renders in the diff as "+++count;". If that line is
+        // misread as a "+++" file header the inserted-line set shifts by one, and the finding on
+        // the following inserted line (new-file line 3) is wrongly downgraded to an overview comment.
+        var gitLabPr = new PullRequest(
+            "https://gitlab.example.com",
+            "acme",
+            "repo",
+            "repo",
+            job.PullRequestId,
+            job.IterationId,
+            "GitLab PR",
+            null,
+            "feature/x",
+            "main",
+            [
+                new ChangedFile(
+                    "src/Foo.cs",
+                    ChangeType.Edit,
+                    "int total = count;\n++count;\ntotal = Recompute(count);\nreturn total;\n",
+                    "@@ -1,2 +1,4 @@\n int total = count;\n+++count;\n+total = Recompute(count);\n return total;\n"),
+            ]);
+
+        prFetcher.FetchAsync(
+                Arg.Any<string>(),
+                Arg.Any<string>(),
+                Arg.Any<string>(),
+                Arg.Any<int>(),
+                Arg.Any<int>(),
+                Arg.Any<int?>(),
+                Arg.Any<Guid?>(),
+                Arg.Any<CancellationToken>(),
+                Arg.Any<ReviewRevision?>(),
+                Arg.Any<IReviewRepositoryWorkspace?>())
+            .Returns(gitLabPr);
+
+        var reviewResult = new ReviewResult(
+            "Summary of review.",
+            [new ReviewComment("src/Foo.cs", 3, CommentSeverity.Warning, "Recompute reads the mutated count.")]);
+        orchestrator.ReviewAsync(
+                Arg.Any<ReviewJob>(),
+                Arg.Any<PullRequest>(),
+                Arg.Any<ReviewSystemContext>(),
+                Arg.Any<CancellationToken>(),
+                Arg.Any<IChatClient?>())
+            .Returns(Task.FromResult(reviewResult));
+
+        var exclusionFetcher = Substitute.For<IRepositoryExclusionFetcher>();
+        exclusionFetcher
+            .FetchAsync(
+                Arg.Any<string>(),
+                Arg.Any<string>(),
+                Arg.Any<string>(),
+                Arg.Any<string>(),
+                Arg.Any<Guid?>(),
+                Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(ReviewExclusionRules.Empty));
+
+        var sut = CreateService(
+            jobs,
+            prFetcher,
+            orchestrator,
+            commentPoster,
+            reviewerManager,
+            clientRegistry,
+            prScanRepository,
+            logger,
+            instructionFetcher,
+            instructionEvaluator,
+            exclusionFetcher);
+
+        await sut.ProcessAsync(job, CancellationToken.None);
+
+        await AssertReviewPublishedAsync(
+            commentPoster,
+            job,
+            result => result.Comments.Count == 1
+                      && result.Comments[0].FilePath == "src/Foo.cs"
+                      && result.Comments[0].LineNumber == 3
+                      && result.Comments[0].Message.Contains("Recompute reads the mutated count", StringComparison.Ordinal));
+    }
+
+    [Fact]
     public async Task ProcessAsync_ForgejoJob_DowngradesNonInsertedInlineCommentsBeforePublication()
     {
         var (jobs, prFetcher, orchestrator, commentPoster, reviewerManager, clientRegistry, prScanRepository,
