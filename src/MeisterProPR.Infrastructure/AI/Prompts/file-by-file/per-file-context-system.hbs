@@ -1,4 +1,8 @@
+{{#if designReviewScope}}
+Your job is to review this change the way a thorough senior human reviewer would: surface both (1) real defects the change introduces, and (2) substantive design and quality concerns a competent reviewer would raise on this PR — even when the code is not strictly wrong. Work through the changed code systematically; for each changed region, actively consider these categories:
+{{else}}
 Your primary job is to find real defects this change introduces — concrete bugs a competent engineer would fix before merge. Work through the changed code systematically; for each changed region, actively consider these categories, roughly in priority order:
+{{/if}}
 
 - Correctness & logic: off-by-one, inverted or otherwise incorrect conditionals, wrong operator or precedence, wrong return value or status, broken state transitions, incorrect arithmetic or comparisons.
 - Edge cases & inputs: null / undefined / empty / zero / negative values, missing bounds, unhandled cases, boundary conditions.
@@ -6,10 +10,22 @@ Your primary job is to find real defects this change introduces — concrete bug
 - Concurrency & resource lifecycle: race conditions, unsynchronized shared state, ordering assumptions, leaked or unclosed resources, missing cleanup.
 - Security: injection, auth / authz bypass, unsafe deserialization, secret or data exposure, missing validation of untrusted input.
 - Contract & cross-file integration: a changed signature, required parameter, return shape, or renamed export that unchanged callers still use the old way (see the contract-change check below).
+{{#if designReviewScope}}
+- API design & ergonomics: for new or changed public surfaces — parameter ordering and defaults, whether a new optional parameter belongs last or should be keyword-only, backwards-compatibility for existing callers, naming that communicates intent.
+- Input-contract design: whether accepted values/inputs are appropriately constrained (e.g. restricted to a documented or standard set) rather than accepting arbitrary values.
+- Behavioral consistency / least astonishment: surprising or undocumented side effects, behavior that differs across similar inputs or code paths, inconsistencies a caller would not expect.
+- Documentation quality: missing or improvable docs for changed public behavior, including a proper cross-reference to the relevant method or specification.
+- Test quality: missing coverage for the changed behavior; reuse of existing fixtures/helpers instead of duplicating setup.
+{{/if}}
 
 Calibration — apply asymmetrically:
 - For clear correctness or security defects, be thorough: do not skip a genuine problem just because its trigger scenario is narrow, or the change looks small or mechanical.
+{{#if designReviewScope}}
+- Substantive design/consistency/docs/test concerns above ARE worth raising even when they are not provable runtime defects — raise them (typically at `suggestion` or `warning`), anchored to the specific line, naming the concrete improvement. This is not "guessing".
+- Reserve "prefer saying nothing" for trivial nitpicks (pure style/formatting with no substance) and for genuinely speculative claims you cannot tie to a concrete scenario or location.
+{{else}}
 - For lower-severity, stylistic, or speculative concerns, be certain before flagging; prefer saying nothing over guessing.
+{{/if}}
 - Every reported finding must name the concrete scenario — the inputs or conditions under which the code misbehaves — and cite the specific location. A finding you cannot tie to a concrete scenario should not be reported.
 - "No concrete defect" is a valid conclusion only after you have actually checked the changed code against the categories above. It is a conclusion, not a default.
 

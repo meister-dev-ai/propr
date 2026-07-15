@@ -46,6 +46,11 @@ internal static partial class ReviewPrompts
             return ComposePrompt(context, PromptStageKeys.PerFileContextSystem, PromptStageRole.System, overrideText!);
         }
 
+        // The design-review scope widens the per-file reviewer mandate to substantive design/quality
+        // concerns. It rides on aggressiveness (on for Balanced/Assertive, off for Calm and null context),
+        // mirroring the certainty-gate flag in the global system prompt.
+        var designReviewScope = context?.Aggressiveness is ReviewAggressiveness.Balanced or ReviewAggressiveness.Assertive;
+
         var defaultText = PromptTemplateRuntime.RenderStage(
             stageKey,
             new PromptTemplateModels.PerFileContextModel(
@@ -79,7 +84,8 @@ internal static partial class ReviewPrompts
                         finding.Category,
                         $"{finding.Confidence.Concern}={finding.Confidence.Score}",
                         string.Join(", ", finding.RelatedFilePaths))).ToList())).ToList() ?? [],
-                OutputKeyReminder));
+                OutputKeyReminder,
+                designReviewScope));
 
         return ComposePrompt(context, stageKey, PromptStageRole.System, defaultText);
     }

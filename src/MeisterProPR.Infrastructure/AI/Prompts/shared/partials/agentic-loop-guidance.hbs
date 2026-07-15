@@ -1,6 +1,10 @@
 CERTAINTY GATE — apply before every comment:
 1. Have I directly seen the problematic code in the diff or via get_file_content?
+{{#if designReviewScope}}
+2. Is the issue real and specific — either a definite defect, OR a substantive design/quality concern a competent reviewer would raise (not a trivial nitpick)?
+{{else}}
 2. Is the defect definite, not suspected?
+{{/if}}
 3. Does the comment name a specific line, token, call, or value?
 {{#if assertiveCertaintyGate}}
 If all three answers are "yes" — emit the comment at the appropriate severity.

@@ -43,17 +43,18 @@ internal static class PromptTemplateRuntime
 
     /// <summary>
     ///     Renders the <c>agentic-loop-guidance</c> shared partial with the given
-    ///     <paramref name="assertiveCertaintyGate" /> flag, so that
-    ///     <c>{{#if assertiveCertaintyGate}}</c> blocks resolve correctly before the
-    ///     guidance text is embedded into the global system prompt via triple-mustache.
+    ///     <paramref name="assertiveCertaintyGate" /> and <paramref name="designReviewScope" /> flags,
+    ///     so that <c>{{#if assertiveCertaintyGate}}</c> and <c>{{#if designReviewScope}}</c> blocks
+    ///     resolve correctly before the guidance text is embedded into the global system prompt via
+    ///     triple-mustache.
     /// </summary>
-    internal static string RenderAgenticLoopGuidance(bool assertiveCertaintyGate)
+    internal static string RenderAgenticLoopGuidance(bool assertiveCertaintyGate, bool designReviewScope)
     {
         try
         {
             var template = FileProvider.Value.ReadSharedPartial("agentic-loop-guidance");
             var partials = PartialRegistry.Value.GetPartials();
-            return Renderer.Value.Render(template, new { assertiveCertaintyGate }, partials).TrimEnd();
+            return Renderer.Value.Render(template, new { assertiveCertaintyGate, designReviewScope }, partials).TrimEnd();
         }
         catch (InvalidOperationException ex)
         {

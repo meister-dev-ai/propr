@@ -38,9 +38,13 @@ internal static partial class ReviewPrompts
         else
         {
             var assertiveCertaintyGate = context?.Aggressiveness == ReviewAggressiveness.Assertive;
-            // Pre-render the agentic loop guidance with the assertiveCertaintyGate flag so that
-            // {{#if assertiveCertaintyGate}} blocks in agentic-loop-guidance.hbs are resolved.
-            // The override path (if set) bypasses this and injects the override text directly.
+            // The design-review scope widens the reviewer mandate to substantive design/quality concerns.
+            // It rides on aggressiveness (on for Balanced/Assertive, off for Calm and null context), so a
+            // Calm posture keeps the defect-only framing.
+            var designReviewScope = context?.Aggressiveness is ReviewAggressiveness.Balanced or ReviewAggressiveness.Assertive;
+            // Pre-render the agentic loop guidance with the certainty-gate and design-scope flags so that
+            // {{#if assertiveCertaintyGate}} and {{#if designReviewScope}} blocks in agentic-loop-guidance.hbs
+            // are resolved. The override path (if set) bypasses this and injects the override text directly.
             string agenticGuidance;
             if (context?.PromptOverrides.TryGetValue("AgenticLoopGuidance", out var overrideGuidance) == true)
             {
@@ -48,7 +52,7 @@ internal static partial class ReviewPrompts
             }
             else
             {
-                agenticGuidance = PromptTemplateRuntime.RenderAgenticLoopGuidance(assertiveCertaintyGate);
+                agenticGuidance = PromptTemplateRuntime.RenderAgenticLoopGuidance(assertiveCertaintyGate, designReviewScope);
             }
 
             baseSystemPrompt = PromptTemplateRuntime.RenderStage(
@@ -64,7 +68,8 @@ internal static partial class ReviewPrompts
                         instruction.Body)).ToList() ?? [],
                     context is { DismissedPatterns.Count: > 0 },
                     context?.DismissedPatterns ?? [],
-                    assertiveCertaintyGate));
+                    assertiveCertaintyGate,
+                    designReviewScope));
         }
 
         return ComposePrompt(context, PromptStageKeys.GlobalSystem, PromptStageRole.System, baseSystemPrompt);

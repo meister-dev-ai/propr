@@ -13,7 +13,8 @@ internal static class PromptTemplateModels
         IReadOnlyList<PromptRepositoryInstructionModel> repositoryInstructions,
         bool hasDismissedPatterns,
         IReadOnlyList<string> dismissedPatterns,
-        bool assertiveCertaintyGate = false);
+        bool assertiveCertaintyGate = false,
+        bool designReviewScope = false);
 
     internal sealed record LegacyPrReviewUserModel(
         bool hasChangedFiles,
@@ -82,7 +83,8 @@ internal static class PromptTemplateModels
         IReadOnlyList<PromptPrefetchedContextEvidenceModel> prefetchedContextEvidence,
         bool hasInvestigations,
         IReadOnlyList<PromptInvestigationResultModel> investigations,
-        string outputKeyReminder);
+        string outputKeyReminder,
+        bool designReviewScope = false);
 
     internal sealed record PerFileUserModel(
         string filePath,
