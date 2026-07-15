@@ -6,7 +6,7 @@
  * Uses direct fetch calls since the new endpoints are not yet in the generated openapi schema.
  */
 
-import { useSession } from '@/composables/useSession'
+import { authedFetch } from '@/services/api'
 import { API_BASE_URL } from '@/services/apiBase'
 
 const BASE = API_BASE_URL
@@ -43,12 +43,6 @@ export interface PagedResult<T> {
   pageSize: number
 }
 
-async function authHeaders(): Promise<Record<string, string>> {
-  const { getAccessToken } = useSession()
-  const token = getAccessToken()
-  return token ? { Authorization: `Bearer ${token}` } : {}
-}
-
 /** Returns a paginated list of stored thread memory embeddings for the given client. */
 export async function fetchStoredEmbeddings(
   clientId: string,
@@ -59,9 +53,7 @@ export async function fetchStoredEmbeddings(
   const params = new URLSearchParams({ clientId, page: String(page), pageSize: String(pageSize) })
   if (search) params.set('search', search)
 
-  const res = await fetch(`${BASE}/admin/thread-memory?${params}`, {
-    headers: await authHeaders(),
-  })
+  const res = await authedFetch(`${BASE}/admin/thread-memory?${params}`)
   if (!res.ok) throw new Error(`GET /admin/thread-memory: ${res.status}`)
   return res.json() as Promise<PagedResult<ThreadMemoryRecordDto>>
 }
@@ -69,9 +61,8 @@ export async function fetchStoredEmbeddings(
 /** Deletes a stored thread memory embedding by ID. Idempotent. */
 export async function deleteEmbedding(id: string, clientId: string): Promise<void> {
   const params = new URLSearchParams({ clientId })
-  const res = await fetch(`${BASE}/admin/thread-memory/${id}?${params}`, {
+  const res = await authedFetch(`${BASE}/admin/thread-memory/${id}?${params}`, {
     method: 'DELETE',
-    headers: await authHeaders(),
   })
   if (!res.ok && res.status !== 204) throw new Error(`DELETE /admin/thread-memory/${id}: ${res.status}`)
 }
@@ -100,9 +91,7 @@ export async function fetchActivityLog(
   if (opts.page != null) params.set('page', String(opts.page))
   if (opts.pageSize != null) params.set('pageSize', String(opts.pageSize))
 
-  const res = await fetch(`${BASE}/admin/thread-memory/activity-log?${params}`, {
-    headers: await authHeaders(),
-  })
+  const res = await authedFetch(`${BASE}/admin/thread-memory/activity-log?${params}`)
   if (!res.ok) throw new Error(`GET /admin/thread-memory/activity-log: ${res.status}`)
   return res.json() as Promise<PagedResult<MemoryActivityLogEntryDto>>
 }

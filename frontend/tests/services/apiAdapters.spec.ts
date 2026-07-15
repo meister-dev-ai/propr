@@ -54,9 +54,11 @@ describe('runtime-selected API adapters', () => {
 
     await getJobProtocol('job-123', { includeEvents: false })
 
+    // The job endpoints go through the refresh-aware `authedFetch`, which normalizes
+    // request headers to a `Headers` instance; the adapter's job is to carry the query flag.
     expect(fetchMock).toHaveBeenCalledWith(
       expect.stringContaining('/jobs/job-123/protocol?includeEvents=false'),
-      expect.objectContaining({ headers: {} }),
+      expect.objectContaining({ headers: expect.any(Headers) }),
     )
   })
 

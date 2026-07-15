@@ -128,3 +128,79 @@ describe('createAdminClient', () => {
     expect(getApiErrorMessage(undefined, 'fallback')).toBe('fallback')
   })
 })
+
+describe('authedFetch', () => {
+  let authedFetch: typeof import('@/services/api').authedFetch
+  // Must be re-imported after vi.resetModules() so instanceof uses the same class.
+  let UnauthorizedError: typeof import('@/services/api').UnauthorizedError
+  let useSession: typeof import('@/composables/useSession').useSession
+
+  beforeEach(async () => {
+    vi.resetModules()
+    const api = await import('@/services/api')
+    authedFetch = api.authedFetch
+    UnauthorizedError = api.UnauthorizedError
+    useSession = (await import('@/composables/useSession')).useSession
+  })
+
+  function authorizationOfLastRequest(): string | null {
+    const lastCall = vi.mocked(global.fetch).mock.calls.at(-1)
+    const init = lastCall?.[1] as RequestInit | undefined
+    return new Headers(init?.headers).get('authorization')
+  }
+
+  it('attaches the in-memory bearer token without refreshing a fresh token', async () => {
+    // Future-dated JWT so the proactive (<60 s to expiry) refresh does not fire.
+    const jwt = createJwt(Math.floor(Date.now() / 1000) + 3600)
+    useSession().setAccessToken(jwt)
+    mockFetch(200, [])
+
+    const res = await authedFetch('http://localhost/api/jobs')
+
+    expect(res.status).toBe(200)
+    expect(vi.mocked(global.fetch)).toHaveBeenCalledTimes(1)
+    expect(vi.mocked(global.fetch).mock.calls[0]?.[0]).toBe('http://localhost/api/jobs')
+    expect(authorizationOfLastRequest()).toBe(`Bearer ${jwt}`)
+  })
+
+  it('proactively refreshes a near-expiry token before sending the request', async () => {
+    // JWT expiring within the 60 s proactive window.
+    useSession().setAccessToken(createJwt(Math.floor(Date.now() / 1000) + 10))
+
+    mockFetch(200, { accessToken: 'fresh-token' }) // /auth/refresh
+    mockFetch(200, { clientRoles: {} })            // /auth/me (loadClientRoles)
+    mockFetch(200, [])                             // the actual request
+
+    await authedFetch('http://localhost/api/jobs')
+
+    expect(vi.mocked(global.fetch)).toHaveBeenCalledTimes(3)
+    expect(authorizationOfLastRequest()).toBe('Bearer fresh-token')
+    expect(useSession().getAccessToken()).toBe('fresh-token')
+  })
+
+  it('silently refreshes and retries once on a 401', async () => {
+    useSession().setAccessToken(createJwt(Math.floor(Date.now() / 1000) + 3600))
+
+    mockFetch(401, { error: 'Unauthorized' })   // first attempt → 401
+    mockFetch(200, { accessToken: 'fresh-token' }) // /auth/refresh
+    mockFetch(200, { clientRoles: {} })            // /auth/me (loadClientRoles)
+    mockFetch(200, [])                             // retried request
+
+    const res = await authedFetch('http://localhost/api/jobs')
+
+    expect(res.status).toBe(200)
+    expect(vi.mocked(global.fetch)).toHaveBeenCalledTimes(4)
+    expect(authorizationOfLastRequest()).toBe('Bearer fresh-token')
+    expect(useSession().getAccessToken()).toBe('fresh-token')
+  })
+
+  it('throws UnauthorizedError and clears the session when refresh fails after a 401', async () => {
+    useSession().setAccessToken(createJwt(Math.floor(Date.now() / 1000) + 3600))
+
+    mockFetch(401, { error: 'Unauthorized' }) // first attempt → 401
+    mockFetch(401, { error: 'Unauthorized' }) // cookie refresh also fails
+
+    await expect(authedFetch('http://localhost/api/jobs')).rejects.toBeInstanceOf(UnauthorizedError)
+    expect(useSession().getAccessToken()).toBeNull()
+  })
+})

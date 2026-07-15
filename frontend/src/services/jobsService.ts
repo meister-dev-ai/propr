@@ -6,21 +6,14 @@
  * Uses direct fetch calls since some endpoints are not yet in the generated openapi schema.
  */
 
-import { useSession } from '@/composables/useSession'
 import { getActiveRuntime } from '@/app/runtime/runtimeContext'
 import type { RuntimeMode } from '@/app/runtime/createRuntime'
 import { sanitizeErrorMessage } from '@/services/credentialSafety'
-import { createAdminClient } from '@/services/api'
+import { authedFetch } from '@/services/api'
 import type { components } from '@/types'
 
 function getJobsBaseUrl(): string {
   return getActiveRuntime().apiBaseUrl
-}
-
-async function authHeaders(): Promise<Record<string, string>> {
-  const { getAccessToken } = useSession()
-  const token = getAccessToken()
-  return token ? { Authorization: `Bearer ${token}` } : {}
 }
 
 // ──────────────────────────────────────────────────────────────────────────────
@@ -157,7 +150,7 @@ async function listJobsInternal(params: ListJobsParams = {}): Promise<JobListRes
   if (params.pullRequestId != null) q.set('pullRequestId', String(params.pullRequestId))
 
   try {
-    const res = await fetch(`${getJobsBaseUrl()}/jobs?${q}`, { headers: await authHeaders() })
+    const res = await authedFetch(`${getJobsBaseUrl()}/jobs?${q}`)
     if (!res.ok) throw new Error(`GET /jobs: ${res.status}`)
     return res.json() as Promise<JobListResponse>
   } catch (error) {
@@ -172,7 +165,7 @@ export async function getJobDetail(id: string): Promise<JobDetailResponse> {
 
 async function getJobDetailInternal(id: string): Promise<JobDetailResponse> {
   try {
-    const res = await fetch(`${getJobsBaseUrl()}/jobs/${id}`, { headers: await authHeaders() })
+    const res = await authedFetch(`${getJobsBaseUrl()}/jobs/${id}`)
     if (!res.ok) throw new Error(`GET /jobs/${id}: ${res.status}`)
     return res.json() as Promise<JobDetailResponse>
   } catch (error) {
@@ -199,7 +192,7 @@ async function getJobProtocolInternal(
     }
 
     const suffix = query.size > 0 ? `?${query}` : ''
-    const res = await fetch(`${getJobsBaseUrl()}/jobs/${id}/protocol${suffix}`, { headers: await authHeaders() })
+    const res = await authedFetch(`${getJobsBaseUrl()}/jobs/${id}/protocol${suffix}`)
     if (!res.ok) throw new Error(`GET /jobs/${id}/protocol: ${res.status}`)
     return res.json() as Promise<components['schemas']['ReviewJobProtocolDto'][]>
   } catch (error) {
@@ -220,9 +213,8 @@ export async function restartJob(id: string): Promise<RestartJobResponse> {
 
 async function restartJobInternal(id: string): Promise<RestartJobResponse> {
   try {
-    const res = await fetch(`${getJobsBaseUrl()}/reviewing/jobs/${id}/restart`, {
+    const res = await authedFetch(`${getJobsBaseUrl()}/reviewing/jobs/${id}/restart`, {
       method: 'POST',
-      headers: await authHeaders(),
     })
     if (!res.ok) {
       let message = `POST /reviewing/jobs/${id}/restart: ${res.status}`
@@ -273,9 +265,7 @@ async function getPrViewInternal(
   if (params.pageSize != null) q.set('pageSize', String(params.pageSize))
 
   try {
-    const res = await fetch(`${getJobsBaseUrl()}/clients/${clientId}/pr-view?${q}`, {
-      headers: await authHeaders(),
-    })
+    const res = await authedFetch(`${getJobsBaseUrl()}/clients/${clientId}/pr-view?${q}`)
     if (!res.ok) throw new Error(`GET /clients/${clientId}/pr-view: ${res.status}`)
     return res.json() as Promise<PrReviewViewDto>
   } catch (error) {

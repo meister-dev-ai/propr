@@ -1,4 +1,4 @@
-import { useSession } from '@/composables/useSession'
+import { authedFetch } from '@/services/api'
 import { getActiveRuntime } from '@/app/runtime/runtimeContext'
 
 function getTenantApiBaseUrl(): string {
@@ -71,17 +71,14 @@ export async function tenantApiRequest<TResponse>(
     requestHeaders.set('Content-Type', 'application/json')
   }
 
-  if (requireAuth) {
-    const token = useSession().getAccessToken()
-    if (token) {
-      requestHeaders.set('Authorization', `Bearer ${token}`)
-    }
-  }
-
-  const response = await fetch(resolveTenantApiUrl(path), {
-    ...init,
-    headers: requestHeaders,
-  })
+  // Authenticated calls go through the refresh-aware fetch so a token that expired while the
+  // tab sat idle is silently refreshed (via the httpOnly cookie) instead of failing the request.
+  // Unauthenticated calls (login, provider discovery) must not attach or refresh a token.
+  const url = resolveTenantApiUrl(path)
+  const requestInit: RequestInit = { ...init, headers: requestHeaders }
+  const response = requireAuth
+    ? await authedFetch(url, requestInit)
+    : await fetch(url, requestInit)
 
   if (!response.ok) {
     let message = 'Tenant API request failed.'

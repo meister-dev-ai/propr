@@ -149,3 +149,59 @@ export function createAdminClient(opts?: CreateAdminClientOptions) {
 
   return client
 }
+
+/**
+ * Refresh-aware `fetch` for the hand-written service wrappers whose endpoints are not in
+ * the generated OpenAPI schema (jobs, thread-memory, tenant admin). It mirrors the auth
+ * middleware in `createAdminClient`: proactively refreshes the access token via the httpOnly
+ * cookie when it is within 60 s of expiry, attaches the bearer token, and on a 401 tries one
+ * silent refresh + retry before ending the session.
+ *
+ * Without this, a tab left open past the access-token lifetime fails its next in-app request
+ * (e.g. "Failed to load review history") until a full page reload re-bootstraps the token.
+ *
+ * `input` is the fully-resolved request URL; callers build it as they already do.
+ */
+export async function authedFetch(input: string, init: RequestInit = {}): Promise<Response> {
+  const { getAccessToken, setAccessToken, clearTokens, accessTokenExpiresIn, loadClientRoles } = useSession()
+  const refreshBaseUrl = resolveAdminClientBaseUrl()
+
+  let token = getAccessToken()
+
+  // Proactively refresh (via the httpOnly cookie) if within 60 s of expiry.
+  if (token && accessTokenExpiresIn() < 60) {
+    const refreshed = await refreshAccessToken(refreshBaseUrl)
+    if (refreshed) {
+      setAccessToken(refreshed)
+      await loadClientRoles()
+      token = refreshed
+    }
+  }
+
+  const send = (bearer: string | null): Promise<Response> => {
+    const headers = new Headers(init.headers)
+    if (bearer) {
+      headers.set('Authorization', `Bearer ${bearer}`)
+    }
+    return fetch(input, { ...init, headers })
+  }
+
+  const response = await send(token)
+  if (response.status !== 401) {
+    return response
+  }
+
+  // A 401 despite the proactive check (token expired mid-flight, or clock skew): try one
+  // silent cookie refresh, then retry the request once with the fresh token.
+  const refreshed = await refreshAccessToken(refreshBaseUrl)
+  if (refreshed) {
+    setAccessToken(refreshed)
+    await loadClientRoles()
+    return send(refreshed)
+  }
+
+  // Refresh failed terminally → the session is over: clear state and let the app route to login.
+  clearTokens()
+  onSessionExpired?.()
+  throw new UnauthorizedError()
+}
