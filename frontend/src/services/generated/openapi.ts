@@ -11360,7 +11360,7 @@ export interface components {
          * @description Status of a review job.
          * @enum {string}
          */
-        JobStatus: "pending" | "processing" | "completed" | "failed" | "cancelled";
+        JobStatus: "pending" | "processing" | "completed" | "failed" | "cancelled" | "superseded";
         /** @description Installation-wide licensing summary for administration and session hydration. */
         LicensingSummaryDto: {
             edition?: components["schemas"]["InstallationEdition"];

@@ -197,6 +197,42 @@
                             <div v-if="vm.agenticInvestigationEvidenceCount(vm.selectedAgenticInvestigationOutput) !== null" class="json-field"><span class="json-key">Evidence count:</span><pre class="json-content">{{ vm.agenticInvestigationEvidenceCount(vm.selectedAgenticInvestigationOutput) }}</pre></div>
                             <div v-if="vm.isAgenticDegradedEvent(vm.selectedMergedEvent?.callDetails.name)" class="json-field"><span class="json-key">Degraded outcome note:</span><pre class="json-content">This degraded Stage B result was a non-validated intermediate outcome. It only affected the final review if later verification and final gate kept supporting findings.</pre></div>
                         </template>
+                        <template v-else-if="vm.selectedAssistantTurn">
+                            <div v-if="vm.selectedAssistantTurn.reasoning" class="json-field reasoning-field">
+                                <div class="reasoning-header">
+                                    <span class="json-key">Reasoning</span>
+                                    <button type="button" class="reasoning-toggle" @click="vm.toggleReasoning()">
+                                        {{ vm.isReasoningExpanded ? 'Hide' : 'Show' }}
+                                    </button>
+                                </div>
+                                <pre v-if="vm.isReasoningExpanded" class="content-block">{{ vm.selectedAssistantTurn.reasoning }}</pre>
+                            </div>
+                            <template v-if="vm.selectedAssistantTurn.parsedReview && (vm.selectedAssistantTurn.parsedReview.summary || vm.selectedAssistantTurn.parsedReview.comments?.length)">
+                                <div v-if="vm.selectedAssistantTurn.parsedReview.summary" class="json-field">
+                                    <span class="json-key">Summary:</span>
+                                    <p class="json-summary-text">{{ vm.selectedAssistantTurn.parsedReview.summary }}</p>
+                                </div>
+                                <div v-if="vm.selectedAssistantTurn.parsedReview.comments?.length" class="json-field">
+                                    <span class="json-key">Comments ({{ vm.selectedAssistantTurn.parsedReview.comments.length }}):</span>
+                                    <ul class="json-comments-list">
+                                        <li v-for="(comment, idx) in vm.selectedAssistantTurn.parsedReview.comments" :key="idx" class="json-comment-item" :class="`severity-${comment.severity}`">
+                                            <strong>{{ (comment.severity ?? 'note').toUpperCase() }}</strong> at <span class="monospace-value">{{ comment.file_path }}:L{{ comment.line_number }}</span><br />
+                                            {{ comment.message }}
+                                        </li>
+                                    </ul>
+                                </div>
+                            </template>
+                            <pre v-else-if="vm.selectedAssistantTurn.text" class="content-block">{{ vm.decodeHtmlEntities(vm.selectedAssistantTurn.text) }}</pre>
+                            <div v-if="vm.selectedAssistantTurn.toolCalls.length" class="json-field">
+                                <span class="json-key">Tool calls ({{ vm.selectedAssistantTurn.toolCalls.length }}):</span>
+                                <div class="assistant-tool-call-list">
+                                    <div v-for="(call, idx) in vm.selectedAssistantTurn.toolCalls" :key="idx" class="assistant-tool-call-row">
+                                        <span class="monospace-badge assistant-tool-call-name">{{ call.name }}</span>
+                                        <pre class="json-content">{{ JSON.stringify(call.arguments, null, 2) }}</pre>
+                                    </div>
+                                </div>
+                            </div>
+                        </template>
                         <pre v-else-if="typeof vm.parsedOutputResult === 'string'" class="content-block">{{ vm.decodeHtmlEntities(vm.parsedOutputResult) }}</pre>
                         <template v-else>
                             <div v-if="vm.parsedOutputResult.summary" class="json-field">
@@ -508,6 +544,45 @@ defineProps<{ vm: JobProtocolViewModel }>()
     font-size: 0.75rem;
     color: var(--color-accent);
     font-weight: 500;
+}
+
+.reasoning-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.5rem;
+}
+
+.reasoning-toggle {
+    appearance: none;
+    border: 1px solid var(--color-border);
+    background: rgba(255, 255, 255, 0.03);
+    color: var(--color-text);
+    border-radius: var(--radius-md);
+    padding: 0.2rem 0.6rem;
+    font-size: 0.75rem;
+    cursor: pointer;
+}
+
+.reasoning-toggle:hover {
+    background: rgba(255, 255, 255, 0.06);
+}
+
+.assistant-tool-call-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    margin-top: 0.25rem;
+}
+
+.assistant-tool-call-row {
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+}
+
+.assistant-tool-call-name {
+    align-self: flex-start;
 }
 
 .provider-managed-note {

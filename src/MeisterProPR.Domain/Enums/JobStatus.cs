@@ -22,4 +22,12 @@ public enum JobStatus
 
     /// <summary>Job was cancelled because the pull request was abandoned before the review completed.</summary>
     Cancelled = 4,
+
+    /// <summary>
+    ///     Job was superseded because a newer push arrived for the same pull request before the review
+    ///     completed. Unlike <see cref="Cancelled" /> (pull request abandoned/closed), a superseded job's
+    ///     reviewed per-file results remain a valid baseline whose unchanged files can be inherited by the
+    ///     newer revision's review.
+    /// </summary>
+    Superseded = 5,
 }

@@ -99,9 +99,9 @@ public class ToolAwareAiReviewCoreTests
         return new ReviewSystemContext(null, [], tools);
     }
 
-    private static ChatResponse CreateFinalReviewResponse(string summary = "All good.")
+    private static string CreateFinalReviewJson(string summary = "All good.")
     {
-        var json = JsonSerializer.Serialize(
+        return JsonSerializer.Serialize(
             new
             {
                 summary,
@@ -113,7 +113,11 @@ public class ToolAwareAiReviewCoreTests
                 },
                 loop_complete = true,
             });
-        return new ChatResponse(new ChatMessage(ChatRole.Assistant, json));
+    }
+
+    private static ChatResponse CreateFinalReviewResponse(string summary = "All good.")
+    {
+        return new ChatResponse(new ChatMessage(ChatRole.Assistant, CreateFinalReviewJson(summary)));
     }
 
     private static ChatResponse CreateFunctionCallResponse(string callId, string functionName, string argsJson)
@@ -879,6 +883,358 @@ public class ToolAwareAiReviewCoreTests
         Assert.Contains("DeltaContext", context.LoopMetrics.TurnsJson, StringComparison.Ordinal);
     }
 
+    // A plain-string tool result (e.g. file contents) is replayed to the model as raw text, not a
+    // double-encoded JSON string, so angle brackets/ampersands/newlines don't inflate the wire payload.
+    [Fact]
+    public async Task ReviewAsync_StringToolResult_ReplayedAsRawTextNotJsonEscaped()
+    {
+        var captured = new List<List<ChatMessage>>();
+        var mockClient = Substitute.For<IChatClient>();
+        mockClient
+            .GetResponseAsync(
+                Arg.Do<IEnumerable<ChatMessage>>(messages => captured.Add(messages.ToList())),
+                Arg.Any<ChatOptions?>(),
+                Arg.Any<CancellationToken>())
+            .Returns(
+                CreateFunctionCallResponse(
+                    "call-1",
+                    "get_file_content",
+                    "{\"path\":\"src/Foo.cs\",\"branch\":\"feature/x\",\"startLine\":1,\"endLine\":1}"),
+                CreateFinalReviewResponse("Done."));
+
+        var mockTools = Substitute.For<IReviewContextTools>();
+        mockTools
+            .GetFileContentAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<int>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
+            .Returns("if (a < b && c > d)");
+
+        var sut = new ToolAwareAiReviewCore(
+            mockClient,
+            DefaultOptions(),
+            Substitute.For<ILogger<ToolAwareAiReviewCore>>());
+
+        await sut.ReviewAsync(CreatePullRequest(), CreateContext(mockTools));
+
+        Assert.Equal(2, captured.Count);
+        var toolResult = captured[1]
+            .SelectMany(message => message.Contents)
+            .OfType<FunctionResultContent>()
+            .First();
+        var raw = Assert.IsType<string>(toolResult.Result);
+        Assert.Contains("if (a < b && c > d)", raw, StringComparison.Ordinal);
+        Assert.DoesNotContain("\\u003c", raw, StringComparison.Ordinal);
+        Assert.DoesNotContain("\\u0026", raw, StringComparison.Ordinal);
+        Assert.False(raw.StartsWith('"'));
+    }
+
+    // With retention enabled (A/B), file content fetched on an early iteration is kept and re-injected
+    // as an evidence message on later iterations rather than being dropped, so the model does not re-fetch it.
+    [Fact]
+    public async Task ReviewAsync_RetainToolEvidenceEnabled_ReinjectsFetchedContentInsteadOfWorkingMemorySummary()
+    {
+        var captured = new List<List<ChatMessage>>();
+        var mockClient = Substitute.For<IChatClient>();
+        mockClient
+            .GetResponseAsync(
+                Arg.Do<IEnumerable<ChatMessage>>(messages => captured.Add(messages.ToList())),
+                Arg.Any<ChatOptions?>(),
+                Arg.Any<CancellationToken>())
+            .Returns(
+                CreateFunctionCallResponse(
+                    "c1",
+                    "get_file_content",
+                    "{\"path\":\"src/Alpha.cs\",\"branch\":\"feature/x\",\"startLine\":1,\"endLine\":1}"),
+                CreateFunctionCallResponse(
+                    "c2",
+                    "get_file_content",
+                    "{\"path\":\"src/Beta.cs\",\"branch\":\"feature/x\",\"startLine\":1,\"endLine\":1}"),
+                CreateFinalReviewResponse("Done."));
+
+        var mockTools = Substitute.For<IReviewContextTools>();
+        mockTools
+            .GetFileContentAsync("src/Alpha.cs", Arg.Any<string>(), Arg.Any<int>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
+            .Returns("ALPHA_FILE_BODY");
+        mockTools
+            .GetFileContentAsync("src/Beta.cs", Arg.Any<string>(), Arg.Any<int>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
+            .Returns("BETA_FILE_BODY");
+
+        var file = new ChangedFile("src/Alpha.cs", ChangeType.Edit, "code", "+code");
+        var pr = new PullRequest(
+            "https://dev.azure.com/org",
+            "proj",
+            "repo",
+            "repo",
+            1,
+            1,
+            "PR",
+            null,
+            "feature/x",
+            "main",
+            new List<ChangedFile> { file }.AsReadOnly());
+
+        var options = Microsoft.Extensions.Options.Options.Create(new AiReviewOptions { MaxIterations = 10, EnableRetainedToolEvidence = true });
+        var context = new ReviewSystemContext(null, [], mockTools)
+        {
+            PerFileHint = new PerFileReviewHint("src/Alpha.cs", 1, 1, pr.AllPrFileSummaries),
+        };
+
+        var sut = new ToolAwareAiReviewCore(
+            mockClient,
+            options,
+            Substitute.For<ILogger<ToolAwareAiReviewCore>>());
+
+        await sut.ReviewAsync(pr, context);
+
+        Assert.Equal(3, captured.Count);
+        var finalTurn = captured[2];
+        Assert.Contains(
+            finalTurn,
+            message => message.Role == ChatRole.User &&
+                       (message.Text?.Contains("ALPHA_FILE_BODY", StringComparison.Ordinal) ?? false));
+        Assert.DoesNotContain(
+            finalTurn,
+            message => message.Text?.Contains("Working memory summary for prior bulky context:", StringComparison.Ordinal) ?? false);
+    }
+
+    // Truncating an oversized retained-evidence entry must keep the accumulated store within its character budget:
+    // the truncation marker has to be reserved before slicing, otherwise the stored string overshoots the cap.
+    [Fact]
+    public void CompactReplayHistory_OversizedRetainedEvidence_StaysWithinCharBudget()
+    {
+        const int budget = 300;
+        var state = new ReviewLoopState
+        {
+            RetainToolEvidence = true,
+            MaxRetainedEvidenceChars = budget,
+        };
+
+        var toolCall = new FunctionCallContent(
+            "c1",
+            "get_file_content",
+            new Dictionary<string, object?> { ["path"] = "src/Foo.cs" });
+        state.Messages.Add(new ChatMessage(ChatRole.Assistant, [toolCall]));
+        state.Messages.Add(new ChatMessage(ChatRole.Tool, [new FunctionResultContent("c1", new string('x', 5000))]));
+        // A trailing turn so the oversized tool result is compacted rather than kept in the replay tail.
+        state.Messages.Add(new ChatMessage(ChatRole.Assistant, "next step"));
+
+        state.CompactReplayHistory();
+
+        Assert.True(state.HasRetainedEvidence);
+        Assert.True(
+            state.RetainedEvidenceChars <= state.MaxRetainedEvidenceChars,
+            $"retained evidence held {state.RetainedEvidenceChars} chars, exceeding the {budget} budget");
+    }
+
+    // The fallback dedup key (used when a tool call carries no path-like argument) must be independent of dictionary
+    // enumeration order so the same argument set always maps to the same retained-evidence entry.
+    [Fact]
+    public void BuildRetainedEvidenceMessage_FallbackKey_IsStableAcrossArgumentOrder()
+    {
+        static ReviewLoopState Retain(IDictionary<string, object?> arguments)
+        {
+            var state = new ReviewLoopState { RetainToolEvidence = true };
+            var toolCall = new FunctionCallContent("c1", "search_repo", arguments);
+            state.Messages.Add(new ChatMessage(ChatRole.Assistant, [toolCall]));
+            state.Messages.Add(new ChatMessage(ChatRole.Tool, [new FunctionResultContent("c1", "MATCHES")]));
+            state.Messages.Add(new ChatMessage(ChatRole.Assistant, "next step"));
+            state.CompactReplayHistory();
+            return state;
+        }
+
+        var forward = Retain(new Dictionary<string, object?> { ["query"] = "needle", ["scope"] = "src" });
+        var reversed = Retain(new Dictionary<string, object?> { ["scope"] = "src", ["query"] = "needle" });
+
+        Assert.Equal(
+            forward.BuildRetainedEvidenceMessage()!.Text,
+            reversed.BuildRetainedEvidenceMessage()!.Text);
+    }
+
+    // The recorded assistant-turn output is a structured envelope: verbatim text + each tool call as
+    // {name, arguments}. A turn that emits no reasoning content simply omits the reasoning field.
+    [Fact]
+    public async Task ReviewAsync_RecordsStructuredAssistantTurn_WithToolCalls()
+    {
+        var capturedOutputs = new List<string?>();
+        var recorder = Substitute.For<IProtocolRecorder>();
+        recorder
+            .WhenForAnyArgs(r => r.RecordAiCallAsync(Guid.Empty, 0, null, null, null, null, null))
+            .Do(call => capturedOutputs.Add(call.ArgAt<string?>(6)));
+
+        var mockClient = Substitute.For<IChatClient>();
+        mockClient
+            .GetResponseAsync(
+                Arg.Any<IEnumerable<ChatMessage>>(),
+                Arg.Any<ChatOptions?>(),
+                Arg.Any<CancellationToken>())
+            .Returns(
+                CreateFunctionCallResponse("call-1", "get_changed_files", "{}"),
+                CreateFinalReviewResponse("Done."));
+
+        var mockTools = Substitute.For<IReviewContextTools>();
+        mockTools.GetChangedFilesAsync(Arg.Any<CancellationToken>()).Returns([]);
+
+        var context = CreateContext(mockTools);
+        context.ActiveProtocolId = Guid.NewGuid();
+        context.ProtocolRecorder = recorder;
+
+        var sut = new ToolAwareAiReviewCore(
+            mockClient,
+            DefaultOptions(),
+            Substitute.For<ILogger<ToolAwareAiReviewCore>>());
+
+        await sut.ReviewAsync(CreatePullRequest(), context);
+
+        var toolTurn = capturedOutputs.FirstOrDefault(o => o is not null && o.Contains("\"toolCalls\"", StringComparison.Ordinal));
+        Assert.NotNull(toolTurn);
+        using var doc = JsonDocument.Parse(toolTurn!);
+        Assert.True(doc.RootElement.TryGetProperty("assistantText", out _));
+        // This turn produced no reasoning content, so the field is absent regardless of the capture default.
+        Assert.False(doc.RootElement.TryGetProperty("reasoning", out _));
+        var toolCalls = doc.RootElement.GetProperty("toolCalls");
+        Assert.Equal("get_changed_files", toolCalls[0].GetProperty("name").GetString());
+        Assert.True(toolCalls[0].TryGetProperty("arguments", out _));
+    }
+
+    // Reasoning capture is on by default: a turn that emits reasoning has it recorded under the default options.
+    [Fact]
+    public async Task ReviewAsync_CaptureReasoningOnByDefault_RecordsReasoning()
+    {
+        var capturedOutputs = new List<string?>();
+        var recorder = Substitute.For<IProtocolRecorder>();
+        recorder
+            .WhenForAnyArgs(r => r.RecordAiCallAsync(Guid.Empty, 0, null, null, null, null, null))
+            .Do(call => capturedOutputs.Add(call.ArgAt<string?>(6)));
+
+        var reasoningMessage = new ChatMessage(
+            ChatRole.Assistant,
+            [new TextReasoningContent("weighing the tradeoffs"), new TextContent(CreateFinalReviewJson("Done."))]);
+
+        var mockClient = Substitute.For<IChatClient>();
+        mockClient
+            .GetResponseAsync(
+                Arg.Any<IEnumerable<ChatMessage>>(),
+                Arg.Any<ChatOptions?>(),
+                Arg.Any<CancellationToken>())
+            .Returns(new ChatResponse(reasoningMessage));
+
+        var context = CreateContext();
+        context.ActiveProtocolId = Guid.NewGuid();
+        context.ProtocolRecorder = recorder;
+
+        var sut = new ToolAwareAiReviewCore(
+            mockClient,
+            DefaultOptions(),
+            Substitute.For<ILogger<ToolAwareAiReviewCore>>());
+
+        await sut.ReviewAsync(CreatePullRequest(), context);
+
+        var turn = capturedOutputs.FirstOrDefault(o => o is not null && o.Contains("\"reasoning\"", StringComparison.Ordinal));
+        Assert.NotNull(turn);
+        using var doc = JsonDocument.Parse(turn!);
+        Assert.Equal("weighing the tradeoffs", doc.RootElement.GetProperty("reasoning").GetString());
+    }
+
+    // The capture gate turns off: with capture disabled, reasoning is dropped even when the turn emits it.
+    [Fact]
+    public async Task ReviewAsync_CaptureReasoningDisabled_OmitsReasoning()
+    {
+        var capturedOutputs = new List<string?>();
+        var recorder = Substitute.For<IProtocolRecorder>();
+        recorder
+            .WhenForAnyArgs(r => r.RecordAiCallAsync(Guid.Empty, 0, null, null, null, null, null))
+            .Do(call => capturedOutputs.Add(call.ArgAt<string?>(6)));
+
+        var reasoningMessage = new ChatMessage(
+            ChatRole.Assistant,
+            [new TextReasoningContent("private chain of thought"), new TextContent(CreateFinalReviewJson("Done."))]);
+
+        var mockClient = Substitute.For<IChatClient>();
+        mockClient
+            .GetResponseAsync(
+                Arg.Any<IEnumerable<ChatMessage>>(),
+                Arg.Any<ChatOptions?>(),
+                Arg.Any<CancellationToken>())
+            .Returns(new ChatResponse(reasoningMessage));
+
+        var context = CreateContext();
+        context.ActiveProtocolId = Guid.NewGuid();
+        context.ProtocolRecorder = recorder;
+
+        var options = Microsoft.Extensions.Options.Options.Create(new AiReviewOptions { CaptureReasoningInProtocol = false });
+        var sut = new ToolAwareAiReviewCore(
+            mockClient,
+            options,
+            Substitute.For<ILogger<ToolAwareAiReviewCore>>());
+
+        await sut.ReviewAsync(CreatePullRequest(), context);
+
+        var turn = capturedOutputs.FirstOrDefault(o => o is not null && o.Contains("\"assistantText\"", StringComparison.Ordinal));
+        Assert.NotNull(turn);
+        using var doc = JsonDocument.Parse(turn!);
+        Assert.False(doc.RootElement.TryGetProperty("reasoning", out _));
+        Assert.DoesNotContain("private chain of thought", turn!, StringComparison.Ordinal);
+    }
+
+    // With reasoning capture enabled, reasoning content is recorded and bounded to the configured cap.
+    [Fact]
+    public async Task ReviewAsync_CaptureReasoningEnabled_RecordsBoundedReasoning()
+    {
+        var capturedOutputs = new List<string?>();
+        var recorder = Substitute.For<IProtocolRecorder>();
+        recorder
+            .WhenForAnyArgs(r => r.RecordAiCallAsync(Guid.Empty, 0, null, null, null, null, null))
+            .Do(call => capturedOutputs.Add(call.ArgAt<string?>(6)));
+
+        var longReasoning = new string('r', 5000);
+        var reasoningMessage = new ChatMessage(
+            ChatRole.Assistant,
+            [new TextReasoningContent(longReasoning), new TextContent(CreateFinalReviewJson("Done."))]);
+
+        var mockClient = Substitute.For<IChatClient>();
+        mockClient
+            .GetResponseAsync(
+                Arg.Any<IEnumerable<ChatMessage>>(),
+                Arg.Any<ChatOptions?>(),
+                Arg.Any<CancellationToken>())
+            .Returns(new ChatResponse(reasoningMessage));
+
+        var context = CreateContext();
+        context.ActiveProtocolId = Guid.NewGuid();
+        context.ProtocolRecorder = recorder;
+
+        var options = Microsoft.Extensions.Options.Options.Create(new AiReviewOptions { CaptureReasoningInProtocol = true, MaxReasoningSummaryChars = 512 });
+        var sut = new ToolAwareAiReviewCore(
+            mockClient,
+            options,
+            Substitute.For<ILogger<ToolAwareAiReviewCore>>());
+
+        await sut.ReviewAsync(CreatePullRequest(), context);
+
+        var turn = capturedOutputs.FirstOrDefault(o => o is not null && o.Contains("\"reasoning\"", StringComparison.Ordinal));
+        Assert.NotNull(turn);
+        using var doc = JsonDocument.Parse(turn!);
+        var reasoning = doc.RootElement.GetProperty("reasoning").GetString();
+        Assert.NotNull(reasoning);
+        // Bounded well below the raw 5000 chars, with a truncation marker.
+        Assert.True(reasoning!.Length < 700, $"reasoning length was {reasoning.Length}");
+        Assert.Contains("reasoning truncated", reasoning, StringComparison.Ordinal);
+    }
+
+    // A zero (or negative) reasoning cap must yield no reasoning field rather than indexing past the start of the
+    // string. Building a turn with a non-empty reasoning body and a zero cap must not throw.
+    [Fact]
+    public void Build_ZeroReasoningCap_OmitsReasoningWithoutThrowing()
+    {
+        var message = new ChatMessage(
+            ChatRole.Assistant,
+            [new TextReasoningContent("private reasoning body"), new TextContent("{\"summary\":\"ok\"}")]);
+
+        var record = AssistantTurnOutputRecord.Build(message, captureReasoning: true, maxReasoningChars: 0);
+
+        Assert.NotNull(record);
+        using var doc = JsonDocument.Parse(record!);
+        Assert.False(doc.RootElement.TryGetProperty("reasoning", out _));
+    }
+
     [Fact]
     public async Task ReviewAsync_NonFileByFileProviderManagedSession_StaysOnDirectChatClient()
     {
@@ -1360,8 +1716,10 @@ public class ToolAwareAiReviewCoreTests
                 Arg.Any<string?>());
     }
 
+    // A tool-only turn (empty assistant text) records the structured envelope with its tool calls,
+    // rather than collapsing to a bare "[tool calls: ...]" name list.
     [Fact]
-    public async Task ReviewAsync_WithToolOnlyResponseAndEmptyText_RecordsFunctionCallSummary()
+    public async Task ReviewAsync_WithToolOnlyResponseAndEmptyText_RecordsStructuredToolCalls()
     {
         var mockClient = Substitute.For<IChatClient>();
         var mockTools = Substitute.For<IReviewContextTools>();
@@ -1400,7 +1758,10 @@ public class ToolAwareAiReviewCoreTests
                 Arg.Any<long?>(),
                 Arg.Any<string?>(),
                 Arg.Any<string?>(),
-                "[tool calls: get_changed_files]",
+                Arg.Is<string?>(output =>
+                    output != null &&
+                    output.Contains("\"toolCalls\"", StringComparison.Ordinal) &&
+                    output.Contains("get_changed_files", StringComparison.Ordinal)),
                 Arg.Any<CancellationToken>());
     }
 
@@ -1906,9 +2267,10 @@ public class ToolAwareAiReviewCoreTests
         Assert.Equal(50L, context.LoopMetrics.TotalOutputTokens);
     }
 
-    // T017 — Per-file path: global System message absent from messages on iteration 2+
+    // Per-file path: the global persona System message stays present and first (byte-stable) on
+    // iterations 2+ so the whole system prefix remains eligible for the provider's prefix caching.
     [Fact]
-    public async Task ReviewAsync_PerFilePath_GlobalSystemMessageAbsentOnIteration2Plus()
+    public async Task ReviewAsync_PerFilePath_GlobalSystemMessageStaysFirstOnIteration2Plus()
     {
         // Arrange — two tool calls to force three GetResponseAsync calls (iterations 1, 2, 3)
         var toolCallResponse1 = CreateFunctionCallResponse("c1", "get_changed_files", "{}");
@@ -1963,13 +2325,14 @@ public class ToolAwareAiReviewCoreTests
         Assert.Equal(2, iter1SystemMsgs.Count);
         Assert.Contains(expectedGlobalSystemPrompt, iter1SystemMsgs[0].Text ?? "");
 
-        // On iteration 2+, only one System message (per-file context; global dropped)
+        // On iteration 2+, the global persona message is still present and first (stable prefix),
+        // followed by the per-file context and the working-memory summary of compacted evidence.
         var iter2Messages = capturedCallArgs[1];
         var iter2SystemMsgs = iter2Messages.Where(m => m.Role == ChatRole.System).ToList();
-        Assert.Equal(2, iter2SystemMsgs.Count);
-        Assert.DoesNotContain(expectedGlobalSystemPrompt, iter2SystemMsgs[0].Text ?? "");
-        Assert.Contains("src/Foo.cs", iter2SystemMsgs[0].Text ?? "");
-        Assert.Contains("Working memory summary for prior bulky context:", iter2SystemMsgs[1].Text ?? "", StringComparison.Ordinal);
+        Assert.Equal(3, iter2SystemMsgs.Count);
+        Assert.Contains(expectedGlobalSystemPrompt, iter2SystemMsgs[0].Text ?? "");
+        Assert.Contains("src/Foo.cs", iter2SystemMsgs[1].Text ?? "");
+        Assert.Contains("Working memory summary for prior bulky context:", iter2SystemMsgs[2].Text ?? "", StringComparison.Ordinal);
     }
 
     // T017 — RecordToolCallAsync receives iteration equal to current loop count

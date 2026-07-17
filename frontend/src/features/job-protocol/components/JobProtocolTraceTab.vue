@@ -1249,6 +1249,11 @@ function retryFileDiff() {
     color: var(--color-text-muted);
 }
 
+.status-superseded {
+    background: rgba(245, 158, 11, 0.15);
+    color: var(--color-warning);
+}
+
 @keyframes flash {
     0%, 100% { opacity: 1; }
     50% { opacity: 0.5; }

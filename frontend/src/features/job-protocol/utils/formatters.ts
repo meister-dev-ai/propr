@@ -243,6 +243,8 @@ export function statusBadgeClass(status: string | undefined | null): string {
             return 'status-badge status-processing'
         case 'failed':
             return 'status-badge status-failed'
+        case 'superseded':
+            return 'status-badge status-superseded'
         default:
             return 'status-badge status-pending'
     }

@@ -16,13 +16,17 @@ namespace MeisterProPR.Api.Tests.Workers;
 
 public class ReviewJobWorkerTests
 {
-    private static IOptions<WorkerOptions> CreateWorkerOptions(int pollIntervalMilliseconds = 25, int stuckJobTimeoutMinutes = 30)
+    private static IOptions<WorkerOptions> CreateWorkerOptions(
+        int pollIntervalMilliseconds = 25,
+        int stuckJobTimeoutMinutes = 30,
+        int maxConcurrentReviewJobs = 4)
     {
         return Options.Create(
             new WorkerOptions
             {
                 PollIntervalMilliseconds = pollIntervalMilliseconds,
                 StuckJobTimeoutMinutes = stuckJobTimeoutMinutes,
+                MaxConcurrentReviewJobs = maxConcurrentReviewJobs,
             });
     }
 
@@ -258,6 +262,67 @@ public class ReviewJobWorkerTests
 
         cts.Cancel();
         await worker.StopAsync(CancellationToken.None);
+    }
+
+    [Fact]
+    public async Task Worker_CapsConcurrentInFlightJobs_WhenParallelExecutionLicensed()
+    {
+        var repo = Substitute.For<IReviewJobExecutionStore>();
+        var jobs = Enumerable.Range(1, 5).Select(i => CreateJob(2000 + i)).ToArray();
+        repo.GetPendingJobs().Returns(jobs);
+        repo.GetStuckProcessingJobsAsync(Arg.Any<TimeSpan>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<IReadOnlyList<ReviewJob>>([]));
+        repo.TryTransitionAsync(Arg.Any<Guid>(), JobStatus.Pending, JobStatus.Processing, Arg.Any<CancellationToken>())
+            .Returns(true);
+
+        var startedCount = 0;
+        var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var processor = Substitute.For<IReviewJobProcessor>();
+        processor.ProcessAsync(Arg.Any<ReviewJob>(), Arg.Any<CancellationToken>())
+            .Returns(async _ =>
+            {
+                Interlocked.Increment(ref startedCount);
+                await release.Task;
+            });
+
+        var scopeFactory = Substitute.For<IServiceScopeFactory>();
+        var scope = Substitute.For<IServiceScope>();
+        var sp = Substitute.For<IServiceProvider>();
+        scopeFactory.CreateScope().Returns(scope);
+        scope.ServiceProvider.Returns(sp);
+        sp.GetService(typeof(IReviewJobExecutionStore)).Returns(repo);
+        sp.GetService(typeof(IReviewJobProcessor)).Returns(processor);
+
+        // No ILicensingCapabilityService registered -> parallel review execution is treated as enabled,
+        // so only the concurrency cap (2) should bound how many of the 5 pending jobs run at once.
+        var worker = new ReviewJobWorker(
+            scopeFactory,
+            CreateWorkerOptions(maxConcurrentReviewJobs: 2),
+            CreateMetrics(),
+            Substitute.For<ILogger<ReviewJobWorker>>());
+
+        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+        _ = worker.StartAsync(cts.Token);
+
+        try
+        {
+            await WaitUntilAsync(
+                () => Volatile.Read(ref startedCount) >= 2,
+                TimeSpan.FromSeconds(2),
+                "Worker never started the capped number of jobs.");
+
+            // Let several more poll cycles elapse; the cap must keep the started count pinned at 2
+            // while the in-flight jobs stay blocked.
+            await Task.Delay(200, CancellationToken.None);
+
+            Assert.Equal(2, Volatile.Read(ref startedCount));
+        }
+        finally
+        {
+            release.TrySetResult();
+            cts.Cancel();
+            await worker.StopAsync(CancellationToken.None);
+        }
     }
 
     [Fact]

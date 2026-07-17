@@ -449,7 +449,7 @@ public sealed class PullRequestSynchronizationService(
         {
             foreach (var supersededJob in supersededJobs)
             {
-                await jobs.SetCancelledAsync(supersededJob.Id, ct);
+                await jobs.SetSupersededAsync(supersededJob.Id, ct);
             }
 
             lifecycleDecision = PullRequestSynchronizationLifecycleDecision.CancelledActiveJobs;

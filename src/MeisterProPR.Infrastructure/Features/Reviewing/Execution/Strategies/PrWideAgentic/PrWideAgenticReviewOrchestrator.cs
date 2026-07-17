@@ -357,7 +357,8 @@ public sealed partial class PrWideAgenticReviewOrchestrator(
                 };
                 await PromptStageEvidenceRecorder.RecordAsync(baseContext, "pr_wide_planning_system", messages[0].Text, null, ct);
                 await PromptStageEvidenceRecorder.RecordAsync(baseContext, "pr_wide_planning_user", null, messages[1].Text, ct);
-                var response = await effectiveClient.GetResponseAsync(messages, new ChatOptions { ModelId = baseContext.ModelId }, ct);
+                var response = await effectiveClient.GetResponseAsync(
+                    messages, new ChatOptions { ModelId = baseContext.ModelId }.ApplyReasoningSummaryOptIn(this._options.CaptureReasoningInProtocol), ct);
                 await this.RecordAiResponseAsync(baseContext, 1, messages, response, "pr_wide_planning", ct);
                 var inputTokens = response.Usage?.InputTokenCount ?? 0;
                 var outputTokens = response.Usage?.OutputTokenCount ?? 0;
@@ -541,7 +542,8 @@ public sealed partial class PrWideAgenticReviewOrchestrator(
                 };
                 await PromptStageEvidenceRecorder.RecordAsync(baseContext, "pr_wide_investigation_system", messages[0].Text, null, ct);
                 await PromptStageEvidenceRecorder.RecordAsync(baseContext, "pr_wide_investigation_user", null, messages[1].Text, ct);
-                var response = await effectiveClient.GetResponseAsync(messages, new ChatOptions { ModelId = baseContext.ModelId }, ct);
+                var response = await effectiveClient.GetResponseAsync(
+                    messages, new ChatOptions { ModelId = baseContext.ModelId }.ApplyReasoningSummaryOptIn(this._options.CaptureReasoningInProtocol), ct);
                 await this.RecordAiResponseAsync(baseContext, 1, messages, response, $"pr_wide_investigation_{task.Id}", ct);
                 var inputTokens = response.Usage?.InputTokenCount ?? 0;
                 var outputTokens = response.Usage?.OutputTokenCount ?? 0;
@@ -872,7 +874,8 @@ public sealed partial class PrWideAgenticReviewOrchestrator(
                 };
                 await PromptStageEvidenceRecorder.RecordAsync(baseContext, "pr_wide_synthesis_system", messages[0].Text, null, ct);
                 await PromptStageEvidenceRecorder.RecordAsync(baseContext, "pr_wide_synthesis_user", null, messages[1].Text, ct);
-                var response = await effectiveClient.GetResponseAsync(messages, new ChatOptions { ModelId = baseContext.ModelId }, ct);
+                var response = await effectiveClient.GetResponseAsync(
+                    messages, new ChatOptions { ModelId = baseContext.ModelId }.ApplyReasoningSummaryOptIn(this._options.CaptureReasoningInProtocol), ct);
                 await this.RecordAiResponseAsync(baseContext, 1, messages, response, "pr_wide_synthesis", ct);
                 var inputTokens = response.Usage?.InputTokenCount ?? 0;
                 var outputTokens = response.Usage?.OutputTokenCount ?? 0;
@@ -922,7 +925,11 @@ public sealed partial class PrWideAgenticReviewOrchestrator(
 
         var inputSample = GetInputSample(messages);
         var systemPrompt = GetSystemPrompt(messages);
-        var outputSample = response.Text ?? response.Messages.LastOrDefault()?.Text;
+        var outputSample = AssistantTurnOutputRecord.Build(
+                               response.Messages.LastOrDefault(),
+                               this._options.CaptureReasoningInProtocol,
+                               this._options.MaxReasoningSummaryChars)
+                           ?? response.Text;
 
         await context.ProtocolRecorder.RecordAiCallAsync(
             context.ActiveProtocolId.Value,

@@ -3,11 +3,10 @@
 
 import { computed, onMounted, onUnmounted, ref, type ComputedRef, type Ref } from 'vue'
 import { useSession } from '@/composables/useSession'
-import { getJobProtocol, listJobs, restartJob } from '@/services/jobsService'
+import { listJobs, restartJob } from '@/services/jobsService'
 import type { components } from '@/types'
 
 type JobListItem = components['schemas']['JobListItem']
-type ReviewJobProtocolDto = components['schemas']['ReviewJobProtocolDto']
 
 export interface PrGroup {
   key: string
@@ -29,7 +28,6 @@ export interface PrGroup {
 
 export interface ReviewHistoryService {
   listJobs: (clientId?: string) => Promise<{ items: JobListItem[] }>
-  getJobProtocol: (jobId: string) => Promise<ReviewJobProtocolDto[]>
   restartJob: (jobId: string) => Promise<void>
 }
 
@@ -43,7 +41,6 @@ export interface ReviewHistoryViewModel {
   currentPage: Ref<number>
   isSummaryModalOpen: Ref<boolean>
   selectedSummary: Ref<string>
-  processingProtocols: Ref<Record<string, ReviewJobProtocolDto[]>>
   itemsVisibleDefault: number
   totalPages: ComputedRef<number>
   paginatedGroups: ComputedRef<PrGroup[]>
@@ -79,10 +76,6 @@ async function defaultListJobs(clientId?: string): Promise<{ items: JobListItem[
   }
 }
 
-async function defaultGetJobProtocol(jobId: string): Promise<ReviewJobProtocolDto[]> {
-  return (await getJobProtocol(jobId)) as ReviewJobProtocolDto[]
-}
-
 async function defaultRestartJob(jobId: string): Promise<void> {
   await restartJob(jobId)
 }
@@ -91,7 +84,6 @@ export function useReviewHistoryViewModel(options: UseReviewHistoryViewModelOpti
   const { hasClientRole } = useSession()
   const clientId = options.clientId
   const listJobsFn = options.reviewHistoryService?.listJobs ?? defaultListJobs
-  const getJobProtocolFn = options.reviewHistoryService?.getJobProtocol ?? defaultGetJobProtocol
   const restartJobFn = options.reviewHistoryService?.restartJob ?? defaultRestartJob
   const autoLoad = options.autoLoad ?? true
 
@@ -102,7 +94,6 @@ export function useReviewHistoryViewModel(options: UseReviewHistoryViewModelOpti
   const currentPage = ref(1)
   const isSummaryModalOpen = ref(false)
   const selectedSummary = ref('')
-  const processingProtocols = ref<Record<string, ReviewJobProtocolDto[]>>({})
   const restartingJobs = ref<Set<string>>(new Set())
   const restartError = ref('')
 
@@ -116,7 +107,9 @@ export function useReviewHistoryViewModel(options: UseReviewHistoryViewModelOpti
   let pollInterval: ReturnType<typeof setInterval> | null = null
 
   function openSummaryModal(item: JobListItem) {
-    if (item.status === 'processing' && item.id && processingProtocols.value[item.id]) {
+    // A processing item has no final summary yet; its summary cell renders the progress chip instead,
+    // so a click should never open the (empty) summary modal.
+    if (item.status === 'processing') {
       return
     }
 
@@ -124,21 +117,6 @@ export function useReviewHistoryViewModel(options: UseReviewHistoryViewModelOpti
     if (text && text.trim() !== '') {
       selectedSummary.value = text
       isSummaryModalOpen.value = true
-    }
-  }
-
-  async function loadProcessingProtocols(items: JobListItem[]) {
-    const activeIds = items
-      .filter((item) => item.status === 'processing' && item.id)
-      .map((item) => item.id as string)
-
-    for (const id of activeIds) {
-      try {
-        const data = await getJobProtocolFn(id)
-        processingProtocols.value[id] = data
-      } catch {
-        // Ignore transient protocol fetch failures while polling.
-      }
     }
   }
 
@@ -155,7 +133,6 @@ export function useReviewHistoryViewModel(options: UseReviewHistoryViewModelOpti
 
       const isProcessing = items.some((item) => item.status === 'processing' || item.status === 'pending')
       if (isProcessing) {
-        void loadProcessingProtocols(items)
         if (!pollInterval) {
           pollInterval = setInterval(() => {
             void loadJobs(false)
@@ -254,7 +231,6 @@ export function useReviewHistoryViewModel(options: UseReviewHistoryViewModelOpti
     currentPage,
     isSummaryModalOpen,
     selectedSummary,
-    processingProtocols,
     itemsVisibleDefault: ITEMS_VISIBLE_DEFAULT,
     totalPages,
     paginatedGroups,

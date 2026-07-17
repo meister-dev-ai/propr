@@ -19,17 +19,19 @@ namespace MeisterProPR.Infrastructure.AI.Providers.OpenAi;
 /// <summary>
 ///     OpenAI-hosted provider driver.
 /// </summary>
-/// <param name="allowPrivateEgress">When true (Development), the probe-target egress check permits localhost/private hosts.</param>
+/// <param name="allowPrivateEgress">When true (Development, or the operator opt-in), the probe-target check permits private/loopback hosts.</param>
+/// <param name="allowInsecureScheme">When true (Development only), the probe-target check permits a plain-http baseUrl.</param>
 public sealed class OpenAiProviderDriver(
     OpenAiCompatibleTransport transport,
     IHttpClientFactory httpClientFactory,
-    bool allowPrivateEgress) : IAiProviderDriver
+    bool allowPrivateEgress,
+    bool allowInsecureScheme) : IAiProviderDriver
 {
     public AiProviderKind ProviderKind => AiProviderKind.OpenAi;
 
     public string? ValidateProbeTarget(AiProbeTarget target)
     {
-        return AiProbeTargetValidation.ForOpenAiCompatible(target, allowPrivateEgress, rejectAzureHosts: true);
+        return AiProbeTargetValidation.ForOpenAiCompatible(target, allowPrivateEgress, allowInsecureScheme, rejectAzureHosts: true);
     }
 
     public async Task<AiModelDiscoveryResultDto> DiscoverModelsAsync(

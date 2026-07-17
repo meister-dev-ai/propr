@@ -8,6 +8,7 @@ import { createAdminClient } from '@/services/api'
 import { createDismissal } from '@/services/findingDismissalsService'
 import { restartJob } from '@/services/jobsService'
 import { formatTriageDecision } from './formatTriageDecision'
+import { parseAssistantTurnRecord } from '../utils/assistantTurn'
 import { originLabel, passKindLabel } from './passLabels'
 import { parseUnionContributions, parseUnionPassIndex, type UnionPassContribution } from './multiPassUnionContribution'
 import { useFileDiff } from './useFileDiff'
@@ -157,6 +158,7 @@ export function useJobProtocolViewModel() {
     const expandedPhaseGroups = ref<Set<string>>(new Set())
     const modalPhaseGroups = shallowRef<ToolPhaseGroup[]>([])
     const modalPhaseGroupsPending = ref(false)
+    const isReasoningExpanded = ref(false)
     const reviewStatus = ref<ReviewJobResultDto | null>(null)
     const jobDetail = ref<JobDetail | null>(null)
     const jobStatus = ref<string | null>(null)
@@ -1354,12 +1356,25 @@ export function useJobProtocolViewModel() {
         }
     })
 
+    // A structured assistant-turn record captured for an AI call: verbatim text (which may itself be the final
+    // review JSON), optional reasoning, and each tool call as { name, arguments }. Detected by the always-present
+    // "assistantText" key so it is distinguishable from a bare final-review JSON body or other event payloads.
+    const selectedAssistantTurn = computed(() =>
+        selectedMergedEvent.value?.callDetails.kind === 'aiCall'
+            ? parseAssistantTurnRecord(parsedOutputResult.value)
+            : null)
+
     const selectedToolPhaseTimings = computed(() => getEventTimingPresentation(selectedMergedEvent.value?.callDetails).phaseTimings)
 
     function resetEventModalExpansionState(): void {
         expandedPhaseGroups.value = new Set()
         modalPhaseGroups.value = []
         modalPhaseGroupsPending.value = false
+        isReasoningExpanded.value = false
+    }
+
+    function toggleReasoning(): void {
+        isReasoningExpanded.value = !isReasoningExpanded.value
     }
 
     async function scheduleModalPhaseGrouping(): Promise<void> {
@@ -1651,6 +1666,7 @@ export function useJobProtocolViewModel() {
         const isTerminal = jobLifecycleStatus === 'completed'
             || jobLifecycleStatus === 'failed'
             || jobLifecycleStatus === 'cancelled'
+            || jobLifecycleStatus === 'superseded'
         if (isProcessing && !pollInterval) {
             pollInterval = setInterval(() => {
                 void loadProtocol(false)
@@ -2186,6 +2202,9 @@ export function useJobProtocolViewModel() {
         parsedInputResult,
         selectedTriageDecision,
         parsedOutputResult,
+        selectedAssistantTurn,
+        isReasoningExpanded,
+        toggleReasoning,
         selectedToolPhaseTimings,
         selectedAiCallSessionTurn,
         selectedAiCallProviderManagedNote,

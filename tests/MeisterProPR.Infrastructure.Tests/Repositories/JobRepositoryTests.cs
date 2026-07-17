@@ -319,6 +319,130 @@ public sealed class JobRepositoryTests(PostgresContainerFixture fixture) : IAsyn
     }
 
     [Fact]
+    public async Task GetLatestReusableTerminalJobAsync_ReturnsMostReusableTerminalAtDifferentRevision()
+    {
+        var currentJob = MakeJob(prId: 720, iterationId: 3);
+        currentJob.SetReviewRevision(new ReviewRevision("cur-head", "base", null, "cur", "base...cur"));
+        await this._repo.AddAsync(currentJob);
+
+        var completed = MakeJob(currentJob.ClientId, currentJob.OrganizationUrl, currentJob.ProjectId, currentJob.RepositoryId, 720, 1);
+        completed.SetReviewRevision(new ReviewRevision("old1-head", "base", null, "old1", "base...old1"));
+        await this._repo.AddAsync(completed);
+        await this._repo.SetResultAsync(completed.Id, new ReviewResult("summary", []));
+        await this._repo.AddFileResultAsync(CreateCompletedFileResult(completed.Id, "src/A.cs"));
+        await this._repo.AddFileResultAsync(CreateCompletedFileResult(completed.Id, "src/B.cs"));
+
+        var failed = MakeJob(currentJob.ClientId, currentJob.OrganizationUrl, currentJob.ProjectId, currentJob.RepositoryId, 720, 2);
+        failed.SetReviewRevision(new ReviewRevision("old2-head", "base", null, "old2", "base...old2"));
+        await this._repo.AddAsync(failed);
+        await this._repo.SetFailedAsync(failed.Id, "boom");
+        await this._repo.AddFileResultAsync(CreateCompletedFileResult(failed.Id, "src/A.cs"));
+
+        var currentKey = ReviewRevisionKeys.GetStoredKey(currentJob.ReviewRevisionReference, currentJob.IterationId);
+
+        var found = await this._repo.GetLatestReusableTerminalJobAsync(
+            currentJob.OrganizationUrl,
+            currentJob.ProjectId,
+            currentJob.RepositoryId,
+            currentJob.PullRequestId,
+            currentJob.Id,
+            currentKey);
+
+        Assert.NotNull(found);
+        Assert.Equal(completed.Id, found!.Id);
+    }
+
+    [Fact]
+    public async Task GetLatestReusableTerminalJobAsync_ExcludesSameRevisionAndDeprioritizesCancelled()
+    {
+        var currentJob = MakeJob(prId: 721, iterationId: 5);
+        currentJob.SetReviewRevision(new ReviewRevision("cur-head", "base", null, "cur", "base...cur"));
+        await this._repo.AddAsync(currentJob);
+
+        // Same revision key as the current job — must be excluded even though it has the most results.
+        var sameRevision = MakeJob(currentJob.ClientId, currentJob.OrganizationUrl, currentJob.ProjectId, currentJob.RepositoryId, 721, 4);
+        sameRevision.SetReviewRevision(new ReviewRevision("cur-head", "base", null, "cur", "base...cur"));
+        await this._repo.AddAsync(sameRevision);
+        await this._repo.SetResultAsync(sameRevision.Id, new ReviewResult("summary", []));
+        await this._repo.AddFileResultAsync(CreateCompletedFileResult(sameRevision.Id, "src/A.cs"));
+        await this._repo.AddFileResultAsync(CreateCompletedFileResult(sameRevision.Id, "src/B.cs"));
+
+        // Abandoned-pull-request cancellation with more results — deprioritized below other terminal states.
+        var cancelled = MakeJob(currentJob.ClientId, currentJob.OrganizationUrl, currentJob.ProjectId, currentJob.RepositoryId, 721, 2);
+        cancelled.SetReviewRevision(new ReviewRevision("old2-head", "base", null, "old2", "base...old2"));
+        await this._repo.AddAsync(cancelled);
+        await this._repo.SetCancelledAsync(cancelled.Id);
+        await this._repo.AddFileResultAsync(CreateCompletedFileResult(cancelled.Id, "src/A.cs"));
+        await this._repo.AddFileResultAsync(CreateCompletedFileResult(cancelled.Id, "src/B.cs"));
+
+        // Failed with fewer results — still preferred over the abandoned cancellation.
+        var failed = MakeJob(currentJob.ClientId, currentJob.OrganizationUrl, currentJob.ProjectId, currentJob.RepositoryId, 721, 3);
+        failed.SetReviewRevision(new ReviewRevision("old3-head", "base", null, "old3", "base...old3"));
+        await this._repo.AddAsync(failed);
+        await this._repo.SetFailedAsync(failed.Id, "boom");
+        await this._repo.AddFileResultAsync(CreateCompletedFileResult(failed.Id, "src/A.cs"));
+
+        var found = await this._repo.GetLatestReusableTerminalJobAsync(
+            currentJob.OrganizationUrl,
+            currentJob.ProjectId,
+            currentJob.RepositoryId,
+            currentJob.PullRequestId,
+            currentJob.Id,
+            "cur");
+
+        Assert.NotNull(found);
+        Assert.Equal(failed.Id, found!.Id);
+    }
+
+    [Fact]
+    public async Task GetLatestReusableTerminalJobAsync_IncludesSupersededTerminalJob()
+    {
+        var currentJob = MakeJob(prId: 723, iterationId: 2);
+        currentJob.SetReviewRevision(new ReviewRevision("cur-head", "base", null, "cur", "base...cur"));
+        await this._repo.AddAsync(currentJob);
+
+        var superseded = MakeJob(currentJob.ClientId, currentJob.OrganizationUrl, currentJob.ProjectId, currentJob.RepositoryId, 723, 1);
+        superseded.SetReviewRevision(new ReviewRevision("old-head", "base", null, "old", "base...old"));
+        await this._repo.AddAsync(superseded);
+        await this._repo.TryTransitionAsync(superseded.Id, JobStatus.Pending, JobStatus.Processing);
+        await this._repo.SetSupersededAsync(superseded.Id);
+        await this._repo.AddFileResultAsync(CreateCompletedFileResult(superseded.Id, "src/A.cs"));
+
+        var found = await this._repo.GetLatestReusableTerminalJobAsync(
+            currentJob.OrganizationUrl,
+            currentJob.ProjectId,
+            currentJob.RepositoryId,
+            currentJob.PullRequestId,
+            currentJob.Id,
+            "cur");
+
+        Assert.NotNull(found);
+        Assert.Equal(superseded.Id, found!.Id);
+        Assert.Equal(JobStatus.Superseded, found.Status);
+    }
+
+    [Fact]
+    public async Task TryAddIfNoActiveDuplicateAsync_NewRevision_SupersedesActivePriorJob()
+    {
+        var priorJob = MakeJob(prId: 722, iterationId: 1);
+        priorJob.SetReviewRevision(new ReviewRevision("old-head", "base", null, "old", "base...old"));
+        await this._repo.AddAsync(priorJob);
+        await this._repo.TryTransitionAsync(priorJob.Id, JobStatus.Pending, JobStatus.Processing);
+
+        var newJob = MakeJob(priorJob.ClientId, priorJob.OrganizationUrl, priorJob.ProjectId, priorJob.RepositoryId, 722, 2);
+        newJob.SetReviewRevision(new ReviewRevision("new-head", "base", null, "new", "base...new"));
+
+        var result = await this._repo.TryAddIfNoActiveDuplicateAsync(newJob);
+
+        Assert.True(result.WasAdded);
+        Assert.Equal(1, result.CancelledSupersededJobCount);
+
+        var reloaded = this._repo.GetById(priorJob.Id);
+        Assert.NotNull(reloaded);
+        Assert.Equal(JobStatus.Superseded, reloaded!.Status);
+    }
+
+    [Fact]
     public async Task FindActiveJob_ReturnsNullForFailedJob()
     {
         // T039 / T009: Failed job should return null to allow retry
@@ -429,7 +553,7 @@ public sealed class JobRepositoryTests(PostgresContainerFixture fixture) : IAsyn
 
         var persistedOlder = await this._dbContext.ReviewJobs.FirstAsync(candidate => candidate.Id == older.Id);
         var persistedNewer = await this._dbContext.ReviewJobs.FirstAsync(candidate => candidate.Id == newer.Id);
-        Assert.Equal(JobStatus.Cancelled, persistedOlder.Status);
+        Assert.Equal(JobStatus.Superseded, persistedOlder.Status);
         Assert.Equal(JobStatus.Pending, persistedNewer.Status);
     }
 

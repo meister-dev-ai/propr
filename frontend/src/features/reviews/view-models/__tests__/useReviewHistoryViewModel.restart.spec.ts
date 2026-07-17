@@ -45,7 +45,6 @@ describe('useReviewHistoryViewModel restart action', () => {
       autoLoad: false,
       reviewHistoryService: {
         listJobs,
-        getJobProtocol: vi.fn().mockResolvedValue([]),
         restartJob,
       },
     })
@@ -68,7 +67,6 @@ describe('useReviewHistoryViewModel restart action', () => {
       autoLoad: false,
       reviewHistoryService: {
         listJobs: vi.fn().mockResolvedValue({ items: [] }),
-        getJobProtocol: vi.fn().mockResolvedValue([]),
         restartJob,
       },
     })
@@ -85,7 +83,6 @@ describe('useReviewHistoryViewModel restart action', () => {
       autoLoad: false,
       reviewHistoryService: {
         listJobs: vi.fn().mockResolvedValue({ items: [item] }),
-        getJobProtocol: vi.fn().mockResolvedValue([]),
         restartJob,
       },
     })

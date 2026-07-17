@@ -232,6 +232,11 @@ public sealed class ReviewingDiagnosticsServiceCollectionExtensionsTests
             return Task.CompletedTask;
         }
 
+        public Task SetSupersededAsync(Guid id, CancellationToken ct = default)
+        {
+            return Task.CompletedTask;
+        }
+
         public Task<IReadOnlyList<ReviewJob>> GetActiveJobsForConfigAsync(
             string organizationUrl,
             string projectId,
@@ -275,12 +280,13 @@ public sealed class ReviewingDiagnosticsServiceCollectionExtensionsTests
             return Task.FromResult<ReviewJob?>(null);
         }
 
-        public Task<ReviewJob?> GetLatestTerminalJobWithFileResultsByStoredRevisionAsync(
+        public Task<ReviewJob?> GetLatestReusableTerminalJobAsync(
             string organizationUrl,
             string projectId,
             string repositoryId,
             int pullRequestId,
-            string storedRevisionKey,
+            Guid excludeJobId,
+            string currentRevisionKey,
             CancellationToken ct = default)
         {
             return Task.FromResult<ReviewJob?>(null);

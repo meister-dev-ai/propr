@@ -16,9 +16,10 @@ internal static class AiProbeTargetValidation
 {
     /// <summary>Validates an OpenAI-compatible target (plain OpenAI or LiteLLM).</summary>
     /// <param name="target">The probe target.</param>
-    /// <param name="allowPrivateEgress">When true (Development), the https/private-address checks are skipped so a local provider stays reachable.</param>
+    /// <param name="allowPrivateEgress">When true, a private/loopback/link-local host is permitted so a self-hosted / on-prem endpoint can be configured (Development, or the operator opt-in).</param>
+    /// <param name="allowInsecureScheme">When true (Development only), a plain-http baseUrl is permitted so a local provider stays reachable. The private-egress opt-in does not relax this.</param>
     /// <param name="rejectAzureHosts">When true (plain OpenAI), an Azure-hosted URL is rejected so it is configured under the Azure provider kind instead.</param>
-    public static string? ForOpenAiCompatible(AiProbeTarget target, bool allowPrivateEgress, bool rejectAzureHosts)
+    public static string? ForOpenAiCompatible(AiProbeTarget target, bool allowPrivateEgress, bool allowInsecureScheme, bool rejectAzureHosts)
     {
         if (!Uri.TryCreate(target.BaseUrl, UriKind.Absolute, out var uri))
         {
@@ -30,7 +31,7 @@ internal static class AiProbeTargetValidation
             return "Azure-hosted OpenAI endpoints, including Azure AI Foundry OpenAI endpoints, must use providerKind 'azureOpenAi' instead of 'openAi'.";
         }
 
-        var egressError = ValidateEgress(uri, allowPrivateEgress);
+        var egressError = ValidateEgress(uri, allowPrivateEgress, allowInsecureScheme);
         if (egressError is not null)
         {
             return egressError;
@@ -67,19 +68,19 @@ internal static class AiProbeTargetValidation
         return RequireApiKey(target, "An API key or Azure identity is required for this provider.");
     }
 
-    private static string? ValidateEgress(Uri uri, bool allowPrivateEgress)
+    private static string? ValidateEgress(Uri uri, bool allowPrivateEgress, bool allowInsecureScheme)
     {
-        if (allowPrivateEgress)
-        {
-            return null;
-        }
-
-        if (!string.Equals(uri.Scheme, Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase))
+        // https is required unless a Development-local provider needs plain http. The private-egress opt-in
+        // intentionally does NOT relax the scheme — a self-hosted / on-prem endpoint must still use https.
+        if (!allowInsecureScheme
+            && !string.Equals(uri.Scheme, Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase))
         {
             return "baseUrl must use https.";
         }
 
-        if (EgressAddressPolicy.IsBlockedEgressHost(uri.Host))
+        // The private/loopback/link-local block is lifted only when private egress is permitted — Development,
+        // or the operator opt-in — so an on-prem endpoint can be configured. It stays blocked by default.
+        if (!allowPrivateEgress && EgressAddressPolicy.IsBlockedEgressHost(uri.Host))
         {
             return "baseUrl must not target a private, loopback, or link-local address.";
         }

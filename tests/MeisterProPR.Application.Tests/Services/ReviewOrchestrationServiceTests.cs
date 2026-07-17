@@ -21,7 +21,7 @@ using NSubstitute.ExceptionExtensions;
 
 namespace MeisterProPR.Application.Tests.Services;
 
-public class ReviewOrchestrationServiceTests
+public partial class ReviewOrchestrationServiceTests
 {
     private static (
         IReviewJobExecutionStore jobs,
@@ -3372,7 +3372,24 @@ public class ReviewOrchestrationServiceTests
             priorJob.FileReviewResults.Add(result);
         }
 
+        // Default a prior job to a completed (full-coverage) baseline; resume/partial tests override the
+        // status afterward. Full coverage keeps the delta-scoped carry-forward path exercised here.
+        priorJob.Status = JobStatus.Completed;
+        priorJob.CompletedAt = DateTimeOffset.UtcNow;
         return priorJob;
+    }
+
+    private static void SetupReusableBaselineReturns(IReviewJobExecutionStore jobs, ReviewJob? baseline)
+    {
+        jobs.GetLatestReusableTerminalJobAsync(
+                Arg.Any<string>(),
+                Arg.Any<string>(),
+                Arg.Any<string>(),
+                Arg.Any<int>(),
+                Arg.Any<Guid>(),
+                Arg.Any<string>(),
+                Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(baseline));
     }
 
     [Fact]
@@ -3429,14 +3446,7 @@ public class ReviewOrchestrationServiceTests
 
         // Prior job (iteration 1) has both Changed.cs and Unchanged.cs
         var priorJob = BuildPriorJob(job, 1, "src/Changed.cs", "src/Unchanged.cs");
-        jobs.GetCompletedJobWithFileResultsAsync(
-                Arg.Any<string>(),
-                Arg.Any<string>(),
-                Arg.Any<string>(),
-                Arg.Any<int>(),
-                1,
-                Arg.Any<CancellationToken>())
-            .Returns(Task.FromResult<ReviewJob?>(priorJob));
+        SetupReusableBaselineReturns(jobs, priorJob);
 
         var sut = CreateService(
             jobs,
@@ -3474,7 +3484,7 @@ public class ReviewOrchestrationServiceTests
     }
 
     [Fact]
-    public async Task ProcessAsync_NonAdoStoredRevision_UsesStoredRevisionBaselineLookup()
+    public async Task ProcessAsync_NonAdoNewRevision_SelectsReusableBaselineFromJobHistory()
     {
         var (jobs, prFetcher, orchestrator, commentPoster, reviewerManager, clientRegistry, prScanRepository, _, _,
                 logger) =
@@ -3535,14 +3545,7 @@ public class ReviewOrchestrationServiceTests
         var priorJob = BuildPriorJob(job, 1, "src/Changed.cs", "src/Unchanged.cs");
         priorJob.SetReviewRevision(new ReviewRevision("old-head", "base-sha", null, "old-head", "base-sha...old-head"));
 
-        jobs.GetCompletedJobWithFileResultsByStoredRevisionAsync(
-                Arg.Any<string>(),
-                Arg.Any<string>(),
-                Arg.Any<string>(),
-                Arg.Any<int>(),
-                "base-sha...old-head",
-                Arg.Any<CancellationToken>())
-            .Returns(Task.FromResult<ReviewJob?>(priorJob));
+        SetupReusableBaselineReturns(jobs, priorJob);
 
         var sut = CreateService(
             jobs,
@@ -3556,22 +3559,17 @@ public class ReviewOrchestrationServiceTests
 
         await sut.ProcessAsync(job, CancellationToken.None);
 
+        // Baseline is selected from job history, excluding the current job and its own revision key.
         await jobs.Received(1)
-            .GetCompletedJobWithFileResultsByStoredRevisionAsync(
+            .GetLatestReusableTerminalJobAsync(
                 job.OrganizationUrl,
                 job.ProjectId,
                 job.RepositoryId,
                 job.PullRequestId,
-                "base-sha...old-head",
+                job.Id,
+                "new-head",
                 Arg.Any<CancellationToken>());
-        await jobs.DidNotReceive()
-            .GetCompletedJobWithFileResultsAsync(
-                Arg.Any<string>(),
-                Arg.Any<string>(),
-                Arg.Any<string>(),
-                Arg.Any<int>(),
-                Arg.Any<int>(),
-                Arg.Any<CancellationToken>());
+        // Same-revision resume lookup still runs against the current revision key.
         await jobs.Received(1)
             .GetBestTerminalJobWithFileResultsByStoredRevisionAsync(
                 job.OrganizationUrl,
@@ -3579,6 +3577,11 @@ public class ReviewOrchestrationServiceTests
                 job.RepositoryId,
                 job.PullRequestId,
                 "new-head",
+                Arg.Any<CancellationToken>());
+        // The full-coverage baseline is delta-scoped, so its unchanged file carries forward.
+        await jobs.Received(1)
+            .AddFileResultAsync(
+                Arg.Is<ReviewFileResult>(r => r.IsCarriedForward && r.FilePath == "src/Unchanged.cs"),
                 Arg.Any<CancellationToken>());
     }
 
@@ -3827,14 +3830,7 @@ public class ReviewOrchestrationServiceTests
             .Returns(Task.FromResult<ReviewPrScan?>(scan));
 
         var priorBaseline = BuildPriorJob(job, 1, "src/Changed.cs", "src/Unchanged.cs");
-        jobs.GetCompletedJobWithFileResultsAsync(
-                Arg.Any<string>(),
-                Arg.Any<string>(),
-                Arg.Any<string>(),
-                Arg.Any<int>(),
-                1,
-                Arg.Any<CancellationToken>())
-            .Returns(Task.FromResult<ReviewJob?>(priorBaseline));
+        SetupReusableBaselineReturns(jobs, priorBaseline);
 
         var failedCurrentJob = BuildPriorJob(job, job.IterationId, "src/Changed.cs");
         failedCurrentJob.Status = JobStatus.Failed;
@@ -4055,8 +4051,10 @@ public class ReviewOrchestrationServiceTests
     }
 
     [Fact]
-    public async Task ProcessAsync_NonAdoCancelledBaseline_FallsBackToFullReviewWithoutCarryForward()
+    public async Task ProcessAsync_SupersededFullCoverageBaseline_CarriesForwardUnchangedAndDeltaReviews()
     {
+        // A prior push's review that finished all its in-scope files before being superseded by this push
+        // is a full-coverage baseline: its unchanged files carry forward and only the delta is re-reviewed.
         var (jobs, prFetcher, orchestrator, commentPoster, reviewerManager, clientRegistry, prScanRepository, _, _, logger) =
             CreateDeps();
 
@@ -4090,14 +4088,14 @@ public class ReviewOrchestrationServiceTests
         prScanRepository.GetAsync(Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
             .Returns(
                 Task.FromResult<ReviewPrScan?>(new ReviewPrScan(Guid.NewGuid(), job.ClientId, job.RepositoryId, job.PullRequestId, "base-sha...old-head")));
-        jobs.GetCompletedJobWithFileResultsByStoredRevisionAsync(
-                Arg.Any<string>(),
-                Arg.Any<string>(),
-                Arg.Any<string>(),
-                Arg.Any<int>(),
-                "base-sha...old-head",
-                Arg.Any<CancellationToken>())
-            .Returns(Task.FromResult<ReviewJob?>(null));
+
+        // Superseded prior at the old revision that reviewed all its in-scope files (full coverage).
+        var supersededBaseline = BuildPriorJob(job, 1, "src/Changed.cs", "src/Unchanged.cs");
+        supersededBaseline.Status = JobStatus.Superseded;
+        supersededBaseline.SetInScopeChangedFileCount(2);
+        supersededBaseline.SetReviewRevision(new ReviewRevision("old-head", "base-sha", null, "old-head", "base-sha...old-head"));
+        SetupReusableBaselineReturns(jobs, supersededBaseline);
+
         prFetcher.FetchAsync(
                 Arg.Any<string>(),
                 Arg.Any<string>(),
@@ -4130,6 +4128,7 @@ public class ReviewOrchestrationServiceTests
 
         await sut.ProcessAsync(job, CancellationToken.None);
 
+        // Delta-scoped against the superseded baseline's revision (not a full re-fetch).
         await prFetcher.Received(1)
             .FetchAsync(
                 job.OrganizationUrl,
@@ -4137,15 +4136,140 @@ public class ReviewOrchestrationServiceTests
                 job.RepositoryId,
                 job.PullRequestId,
                 job.IterationId,
-                null,
+                Arg.Any<int?>(),
                 job.ClientId,
                 Arg.Any<CancellationToken>(),
-                Arg.Any<ReviewRevision?>(),
+                Arg.Is<ReviewRevision?>(r => r != null && r.ProviderRevisionId == "old-head"),
                 Arg.Any<IReviewRepositoryWorkspace?>());
+        // Unchanged file carries forward; the changed file is left for the fresh delta review.
+        await jobs.Received(1)
+            .AddFileResultAsync(
+                Arg.Is<ReviewFileResult>(r => r.IsCarriedForward && r.FilePath == "src/Unchanged.cs"),
+                Arg.Any<CancellationToken>());
         await jobs.DidNotReceive()
             .AddFileResultAsync(
-                Arg.Is<ReviewFileResult>(r => r.IsCarriedForward),
+                Arg.Is<ReviewFileResult>(r => r.IsCarriedForward && r.FilePath == "src/Changed.cs"),
                 Arg.Any<CancellationToken>());
+        await orchestrator.Received(1)
+            .ReviewAsync(
+                Arg.Any<ReviewJob>(),
+                Arg.Any<PullRequest>(),
+                Arg.Any<ReviewSystemContext>(),
+                Arg.Any<CancellationToken>(),
+                Arg.Any<IChatClient?>());
+    }
+
+    [Fact]
+    public async Task ProcessAsync_PartialBaseline_FullFetchesAndCarriesForwardOnlyReviewedFiles()
+    {
+        // A prior review cancelled/superseded BEFORE it reviewed every in-scope file is a partial baseline.
+        // The current review must fetch the FULL pull request (no delta compare) so a file that is unchanged
+        // since the baseline but was never reviewed by it is still reviewed; only the baseline's reviewed
+        // files carry forward as an AI-skip set.
+        var (jobs, prFetcher, orchestrator, commentPoster, reviewerManager, clientRegistry, prScanRepository, _, _, logger) =
+            CreateDeps();
+
+        var job = CreateJob();
+        job.SetProviderReviewContext(
+            new CodeReviewRef(
+                new RepositoryRef(
+                    new ProviderHostRef(ScmProvider.GitHub, "https://github.com"),
+                    "repo",
+                    "acme",
+                    "acme/repo"),
+                CodeReviewPlatformKind.PullRequest,
+                "42",
+                job.PullRequestId));
+        job.SetReviewRevision(new ReviewRevision("new-head", "base-sha", null, "new-head", "base-sha...new-head"));
+
+        // Full PR manifest — the baseline reviewed AlreadyReviewed.cs but never reached NeverReviewed.cs.
+        var pr = new PullRequest(
+            job.OrganizationUrl,
+            job.ProjectId,
+            job.RepositoryId,
+            job.RepositoryId,
+            job.PullRequestId,
+            job.IterationId,
+            "GitHub PR",
+            null,
+            "feature/x",
+            "main",
+            [
+                new ChangedFile("src/AlreadyReviewed.cs", ChangeType.Edit, "content", "diff"),
+                new ChangedFile("src/NeverReviewed.cs", ChangeType.Edit, "content", "diff"),
+            ]);
+
+        SetupReviewerIdReturns(clientRegistry, job, Guid.NewGuid());
+
+        // Partial baseline: only 1 of 3 in-scope files reviewed before it was superseded.
+        var partialBaseline = BuildPriorJob(job, 1, "src/AlreadyReviewed.cs");
+        partialBaseline.Status = JobStatus.Superseded;
+        partialBaseline.SetInScopeChangedFileCount(3);
+        partialBaseline.SetReviewRevision(new ReviewRevision("old-head", "base-sha", null, "old-head", "base-sha...old-head"));
+        SetupReusableBaselineReturns(jobs, partialBaseline);
+
+        prFetcher.FetchAsync(
+                Arg.Any<string>(),
+                Arg.Any<string>(),
+                Arg.Any<string>(),
+                Arg.Any<int>(),
+                Arg.Any<int>(),
+                Arg.Any<int?>(),
+                Arg.Any<Guid?>(),
+                Arg.Any<CancellationToken>(),
+                Arg.Any<ReviewRevision?>(),
+                Arg.Any<IReviewRepositoryWorkspace?>())
+            .Returns(pr);
+        orchestrator.ReviewAsync(
+                Arg.Any<ReviewJob>(),
+                Arg.Any<PullRequest>(),
+                Arg.Any<ReviewSystemContext>(),
+                Arg.Any<CancellationToken>(),
+                Arg.Any<IChatClient?>())
+            .Returns(CreateReviewResult());
+
+        var sut = CreateService(
+            jobs,
+            prFetcher,
+            orchestrator,
+            commentPoster,
+            reviewerManager,
+            clientRegistry,
+            prScanRepository,
+            logger);
+
+        await sut.ProcessAsync(job, CancellationToken.None);
+
+        // Full fetch: no delta compare revision is passed for a partial baseline.
+        await prFetcher.Received(1)
+            .FetchAsync(
+                Arg.Is(job.OrganizationUrl),
+                Arg.Is(job.ProjectId),
+                Arg.Is(job.RepositoryId),
+                Arg.Is(job.PullRequestId),
+                Arg.Is(job.IterationId),
+                Arg.Any<int?>(),
+                Arg.Is<Guid?>(job.ClientId),
+                Arg.Any<CancellationToken>(),
+                Arg.Is<ReviewRevision?>(r => r == null),
+                Arg.Any<IReviewRepositoryWorkspace?>());
+        // The baseline's reviewed file carries forward (AI-skip)…
+        await jobs.Received(1)
+            .AddFileResultAsync(
+                Arg.Is<ReviewFileResult>(r => r.IsCarriedForward && r.FilePath == "src/AlreadyReviewed.cs"),
+                Arg.Any<CancellationToken>());
+        // …but the never-reviewed file must NOT be inherited — it has to be reviewed fresh.
+        await jobs.DidNotReceive()
+            .AddFileResultAsync(
+                Arg.Is<ReviewFileResult>(r => r.IsCarriedForward && r.FilePath == "src/NeverReviewed.cs"),
+                Arg.Any<CancellationToken>());
+        await orchestrator.Received(1)
+            .ReviewAsync(
+                Arg.Any<ReviewJob>(),
+                Arg.Any<PullRequest>(),
+                Arg.Any<ReviewSystemContext>(),
+                Arg.Any<CancellationToken>(),
+                Arg.Any<IChatClient?>());
     }
 
     [Fact]
@@ -4194,14 +4318,7 @@ public class ReviewOrchestrationServiceTests
 
         // Prior job has files (all will be carried forward since delta is empty)
         var priorJob = BuildPriorJob(job, 1, "src/Alpha.cs", "src/Beta.cs");
-        jobs.GetCompletedJobWithFileResultsAsync(
-                Arg.Any<string>(),
-                Arg.Any<string>(),
-                Arg.Any<string>(),
-                Arg.Any<int>(),
-                Arg.Any<int>(),
-                Arg.Any<CancellationToken>())
-            .Returns(Task.FromResult<ReviewJob?>(priorJob));
+        SetupReusableBaselineReturns(jobs, priorJob);
 
         var sut = CreateService(
             jobs,
@@ -4280,14 +4397,7 @@ public class ReviewOrchestrationServiceTests
 
         // Prior job: Changed.cs and Unchanged.cs; only Unchanged.cs will be carried forward
         var priorJob = BuildPriorJob(job, 1, "src/Changed.cs", "src/Unchanged.cs");
-        jobs.GetCompletedJobWithFileResultsAsync(
-                Arg.Any<string>(),
-                Arg.Any<string>(),
-                Arg.Any<string>(),
-                Arg.Any<int>(),
-                Arg.Any<int>(),
-                Arg.Any<CancellationToken>())
-            .Returns(Task.FromResult<ReviewJob?>(priorJob));
+        SetupReusableBaselineReturns(jobs, priorJob);
 
         var sut = CreateService(
             jobs,

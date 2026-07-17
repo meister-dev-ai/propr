@@ -165,6 +165,12 @@ public interface IJobRepository
     /// <summary>Marks the job as cancelled. No-op if the job does not exist or is already in a terminal state.</summary>
     Task SetCancelledAsync(Guid id, CancellationToken ct = default);
 
+    /// <summary>
+    ///     Marks the job as superseded because a newer push arrived for the same pull request.
+    ///     No-op if the job does not exist or is already in a terminal state.
+    /// </summary>
+    Task SetSupersededAsync(Guid id, CancellationToken ct = default);
+
     /// <summary>Returns all Pending or Processing jobs for the given ADO organisation/project combination.</summary>
     Task<IReadOnlyList<ReviewJob>> GetActiveJobsForConfigAsync(
         string organizationUrl,
@@ -211,16 +217,22 @@ public interface IJobRepository
         CancellationToken ct = default);
 
     /// <summary>
-    ///     Returns the most-recent terminal review job for the given pull request whose persisted revision key matches
-    ///     the supplied stored revision key, with <see cref="ReviewJob.FileReviewResults" /> eagerly loaded, or
-    ///     <see langword="null" />.
+    ///     Returns the most-recent terminal review job usable as a cross-revision carry-forward baseline for the
+    ///     given pull request: any job in a terminal state (<see cref="JobStatus.Completed" />,
+    ///     <see cref="JobStatus.Failed" />, <see cref="JobStatus.Cancelled" />, or
+    ///     <see cref="JobStatus.Superseded" />) that is not <paramref name="excludeJobId" /> and whose stored
+    ///     revision key differs from <paramref name="currentRevisionKey" />. Candidates are ranked by count of
+    ///     usable reviewed file results (descending) and then most-recent completion, with plain
+    ///     <see cref="JobStatus.Cancelled" /> (abandoned pull request) deprioritized. <see cref="ReviewJob.FileReviewResults" />
+    ///     is eagerly loaded. Returns <see langword="null" /> when no such job exists.
     /// </summary>
-    Task<ReviewJob?> GetLatestTerminalJobWithFileResultsByStoredRevisionAsync(
+    Task<ReviewJob?> GetLatestReusableTerminalJobAsync(
         string organizationUrl,
         string projectId,
         string repositoryId,
         int pullRequestId,
-        string storedRevisionKey,
+        Guid excludeJobId,
+        string currentRevisionKey,
         CancellationToken ct = default);
 
     /// <summary>

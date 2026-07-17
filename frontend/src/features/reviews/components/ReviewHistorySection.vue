@@ -79,7 +79,7 @@
                         </div>
 
                         <div class="list-summary-col" :class="{ 'summary-truncate': item.status !== 'processing' }" @click="openSummaryModal(item)">
-                            <template v-if="item.status === 'processing' && item.id && processingProtocols[item.id]">
+                            <template v-if="item.status === 'processing' && item.id">
                                 <div class="active-chips">
                                     <RouterLink 
                                         v-if="canInspectClient(props.clientId || item.clientId)"
@@ -196,7 +196,6 @@ const {
     currentPage,
     isSummaryModalOpen,
     selectedSummary,
-    processingProtocols,
     totalPages,
     paginatedGroups,
     itemsVisibleDefault,
@@ -257,6 +256,7 @@ function statusBadgeClass(status: JobStatus | undefined): string {
         case 'processing': return 'status-badge status-processing'
         case 'pending': return 'status-badge status-pending'
         case 'failed': return 'status-badge status-failed'
+        case 'superseded': return 'status-badge status-superseded'
         default: return 'status-badge'
     }
 }
@@ -523,6 +523,11 @@ function prReviewLink(group: PrGroup): object {
 .status-failed {
     background: rgba(239, 68, 68, 0.15);
     color: var(--color-danger);
+}
+
+.status-superseded {
+    background: rgba(245, 158, 11, 0.15);
+    color: var(--color-warning);
 }
 
 /* Row variants */

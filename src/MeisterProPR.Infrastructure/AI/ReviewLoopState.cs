@@ -1,6 +1,7 @@
 // Copyright (c) Andreas Rain.
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
+using System.Text;
 using MeisterProPR.Application.Features.Reviewing.Execution.Models;
 using MeisterProPR.Domain.ValueObjects;
 using Microsoft.Extensions.AI;
@@ -10,6 +11,17 @@ namespace MeisterProPR.Infrastructure.AI;
 /// <summary>Mutable state tracked across iterations of the agentic review loop.</summary>
 internal sealed class ReviewLoopState
 {
+    /// <summary>
+    ///     Tool evidence retained across compaction, keyed by a stable evidence key (tool name + primary path
+    ///     argument) so a repeated fetch of the same file is not stored twice. Insertion order is preserved so the
+    ///     rendered block is append-only across turns, keeping its leading bytes stable for prefix caching.
+    /// </summary>
+    private static readonly string[] PathArgumentNames = ["path", "filePath", "file_path", "file"];
+
+    private readonly Dictionary<string, string> retainedEvidence = new(StringComparer.Ordinal);
+    private readonly List<string> retainedEvidenceOrder = [];
+    private int retainedEvidenceChars;
+
     /// <summary>Gets or sets the current iteration number (one-based).</summary>
     public int Iteration { get; set; } = 1;
 
@@ -62,6 +74,25 @@ internal sealed class ReviewLoopState
 
     /// <summary>Gets the in-memory provider continuation token used for provider-managed turns.</summary>
     public ResponseContinuationToken? ProviderContinuationToken { get; private set; }
+
+    /// <summary>
+    ///     Gets or sets whether tool evidence fetched during the loop is retained across compaction and
+    ///     re-injected as a deduplicated block, rather than dropped. Experimental / A-B only — this alters the
+    ///     token profile and the review's convergence behaviour and must be validated on the evaluation harness.
+    /// </summary>
+    public bool RetainToolEvidence { get; set; }
+
+    /// <summary>Gets or sets the maximum number of distinct retained tool-evidence entries.</summary>
+    public int MaxRetainedEvidenceEntries { get; set; } = 16;
+
+    /// <summary>Gets or sets the maximum total character budget for the retained tool-evidence block.</summary>
+    public int MaxRetainedEvidenceChars { get; set; } = 48_000;
+
+    /// <summary>Gets whether any tool evidence has been retained for re-injection.</summary>
+    public bool HasRetainedEvidence => this.retainedEvidenceOrder.Count > 0;
+
+    /// <summary>Gets the total characters currently held across the retained tool-evidence store.</summary>
+    public int RetainedEvidenceChars => this.retainedEvidenceChars;
 
     /// <summary>Records a single tool invocation.</summary>
     /// <param name="toolName">Name of the tool called.</param>
@@ -221,6 +252,11 @@ internal sealed class ReviewLoopState
 
         var replayTail = GetReplayTail(messagesToCompact);
 
+        if (this.RetainToolEvidence)
+        {
+            this.RetainToolEvidenceFromCompaction(messagesToCompact, replayTail);
+        }
+
         this.Messages.Clear();
         this.Messages.AddRange(this.PersistentMessages);
         this.Messages.AddRange(replayTail);
@@ -232,6 +268,128 @@ internal sealed class ReviewLoopState
             LastUpdatedAt = DateTimeOffset.UtcNow,
         };
         this.ReplayedPayloadSummary = DescribeReplay(this.Messages);
+    }
+
+    /// <summary>
+    ///     Builds the retained tool-evidence message re-injected into later turns, or <see langword="null" /> when
+    ///     no evidence has been retained. Rendered as a single user message so it stays out of the durable system
+    ///     prefix (which must remain byte-stable for prefix caching).
+    /// </summary>
+    public ChatMessage? BuildRetainedEvidenceMessage()
+    {
+        if (this.retainedEvidenceOrder.Count == 0)
+        {
+            return null;
+        }
+
+        var builder = new StringBuilder();
+        builder.Append(
+            "Evidence already gathered in earlier steps of this review. Reuse it and do NOT call tools to re-fetch " +
+            "the same content:\n");
+        foreach (var key in this.retainedEvidenceOrder)
+        {
+            builder.Append("\n=== ").Append(key).Append(" ===\n").Append(this.retainedEvidence[key]).Append('\n');
+        }
+
+        return new ChatMessage(ChatRole.User, builder.ToString());
+    }
+
+    /// <summary>
+    ///     Captures tool results that are about to be dropped by compaction into the retained-evidence store, keyed
+    ///     by tool name and primary path argument. Results still present in <paramref name="keptTail" /> are skipped
+    ///     so they are not rendered twice in the same turn.
+    /// </summary>
+    private void RetainToolEvidenceFromCompaction(
+        IReadOnlyList<ChatMessage> compactedMessages,
+        IReadOnlyList<ChatMessage> keptTail)
+    {
+        var callInfo = new Dictionary<string, FunctionCallContent>(StringComparer.Ordinal);
+        foreach (var message in compactedMessages)
+        {
+            foreach (var call in message.Contents.OfType<FunctionCallContent>())
+            {
+                if (!string.IsNullOrEmpty(call.CallId))
+                {
+                    callInfo[call.CallId] = call;
+                }
+            }
+        }
+
+        foreach (var message in compactedMessages)
+        {
+            if (keptTail.Contains(message))
+            {
+                continue;
+            }
+
+            foreach (var result in message.Contents.OfType<FunctionResultContent>())
+            {
+                if (result.Result is not string content || string.IsNullOrWhiteSpace(content))
+                {
+                    continue;
+                }
+
+                callInfo.TryGetValue(result.CallId, out var call);
+                this.AddRetainedEvidence(BuildEvidenceKey(call), content);
+            }
+        }
+    }
+
+    private void AddRetainedEvidence(string key, string content)
+    {
+        if (this.retainedEvidence.ContainsKey(key) ||
+            this.retainedEvidenceOrder.Count >= this.MaxRetainedEvidenceEntries)
+        {
+            return;
+        }
+
+        var remaining = this.MaxRetainedEvidenceChars - this.retainedEvidenceChars;
+        if (remaining < 256)
+        {
+            return;
+        }
+
+        if (content.Length > remaining)
+        {
+            const string marker = "\n[retained evidence truncated to fit budget]";
+
+            // Reserve room for the marker before slicing so the stored string (content + marker) fits within the
+            // remaining budget. Slicing to the full remaining first and then appending the marker would push the
+            // stored length — and thus retainedEvidenceChars — past MaxRetainedEvidenceChars.
+            var allowed = Math.Max(0, remaining - marker.Length);
+            var cut = allowed;
+            if (cut > 0 && char.IsHighSurrogate(content[cut - 1]))
+            {
+                cut--;
+            }
+
+            content = content[..cut] + marker;
+        }
+
+        this.retainedEvidence[key] = content;
+        this.retainedEvidenceOrder.Add(key);
+        this.retainedEvidenceChars += content.Length;
+    }
+
+    private static string BuildEvidenceKey(FunctionCallContent? call)
+    {
+        var name = call?.Name is { Length: > 0 } toolName ? toolName : "tool";
+        if (call?.Arguments is { Count: > 0 } arguments)
+        {
+            foreach (var candidate in PathArgumentNames)
+            {
+                if (arguments.TryGetValue(candidate, out var value) && value is not null)
+                {
+                    return $"{name}:{value}";
+                }
+            }
+
+            // Order by key so equivalent argument sets produce the same dedup key regardless of dictionary
+            // enumeration order, which is not guaranteed to be stable.
+            return $"{name}:{string.Join(",", arguments.OrderBy(pair => pair.Key, StringComparer.Ordinal).Select(pair => $"{pair.Key}={pair.Value}"))}";
+        }
+
+        return name;
     }
 
     /// <summary>Records one turn's context-submission metadata.</summary>

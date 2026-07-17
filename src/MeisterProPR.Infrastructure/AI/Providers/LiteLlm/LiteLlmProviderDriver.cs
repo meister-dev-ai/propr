@@ -17,16 +17,17 @@ namespace MeisterProPR.Infrastructure.AI.Providers.LiteLlm;
 public sealed class LiteLlmProviderDriver(
     OpenAiCompatibleTransport transport,
     IHttpClientFactory httpClientFactory,
-    bool allowPrivateEgress) : IAiProviderDriver
+    bool allowPrivateEgress,
+    bool allowInsecureScheme) : IAiProviderDriver
 {
-    private readonly OpenAiProviderDriver _innerDriver = new(transport, httpClientFactory, allowPrivateEgress);
+    private readonly OpenAiProviderDriver _innerDriver = new(transport, httpClientFactory, allowPrivateEgress, allowInsecureScheme);
 
     public AiProviderKind ProviderKind => AiProviderKind.LiteLlm;
 
     public string? ValidateProbeTarget(AiProbeTarget target)
     {
         // LiteLLM is a generic OpenAI-compatible proxy, so (unlike plain OpenAI) an Azure host is not rejected.
-        return AiProbeTargetValidation.ForOpenAiCompatible(target, allowPrivateEgress, rejectAzureHosts: false);
+        return AiProbeTargetValidation.ForOpenAiCompatible(target, allowPrivateEgress, allowInsecureScheme, rejectAzureHosts: false);
     }
 
     public Task<AiModelDiscoveryResultDto> DiscoverModelsAsync(AiConnectionProbeOptionsDto options, CancellationToken ct = default)

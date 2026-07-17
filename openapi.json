@@ -17672,7 +17672,8 @@
           "processing",
           "completed",
           "failed",
-          "cancelled"
+          "cancelled",
+          "superseded"
         ],
         "type": "string",
         "description": "Status of a review job."

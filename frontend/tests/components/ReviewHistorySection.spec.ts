@@ -5,12 +5,12 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
 
 const listJobsMock = vi.fn()
-const getJobProtocolMock = vi.fn()
+const restartJobMock = vi.fn()
 let assignedRole: 0 | 1 | null = 0
 
 vi.mock('@/services/jobsService', () => ({
   listJobs: listJobsMock,
-  getJobProtocol: getJobProtocolMock,
+  restartJob: restartJobMock,
 }))
 
 vi.mock('@/composables/useSession', () => ({
@@ -76,7 +76,7 @@ describe('ReviewHistorySection', () => {
     vi.clearAllMocks()
     assignedRole = 0
     listJobsMock.mockResolvedValue(jobsPayload)
-    getJobProtocolMock.mockResolvedValue([])
+    restartJobMock.mockResolvedValue(undefined)
   })
 
   it('shows protocol and PR view links for assigned client users', async () => {

@@ -42,7 +42,6 @@ describe('useReviewHistoryViewModel progress fields', () => {
       autoLoad: false,
       reviewHistoryService: {
         listJobs: vi.fn().mockResolvedValue({ items: [item] }),
-        getJobProtocol: vi.fn().mockResolvedValue([]),
         restartJob: vi.fn().mockResolvedValue(undefined),
       },
     })

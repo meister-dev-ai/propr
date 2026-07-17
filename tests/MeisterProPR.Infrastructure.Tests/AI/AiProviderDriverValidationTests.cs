@@ -44,7 +44,8 @@ public sealed class AiProviderDriverValidationTests
     [Fact]
     public void OpenAi_AzureHost_RejectedWithProviderKindHint()
     {
-        var error = CreateOpenAiDriver(isDevelopment: false).ValidateProbeTarget(new AiProbeTarget("https://x.openai.azure.com/", AiAuthMode.ApiKey, true));
+        var error = CreateOpenAiDriver(allowPrivateEgress: false, allowInsecureScheme: false)
+            .ValidateProbeTarget(new AiProbeTarget("https://x.openai.azure.com/", AiAuthMode.ApiKey, true));
 
         Assert.Contains("azureOpenAi", error);
     }
@@ -52,7 +53,8 @@ public sealed class AiProviderDriverValidationTests
     [Fact]
     public void OpenAi_HttpOutsideDevelopment_RejectsScheme()
     {
-        var error = CreateOpenAiDriver(isDevelopment: false).ValidateProbeTarget(new AiProbeTarget("http://api.example.com/v1", AiAuthMode.ApiKey, true));
+        var error = CreateOpenAiDriver(allowPrivateEgress: false, allowInsecureScheme: false)
+            .ValidateProbeTarget(new AiProbeTarget("http://api.example.com/v1", AiAuthMode.ApiKey, true));
 
         Assert.Contains("https", error);
     }
@@ -60,7 +62,8 @@ public sealed class AiProviderDriverValidationTests
     [Fact]
     public void OpenAi_LiteralMetadataIp_Rejected()
     {
-        var error = CreateOpenAiDriver(isDevelopment: false).ValidateProbeTarget(new AiProbeTarget("https://169.254.169.254/", AiAuthMode.ApiKey, true));
+        var error = CreateOpenAiDriver(allowPrivateEgress: false, allowInsecureScheme: false)
+            .ValidateProbeTarget(new AiProbeTarget("https://169.254.169.254/", AiAuthMode.ApiKey, true));
 
         Assert.Contains("private", error);
     }
@@ -68,7 +71,8 @@ public sealed class AiProviderDriverValidationTests
     [Fact]
     public void OpenAi_PublicHttpsWithKey_Accepted()
     {
-        var error = CreateOpenAiDriver(isDevelopment: false).ValidateProbeTarget(new AiProbeTarget("https://api.openai.com/v1", AiAuthMode.ApiKey, true));
+        var error = CreateOpenAiDriver(allowPrivateEgress: false, allowInsecureScheme: false)
+            .ValidateProbeTarget(new AiProbeTarget("https://api.openai.com/v1", AiAuthMode.ApiKey, true));
 
         Assert.Null(error);
     }
@@ -76,7 +80,8 @@ public sealed class AiProviderDriverValidationTests
     [Fact]
     public void OpenAi_MissingApiKey_Rejected()
     {
-        var error = CreateOpenAiDriver(isDevelopment: false).ValidateProbeTarget(new AiProbeTarget("https://api.openai.com/v1", AiAuthMode.ApiKey, false));
+        var error = CreateOpenAiDriver(allowPrivateEgress: false, allowInsecureScheme: false)
+            .ValidateProbeTarget(new AiProbeTarget("https://api.openai.com/v1", AiAuthMode.ApiKey, false));
 
         Assert.Contains("API key", error);
     }
@@ -84,7 +89,8 @@ public sealed class AiProviderDriverValidationTests
     [Fact]
     public void OpenAi_HttpInDevelopment_Allowed()
     {
-        var error = CreateOpenAiDriver(isDevelopment: true).ValidateProbeTarget(new AiProbeTarget("http://localhost:1234/v1", AiAuthMode.ApiKey, true));
+        var error = CreateOpenAiDriver(allowPrivateEgress: true, allowInsecureScheme: true)
+            .ValidateProbeTarget(new AiProbeTarget("http://localhost:1234/v1", AiAuthMode.ApiKey, true));
 
         Assert.Null(error);
     }
@@ -93,19 +99,77 @@ public sealed class AiProviderDriverValidationTests
     public void LiteLlm_AzureHost_Allowed()
     {
         // LiteLLM is a generic OpenAI-compatible proxy, so an Azure host is not rejected (unlike plain OpenAI).
-        var error = CreateLiteLlmDriver(isDevelopment: false).ValidateProbeTarget(new AiProbeTarget("https://x.openai.azure.com/", AiAuthMode.ApiKey, true));
+        var error = CreateLiteLlmDriver(allowPrivateEgress: false, allowInsecureScheme: false)
+            .ValidateProbeTarget(new AiProbeTarget("https://x.openai.azure.com/", AiAuthMode.ApiKey, true));
 
         Assert.Null(error);
     }
 
-    private static OpenAiProviderDriver CreateOpenAiDriver(bool isDevelopment)
+    [Fact]
+    public void OpenAi_PrivateHttpsHost_RejectedWhenOptInOff()
     {
-        return new OpenAiProviderDriver(CreateTransport(), CreateHttpClientFactory(), allowPrivateEgress: isDevelopment);
+        // Default (production, no opt-in): a private-IP host is blocked even over https.
+        var error = CreateOpenAiDriver(allowPrivateEgress: false, allowInsecureScheme: false)
+            .ValidateProbeTarget(new AiProbeTarget("https://10.0.0.5/v1", AiAuthMode.ApiKey, true));
+
+        Assert.Contains("private", error);
     }
 
-    private static LiteLlmProviderDriver CreateLiteLlmDriver(bool isDevelopment)
+    [Fact]
+    public void OpenAi_PrivateHttpsHost_AcceptedWhenOptInOn()
     {
-        return new LiteLlmProviderDriver(CreateTransport(), CreateHttpClientFactory(), allowPrivateEgress: isDevelopment);
+        // Operator opt-in: a self-hosted / on-prem https endpoint on a private address is permitted.
+        var error = CreateOpenAiDriver(allowPrivateEgress: true, allowInsecureScheme: false)
+            .ValidateProbeTarget(new AiProbeTarget("https://10.0.0.5/v1", AiAuthMode.ApiKey, true));
+
+        Assert.Null(error);
+    }
+
+    [Fact]
+    public void OpenAi_LoopbackHttpsHost_AcceptedWhenOptInOn()
+    {
+        var error = CreateOpenAiDriver(allowPrivateEgress: true, allowInsecureScheme: false)
+            .ValidateProbeTarget(new AiProbeTarget("https://127.0.0.1:8080/v1", AiAuthMode.ApiKey, true));
+
+        Assert.Null(error);
+    }
+
+    [Fact]
+    public void OpenAi_PrivateHttpHost_RejectedWhenOptInOn_HttpsStillRequired()
+    {
+        // The opt-in permits the private address but does NOT relax the https requirement.
+        var error = CreateOpenAiDriver(allowPrivateEgress: true, allowInsecureScheme: false)
+            .ValidateProbeTarget(new AiProbeTarget("http://10.0.0.5/v1", AiAuthMode.ApiKey, true));
+
+        Assert.Contains("https", error);
+    }
+
+    [Fact]
+    public void LiteLlm_PrivateHttpsHost_RejectedWhenOptInOff()
+    {
+        var error = CreateLiteLlmDriver(allowPrivateEgress: false, allowInsecureScheme: false)
+            .ValidateProbeTarget(new AiProbeTarget("https://192.168.1.10/v1", AiAuthMode.ApiKey, true));
+
+        Assert.Contains("private", error);
+    }
+
+    [Fact]
+    public void LiteLlm_PrivateHttpsHost_AcceptedWhenOptInOn()
+    {
+        var error = CreateLiteLlmDriver(allowPrivateEgress: true, allowInsecureScheme: false)
+            .ValidateProbeTarget(new AiProbeTarget("https://192.168.1.10/v1", AiAuthMode.ApiKey, true));
+
+        Assert.Null(error);
+    }
+
+    private static OpenAiProviderDriver CreateOpenAiDriver(bool allowPrivateEgress, bool allowInsecureScheme)
+    {
+        return new OpenAiProviderDriver(CreateTransport(), CreateHttpClientFactory(), allowPrivateEgress, allowInsecureScheme);
+    }
+
+    private static LiteLlmProviderDriver CreateLiteLlmDriver(bool allowPrivateEgress, bool allowInsecureScheme)
+    {
+        return new LiteLlmProviderDriver(CreateTransport(), CreateHttpClientFactory(), allowPrivateEgress, allowInsecureScheme);
     }
 
     private static OpenAiCompatibleTransport CreateTransport()

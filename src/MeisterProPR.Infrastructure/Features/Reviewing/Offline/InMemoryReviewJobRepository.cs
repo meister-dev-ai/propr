@@ -52,12 +52,12 @@ public sealed class InMemoryReviewJobRepository : IJobRepository
                          currentRevisionKey,
                          StringComparison.Ordinal)))
             {
-                if (activeJob.Status is JobStatus.Completed or JobStatus.Failed or JobStatus.Cancelled)
+                if (activeJob.Status is JobStatus.Completed or JobStatus.Failed or JobStatus.Cancelled or JobStatus.Superseded)
                 {
                     continue;
                 }
 
-                activeJob.Status = JobStatus.Cancelled;
+                activeJob.Status = JobStatus.Superseded;
                 activeJob.CompletedAt = DateTimeOffset.UtcNow;
                 cancelledSupersededJobCount++;
             }
@@ -378,9 +378,22 @@ public sealed class InMemoryReviewJobRepository : IJobRepository
 
     public Task SetCancelledAsync(Guid id, CancellationToken ct = default)
     {
-        if (this._jobs.TryGetValue(id, out var job) && job.Status is not (JobStatus.Completed or JobStatus.Failed or JobStatus.Cancelled))
+        if (this._jobs.TryGetValue(id, out var job) &&
+            job.Status is not (JobStatus.Completed or JobStatus.Failed or JobStatus.Cancelled or JobStatus.Superseded))
         {
             job.Status = JobStatus.Cancelled;
+            job.CompletedAt = DateTimeOffset.UtcNow;
+        }
+
+        return Task.CompletedTask;
+    }
+
+    public Task SetSupersededAsync(Guid id, CancellationToken ct = default)
+    {
+        if (this._jobs.TryGetValue(id, out var job) &&
+            job.Status is not (JobStatus.Completed or JobStatus.Failed or JobStatus.Cancelled or JobStatus.Superseded))
+        {
+            job.Status = JobStatus.Superseded;
             job.CompletedAt = DateTimeOffset.UtcNow;
         }
 
@@ -437,28 +450,25 @@ public sealed class InMemoryReviewJobRepository : IJobRepository
                 .FirstOrDefault());
     }
 
-    public Task<ReviewJob?> GetLatestTerminalJobWithFileResultsByStoredRevisionAsync(
+    public Task<ReviewJob?> GetLatestReusableTerminalJobAsync(
         string organizationUrl,
         string projectId,
         string repositoryId,
         int pullRequestId,
-        string storedRevisionKey,
+        Guid excludeJobId,
+        string currentRevisionKey,
         CancellationToken ct = default)
     {
-        return Task.FromResult(
-            this._jobs.Values
-                .Where(job =>
-                    string.Equals(job.OrganizationUrl, organizationUrl, StringComparison.Ordinal)
-                    && string.Equals(job.ProjectId, projectId, StringComparison.Ordinal)
-                    && string.Equals(job.RepositoryId, repositoryId, StringComparison.Ordinal)
-                    && job.PullRequestId == pullRequestId
-                    && job.Status is JobStatus.Completed or JobStatus.Failed or JobStatus.Cancelled
-                    && string.Equals(
-                        ReviewRevisionKeys.GetStoredKey(job.ReviewRevisionReference, job.IterationId),
-                        storedRevisionKey,
-                        StringComparison.Ordinal))
-                .OrderByDescending(job => job.CompletedAt)
-                .FirstOrDefault());
+        var candidates = this._jobs.Values
+            .Where(job =>
+                string.Equals(job.OrganizationUrl, organizationUrl, StringComparison.Ordinal)
+                && string.Equals(job.ProjectId, projectId, StringComparison.Ordinal)
+                && string.Equals(job.RepositoryId, repositoryId, StringComparison.Ordinal)
+                && job.PullRequestId == pullRequestId
+                && job.Id != excludeJobId
+                && job.Status is JobStatus.Completed or JobStatus.Failed or JobStatus.Cancelled or JobStatus.Superseded);
+
+        return Task.FromResult(ReviewBaselineSelection.SelectReusableBaseline(candidates, currentRevisionKey));
     }
 
     public Task<ReviewJob?> GetBestTerminalJobWithFileResultsByStoredRevisionAsync(
@@ -476,13 +486,12 @@ public sealed class InMemoryReviewJobRepository : IJobRepository
                     && string.Equals(job.ProjectId, projectId, StringComparison.Ordinal)
                     && string.Equals(job.RepositoryId, repositoryId, StringComparison.Ordinal)
                     && job.PullRequestId == pullRequestId
-                    && job.Status is JobStatus.Completed or JobStatus.Failed or JobStatus.Cancelled
+                    && job.Status is JobStatus.Completed or JobStatus.Failed or JobStatus.Cancelled or JobStatus.Superseded
                     && string.Equals(
                         ReviewRevisionKeys.GetStoredKey(job.ReviewRevisionReference, job.IterationId),
                         storedRevisionKey,
                         StringComparison.Ordinal))
-                .OrderByDescending(job =>
-                    job.FileReviewResults.Count(result => result.IsComplete && !result.IsFailed && !result.IsExcluded && !result.IsCarriedForward))
+                .OrderByDescending(ReviewBaselineSelection.CountUsableReviewedResults)
                 .ThenByDescending(job => job.CompletedAt)
                 .FirstOrDefault());
     }

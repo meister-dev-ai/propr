@@ -3,6 +3,7 @@ using System;
 using MeisterProPR.Infrastructure.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 using Pgvector;
@@ -12,9 +13,11 @@ using Pgvector;
 namespace MeisterProPR.Infrastructure.Migrations
 {
     [DbContext(typeof(MeisterProPRDbContext))]
-    partial class MeisterProPRDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260716212625_AddSupersededJobStatus")]
+    partial class AddSupersededJobStatus
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -1173,10 +1176,6 @@ namespace MeisterProPR.Infrastructure.Migrations
 
                     b.HasIndex("ClientId", "PullRequestId")
                         .HasDatabaseName("ix_review_jobs_client_pr");
-
-                    b.HasIndex("ClientId", "SubmittedAt")
-                        .IsDescending(false, true)
-                        .HasDatabaseName("ix_review_jobs_client_submitted_at");
 
                     b.HasIndex("ClientId", "Provider", "RepositoryId", "ExternalCodeReviewId")
                         .HasDatabaseName("ix_review_jobs_client_provider_review");

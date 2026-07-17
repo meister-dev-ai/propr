@@ -214,6 +214,13 @@ internal sealed class ReviewJobEntityTypeConfiguration : IEntityTypeConfiguratio
         builder.HasIndex(j => new { j.ClientId, j.PullRequestId })
             .HasDatabaseName("ix_review_jobs_client_pr");
 
+        // Backs the client-filtered review-history query, which filters by client and orders by
+        // submitted_at descending. The descending second key lets the planner satisfy the ORDER BY
+        // directly from the index.
+        builder.HasIndex(j => new { j.ClientId, j.SubmittedAt })
+            .HasDatabaseName("ix_review_jobs_client_submitted_at")
+            .IsDescending(false, true);
+
         builder.HasIndex(j => new { j.ClientId, j.Provider, j.RepositoryId, j.ExternalCodeReviewId })
             .HasDatabaseName("ix_review_jobs_client_provider_review");
 

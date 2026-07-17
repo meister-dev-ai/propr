@@ -110,6 +110,46 @@ public sealed class AiReviewOptions
     public int MaxToolResultReplayCharacters { get; set; } = 32000;
 
     /// <summary>
+    ///     EXPERIMENTAL / A-B ONLY. When <see langword="true" />, tool evidence (e.g. fetched file contents) is
+    ///     retained across agentic-loop compaction and re-injected as a stable, deduplicated block so the model
+    ///     does not re-fetch the same content on later iterations. This changes both the token profile AND the
+    ///     review's convergence behaviour, so it must be validated on the evaluation harness before it ships;
+    ///     the default keeps the existing drop-on-compaction behaviour. Bound to <c>AI_ENABLE_RETAINED_TOOL_EVIDENCE</c>.
+    /// </summary>
+    public bool EnableRetainedToolEvidence { get; set; } = false;
+
+    /// <summary>
+    ///     Maximum number of distinct tool-evidence entries retained across compaction when
+    ///     <see cref="EnableRetainedToolEvidence" /> is enabled. Older entries beyond this count are not retained.
+    /// </summary>
+    [Range(1, 100, ErrorMessage = "MaxRetainedToolEvidenceEntries must be between 1 and 100.")]
+    public int MaxRetainedToolEvidenceEntries { get; set; } = 16;
+
+    /// <summary>
+    ///     Maximum total character budget for the retained tool-evidence block when
+    ///     <see cref="EnableRetainedToolEvidence" /> is enabled. Prevents the retained context from growing
+    ///     without bound across iterations.
+    /// </summary>
+    [Range(1024, 400000, ErrorMessage = "MaxRetainedToolEvidenceChars must be between 1024 and 400000.")]
+    public int MaxRetainedToolEvidenceChars { get; set; } = 48000;
+
+    /// <summary>
+    ///     When <see langword="true" /> (the default), the model's reasoning content (<c>TextReasoningContent</c>) is
+    ///     captured into the recorded assistant-turn output for diagnostics. Reasoning can contain verbatim source
+    ///     excerpts, so set this to <see langword="false" /> where data-retention policy requires it; assistant text
+    ///     and tool calls are always recorded regardless. Bound to <c>AI_CAPTURE_REASONING_IN_PROTOCOL</c>.
+    /// </summary>
+    public bool CaptureReasoningInProtocol { get; set; } = true;
+
+    /// <summary>
+    ///     Maximum number of characters of captured reasoning retained per assistant turn (applied at write time,
+    ///     before persistence). Prevents unbounded reasoning text from bloating the recorded protocol; only consulted
+    ///     when <see cref="CaptureReasoningInProtocol" /> is enabled.
+    /// </summary>
+    [Range(256, 100000, ErrorMessage = "MaxReasoningSummaryChars must be between 256 and 100000.")]
+    public int MaxReasoningSummaryChars { get; set; } = 4000;
+
+    /// <summary>
     ///     Minimum confidence score (0–100) required to post a comment at ERROR severity.
     ///     Comments below this threshold are automatically downgraded to WARNING before posting.
     ///     Bound to <c>AI_CONFIDENCE_FLOOR_ERROR</c>.

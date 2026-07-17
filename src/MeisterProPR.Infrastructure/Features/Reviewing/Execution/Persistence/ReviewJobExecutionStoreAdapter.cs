@@ -100,20 +100,22 @@ public sealed class ReviewJobExecutionStoreAdapter(IJobRepository inner) : IRevi
             ct);
     }
 
-    public Task<ReviewJob?> GetLatestTerminalJobWithFileResultsByStoredRevisionAsync(
+    public Task<ReviewJob?> GetLatestReusableTerminalJobAsync(
         string organizationUrl,
         string projectId,
         string repositoryId,
         int pullRequestId,
-        string storedRevisionKey,
+        Guid excludeJobId,
+        string currentRevisionKey,
         CancellationToken ct = default)
     {
-        return inner.GetLatestTerminalJobWithFileResultsByStoredRevisionAsync(
+        return inner.GetLatestReusableTerminalJobAsync(
             organizationUrl,
             projectId,
             repositoryId,
             pullRequestId,
-            storedRevisionKey,
+            excludeJobId,
+            currentRevisionKey,
             ct);
     }
 

@@ -125,7 +125,8 @@ public sealed partial class ReviewOrchestrationService(
     {
         LogReviewStarted(logger, job.Id, job.PullRequestId);
 
-        var (scan, isNewIteration, baselineJob, resumeJob, compareToIterationId, compareToReviewRevision) = await this.LoadScanStateAsync(job, ct);
+        var (scan, isNewIteration, baselineJob, baselineIsFullCoverage, resumeJob, compareToIterationId, compareToReviewRevision) =
+            await this.LoadScanStateAsync(job, ct);
 
         // Lightweight fetch: get branch names so the workspace can be prepared before the
         // full content fetch — avoids N GetItemAsync calls for ADO-backed reviews.
@@ -194,6 +195,7 @@ public sealed partial class ReviewOrchestrationService(
             job,
             pr,
             baselineJob,
+            baselineIsFullCoverage,
             resumeJob,
             overrideChatClient,
             runtimeCapabilities,
@@ -210,7 +212,7 @@ public sealed partial class ReviewOrchestrationService(
 
         pr = await this.AttachLinkedItemsAsync(job, pr, systemContext, ct);
 
-        if (jobs.GetById(job.Id)?.Status == JobStatus.Cancelled)
+        if (jobs.GetById(job.Id)?.Status is JobStatus.Cancelled or JobStatus.Superseded)
         {
             LogJobCancelledBeforeFileReview(logger, job.Id);
             return null;
@@ -218,7 +220,7 @@ public sealed partial class ReviewOrchestrationService(
 
         var result = await this.DispatchFileReviewAsync(job, pr, systemContext, overrideChatClient, ct);
 
-        if (jobs.GetById(job.Id)?.Status == JobStatus.Cancelled)
+        if (jobs.GetById(job.Id)?.Status is JobStatus.Cancelled or JobStatus.Superseded)
         {
             LogJobCancelledAfterFileReview(logger, job.Id);
             return null;
@@ -556,11 +558,14 @@ public sealed partial class ReviewOrchestrationService(
         return (client, new AgentReviewRuntimeCapabilities(false, false, false, false));
     }
 
-    // T071: Load scan state — returns the scan, whether a new revision exists, and any reusable baseline.
+    // Load scan state — returns the scan, whether a new revision exists, the reusable carry-forward baseline
+    // (with whether it covered its full revision), any same-revision resume job, and the provider-neutral
+    // delta-compare handle when the baseline is full-coverage.
     private async Task<(
         ReviewPrScan? scan,
         bool isNewIteration,
         ReviewJob? baselineJob,
+        bool baselineIsFullCoverage,
         ReviewJob? resumeJob,
         int? compareToIterationId,
         ReviewRevision? compareToReviewRevision)> LoadScanStateAsync(
@@ -572,6 +577,7 @@ public sealed partial class ReviewOrchestrationService(
         var isNewIteration = scan is null || scan.LastProcessedCommitId != iterationKey;
 
         ReviewJob? baselineJob = null;
+        var baselineIsFullCoverage = false;
         ReviewJob? resumeJob = null;
         int? compareToIterationId = null;
         ReviewRevision? compareToReviewRevision = null;
@@ -593,36 +599,59 @@ public sealed partial class ReviewOrchestrationService(
             }
         }
 
-        if (isNewIteration && scan is not null && !string.IsNullOrWhiteSpace(scan.LastProcessedCommitId))
+        if (isNewIteration)
         {
-            if (job.Provider == ScmProvider.AzureDevOps)
+            // Select the carry-forward baseline from job history — the most-recent terminal job at a
+            // different revision — rather than from the scan. This lets a prior review that was
+            // cancelled/failed/superseded mid-flight still seed the next review's unchanged files.
+            baselineJob = await jobs.GetLatestReusableTerminalJobAsync(
+                job.OrganizationUrl,
+                job.ProjectId,
+                job.RepositoryId,
+                job.PullRequestId,
+                job.Id,
+                iterationKey,
+                ct);
+
+            if (baselineJob is not null)
             {
-                compareToIterationId = ReviewRevisionKeys.TryParseIterationId(scan.LastProcessedCommitId);
-                if (compareToIterationId.HasValue)
+                baselineIsFullCoverage = ReviewBaselineSelection.IsFullCoverage(baselineJob);
+                if (baselineIsFullCoverage)
                 {
-                    baselineJob = await jobs.GetCompletedJobWithFileResultsAsync(
-                        job.OrganizationUrl,
-                        job.ProjectId,
-                        job.RepositoryId,
-                        job.PullRequestId,
-                        compareToIterationId.Value,
-                        ct);
+                    // Full-coverage baseline: delta-scope against it so only files changed since the
+                    // baseline are re-reviewed. The compare handle is provider-neutral — Azure DevOps
+                    // reads the iteration id off the baseline job, other providers read its review revision.
+                    if (job.Provider == ScmProvider.AzureDevOps)
+                    {
+                        var baselineIterationId = ResolveBaselineIterationId(baselineJob);
+                        if (baselineIterationId is > 0 && baselineIterationId < job.IterationId)
+                        {
+                            compareToIterationId = baselineIterationId;
+                        }
+                        else
+                        {
+                            // Out-of-order or unavailable iteration id: fall back to a full fetch and treat
+                            // the baseline purely as an AI-skip set rather than risk a negative delta.
+                            baselineIsFullCoverage = false;
+                        }
+                    }
+                    else
+                    {
+                        compareToReviewRevision = baselineJob.ReviewRevisionReference;
+                    }
                 }
-            }
-            else
-            {
-                baselineJob = await jobs.GetCompletedJobWithFileResultsByStoredRevisionAsync(
-                    job.OrganizationUrl,
-                    job.ProjectId,
-                    job.RepositoryId,
-                    job.PullRequestId,
-                    scan.LastProcessedCommitId,
-                    ct);
-                compareToReviewRevision = baselineJob?.ReviewRevisionReference;
             }
         }
 
-        return (scan, isNewIteration, baselineJob, resumeJob, compareToIterationId, compareToReviewRevision);
+        return (scan, isNewIteration, baselineJob, baselineIsFullCoverage, resumeJob, compareToIterationId, compareToReviewRevision);
+    }
+
+    // Derives the Azure DevOps iteration id to compare against from the baseline job itself: prefer the
+    // iteration id carried in its review revision (ProviderRevisionId), falling back to the stored iteration.
+    private static int? ResolveBaselineIterationId(ReviewJob baselineJob)
+    {
+        var iterationFromRevision = ReviewRevisionKeys.TryParseIterationId(ReviewRevisionKeys.TryGetStoredKey(baselineJob.ReviewRevisionReference));
+        return iterationFromRevision ?? (baselineJob.IterationId > 0 ? baselineJob.IterationId : null);
     }
 
     // T072: Fetch PR and guard the active status — returns null if PR is no longer active (job already updated).
@@ -752,13 +781,14 @@ public sealed partial class ReviewOrchestrationService(
             ct);
     }
 
-    // T074: Build review context — reuse prior results, fetch instructions and exclusions.
+    // Build review context — reuse prior results, fetch instructions and exclusions.
     // Returns (systemContext, carriedForwardPaths); systemContext is null when all files were carried
     // forward with an empty delta (no AI review needed — caller should save scan and delete job).
     private async Task<(ReviewSystemContext? systemContext, List<string> carriedForwardPaths)> BuildReviewContextAsync(
         ReviewJob job,
         PullRequest pr,
         ReviewJob? baselineJob,
+        bool baselineIsFullCoverage,
         ReviewJob? resumeJob,
         IChatClient chatClient,
         AgentReviewRuntimeCapabilities runtimeCapabilities,
@@ -768,8 +798,17 @@ public sealed partial class ReviewOrchestrationService(
         var changedFilePaths = pr.ChangedFiles.Select(f => f.Path).ToList();
         var changedPathsSet = new HashSet<string>(changedFilePaths, StringComparer.OrdinalIgnoreCase);
 
-        var carriedForwardPaths = await this.CarryForwardBaselineResultsAsync(job, baselineJob, changedPathsSet, ct);
-        await this.ResumePriorFileResultsAsync(job, resumeJob, changedPathsSet, ct);
+        // Fetch exclusion rules up front: on the partial-baseline (full-fetch) path a baseline-reviewed
+        // file that now matches an exclusion rule must be excluded rather than carried forward stale.
+        var exclusionRules = await this.FetchExclusionRulesAsync(job, pr, ct);
+
+        // Same-revision resume (files changed at this revision) and cross-revision carry-forward (unchanged
+        // files) must never both write a result row for the same path. Resume runs first so a result computed
+        // at the current revision wins over an inherited one from an earlier revision.
+        var claimedPaths = new HashSet<string>(StringComparer.Ordinal);
+        await this.ResumePriorFileResultsAsync(job, resumeJob, changedPathsSet, claimedPaths, ct);
+        var carriedForwardPaths = await this.CarryForwardBaselineResultsAsync(
+            job, baselineJob, baselineIsFullCoverage, changedPathsSet, exclusionRules, claimedPaths, ct);
 
         if (changedFilePaths.Count == 0 && (carriedForwardPaths.Count > 0 || resumeJob is not null))
         {
@@ -808,9 +847,6 @@ public sealed partial class ReviewOrchestrationService(
                 Workspace: workspacePreparation.Workspace,
                 WorkspaceLease: workspacePreparation.Workspace?.Lease,
                 WorkspaceFailure: workspacePreparation.Failure));
-        IReadOnlyList<RepositoryInstruction> relevantInstructions;
-        ReviewExclusionRules exclusionRules;
-
         var fetchedInstructions = await instructionFetcher.FetchAsync(
             job.OrganizationUrl,
             job.ProjectId,
@@ -818,27 +854,9 @@ public sealed partial class ReviewOrchestrationService(
             pr.TargetBranch,
             job.ClientId,
             ct);
-        relevantInstructions = fetchedInstructions.Count > 0
+        var relevantInstructions = fetchedInstructions.Count > 0
             ? await instructionEvaluator.EvaluateRelevanceAsync(fetchedInstructions, changedFilePaths, ct)
             : [];
-
-        // IRepositoryExclusionFetcher.FetchAsync is contractually non-throwing and returns
-        // defaults on failure. The defensive catch below is belt-and-suspenders.
-        try
-        {
-            exclusionRules = await exclusionFetcher.FetchAsync(
-                job.OrganizationUrl,
-                job.ProjectId,
-                job.RepositoryId,
-                pr.TargetBranch,
-                job.ClientId,
-                ct);
-        }
-        catch (Exception ex)
-        {
-            logger.LogWarning(ex, "Failed to fetch exclusion rules for job {JobId}; using defaults", job.Id);
-            exclusionRules = ReviewExclusionRules.Default;
-        }
 
         var systemContext = new ReviewSystemContext(customSystemMessage, relevantInstructions, reviewTools)
         {
@@ -916,12 +934,23 @@ public sealed partial class ReviewOrchestrationService(
         Message = "Linked-item discovery unavailable for job {JobId}; proceeding without linked-item context.")]
     private static partial void LogLinkedItemsSkipped(ILogger logger, Guid jobId, Exception ex);
 
-    // Carries forward file results from the prior baseline job for files that are no longer
-    // part of the current change set, persisting a carried-forward copy under the current job.
+    // Carries forward reviewed file results from a prior baseline job at a different revision.
+    //
+    // Full-coverage baseline: the current fetch is delta-scoped against it, so a reviewed file that is NOT
+    // in the delta (<paramref name="changedPathsSet" /> holds the delta) is provably unchanged and carries
+    // forward. This is the long-standing behaviour and is unchanged for a completed baseline.
+    //
+    // Partial baseline (cancelled/failed/superseded mid per-file review): the current fetch is the full PR
+    // (<paramref name="changedPathsSet" /> holds every current file), so carry forward every reviewed file
+    // still present as an AI-skip set and let the dispatcher review the rest fresh — this keeps files that
+    // are unchanged since the baseline but were never reviewed by it from being silently skipped.
     private async Task<List<string>> CarryForwardBaselineResultsAsync(
         ReviewJob job,
         ReviewJob? baselineJob,
+        bool baselineIsFullCoverage,
         HashSet<string> changedPathsSet,
+        ReviewExclusionRules exclusionRules,
+        HashSet<string> claimedPaths,
         CancellationToken ct)
     {
         var carriedForwardPaths = new List<string>();
@@ -933,12 +962,30 @@ public sealed partial class ReviewOrchestrationService(
         foreach (var priorResult in baselineJob.FileReviewResults
                      .Where(fr => fr.IsComplete && !fr.IsFailed && !fr.IsExcluded && !fr.IsCarriedForward))
         {
-            if (!changedPathsSet.Contains(priorResult.FilePath))
+            var shouldCarryForward = baselineIsFullCoverage
+                ? !changedPathsSet.Contains(priorResult.FilePath)
+                : changedPathsSet.Contains(priorResult.FilePath);
+            if (!shouldCarryForward)
             {
-                var carried = ReviewFileResult.CreateCarriedForward(job.Id, priorResult);
-                await jobs.AddFileResultAsync(carried, ct);
-                carriedForwardPaths.Add(priorResult.FilePath);
+                continue;
             }
+
+            // Exclusion drift only applies on the partial (full-fetch) path: there the skipped file still
+            // reaches the dispatcher to be recorded as excluded. On the delta path the file is absent from
+            // the fetch, so skipping carry-forward would drop it entirely — preserve carry-forward there.
+            if (!baselineIsFullCoverage && exclusionRules.Matches(priorResult.FilePath))
+            {
+                continue;
+            }
+
+            if (!claimedPaths.Add(priorResult.FilePath))
+            {
+                continue;
+            }
+
+            var carried = ReviewFileResult.CreateCarriedForward(job.Id, priorResult);
+            await jobs.AddFileResultAsync(carried, ct);
+            carriedForwardPaths.Add(priorResult.FilePath);
         }
 
         return carriedForwardPaths;
@@ -950,6 +997,7 @@ public sealed partial class ReviewOrchestrationService(
         ReviewJob job,
         ReviewJob? resumeJob,
         HashSet<string> changedPathsSet,
+        HashSet<string> claimedPaths,
         CancellationToken ct)
     {
         if (resumeJob is null)
@@ -960,11 +1008,39 @@ public sealed partial class ReviewOrchestrationService(
         foreach (var priorResult in resumeJob.FileReviewResults
                      .Where(fr => fr.IsComplete && !fr.IsFailed && !fr.IsExcluded && !fr.IsCarriedForward))
         {
-            if (changedPathsSet.Contains(priorResult.FilePath))
+            if (!changedPathsSet.Contains(priorResult.FilePath))
             {
-                var resumed = ReviewFileResult.CreateResumed(job.Id, priorResult);
-                await jobs.AddFileResultAsync(resumed, ct);
+                continue;
             }
+
+            if (!claimedPaths.Add(priorResult.FilePath))
+            {
+                continue;
+            }
+
+            var resumed = ReviewFileResult.CreateResumed(job.Id, priorResult);
+            await jobs.AddFileResultAsync(resumed, ct);
+        }
+    }
+
+    // Fetches the repository exclusion rules for the review target branch. IRepositoryExclusionFetcher is
+    // contractually non-throwing and returns defaults on failure; the catch is belt-and-suspenders.
+    private async Task<ReviewExclusionRules> FetchExclusionRulesAsync(ReviewJob job, PullRequest pr, CancellationToken ct)
+    {
+        try
+        {
+            return await exclusionFetcher.FetchAsync(
+                job.OrganizationUrl,
+                job.ProjectId,
+                job.RepositoryId,
+                pr.TargetBranch,
+                job.ClientId,
+                ct);
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "Failed to fetch exclusion rules for job {JobId}; using defaults", job.Id);
+            return ReviewExclusionRules.Default;
         }
     }
 

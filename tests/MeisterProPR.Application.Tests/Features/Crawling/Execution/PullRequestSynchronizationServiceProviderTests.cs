@@ -328,7 +328,8 @@ public sealed class PullRequestSynchronizationServiceProviderTests
             summary => summary.Contains(
                 "Cancelled 1 superseded active review job",
                 StringComparison.OrdinalIgnoreCase));
-        await jobs.Received(1).SetCancelledAsync(existingJob.Id, Arg.Any<CancellationToken>());
+        await jobs.Received(1).SetSupersededAsync(existingJob.Id, Arg.Any<CancellationToken>());
+        await jobs.DidNotReceive().SetCancelledAsync(existingJob.Id, Arg.Any<CancellationToken>());
         await jobs.Received(1)
             .TryAddIfNoActiveDuplicateAsync(
                 Arg.Is<ReviewJob>(job =>

@@ -57,14 +57,20 @@ internal sealed partial class ToolAwareAiReviewCore(
         CancellationToken cancellationToken = default)
     {
         var opts = options.Value;
-        var state = new ReviewLoopState();
+        var state = new ReviewLoopState
+        {
+            RetainToolEvidence = opts.EnableRetainedToolEvidence,
+            MaxRetainedEvidenceEntries = opts.MaxRetainedToolEvidenceEntries,
+            MaxRetainedEvidenceChars = opts.MaxRetainedToolEvidenceChars,
+        };
 
         string userMessage;
 
         if (systemContext.PerFileHint is { } hint)
         {
-            // Per-file review path (US4): two System messages — global persona (S1) + per-file context (S2).
-            // S1 is dropped from history on iterations 2+ to reduce retransmitted token overhead.
+            // Per-file review path: two System messages — global persona (S1) + per-file context (S2). Both stay
+            // first and byte-stable on every iteration so the whole S1+S2 prefix remains eligible for the
+            // provider's automatic prefix caching (a stable cached prefix is cheaper than re-sending a shorter one).
             state.Messages.Add(new ChatMessage(ChatRole.System, ReviewPrompts.BuildGlobalSystemPrompt(systemContext)));
             state.Messages.Add(
                 new ChatMessage(
@@ -137,7 +143,7 @@ internal sealed partial class ToolAwareAiReviewCore(
             ModelId = effectiveModelId,
             Temperature = systemContext.Temperature,
             Tools = transportTools.Count > 0 ? [.. transportTools] : null,
-        };
+        }.ApplyReasoningSummaryOptIn(opts.CaptureReasoningInProtocol);
 
         // Pre-flight context-window budgeting: estimate the assembled payload against the model's context
         // window and degrade to diff-only, or skip, rather than send the provider a context that is too large.
@@ -228,7 +234,7 @@ internal sealed partial class ToolAwareAiReviewCore(
                 LogIterationStarted(logger, state.Iteration, effectiveMaxIterations);
 
                 ApplySessionModeToOptions(chatOptions, state);
-                var messagesToSend = BuildMessagesForCurrentTurn(state, systemContext);
+                var messagesToSend = BuildMessagesForCurrentTurn(state);
 
                 // Capture input sample BEFORE AddRange so we get the last message that was sent to the AI.
                 // Tool result messages have FunctionResultContent (no .Text), so serialize them explicitly.
@@ -243,7 +249,7 @@ internal sealed partial class ToolAwareAiReviewCore(
                 catch (Exception ex) when (this.TryDowngradeProviderManagedSession(state, systemContext, ex))
                 {
                     ApplySessionModeToOptions(chatOptions, state);
-                    messagesToSend = BuildMessagesForCurrentTurn(state, systemContext);
+                    messagesToSend = BuildMessagesForCurrentTurn(state);
                     inputSample = GetInputSample(messagesToSend);
                     systemPrompt = GetSystemPrompt(messagesToSend);
                     response = await GetResponseAsync(messagesToSend, chatOptions);
@@ -268,8 +274,13 @@ internal sealed partial class ToolAwareAiReviewCore(
 
                 if (systemContext.ActiveProtocolId.HasValue && systemContext.ProtocolRecorder is not null)
                 {
-                    // Function-call-only turns can surface as null or empty text depending on provider/client.
-                    var outputSample = GetOutputSample(responseMessage);
+                    // Structured, write-time-bounded assistant-turn record: verbatim text, optional bounded
+                    // reasoning, and each tool call as {name, arguments}. Function-call-only turns still record
+                    // their calls (rather than collapsing to a bare name list) and carry no text.
+                    var outputSample = AssistantTurnOutputRecord.Build(
+                        responseMessage,
+                        opts.CaptureReasoningInProtocol,
+                        opts.MaxReasoningSummaryChars);
                     await systemContext.ProtocolRecorder.RecordAiCallAsync(
                         systemContext.ActiveProtocolId.Value,
                         state.Iteration,
@@ -676,9 +687,61 @@ internal sealed partial class ToolAwareAiReviewCore(
             return resultText;
         }
 
-        var omitted = resultText.Length - maxCharacters;
-        return resultText[..maxCharacters] +
+        // Slice on the raw text length. Never end the slice on a lone high surrogate — that would
+        // corrupt the boundary character. (Because raw string results are unwrapped by
+        // SerializeToolResult before bounding, the slice can no longer split a JSON escape sequence.)
+        var cut = maxCharacters;
+        if (cut > 0 && char.IsHighSurrogate(resultText[cut - 1]))
+        {
+            cut--;
+        }
+
+        var omitted = resultText.Length - cut;
+        return resultText[..cut] +
                $"\n\n[Tool evidence bounded: omitted {omitted} characters from replay. Re-run the tool with a narrower range if exact context is needed.]";
+    }
+
+    /// <summary>
+    ///     Bounds a per-turn input/output excerpt stored on the session-turn diagnostics event. The full
+    ///     transcript already lives on the paired AI-call event, so only a short excerpt is retained here to
+    ///     avoid duplicating the whole turn payload inside a JSON body that read-time truncation leaves intact.
+    /// </summary>
+    private static string? BoundSessionTurnSample(string? text)
+    {
+        const int maxCharacters = 512;
+        if (string.IsNullOrEmpty(text) || text.Length <= maxCharacters)
+        {
+            return text;
+        }
+
+        var cut = maxCharacters;
+        if (char.IsHighSurrogate(text[cut - 1]))
+        {
+            cut--;
+        }
+
+        var omitted = text.Length - cut;
+        return text[..cut] + $"… [{omitted} chars omitted; full text on the paired AI-call event]";
+    }
+
+    /// <summary>
+    ///     Serialises a tool result for replay to the model. Tool functions surface their result as a
+    ///     <see cref="JsonElement" /> (or, for some paths, a plain <see cref="string" />). When the result is a
+    ///     string scalar — e.g. file contents from <c>get_file_content</c> — re-serialising it double-encodes the
+    ///     payload: newlines, tabs and especially <c>&lt;</c>, <c>&gt;</c> and <c>&amp;</c> expand into escape
+    ///     sequences (<c>&lt;</c> becomes six characters) that inflate the tokens sent to the model on every
+    ///     replay. Unwrap the string scalar and pass the raw text through instead; Microsoft.Extensions.AI
+    ///     forwards a string <see cref="FunctionResultContent.Result" /> verbatim. Non-string results keep their
+    ///     structured JSON form.
+    /// </summary>
+    private static string SerializeToolResult(object? result)
+    {
+        return result switch
+        {
+            string raw => raw,
+            JsonElement { ValueKind: JsonValueKind.String } element => element.GetString() ?? string.Empty,
+            _ => JsonSerializer.Serialize(result, JsonOptions),
+        };
     }
 
     private static int EstimateTokenCount(string? text)
@@ -920,40 +983,43 @@ internal sealed partial class ToolAwareAiReviewCore(
         }
     }
 
-    private static IList<ChatMessage> BuildMessagesForCurrentTurn(ReviewLoopState state, ReviewSystemContext systemContext)
+    private static IList<ChatMessage> BuildMessagesForCurrentTurn(ReviewLoopState state)
     {
         return state.Session.Mode switch
         {
-            AgentReviewSessionMode.ProviderManagedSession => BuildProviderManagedMessages(state, systemContext),
-            AgentReviewSessionMode.LocalManagedSession => BuildLocalManagedMessages(state, systemContext),
-            _ => BuildStatelessReplayMessages(state, systemContext),
+            AgentReviewSessionMode.ProviderManagedSession => BuildProviderManagedMessages(state),
+            AgentReviewSessionMode.LocalManagedSession => BuildLocalManagedMessages(state),
+            _ => BuildStatelessReplayMessages(state),
         };
     }
 
-    private static IList<ChatMessage> BuildProviderManagedMessages(ReviewLoopState state, ReviewSystemContext systemContext)
+    private static IList<ChatMessage> BuildProviderManagedMessages(ReviewLoopState state)
     {
         if (state.Iteration == 1 || state.Session.ContinuationHandle is null)
         {
-            return BuildStatelessReplayMessages(state, systemContext);
+            return BuildStatelessReplayMessages(state);
         }
 
         return GetProviderContinuationMessages(state);
     }
 
-    private static IList<ChatMessage> BuildLocalManagedMessages(ReviewLoopState state, ReviewSystemContext systemContext)
+    private static IList<ChatMessage> BuildLocalManagedMessages(ReviewLoopState state)
     {
         if (state.Iteration == 1)
         {
-            return BuildStatelessReplayMessages(state, systemContext);
+            return BuildStatelessReplayMessages(state);
         }
 
+        // Keep the durable system prefix (global persona + per-file context) stable and first on every turn
+        // so the whole prefix stays eligible for the provider's automatic prefix caching.
         var messages = state.PersistentMessages.ToList();
-        if (systemContext.PerFileHint is not null && messages.Count > 0)
-        {
-            messages = messages.Skip(1).ToList();
-        }
 
-        if (!string.IsNullOrWhiteSpace(state.CompactedPayloadSummary))
+        var retainedEvidence = state.RetainToolEvidence ? state.BuildRetainedEvidenceMessage() : null;
+        if (retainedEvidence is not null)
+        {
+            messages.Add(retainedEvidence);
+        }
+        else if (!string.IsNullOrWhiteSpace(state.CompactedPayloadSummary))
         {
             messages.Add(
                 new ChatMessage(
@@ -966,11 +1032,22 @@ internal sealed partial class ToolAwareAiReviewCore(
         return messages;
     }
 
-    private static IList<ChatMessage> BuildStatelessReplayMessages(ReviewLoopState state, ReviewSystemContext systemContext)
+    private static IList<ChatMessage> BuildStatelessReplayMessages(ReviewLoopState state)
     {
-        return state.Iteration > 1 && systemContext.PerFileHint is not null
-            ? (IList<ChatMessage>)state.Messages.Skip(1).ToList()
-            : state.Messages;
+        // Retained tool evidence is injected immediately after the durable system/user prefix so the prefix
+        // stays byte-stable (and cacheable) while previously fetched content remains available without a re-fetch.
+        var retainedEvidence = state.RetainToolEvidence ? state.BuildRetainedEvidenceMessage() : null;
+        if (retainedEvidence is null)
+        {
+            return state.Messages;
+        }
+
+        var insertAt = Math.Min(state.PersistentMessages.Count, state.Messages.Count);
+        var withEvidence = new List<ChatMessage>(state.Messages.Count + 1);
+        withEvidence.AddRange(state.Messages.Take(insertAt));
+        withEvidence.Add(retainedEvidence);
+        withEvidence.AddRange(state.Messages.Skip(insertAt));
+        return withEvidence;
     }
 
     private static IList<ChatMessage> BuildMessagesForForcedFinalTurn(ReviewLoopState state)
@@ -1176,6 +1253,11 @@ internal sealed partial class ToolAwareAiReviewCore(
         }
 
         var latestTurn = state.TurnHistory.Count > 0 ? state.TurnHistory[^1] : null;
+
+        // The full input/output transcript for this turn is already persisted in full on the paired
+        // ai_call_iter_N event (InputTextSample / OutputSummary). Re-storing it here — inside a JSON
+        // payload the read-time truncation deliberately leaves whole — duplicates tens of kilobytes per
+        // turn. This event is about session/continuation mechanics, so keep only a short bounded excerpt.
         await systemContext.ProtocolRecorder.RecordReviewStrategyEventAsync(
             systemContext.ActiveProtocolId.Value,
             ReviewProtocolEventNames.ReviewAgentSessionTurn,
@@ -1186,7 +1268,7 @@ internal sealed partial class ToolAwareAiReviewCore(
                     sessionMode = state.Session.Mode,
                     contextStrategy = latestTurn?.ContextStrategy,
                     promptMode = latestTurn?.PromptMode ?? state.Session.ActivePromptMode,
-                    newInputSummary = latestTurn?.NewInputSummary ?? inputSample,
+                    newInputSummary = BoundSessionTurnSample(latestTurn?.NewInputSummary ?? inputSample),
                     replayedPayloadSummary = latestTurn?.ReplayedPayloadSummary,
                     compactedPayloadSummary = latestTurn?.CompactedPayloadSummary,
                     usedRemoteConversation = latestTurn?.UsedRemoteConversation,
@@ -1198,7 +1280,7 @@ internal sealed partial class ToolAwareAiReviewCore(
             JsonSerializer.Serialize(
                 new
                 {
-                    outputSample,
+                    outputSample = BoundSessionTurnSample(outputSample),
                     continuationHandle = latestTurn?.ContinuationHandle,
                 }),
             null,
@@ -1622,7 +1704,7 @@ internal sealed partial class ToolAwareAiReviewCore(
             }
 
             var result = await matchingTool.InvokeAsync(functionArgs, cancellationToken);
-            var resultText = JsonSerializer.Serialize(result, JsonOptions);
+            var resultText = SerializeToolResult(result);
             var boundedResultText = BoundToolResult(resultText, options.Value.MaxToolResultReplayCharacters);
             return CreateToolInvocationTelemetry(
                 toolName,
@@ -1760,24 +1842,6 @@ internal sealed partial class ToolAwareAiReviewCore(
         return prompts.Count > 0
             ? string.Join("\n\n---\n\n", prompts)
             : null;
-    }
-
-    private static string? GetFunctionCallSummary(ChatMessage message)
-    {
-        var calls = message.Contents.OfType<FunctionCallContent>().ToList();
-        if (calls.Count == 0)
-        {
-            return null;
-        }
-
-        return "[tool calls: " + string.Join(", ", calls.Select(c => c.Name)) + "]";
-    }
-
-    private static string? GetOutputSample(ChatMessage message)
-    {
-        return string.IsNullOrWhiteSpace(message.Text)
-            ? GetFunctionCallSummary(message)
-            : message.Text;
     }
 
     private static string? BuildAssistantTurnFingerprint(string text, IReadOnlyList<FunctionCallContent> functionCalls)
@@ -2314,7 +2378,7 @@ internal sealed partial class ToolAwareAiReviewCore(
             try
             {
                 var result = await inner.InvokeAsync(arguments, cancellationToken);
-                var resultJson = JsonSerializer.Serialize(result, JsonOptions);
+                var resultJson = SerializeToolResult(result);
                 var boundedResultJson = BoundToolResult(resultJson, maxToolResultReplayCharacters);
                 await onInvoked(
                     CreateToolInvocationTelemetry(

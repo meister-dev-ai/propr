@@ -120,6 +120,11 @@ public static class InfrastructureServiceExtensions
                 {
                     opts.StuckJobTimeoutMinutes = timeout;
                 }
+
+                if (int.TryParse(configuration["WORKER_MAX_CONCURRENT_REVIEW_JOBS"], out var maxConcurrentReviewJobs))
+                {
+                    opts.MaxConcurrentReviewJobs = maxConcurrentReviewJobs;
+                }
             })
             .ValidateDataAnnotations()
             .ValidateOnStart();
@@ -148,8 +153,11 @@ public static class InfrastructureServiceExtensions
         // Per-client AI connection factory (singleton — stateless, creates new clients on demand).
         // Guard these outbound clients against SSRF: an admin-supplied AI baseUrl must not reach
         // private/loopback/link-local (incl. cloud-metadata) addresses, and redirects are never followed.
-        // Localhost egress is permitted only in Development so a local provider (e.g. LiteLLM) stays reachable.
-        var allowPrivateEgress = environment?.IsDevelopment() ?? false;
+        // Private egress is permitted in Development so a local provider (e.g. LiteLLM) stays reachable, or when
+        // an operator explicitly opts in via AI_ALLOW_PRIVATE_EGRESS to reach a self-hosted / on-prem endpoint.
+        // Both are off by default, so production egress stays locked unless deliberately enabled.
+        var isDevelopment = environment?.IsDevelopment() ?? false;
+        var allowPrivateEgress = AllowPrivateEgress(isDevelopment, configuration);
         services.AddHttpClient("AiProbe")
             .ConfigurePrimaryHttpMessageHandler(() => GuardedEgressHttpHandler.Create(allowPrivateEgress));
         services.AddHttpClient("AiProviderAdmin")
@@ -163,14 +171,18 @@ public static class InfrastructureServiceExtensions
         services.AddSingleton<OpenAiCompatibleRequestFactory>();
         services.AddSingleton<OpenAiCompatibleTransport>();
         services.AddSingleton<IAiProviderDriver, AzureOpenAiProviderDriver>();
+        // The config-time probe check permits a private host when private egress is allowed, but plain http is
+        // relaxed only in Development — a self-hosted endpoint reached via the opt-in must still use https.
         services.AddSingleton<IAiProviderDriver>(serviceProvider => new OpenAiProviderDriver(
             serviceProvider.GetRequiredService<OpenAiCompatibleTransport>(),
             serviceProvider.GetRequiredService<IHttpClientFactory>(),
-            allowPrivateEgress));
+            allowPrivateEgress,
+            allowInsecureScheme: isDevelopment));
         services.AddSingleton<IAiProviderDriver>(serviceProvider => new LiteLlmProviderDriver(
             serviceProvider.GetRequiredService<OpenAiCompatibleTransport>(),
             serviceProvider.GetRequiredService<IHttpClientFactory>(),
-            allowPrivateEgress));
+            allowPrivateEgress,
+            allowInsecureScheme: isDevelopment));
         services.AddSingleton<IAiProviderDriverRegistry, AiProviderRegistry>();
         services.AddSingleton<IAiChatClientFactory, AiChatClientFactory>();
 
@@ -214,6 +226,14 @@ public static class InfrastructureServiceExtensions
         opts.MaxReferenceResultChars = TryGetInt(configuration, "AI_MAX_REFERENCE_RESULT_CHARS") ?? opts.MaxReferenceResultChars;
         opts.ReferenceResolutionTimeoutMs = TryGetInt(configuration, "AI_REFERENCE_RESOLUTION_TIMEOUT_MS") ?? opts.ReferenceResolutionTimeoutMs;
 
+        // Cross-compaction tool-evidence retention (experimental; A/B only).
+        opts.EnableRetainedToolEvidence =
+            TryGetBool(configuration, "AI_ENABLE_RETAINED_TOOL_EVIDENCE") ?? opts.EnableRetainedToolEvidence;
+
+        // Reasoning capture into recorded assistant-turn output (off by default; data-retention gate).
+        opts.CaptureReasoningInProtocol =
+            TryGetBool(configuration, "AI_CAPTURE_REASONING_IN_PROTOCOL") ?? opts.CaptureReasoningInProtocol;
+
         // Linked work items / issues in the review context.
         opts.MaxLinkedItemsInContext = TryGetInt(configuration, "AI_MAX_LINKED_ITEMS_IN_CONTEXT") ?? opts.MaxLinkedItemsInContext;
         opts.MaxLinkedItemDescriptionChars = TryGetInt(configuration, "AI_MAX_LINKED_ITEM_DESCRIPTION_CHARS") ?? opts.MaxLinkedItemDescriptionChars;
@@ -236,6 +256,17 @@ public static class InfrastructureServiceExtensions
     private static bool? TryGetBool(IConfiguration configuration, string key)
     {
         return bool.TryParse(configuration[key], out var value) ? value : null;
+    }
+
+    /// <summary>
+    ///     Resolves whether outbound AI egress may reach private/loopback/link-local addresses. Off by default so
+    ///     production stays locked against SSRF: it is permitted in Development (so a local provider stays
+    ///     reachable) or when an operator explicitly opts in via <c>AI_ALLOW_PRIVATE_EGRESS</c> to reach a
+    ///     self-hosted / on-prem endpoint. A missing or non-boolean value falls through to the safe default.
+    /// </summary>
+    internal static bool AllowPrivateEgress(bool isDevelopment, IConfiguration configuration)
+    {
+        return isDevelopment || (TryGetBool(configuration, "AI_ALLOW_PRIVATE_EGRESS") ?? false);
     }
 
     /// <summary>

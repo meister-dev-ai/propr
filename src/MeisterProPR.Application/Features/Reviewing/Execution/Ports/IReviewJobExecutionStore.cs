@@ -119,14 +119,17 @@ public interface IReviewJobExecutionStore
         CancellationToken ct = default);
 
     /// <summary>
-    ///     Gets the most-recent terminal review job with file results for the supplied stored revision key.
+    ///     Gets the most-recent terminal review job usable as a cross-revision carry-forward baseline: any terminal
+    ///     job that is not <paramref name="excludeJobId" /> and whose stored revision key differs from
+    ///     <paramref name="currentRevisionKey" />, ranked by usable reviewed-result count then recency.
     /// </summary>
-    Task<ReviewJob?> GetLatestTerminalJobWithFileResultsByStoredRevisionAsync(
+    Task<ReviewJob?> GetLatestReusableTerminalJobAsync(
         string organizationUrl,
         string projectId,
         string repositoryId,
         int pullRequestId,
-        string storedRevisionKey,
+        Guid excludeJobId,
+        string currentRevisionKey,
         CancellationToken ct = default);
 
     /// <summary>

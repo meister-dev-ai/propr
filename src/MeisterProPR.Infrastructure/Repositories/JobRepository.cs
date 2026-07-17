@@ -337,12 +337,12 @@ public sealed partial class JobRepository(
                          currentRevisionKey,
                          StringComparison.Ordinal)))
             {
-                if (activeJob.Status is JobStatus.Completed or JobStatus.Failed or JobStatus.Cancelled)
+                if (activeJob.Status is JobStatus.Completed or JobStatus.Failed or JobStatus.Cancelled or JobStatus.Superseded)
                 {
                     continue;
                 }
 
-                activeJob.Status = JobStatus.Cancelled;
+                activeJob.Status = JobStatus.Superseded;
                 activeJob.CompletedAt = DateTimeOffset.UtcNow;
                 cancelledSupersededJobCount++;
             }
@@ -468,7 +468,12 @@ public sealed partial class JobRepository(
     /// <inheritdoc />
     public async Task<ReviewJob?> GetByIdWithProtocolsAsync(Guid id, CancellationToken ct = default)
     {
+        // Read-only path: every caller (the full per-pass trace reader and its inherited-source
+        // fallbacks) only projects the loaded graph into DTOs and never persists it. Skipping change
+        // tracking roughly halves the managed-heap footprint of a heavy trace (which carries the full
+        // event bodies and phase_timings jsonb).
         var job = await dbContext.ReviewJobs
+            .AsNoTracking()
             .AsSplitQuery()
             .Include(j => j.Protocols.OrderByDescending(p => p.AttemptNumber))
             .ThenInclude(p => p.Events.OrderBy(e => e.OccurredAt))
@@ -586,12 +591,27 @@ public sealed partial class JobRepository(
     public async Task SetCancelledAsync(Guid id, CancellationToken ct = default)
     {
         var job = await dbContext.ReviewJobs.FindAsync([id], ct);
-        if (job is null || job.Status is JobStatus.Completed or JobStatus.Failed or JobStatus.Cancelled)
+        if (job is null || job.Status is JobStatus.Completed or JobStatus.Failed or JobStatus.Cancelled or JobStatus.Superseded)
         {
             return;
         }
 
         job.Status = JobStatus.Cancelled;
+        job.CompletedAt = DateTimeOffset.UtcNow;
+        await dbContext.SaveChangesAsync(ct).ConfigureAwait(false);
+        await this.CloseOpenProtocolsAsync(id).ConfigureAwait(false);
+    }
+
+    /// <inheritdoc />
+    public async Task SetSupersededAsync(Guid id, CancellationToken ct = default)
+    {
+        var job = await dbContext.ReviewJobs.FindAsync([id], ct);
+        if (job is null || job.Status is JobStatus.Completed or JobStatus.Failed or JobStatus.Cancelled or JobStatus.Superseded)
+        {
+            return;
+        }
+
+        job.Status = JobStatus.Superseded;
         job.CompletedAt = DateTimeOffset.UtcNow;
         await dbContext.SaveChangesAsync(ct).ConfigureAwait(false);
         await this.CloseOpenProtocolsAsync(id).ConfigureAwait(false);
@@ -674,28 +694,29 @@ public sealed partial class JobRepository(
     }
 
     /// <inheritdoc />
-    public async Task<ReviewJob?> GetLatestTerminalJobWithFileResultsByStoredRevisionAsync(
+    public async Task<ReviewJob?> GetLatestReusableTerminalJobAsync(
         string organizationUrl,
         string projectId,
         string repositoryId,
         int pullRequestId,
-        string storedRevisionKey,
+        Guid excludeJobId,
+        string currentRevisionKey,
         CancellationToken ct = default)
     {
-        var matchingJobs = await dbContext.ReviewJobs
+        var candidateJobs = await dbContext.ReviewJobs
             .Include(j => j.FileReviewResults)
             .Where(j => j.OrganizationUrl == organizationUrl &&
                         j.ProjectId == projectId &&
                         j.RepositoryId == repositoryId &&
                         j.PullRequestId == pullRequestId &&
-                        (j.Status == JobStatus.Completed || j.Status == JobStatus.Failed || j.Status == JobStatus.Cancelled))
-            .OrderByDescending(j => j.CompletedAt)
+                        j.Id != excludeJobId &&
+                        (j.Status == JobStatus.Completed ||
+                         j.Status == JobStatus.Failed ||
+                         j.Status == JobStatus.Cancelled ||
+                         j.Status == JobStatus.Superseded))
             .ToListAsync(ct);
 
-        var job = matchingJobs.FirstOrDefault(j => string.Equals(
-            ReviewRevisionKeys.GetStoredKey(j.ReviewRevisionReference, j.IterationId),
-            storedRevisionKey,
-            StringComparison.Ordinal));
+        var job = ReviewBaselineSelection.SelectReusableBaseline(candidateJobs, currentRevisionKey);
 
         if (job is not null)
         {
@@ -720,7 +741,10 @@ public sealed partial class JobRepository(
                         j.ProjectId == projectId &&
                         j.RepositoryId == repositoryId &&
                         j.PullRequestId == pullRequestId &&
-                        (j.Status == JobStatus.Completed || j.Status == JobStatus.Failed || j.Status == JobStatus.Cancelled))
+                        (j.Status == JobStatus.Completed ||
+                         j.Status == JobStatus.Failed ||
+                         j.Status == JobStatus.Cancelled ||
+                         j.Status == JobStatus.Superseded))
             .ToListAsync(ct);
 
         var job = matchingJobs
@@ -728,7 +752,7 @@ public sealed partial class JobRepository(
                 ReviewRevisionKeys.GetStoredKey(j.ReviewRevisionReference, j.IterationId),
                 storedRevisionKey,
                 StringComparison.Ordinal))
-            .OrderByDescending(j => j.FileReviewResults.Count(r => r.IsComplete && !r.IsFailed && !r.IsExcluded && !r.IsCarriedForward))
+            .OrderByDescending(ReviewBaselineSelection.CountUsableReviewedResults)
             .ThenByDescending(j => j.CompletedAt)
             .FirstOrDefault();
 

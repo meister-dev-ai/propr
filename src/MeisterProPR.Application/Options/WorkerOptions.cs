@@ -24,4 +24,13 @@ public sealed class WorkerOptions
     /// </summary>
     [Range(5, 1440, ErrorMessage = "StuckJobTimeoutMinutes must be between 5 and 1440.")]
     public int StuckJobTimeoutMinutes { get; set; } = 30;
+
+    /// <summary>
+    ///     Maximum number of review jobs the worker runs concurrently in a single cycle when parallel
+    ///     review execution is licensed. Bounds the peak memory/CPU multiplier of simultaneous reviews;
+    ///     jobs beyond the cap are picked up on subsequent poll cycles.
+    ///     Bound to <c>WORKER_MAX_CONCURRENT_REVIEW_JOBS</c>.
+    /// </summary>
+    [Range(1, 64, ErrorMessage = "MaxConcurrentReviewJobs must be between 1 and 64.")]
+    public int MaxConcurrentReviewJobs { get; set; } = 4;
 }

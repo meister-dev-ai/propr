@@ -94,6 +94,7 @@ public sealed partial class ReviewJobWorker(
         var licensingCapabilityService = tickScope.ServiceProvider.GetService<ILicensingCapabilityService>();
         var parallelReviewExecutionEnabled = licensingCapabilityService is null
                                              || await licensingCapabilityService.IsEnabledAsync(PremiumCapabilityKey.ParallelReviewExecution, stoppingToken);
+        var maxConcurrentReviewJobs = workerOptions.Value.MaxConcurrentReviewJobs;
 
         foreach (var job in jobRepository.GetPendingJobs())
         {
@@ -104,6 +105,13 @@ public sealed partial class ReviewJobWorker(
                 {
                     break;
                 }
+            }
+            else if (this._inflight.Count >= maxConcurrentReviewJobs)
+            {
+                // Bounded parallelism: cap how many reviews run at once so a burst of pending jobs
+                // cannot fan out into an unbounded memory/CPU multiplier. The overflow stays Pending
+                // and is claimed on later cycles as in-flight work drains below the cap.
+                break;
             }
 
             if (!await jobRepository.TryTransitionAsync(job.Id, JobStatus.Pending, JobStatus.Processing, stoppingToken))
