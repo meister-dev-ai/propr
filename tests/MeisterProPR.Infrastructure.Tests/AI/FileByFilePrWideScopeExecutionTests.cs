@@ -48,6 +48,7 @@ public sealed class FileByFilePrWideScopeExecutionTests
                 Arg.Any<PrWideGenerationBudget>(),
                 Arg.Any<int>(),
                 Arg.Any<bool>(),
+                Arg.Any<ReviewReasoningEffort>(),
                 Arg.Any<CancellationToken>())
             .Returns([PublishablePrWideFinding(unionPassIndex: 2)]);
 
@@ -65,6 +66,7 @@ public sealed class FileByFilePrWideScopeExecutionTests
                 budget.MaxInvestigations == 3 && budget.MaxToolCallsPerInvestigation == 3 && budget.MaxSeedFilesPerInvestigation == 5),
             2,
             false,
+            Arg.Any<ReviewReasoningEffort>(),
             Arg.Any<CancellationToken>());
 
         var prWideComment = Assert.Single(result.Comments, comment => comment.Message == "PR-wide cross-cutting concern.");
@@ -85,6 +87,7 @@ public sealed class FileByFilePrWideScopeExecutionTests
                 Arg.Any<PrWideGenerationBudget>(),
                 Arg.Any<int>(),
                 Arg.Any<bool>(),
+                Arg.Any<ReviewReasoningEffort>(),
                 Arg.Any<CancellationToken>())
             .Returns([VerifierApprovedAnchoredPrWideFinding(unionPassIndex: 2)]);
 
@@ -113,6 +116,7 @@ public sealed class FileByFilePrWideScopeExecutionTests
                 Arg.Any<PrWideGenerationBudget>(),
                 Arg.Any<int>(),
                 Arg.Any<bool>(),
+                Arg.Any<ReviewReasoningEffort>(),
                 Arg.Any<CancellationToken>())
             .Returns([UnanchoredPrWideFinding(unionPassIndex: 2)]);
 
@@ -136,6 +140,7 @@ public sealed class FileByFilePrWideScopeExecutionTests
                 Arg.Any<PrWideGenerationBudget>(),
                 Arg.Any<int>(),
                 Arg.Any<bool>(),
+                Arg.Any<ReviewReasoningEffort>(),
                 Arg.Any<CancellationToken>())
             .Returns([PublishablePrWideFinding(unionPassIndex: 2)]);
 
@@ -156,6 +161,7 @@ public sealed class FileByFilePrWideScopeExecutionTests
             Arg.Any<PrWideGenerationBudget>(),
             2,
             true,
+            Arg.Any<ReviewReasoningEffort>(),
             Arg.Any<CancellationToken>());
         // ...but its finding is never published.
         Assert.DoesNotContain(result.Comments, comment => comment.Message == "PR-wide cross-cutting concern.");
@@ -180,6 +186,7 @@ public sealed class FileByFilePrWideScopeExecutionTests
             Arg.Any<PrWideGenerationBudget>(),
             Arg.Any<int>(),
             Arg.Any<bool>(),
+            Arg.Any<ReviewReasoningEffort>(),
             Arg.Any<CancellationToken>());
         Assert.Contains(result.Comments, comment => comment.Message == "Confirmed local issue.");
         Assert.DoesNotContain(result.Comments, comment => comment.Message == "PR-wide cross-cutting concern.");
@@ -207,6 +214,7 @@ public sealed class FileByFilePrWideScopeExecutionTests
                 Arg.Any<PrWideGenerationBudget>(),
                 Arg.Any<int>(),
                 Arg.Any<bool>(),
+                Arg.Any<ReviewReasoningEffort>(),
                 Arg.Any<CancellationToken>())
             .Returns([]);
 
@@ -229,6 +237,7 @@ public sealed class FileByFilePrWideScopeExecutionTests
             Arg.Any<PrWideGenerationBudget>(),
             3,
             false,
+            Arg.Any<ReviewReasoningEffort>(),
             Arg.Any<CancellationToken>());
         Assert.Contains(result.Comments, comment => comment.Message == "Confirmed local issue.");
     }

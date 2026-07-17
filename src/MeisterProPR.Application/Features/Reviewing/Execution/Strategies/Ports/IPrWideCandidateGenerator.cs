@@ -5,6 +5,7 @@ using MeisterProPR.Application.Features.Reviewing.Execution.Models;
 using MeisterProPR.Application.Interfaces;
 using MeisterProPR.Application.ValueObjects;
 using MeisterProPR.Domain.Entities;
+using MeisterProPR.Domain.Enums;
 using MeisterProPR.Domain.ValueObjects;
 
 namespace MeisterProPR.Application.Features.Reviewing.Execution.Strategies.Ports;
@@ -38,6 +39,10 @@ public interface IPrWideCandidateGenerator
     ///     completion event with its catch count, but the caller does not publish its candidates. The returned
     ///     candidates carry the shadow marker on their provenance.
     /// </param>
+    /// <param name="reasoningEffort">
+    ///     Reasoning effort configured for this pass, applied to the outbound chat requests unconditionally.
+    ///     <see cref="ReviewReasoningEffort.None" /> leaves the request without an effort level (current behavior).
+    /// </param>
     /// <param name="ct">Cancellation token.</param>
     Task<IReadOnlyList<CandidateReviewFinding>> GenerateCandidatesAsync(
         ReviewJob job,
@@ -47,5 +52,6 @@ public interface IPrWideCandidateGenerator
         PrWideGenerationBudget budget,
         int unionPassIndex,
         bool shadow,
+        ReviewReasoningEffort reasoningEffort,
         CancellationToken ct);
 }

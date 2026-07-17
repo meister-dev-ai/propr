@@ -98,7 +98,7 @@ describe('ClientReviewPassesEditor lens selector', () => {
         await wrapper.find('[data-testid="review-pass-lens"]').setValue('security')
 
         const emitted = lastEmittedPasses(wrapper)
-        expect(emitted).toEqual([{ ordinal: 0, configuredModelId: 'm1', lens: 'security', scope: null, shadow: false }])
+        expect(emitted).toEqual([{ ordinal: 0, configuredModelId: 'm1', lens: 'security', scope: null, shadow: false, reasoningEffort: 'none' }])
     })
 
     it('emits a null lens when a pass is switched back to None', async () => {
@@ -111,7 +111,7 @@ describe('ClientReviewPassesEditor lens selector', () => {
 
         await wrapper.find('[data-testid="review-pass-lens"]').setValue('')
 
-        expect(lastEmittedPasses(wrapper)).toEqual([{ ordinal: 0, configuredModelId: 'm1', lens: null, scope: null, shadow: false }])
+        expect(lastEmittedPasses(wrapper)).toEqual([{ ordinal: 0, configuredModelId: 'm1', lens: null, scope: null, shadow: false, reasoningEffort: 'none' }])
     })
 
     it('hydrates the lens from the persisted value', () => {
@@ -148,7 +148,7 @@ describe('ClientReviewPassesEditor scope and shadow', () => {
         await wrapper.find('[data-testid="review-pass-shadow"]').setValue(true)
 
         expect(lastEmittedPasses(wrapper)).toEqual([
-            { ordinal: 0, configuredModelId: 'm1', lens: null, scope: 'pr_wide', shadow: true },
+            { ordinal: 0, configuredModelId: 'm1', lens: null, scope: 'pr_wide', shadow: true, reasoningEffort: 'none' },
         ])
     })
 
@@ -162,7 +162,7 @@ describe('ClientReviewPassesEditor scope and shadow', () => {
 
         await wrapper.find('[data-testid="review-pass-scope"]').setValue('')
 
-        expect(lastEmittedPasses(wrapper)).toEqual([{ ordinal: 0, configuredModelId: 'm1', lens: null, scope: null, shadow: false }])
+        expect(lastEmittedPasses(wrapper)).toEqual([{ ordinal: 0, configuredModelId: 'm1', lens: null, scope: null, shadow: false, reasoningEffort: 'none' }])
     })
 
     it('hydrates scope and shadow from the persisted value', () => {
@@ -175,5 +175,50 @@ describe('ClientReviewPassesEditor scope and shadow', () => {
 
         expect((wrapper.find('[data-testid="review-pass-scope"]').element as HTMLSelectElement).value).toBe('pr_wide')
         expect((wrapper.find('[data-testid="review-pass-shadow"]').element as HTMLInputElement).checked).toBe(true)
+    })
+})
+
+describe('ClientReviewPassesEditor reasoning effort', () => {
+    it('offers None, Low, Medium, and High reasoning options per row', () => {
+        const wrapper = mount(ClientReviewPassesEditor, {
+            props: { modelValue: [{ ordinal: 0, configuredModelId: 'm1' }] as ReviewPassEntry[], connections },
+        })
+
+        const reasoningOptions = wrapper
+            .find('[data-testid="review-pass-reasoning"]')
+            .findAll('option')
+            .map(option => option.attributes('value') ?? '')
+        expect(reasoningOptions).toEqual(['none', 'low', 'medium', 'high'])
+    })
+
+    it('defaults a new pass to None reasoning effort', () => {
+        const wrapper = mount(ClientReviewPassesEditor, {
+            props: { modelValue: [{ ordinal: 0, configuredModelId: 'm1' }] as ReviewPassEntry[], connections },
+        })
+
+        expect((wrapper.find('[data-testid="review-pass-reasoning"]').element as HTMLSelectElement).value).toBe('none')
+    })
+
+    it('emits the chosen reasoning effort on the entry', async () => {
+        const wrapper = mount(ClientReviewPassesEditor, {
+            props: { modelValue: [{ ordinal: 0, configuredModelId: 'm1' }] as ReviewPassEntry[], connections },
+        })
+
+        await wrapper.find('[data-testid="review-pass-reasoning"]').setValue('high')
+
+        expect(lastEmittedPasses(wrapper)).toEqual([
+            { ordinal: 0, configuredModelId: 'm1', lens: null, scope: null, shadow: false, reasoningEffort: 'high' },
+        ])
+    })
+
+    it('hydrates the reasoning effort from the persisted value', () => {
+        const wrapper = mount(ClientReviewPassesEditor, {
+            props: {
+                modelValue: [{ ordinal: 0, configuredModelId: 'm1', reasoningEffort: 'medium' }] as ReviewPassEntry[],
+                connections,
+            },
+        })
+
+        expect((wrapper.find('[data-testid="review-pass-reasoning"]').element as HTMLSelectElement).value).toBe('medium')
     })
 })

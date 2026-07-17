@@ -61,6 +61,7 @@ public sealed class PrWideCandidateGeneratorTests
             new PrWideGenerationBudget(3, 3, 5),
             unionPassIndex: 2,
             shadow: false,
+            reasoningEffort: ReviewReasoningEffort.None,
             CancellationToken.None);
 
         Assert.NotEmpty(candidates);
@@ -133,6 +134,7 @@ public sealed class PrWideCandidateGeneratorTests
             new PrWideGenerationBudget(MaxInvestigations: 1, MaxToolCallsPerInvestigation: 3, MaxSeedFilesPerInvestigation: 5),
             unionPassIndex: 2,
             shadow: false,
+            reasoningEffort: ReviewReasoningEffort.None,
             CancellationToken.None);
 
         await recorder.Received(1).RecordPrWideStageEventAsync(
@@ -178,6 +180,7 @@ public sealed class PrWideCandidateGeneratorTests
             new PrWideGenerationBudget(3, 3, 5),
             unionPassIndex: 2,
             shadow: true,
+            reasoningEffort: ReviewReasoningEffort.None,
             CancellationToken.None);
 
         Assert.NotEmpty(candidates);
@@ -263,6 +266,7 @@ public sealed class PrWideCandidateGeneratorTests
             new PrWideGenerationBudget(3, 3, 5),
             unionPassIndex: 2,
             shadow: false,
+            reasoningEffort: ReviewReasoningEffort.None,
             CancellationToken.None);
 
         var candidate = Assert.Single(candidates);

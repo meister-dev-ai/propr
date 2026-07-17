@@ -147,6 +147,24 @@
                             </p>
                         </label>
                     </div>
+                </div>
+                <div class="inline-field-row review-publication-row">
+                    <div class="form-field flex-1 review-publication-field">
+                        <label for="baselineReasoningEffort">Baseline reasoning effort</label>
+                        <select id="baselineReasoningEffort"
+                            v-model="editedBaselineReasoningEffort"
+                            name="baselineReasoningEffort">
+                            <option v-for="option in REASONING_EFFORT_OPTIONS" :key="option.value" :value="option.value">
+                                {{ option.label }}
+                            </option>
+                        </select>
+                        <p class="muted review-publication-copy">
+                            How much reasoning the model spends on the baseline (tier) review pass.
+                            <strong>None</strong> (default) sends no reasoning effort, so behavior and cost
+                            are unchanged. Per-additional-pass effort is set in the AI Providers tab under
+                            "Review passes".
+                        </p>
+                    </div>
                     <button :disabled="!isAdvancedSettingsButtonEnabled()"
                         class="btn-primary inline-save-btn scm-advanced-settings-save-btn"
                         @click="saveAdvancedSettings">
@@ -195,6 +213,7 @@ const {
     editedEnableMultiPassUnion,
     editedIncludeLinkedItemsInContext,
     editedEnableLanguageRobustScreening,
+    editedBaselineReasoningEffort,
     reviewProfiles,
     clientReviewProfile,
     saveDisplayName,
@@ -206,6 +225,15 @@ const {
     handleDelete,
     handleOverviewNavigate,
 } = vm;
+
+// The reasoning-effort levels offered for the baseline (tier) pass. Mirrors the backend
+// ReviewReasoningEffort enum; 'none' (default) sends no effort so behavior/cost stay unchanged.
+const REASONING_EFFORT_OPTIONS: { value: string; label: string }[] = [
+    { value: "none", label: "None (off)" },
+    { value: "low", label: "Low" },
+    { value: "medium", label: "Medium" },
+    { value: "high", label: "High" },
+];
 </script>
 
 <style scoped>

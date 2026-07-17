@@ -68,6 +68,12 @@ internal sealed class ClientEntityTypeConfiguration : IEntityTypeConfiguration<C
             .HasColumnName("enable_multi_pass_union")
             .HasDefaultValue(false);
 
+        builder.Property(c => c.BaselineReasoningEffort)
+            .HasColumnName("baseline_reasoning_effort")
+            .HasConversion<int>()
+            .HasDefaultValue(ReviewReasoningEffort.None)
+            .HasSentinel(ReviewReasoningEffort.None);
+
         builder.Property(c => c.IncludeLinkedItemsInContext)
             .HasColumnName("include_linked_items_in_context")
             .HasDefaultValue(true);

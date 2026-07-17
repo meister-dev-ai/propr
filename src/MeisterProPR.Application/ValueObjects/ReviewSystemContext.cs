@@ -205,6 +205,21 @@ public sealed class ReviewSystemContext
     public IReadOnlyList<ReviewPassSpec> ReviewPasses { get; init; } = [];
 
     /// <summary>
+    ///     Reasoning effort configured at the client level for the implicit tier baseline pass. Populated once per job
+    ///     from the client baseline setting and used when building the baseline per-file pass context.
+    ///     Defaults to <see cref="ReviewReasoningEffort.None" /> (no effort sent — current behavior).
+    /// </summary>
+    public ReviewReasoningEffort BaselineReasoningEffort { get; set; } = ReviewReasoningEffort.None;
+
+    /// <summary>
+    ///     Reasoning effort active for the current pass context, applied to the outbound chat request unconditionally
+    ///     (independent of reasoning-summary capture). Set after the per-pass context is created — the baseline pass
+    ///     from <see cref="BaselineReasoningEffort" />, an additional pass from its <see cref="ReviewPassSpec" />.
+    ///     Not persisted — a per-pass runtime marker. Defaults to <see cref="ReviewReasoningEffort.None" />.
+    /// </summary>
+    public ReviewReasoningEffort ActiveReasoningEffort { get; set; } = ReviewReasoningEffort.None;
+
+    /// <summary>
     ///     The specialist lens active for the current per-file pass context, or <see langword="null" /> for an
     ///     ordinary pass. Set on a lens pass (e.g. security) so prompt construction selects the specialist template.
     ///     Not persisted — a per-pass runtime marker set after the pass context is created.

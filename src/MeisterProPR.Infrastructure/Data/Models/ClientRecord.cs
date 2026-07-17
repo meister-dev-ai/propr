@@ -60,6 +60,14 @@ public sealed class ClientRecord
     public bool EnableMultiPassUnion { get; set; } = false;
 
     /// <summary>
+    ///     Reasoning effort applied to the implicit tier baseline review pass for this client.
+    ///     Defaults to <see cref="Domain.Enums.ReviewReasoningEffort.None" /> so no effort is sent until a user
+    ///     opts in (behavior and cost unchanged). Per-additional-pass effort lives on each
+    ///     <see cref="ClientReviewPassRecord" />.
+    /// </summary>
+    public ReviewReasoningEffort BaselineReasoningEffort { get; set; } = ReviewReasoningEffort.None;
+
+    /// <summary>
     ///     Controls whether the work items (Azure DevOps) or issues (GitHub, GitLab, Forgejo) linked to a
     ///     pull request are fetched and included in the review context for this client. Defaults to
     ///     <see langword="true" /> so the review can judge changes against their intended direction.

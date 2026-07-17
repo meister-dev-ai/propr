@@ -210,7 +210,7 @@ internal sealed partial class FileByFileReviewOrchestrator(
             }
 
             // The per-file baseline is pass 1, so a job-level entry numbers as its list ordinal plus two.
-            var candidates = await generator.GenerateCandidatesAsync(job, pr, baseContext, runtime, budget, ordinal + 2, pass.Shadow, ct);
+            var candidates = await generator.GenerateCandidatesAsync(job, pr, baseContext, runtime, budget, ordinal + 2, pass.Shadow, pass.ReasoningEffort, ct);
 
             // A shadow entry still runs and records its full generation trace plus a shadow-completed event (both
             // inside the generator), but its candidates are never threaded into synthesis, so it never publishes.

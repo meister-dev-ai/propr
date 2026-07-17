@@ -167,6 +167,9 @@ internal sealed partial class FileReviewer(
 
             var pipelineProfile = ResolvePipelineProfile(job, pipelineProfileProvider);
             fileContext.Aggressiveness = pipelineProfile.Aggressiveness;
+            // The baseline (tier) pass takes the client-level baseline reasoning effort. Set before the dispatch
+            // pipeline so it survives on the same context the review core reads.
+            fileContext.ActiveReasoningEffort = baseContext.BaselineReasoningEffort;
             await this.RecordPipelineProfileAsync(protocolId, file.Path, pipelineProfile, ct);
             fileContext = await this.RunDispatchPipelineAsync(
                 job,
@@ -408,6 +411,7 @@ internal sealed partial class FileReviewer(
                     inputs.PipelineProfile,
                     plannedPass.MaxContextTokens,
                     plannedPass.TokenizerName,
+                    plannedPass.ReasoningEffort,
                     inputs.Ct));
 
             unionComments.AddRange(StampUnionOrigin(passResult.Comments, plannedPass.PassIndex, plannedPass.Lens, plannedPass.Shadow));
@@ -563,7 +567,8 @@ internal sealed partial class FileReviewer(
                         pass.Lens,
                         pass.Shadow,
                         runtime.Model.MaxContextTokens,
-                        runtime.Model.TokenizerName));
+                        runtime.Model.TokenizerName,
+                        pass.ReasoningEffort));
             }
 
             passIndex++;
@@ -673,6 +678,9 @@ internal sealed partial class FileReviewer(
 
             // A lens pass selects a specialist per-file prompt; the marker is read during prompt construction.
             passContext.ActiveLens = inputs.PassArm.Lens;
+
+            // The pass's configured reasoning effort is applied to the outbound request unconditionally.
+            passContext.ActiveReasoningEffort = inputs.PassReasoningEffort;
 
             passContext = await this.RunDispatchPipelineAsync(
                 inputs.Job,
@@ -1606,7 +1614,8 @@ internal sealed partial class FileReviewer(
         string? Lens = null,
         bool Shadow = false,
         int? MaxContextTokens = null,
-        string? TokenizerName = null);
+        string? TokenizerName = null,
+        ReviewReasoningEffort ReasoningEffort = ReviewReasoningEffort.None);
 
     private sealed record MultiPassUnionCompletion(
         Guid? ProtocolId,
@@ -1657,5 +1666,6 @@ internal sealed partial class FileReviewer(
         ReviewPipelineProfile PipelineProfile,
         int? PassMaxContextTokens,
         string? PassTokenizerName,
+        ReviewReasoningEffort PassReasoningEffort,
         CancellationToken Ct);
 }

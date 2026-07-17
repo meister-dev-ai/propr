@@ -452,6 +452,66 @@ public sealed class ClientRegistryTests(PostgresContainerFixture fixture) : IAsy
     }
 
     [Fact]
+    public async Task ReviewPasses_PatchPersistsReasoningEffort_AndGetEchoesIt()
+    {
+        var client = await this.SeedClientAsync();
+        var adminService = new ClientAdminService(this._dbContext);
+        var defaultModel = await this.SeedChatModelAsync(client.Id);
+        var highModel = await this.SeedChatModelAsync(client.Id);
+
+        var updated = await adminService.PatchAsync(
+            client.Id,
+            null,
+            null,
+            reviewPasses: new List<ReviewPassDto>
+            {
+                new(0, defaultModel),
+                new(1, highModel, ReasoningEffort: ReviewReasoningEffort.High),
+            },
+            ct: CancellationToken.None);
+
+        Assert.NotNull(updated);
+        Assert.Equal(
+            new[]
+            {
+                new ReviewPassDto(0, defaultModel, ReasoningEffort: ReviewReasoningEffort.None),
+                new ReviewPassDto(1, highModel, ReasoningEffort: ReviewReasoningEffort.High),
+            },
+            updated!.ReviewPassesOrEmpty.ToArray());
+
+        // The effort survives to the review-pipeline projection so it reaches the outbound request. An unset
+        // per-pass effort reads back as None (the column is null in the database).
+        var passes = await this._registry.GetReviewPassesAsync(client.Id, CancellationToken.None);
+        Assert.Equal(
+            new[] { ReviewReasoningEffort.None, ReviewReasoningEffort.High },
+            passes.Select(pass => pass.ReasoningEffort).ToArray());
+    }
+
+    [Fact]
+    public async Task BaselineReasoningEffort_PatchPersists_AndRegistryEchoesIt()
+    {
+        var client = await this.SeedClientAsync();
+        var adminService = new ClientAdminService(this._dbContext);
+
+        // Default before any opt-in is None (byte-identical to today: no effort sent).
+        var initial = await this._registry.GetBaselineReasoningEffortAsync(client.Id, CancellationToken.None);
+        Assert.Equal(ReviewReasoningEffort.None, initial);
+
+        var updated = await adminService.PatchAsync(
+            client.Id,
+            null,
+            null,
+            baselineReasoningEffort: ReviewReasoningEffort.Medium,
+            ct: CancellationToken.None);
+
+        Assert.NotNull(updated);
+        Assert.Equal(ReviewReasoningEffort.Medium, updated!.BaselineReasoningEffort);
+
+        var persisted = await this._registry.GetBaselineReasoningEffortAsync(client.Id, CancellationToken.None);
+        Assert.Equal(ReviewReasoningEffort.Medium, persisted);
+    }
+
+    [Fact]
     public async Task ReviewPasses_PatchReplacesListWholesale()
     {
         var client = await this.SeedClientAsync();

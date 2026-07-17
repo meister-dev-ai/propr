@@ -10918,6 +10918,7 @@ export interface components {
             enableMultiPassUnion?: boolean;
             includeLinkedItemsInContext?: boolean;
             reviewPasses?: components["schemas"]["ReviewPassEntry"][] | null;
+            baselineReasoningEffort?: components["schemas"]["ReviewReasoningEffort"];
             /** Format: uuid */
             tenantId?: string | null;
             tenantSlug?: string | null;
@@ -11530,6 +11531,7 @@ export interface components {
             enableMultiPassUnion?: boolean | null;
             includeLinkedItemsInContext?: boolean | null;
             reviewPasses?: components["schemas"]["ReviewPassEntry"][] | null;
+            baselineReasoningEffort?: components["schemas"]["ReviewReasoningEffort"];
         };
         /** @description Patch payload for one premium capability override. */
         PatchPremiumCapabilityOverrideRequest: {
@@ -12671,6 +12673,7 @@ export interface components {
             scope?: string | null;
             /** @description Whether this pass runs in shadow mode. Additive metadata the runtime does not act on yet. */
             shadow?: boolean;
+            reasoningEffort?: components["schemas"]["ReviewReasoningEffort"];
         };
         /** @description One selectable review profile entry. */
         ReviewProfileCatalogItemResponse: {
@@ -12687,6 +12690,14 @@ export interface components {
          * @enum {string}
          */
         ReviewProfileSource: "systemDefault" | "clientDefault";
+        /**
+         * @description How much reasoning effort a review pass asks the model to spend. Configured per pass at the client level and
+         *     applied to the outbound chat request. MeisterProPR.Domain.Enums.ReviewReasoningEffort.None is the default and leaves the request without an
+         *     effort level, so the provider keeps its own default (no reasoning) — behavior and cost stay unchanged until a
+         *     user opts in. The remaining levels map to the provider's low/medium/high reasoning-effort settings.
+         * @enum {string}
+         */
+        ReviewReasoningEffort: "none" | "low" | "medium" | "high";
         /** @description Provider-neutral repository identity supplied by review intake clients. */
         ReviewRepositoryRefDto: {
             externalRepositoryId?: string | null;

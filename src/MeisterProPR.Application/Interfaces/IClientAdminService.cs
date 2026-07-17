@@ -50,6 +50,9 @@ public interface IClientAdminService
     ///     When non-null, replaces the client's ordered review-pass list wholesale (an empty list clears it).
     ///     Each entry binds one additional multi-pass union pass to a configured model.
     /// </param>
+    /// <param name="baselineReasoningEffort">
+    ///     When non-null, sets the client-level reasoning effort for the implicit tier baseline review pass.
+    /// </param>
     /// <param name="ct">Cancellation token.</param>
     Task<ClientDto?> PatchAsync(
         Guid clientId,
@@ -64,6 +67,7 @@ public interface IClientAdminService
         bool? enableMultiPassUnion = null,
         bool? includeLinkedItemsInContext = null,
         IReadOnlyList<ReviewPassDto>? reviewPasses = null,
+        ReviewReasoningEffort? baselineReasoningEffort = null,
         CancellationToken ct = default);
 
     /// <summary>

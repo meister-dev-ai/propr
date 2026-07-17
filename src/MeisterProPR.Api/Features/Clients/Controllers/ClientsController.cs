@@ -36,8 +36,9 @@ public sealed class ClientsController(
             client.EnableMultiPassUnion,
             client.IncludeLinkedItemsInContext,
             client.ReviewPassesOrEmpty
-                .Select(pass => new ReviewPassEntry(pass.Ordinal, pass.ConfiguredModelId, pass.Lens, pass.Scope, pass.Shadow))
+                .Select(pass => new ReviewPassEntry(pass.Ordinal, pass.ConfiguredModelId, pass.Lens, pass.Scope, pass.Shadow, pass.ReasoningEffort))
                 .ToList(),
+            client.BaselineReasoningEffort,
             client.TenantId,
             client.TenantSlug,
             client.TenantDisplayName,
@@ -328,8 +329,9 @@ public sealed class ClientsController(
             request.EnableMultiPassUnion,
             request.IncludeLinkedItemsInContext,
             request.ReviewPasses?
-                .Select(pass => new ReviewPassDto(pass.Ordinal, pass.ConfiguredModelId, pass.Lens, pass.Scope, pass.Shadow))
+                .Select(pass => new ReviewPassDto(pass.Ordinal, pass.ConfiguredModelId, pass.Lens, pass.Scope, pass.Shadow, pass.ReasoningEffort))
                 .ToList(),
+            request.BaselineReasoningEffort,
             ct);
         return client is null ? this.NotFound() : this.Ok(ToClientResponse(client));
     }
@@ -349,6 +351,7 @@ public sealed record ClientResponse(
     bool EnableMultiPassUnion,
     bool IncludeLinkedItemsInContext,
     IReadOnlyList<ReviewPassEntry> ReviewPasses,
+    ReviewReasoningEffort BaselineReasoningEffort,
     Guid? TenantId,
     string? TenantSlug,
     string? TenantDisplayName,
@@ -367,7 +370,17 @@ public sealed record ClientResponse(
 ///     at the job level rather than per file.
 /// </param>
 /// <param name="Shadow">Whether this pass runs in shadow mode. Additive metadata the runtime does not act on yet.</param>
-public sealed record ReviewPassEntry(int Ordinal, Guid ConfiguredModelId, string? Lens = null, string? Scope = null, bool Shadow = false);
+/// <param name="ReasoningEffort">
+///     Reasoning effort this pass asks the model to spend. <see cref="ReviewReasoningEffort.None" /> (default) sends no
+///     effort level (current behavior); low/medium/high enable reasoning at the corresponding level.
+/// </param>
+public sealed record ReviewPassEntry(
+    int Ordinal,
+    Guid ConfiguredModelId,
+    string? Lens = null,
+    string? Scope = null,
+    bool Shadow = false,
+    ReviewReasoningEffort ReasoningEffort = ReviewReasoningEffort.None);
 
 /// <summary>Crawl configuration response.</summary>
 public sealed record CrawlConfigResponse(
@@ -411,4 +424,5 @@ public sealed record PatchClientRequest(
     bool? EnableLanguageRobustScreening = null,
     bool? EnableMultiPassUnion = null,
     bool? IncludeLinkedItemsInContext = null,
-    IReadOnlyList<ReviewPassEntry>? ReviewPasses = null);
+    IReadOnlyList<ReviewPassEntry>? ReviewPasses = null,
+    ReviewReasoningEffort? BaselineReasoningEffort = null);

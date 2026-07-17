@@ -18,8 +18,8 @@ describe('review-pass normalize/equal preserve the lens', () => {
     ])
 
     expect(normalized).toEqual([
-      { ordinal: 0, configuredModelId: 'm1', lens: 'security', scope: null, shadow: false },
-      { ordinal: 1, configuredModelId: 'm2', lens: null, scope: null, shadow: false },
+      { ordinal: 0, configuredModelId: 'm1', lens: 'security', scope: null, shadow: false, reasoningEffort: 'none' },
+      { ordinal: 1, configuredModelId: 'm2', lens: null, scope: null, shadow: false, reasoningEffort: 'none' },
     ])
   })
 
@@ -39,7 +39,7 @@ describe('review-pass normalize/equal preserve the lens', () => {
 
   it('normalize keeps scope/shadow and equality treats a scope- or shadow-only change as different', () => {
     const normalized = normalizeReviewPasses([{ ordinal: 0, configuredModelId: 'm1', scope: 'pr_wide', shadow: true }])
-    expect(normalized).toEqual([{ ordinal: 0, configuredModelId: 'm1', lens: null, scope: 'pr_wide', shadow: true }])
+    expect(normalized).toEqual([{ ordinal: 0, configuredModelId: 'm1', lens: null, scope: 'pr_wide', shadow: true, reasoningEffort: 'none' }])
 
     const base: ReviewPassEntry[] = [{ ordinal: 0, configuredModelId: 'm1', lens: null, scope: null, shadow: false }]
     expect(reviewPassesEqual(base, [{ ordinal: 0, configuredModelId: 'm1', lens: null, scope: 'pr_wide', shadow: false }])).toBe(false)

@@ -24,6 +24,7 @@ public sealed record ClientDto(
     bool EnableMultiPassUnion = false,
     bool IncludeLinkedItemsInContext = true,
     IReadOnlyList<ReviewPassDto>? ReviewPasses = null,
+    ReviewReasoningEffort BaselineReasoningEffort = ReviewReasoningEffort.None,
     Guid? TenantId = null,
     string? TenantSlug = null,
     string? TenantDisplayName = null)
@@ -39,4 +40,10 @@ public sealed record ClientDto(
 ///     ordinary resample pass; <see cref="Scope" /> is <see langword="null" /> for the per-file default; <see
 ///     cref="Shadow" /> is additive metadata the runtime does not act on yet.
 /// </summary>
-public sealed record ReviewPassDto(int Ordinal, Guid ConfiguredModelId, string? Lens = null, string? Scope = null, bool Shadow = false);
+public sealed record ReviewPassDto(
+    int Ordinal,
+    Guid ConfiguredModelId,
+    string? Lens = null,
+    string? Scope = null,
+    bool Shadow = false,
+    ReviewReasoningEffort ReasoningEffort = ReviewReasoningEffort.None);

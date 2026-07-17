@@ -267,7 +267,7 @@ describe('ClientDetailView', () => {
       '/clients/{clientId}',
         expect.objectContaining({
           params: { path: { clientId: 'client-1' } },
-          body: { scmCommentPostingEnabled: false, enableEvidenceBackedVerification: false, enableMultiPassUnion: false, includeLinkedItemsInContext: true, enableLanguageRobustScreening: false },
+          body: { scmCommentPostingEnabled: false, enableEvidenceBackedVerification: false, enableMultiPassUnion: false, includeLinkedItemsInContext: true, enableLanguageRobustScreening: false, baselineReasoningEffort: 'none' },
         })
     )
   })
@@ -295,7 +295,7 @@ describe('ClientDetailView', () => {
       '/clients/{clientId}',
         expect.objectContaining({
           params: { path: { clientId: 'client-1' } },
-          body: { scmCommentPostingEnabled: true, enableEvidenceBackedVerification: false, enableMultiPassUnion: false, includeLinkedItemsInContext: true, enableLanguageRobustScreening: false },
+          body: { scmCommentPostingEnabled: true, enableEvidenceBackedVerification: false, enableMultiPassUnion: false, includeLinkedItemsInContext: true, enableLanguageRobustScreening: false, baselineReasoningEffort: 'none' },
         })
     )
   })

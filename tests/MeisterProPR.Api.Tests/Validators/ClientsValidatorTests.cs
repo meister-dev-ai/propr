@@ -317,6 +317,26 @@ public sealed class ClientsValidatorTests
         Assert.True(result.IsValid);
     }
 
+    [Theory]
+    [InlineData(ReviewReasoningEffort.None)]
+    [InlineData(ReviewReasoningEffort.Low)]
+    [InlineData(ReviewReasoningEffort.Medium)]
+    [InlineData(ReviewReasoningEffort.High)]
+    public void PatchClient_BaselineReasoningEffortDefinedValue_Passes(ReviewReasoningEffort effort)
+    {
+        var result = PatchClientValidator.Validate(new PatchClientRequest(BaselineReasoningEffort: effort));
+
+        Assert.True(result.IsValid);
+    }
+
+    [Fact]
+    public void PatchClient_BaselineReasoningEffortUndefinedValue_Fails()
+    {
+        var result = PatchClientValidator.Validate(new PatchClientRequest(BaselineReasoningEffort: (ReviewReasoningEffort)99));
+
+        Assert.False(result.IsValid);
+    }
+
     [Fact]
     public void PatchClient_ValidReviewPassList_Passes()
     {
@@ -325,10 +345,23 @@ public sealed class ClientsValidatorTests
                 ReviewPasses:
                 [
                     new ReviewPassEntry(0, Guid.NewGuid()),
-                    new ReviewPassEntry(1, Guid.NewGuid()),
+                    new ReviewPassEntry(1, Guid.NewGuid(), ReasoningEffort: ReviewReasoningEffort.High),
                 ]));
 
         Assert.True(result.IsValid);
+    }
+
+    [Fact]
+    public void PatchClient_ReviewPassListWithUndefinedReasoningEffort_Fails()
+    {
+        var result = PatchClientValidator.Validate(
+            new PatchClientRequest(
+                ReviewPasses:
+                [
+                    new ReviewPassEntry(0, Guid.NewGuid(), ReasoningEffort: (ReviewReasoningEffort)42),
+                ]));
+
+        Assert.False(result.IsValid);
     }
 
     [Fact]

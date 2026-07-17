@@ -821,6 +821,7 @@ public sealed partial class ReviewOrchestrationService(
         var enableMultiPassUnion = await clientRegistry.GetMultiPassUnionEnabledAsync(job.ClientId, ct);
         var includeLinkedItemsInContext = await clientRegistry.GetIncludeLinkedItemsInContextEnabledAsync(job.ClientId, ct);
         var reviewPasses = await clientRegistry.GetReviewPassesAsync(job.ClientId, ct);
+        var baselineReasoningEffort = await clientRegistry.GetBaselineReasoningEffortAsync(job.ClientId, ct);
 
         var workspacePreparation = preparedWorkspace;
 
@@ -868,6 +869,7 @@ public sealed partial class ReviewOrchestrationService(
             EnableMultiPassUnion = enableMultiPassUnion,
             IncludeLinkedItemsInContext = includeLinkedItemsInContext,
             ReviewPasses = reviewPasses,
+            BaselineReasoningEffort = baselineReasoningEffort,
             ExclusionRules = exclusionRules,
             ModelId = job.AiModel,
             ProtocolRecorder = protocolRecorder,

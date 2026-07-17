@@ -36,6 +36,7 @@
         <span class="review-pass-col-label">Model</span>
         <span class="review-pass-col-label">Lens</span>
         <span class="review-pass-col-label">Scope</span>
+        <span class="review-pass-col-label">Reasoning</span>
         <span class="review-pass-col-label">Shadow</span>
         <span></span>
       </div>
@@ -93,6 +94,18 @@
             @change="emitChange"
           >
             <option v-for="option in SCOPE_OPTIONS" :key="option.value" :value="option.value">
+              {{ option.label }}
+            </option>
+          </select>
+
+          <select
+            v-model="row.reasoning"
+            class="form-input-sm review-pass-input"
+            aria-label="Reasoning"
+            data-testid="review-pass-reasoning"
+            @change="emitChange"
+          >
+            <option v-for="option in REASONING_EFFORT_OPTIONS" :key="option.value" :value="option.value">
               {{ option.label }}
             </option>
           </select>
@@ -174,6 +187,7 @@ interface PassRow {
   lens: string
   scope: string
   shadow: boolean
+  reasoning: string
 }
 
 const MAX_PASSES = 4
@@ -191,6 +205,16 @@ const LENS_OPTIONS: { value: string; label: string }[] = [
 const SCOPE_OPTIONS: { value: string; label: string }[] = [
   { value: '', label: 'Per-file' },
   { value: 'pr_wide', label: 'PR-wide' },
+]
+
+// The reasoning-effort levels offered per pass. 'none' (default) sends no effort so behavior/cost stay
+// unchanged; low/medium/high enable reasoning at the corresponding level. Mirrors the backend
+// ReviewReasoningEffort enum.
+const REASONING_EFFORT_OPTIONS: { value: string; label: string }[] = [
+  { value: 'none', label: 'None' },
+  { value: 'low', label: 'Low' },
+  { value: 'medium', label: 'Medium' },
+  { value: 'high', label: 'High' },
 ]
 
 const props = defineProps<{
@@ -282,11 +306,15 @@ const completeEntries = (source: PassRow[]): ReviewPassEntry[] =>
       lens: row.lens ? row.lens : null,
       scope: row.scope ? row.scope : null,
       shadow: row.shadow,
+      reasoningEffort: (row.reasoning || 'none') as ReviewPassEntry['reasoningEffort'],
     }))
 
 const entriesKey = (entries: ReviewPassEntry[]): string =>
   entries
-    .map((entry) => `${entry.configuredModelId ?? ''}:${entry.lens ?? ''}:${entry.scope ?? ''}:${entry.shadow ? '1' : '0'}`)
+    .map(
+      (entry) =>
+        `${entry.configuredModelId ?? ''}:${entry.lens ?? ''}:${entry.scope ?? ''}:${entry.shadow ? '1' : '0'}:${entry.reasoningEffort ?? 'none'}`,
+    )
     .join('|')
 
 const syncRowsFromModelValue = (): void => {
@@ -296,6 +324,7 @@ const syncRowsFromModelValue = (): void => {
     lens: entry.lens ?? '',
     scope: entry.scope === 'pr_wide' ? 'pr_wide' : '',
     shadow: entry.shadow ?? false,
+    reasoning: entry.reasoningEffort ?? 'none',
   }))
 }
 
@@ -336,7 +365,7 @@ const addRow = (): void => {
     return
   }
 
-  rows.value.push({ connectionId: '', configuredModelId: '', lens: '', scope: '', shadow: false })
+  rows.value.push({ connectionId: '', configuredModelId: '', lens: '', scope: '', shadow: false, reasoning: 'none' })
   emitChange()
 }
 
@@ -369,7 +398,7 @@ const onConnectionChange = (index: number): void => {
      two flexible middle columns identically — the "Connection"/"Model" headers then line up above the selects.
      The actions column is wide enough to hold the two reorder buttons plus Remove so they never overflow left
      onto the Shadow cell. */
-  --review-pass-cols: 4.5rem minmax(0, 1fr) minmax(0, 1fr) 9rem 8rem 4.5rem 10.5rem;
+  --review-pass-cols: 4.5rem minmax(0, 1fr) minmax(0, 1fr) 9rem 8rem 7rem 4.5rem 10.5rem;
   border: 1px solid var(--color-border);
   border-radius: var(--radius-lg);
   background: var(--color-surface);

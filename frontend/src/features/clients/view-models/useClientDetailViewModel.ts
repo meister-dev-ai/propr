@@ -22,6 +22,7 @@ const detailTabs = [
 
 export type DetailTab = (typeof detailTabs)[number]
 export type ReviewPassEntry = components['schemas']['ReviewPassEntry']
+export type ReviewReasoningEffort = components['schemas']['ReviewReasoningEffort']
 
 export interface ClientDetailDto {
   id: string
@@ -36,6 +37,7 @@ export interface ClientDetailDto {
   includeLinkedItemsInContext: boolean
   enableLanguageRobustScreening: boolean
   reviewPasses?: ReviewPassEntry[] | null
+  baselineReasoningEffort?: ReviewReasoningEffort | null
 }
 
 export interface ReviewProfileCatalogItemDto {
@@ -68,6 +70,7 @@ export interface ClientDetailViewModel {
   editedIncludeLinkedItemsInContext: Ref<boolean>
   editedEnableLanguageRobustScreening: Ref<boolean>
   editedReviewPasses: Ref<ReviewPassEntry[]>
+  editedBaselineReasoningEffort: Ref<ReviewReasoningEffort>
   reviewProfiles: Ref<ReviewProfileCatalogItemDto[]>
   clientReviewProfile: Ref<ClientReviewProfileDto | null>
   isProviderDetailOpen: Ref<boolean>
@@ -165,6 +168,7 @@ export function normalizeReviewPasses(passes: ReviewPassEntry[] | null | undefin
       lens: pass.lens ?? null,
       scope: pass.scope ?? null,
       shadow: pass.shadow ?? false,
+      reasoningEffort: pass.reasoningEffort ?? 'none',
     }))
 }
 
@@ -203,7 +207,8 @@ function isFailedPatch(result: { data?: unknown; error?: unknown; response?: Res
   return !!result.error || !result.data || (result.response !== undefined && result.response.ok === false)
 }
 
-/** Two pass lists are equal when they carry the same ordered (configured-model id, lens, scope, shadow) tuples. */
+/** Two pass lists are equal when they carry the same ordered (configured-model id, lens, scope, shadow,
+ * reasoning effort) tuples. */
 export function reviewPassesEqual(left: ReviewPassEntry[], right: ReviewPassEntry[]): boolean {
   if (left.length !== right.length) {
     return false
@@ -214,7 +219,8 @@ export function reviewPassesEqual(left: ReviewPassEntry[], right: ReviewPassEntr
       (pass.configuredModelId ?? '') === (right[index]?.configuredModelId ?? '') &&
       (pass.lens ?? null) === (right[index]?.lens ?? null) &&
       (pass.scope ?? null) === (right[index]?.scope ?? null) &&
-      (pass.shadow ?? false) === (right[index]?.shadow ?? false),
+      (pass.shadow ?? false) === (right[index]?.shadow ?? false) &&
+      (pass.reasoningEffort ?? 'none') === (right[index]?.reasoningEffort ?? 'none'),
   )
 }
 
@@ -247,6 +253,7 @@ export function useClientDetailViewModel(options: UseClientDetailViewModelOption
   const editedIncludeLinkedItemsInContext = ref(true)
   const editedEnableLanguageRobustScreening = ref(false)
   const editedReviewPasses = ref<ReviewPassEntry[]>([])
+  const editedBaselineReasoningEffort = ref<ReviewReasoningEffort>('none')
   const reviewProfiles = ref<ReviewProfileCatalogItemDto[]>([])
   const clientReviewProfile = ref<ClientReviewProfileDto | null>(null)
 
@@ -297,6 +304,7 @@ export function useClientDetailViewModel(options: UseClientDetailViewModelOption
     editedIncludeLinkedItemsInContext.value = Boolean(nextClient.includeLinkedItemsInContext)
     editedEnableLanguageRobustScreening.value = Boolean(nextClient.enableLanguageRobustScreening)
     editedReviewPasses.value = normalizeReviewPasses(nextClient.reviewPasses)
+    editedBaselineReasoningEffort.value = nextClient.baselineReasoningEffort ?? 'none'
   }
 
   function applyClientReviewProfile(nextProfile: ClientReviewProfileDto): void {
@@ -455,6 +463,7 @@ export function useClientDetailViewModel(options: UseClientDetailViewModelOption
         enableMultiPassUnion: editedEnableMultiPassUnion.value,
         includeLinkedItemsInContext: editedIncludeLinkedItemsInContext.value,
         enableLanguageRobustScreening: editedEnableLanguageRobustScreening.value,
+        baselineReasoningEffort: editedBaselineReasoningEffort.value,
       }
 
       // The review-pass list is edited on the AI Connections tab but shares this save path with the System tab.
@@ -514,6 +523,7 @@ export function useClientDetailViewModel(options: UseClientDetailViewModelOption
         editedEnableMultiPassUnion.value !== Boolean(client.value.enableMultiPassUnion) ||
         editedIncludeLinkedItemsInContext.value !== Boolean(client.value.includeLinkedItemsInContext) ||
         editedEnableLanguageRobustScreening.value !== Boolean(client.value.enableLanguageRobustScreening) ||
+        editedBaselineReasoningEffort.value !== (client.value.baselineReasoningEffort ?? 'none') ||
         !reviewPassesEqual(editedReviewPasses.value, normalizeReviewPasses(client.value.reviewPasses))
       )
     )
@@ -554,6 +564,7 @@ export function useClientDetailViewModel(options: UseClientDetailViewModelOption
     editedIncludeLinkedItemsInContext,
     editedEnableLanguageRobustScreening,
     editedReviewPasses,
+    editedBaselineReasoningEffort,
     reviewProfiles,
     clientReviewProfile,
     isProviderDetailOpen,

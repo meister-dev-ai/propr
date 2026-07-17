@@ -16437,6 +16437,9 @@
             },
             "nullable": true
           },
+          "baselineReasoningEffort": {
+            "$ref": "#/components/schemas/ReviewReasoningEffort"
+          },
           "tenantId": {
             "type": "string",
             "format": "uuid",
@@ -18045,6 +18048,9 @@
               "$ref": "#/components/schemas/ReviewPassEntry"
             },
             "nullable": true
+          },
+          "baselineReasoningEffort": {
+            "$ref": "#/components/schemas/ReviewReasoningEffort"
           }
         },
         "additionalProperties": false,
@@ -20779,6 +20785,9 @@
           "shadow": {
             "type": "boolean",
             "description": "Whether this pass runs in shadow mode. Additive metadata the runtime does not act on yet."
+          },
+          "reasoningEffort": {
+            "$ref": "#/components/schemas/ReviewReasoningEffort"
           }
         },
         "additionalProperties": false,
@@ -20823,6 +20832,16 @@
         ],
         "type": "string",
         "description": "Indicates whether the effective review profile comes from the client or the system default."
+      },
+      "ReviewReasoningEffort": {
+        "enum": [
+          "none",
+          "low",
+          "medium",
+          "high"
+        ],
+        "type": "string",
+        "description": "How much reasoning effort a review pass asks the model to spend. Configured per pass at the client level and\napplied to the outbound chat request. MeisterProPR.Domain.Enums.ReviewReasoningEffort.None is the default and leaves the request without an\neffort level, so the provider keeps its own default (no reasoning) — behavior and cost stay unchanged until a\nuser opts in. The remaining levels map to the provider's low/medium/high reasoning-effort settings."
       },
       "ReviewRepositoryRefDto": {
         "type": "object",

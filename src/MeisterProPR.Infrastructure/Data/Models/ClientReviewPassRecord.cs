@@ -1,6 +1,8 @@
 // Copyright (c) Andreas Rain.
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
+using MeisterProPR.Domain.Enums;
+
 namespace MeisterProPR.Infrastructure.Data.Models;
 
 /// <summary>
@@ -32,6 +34,12 @@ public sealed class ClientReviewPassRecord
     ///     not act on the flag yet.
     /// </summary>
     public bool Shadow { get; set; }
+
+    /// <summary>
+    ///     Reasoning effort this pass asks the model to spend. <see langword="null" /> is the default and means
+    ///     <see cref="ReviewReasoningEffort.None" /> (no effort sent — current behavior).
+    /// </summary>
+    public ReviewReasoningEffort? ReasoningEffort { get; set; }
 
     public ClientRecord? Client { get; set; }
 }

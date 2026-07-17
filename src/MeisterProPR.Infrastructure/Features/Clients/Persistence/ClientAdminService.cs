@@ -72,6 +72,7 @@ public sealed class ClientAdminService(
         bool? enableMultiPassUnion = null,
         bool? includeLinkedItemsInContext = null,
         IReadOnlyList<ReviewPassDto>? reviewPasses = null,
+        ReviewReasoningEffort? baselineReasoningEffort = null,
         CancellationToken ct = default)
     {
         var isCommunityEdition = await this.IsCommunityEditionAsync(ct);
@@ -139,6 +140,11 @@ public sealed class ClientAdminService(
             client.IncludeLinkedItemsInContext = includeLinkedItemsInContext.Value;
         }
 
+        if (baselineReasoningEffort.HasValue)
+        {
+            client.BaselineReasoningEffort = baselineReasoningEffort.Value;
+        }
+
         if (reviewPasses is not null)
         {
             // Wholesale replace the ordered pass list: clear the existing rows (cascade-deleted) and re-add the
@@ -157,6 +163,8 @@ public sealed class ClientAdminService(
                         Lens = pass.Lens,
                         Scope = pass.Scope,
                         Shadow = pass.Shadow,
+                        // Store None as null so an unset effort keeps the column empty (null reads back as None).
+                        ReasoningEffort = pass.ReasoningEffort == ReviewReasoningEffort.None ? null : pass.ReasoningEffort,
                     });
             }
         }
@@ -336,7 +344,13 @@ public sealed class ClientAdminService(
 
         var reviewPasses = client.ReviewPasses
             .OrderBy(pass => pass.Ordinal)
-            .Select(pass => new ReviewPassDto(pass.Ordinal, pass.ConfiguredModelId, pass.Lens, pass.Scope, pass.Shadow))
+            .Select(pass => new ReviewPassDto(
+                pass.Ordinal,
+                pass.ConfiguredModelId,
+                pass.Lens,
+                pass.Scope,
+                pass.Shadow,
+                pass.ReasoningEffort ?? ReviewReasoningEffort.None))
             .ToList()
             .AsReadOnly();
 
@@ -355,6 +369,7 @@ public sealed class ClientAdminService(
             client.EnableMultiPassUnion,
             client.IncludeLinkedItemsInContext,
             reviewPasses,
+            client.BaselineReasoningEffort,
             tenantId,
             tenantSlug,
             tenantDisplayName);

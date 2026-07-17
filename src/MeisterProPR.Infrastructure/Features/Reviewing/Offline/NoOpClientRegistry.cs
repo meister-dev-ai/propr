@@ -69,6 +69,11 @@ public sealed class NoOpClientRegistry : IClientRegistry
         return Task.FromResult<IReadOnlyList<ReviewPassSpec>>([]);
     }
 
+    public Task<ReviewReasoningEffort> GetBaselineReasoningEffortAsync(Guid clientId, CancellationToken ct = default)
+    {
+        return Task.FromResult(ReviewReasoningEffort.None);
+    }
+
     public Task<string?> GetDefaultReviewPipelineProfileIdAsync(Guid clientId, CancellationToken ct = default)
     {
         return Task.FromResult<string?>(null);

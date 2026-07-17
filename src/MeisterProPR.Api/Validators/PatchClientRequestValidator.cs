@@ -39,12 +39,17 @@ public sealed class PatchClientRequestValidator : AbstractValidator<PatchClientR
             .Must(_ => true)
             .When(r => r.IncludeLinkedItemsInContext.HasValue);
 
+        this.RuleFor(r => r.BaselineReasoningEffort)
+            .Must(effort => Enum.IsDefined(effort!.Value))
+            .WithMessage("BaselineReasoningEffort must be one of none, low, medium, high.")
+            .When(r => r.BaselineReasoningEffort.HasValue);
+
         this.RuleFor(r => r.ReviewPasses)
             .Must(BeAValidReviewPassList)
             .WithMessage(
                 "ReviewPasses must contain at most 4 entries, each with a non-empty configuredModelId, an optional "
-                + "recognized lens, an optional recognized scope, a distinct (configuredModelId, lens, scope, shadow) "
-                + "tuple, and unique, contiguous ordinals starting at 0.")
+                + "recognized lens, an optional recognized scope, a recognized reasoning effort, a distinct "
+                + "(configuredModelId, lens, scope, shadow) tuple, and unique, contiguous ordinals starting at 0.")
             .When(r => r.ReviewPasses is not null);
     }
 
@@ -77,6 +82,12 @@ public sealed class PatchClientRequestValidator : AbstractValidator<PatchClientR
 
         // Only null (the per-file default) or a recognized scope value is permitted.
         if (passes.Any(pass => !ReviewPassScope.IsValid(pass.Scope)))
+        {
+            return false;
+        }
+
+        // Only a defined reasoning-effort level is permitted (none/low/medium/high).
+        if (passes.Any(pass => !Enum.IsDefined(pass.ReasoningEffort)))
         {
             return false;
         }

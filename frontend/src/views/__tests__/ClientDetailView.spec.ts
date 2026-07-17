@@ -177,6 +177,7 @@ describe('ClientDetailView', () => {
         enableMultiPassUnion: false,
         includeLinkedItemsInContext: true,
         enableLanguageRobustScreening: false,
+        baselineReasoningEffort: 'none',
       },
     })
   })
@@ -199,6 +200,7 @@ describe('ClientDetailView', () => {
         enableMultiPassUnion: true,
         includeLinkedItemsInContext: true,
         enableLanguageRobustScreening: false,
+        baselineReasoningEffort: 'none',
       },
     })
   })
@@ -221,6 +223,7 @@ describe('ClientDetailView', () => {
         enableMultiPassUnion: false,
         includeLinkedItemsInContext: true,
         enableLanguageRobustScreening: true,
+        baselineReasoningEffort: 'none',
       },
     })
   })
