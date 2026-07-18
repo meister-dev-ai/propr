@@ -385,8 +385,10 @@ public sealed partial class JobRepository(
     public async Task SetFailedAsync(Guid id, string errorMessage, CancellationToken ct = default)
     {
         var job = await dbContext.ReviewJobs.FindAsync([id], ct);
-        if (job is null)
+        if (job is null || job.Status is JobStatus.Cancelled or JobStatus.Superseded or JobStatus.Stopped)
         {
+            // Never overwrite a deliberate terminal decision (a manual stop, a PR-abandoned cancel, or a
+            // supersede) with a late failure from an execution that had already passed its status checkpoints.
             return;
         }
 
@@ -414,8 +416,11 @@ public sealed partial class JobRepository(
     public async Task SetResultAsync(Guid id, ReviewResult result, CancellationToken ct = default)
     {
         var job = await dbContext.ReviewJobs.FindAsync([id], ct);
-        if (job is null)
+        if (job is null || job.Status is JobStatus.Cancelled or JobStatus.Superseded or JobStatus.Stopped)
         {
+            // Never overwrite a deliberate terminal decision (a manual stop, a PR-abandoned cancel, or a
+            // supersede) with a late completion — in a multi-instance deployment the running instance may not
+            // receive the stop signal and could otherwise clobber Stopped with Completed after the fact.
             return;
         }
 
@@ -591,7 +596,7 @@ public sealed partial class JobRepository(
     public async Task SetCancelledAsync(Guid id, CancellationToken ct = default)
     {
         var job = await dbContext.ReviewJobs.FindAsync([id], ct);
-        if (job is null || job.Status is JobStatus.Completed or JobStatus.Failed or JobStatus.Cancelled or JobStatus.Superseded)
+        if (job is null || job.Status is JobStatus.Completed or JobStatus.Failed or JobStatus.Cancelled or JobStatus.Superseded or JobStatus.Stopped)
         {
             return;
         }
@@ -606,12 +611,27 @@ public sealed partial class JobRepository(
     public async Task SetSupersededAsync(Guid id, CancellationToken ct = default)
     {
         var job = await dbContext.ReviewJobs.FindAsync([id], ct);
-        if (job is null || job.Status is JobStatus.Completed or JobStatus.Failed or JobStatus.Cancelled or JobStatus.Superseded)
+        if (job is null || job.Status is JobStatus.Completed or JobStatus.Failed or JobStatus.Cancelled or JobStatus.Superseded or JobStatus.Stopped)
         {
             return;
         }
 
         job.Status = JobStatus.Superseded;
+        job.CompletedAt = DateTimeOffset.UtcNow;
+        await dbContext.SaveChangesAsync(ct).ConfigureAwait(false);
+        await this.CloseOpenProtocolsAsync(id).ConfigureAwait(false);
+    }
+
+    /// <inheritdoc />
+    public async Task SetStoppedAsync(Guid id, CancellationToken ct = default)
+    {
+        var job = await dbContext.ReviewJobs.FindAsync([id], ct);
+        if (job is null || job.Status is JobStatus.Completed or JobStatus.Failed or JobStatus.Cancelled or JobStatus.Superseded or JobStatus.Stopped)
+        {
+            return;
+        }
+
+        job.Status = JobStatus.Stopped;
         job.CompletedAt = DateTimeOffset.UtcNow;
         await dbContext.SaveChangesAsync(ct).ConfigureAwait(false);
         await this.CloseOpenProtocolsAsync(id).ConfigureAwait(false);

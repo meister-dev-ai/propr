@@ -62,6 +62,13 @@ public sealed record ReviewJobRestartResponse(
     Guid SourceJobId,
     string Status);
 
+/// <summary>Response returned when a running or queued review job is stopped.</summary>
+/// <param name="JobId">Identifier of the stopped review job.</param>
+/// <param name="Status">Lower-cased status of the job (<c>stopped</c>).</param>
+public sealed record ReviewJobStopResponse(
+    Guid JobId,
+    string Status);
+
 /// <summary>Detailed status response for a review job.</summary>
 public sealed record ReviewStatusResponse(
     Guid JobId,

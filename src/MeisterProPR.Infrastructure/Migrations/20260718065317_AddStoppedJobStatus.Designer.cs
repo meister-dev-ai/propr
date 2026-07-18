@@ -3,6 +3,7 @@ using System;
 using MeisterProPR.Infrastructure.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 using Pgvector;
@@ -12,9 +13,11 @@ using Pgvector;
 namespace MeisterProPR.Infrastructure.Migrations
 {
     [DbContext(typeof(MeisterProPRDbContext))]
-    partial class MeisterProPRDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260718065317_AddStoppedJobStatus")]
+    partial class AddStoppedJobStatus
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -23,56 +26,6 @@ namespace MeisterProPR.Infrastructure.Migrations
 
             NpgsqlModelBuilderExtensions.HasPostgresExtension(modelBuilder, "vector");
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
-
-            modelBuilder.Entity("MeisterProPR.Domain.Entities.BlockedPullRequest", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .HasColumnType("uuid")
-                        .HasColumnName("id");
-
-                    b.Property<DateTimeOffset>("BlockedAt")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("blocked_at");
-
-                    b.Property<Guid>("BlockedByUserId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("blocked_by_user_id");
-
-                    b.Property<Guid>("ClientId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("client_id");
-
-                    b.Property<string>("ProviderProjectKey")
-                        .IsRequired()
-                        .HasColumnType("text")
-                        .HasColumnName("provider_project_key");
-
-                    b.Property<string>("ProviderScopePath")
-                        .IsRequired()
-                        .HasColumnType("text")
-                        .HasColumnName("provider_scope_path");
-
-                    b.Property<int>("PullRequestId")
-                        .HasColumnType("integer")
-                        .HasColumnName("pull_request_id");
-
-                    b.Property<string>("Reason")
-                        .HasColumnType("text")
-                        .HasColumnName("reason");
-
-                    b.Property<string>("RepositoryId")
-                        .IsRequired()
-                        .HasColumnType("text")
-                        .HasColumnName("repository_id");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("ClientId", "ProviderScopePath", "ProviderProjectKey", "RepositoryId", "PullRequestId")
-                        .IsUnique()
-                        .HasDatabaseName("uq_blocked_pull_requests_pr");
-
-                    b.ToTable("blocked_pull_requests", (string)null);
-                });
 
             modelBuilder.Entity("MeisterProPR.Domain.Entities.ClientTokenUsageSample", b =>
                 {
@@ -1921,12 +1874,6 @@ namespace MeisterProPR.Infrastructure.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("id");
 
-                    b.Property<int>("BaselineReasoningEffort")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("integer")
-                        .HasDefaultValue(0)
-                        .HasColumnName("baseline_reasoning_effort");
-
                     b.Property<int>("CommentResolutionBehavior")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("integer")
@@ -2025,10 +1972,6 @@ namespace MeisterProPR.Infrastructure.Migrations
                     b.Property<int>("Ordinal")
                         .HasColumnType("integer")
                         .HasColumnName("ordinal");
-
-                    b.Property<int?>("ReasoningEffort")
-                        .HasColumnType("integer")
-                        .HasColumnName("reasoning_effort");
 
                     b.Property<string>("Scope")
                         .HasMaxLength(64)
@@ -3275,15 +3218,6 @@ namespace MeisterProPR.Infrastructure.Migrations
                         .HasDatabaseName("ix_webhook_repo_filters_config_source_ref");
 
                     b.ToTable("webhook_repo_filters", (string)null);
-                });
-
-            modelBuilder.Entity("MeisterProPR.Domain.Entities.BlockedPullRequest", b =>
-                {
-                    b.HasOne("MeisterProPR.Infrastructure.Data.Models.ClientRecord", null)
-                        .WithMany()
-                        .HasForeignKey("ClientId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
                 });
 
             modelBuilder.Entity("MeisterProPR.Domain.Entities.ClientTokenUsageSample", b =>

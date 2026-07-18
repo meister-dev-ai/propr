@@ -2262,6 +2262,207 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/clients/{clientId}/reviewing/blocked-prs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List the pull requests currently blocked from review processing for a client. */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    /** @description ID of the client whose blocked pull requests are listed. */
+                    clientId: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description The blocked pull requests for the client. */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["BlockedPullRequestDto"][];
+                        "application/json": components["schemas"]["BlockedPullRequestDto"][];
+                        "text/json": components["schemas"]["BlockedPullRequestDto"][];
+                    };
+                };
+                /** @description Missing or invalid credentials. */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Caller lacks access to the client. */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        /** Block a pull request from review processing. */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    /** @description ID of the client that owns the pull request. */
+                    clientId: string;
+                };
+                cookie?: never;
+            };
+            /** @description The pull request to block, and an optional reason. */
+            requestBody?: {
+                content: {
+                    "application/json": components["schemas"]["BlockPullRequestRequest"];
+                    "text/json": components["schemas"]["BlockPullRequestRequest"];
+                    "application/*+json": components["schemas"]["BlockPullRequestRequest"];
+                };
+            };
+            responses: {
+                /** @description The pull request is blocked (already blocked requests are accepted idempotently). */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description The request is missing required pull-request identity fields. */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Missing or invalid credentials. */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Caller lacks `ClientAdministrator` rights for the client. */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/clients/{clientId}/reviewing/blocked-prs/unblock": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Unblock a pull request so future pushes are processed again. */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    /** @description ID of the client that owns the pull request. */
+                    clientId: string;
+                };
+                cookie?: never;
+            };
+            /** @description The pull request to unblock. */
+            requestBody?: {
+                content: {
+                    "application/json": components["schemas"]["UnblockPullRequestRequest"];
+                    "text/json": components["schemas"]["UnblockPullRequestRequest"];
+                    "application/*+json": components["schemas"]["UnblockPullRequestRequest"];
+                };
+            };
+            responses: {
+                /** @description The pull request is not blocked (already-unblocked requests are accepted idempotently). */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description The request is missing required pull-request identity fields. */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Missing or invalid credentials. */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Caller lacks `ClientAdministrator` rights for the client. */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/clients/{clientId}/ai-connections": {
         parameters: {
             query?: never;
@@ -8110,7 +8311,7 @@ export interface paths {
                         "text/json": components["schemas"]["ProblemDetails"];
                     };
                 };
-                /** @description Active review job already exists for this PR iteration. */
+                /** @description An active review job already exists for this PR iteration, or the pull request is blocked from processing. */
                 409: {
                     headers: {
                         [name: string]: unknown;
@@ -8249,7 +8450,7 @@ export interface paths {
                         "text/json": components["schemas"]["ProblemDetails"];
                     };
                 };
-                /** @description Active review job already exists for this PR iteration. */
+                /** @description An active review job already exists for this PR iteration, or the pull request is blocked from processing. */
                 409: {
                     headers: {
                         [name: string]: unknown;
@@ -8430,6 +8631,188 @@ export interface paths {
                     };
                 };
                 /** @description Job is not in a failed state, or an active job already exists for this PR revision. */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/reviewing/jobs/{jobId}/stop": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Manually stop a running or queued review job.
+         * @description Lets a client administrator halt a review that should not run to completion (for example an
+         *     oversized or misbehaving pull request). Requires MeisterProPR.Domain.Enums.ClientRole.ClientAdministrator for
+         *     the job's owning client. Stopping is terminal: it does not requeue the job. Blocking a pull request
+         *     is a separate action that prevents future processing without stopping the current run.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    /** @description The identifier of the review job to stop. */
+                    jobId: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description The job was running or queued and has been stopped. */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ReviewJobStopResponse"];
+                        "application/json": components["schemas"]["ReviewJobStopResponse"];
+                        "text/json": components["schemas"]["ReviewJobStopResponse"];
+                    };
+                };
+                /** @description Missing or invalid credentials. */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Caller lacks `ClientAdministrator` rights for the job's owning client. */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Job not found. */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Job has already reached a terminal state and cannot be stopped. */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/jobs/{jobId}/stop": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Manually stop a running or queued review job.
+         * @description Lets a client administrator halt a review that should not run to completion (for example an
+         *     oversized or misbehaving pull request). Requires MeisterProPR.Domain.Enums.ClientRole.ClientAdministrator for
+         *     the job's owning client. Stopping is terminal: it does not requeue the job. Blocking a pull request
+         *     is a separate action that prevents future processing without stopping the current run.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    /** @description The identifier of the review job to stop. */
+                    jobId: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description The job was running or queued and has been stopped. */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ReviewJobStopResponse"];
+                        "application/json": components["schemas"]["ReviewJobStopResponse"];
+                        "text/json": components["schemas"]["ReviewJobStopResponse"];
+                    };
+                };
+                /** @description Missing or invalid credentials. */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Caller lacks `ClientAdministrator` rights for the job's owning client. */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Job not found. */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Job has already reached a terminal state and cannot be stopped. */
                 409: {
                     headers: {
                         [name: string]: unknown;
@@ -10882,6 +11265,58 @@ export interface components {
             edition?: components["schemas"]["InstallationEdition"];
             capabilities?: components["schemas"]["PremiumCapabilityDto"][] | null;
         };
+        /** @description Identifies a pull request to block and, optionally, why. */
+        BlockPullRequestRequest: {
+            /** @description Provider host/organisation scope of the pull request. */
+            providerScopePath?: string | null;
+            /** @description Provider project/namespace key of the pull request. */
+            providerProjectKey?: string | null;
+            /** @description Repository identifier of the pull request. */
+            repositoryId?: string | null;
+            /**
+             * Format: int32
+             * @description Pull request number.
+             */
+            pullRequestId?: number;
+            /** @description Optional free-text reason for the block. */
+            reason?: string | null;
+        };
+        /** @description A pull request currently blocked from review processing. */
+        BlockedPullRequestDto: {
+            /**
+             * Format: uuid
+             * @description Identifier of the block record.
+             */
+            id?: string;
+            /**
+             * Format: uuid
+             * @description Owning client.
+             */
+            clientId?: string;
+            /** @description Provider host/organisation scope of the pull request. */
+            providerScopePath?: string | null;
+            /** @description Provider project/namespace key of the pull request. */
+            providerProjectKey?: string | null;
+            /** @description Repository identifier of the pull request. */
+            repositoryId?: string | null;
+            /**
+             * Format: int32
+             * @description Pull request number.
+             */
+            pullRequestId?: number;
+            /**
+             * Format: uuid
+             * @description User who created the block.
+             */
+            blockedByUserId?: string;
+            /**
+             * Format: date-time
+             * @description When the block was created (UTC).
+             */
+            blockedAt?: string;
+            /** @description Optional free-text reason for the block. */
+            reason?: string | null;
+        };
         /**
          * @description Cache outcome recorded for one AI call.
          * @enum {string}
@@ -11361,7 +11796,7 @@ export interface components {
          * @description Status of a review job.
          * @enum {string}
          */
-        JobStatus: "pending" | "processing" | "completed" | "failed" | "cancelled" | "superseded";
+        JobStatus: "pending" | "processing" | "completed" | "failed" | "cancelled" | "superseded" | "stopped";
         /** @description Installation-wide licensing summary for administration and session hydration. */
         LicensingSummaryDto: {
             edition?: components["schemas"]["InstallationEdition"];
@@ -12626,6 +13061,16 @@ export interface components {
             completedAt?: string | null;
             result?: components["schemas"]["ReviewResultDto"];
         };
+        /** @description Response returned when a running or queued review job is stopped. */
+        ReviewJobStopResponse: {
+            /**
+             * Format: uuid
+             * @description Identifier of the stopped review job.
+             */
+            jobId?: string;
+            /** @description Lower-cased status of the job (`stopped`). */
+            status?: string | null;
+        };
         /** @description List item for a review job. */
         ReviewListItem: {
             /** Format: uuid */
@@ -12969,6 +13414,20 @@ export interface components {
              * @description Accumulated output tokens for this tier/model combination.
              */
             totalOutputTokens?: number;
+        };
+        /** @description Identifies a pull request to unblock. */
+        UnblockPullRequestRequest: {
+            /** @description Provider host/organisation scope of the pull request. */
+            providerScopePath?: string | null;
+            /** @description Provider project/namespace key of the pull request. */
+            providerProjectKey?: string | null;
+            /** @description Repository identifier of the pull request. */
+            repositoryId?: string | null;
+            /**
+             * Format: int32
+             * @description Pull request number.
+             */
+            pullRequestId?: number;
         };
         /** @description Request body for updating an existing provider-neutral AI connection profile. */
         UpdateAiConnectionRequest: {

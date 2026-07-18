@@ -141,6 +141,11 @@ public sealed class ReviewJobExecutionStoreAdapter(IJobRepository inner) : IRevi
         return inner.SetCancelledAsync(id, ct);
     }
 
+    public Task SetStoppedAsync(Guid id, CancellationToken ct = default)
+    {
+        return inner.SetStoppedAsync(id, ct);
+    }
+
     public Task UpdateAiConfigAsync(
         Guid id,
         Guid? connectionId,

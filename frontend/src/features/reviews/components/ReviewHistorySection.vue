@@ -4,6 +4,8 @@
 <template>
     <div class="review-history-section">
         <p v-if="restartError" class="error restart-error">{{ restartError }}</p>
+        <p v-if="stopError" class="error restart-error">{{ stopError }}</p>
+        <p v-if="blockError" class="error restart-error">{{ blockError }}</p>
         <p v-if="loading" class="loading">Loading…</p>
         <p v-else-if="error" class="error">{{ error }}</p>
         <p v-else-if="groups.length === 0" class="empty-state">No reviews yet.</p>
@@ -18,6 +20,13 @@
                         <span class="repo-name">{{ group.prRepositoryName ?? group.repositoryId }}</span>
                         <span v-if="group.prSourceBranch && group.prTargetBranch" class="branch-context">
                             {{ group.prSourceBranch }} &rarr; {{ group.prTargetBranch }}
+                        </span>
+                        <span
+                            v-if="isPrBlocked(group)"
+                            class="blocked-badge"
+                            title="Blocked from review processing — new pushes are not reviewed"
+                        >
+                            <i class="fi fi-rr-ban"></i> Blocked
                         </span>
                     </div>
             <div class="pr-card-header-right">
@@ -48,6 +57,23 @@
                             +{{ group.items.length - itemsVisibleDefault }} more ▾
                         </span>
                     </button>
+                    <OverflowMenu
+                        v-if="canManageClient(group.clientId)"
+                        class="pr-block-menu"
+                        title="PR actions"
+                    >
+                        <template #default="{ close }">
+                            <button
+                                type="button"
+                                class="overflow-menu-item"
+                                :disabled="blockingPrs.has(group.key)"
+                                @click="toggleBlockPr(group); close()"
+                            >
+                                <i :class="isPrBlocked(group) ? 'fi fi-rr-play' : 'fi fi-rr-ban'"></i>
+                                {{ isPrBlocked(group) ? 'Unblock PR' : 'Block PR' }}
+                            </button>
+                        </template>
+                    </OverflowMenu>
                 </div>
             </div>
                 </div>
@@ -78,7 +104,11 @@
                             </div>
                         </div>
 
-                        <div class="list-summary-col" :class="{ 'summary-truncate': item.status !== 'processing' }" @click="openSummaryModal(item)">
+                        <div
+                            class="list-summary-col"
+                            :class="{ 'summary-truncate': item.status !== 'processing' && hasSummaryContent(item) }"
+                            @click="hasSummaryContent(item) && openSummaryModal(item)"
+                        >
                             <template v-if="item.status === 'processing' && item.id">
                                 <div class="active-chips">
                                     <RouterLink 
@@ -113,6 +143,15 @@
                                 @click="restartJob(item)"
                             >
                                 {{ restartingJobs.has(item.id) ? 'Restarting…' : 'Restart ↻' }}
+                            </button>
+                            <button
+                                v-if="(item.status === 'processing' || item.status === 'pending') && item.id && canManageClient(item.clientId)"
+                                class="btn-ghost stop-btn"
+                                :disabled="stoppingJobs.has(item.id)"
+                                title="Stop this running review"
+                                @click="stopJob(item)"
+                            >
+                                {{ stoppingJobs.has(item.id) ? 'Stopping…' : 'Stop ◼' }}
                             </button>
                             <RouterLink
                                 v-if="canInspectClient(props.clientId || item.clientId)"
@@ -164,6 +203,7 @@
 <script lang="ts" setup>
 import { RouterLink } from 'vue-router'
 import ModalDialog from '@/components/dialogs/ModalDialog.vue'
+import OverflowMenu from '@/components/OverflowMenu.vue'
 import ProgressOrb from '@/components/ProgressOrb.vue'
 import { useReviewHistoryViewModel, type PrGroup } from '@/features/reviews/view-models/useReviewHistoryViewModel'
 import { formatFilesReviewed } from '@/utils/reviewProgress'
@@ -206,9 +246,17 @@ const {
     refresh,
     visibleItems,
     canInspectClient,
+    canManageClient,
     restartingJobs,
     restartError,
     restartJob,
+    stoppingJobs,
+    stopError,
+    stopJob,
+    blockingPrs,
+    blockError,
+    isPrBlocked,
+    toggleBlockPr,
 } = vm
 
 defineExpose({
@@ -248,6 +296,12 @@ function rowClass(item: JobListItem): string {
     if (item.status === 'processing') return 'row-processing'
     if (item.status === 'pending') return 'row-pending'
     return ''
+}
+
+// The summary cell is only clickable when it has real content to show; a bare '—' fallback should not
+// open an empty modal.
+function hasSummaryContent(item: JobListItem): boolean {
+    return Boolean(item.resultSummary || item.errorMessage)
 }
 
 function statusBadgeClass(status: JobStatus | undefined): string {
@@ -347,6 +401,25 @@ function prReviewLink(group: PrGroup): object {
     background: var(--color-bg-subtle, rgba(0,0,0,0.06));
     padding: 0.1rem 0.4rem;
     border-radius: var(--radius-xs);
+}
+
+.blocked-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+    font-size: 0.72rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    color: var(--color-danger);
+    background: var(--color-danger-soft, rgba(239, 68, 68, 0.12));
+    border: 1px solid rgba(239, 68, 68, 0.4);
+    padding: 0.1rem 0.45rem;
+    border-radius: var(--radius-xs);
+}
+
+.blocked-badge i {
+    font-size: 0.7rem;
 }
 
 .pr-card-totals {
@@ -481,6 +554,24 @@ function prReviewLink(group: PrGroup): object {
 }
 
 .restart-btn:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+}
+
+.stop-btn {
+    font-size: 0.78rem;
+    padding: 0.25rem 0.6rem;
+    color: var(--color-danger);
+    border: 1px solid rgba(239, 68, 68, 0.3);
+    white-space: nowrap;
+}
+
+.stop-btn:hover:not(:disabled) {
+    background: rgba(239, 68, 68, 0.1);
+    border-color: rgba(239, 68, 68, 0.55);
+}
+
+.stop-btn:disabled {
     opacity: 0.6;
     cursor: not-allowed;
 }

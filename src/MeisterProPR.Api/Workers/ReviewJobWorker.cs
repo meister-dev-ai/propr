@@ -19,6 +19,7 @@ public sealed partial class ReviewJobWorker(
     IServiceScopeFactory scopeFactory,
     IOptions<WorkerOptions> workerOptions,
     ReviewJobMetrics metrics,
+    IReviewJobCancellationRegistry cancellationRegistry,
     ILogger<ReviewJobWorker> logger) : BackgroundService
 {
     private readonly ConcurrentDictionary<Guid, byte> _claimed = new();
@@ -157,16 +158,33 @@ public sealed partial class ReviewJobWorker(
         using var scope = scopeFactory.CreateScope();
         var jobRepository = scope.ServiceProvider.GetRequiredService<IReviewJobExecutionStore>();
 
+        // Register a per-job cancellation source and run the review under a token linked to it and the
+        // host-shutdown token. A manual stop cancels the former; shutdown cancels the latter — the catch
+        // below tells them apart so an operator-halted job is finalized as Stopped rather than requeued.
+        var jobCancellationToken = cancellationRegistry.Register(job.Id);
+        using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(stoppingToken, jobCancellationToken);
+
         try
         {
             var orchestrator = scope.ServiceProvider.GetRequiredService<IReviewJobProcessor>();
-            await orchestrator.ProcessAsync(job, stoppingToken);
+            await orchestrator.ProcessAsync(job, linkedCts.Token);
             activity?.SetStatus(ActivityStatusCode.Ok);
         }
         catch (OperationCanceledException)
         {
-            outcome = "cancelled";
-            await jobRepository.TryTransitionAsync(job.Id, JobStatus.Processing, JobStatus.Pending, stoppingToken);
+            if (jobCancellationToken.IsCancellationRequested && !stoppingToken.IsCancellationRequested)
+            {
+                // Manual stop by a client administrator: the endpoint already persisted Stopped. Ensure it
+                // and do NOT reset to Pending — that would resurrect a job the operator explicitly halted.
+                outcome = "stopped";
+                LogJobStoppedByOperator(logger, job.Id);
+                await jobRepository.SetStoppedAsync(job.Id, CancellationToken.None);
+            }
+            else
+            {
+                outcome = "cancelled";
+                await jobRepository.TryTransitionAsync(job.Id, JobStatus.Processing, JobStatus.Pending, stoppingToken);
+            }
         }
         catch (Exception ex)
         {
@@ -178,6 +196,7 @@ public sealed partial class ReviewJobWorker(
         }
         finally
         {
+            cancellationRegistry.Remove(job.Id);
             stopwatch.Stop();
             activity?.SetTag("review_job.outcome", outcome);
             metrics.RecordJobDuration(job.Provider, stopwatch.Elapsed.TotalSeconds, outcome);
@@ -195,6 +214,9 @@ public sealed partial class ReviewJobWorker(
 
     [LoggerMessage(Level = LogLevel.Error, Message = "ReviewJobWorker: unhandled exception processing job {JobId}")]
     private static partial void LogJobProcessingError(ILogger logger, Guid jobId, Exception ex);
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "ReviewJobWorker: job {JobId} stopped by client administrator")]
+    private static partial void LogJobStoppedByOperator(ILogger logger, Guid jobId);
 
     [LoggerMessage(
         Level = LogLevel.Warning,

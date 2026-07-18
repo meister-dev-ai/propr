@@ -30,4 +30,12 @@ public enum JobStatus
     ///     newer revision's review.
     /// </summary>
     Superseded = 5,
+
+    /// <summary>
+    ///     Job was stopped manually by a client administrator through the control panel. Unlike
+    ///     <see cref="Cancelled" /> (pull request abandoned) and <see cref="Superseded" /> (a newer push
+    ///     arrived), this is a deliberate operator action that halts an in-flight or queued review; its
+    ///     partial results are not treated as a reusable baseline.
+    /// </summary>
+    Stopped = 6,
 }

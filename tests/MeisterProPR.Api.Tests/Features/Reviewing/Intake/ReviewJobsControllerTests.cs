@@ -3,7 +3,9 @@
 
 using MeisterProPR.Api.Features.Reviewing.Contracts;
 using MeisterProPR.Api.Features.Reviewing.Intake.Controllers;
+using MeisterProPR.Application.Features.Reviewing.Execution.Ports;
 using MeisterProPR.Application.Features.Reviewing.Intake.Commands.RestartReviewJob;
+using MeisterProPR.Application.Features.Reviewing.Intake.Commands.StopReviewJob;
 using MeisterProPR.Application.Features.Reviewing.Intake.Commands.SubmitReviewJob;
 using MeisterProPR.Application.Features.Reviewing.Intake.Dtos;
 using MeisterProPR.Application.Features.Reviewing.Intake.Ports;
@@ -299,6 +301,84 @@ public sealed class ReviewJobsControllerTests
         await queue.Received(1).EnqueueAsync(payload.JobId, Arg.Any<CancellationToken>());
     }
 
+    [Fact]
+    public async Task StopReview_WithoutAdminRole_ReturnsForbidden()
+    {
+        var jobId = Guid.NewGuid();
+        var clientId = Guid.NewGuid();
+        var store = Substitute.For<IReviewJobIntakeStore>();
+        store.GetByIdAsync(jobId, Arg.Any<CancellationToken>())
+            .Returns(new ReviewJob(jobId, clientId, "https://dev.azure.com/org", "proj", "repo", 42, 1));
+        var controller = CreateController(store, clientId, ClientRole.ClientUser);
+
+        var result = await controller.StopReview(jobId, CancellationToken.None);
+
+        var objectResult = Assert.IsType<ObjectResult>(result);
+        Assert.Equal(StatusCodes.Status403Forbidden, objectResult.StatusCode);
+    }
+
+    [Fact]
+    public async Task StopReview_UnknownJob_ReturnsNotFound()
+    {
+        var jobId = Guid.NewGuid();
+        var store = Substitute.For<IReviewJobIntakeStore>();
+        store.GetByIdAsync(jobId, Arg.Any<CancellationToken>()).Returns((ReviewJob?)null);
+        var controller = CreateController(store, Guid.NewGuid(), ClientRole.ClientAdministrator);
+
+        var result = await controller.StopReview(jobId, CancellationToken.None);
+
+        Assert.IsType<NotFoundResult>(result);
+    }
+
+    [Fact]
+    public async Task StopReview_RunningJobAsAdmin_ReturnsOkStoppedAndPersistsStop()
+    {
+        var jobId = Guid.NewGuid();
+        var clientId = Guid.NewGuid();
+        var store = Substitute.For<IReviewJobIntakeStore>();
+        store.GetByIdAsync(jobId, Arg.Any<CancellationToken>())
+            .Returns(new ReviewJob(jobId, clientId, "https://dev.azure.com/org", "proj", "repo", 42, 1));
+        var jobRepository = Substitute.For<IJobRepository>();
+        jobRepository.GetById(jobId)
+            .Returns(
+                new ReviewJob(jobId, clientId, "https://dev.azure.com/org", "proj", "repo", 42, 1)
+                {
+                    Status = JobStatus.Processing,
+                });
+        var controller = CreateController(store, clientId, ClientRole.ClientAdministrator, jobRepository: jobRepository);
+
+        var result = await controller.StopReview(jobId, CancellationToken.None);
+
+        var ok = Assert.IsType<OkObjectResult>(result);
+        var response = Assert.IsType<ReviewJobStopResponse>(ok.Value);
+        Assert.Equal(jobId, response.JobId);
+        Assert.Equal("stopped", response.Status);
+        await jobRepository.Received(1).SetStoppedAsync(jobId, Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task StopReview_TerminalJob_ReturnsConflictWithoutStopping()
+    {
+        var jobId = Guid.NewGuid();
+        var clientId = Guid.NewGuid();
+        var store = Substitute.For<IReviewJobIntakeStore>();
+        store.GetByIdAsync(jobId, Arg.Any<CancellationToken>())
+            .Returns(new ReviewJob(jobId, clientId, "https://dev.azure.com/org", "proj", "repo", 42, 1));
+        var jobRepository = Substitute.For<IJobRepository>();
+        jobRepository.GetById(jobId)
+            .Returns(
+                new ReviewJob(jobId, clientId, "https://dev.azure.com/org", "proj", "repo", 42, 1)
+                {
+                    Status = JobStatus.Completed,
+                });
+        var controller = CreateController(store, clientId, ClientRole.ClientAdministrator, jobRepository: jobRepository);
+
+        var result = await controller.StopReview(jobId, CancellationToken.None);
+
+        Assert.IsType<ConflictObjectResult>(result);
+        await jobRepository.DidNotReceive().SetStoppedAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>());
+    }
+
     private static ReviewJobsController CreateController(
         IReviewJobIntakeStore store,
         Guid? clientId,
@@ -315,9 +395,14 @@ public sealed class ReviewJobsControllerTests
             jobRepository ?? Substitute.For<IJobRepository>(),
             queue ?? Substitute.For<IReviewExecutionQueue>(),
             NullLogger<RestartReviewJobHandler>.Instance);
+        var stopHandler = new StopReviewJobHandler(
+            jobRepository ?? Substitute.For<IJobRepository>(),
+            Substitute.For<IReviewJobCancellationRegistry>(),
+            NullLogger<StopReviewJobHandler>.Instance);
         var controller = new ReviewJobsController(
             submitHandler,
             restartHandler,
+            stopHandler,
             queryHandler,
             NullLogger<ReviewJobsController>.Instance)
         {

@@ -146,6 +146,14 @@ Verification metadata is stored in review-domain records and protocol payloads:
 - Final-gate payloads store summary reconciliation metadata, including original and final summary
     text, dropped finding ids, summary-only finding ids, and whether a summary rewrite was required.
 
+Client administrators have manual control over review processing. A review job carries a terminal
+`Stopped` status, distinct from `Cancelled` (pull request abandoned) and `Superseded` (a newer push
+arrived): it records an operator halting an in-flight or queued review, and its partial results are not
+reused as a baseline. `BlockedPullRequest` records the pull requests an administrator has blocked from
+processing, keyed by the same identity both intake paths use — `(ClientId, ProviderScopePath,
+ProviderProjectKey, RepositoryId, PullRequestId)`. While a block exists, new submissions and
+crawl/webhook pushes create no review job; a block never stops a job that is already running.
+
 ```mermaid
 erDiagram
     Client {
@@ -188,7 +196,7 @@ erDiagram
         string RepositoryId
         int PullRequestId
         int IterationId
-        string Status
+        string Status "Pending / Processing / Completed / Failed / Cancelled / Superseded / Stopped"
         datetime SubmittedAt
         datetime CompletedAt
         jsonb Result
@@ -225,6 +233,18 @@ erDiagram
         bool IsFailed
         bool IsExcluded "true when skipped by exclusion rules"
         string ExclusionReason "pattern that matched, e.g. **/Migrations/*.Designer.cs"
+    }
+
+    BlockedPullRequest {
+        uuid Id PK
+        uuid ClientId FK
+        string ProviderScopePath
+        string ProviderProjectKey
+        string RepositoryId
+        int PullRequestId
+        uuid BlockedByUserId
+        string Reason "optional"
+        datetime BlockedAt
     }
 
     AppUser {

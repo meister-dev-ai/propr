@@ -310,7 +310,8 @@ public sealed class InMemoryReviewJobRepository : IJobRepository
 
     public Task SetFailedAsync(Guid id, string errorMessage, CancellationToken ct = default)
     {
-        if (this._jobs.TryGetValue(id, out var job))
+        if (this._jobs.TryGetValue(id, out var job) &&
+            job.Status is not (JobStatus.Cancelled or JobStatus.Superseded or JobStatus.Stopped))
         {
             job.ErrorMessage = errorMessage;
             job.Status = JobStatus.Failed;
@@ -328,7 +329,8 @@ public sealed class InMemoryReviewJobRepository : IJobRepository
 
     public Task SetResultAsync(Guid id, ReviewResult result, CancellationToken ct = default)
     {
-        if (this._jobs.TryGetValue(id, out var job))
+        if (this._jobs.TryGetValue(id, out var job) &&
+            job.Status is not (JobStatus.Cancelled or JobStatus.Superseded or JobStatus.Stopped))
         {
             job.ApplyResult(result);
             job.Status = JobStatus.Completed;
@@ -379,7 +381,7 @@ public sealed class InMemoryReviewJobRepository : IJobRepository
     public Task SetCancelledAsync(Guid id, CancellationToken ct = default)
     {
         if (this._jobs.TryGetValue(id, out var job) &&
-            job.Status is not (JobStatus.Completed or JobStatus.Failed or JobStatus.Cancelled or JobStatus.Superseded))
+            job.Status is not (JobStatus.Completed or JobStatus.Failed or JobStatus.Cancelled or JobStatus.Superseded or JobStatus.Stopped))
         {
             job.Status = JobStatus.Cancelled;
             job.CompletedAt = DateTimeOffset.UtcNow;
@@ -391,9 +393,21 @@ public sealed class InMemoryReviewJobRepository : IJobRepository
     public Task SetSupersededAsync(Guid id, CancellationToken ct = default)
     {
         if (this._jobs.TryGetValue(id, out var job) &&
-            job.Status is not (JobStatus.Completed or JobStatus.Failed or JobStatus.Cancelled or JobStatus.Superseded))
+            job.Status is not (JobStatus.Completed or JobStatus.Failed or JobStatus.Cancelled or JobStatus.Superseded or JobStatus.Stopped))
         {
             job.Status = JobStatus.Superseded;
+            job.CompletedAt = DateTimeOffset.UtcNow;
+        }
+
+        return Task.CompletedTask;
+    }
+
+    public Task SetStoppedAsync(Guid id, CancellationToken ct = default)
+    {
+        if (this._jobs.TryGetValue(id, out var job) &&
+            job.Status is not (JobStatus.Completed or JobStatus.Failed or JobStatus.Cancelled or JobStatus.Superseded or JobStatus.Stopped))
+        {
+            job.Status = JobStatus.Stopped;
             job.CompletedAt = DateTimeOffset.UtcNow;
         }
 

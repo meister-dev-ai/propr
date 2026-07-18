@@ -32,6 +32,9 @@ public static class ReviewingExecutionServiceCollectionExtensions
     {
         services.AddScoped<IReviewJobExecutionStore>(sp =>
             new ReviewJobExecutionStoreAdapter(sp.GetRequiredService<IJobRepository>()));
+        // Singleton so the background worker and the control-plane stop endpoint share the same
+        // per-job cancellation sources for prompt in-flight interruption on this instance.
+        services.AddSingleton<IReviewJobCancellationRegistry, ReviewJobCancellationRegistry>();
         services.AddSingleton<IReviewPipelineProfileProvider, ReviewPipelineProfileProvider>();
         services.AddScoped<IReviewPipeline<PerFileReviewContext>, ReviewPipelineRunner<PerFileReviewContext>>();
         services.AddScoped<IReviewPipelineStage<PerFileReviewContext>, FileByFileContextPrefetchStage>();

@@ -1629,6 +1629,9 @@ let memoryActivityLog = [
   }
 ]
 
+// Blocked pull requests, keyed by clientId. Populated/cleared via the blocked-prs handlers below.
+const mockBlockedPrsByClient: Record<string, any[]> = {}
+
 export const handlers = [
   http.get(`${base}/auth/options`, async () => {
     return HttpResponse.json({
@@ -3544,5 +3547,64 @@ export const handlers = [
             }
         ] : []
     })
+  }),
+
+  // Stop a running/queued review job (canonical + /jobs alias).
+  http.post(`${base}/reviewing/jobs/:jobId/stop`, async ({ params }) => {
+    await delay(300)
+    return HttpResponse.json({ jobId: params.jobId as string, status: 'stopped' })
+  }),
+
+  http.post(`${base}/jobs/:jobId/stop`, async ({ params }) => {
+    await delay(300)
+    return HttpResponse.json({ jobId: params.jobId as string, status: 'stopped' })
+  }),
+
+  // Blocked pull requests (list / block / unblock).
+  http.get(`${base}/clients/:clientId/reviewing/blocked-prs`, async ({ params }) => {
+    await delay(200)
+    const clientId = params.clientId as string
+    return HttpResponse.json(mockBlockedPrsByClient[clientId] ?? [])
+  }),
+
+  http.post(`${base}/clients/:clientId/reviewing/blocked-prs`, async ({ params, request }) => {
+    await delay(300)
+    const clientId = params.clientId as string
+    const body = await request.json() as any
+    const list = mockBlockedPrsByClient[clientId] ?? (mockBlockedPrsByClient[clientId] = [])
+    const alreadyBlocked = list.some((entry) =>
+      entry.providerScopePath === body.providerScopePath &&
+      entry.providerProjectKey === body.providerProjectKey &&
+      entry.repositoryId === body.repositoryId &&
+      entry.pullRequestId === body.pullRequestId,
+    )
+    if (!alreadyBlocked) {
+      list.push({
+        id: `block-${Math.random().toString(36).slice(2, 11)}`,
+        clientId,
+        providerScopePath: body.providerScopePath,
+        providerProjectKey: body.providerProjectKey,
+        repositoryId: body.repositoryId,
+        pullRequestId: body.pullRequestId,
+        blockedByUserId: '0000-1111-2222-3333',
+        blockedAt: new Date().toISOString(),
+        reason: body.reason ?? null,
+      })
+    }
+    return new HttpResponse(null, { status: 200 })
+  }),
+
+  http.post(`${base}/clients/:clientId/reviewing/blocked-prs/unblock`, async ({ params, request }) => {
+    await delay(300)
+    const clientId = params.clientId as string
+    const body = await request.json() as any
+    const list = mockBlockedPrsByClient[clientId] ?? []
+    mockBlockedPrsByClient[clientId] = list.filter((entry) =>
+      !(entry.providerScopePath === body.providerScopePath &&
+        entry.providerProjectKey === body.providerProjectKey &&
+        entry.repositoryId === body.repositoryId &&
+        entry.pullRequestId === body.pullRequestId),
+    )
+    return new HttpResponse(null, { status: 200 })
   })
 ]

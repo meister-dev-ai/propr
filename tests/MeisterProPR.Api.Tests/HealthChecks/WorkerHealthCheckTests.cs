@@ -9,6 +9,7 @@ using MeisterProPR.Application.Features.Clients.Support;
 using MeisterProPR.Application.Interfaces;
 using MeisterProPR.Application.Options;
 using MeisterProPR.Domain.Enums;
+using MeisterProPR.Infrastructure.Features.Reviewing.Execution;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Diagnostics.HealthChecks;
@@ -83,6 +84,7 @@ public sealed class WorkerHealthCheckTests
             Substitute.For<IServiceScopeFactory>(),
             Options.Create(new WorkerOptions()),
             metrics,
+            new ReviewJobCancellationRegistry(),
             NullLogger<ReviewJobWorker>.Instance);
 
         var sut = new WorkerHealthCheck(worker, provider, configuration);

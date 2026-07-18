@@ -6,6 +6,7 @@ using MeisterProPR.Api.Features.Licensing;
 using MeisterProPR.Api.Features.Reviewing.Contracts;
 using MeisterProPR.Application.Exceptions;
 using MeisterProPR.Application.Features.Reviewing.Intake.Commands.RestartReviewJob;
+using MeisterProPR.Application.Features.Reviewing.Intake.Commands.StopReviewJob;
 using MeisterProPR.Application.Features.Reviewing.Intake.Commands.SubmitReviewJob;
 using MeisterProPR.Application.Features.Reviewing.Intake.Dtos;
 using MeisterProPR.Application.Features.Reviewing.Intake.Queries.GetReviewJobStatus;
@@ -20,6 +21,7 @@ namespace MeisterProPR.Api.Features.Reviewing.Intake.Controllers;
 public sealed partial class ReviewJobsController(
     SubmitReviewJobHandler submitReviewJobHandler,
     RestartReviewJobHandler restartReviewJobHandler,
+    StopReviewJobHandler stopReviewJobHandler,
     GetReviewJobStatusHandler getReviewJobStatusHandler,
     ILogger<ReviewJobsController> logger) : ControllerBase
 {
@@ -67,7 +69,7 @@ public sealed partial class ReviewJobsController(
     /// <response code="401">Missing or invalid credentials.</response>
     /// <response code="403">Caller lacks <c>ClientAdministrator</c> role for the specified client.</response>
     /// <response code="404">Client not found.</response>
-    /// <response code="409">Active review job already exists for this PR iteration.</response>
+    /// <response code="409">An active review job already exists for this PR iteration, or the pull request is blocked from processing.</response>
     [HttpPost("/clients/{clientId:guid}/reviewing/jobs")]
     [HttpPost("clients/{clientId:guid}/reviews")]
     [ProducesResponseType(typeof(ReviewJobAcceptedResponse), StatusCodes.Status202Accepted)]
@@ -103,6 +105,11 @@ public sealed partial class ReviewJobsController(
         catch (PremiumFeatureUnavailableException ex)
         {
             return new PremiumFeatureUnavailableResult(ex.Capability);
+        }
+
+        if (result.IsBlocked)
+        {
+            return this.Conflict(new { error = "This pull request is blocked from review processing." });
         }
 
         var response = MapAcceptedResponse(result, intakeRequest);
@@ -175,6 +182,64 @@ public sealed partial class ReviewJobsController(
                         result.NewJobId ?? Guid.Empty,
                         jobId,
                         JobStatus.Pending.ToString().ToLowerInvariant()));
+        }
+    }
+
+    /// <summary>Manually stop a running or queued review job.</summary>
+    /// <remarks>
+    ///     Lets a client administrator halt a review that should not run to completion (for example an
+    ///     oversized or misbehaving pull request). Requires <see cref="ClientRole.ClientAdministrator" /> for
+    ///     the job's owning client. Stopping is terminal: it does not requeue the job. Blocking a pull request
+    ///     is a separate action that prevents future processing without stopping the current run.
+    /// </remarks>
+    /// <param name="jobId">The identifier of the review job to stop.</param>
+    /// <param name="ct">Cancellation token.</param>
+    /// <response code="200">The job was running or queued and has been stopped.</response>
+    /// <response code="401">Missing or invalid credentials.</response>
+    /// <response code="403">Caller lacks <c>ClientAdministrator</c> rights for the job's owning client.</response>
+    /// <response code="404">Job not found.</response>
+    /// <response code="409">Job has already reached a terminal state and cannot be stopped.</response>
+    [HttpPost("/reviewing/jobs/{jobId:guid}/stop")]
+    [HttpPost("/jobs/{jobId:guid}/stop")]
+    [ProducesResponseType(typeof(ReviewJobStopResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status409Conflict)]
+    public async Task<IActionResult> StopReview(Guid jobId, CancellationToken ct)
+    {
+        var auth = AuthHelpers.RequireAuthenticated(this.HttpContext);
+        if (auth is not null)
+        {
+            return auth;
+        }
+
+        // Resolve the owning client first so the administrator role check happens before any mutation.
+        var status = await getReviewJobStatusHandler.HandleAsync(new GetReviewJobStatusQuery(jobId), ct);
+        if (status is null)
+        {
+            return this.NotFound();
+        }
+
+        var roleCheck = AuthHelpers.RequireClientRole(this.HttpContext, status.ClientId, ClientRole.ClientAdministrator);
+        if (roleCheck is not null)
+        {
+            return roleCheck;
+        }
+
+        var result = await stopReviewJobHandler.HandleAsync(new StopReviewJobCommand(jobId), ct);
+
+        switch (result.Outcome)
+        {
+            case StopReviewJobOutcome.NotFound:
+                return this.NotFound();
+            case StopReviewJobOutcome.AlreadyFinished:
+                return this.Conflict(new { error = "Only running or queued review jobs can be stopped." });
+            case StopReviewJobOutcome.Stopped:
+                LogReviewJobStopped(logger, jobId);
+                return this.Ok(new ReviewJobStopResponse(jobId, JobStatus.Stopped.ToString().ToLowerInvariant()));
+            default:
+                return this.StatusCode(StatusCodes.Status500InternalServerError, new { error = "Unexpected stop outcome." });
         }
     }
 
@@ -417,4 +482,7 @@ public sealed partial class ReviewJobsController(
 
     [LoggerMessage(Level = LogLevel.Information, Message = "Failed review job {SourceJobId} restarted as new job {NewJobId}")]
     private static partial void LogReviewJobRestarted(ILogger logger, Guid sourceJobId, Guid newJobId);
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "Review job {JobId} stopped by client administrator")]
+    private static partial void LogReviewJobStopped(ILogger logger, Guid jobId);
 }

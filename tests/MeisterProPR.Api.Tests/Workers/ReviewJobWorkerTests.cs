@@ -7,6 +7,7 @@ using MeisterProPR.Application.Features.Reviewing.Execution.Ports;
 using MeisterProPR.Application.Options;
 using MeisterProPR.Domain.Entities;
 using MeisterProPR.Domain.Enums;
+using MeisterProPR.Infrastructure.Features.Reviewing.Execution;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
@@ -38,6 +39,11 @@ public class ReviewJobWorkerTests
     private static ReviewJobMetrics CreateMetrics()
     {
         return new ReviewJobMetrics(Substitute.For<IServiceScopeFactory>());
+    }
+
+    private static IReviewJobCancellationRegistry CreateCancellationRegistry()
+    {
+        return new ReviewJobCancellationRegistry();
     }
 
     private static IServiceScopeFactory CreateScopeFactory(IReviewJobExecutionStore? repo = null)
@@ -80,7 +86,7 @@ public class ReviewJobWorkerTests
     {
         var scopeFactory = CreateScopeFactory();
         var logger = Substitute.For<ILogger<ReviewJobWorker>>();
-        var worker = new ReviewJobWorker(scopeFactory, CreateWorkerOptions(), CreateMetrics(), logger);
+        var worker = new ReviewJobWorker(scopeFactory, CreateWorkerOptions(), CreateMetrics(), CreateCancellationRegistry(), logger);
 
         using var cts = new CancellationTokenSource();
 
@@ -109,7 +115,7 @@ public class ReviewJobWorkerTests
     {
         var scopeFactory = CreateScopeFactory();
         var logger = Substitute.For<ILogger<ReviewJobWorker>>();
-        var worker = new ReviewJobWorker(scopeFactory, CreateWorkerOptions(), CreateMetrics(), logger);
+        var worker = new ReviewJobWorker(scopeFactory, CreateWorkerOptions(), CreateMetrics(), CreateCancellationRegistry(), logger);
 
         Assert.False(worker.IsRunning);
     }
@@ -143,7 +149,7 @@ public class ReviewJobWorkerTests
         // causing SetFailed to be called on the job.
         sp.GetService(typeof(IReviewJobProcessor)).Returns(null);
 
-        var worker = new ReviewJobWorker(scopeFactory, CreateWorkerOptions(), CreateMetrics(), logger);
+        var worker = new ReviewJobWorker(scopeFactory, CreateWorkerOptions(), CreateMetrics(), CreateCancellationRegistry(), logger);
         using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
 
         _ = worker.StartAsync(cts.Token);
@@ -158,11 +164,68 @@ public class ReviewJobWorkerTests
     }
 
     [Fact]
+    public async Task Worker_WhenJobCancelledViaRegistry_MarksStoppedAndDoesNotRequeue()
+    {
+        var repo = Substitute.For<IReviewJobExecutionStore>();
+        var job = CreateJob(555);
+        var processingStarted = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var stopped = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var claimedOnce = 0;
+
+        repo.GetPendingJobs().Returns(new[] { job });
+        repo.GetStuckProcessingJobsAsync(Arg.Any<TimeSpan>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<IReadOnlyList<ReviewJob>>([]));
+        repo.TryTransitionAsync(job.Id, JobStatus.Pending, JobStatus.Processing, Arg.Any<CancellationToken>())
+            .Returns(_ => Interlocked.Exchange(ref claimedOnce, 1) == 0);
+        repo.SetStoppedAsync(job.Id, Arg.Any<CancellationToken>())
+            .Returns(_ =>
+            {
+                stopped.TrySetResult();
+                return Task.CompletedTask;
+            });
+
+        var processor = Substitute.For<IReviewJobProcessor>();
+        processor.ProcessAsync(Arg.Any<ReviewJob>(), Arg.Any<CancellationToken>())
+            .Returns(async ci =>
+            {
+                var token = ci.Arg<CancellationToken>();
+                processingStarted.TrySetResult();
+                await Task.Delay(Timeout.Infinite, token);
+            });
+
+        var scopeFactory = Substitute.For<IServiceScopeFactory>();
+        var scope = Substitute.For<IServiceScope>();
+        var sp = Substitute.For<IServiceProvider>();
+        scopeFactory.CreateScope().Returns(scope);
+        scope.ServiceProvider.Returns(sp);
+        sp.GetService(typeof(IReviewJobExecutionStore)).Returns(repo);
+        sp.GetService(typeof(IReviewJobProcessor)).Returns(processor);
+
+        var registry = new ReviewJobCancellationRegistry();
+        var logger = Substitute.For<ILogger<ReviewJobWorker>>();
+        var worker = new ReviewJobWorker(scopeFactory, CreateWorkerOptions(), CreateMetrics(), registry, logger);
+
+        using var hostCts = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+        _ = worker.StartAsync(hostCts.Token);
+        await processingStarted.Task.WaitAsync(TimeSpan.FromSeconds(3));
+
+        // Manual stop: cancel via the registry while the host-shutdown token stays live.
+        Assert.True(registry.Cancel(job.Id));
+        await stopped.Task.WaitAsync(TimeSpan.FromSeconds(3));
+
+        await worker.StopAsync(CancellationToken.None);
+
+        await repo.Received(1).SetStoppedAsync(job.Id, Arg.Any<CancellationToken>());
+        await repo.DidNotReceive()
+            .TryTransitionAsync(job.Id, JobStatus.Processing, JobStatus.Pending, Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
     public async Task Worker_IsRunning_BecomesFalseAfterStop()
     {
         var scopeFactory = CreateScopeFactory();
         var logger = Substitute.For<ILogger<ReviewJobWorker>>();
-        var worker = new ReviewJobWorker(scopeFactory, CreateWorkerOptions(), CreateMetrics(), logger);
+        var worker = new ReviewJobWorker(scopeFactory, CreateWorkerOptions(), CreateMetrics(), CreateCancellationRegistry(), logger);
 
         using var cts = new CancellationTokenSource();
         _ = worker.StartAsync(cts.Token);
@@ -207,7 +270,7 @@ public class ReviewJobWorkerTests
         sp.GetService(typeof(IReviewJobProcessor)).Returns(null);
 
         var logger = Substitute.For<ILogger<ReviewJobWorker>>();
-        var worker = new ReviewJobWorker(scopeFactory, CreateWorkerOptions(), CreateMetrics(), logger);
+        var worker = new ReviewJobWorker(scopeFactory, CreateWorkerOptions(), CreateMetrics(), CreateCancellationRegistry(), logger);
 
         using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(4));
         _ = worker.StartAsync(cts.Token);
@@ -252,6 +315,7 @@ public class ReviewJobWorkerTests
             scopeFactory,
             CreateWorkerOptions(),
             CreateMetrics(),
+            CreateCancellationRegistry(),
             Substitute.For<ILogger<ReviewJobWorker>>());
         using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(4));
 
@@ -299,6 +363,7 @@ public class ReviewJobWorkerTests
             scopeFactory,
             CreateWorkerOptions(maxConcurrentReviewJobs: 2),
             CreateMetrics(),
+            CreateCancellationRegistry(),
             Substitute.For<ILogger<ReviewJobWorker>>());
 
         using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
@@ -381,6 +446,7 @@ public class ReviewJobWorkerTests
             scopeFactory,
             CreateWorkerOptions(25, 5),
             CreateMetrics(),
+            CreateCancellationRegistry(),
             Substitute.For<ILogger<ReviewJobWorker>>());
 
         using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));

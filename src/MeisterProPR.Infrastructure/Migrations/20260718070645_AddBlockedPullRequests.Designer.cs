@@ -3,6 +3,7 @@ using System;
 using MeisterProPR.Infrastructure.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 using Pgvector;
@@ -12,9 +13,11 @@ using Pgvector;
 namespace MeisterProPR.Infrastructure.Migrations
 {
     [DbContext(typeof(MeisterProPRDbContext))]
-    partial class MeisterProPRDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260718070645_AddBlockedPullRequests")]
+    partial class AddBlockedPullRequests
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -1921,12 +1924,6 @@ namespace MeisterProPR.Infrastructure.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("id");
 
-                    b.Property<int>("BaselineReasoningEffort")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("integer")
-                        .HasDefaultValue(0)
-                        .HasColumnName("baseline_reasoning_effort");
-
                     b.Property<int>("CommentResolutionBehavior")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("integer")
@@ -2025,10 +2022,6 @@ namespace MeisterProPR.Infrastructure.Migrations
                     b.Property<int>("Ordinal")
                         .HasColumnType("integer")
                         .HasColumnName("ordinal");
-
-                    b.Property<int?>("ReasoningEffort")
-                        .HasColumnType("integer")
-                        .HasColumnName("reasoning_effort");
 
                     b.Property<string>("Scope")
                         .HasMaxLength(64)

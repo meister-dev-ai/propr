@@ -34,7 +34,8 @@ public sealed class PullRequestSynchronizationService(
     IClientScmConnectionRepository? scmConnectionRepository = null,
     IPullRequestFetcher? pullRequestFetcher = null,
     IReviewArchiveIngestionService? reviewArchiveIngestionService = null,
-    IPostedCommentOriginStore? postedCommentOriginStore = null) : IPullRequestSynchronizationService
+    IPostedCommentOriginStore? postedCommentOriginStore = null,
+    IBlockedPullRequestStore? blockedPullRequestStore = null) : IPullRequestSynchronizationService
 {
     private const string ActivationSourceTagName = "pull_request.activation_source";
     private static readonly ActivitySource CrawlingActivitySource = new("MeisterProPR.Crawling", "1.0.0");
@@ -82,6 +83,27 @@ public sealed class PullRequestSynchronizationService(
                     PullRequestSynchronizationLifecycleDecision.None,
                     [
                         $"No shared synchronization action was required for active PR #{request.PullRequestId} during {request.SummaryLabel}.",
+                    ]);
+                return CompleteOutcome(activity, startedAt, request, outcome);
+            }
+
+            if (blockedPullRequestStore is not null && await blockedPullRequestStore.IsBlockedAsync(
+                    request.ClientId,
+                    request.ProviderScopePath,
+                    request.ProviderProjectKey,
+                    request.RepositoryId,
+                    request.PullRequestId,
+                    ct))
+            {
+                logger.LogInformation(
+                    "Skipping review synchronization for active PR #{PullRequestId} during {SummaryLabel}: the pull request is blocked from review processing.",
+                    request.PullRequestId,
+                    request.SummaryLabel);
+                outcome = new PullRequestSynchronizationOutcome(
+                    PullRequestSynchronizationReviewDecision.None,
+                    PullRequestSynchronizationLifecycleDecision.None,
+                    [
+                        $"Pull request #{request.PullRequestId} is blocked from review processing; no review job was created during {request.SummaryLabel}.",
                     ]);
                 return CompleteOutcome(activity, startedAt, request, outcome);
             }

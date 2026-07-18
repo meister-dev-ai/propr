@@ -5,8 +5,9 @@ using MeisterProPR.Domain.Enums;
 
 namespace MeisterProPR.Application.Features.Reviewing.Intake.Commands.SubmitReviewJob;
 
-/// <summary>Result returned when a review job is accepted or deduplicated.</summary>
+/// <summary>Result returned when a review job is accepted, deduplicated, or refused because the PR is blocked.</summary>
 public sealed record SubmitReviewJobResult(
     Guid JobId,
     JobStatus Status,
-    bool IsDuplicate);
+    bool IsDuplicate,
+    bool IsBlocked = false);

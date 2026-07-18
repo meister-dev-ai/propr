@@ -3307,6 +3307,136 @@ public partial class ReviewOrchestrationServiceTests
     }
 
     [Fact]
+    public async Task ProcessAsync_JobStoppedBetweenPrFetchAndFileReview_ExitsWithoutAiCalls()
+    {
+        // A manual stop persisted by another instance flips the status to Stopped after PR fetch → no AI calls.
+        var (jobs, prFetcher, orchestrator, commentPoster, reviewerManager, clientRegistry, prScanRepository,
+                instructionFetcher, instructionEvaluator, logger) =
+            CreateDeps();
+
+        var job = CreateJob();
+        var pr = CreatePullRequest();
+
+        SetupReviewerIdReturns(clientRegistry, job, Guid.NewGuid());
+        prFetcher.FetchAsync(
+                Arg.Any<string>(),
+                Arg.Any<string>(),
+                Arg.Any<string>(),
+                Arg.Any<int>(),
+                Arg.Any<int>(),
+                Arg.Any<int?>(),
+                Arg.Any<Guid?>(),
+                Arg.Any<CancellationToken>(),
+                Arg.Any<ReviewRevision?>(),
+                Arg.Any<IReviewRepositoryWorkspace?>())
+            .Returns(pr);
+
+        var stoppedJob = new ReviewJob(
+            job.Id,
+            job.ClientId,
+            job.OrganizationUrl,
+            job.ProjectId,
+            job.RepositoryId,
+            job.PullRequestId,
+            job.IterationId);
+        stoppedJob.Status = JobStatus.Stopped;
+        jobs.GetById(job.Id).Returns(stoppedJob);
+
+        var sut = CreateService(
+            jobs,
+            prFetcher,
+            orchestrator,
+            commentPoster,
+            reviewerManager,
+            clientRegistry,
+            prScanRepository,
+            logger);
+
+        await sut.ProcessAsync(job, CancellationToken.None);
+
+        await orchestrator.DidNotReceive()
+            .ReviewAsync(
+                Arg.Any<ReviewJob>(),
+                Arg.Any<PullRequest>(),
+                Arg.Any<ReviewSystemContext>(),
+                Arg.Any<CancellationToken>());
+        await AssertReviewNotPublishedAsync(commentPoster);
+    }
+
+    [Fact]
+    public async Task ProcessAsync_JobStoppedBeforePublish_DiscardsResultNoCommentPost()
+    {
+        // Both file-review checkpoints pass, but a manual stop lands right before publication → the review is
+        // neither posted to the provider nor committed as Completed (the final line of defence for a stop that
+        // reaches this instance only via the persisted status).
+        var (jobs, prFetcher, orchestrator, commentPoster, reviewerManager, clientRegistry, prScanRepository,
+                instructionFetcher, instructionEvaluator, logger) =
+            CreateDeps();
+
+        var job = CreateJob();
+        var pr = CreatePullRequest(new List<PrCommentThread>());
+
+        SetupReviewerIdReturns(clientRegistry, job, Guid.NewGuid());
+        prFetcher.FetchAsync(
+                Arg.Any<string>(),
+                Arg.Any<string>(),
+                Arg.Any<string>(),
+                Arg.Any<int>(),
+                Arg.Any<int>(),
+                Arg.Any<int?>(),
+                Arg.Any<Guid?>(),
+                Arg.Any<CancellationToken>(),
+                Arg.Any<ReviewRevision?>(),
+                Arg.Any<IReviewRepositoryWorkspace?>())
+            .Returns(pr);
+
+        var reviewResult = new ReviewResult("A thorough review summary.", new List<ReviewComment>().AsReadOnly());
+        orchestrator.ReviewAsync(
+                Arg.Any<ReviewJob>(),
+                Arg.Any<PullRequest>(),
+                Arg.Any<ReviewSystemContext>(),
+                Arg.Any<CancellationToken>(),
+                Arg.Any<IChatClient?>())
+            .Returns(Task.FromResult(reviewResult));
+
+        var normalJob = new ReviewJob(
+            job.Id,
+            job.ClientId,
+            job.OrganizationUrl,
+            job.ProjectId,
+            job.RepositoryId,
+            job.PullRequestId,
+            job.IterationId);
+        var stoppedJob = new ReviewJob(
+            job.Id,
+            job.ClientId,
+            job.OrganizationUrl,
+            job.ProjectId,
+            job.RepositoryId,
+            job.PullRequestId,
+            job.IterationId);
+        stoppedJob.Status = JobStatus.Stopped;
+        // Two file-review checkpoints see a running job; the pre-publish checkpoint sees Stopped.
+        jobs.GetById(job.Id).Returns(normalJob, normalJob, stoppedJob);
+
+        var sut = CreateService(
+            jobs,
+            prFetcher,
+            orchestrator,
+            commentPoster,
+            reviewerManager,
+            clientRegistry,
+            prScanRepository,
+            logger);
+
+        await sut.ProcessAsync(job, CancellationToken.None);
+
+        await AssertReviewNotPublishedAsync(commentPoster);
+        await jobs.DidNotReceive()
+            .SetResultAsync(Arg.Any<Guid>(), Arg.Any<ReviewResult>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
     public async Task ProcessAsync_CompletedPr_DoesNotCallSetCancelledAsync()
     {
         // T012 (d): pr.Status == Completed → SetCancelledAsync NOT called (only Abandoned triggers cancellation)

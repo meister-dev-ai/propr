@@ -123,6 +123,31 @@ public sealed class PullRequestSynchronizationServiceTests
                 Arg.Any<CancellationToken>());
     }
 
+    [Fact]
+    public async Task SynchronizeAsync_WhenPullRequestBlocked_SkipsReviewSubmission()
+    {
+        var jobs = Substitute.For<IJobRepository>();
+        var blockStore = Substitute.For<IBlockedPullRequestStore>();
+        blockStore.IsBlockedAsync(ClientId, "https://dev.azure.com/org", "project", "repo-1", 42, Arg.Any<CancellationToken>())
+            .Returns(true);
+
+        var sut = new PullRequestSynchronizationService(
+            jobs,
+            NullLogger<PullRequestSynchronizationService>.Instance,
+            blockedPullRequestStore: blockStore);
+
+        var outcome = await sut.SynchronizeAsync(
+            CreateRequest(PullRequestActivationSource.Webhook, "pull request updated") with
+            {
+                CandidateIterationId = 7,
+            });
+
+        Assert.Equal(PullRequestSynchronizationReviewDecision.None, outcome.ReviewDecision);
+        await jobs.DidNotReceive().TryAddIfNoActiveDuplicateAsync(Arg.Any<ReviewJob>(), Arg.Any<CancellationToken>());
+        await blockStore.Received(1)
+            .IsBlockedAsync(ClientId, "https://dev.azure.com/org", "project", "repo-1", 42, Arg.Any<CancellationToken>());
+    }
+
     [Theory]
     [InlineData(PullRequestActivationSource.Crawl, "crawl disappearance")]
     [InlineData(PullRequestActivationSource.Webhook, "pull request closure")]

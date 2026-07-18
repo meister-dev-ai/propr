@@ -52,6 +52,38 @@ public sealed class SubmitReviewJobHandlerTests
     }
 
     [Fact]
+    public async Task HandleAsync_WhenPullRequestBlocked_ReturnsBlockedWithoutCreatingJob()
+    {
+        var request = CreateRequest();
+        var store = Substitute.For<IReviewJobIntakeStore>();
+        var queue = Substitute.For<IReviewExecutionQueue>();
+        store.FindActiveJobAsync(ClientId, request, Arg.Any<CancellationToken>()).Returns((ReviewJob?)null);
+        var blockStore = Substitute.For<IBlockedPullRequestStore>();
+        blockStore.IsBlockedAsync(
+                ClientId,
+                request.ProviderScopePath,
+                request.ProviderProjectKey,
+                request.RepositoryId,
+                request.PullRequestId,
+                Arg.Any<CancellationToken>())
+            .Returns(true);
+
+        var sut = new SubmitReviewJobHandler(
+            store,
+            queue,
+            NullLogger<SubmitReviewJobHandler>.Instance,
+            blockedPullRequestStore: blockStore);
+
+        var result = await sut.HandleAsync(new SubmitReviewJobCommand(ClientId, request));
+
+        Assert.True(result.IsBlocked);
+        Assert.False(result.IsDuplicate);
+        await store.DidNotReceive()
+            .CreatePendingJobAsync(Arg.Any<Guid>(), Arg.Any<SubmitReviewJobRequestDto>(), Arg.Any<CancellationToken>());
+        await queue.DidNotReceive().EnqueueAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
     public async Task HandleAsync_ExistingActiveJob_ReturnsDuplicateWithoutQueueing()
     {
         var request = CreateRequest();

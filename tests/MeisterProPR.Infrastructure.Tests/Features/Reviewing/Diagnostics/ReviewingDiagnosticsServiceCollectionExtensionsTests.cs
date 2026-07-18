@@ -237,6 +237,11 @@ public sealed class ReviewingDiagnosticsServiceCollectionExtensionsTests
             return Task.CompletedTask;
         }
 
+        public Task SetStoppedAsync(Guid id, CancellationToken ct = default)
+        {
+            return Task.CompletedTask;
+        }
+
         public Task<IReadOnlyList<ReviewJob>> GetActiveJobsForConfigAsync(
             string organizationUrl,
             string projectId,

@@ -5,12 +5,10 @@ using MeisterProPR.Application.Exceptions;
 using MeisterProPR.Application.Features.Licensing.Models;
 using MeisterProPR.Application.Features.Licensing.Ports;
 using MeisterProPR.Application.Features.Reviewing.Execution.Models;
-using MeisterProPR.Application.Features.Reviewing.Intake.Dtos;
 using MeisterProPR.Application.Features.Reviewing.Intake.Ports;
 using MeisterProPR.Application.Interfaces;
 using MeisterProPR.Domain.Entities;
 using MeisterProPR.Domain.Enums;
-using MeisterProPR.Domain.ValueObjects;
 using Microsoft.Extensions.Logging;
 
 namespace MeisterProPR.Application.Features.Reviewing.Intake.Commands.SubmitReviewJob;
@@ -22,7 +20,8 @@ public sealed partial class SubmitReviewJobHandler(
     ILogger<SubmitReviewJobHandler> logger,
     IPullRequestFetcher? pullRequestFetcher = null,
     ILicensingCapabilityService? licensingCapabilityService = null,
-    IClientRegistry? clientRegistry = null)
+    IClientRegistry? clientRegistry = null,
+    IBlockedPullRequestStore? blockedPullRequestStore = null)
 {
     /// <summary>Creates a new review job unless an active job already exists for the requested PR iteration.</summary>
     public async Task<SubmitReviewJobResult> HandleAsync(
@@ -39,6 +38,18 @@ public sealed partial class SubmitReviewJobHandler(
         if (existing is not null)
         {
             return ToResult(existing, true);
+        }
+
+        if (blockedPullRequestStore is not null && await blockedPullRequestStore.IsBlockedAsync(
+                command.ClientId,
+                request.ProviderScopePath,
+                request.ProviderProjectKey,
+                request.RepositoryId,
+                request.PullRequestId,
+                cancellationToken))
+        {
+            LogReviewSubmissionBlocked(logger, command.ClientId, request.PullRequestId);
+            return new SubmitReviewJobResult(Guid.Empty, JobStatus.Pending, false, true);
         }
 
         var resolvedProfileId = await this.ResolveReviewPipelineProfileIdAsync(command.ClientId, cancellationToken);
@@ -127,4 +138,9 @@ public sealed partial class SubmitReviewJobHandler(
         Level = LogLevel.Warning,
         Message = "Failed to fetch PR context for intake job {JobId}; continuing without PR context.")]
     private static partial void LogPrContextFetchFailed(ILogger logger, Guid jobId, Exception ex);
+
+    [LoggerMessage(
+        Level = LogLevel.Information,
+        Message = "Skipped review submission for client {ClientId} PR #{PrId} because the pull request is blocked.")]
+    private static partial void LogReviewSubmissionBlocked(ILogger logger, Guid clientId, int prId);
 }

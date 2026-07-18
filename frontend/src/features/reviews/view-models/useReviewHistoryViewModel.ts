@@ -3,7 +3,17 @@
 
 import { computed, onMounted, onUnmounted, ref, type ComputedRef, type Ref } from 'vue'
 import { useSession } from '@/composables/useSession'
-import { listJobs, restartJob } from '@/services/jobsService'
+import { RoleLevel } from '@/composables/roles'
+import {
+  blockPr,
+  listBlockedPrs,
+  listJobs,
+  restartJob,
+  stopJob,
+  unblockPr,
+  type BlockedPullRequestDto,
+  type PullRequestIdentity,
+} from '@/services/jobsService'
 import type { components } from '@/types'
 
 type JobListItem = components['schemas']['JobListItem']
@@ -29,6 +39,10 @@ export interface PrGroup {
 export interface ReviewHistoryService {
   listJobs: (clientId?: string) => Promise<{ items: JobListItem[] }>
   restartJob: (jobId: string) => Promise<void>
+  stopJob: (jobId: string) => Promise<void>
+  listBlockedPrs: (clientId: string) => Promise<BlockedPullRequestDto[]>
+  blockPr: (clientId: string, identity: PullRequestIdentity) => Promise<void>
+  unblockPr: (clientId: string, identity: PullRequestIdentity) => Promise<void>
 }
 
 export interface ReviewHistoryViewModel {
@@ -51,9 +65,17 @@ export interface ReviewHistoryViewModel {
   refresh: () => Promise<void>
   visibleItems: (group: PrGroup) => JobListItem[]
   canInspectClient: (clientId: string | null | undefined) => boolean
+  canManageClient: (clientId: string | null | undefined) => boolean
   restartingJobs: Ref<Set<string>>
   restartError: Ref<string>
   restartJob: (item: JobListItem) => Promise<void>
+  stoppingJobs: Ref<Set<string>>
+  stopError: Ref<string>
+  stopJob: (item: JobListItem) => Promise<void>
+  blockingPrs: Ref<Set<string>>
+  blockError: Ref<string>
+  isPrBlocked: (group: PrGroup) => boolean
+  toggleBlockPr: (group: PrGroup) => Promise<void>
 }
 
 export interface UseReviewHistoryViewModelOptions {
@@ -80,11 +102,45 @@ async function defaultRestartJob(jobId: string): Promise<void> {
   await restartJob(jobId)
 }
 
+async function defaultStopJob(jobId: string): Promise<void> {
+  await stopJob(jobId)
+}
+
+async function defaultListBlockedPrs(clientId: string): Promise<BlockedPullRequestDto[]> {
+  return listBlockedPrs(clientId)
+}
+
+async function defaultBlockPr(clientId: string, identity: PullRequestIdentity): Promise<void> {
+  await blockPr(clientId, identity)
+}
+
+async function defaultUnblockPr(clientId: string, identity: PullRequestIdentity): Promise<void> {
+  await unblockPr(clientId, identity)
+}
+
+/** Group/DTO identity key: `scope|project|repo|pr` — matches the PrGroup key so blocked state resolves by key. */
+function blockedKey(scope: string, project: string, repo: string, pr: number): string {
+  return `${scope}|${project}|${repo}|${pr}`
+}
+
+function identityForGroup(group: PrGroup): PullRequestIdentity {
+  return {
+    providerScopePath: group.providerScopePath,
+    providerProjectKey: group.providerProjectKey,
+    repositoryId: group.repositoryId,
+    pullRequestId: group.pullRequestId,
+  }
+}
+
 export function useReviewHistoryViewModel(options: UseReviewHistoryViewModelOptions = {}): ReviewHistoryViewModel {
   const { hasClientRole } = useSession()
   const clientId = options.clientId
   const listJobsFn = options.reviewHistoryService?.listJobs ?? defaultListJobs
   const restartJobFn = options.reviewHistoryService?.restartJob ?? defaultRestartJob
+  const stopJobFn = options.reviewHistoryService?.stopJob ?? defaultStopJob
+  const listBlockedPrsFn = options.reviewHistoryService?.listBlockedPrs ?? defaultListBlockedPrs
+  const blockPrFn = options.reviewHistoryService?.blockPr ?? defaultBlockPr
+  const unblockPrFn = options.reviewHistoryService?.unblockPr ?? defaultUnblockPr
   const autoLoad = options.autoLoad ?? true
 
   const loading = ref(false)
@@ -96,6 +152,13 @@ export function useReviewHistoryViewModel(options: UseReviewHistoryViewModelOpti
   const selectedSummary = ref('')
   const restartingJobs = ref<Set<string>>(new Set())
   const restartError = ref('')
+  const stoppingJobs = ref<Set<string>>(new Set())
+  const stopError = ref('')
+  const blockingPrs = ref<Set<string>>(new Set())
+  const blockError = ref('')
+  // Blocked-PR keys grouped by owning client, loaded once per admin-manageable client.
+  const blockedByClient = ref<Record<string, string[]>>({})
+  const loadedBlockedClients = new Set<string>()
 
   const totalPages = computed(() => Math.ceil(groups.value.length / ITEMS_PER_PAGE))
   const paginatedGroups = computed(() => {
@@ -130,6 +193,12 @@ export function useReviewHistoryViewModel(options: UseReviewHistoryViewModelOpti
       const response = await listJobsFn(clientId)
       const items = response.items ?? []
       groups.value = buildGroups(items)
+
+      // Load the blocked-PR state for each distinct inspectable client (once per client).
+      const distinctClientIds = new Set(groups.value.map((group) => group.clientId).filter(Boolean))
+      for (const groupClientId of distinctClientIds) {
+        void loadBlockedPrsForClient(groupClientId)
+      }
 
       const isProcessing = items.some((item) => item.status === 'processing' || item.status === 'pending')
       if (isProcessing) {
@@ -199,6 +268,82 @@ export function useReviewHistoryViewModel(options: UseReviewHistoryViewModelOpti
     }
   }
 
+  async function stopJobAction(item: JobListItem) {
+    const isRunning = item.status === 'processing' || item.status === 'pending'
+    if (!item.id || !isRunning || stoppingJobs.value.has(item.id) || !canManageClient(item.clientId)) {
+      return
+    }
+
+    stopError.value = ''
+    stoppingJobs.value = new Set(stoppingJobs.value).add(item.id)
+    try {
+      await stopJobFn(item.id)
+      await loadJobs(false)
+    } catch (error) {
+      stopError.value = error instanceof Error ? error.message : 'Failed to stop review.'
+    } finally {
+      const next = new Set(stoppingJobs.value)
+      next.delete(item.id)
+      stoppingJobs.value = next
+    }
+  }
+
+  async function loadBlockedPrsForClient(targetClientId: string, force = false) {
+    // Loaded for any viewer who can inspect the client so the blocked badge is visible to everyone,
+    // not only the administrators who can toggle the block.
+    if (!canInspectClient(targetClientId)) {
+      return
+    }
+    if (!force && loadedBlockedClients.has(targetClientId)) {
+      return
+    }
+
+    try {
+      const blocked = await listBlockedPrsFn(targetClientId)
+      loadedBlockedClients.add(targetClientId)
+      blockedByClient.value = {
+        ...blockedByClient.value,
+        [targetClientId]: blocked.map((entry) =>
+          blockedKey(
+            entry.providerScopePath ?? '',
+            entry.providerProjectKey ?? '',
+            entry.repositoryId ?? '',
+            entry.pullRequestId ?? 0,
+          ),
+        ),
+      }
+    } catch {
+      // Best-effort: a failed blocked-PR load leaves the PR presented as unblocked.
+    }
+  }
+
+  function isPrBlocked(group: PrGroup): boolean {
+    return (blockedByClient.value[group.clientId] ?? []).includes(group.key)
+  }
+
+  async function toggleBlockPr(group: PrGroup) {
+    if (!canManageClient(group.clientId) || blockingPrs.value.has(group.key)) {
+      return
+    }
+
+    blockError.value = ''
+    blockingPrs.value = new Set(blockingPrs.value).add(group.key)
+    try {
+      if (isPrBlocked(group)) {
+        await unblockPrFn(group.clientId, identityForGroup(group))
+      } else {
+        await blockPrFn(group.clientId, identityForGroup(group))
+      }
+      await loadBlockedPrsForClient(group.clientId, true)
+    } catch (error) {
+      blockError.value = error instanceof Error ? error.message : 'Failed to update the block state.'
+    } finally {
+      const next = new Set(blockingPrs.value)
+      next.delete(group.key)
+      blockingPrs.value = next
+    }
+  }
+
   function visibleItems(group: PrGroup): JobListItem[] {
     return expandedGroups.value.has(group.key)
       ? group.items
@@ -207,6 +352,10 @@ export function useReviewHistoryViewModel(options: UseReviewHistoryViewModelOpti
 
   function canInspectClient(targetClientId: string | null | undefined): boolean {
     return typeof targetClientId === 'string' && targetClientId.length > 0 && hasClientRole(targetClientId, 0)
+  }
+
+  function canManageClient(targetClientId: string | null | undefined): boolean {
+    return typeof targetClientId === 'string' && targetClientId.length > 0 && hasClientRole(targetClientId, RoleLevel.Administrator)
   }
 
   if (autoLoad) {
@@ -241,9 +390,17 @@ export function useReviewHistoryViewModel(options: UseReviewHistoryViewModelOpti
     refresh,
     visibleItems,
     canInspectClient,
+    canManageClient,
     restartingJobs,
     restartError,
     restartJob: restartJobAction,
+    stoppingJobs,
+    stopError,
+    stopJob: stopJobAction,
+    blockingPrs,
+    blockError,
+    isPrBlocked,
+    toggleBlockPr,
   }
 }
 

@@ -471,8 +471,11 @@ stateDiagram-v2
     Processing --> Failed : Exception / provider query or publication error
     Failed --> Pending : Retry (if retry count < max)
     Processing --> Failed : Stuck - no heartbeat > StuckJobTimeoutMinutes
+    Pending --> Stopped : Client admin stops a queued job
+    Processing --> Stopped : Client admin stops a running job
     Completed --> [*]
     Failed --> [*] : Max retries exceeded
+    Stopped --> [*]
 
     note right of Processing
         ICodeReviewQueryService
@@ -488,6 +491,15 @@ stateDiagram-v2
 
 The cleanup path runs at startup and on a periodic sweep so interrupted jobs can be recovered
 without manual intervention.
+
+A client administrator can manually stop a running or queued job through the control panel. The stop
+endpoint persists the terminal `Stopped` status — the cross-instance source of truth the review pipeline
+re-reads at its status checkpoints — and signals a process-local cancellation registry so a job running
+on the same instance is interrupted promptly rather than only at the next checkpoint. The worker
+distinguishes this operator stop from host shutdown, so a stopped job is finalized rather than requeued.
+Stopping is distinct from blocking a pull request: a block prevents future submissions and crawl/webhook
+pushes for that pull request from creating new jobs, enforced at both intake paths, and never stops a job
+that is already running.
 
 ## Token Optimization Pipeline
 

@@ -16,6 +16,15 @@
                 >
                     {{ vm.restarting ? 'Restarting…' : 'Restart review ↻' }}
                 </button>
+                <button
+                    v-if="vm.canStop"
+                    class="stop-review-btn"
+                    :disabled="vm.stopping"
+                    title="Stop this running review"
+                    @click="vm.stop()"
+                >
+                    {{ vm.stopping ? 'Stopping…' : 'Stop review ◼' }}
+                </button>
             </div>
             <h2>Job Protocol</h2>
         </AppTopBar>
@@ -105,6 +114,28 @@ const vm = useJobProtocolViewModel()
 }
 
 .restart-review-btn:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+}
+
+.stop-review-btn {
+    margin-left: auto;
+    font-size: 0.85rem;
+    padding: 0.3rem 0.75rem;
+    border-radius: var(--radius-md);
+    color: var(--color-danger);
+    background: transparent;
+    border: 1px solid rgba(239, 68, 68, 0.35);
+    cursor: pointer;
+    white-space: nowrap;
+}
+
+.stop-review-btn:hover:not(:disabled) {
+    background: rgba(239, 68, 68, 0.1);
+    border-color: rgba(239, 68, 68, 0.6);
+}
+
+.stop-review-btn:disabled {
     opacity: 0.6;
     cursor: not-allowed;
 }

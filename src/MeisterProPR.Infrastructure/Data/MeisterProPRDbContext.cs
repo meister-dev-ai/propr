@@ -53,6 +53,9 @@ public sealed class MeisterProPRDbContext(DbContextOptions<MeisterProPRDbContext
     /// <summary>Per-thread reply watermarks within a review PR scan.</summary>
     public DbSet<ReviewPrScanThread> ReviewPrScanThreads => this.Set<ReviewPrScanThread>();
 
+    /// <summary>Pull requests blocked from review processing (one row per client+PR identity).</summary>
+    public DbSet<BlockedPullRequest> BlockedPullRequests => this.Set<BlockedPullRequest>();
+
     /// <summary>Review job protocol records (one per job attempt).</summary>
     public DbSet<ReviewJobProtocol> ReviewJobProtocols => this.Set<ReviewJobProtocol>();
 

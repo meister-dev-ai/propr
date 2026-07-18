@@ -6,7 +6,9 @@ import { useRoute, useRouter } from 'vue-router'
 import type { LocationQueryRaw } from 'vue-router'
 import { createAdminClient } from '@/services/api'
 import { createDismissal } from '@/services/findingDismissalsService'
-import { restartJob } from '@/services/jobsService'
+import { restartJob, stopJob } from '@/services/jobsService'
+import { useSession } from '@/composables/useSession'
+import { RoleLevel } from '@/composables/roles'
 import { formatTriageDecision } from './formatTriageDecision'
 import { parseAssistantTurnRecord } from '../utils/assistantTurn'
 import { originLabel, passKindLabel } from './passLabels'
@@ -144,6 +146,7 @@ function phaseGroupKey(phase: ProtocolEventPhaseTimingDto): string {
 export function useJobProtocolViewModel() {
     const route = useRoute()
     const router = useRouter()
+    const { hasClientRole } = useSession()
 
     const loading = ref(false)
     const error = ref('')
@@ -163,6 +166,7 @@ export function useJobProtocolViewModel() {
     const jobDetail = ref<JobDetail | null>(null)
     const jobStatus = ref<string | null>(null)
     const restarting = ref(false)
+    const stopping = ref(false)
     const collapsedFolders = ref<Set<string>>(new Set())
     const expandedEventParents = ref<Set<string>>(new Set())
     const selectedCommentPath = ref<string | null>(null)
@@ -290,6 +294,35 @@ export function useJobProtocolViewModel() {
             dismissToast.value = { message, isError: true }
         } finally {
             restarting.value = false
+            setTimeout(() => {
+                dismissToast.value = null
+            }, 3000)
+        }
+    }
+
+    // Stop is offered only for a running/queued job AND only to a client-administrator of the job's client.
+    const canStop = computed(() => {
+        const running = jobStatus.value === 'processing' || jobStatus.value === 'pending'
+        const clientId = routeClientId.value
+        return running && typeof clientId === 'string' && clientId.length > 0 && hasClientRole(clientId, RoleLevel.Administrator)
+    })
+
+    async function stop() {
+        const jobId = route.params.id as string
+        if (!jobId || stopping.value || !canStop.value) {
+            return
+        }
+
+        stopping.value = true
+        try {
+            await stopJob(jobId)
+            dismissToast.value = { message: 'Review stopped.', isError: false }
+            await loadProtocol(true)
+        } catch (err) {
+            const message = err instanceof Error ? err.message : 'Failed to stop review.'
+            dismissToast.value = { message, isError: true }
+        } finally {
+            stopping.value = false
             setTimeout(() => {
                 dismissToast.value = null
             }, 3000)
@@ -2124,6 +2157,9 @@ export function useJobProtocolViewModel() {
         canRestart,
         restarting,
         restart,
+        canStop,
+        stopping,
+        stop,
         collapsedFolders,
         expandedEventParents,
         selectedCommentPath,

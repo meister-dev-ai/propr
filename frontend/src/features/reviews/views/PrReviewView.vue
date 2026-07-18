@@ -4,8 +4,33 @@
 <template>
     <div class="page-view pr-review-page">
         <div class="header-stack">
-            <RouterLink class="back-link" :to="{ name: 'reviews' }">← Back to reviews</RouterLink>
-            <h2>PR Review View</h2>
+            <div class="header-row">
+                <RouterLink class="back-link" :to="{ name: 'reviews' }">← Back to reviews</RouterLink>
+                <OverflowMenu v-if="canManage" class="pr-actions-menu" title="PR actions">
+                    <template #default="{ close }">
+                        <button
+                            type="button"
+                            class="overflow-menu-item"
+                            :disabled="blocking"
+                            @click="toggleBlock(); close()"
+                        >
+                            <i :class="isBlocked ? 'fi fi-rr-play' : 'fi fi-rr-ban'"></i>
+                            {{ isBlocked ? 'Unblock PR' : 'Block PR' }}
+                        </button>
+                    </template>
+                </OverflowMenu>
+            </div>
+            <div class="pr-title-row">
+                <h2>PR Review View</h2>
+                <span
+                    v-if="isBlocked"
+                    class="blocked-badge"
+                    title="Blocked from review processing — new pushes are not reviewed"
+                >
+                    <i class="fi fi-rr-ban"></i> Blocked
+                </span>
+            </div>
+            <p v-if="blockError" class="error block-error">{{ blockError }}</p>
         </div>
 
         <p v-if="loading" class="loading">Loading…</p>
@@ -231,6 +256,7 @@
 import { computed, ref, shallowRef, onMounted, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import TokenBreakdownTable from '@/components/usage/TokenBreakdownTable.vue'
+import OverflowMenu from '@/components/OverflowMenu.vue'
 import RetainedConversationTab from '@/features/reviews/components/RetainedConversationTab.vue'
 import RetainedBrowserTab from '@/features/reviews/components/RetainedBrowserTab.vue'
 import {
@@ -238,9 +264,12 @@ import {
     type RetainedPrIdentity,
     type UseRetainedPrData,
 } from '@/features/reviews/composables/useRetainedPrData'
-import { getPrView, type PrReviewViewDto } from '@/services/jobsService'
+import { blockPr, getPrView, listBlockedPrs, unblockPr, type PrReviewViewDto, type PullRequestIdentity } from '@/services/jobsService'
+import { useSession } from '@/composables/useSession'
+import { RoleLevel } from '@/composables/roles'
 
 const route = useRoute()
+const { hasClientRole } = useSession()
 
 const loading = ref(false)
 const error = ref('')
@@ -253,6 +282,70 @@ const providerScopePath = computed(() => route.query.providerScopePath as string
 const providerProjectKey = computed(() => route.query.providerProjectKey as string | undefined)
 const repositoryId = computed(() => route.query.repositoryId as string | undefined)
 const pullRequestId = computed(() => route.query.pullRequestId ? Number(route.query.pullRequestId) : undefined)
+
+// Block/unblock controls are admin-gated. The PR identity comes from the route query params.
+const isBlocked = ref(false)
+const blocking = ref(false)
+const blockError = ref('')
+
+const canManage = computed(() =>
+    typeof clientId.value === 'string' && clientId.value.length > 0 && hasClientRole(clientId.value, RoleLevel.Administrator),
+)
+
+// Any viewer who can inspect the client sees the blocked badge; only administrators can toggle the block.
+const canInspect = computed(() =>
+    typeof clientId.value === 'string' && clientId.value.length > 0 && hasClientRole(clientId.value, RoleLevel.User),
+)
+
+const prIdentity = computed<PullRequestIdentity | null>(() => {
+    if (!providerScopePath.value || !providerProjectKey.value || !repositoryId.value || pullRequestId.value == null) {
+        return null
+    }
+    return {
+        providerScopePath: providerScopePath.value,
+        providerProjectKey: providerProjectKey.value,
+        repositoryId: repositoryId.value,
+        pullRequestId: pullRequestId.value,
+    }
+})
+
+async function loadBlockedState() {
+    if (!canInspect.value || !clientId.value || !prIdentity.value) {
+        return
+    }
+    try {
+        const blocked = await listBlockedPrs(clientId.value)
+        const identity = prIdentity.value
+        isBlocked.value = blocked.some((entry) =>
+            (entry.providerScopePath ?? '') === identity.providerScopePath &&
+            (entry.providerProjectKey ?? '') === identity.providerProjectKey &&
+            (entry.repositoryId ?? '') === identity.repositoryId &&
+            (entry.pullRequestId ?? 0) === identity.pullRequestId,
+        )
+    } catch {
+        // Best-effort: leave the PR presented as unblocked when the state cannot be loaded.
+    }
+}
+
+async function toggleBlock() {
+    if (!canManage.value || blocking.value || !clientId.value || !prIdentity.value) {
+        return
+    }
+    blockError.value = ''
+    blocking.value = true
+    try {
+        if (isBlocked.value) {
+            await unblockPr(clientId.value, prIdentity.value)
+        } else {
+            await blockPr(clientId.value, prIdentity.value)
+        }
+        await loadBlockedState()
+    } catch (err) {
+        blockError.value = err instanceof Error ? err.message : 'Failed to update the block state.'
+    } finally {
+        blocking.value = false
+    }
+}
 
 // Identity for the retained-archive section. The retained endpoints resolve the owning connection
 // server-side from the retained data, so the section only needs clientId + repositoryId +
@@ -280,7 +373,9 @@ const retained = shallowRef<UseRetainedPrData | null>(null)
 watch(
     () => {
         const identity = retainedIdentity.value
-        return identity ? `${identity.clientId} ${identity.repositoryId} ${identity.pullRequestId}` : null
+        return identity
+            ? `${identity.clientId} ${identity.providerScopePath} ${identity.repositoryId} ${identity.pullRequestId}`
+            : null
     },
     () => {
         const identity = retainedIdentity.value
@@ -317,7 +412,21 @@ async function loadData() {
     }
 }
 
-onMounted(loadData)
+onMounted(() => {
+    void loadData()
+})
+
+// The view can be reused across SPA navigation while the route query changes, so reload the blocked
+// state whenever the PR identity changes, resetting to a safe default first so the badge never reflects
+// a previous pull request.
+watch(
+    () => [clientId.value, providerScopePath.value, providerProjectKey.value, repositoryId.value, pullRequestId.value].join('|'),
+    () => {
+        isBlocked.value = false
+        void loadBlockedState()
+    },
+    { immediate: true },
+)
 
 function protocolLink(jobId: string): string {
     return `/jobs/${jobId}/protocol${clientId.value ? '?clientId=' + clientId.value : ''}`
@@ -368,6 +477,43 @@ function statusBadgeClass(status: number): string {
 
 .header-stack {
     margin-bottom: 1.5rem;
+}
+
+.header-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+}
+
+.block-error {
+    margin: 0.5rem 0 0;
+}
+
+.pr-title-row {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    flex-wrap: wrap;
+}
+
+.blocked-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+    font-size: 0.72rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    color: var(--color-danger);
+    background: var(--color-danger-soft, rgba(239, 68, 68, 0.12));
+    border: 1px solid rgba(239, 68, 68, 0.4);
+    padding: 0.15rem 0.5rem;
+    border-radius: var(--radius-xs);
+}
+
+.blocked-badge i {
+    font-size: 0.7rem;
 }
 
 .back-link {

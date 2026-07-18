@@ -9,8 +9,19 @@
 import { getActiveRuntime } from '@/app/runtime/runtimeContext'
 import type { RuntimeMode } from '@/app/runtime/createRuntime'
 import { sanitizeErrorMessage } from '@/services/credentialSafety'
-import { authedFetch } from '@/services/api'
+import { authedFetch, createAdminClient, getApiErrorMessage } from '@/services/api'
 import type { components } from '@/types'
+
+export type ReviewJobStopResponse = components['schemas']['ReviewJobStopResponse']
+export type BlockedPullRequestDto = components['schemas']['BlockedPullRequestDto']
+
+/** Provider-neutral identity of a single pull request, used for block/unblock calls. */
+export interface PullRequestIdentity {
+  providerScopePath: string
+  providerProjectKey: string
+  repositoryId: string
+  pullRequestId: number
+}
 
 function getJobsBaseUrl(): string {
   return getActiveRuntime().apiBaseUrl
@@ -270,6 +281,56 @@ async function getPrViewInternal(
     return res.json() as Promise<PrReviewViewDto>
   } catch (error) {
     throw new Error(sanitizeErrorMessage(error, `Failed to load PR view for client ${clientId}.`))
+  }
+}
+
+/**
+ * Stops a running or queued review job. Terminal: it does not requeue the job. Requires the caller to be
+ * a client-administrator of the job's owning client (enforced server-side).
+ */
+export async function stopJob(jobId: string): Promise<ReviewJobStopResponse> {
+  const { data, error } = await createAdminClient().POST('/reviewing/jobs/{jobId}/stop', {
+    params: { path: { jobId } },
+  })
+  if (error) {
+    throw new Error(getApiErrorMessage(error, `Failed to stop job ${jobId}.`))
+  }
+  if (!data) {
+    throw new Error(`Failed to stop job ${jobId}: the server returned no response body.`)
+  }
+  return data
+}
+
+/** Lists the pull requests currently blocked from review processing for the given client. */
+export async function listBlockedPrs(clientId: string): Promise<BlockedPullRequestDto[]> {
+  const { data, error } = await createAdminClient().GET('/clients/{clientId}/reviewing/blocked-prs', {
+    params: { path: { clientId } },
+  })
+  if (error) {
+    throw new Error(getApiErrorMessage(error, `Failed to load blocked pull requests for client ${clientId}.`))
+  }
+  return data ?? []
+}
+
+/** Blocks a pull request from future review processing. Does not stop a currently running job. */
+export async function blockPr(clientId: string, identity: PullRequestIdentity, reason?: string): Promise<void> {
+  const { error } = await createAdminClient().POST('/clients/{clientId}/reviewing/blocked-prs', {
+    params: { path: { clientId } },
+    body: { ...identity, ...(reason ? { reason } : {}) },
+  })
+  if (error) {
+    throw new Error(getApiErrorMessage(error, 'Failed to block the pull request.'))
+  }
+}
+
+/** Unblocks a previously blocked pull request so future pushes are processed again. */
+export async function unblockPr(clientId: string, identity: PullRequestIdentity): Promise<void> {
+  const { error } = await createAdminClient().POST('/clients/{clientId}/reviewing/blocked-prs/unblock', {
+    params: { path: { clientId } },
+    body: { ...identity },
+  })
+  if (error) {
+    throw new Error(getApiErrorMessage(error, 'Failed to unblock the pull request.'))
   }
 }
 

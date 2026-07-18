@@ -212,7 +212,7 @@ public sealed partial class ReviewOrchestrationService(
 
         pr = await this.AttachLinkedItemsAsync(job, pr, systemContext, ct);
 
-        if (jobs.GetById(job.Id)?.Status is JobStatus.Cancelled or JobStatus.Superseded)
+        if (jobs.GetById(job.Id)?.Status is JobStatus.Cancelled or JobStatus.Superseded or JobStatus.Stopped)
         {
             LogJobCancelledBeforeFileReview(logger, job.Id);
             return null;
@@ -220,7 +220,7 @@ public sealed partial class ReviewOrchestrationService(
 
         var result = await this.DispatchFileReviewAsync(job, pr, systemContext, overrideChatClient, ct);
 
-        if (jobs.GetById(job.Id)?.Status is JobStatus.Cancelled or JobStatus.Superseded)
+        if (jobs.GetById(job.Id)?.Status is JobStatus.Cancelled or JobStatus.Superseded or JobStatus.Stopped)
         {
             LogJobCancelledAfterFileReview(logger, job.Id);
             return null;
@@ -235,6 +235,16 @@ public sealed partial class ReviewOrchestrationService(
         {
             LogSkippedEmptyReview(logger, job.Id, job.PullRequestId);
             await this.SaveScanAndDeleteJobAsync(job, pr, reviewerId, ct);
+            return null;
+        }
+
+        // Final status re-check immediately before the only step that posts to the provider. In a
+        // multi-instance deployment a manual stop may land on another instance and never reach this
+        // instance's cancellation token, so the persisted status is the last line of defence against
+        // publishing the review of a job an administrator has stopped (or that was cancelled/superseded).
+        if (jobs.GetById(job.Id)?.Status is JobStatus.Cancelled or JobStatus.Superseded or JobStatus.Stopped)
+        {
+            LogJobCancelledAfterFileReview(logger, job.Id);
             return null;
         }
 

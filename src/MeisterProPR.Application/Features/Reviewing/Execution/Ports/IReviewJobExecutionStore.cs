@@ -153,6 +153,14 @@ public interface IReviewJobExecutionStore
     Task SetCancelledAsync(Guid id, CancellationToken ct = default);
 
     /// <summary>
+    ///     Marks a review job as stopped by a client administrator. No-op if the job is already terminal.
+    /// </summary>
+    /// <param name="id">The review job identifier.</param>
+    /// <param name="ct">The cancellation token.</param>
+    /// <returns>A task representing the asynchronous operation.</returns>
+    Task SetStoppedAsync(Guid id, CancellationToken ct = default);
+
+    /// <summary>
     ///     Updates the AI configuration of a review job.
     /// </summary>
     /// <param name="id">The review job identifier.</param>

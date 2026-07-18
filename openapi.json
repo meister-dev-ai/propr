@@ -2967,6 +2967,305 @@
         }
       }
     },
+    "/clients/{clientId}/reviewing/blocked-prs": {
+      "get": {
+        "tags": [
+          "BlockedPullRequests"
+        ],
+        "summary": "List the pull requests currently blocked from review processing for a client.",
+        "parameters": [
+          {
+            "name": "clientId",
+            "in": "path",
+            "description": "ID of the client whose blocked pull requests are listed.",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The blocked pull requests for the client.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/BlockedPullRequestDto"
+                  }
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/BlockedPullRequestDto"
+                  }
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/BlockedPullRequestDto"
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid credentials.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Caller lacks access to the client.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "BlockedPullRequests"
+        ],
+        "summary": "Block a pull request from review processing.",
+        "parameters": [
+          {
+            "name": "clientId",
+            "in": "path",
+            "description": "ID of the client that owns the pull request.",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "description": "The pull request to block, and an optional reason.",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BlockPullRequestRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BlockPullRequestRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/BlockPullRequestRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The pull request is blocked (already blocked requests are accepted idempotently)."
+          },
+          "400": {
+            "description": "The request is missing required pull-request identity fields.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid credentials.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Caller lacks `ClientAdministrator` rights for the client.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/clients/{clientId}/reviewing/blocked-prs/unblock": {
+      "post": {
+        "tags": [
+          "BlockedPullRequests"
+        ],
+        "summary": "Unblock a pull request so future pushes are processed again.",
+        "parameters": [
+          {
+            "name": "clientId",
+            "in": "path",
+            "description": "ID of the client that owns the pull request.",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "description": "The pull request to unblock.",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UnblockPullRequestRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UnblockPullRequestRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/UnblockPullRequestRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The pull request is not blocked (already-unblocked requests are accepted idempotently)."
+          },
+          "400": {
+            "description": "The request is missing required pull-request identity fields.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid credentials.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Caller lacks `ClientAdministrator` rights for the client.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/clients/{clientId}/ai-connections": {
       "get": {
         "tags": [
@@ -11735,7 +12034,7 @@
             }
           },
           "409": {
-            "description": "Active review job already exists for this PR iteration.",
+            "description": "An active review job already exists for this PR iteration, or the pull request is blocked from processing.",
             "content": {
               "text/plain": {
                 "schema": {
@@ -11966,7 +12265,7 @@
             }
           },
           "409": {
-            "description": "Active review job already exists for this PR iteration.",
+            "description": "An active review job already exists for this PR iteration, or the pull request is blocked from processing.",
             "content": {
               "text/plain": {
                 "schema": {
@@ -12302,6 +12601,252 @@
           },
           "409": {
             "description": "Job is not in a failed state, or an active job already exists for this PR revision.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/reviewing/jobs/{jobId}/stop": {
+      "post": {
+        "tags": [
+          "ReviewJobs"
+        ],
+        "summary": "Manually stop a running or queued review job.",
+        "description": "Lets a client administrator halt a review that should not run to completion (for example an\noversized or misbehaving pull request). Requires MeisterProPR.Domain.Enums.ClientRole.ClientAdministrator for\nthe job's owning client. Stopping is terminal: it does not requeue the job. Blocking a pull request\nis a separate action that prevents future processing without stopping the current run.",
+        "parameters": [
+          {
+            "name": "jobId",
+            "in": "path",
+            "description": "The identifier of the review job to stop.",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The job was running or queued and has been stopped.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReviewJobStopResponse"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReviewJobStopResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReviewJobStopResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid credentials.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Caller lacks `ClientAdministrator` rights for the job's owning client.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Job not found.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Job has already reached a terminal state and cannot be stopped.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/jobs/{jobId}/stop": {
+      "post": {
+        "tags": [
+          "ReviewJobs"
+        ],
+        "summary": "Manually stop a running or queued review job.",
+        "description": "Lets a client administrator halt a review that should not run to completion (for example an\noversized or misbehaving pull request). Requires MeisterProPR.Domain.Enums.ClientRole.ClientAdministrator for\nthe job's owning client. Stopping is terminal: it does not requeue the job. Blocking a pull request\nis a separate action that prevents future processing without stopping the current run.",
+        "parameters": [
+          {
+            "name": "jobId",
+            "in": "path",
+            "description": "The identifier of the review job to stop.",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The job was running or queued and has been stopped.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReviewJobStopResponse"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReviewJobStopResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReviewJobStopResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid credentials.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Caller lacks `ClientAdministrator` rights for the job's owning client.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Job not found.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Job has already reached a terminal state and cannot be stopped.",
             "content": {
               "text/plain": {
                 "schema": {
@@ -16336,6 +16881,90 @@
         "additionalProperties": false,
         "description": "Authenticated session snapshot shared with the admin UI after sign-in."
       },
+      "BlockPullRequestRequest": {
+        "type": "object",
+        "properties": {
+          "providerScopePath": {
+            "type": "string",
+            "description": "Provider host/organisation scope of the pull request.",
+            "nullable": true
+          },
+          "providerProjectKey": {
+            "type": "string",
+            "description": "Provider project/namespace key of the pull request.",
+            "nullable": true
+          },
+          "repositoryId": {
+            "type": "string",
+            "description": "Repository identifier of the pull request.",
+            "nullable": true
+          },
+          "pullRequestId": {
+            "type": "integer",
+            "description": "Pull request number.",
+            "format": "int32"
+          },
+          "reason": {
+            "type": "string",
+            "description": "Optional free-text reason for the block.",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false,
+        "description": "Identifies a pull request to block and, optionally, why."
+      },
+      "BlockedPullRequestDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "Identifier of the block record.",
+            "format": "uuid"
+          },
+          "clientId": {
+            "type": "string",
+            "description": "Owning client.",
+            "format": "uuid"
+          },
+          "providerScopePath": {
+            "type": "string",
+            "description": "Provider host/organisation scope of the pull request.",
+            "nullable": true
+          },
+          "providerProjectKey": {
+            "type": "string",
+            "description": "Provider project/namespace key of the pull request.",
+            "nullable": true
+          },
+          "repositoryId": {
+            "type": "string",
+            "description": "Repository identifier of the pull request.",
+            "nullable": true
+          },
+          "pullRequestId": {
+            "type": "integer",
+            "description": "Pull request number.",
+            "format": "int32"
+          },
+          "blockedByUserId": {
+            "type": "string",
+            "description": "User who created the block.",
+            "format": "uuid"
+          },
+          "blockedAt": {
+            "type": "string",
+            "description": "When the block was created (UTC).",
+            "format": "date-time"
+          },
+          "reason": {
+            "type": "string",
+            "description": "Optional free-text reason for the block.",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false,
+        "description": "A pull request currently blocked from review processing."
+      },
       "CacheCallStatus": {
         "enum": [
           "notApplicable",
@@ -17676,7 +18305,8 @@
           "completed",
           "failed",
           "cancelled",
-          "superseded"
+          "superseded",
+          "stopped"
         ],
         "type": "string",
         "description": "Status of a review job."
@@ -20699,6 +21329,23 @@
         "additionalProperties": false,
         "description": "Response for the job result endpoint, combining status metadata with the review result."
       },
+      "ReviewJobStopResponse": {
+        "type": "object",
+        "properties": {
+          "jobId": {
+            "type": "string",
+            "description": "Identifier of the stopped review job.",
+            "format": "uuid"
+          },
+          "status": {
+            "type": "string",
+            "description": "Lower-cased status of the job (`stopped`).",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false,
+        "description": "Response returned when a running or queued review job is stopped."
+      },
       "ReviewListItem": {
         "type": "object",
         "properties": {
@@ -21524,6 +22171,33 @@
         "additionalProperties": false,
         "description": "Represents the token cost contribution of a single effort-tier / model-ID combination within a review job.\nStored as a JSONB array in the `review_jobs.token_breakdown` column."
       },
+      "UnblockPullRequestRequest": {
+        "type": "object",
+        "properties": {
+          "providerScopePath": {
+            "type": "string",
+            "description": "Provider host/organisation scope of the pull request.",
+            "nullable": true
+          },
+          "providerProjectKey": {
+            "type": "string",
+            "description": "Provider project/namespace key of the pull request.",
+            "nullable": true
+          },
+          "repositoryId": {
+            "type": "string",
+            "description": "Repository identifier of the pull request.",
+            "nullable": true
+          },
+          "pullRequestId": {
+            "type": "integer",
+            "description": "Pull request number.",
+            "format": "int32"
+          }
+        },
+        "additionalProperties": false,
+        "description": "Identifies a pull request to unblock."
+      },
       "UpdateAiConnectionRequest": {
         "type": "object",
         "properties": {
@@ -21937,6 +22611,9 @@
     },
     {
       "name": "AuthOptions"
+    },
+    {
+      "name": "BlockedPullRequests"
     },
     {
       "name": "ClientAiConnections"

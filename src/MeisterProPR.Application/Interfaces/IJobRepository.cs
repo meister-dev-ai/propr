@@ -171,6 +171,12 @@ public interface IJobRepository
     /// </summary>
     Task SetSupersededAsync(Guid id, CancellationToken ct = default);
 
+    /// <summary>
+    ///     Marks the job as stopped because a client administrator halted it manually through the control
+    ///     panel. No-op if the job does not exist or is already in a terminal state.
+    /// </summary>
+    Task SetStoppedAsync(Guid id, CancellationToken ct = default);
+
     /// <summary>Returns all Pending or Processing jobs for the given ADO organisation/project combination.</summary>
     Task<IReadOnlyList<ReviewJob>> GetActiveJobsForConfigAsync(
         string organizationUrl,
