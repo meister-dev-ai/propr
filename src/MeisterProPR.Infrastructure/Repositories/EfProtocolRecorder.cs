@@ -397,6 +397,17 @@ public sealed class EfProtocolRecorder(
     }
 
     /// <inheritdoc />
+    public async Task RecordPublicationEventAsync(
+        Guid protocolId,
+        string eventName,
+        string? details,
+        string? error,
+        CancellationToken ct = default)
+    {
+        await this.RecordEventAsync(protocolId, ProtocolEventKind.Operational, eventName, details, null, error, ct, "publication");
+    }
+
+    /// <inheritdoc />
     public async Task RecordCommentRelevanceEventAsync(
         Guid protocolId,
         string eventName,

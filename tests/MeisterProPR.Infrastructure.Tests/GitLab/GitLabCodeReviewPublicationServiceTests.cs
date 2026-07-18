@@ -2,6 +2,7 @@
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
 using System.Net;
+using MeisterProPR.Application.Exceptions;
 using MeisterProPR.Application.Features.Reviewing.Execution.Models;
 using MeisterProPR.Application.Interfaces;
 using MeisterProPR.Domain.Enums;
@@ -143,5 +144,168 @@ public sealed class GitLabPublicationContextContractTests
 
         Assert.Empty(diagnostics.PostedComments);
         Assert.Equal(0, diagnostics.PostedCount);
+    }
+
+    [Fact]
+    public async Task PublishReviewAsync_OneInlineDiscussionRejected_StillPostsSummaryAndOtherInline()
+    {
+        var clientId = Guid.NewGuid();
+        var host = new ProviderHostRef(ScmProvider.GitLab, "https://gitlab.example.com");
+        var repository = new RepositoryRef(host, "101", "acme/platform", "acme/platform/propr");
+        var review = new CodeReviewRef(repository, CodeReviewPlatformKind.PullRequest, "4201", 42);
+        var revision = new ReviewRevision("head-sha", "base-sha", "start-sha", "head-sha", "base-sha...head-sha");
+        var reviewer = new ReviewerIdentity(host, "99", "meister-review-bot", "Meister Review Bot", true);
+        var result = new ReviewResult(
+            "Looks solid overall.",
+            [
+                new ReviewComment("src/a.ts", 10, CommentSeverity.Warning, "first inline"),
+                new ReviewComment("src/b.ts", 20, CommentSeverity.Error, "second inline"),
+            ]);
+
+        // Discussion POST order: #1 summary, #2 first inline, #3 second inline. Reject only the first inline.
+        var discussionPosts = 0;
+        var connectionRepository = GitLabTestHelpers.CreateConnectionRepository(clientId, host);
+        var httpClientFactory = GitLabTestHelpers.CreateHttpClientFactory(request =>
+        {
+            var uri = request.RequestUri!.AbsoluteUri;
+            if (uri.EndsWith("/user", StringComparison.Ordinal))
+            {
+                return GitLabTestHelpers.CreateJsonResponse(new { username = "meister-dev" });
+            }
+
+            if (uri.EndsWith("/versions", StringComparison.Ordinal))
+            {
+                return GitLabTestHelpers.CreateJsonResponse(
+                    new[]
+                    {
+                        new { id = 7L, base_commit_sha = "base-sha", head_commit_sha = "head-sha", start_commit_sha = "start-sha" },
+                    });
+            }
+
+            if (uri.EndsWith("/discussions", StringComparison.Ordinal))
+            {
+                discussionPosts++;
+                return discussionPosts == 2
+                    ? new HttpResponseMessage(HttpStatusCode.BadRequest) { Content = new StringContent("invalid line for position") }
+                    : GitLabTestHelpers.CreateJsonResponse(
+                        new { id = $"discussion-{discussionPosts}", notes = new[] { new { id = 9100L } } },
+                        HttpStatusCode.Created);
+            }
+
+            return new HttpResponseMessage(HttpStatusCode.NotFound);
+        });
+
+        var sut = new GitLabCodeReviewPublicationService(
+            new GitLabConnectionVerifier(connectionRepository, httpClientFactory),
+            httpClientFactory);
+
+        var diagnostics = await sut.PublishReviewAsync(clientId, review, revision, result, reviewer);
+
+        // Summary + the second inline still post even though the first inline was rejected.
+        Assert.Equal(3, discussionPosts);
+        Assert.Equal(1, diagnostics.PostedCount);
+        Assert.Equal(1, diagnostics.FailedCount);
+        var failure = Assert.Single(diagnostics.PostingFailures);
+        Assert.Equal("inline", failure.ThreadKind);
+        Assert.Equal("src/a.ts", failure.FilePath);
+        Assert.Equal(10, failure.Line);
+    }
+
+    [Fact]
+    public async Task PublishReviewAsync_AllDiscussionsRejected_ThrowsPublicationFailure()
+    {
+        var clientId = Guid.NewGuid();
+        var host = new ProviderHostRef(ScmProvider.GitLab, "https://gitlab.example.com");
+        var repository = new RepositoryRef(host, "101", "acme/platform", "acme/platform/propr");
+        var review = new CodeReviewRef(repository, CodeReviewPlatformKind.PullRequest, "4201", 42);
+        var revision = new ReviewRevision("head-sha", "base-sha", "start-sha", "head-sha", "base-sha...head-sha");
+        var reviewer = new ReviewerIdentity(host, "99", "meister-review-bot", "Meister Review Bot", true);
+        var result = new ReviewResult(
+            "Looks solid overall.",
+            [new ReviewComment("src/a.ts", 10, CommentSeverity.Warning, "first inline")]);
+
+        var connectionRepository = GitLabTestHelpers.CreateConnectionRepository(clientId, host);
+        var httpClientFactory = GitLabTestHelpers.CreateHttpClientFactory(request =>
+        {
+            var uri = request.RequestUri!.AbsoluteUri;
+            if (uri.EndsWith("/user", StringComparison.Ordinal))
+            {
+                return GitLabTestHelpers.CreateJsonResponse(new { username = "meister-dev" });
+            }
+
+            if (uri.EndsWith("/versions", StringComparison.Ordinal))
+            {
+                return GitLabTestHelpers.CreateJsonResponse(
+                    new[]
+                    {
+                        new { id = 7L, base_commit_sha = "base-sha", head_commit_sha = "head-sha", start_commit_sha = "start-sha" },
+                    });
+            }
+
+            // Every discussion creation is rejected.
+            return new HttpResponseMessage(HttpStatusCode.BadRequest) { Content = new StringContent("rejected") };
+        });
+
+        var sut = new GitLabCodeReviewPublicationService(
+            new GitLabConnectionVerifier(connectionRepository, httpClientFactory),
+            httpClientFactory);
+
+        var exception = await Assert.ThrowsAsync<ReviewCommentPublicationFailedException>(() => sut.PublishReviewAsync(
+            clientId, review, revision, result, reviewer));
+
+        Assert.Equal(0, exception.Diagnostics.PostedCount);
+        Assert.Equal(2, exception.Diagnostics.FailedCount);
+    }
+
+    [Fact]
+    public async Task PublishReviewAsync_WhenInlineRevisionLookupFails_StillPostsSummaryAndRecordsInlineFailures()
+    {
+        var clientId = Guid.NewGuid();
+        var host = new ProviderHostRef(ScmProvider.GitLab, "https://gitlab.example.com");
+        var repository = new RepositoryRef(host, "101", "acme/platform", "acme/platform/propr");
+        var review = new CodeReviewRef(repository, CodeReviewPlatformKind.PullRequest, "4201", 42);
+        var revision = new ReviewRevision("head-sha", "base-sha", "start-sha", "head-sha", "base-sha...head-sha");
+        var reviewer = new ReviewerIdentity(host, "99", "meister-review-bot", "Meister Review Bot", true);
+        var result = new ReviewResult(
+            "Looks solid overall.",
+            [new ReviewComment("src/a.ts", 10, CommentSeverity.Warning, "first inline")]);
+
+        var connectionRepository = GitLabTestHelpers.CreateConnectionRepository(clientId, host);
+        var httpClientFactory = GitLabTestHelpers.CreateHttpClientFactory(request =>
+        {
+            var uri = request.RequestUri!.AbsoluteUri;
+            if (uri.EndsWith("/user", StringComparison.Ordinal))
+            {
+                return GitLabTestHelpers.CreateJsonResponse(new { username = "meister-dev" });
+            }
+
+            // The merge-request diff-revision lookup fails, so no inline can be anchored.
+            if (uri.EndsWith("/versions", StringComparison.Ordinal))
+            {
+                return new HttpResponseMessage(HttpStatusCode.InternalServerError);
+            }
+
+            if (uri.EndsWith("/discussions", StringComparison.Ordinal))
+            {
+                return GitLabTestHelpers.CreateJsonResponse(
+                    new { id = "discussion-1", notes = new[] { new { id = 9100L } } },
+                    HttpStatusCode.Created);
+            }
+
+            return new HttpResponseMessage(HttpStatusCode.NotFound);
+        });
+
+        var sut = new GitLabCodeReviewPublicationService(
+            new GitLabConnectionVerifier(connectionRepository, httpClientFactory),
+            httpClientFactory);
+
+        var diagnostics = await sut.PublishReviewAsync(clientId, review, revision, result, reviewer);
+
+        // Summary still posts; the inline is recorded as failed rather than aborting the publish.
+        Assert.Single(diagnostics.PostedComments);
+        var failure = Assert.Single(diagnostics.PostingFailures);
+        Assert.Equal("inline", failure.ThreadKind);
+        Assert.Equal("src/a.ts", failure.FilePath);
+        Assert.Contains("version", failure.Error, StringComparison.OrdinalIgnoreCase);
     }
 }

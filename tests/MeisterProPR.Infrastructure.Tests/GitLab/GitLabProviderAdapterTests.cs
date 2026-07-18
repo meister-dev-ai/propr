@@ -4,6 +4,7 @@
 using System.Net;
 using System.Text.Json;
 using MeisterProPR.Application.DTOs;
+using MeisterProPR.Application.Exceptions;
 using MeisterProPR.Application.Interfaces;
 using MeisterProPR.Domain.Enums;
 using MeisterProPR.Domain.ValueObjects;
@@ -633,7 +634,7 @@ public sealed class GitLabCodeReviewPublicationServiceTests
     }
 
     [Fact]
-    public async Task PublishReviewAsync_WithForbiddenResponse_ThrowsScopeAwareMessage()
+    public async Task PublishReviewAsync_WhenEveryDiscussionForbidden_SurfacesScopeAwarePublicationFailure()
     {
         var clientId = Guid.NewGuid();
         var host = new ProviderHostRef(ScmProvider.GitLab, "https://gitlab.example.com");
@@ -666,16 +667,21 @@ public sealed class GitLabCodeReviewPublicationServiceTests
             new GitLabConnectionVerifier(connectionRepository, httpClientFactory),
             httpClientFactory);
 
-        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+        // The only discussion (the summary) is forbidden, so nothing posts — surfaced as a publication failure
+        // whose inner exception carries the scope-aware provider detail.
+        var ex = await Assert.ThrowsAsync<ReviewCommentPublicationFailedException>(() =>
             sut.PublishReviewAsync(clientId, review, revision, result, reviewer));
 
-        Assert.Contains("forbidden", ex.Message, StringComparison.OrdinalIgnoreCase);
-        Assert.Contains("api scope", ex.Message, StringComparison.OrdinalIgnoreCase);
-        Assert.Contains("insufficient_scope", ex.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Equal(0, ex.Diagnostics.PostedCount);
+        Assert.Equal(1, ex.Diagnostics.FailedCount);
+        var inner = Assert.Single(ex.InnerExceptions);
+        Assert.Contains("forbidden", inner.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("api scope", inner.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("insufficient_scope", inner.Message, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
-    public async Task PublishReviewAsync_WithServerErrorOnInlineDiscussion_ThrowsTargetedFailureMessage()
+    public async Task PublishReviewAsync_WithServerErrorOnInlineDiscussion_IsolatesTheFailedInlineWithTargetedDetail()
     {
         var clientId = Guid.NewGuid();
         var host = new ProviderHostRef(ScmProvider.GitLab, "https://gitlab.example.com");
@@ -732,13 +738,17 @@ public sealed class GitLabCodeReviewPublicationServiceTests
             new GitLabConnectionVerifier(connectionRepository, httpClientFactory),
             httpClientFactory);
 
-        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() =>
-            sut.PublishReviewAsync(clientId, review, revision, result, reviewer));
+        // The summary posts; the single inline server error is isolated and recorded (not thrown), and its
+        // targeted provider detail is preserved on the recorded failure.
+        var diagnostics = await sut.PublishReviewAsync(clientId, review, revision, result, reviewer);
 
-        Assert.Contains("inline discussion 2/2", ex.Message, StringComparison.OrdinalIgnoreCase);
-        Assert.Contains("src/file.ts:L18", ex.Message, StringComparison.OrdinalIgnoreCase);
-        Assert.Contains("after 1 successful discussion", ex.Message, StringComparison.OrdinalIgnoreCase);
-        Assert.Contains("status 500", ex.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Equal(1, diagnostics.FailedCount);
+        var failure = Assert.Single(diagnostics.PostingFailures);
+        Assert.Equal("inline", failure.ThreadKind);
+        Assert.Contains("inline discussion 2/2", failure.Error, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("src/file.ts:L18", failure.Error, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("after 1 successful discussion", failure.Error, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("status 500", failure.Error, StringComparison.OrdinalIgnoreCase);
     }
 }
 

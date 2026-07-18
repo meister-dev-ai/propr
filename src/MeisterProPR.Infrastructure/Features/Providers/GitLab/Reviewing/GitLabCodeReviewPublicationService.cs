@@ -9,6 +9,7 @@ using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using MeisterProPR.Application.DTOs;
+using MeisterProPR.Application.Exceptions;
 using MeisterProPR.Application.Features.Reviewing.Execution.Models;
 using MeisterProPR.Application.Interfaces;
 using MeisterProPR.Domain.Enums;
@@ -52,76 +53,136 @@ internal sealed class GitLabCodeReviewPublicationService(
 
         var summaryBody = BuildSummaryBody(result, reviewer);
         var inlineComments = result.Comments.Where(IsInlineComment).ToList();
-        var inlineRevision = inlineComments.Count > 0
-            ? await GetLatestInlineRevisionAsync(client, context.Connection.Secret, review, ct)
-            : null;
+        var nonInlineCommentCount = result.Comments.Count - inlineComments.Count;
         var totalDiscussions = inlineComments.Count + (string.IsNullOrWhiteSpace(summaryBody) ? 0 : 1);
-        var successfulDiscussionCount = 0;
-        var postedComments = new List<PostedReviewCommentRef>();
 
+        var postedDiscussionCount = 0;
+        var postedInlineCount = 0;
+        var summaryPosted = false;
+        var postedComments = new List<PostedReviewCommentRef>();
+        var failures = new List<ReviewCommentPostingFailure>();
+        var failureExceptions = new List<Exception>();
+
+        // Post the summary discussion first — it does not depend on the inline diff revision, so an inline
+        // problem cannot cost the summary and a summary rejection cannot abort the inline comments.
         if (!string.IsNullOrWhiteSpace(summaryBody))
         {
-            var captured = await PostDiscussionAsync(
-                new GitLabDiscussionPostRequest(
-                    client,
-                    context.Connection.Secret,
-                    discussionUri,
-                    new GitLabDiscussionRequest(summaryBody, null),
-                    GitLabDiscussionTarget.Overview(1, totalDiscussions),
-                    successfulDiscussionCount,
-                    null,
-                    null),
-                ct);
-            if (captured is not null)
+            try
             {
-                postedComments.Add(captured);
-            }
+                var captured = await PostDiscussionAsync(
+                    new GitLabDiscussionPostRequest(
+                        client,
+                        context.Connection.Secret,
+                        discussionUri,
+                        new GitLabDiscussionRequest(summaryBody, null),
+                        GitLabDiscussionTarget.Overview(1, totalDiscussions),
+                        postedDiscussionCount,
+                        null,
+                        null),
+                    ct);
+                if (captured is not null)
+                {
+                    postedComments.Add(captured);
+                }
 
-            successfulDiscussionCount++;
+                postedDiscussionCount++;
+                summaryPosted = true;
+            }
+            catch (Exception ex) when (!ct.IsCancellationRequested)
+            {
+                failures.Add(new ReviewCommentPostingFailure("summary", null, null, ex.Message));
+                failureExceptions.Add(ex);
+            }
         }
 
-        foreach (var comment in inlineComments)
+        // Inline discussions need the merge request's latest diff revision. If that lookup fails, record it
+        // as a per-thread failure for each inline comment rather than aborting the whole publish.
+        if (inlineComments.Count > 0)
         {
-            var normalizedPath = NormalizePath(comment.FilePath!);
-            var captured = await PostDiscussionAsync(
-                new GitLabDiscussionPostRequest(
-                    client,
-                    context.Connection.Secret,
-                    discussionUri,
-                    new GitLabDiscussionRequest(
-                        $"{FormatSeverity(comment.Severity)}: {comment.Message}",
-                        new GitLabDiscussionPosition(
-                            "text",
-                            inlineRevision!.BaseSha,
-                            inlineRevision.HeadSha,
-                            inlineRevision.StartSha,
-                            normalizedPath,
-                            normalizedPath,
-                            comment.LineNumber)),
-                    GitLabDiscussionTarget.Inline(
-                        successfulDiscussionCount + 1,
-                        totalDiscussions,
-                        normalizedPath,
-                        comment.LineNumber!.Value),
-                    successfulDiscussionCount,
-                    normalizedPath,
-                    comment.LineNumber),
-                ct);
-            if (captured is not null)
+            GitLabInlineRevision? inlineRevision = null;
+            Exception? revisionFailure = null;
+            try
             {
-                postedComments.Add(captured);
+                inlineRevision = await GetLatestInlineRevisionAsync(client, context.Connection.Secret, review, ct);
+            }
+            catch (Exception ex) when (!ct.IsCancellationRequested)
+            {
+                revisionFailure = ex;
             }
 
-            successfulDiscussionCount++;
+            foreach (var comment in inlineComments)
+            {
+                var normalizedPath = NormalizePath(comment.FilePath!);
+                if (inlineRevision is null)
+                {
+                    failures.Add(new ReviewCommentPostingFailure("inline", normalizedPath, comment.LineNumber, revisionFailure!.Message));
+                    continue;
+                }
+
+                try
+                {
+                    var captured = await PostDiscussionAsync(
+                        new GitLabDiscussionPostRequest(
+                            client,
+                            context.Connection.Secret,
+                            discussionUri,
+                            new GitLabDiscussionRequest(
+                                $"{FormatSeverity(comment.Severity)}: {comment.Message}",
+                                new GitLabDiscussionPosition(
+                                    "text",
+                                    inlineRevision.BaseSha,
+                                    inlineRevision.HeadSha,
+                                    inlineRevision.StartSha,
+                                    normalizedPath,
+                                    normalizedPath,
+                                    comment.LineNumber)),
+                            GitLabDiscussionTarget.Inline(
+                                postedDiscussionCount + 1,
+                                totalDiscussions,
+                                normalizedPath,
+                                comment.LineNumber!.Value),
+                            postedDiscussionCount,
+                            normalizedPath,
+                            comment.LineNumber),
+                        ct);
+                    if (captured is not null)
+                    {
+                        postedComments.Add(captured);
+                    }
+
+                    postedDiscussionCount++;
+                    postedInlineCount++;
+                }
+                catch (Exception ex) when (!ct.IsCancellationRequested)
+                {
+                    failures.Add(new ReviewCommentPostingFailure("inline", normalizedPath, comment.LineNumber, ex.Message));
+                    failureExceptions.Add(ex);
+                }
+            }
+
+            if (revisionFailure is not null)
+            {
+                failureExceptions.Add(revisionFailure);
+            }
         }
 
-        return ReviewCommentPostingDiagnosticsDto.Empty(
+        var diagnostics = ReviewCommentPostingDiagnosticsDto.Empty(
                 result.Comments.Count + result.CarriedForwardCandidatesSkipped,
                 result.CarriedForwardCandidatesSkipped) with
             {
-                PostedCount = result.Comments.Count,
+                PostedCount = postedInlineCount + (summaryPosted ? nonInlineCommentCount : 0),
                 PostedComments = postedComments,
+                FailedCount = failures.Count,
+                PostingFailures = failures,
             };
+
+        // Every attempted discussion was rejected: surface a publication failure rather than a silent success.
+        if (postedDiscussionCount == 0 && failures.Count > 0)
+        {
+            throw new ReviewCommentPublicationFailedException(diagnostics, failureExceptions);
+        }
+
+        return diagnostics;
     }
 
     // Posts a single discussion. On success, best-effort parses the created discussion's first note id —

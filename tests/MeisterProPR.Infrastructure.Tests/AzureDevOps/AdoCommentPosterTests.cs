@@ -1,6 +1,8 @@
 // Copyright (c) Andreas Rain.
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
+using MeisterProPR.Application.DTOs;
+using MeisterProPR.Application.Exceptions;
 using MeisterProPR.Application.Features.Reviewing.Execution.Models;
 using MeisterProPR.Domain.Enums;
 using MeisterProPR.Domain.ValueObjects;
@@ -508,5 +510,171 @@ public class AdoCommentPosterTests
 
         var reference = Assert.Single(captured);
         Assert.Equal("9", reference.ProviderCommentId);
+    }
+
+    // Per-thread posting-failure isolation. These exercise the extracted posting loop through the
+    // thread-creation seam, so one provider rejection cannot abort the rest of the pass.
+
+    private static readonly Guid PosterBotId = new("cccccccc-cccc-cccc-cccc-cccccccccccc");
+
+    [Fact]
+    public async Task PostResolvedThreadsAsync_OneInlineOfThreeRejected_StillPostsTheOthers()
+    {
+        var invocations = new List<string>();
+        AdoCommentPoster.AdoThreadFactory factory = (message, _, _, _) =>
+        {
+            invocations.Add(message);
+            return message.Contains("REJECT", StringComparison.Ordinal)
+                ? throw new InvalidOperationException("TF401027: the thread was rejected by the provider.")
+                : Task.FromResult(CreatedThread(invocations.Count, message));
+        };
+
+        var result = new ReviewResult(
+            "All clear.",
+            new List<ReviewComment>
+            {
+                new("/src/A.cs", 1, CommentSeverity.Error, "first issue"),
+                new("/src/B.cs", 2, CommentSeverity.Warning, "REJECT this one"),
+                new("/src/C.cs", 3, CommentSeverity.Suggestion, "third issue"),
+            }.AsReadOnly());
+
+        var diagnostics = await PostAsync(result, factory);
+
+        // Summary + all three inline comments were attempted — the loop did not abort at the failure.
+        Assert.Equal(4, invocations.Count);
+        Assert.Equal(2, diagnostics.PostedCount);
+        Assert.Equal(1, diagnostics.FailedCount);
+        var failure = Assert.Single(diagnostics.PostingFailures);
+        Assert.Equal("inline", failure.ThreadKind);
+        Assert.Equal("/src/B.cs", failure.FilePath);
+        Assert.Equal(2, failure.Line);
+        Assert.Contains("TF401027", failure.Error, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task PostResolvedThreadsAsync_SummaryRejected_StillPostsInlineThreads()
+    {
+        var invocations = new List<string>();
+        AdoCommentPoster.AdoThreadFactory factory = (message, _, _, _) =>
+        {
+            invocations.Add(message);
+            return message.StartsWith("**AI Review Summary**", StringComparison.Ordinal)
+                ? throw new InvalidOperationException("TF401019: the summary thread was rejected.")
+                : Task.FromResult(CreatedThread(invocations.Count, message));
+        };
+
+        var result = new ReviewResult(
+            "Summary body.",
+            new List<ReviewComment>
+            {
+                new("/src/A.cs", 1, CommentSeverity.Error, "inline still posts"),
+            }.AsReadOnly());
+
+        var diagnostics = await PostAsync(result, factory);
+
+        Assert.Equal(2, invocations.Count);
+        Assert.Equal(1, diagnostics.PostedCount);
+        var failure = Assert.Single(diagnostics.PostingFailures);
+        Assert.Equal("summary", failure.ThreadKind);
+        Assert.Null(failure.FilePath);
+    }
+
+    [Fact]
+    public async Task PostResolvedThreadsAsync_AllThreadsRejected_ThrowsPublicationFailure()
+    {
+        AdoCommentPoster.AdoThreadFactory factory = (message, _, _, _) =>
+            throw new InvalidOperationException("TF401: rejected " + message);
+
+        var result = new ReviewResult(
+            "Summary body.",
+            new List<ReviewComment>
+            {
+                new("/src/A.cs", 1, CommentSeverity.Error, "one"),
+                new("/src/B.cs", 2, CommentSeverity.Warning, "two"),
+            }.AsReadOnly());
+
+        var exception = await Assert.ThrowsAsync<ReviewCommentPublicationFailedException>(() => PostAsync(result, factory));
+
+        Assert.Equal(0, exception.Diagnostics.PostedCount);
+        Assert.Equal(3, exception.Diagnostics.FailedCount);
+        Assert.Equal(3, exception.InnerExceptions.Count);
+    }
+
+    [Fact]
+    public async Task PostResolvedThreadsAsync_CallerCancellation_PropagatesInsteadOfBeingSwallowed()
+    {
+        using var cts = new CancellationTokenSource();
+        await cts.CancelAsync();
+        AdoCommentPoster.AdoThreadFactory factory = (_, _, _, token) => throw new OperationCanceledException(token);
+
+        var result = new ReviewResult(
+            "Summary body.",
+            new List<ReviewComment>
+            {
+                new("/src/A.cs", 1, CommentSeverity.Error, "one"),
+            }.AsReadOnly());
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => PostAsync(result, factory, cts.Token));
+    }
+
+    [Fact]
+    public async Task PostResolvedThreadsAsync_InlineTimeout_IsIsolatedNotPropagated()
+    {
+        // A provider request timeout surfaces as TaskCanceledException (an OperationCanceledException) even
+        // though the caller never cancelled — it must be isolated like any other rejection, not abort the pass.
+        var invocations = new List<string>();
+        AdoCommentPoster.AdoThreadFactory factory = (message, _, _, _) =>
+        {
+            invocations.Add(message);
+            return message.Contains("TIMEOUT", StringComparison.Ordinal)
+                ? throw new TaskCanceledException("The request timed out.")
+                : Task.FromResult(CreatedThread(invocations.Count, message));
+        };
+
+        var result = new ReviewResult(
+            "All clear.",
+            new List<ReviewComment>
+            {
+                new("/src/A.cs", 1, CommentSeverity.Error, "first issue"),
+                new("/src/B.cs", 2, CommentSeverity.Warning, "TIMEOUT here"),
+                new("/src/C.cs", 3, CommentSeverity.Suggestion, "third issue"),
+            }.AsReadOnly());
+
+        var diagnostics = await PostAsync(result, factory);
+
+        Assert.Equal(4, invocations.Count);
+        Assert.Equal(2, diagnostics.PostedCount);
+        var failure = Assert.Single(diagnostics.PostingFailures);
+        Assert.Equal("/src/B.cs", failure.FilePath);
+    }
+
+    private static Task<ReviewCommentPostingDiagnosticsDto> PostAsync(
+        ReviewResult result,
+        AdoCommentPoster.AdoThreadFactory factory,
+        CancellationToken cancellationToken = default)
+    {
+        var poster = new AdoCommentPoster(null!, null!);
+        return poster.PostResolvedThreadsAsync(
+            result,
+            factory,
+            PosterBotId,
+            clientId: null,
+            repositoryId: "repo",
+            pullRequestId: 1,
+            iterationId: 1,
+            compareToIterationId: null,
+            changeTrackingIds: new Dictionary<string, int>(),
+            existingThreads: null,
+            publicationIdentity: null,
+            cancellationToken);
+    }
+
+    private static GitPullRequestCommentThread CreatedThread(int id, string message)
+    {
+        return new GitPullRequestCommentThread
+        {
+            Id = id,
+            Comments = [new Comment { Id = (short)id, Content = message }],
+        };
     }
 }

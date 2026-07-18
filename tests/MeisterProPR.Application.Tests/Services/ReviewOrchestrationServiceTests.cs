@@ -3,6 +3,7 @@
 
 using System.Text.Json;
 using MeisterProPR.Application.DTOs;
+using MeisterProPR.Application.Exceptions;
 using MeisterProPR.Application.Features.ReviewArchive;
 using MeisterProPR.Application.Features.Reviewing.Execution.Models;
 using MeisterProPR.Application.Features.Reviewing.Execution.Ports;
@@ -1519,6 +1520,191 @@ public partial class ReviewOrchestrationServiceTests
                 "dedup_degraded_mode",
                 Arg.Is<string?>(details => HasDedupDegradedDiagnostics(details)),
                 Arg.Is<string?>(error => error == null),
+                Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task ProcessAsync_PostingDiagnostics_RecordsEachPublicationFailureWithProviderError()
+    {
+        var (jobs, prFetcher, orchestrator, commentPoster, reviewerManager, clientRegistry, prScanRepository, _, _,
+                logger) =
+            CreateDeps();
+
+        var protocolRecorder = Substitute.For<IProtocolRecorder>();
+        protocolRecorder.BeginAsync(
+                Arg.Any<Guid>(),
+                Arg.Any<int>(),
+                Arg.Any<string?>(),
+                Arg.Any<Guid?>(),
+                Arg.Any<AiConnectionModelCategory?>(),
+                Arg.Any<string?>(),
+                Arg.Any<CancellationToken>(), Arg.Any<ReviewPassKind?>(), Arg.Any<string?>())
+            .Returns(Guid.NewGuid());
+
+        var job = CreateJob();
+        SetupReviewerIdReturns(clientRegistry, job, Guid.NewGuid());
+
+        var pr = CreatePullRequest();
+        prFetcher.FetchAsync(
+                Arg.Any<string>(),
+                Arg.Any<string>(),
+                Arg.Any<string>(),
+                Arg.Any<int>(),
+                Arg.Any<int>(),
+                Arg.Any<int?>(),
+                Arg.Any<Guid?>(),
+                Arg.Any<CancellationToken>(),
+                Arg.Any<ReviewRevision?>(),
+                Arg.Any<IReviewRepositoryWorkspace?>())
+            .Returns(pr);
+        orchestrator.ReviewAsync(
+                Arg.Any<ReviewJob>(),
+                Arg.Any<PullRequest>(),
+                Arg.Any<ReviewSystemContext>(),
+                Arg.Any<CancellationToken>(),
+                Arg.Any<IChatClient?>())
+            .Returns(new ReviewResult("Summary", [new ReviewComment("src/Foo.cs", 12, CommentSeverity.Warning, "Issue")]));
+
+        commentPoster.PublishReviewAsync(
+                Arg.Any<Guid>(),
+                Arg.Any<CodeReviewRef>(),
+                Arg.Any<ReviewRevision>(),
+                Arg.Any<ReviewResult>(),
+                Arg.Any<ReviewerIdentity>(),
+                Arg.Any<CancellationToken>(),
+                Arg.Any<ReviewPublicationContext?>())
+            .Returns(
+                Task.FromResult(
+                    new ReviewCommentPostingDiagnosticsDto
+                    {
+                        CandidateCount = 2,
+                        PostedCount = 1,
+                        FailedCount = 1,
+                        PostingFailures =
+                        [
+                            new ReviewCommentPostingFailure("inline", "/src/Foo.cs", 12, "TF401027: rejected by provider"),
+                        ],
+                    }));
+
+        var service = CreateService(
+            jobs,
+            prFetcher,
+            orchestrator,
+            commentPoster,
+            reviewerManager,
+            clientRegistry,
+            prScanRepository,
+            logger,
+            protocolRecorder: protocolRecorder);
+
+        await service.ProcessAsync(job, CancellationToken.None);
+
+        await protocolRecorder.Received(1)
+            .RecordPublicationEventAsync(
+                Arg.Any<Guid>(),
+                "publication_thread_post_failed",
+                Arg.Is<string?>(details => details != null
+                                           && details.Contains("/src/Foo.cs", StringComparison.Ordinal)
+                                           && details.Contains("inline", StringComparison.Ordinal)),
+                Arg.Is<string?>(error => error != null && error.Contains("TF401027", StringComparison.Ordinal)),
+                Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task ProcessAsync_PublicationFullyFails_RecordsEachFailureFromThrowPath()
+    {
+        var (jobs, prFetcher, orchestrator, commentPoster, reviewerManager, clientRegistry, prScanRepository, _, _,
+                logger) =
+            CreateDeps();
+
+        var protocolRecorder = Substitute.For<IProtocolRecorder>();
+        protocolRecorder.BeginAsync(
+                Arg.Any<Guid>(),
+                Arg.Any<int>(),
+                Arg.Any<string?>(),
+                Arg.Any<Guid?>(),
+                Arg.Any<AiConnectionModelCategory?>(),
+                Arg.Any<string?>(),
+                Arg.Any<CancellationToken>(), Arg.Any<ReviewPassKind?>(), Arg.Any<string?>())
+            .Returns(Guid.NewGuid());
+
+        var job = CreateJob();
+        SetupReviewerIdReturns(clientRegistry, job, Guid.NewGuid());
+
+        var pr = CreatePullRequest();
+        prFetcher.FetchAsync(
+                Arg.Any<string>(),
+                Arg.Any<string>(),
+                Arg.Any<string>(),
+                Arg.Any<int>(),
+                Arg.Any<int>(),
+                Arg.Any<int?>(),
+                Arg.Any<Guid?>(),
+                Arg.Any<CancellationToken>(),
+                Arg.Any<ReviewRevision?>(),
+                Arg.Any<IReviewRepositoryWorkspace?>())
+            .Returns(pr);
+        orchestrator.ReviewAsync(
+                Arg.Any<ReviewJob>(),
+                Arg.Any<PullRequest>(),
+                Arg.Any<ReviewSystemContext>(),
+                Arg.Any<CancellationToken>(),
+                Arg.Any<IChatClient?>())
+            .Returns(new ReviewResult("Summary", [new ReviewComment("src/Foo.cs", 12, CommentSeverity.Warning, "Issue")]));
+
+        // The real poster throws when every thread is rejected — the diagnostics are carried on the exception.
+        var publicationFailure = new ReviewCommentPublicationFailedException(
+            new ReviewCommentPostingDiagnosticsDto
+            {
+                CandidateCount = 1,
+                PostedCount = 0,
+                FailedCount = 1,
+                PostingFailures =
+                [
+                    new ReviewCommentPostingFailure("inline", "/src/Foo.cs", 12, "TF401027: rejected by provider"),
+                ],
+            },
+            [new InvalidOperationException("TF401027: rejected by provider")]);
+
+        commentPoster.PublishReviewAsync(
+                Arg.Any<Guid>(),
+                Arg.Any<CodeReviewRef>(),
+                Arg.Any<ReviewRevision>(),
+                Arg.Any<ReviewResult>(),
+                Arg.Any<ReviewerIdentity>(),
+                Arg.Any<CancellationToken>(),
+                Arg.Any<ReviewPublicationContext?>())
+            .Returns(Task.FromException<ReviewCommentPostingDiagnosticsDto>(publicationFailure));
+
+        var service = CreateService(
+            jobs,
+            prFetcher,
+            orchestrator,
+            commentPoster,
+            reviewerManager,
+            clientRegistry,
+            prScanRepository,
+            logger,
+            protocolRecorder: protocolRecorder);
+
+        await service.ProcessAsync(job, CancellationToken.None);
+
+        // Even on the all-fail throw path, each failure is recorded with its provider error.
+        await protocolRecorder.Received(1)
+            .RecordPublicationEventAsync(
+                Arg.Any<Guid>(),
+                "publication_thread_post_failed",
+                Arg.Is<string?>(details => details != null && details.Contains("/src/Foo.cs", StringComparison.Ordinal)),
+                Arg.Is<string?>(error => error != null && error.Contains("TF401027", StringComparison.Ordinal)),
+                Arg.Any<CancellationToken>());
+
+        // The failure is surfaced, not silently completed as a success.
+        await protocolRecorder.Received()
+            .RecordMemoryEventAsync(
+                Arg.Any<Guid>(),
+                "memory_operation_failed",
+                Arg.Any<string?>(),
+                Arg.Any<string?>(),
                 Arg.Any<CancellationToken>());
     }
 

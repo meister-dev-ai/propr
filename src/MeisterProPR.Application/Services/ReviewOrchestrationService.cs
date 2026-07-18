@@ -477,6 +477,13 @@ public sealed partial class ReviewOrchestrationService(
         {
             if (protocolId.HasValue)
             {
+                // A total publication failure still carries the per-thread provider errors — record them so the
+                // diagnostics are not lost when nothing posted.
+                if (ex is ReviewCommentPublicationFailedException publicationFailure)
+                {
+                    await this.RecordPostingDiagnosticsAsync(protocolId.Value, publicationFailure.Diagnostics, ct);
+                }
+
                 await protocolRecorder.RecordMemoryEventAsync(
                     protocolId.Value,
                     "memory_operation_failed",
@@ -1220,6 +1227,7 @@ public sealed partial class ReviewOrchestrationService(
                 candidateCount = diagnostics.CandidateCount,
                 postedCount = diagnostics.PostedCount,
                 suppressedCount = diagnostics.SuppressedCount,
+                failedCount = diagnostics.FailedCount,
                 suppressionReasons = diagnostics.SuppressionReasons,
                 consideredOpenThreads = diagnostics.ConsideredOpenThreads,
                 consideredResolvedThreads = diagnostics.ConsideredResolvedThreads,
@@ -1228,6 +1236,8 @@ public sealed partial class ReviewOrchestrationService(
             });
 
         await protocolRecorder.RecordDedupEventAsync(protocolId, "dedup_summary", summaryDetails, null, ct);
+
+        await this.RecordPostingFailuresAsync(protocolId, diagnostics, ct);
 
         if (!diagnostics.IsDegraded)
         {
@@ -1245,6 +1255,30 @@ public sealed partial class ReviewOrchestrationService(
             });
 
         await protocolRecorder.RecordDedupEventAsync(protocolId, "dedup_degraded_mode", degradedModeDetails, null, ct);
+    }
+
+    private async Task RecordPostingFailuresAsync(
+        Guid protocolId,
+        ReviewCommentPostingDiagnosticsDto diagnostics,
+        CancellationToken ct)
+    {
+        foreach (var failure in diagnostics.PostingFailures)
+        {
+            var failureDetails = JsonSerializer.Serialize(
+                new
+                {
+                    threadKind = failure.ThreadKind,
+                    filePath = failure.FilePath,
+                    line = failure.Line,
+                });
+
+            await protocolRecorder.RecordPublicationEventAsync(
+                protocolId,
+                "publication_thread_post_failed",
+                failureDetails,
+                failure.Error,
+                ct);
+        }
     }
 
     private ReviewResult PrepareResultForPublication(ReviewJob job, PullRequest pr, ReviewResult result)

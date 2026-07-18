@@ -41,6 +41,10 @@ describe('deriveEventCategory', () => {
         expect(deriveEventCategory('memoryOperation', 'memory_reconsideration_completed', undefined)).toBe('memory')
     })
 
+    it('derives publication from the name path for posting-failure rows', () => {
+        expect(deriveEventCategory('operational', 'publication_thread_post_failed', null)).toBe('publication')
+    })
+
     it('falls back to operational for unknown rows', () => {
         expect(deriveEventCategory('operational', 'mystery_event', null)).toBe('operational')
     })

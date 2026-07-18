@@ -5,6 +5,7 @@ using System.Diagnostics;
 using System.Globalization;
 using System.Text;
 using MeisterProPR.Application.DTOs;
+using MeisterProPR.Application.Exceptions;
 using MeisterProPR.Application.Features.Reviewing.Execution.Models;
 using MeisterProPR.Application.Interfaces;
 using MeisterProPR.Domain.Enums;
@@ -25,6 +26,16 @@ public sealed class AdoCommentPoster(
     private const double FallbackDuplicateSimilarityThreshold = 0.72;
     private static readonly ActivitySource ActivitySource = new("MeisterProPR.Infrastructure");
 
+    /// <summary>
+    ///     Creates a single comment thread from an already-resolved body and anchor context, returning the
+    ///     provider thread. The seam that lets the posting loop be exercised without a live Azure DevOps connection.
+    /// </summary>
+    internal delegate Task<GitPullRequestCommentThread> AdoThreadFactory(
+        string message,
+        CommentThreadContext? threadContext,
+        GitPullRequestCommentThreadContext? prThreadContext,
+        CancellationToken cancellationToken);
+
     public async Task<ReviewCommentPostingDiagnosticsDto> PostAsync(
         string organizationUrl,
         string projectId,
@@ -44,12 +55,6 @@ public sealed class AdoCommentPoster(
         activity?.SetTag("ado.repository_id", repositoryId);
         activity?.SetTag("ado.pull_request_id", pullRequestId);
 
-        var diagnostics = new PostingDiagnosticsBuilder(
-            result.Comments.Count + result.CarriedForwardCandidatesSkipped,
-            result.CarriedForwardCandidatesSkipped,
-            ConsideredOpenThreads(existingThreads, null),
-            ConsideredResolvedThreads(existingThreads, null));
-
         var credentials = await AdoProviderAdapterHelpers.ResolveCredentialsAsync(
             connectionRepository,
             clientId,
@@ -63,9 +68,6 @@ public sealed class AdoCommentPoster(
             activity?.SetTag("publication.author.id", botId.Value.ToString("D"));
         }
 
-        diagnostics.SetThreadCoverage(
-            ConsideredOpenThreads(existingThreads, botId),
-            ConsideredResolvedThreads(existingThreads, botId));
         var gitClient = await connection.GetClientAsync<GitHttpClient>(cancellationToken);
 
         // Build a map of normalized file path → changeTrackingId for inline comment anchoring.
@@ -84,19 +86,77 @@ public sealed class AdoCommentPoster(
 
         var changeTrackingIds = BuildChangeTrackingIds(changes);
 
-        // Post summary as PR-level thread, skipping if a bot summary already exists.
-        if (!HasBotSummary(existingThreads, botId, publicationIdentity))
-        {
-            var createdSummary = await CreateThreadAsync(
+        return await this.PostResolvedThreadsAsync(
+            result,
+            (message, threadContext, prThreadContext, token) => CreateThreadAsync(
                 gitClient,
                 projectId,
                 repositoryId,
                 pullRequestId,
-                BuildSummaryText(result),
-                null,
-                null,
-                cancellationToken);
-            diagnostics.RecordPostedComments(CaptureCreatedComments(createdSummary, null, null));
+                message,
+                threadContext,
+                prThreadContext,
+                token),
+            botId,
+            clientId,
+            repositoryId,
+            pullRequestId,
+            iterationId,
+            publicationContext?.CompareToIterationId,
+            changeTrackingIds,
+            existingThreads,
+            publicationIdentity,
+            cancellationToken);
+    }
+
+    /// <summary>
+    ///     Posts the summary thread and each surviving inline comment through <paramref name="threadFactory" />,
+    ///     isolating each creation so one provider rejection cannot abort the rest of the pass. Every failure is
+    ///     recorded with its provider error and posting continues; when no thread is posted but at least one was
+    ///     rejected, a <see cref="ReviewCommentPublicationFailedException" /> is raised so the pass is not reported
+    ///     as a silent success.
+    /// </summary>
+    internal async Task<ReviewCommentPostingDiagnosticsDto> PostResolvedThreadsAsync(
+        ReviewResult result,
+        AdoThreadFactory threadFactory,
+        Guid? botId,
+        Guid? clientId,
+        string repositoryId,
+        int pullRequestId,
+        int iterationId,
+        int? compareToIterationId,
+        IReadOnlyDictionary<string, int> changeTrackingIds,
+        IReadOnlyList<PrCommentThread>? existingThreads,
+        ReviewerIdentity? publicationIdentity,
+        CancellationToken cancellationToken)
+    {
+        var diagnostics = new PostingDiagnosticsBuilder(
+            result.Comments.Count + result.CarriedForwardCandidatesSkipped,
+            result.CarriedForwardCandidatesSkipped,
+            ConsideredOpenThreads(existingThreads, botId),
+            ConsideredResolvedThreads(existingThreads, botId));
+
+        var postedThreadCount = 0;
+        var failureExceptions = new List<Exception>();
+
+        // Post summary as PR-level thread, skipping if a bot summary already exists.
+        if (!HasBotSummary(existingThreads, botId, publicationIdentity))
+        {
+            try
+            {
+                var createdSummary = await threadFactory(BuildSummaryText(result), null, null, cancellationToken);
+                diagnostics.RecordPostedComments(CaptureCreatedComments(createdSummary, null, null));
+                postedThreadCount++;
+            }
+
+            // Isolate any provider failure so it cannot abort the rest of the pass. Request timeouts surface as
+            // TaskCanceledException (an OperationCanceledException), so gate on the caller token: only a
+            // caller-requested cancellation is allowed to propagate; everything else is recorded and posting continues.
+            catch (Exception ex) when (!cancellationToken.IsCancellationRequested)
+            {
+                diagnostics.RecordFailure(new ReviewCommentPostingFailure("summary", null, null, ex.Message));
+                failureExceptions.Add(ex);
+            }
         }
 
         // Post each inline comment, skipping locations the bot has already covered.
@@ -105,7 +165,7 @@ public sealed class AdoCommentPoster(
             var anchorContext = ResolveAnchorContext(
                 comment,
                 iterationId,
-                publicationContext?.CompareToIterationId,
+                compareToIterationId,
                 changeTrackingIds);
             var (threadContext, prThreadContext) = BuildThreadContexts(anchorContext);
             var normalizedFilePath = anchorContext.NormalizedFilePath;
@@ -155,21 +215,34 @@ public sealed class AdoCommentPoster(
                 }
             }
 
-            var createdThread = await CreateThreadAsync(
-                gitClient,
-                projectId,
-                repositoryId,
-                pullRequestId,
-                FormatInlineCommentBody(comment),
-                threadContext,
-                prThreadContext,
-                cancellationToken);
+            try
+            {
+                var createdThread = await threadFactory(
+                    FormatInlineCommentBody(comment),
+                    threadContext,
+                    prThreadContext,
+                    cancellationToken);
 
-            diagnostics.RecordPosted();
-            diagnostics.RecordPostedComments(CaptureCreatedComments(createdThread, comment.FilePath, comment.LineNumber));
+                diagnostics.RecordPosted();
+                diagnostics.RecordPostedComments(CaptureCreatedComments(createdThread, comment.FilePath, comment.LineNumber));
+                postedThreadCount++;
+            }
+            catch (Exception ex) when (!cancellationToken.IsCancellationRequested)
+            {
+                diagnostics.RecordFailure(new ReviewCommentPostingFailure("inline", comment.FilePath, comment.LineNumber, ex.Message));
+                failureExceptions.Add(ex);
+            }
         }
 
-        return diagnostics.Build();
+        var built = diagnostics.Build();
+
+        // Every attempted thread was rejected: surface a publication failure rather than a silent success.
+        if (postedThreadCount == 0 && built.FailedCount > 0)
+        {
+            throw new ReviewCommentPublicationFailedException(built, failureExceptions);
+        }
+
+        return built;
     }
 
     /// <summary>
@@ -845,11 +918,12 @@ public sealed class AdoCommentPoster(
     {
         private readonly HashSet<string> _degradedComponents = new(StringComparer.Ordinal);
         private readonly HashSet<string> _fallbackChecks = new(StringComparer.Ordinal);
+        private readonly List<ReviewCommentPostingFailure> _postingFailures = [];
         private readonly List<PostedReviewCommentRef> _postedComments = [];
         private readonly Dictionary<string, int> _suppressionReasons = new(StringComparer.Ordinal);
+        private readonly bool _consideredOpenThreads;
+        private readonly bool _consideredResolvedThreads;
         private int _affectedCandidateCount;
-        private bool _consideredOpenThreads;
-        private bool _consideredResolvedThreads;
         private string? _degradedCause;
         private int _postedCount;
         private int _suppressedCount;
@@ -873,12 +947,6 @@ public sealed class AdoCommentPoster(
         public int CandidateCount { get; }
 
         public int CarriedForwardCandidatesSkipped { get; }
-
-        public void SetThreadCoverage(bool consideredOpenThreads, bool consideredResolvedThreads)
-        {
-            this._consideredOpenThreads = consideredOpenThreads;
-            this._consideredResolvedThreads = consideredResolvedThreads;
-        }
 
         public void RecordPosted()
         {
@@ -920,6 +988,11 @@ public sealed class AdoCommentPoster(
             this._fallbackChecks.Add(fallbackCheck);
         }
 
+        public void RecordFailure(ReviewCommentPostingFailure failure)
+        {
+            this._postingFailures.Add(failure);
+        }
+
         public ReviewCommentPostingDiagnosticsDto Build()
         {
             return new ReviewCommentPostingDiagnosticsDto
@@ -927,6 +1000,7 @@ public sealed class AdoCommentPoster(
                 CandidateCount = this.CandidateCount,
                 PostedCount = this._postedCount,
                 SuppressedCount = this._suppressedCount,
+                FailedCount = this._postingFailures.Count,
                 CarriedForwardCandidatesSkipped = this.CarriedForwardCandidatesSkipped,
                 SuppressionReasons = new Dictionary<string, int>(this._suppressionReasons, StringComparer.Ordinal),
                 ConsideredOpenThreads = this._consideredOpenThreads,
@@ -940,6 +1014,7 @@ public sealed class AdoCommentPoster(
                 DegradedCause = this._degradedCause,
                 AffectedCandidateCount = this._affectedCandidateCount,
                 PostedComments = this._postedComments.AsReadOnly(),
+                PostingFailures = this._postingFailures.AsReadOnly(),
             };
         }
     }

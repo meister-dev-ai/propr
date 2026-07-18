@@ -72,6 +72,7 @@ export function deriveEventCategory(
 
     if (normalizedKind === 'memoryoperation') return 'memory'
     if (normalizedName.startsWith('dedup_')) return 'duplicate-suppression'
+    if (normalizedName.startsWith('publication_')) return 'publication'
     if (normalizedName.includes('comment_relevance')) return 'comment-relevance'
     if (normalizedName.includes('verification')) return 'verification'
     if (normalizedName.includes('review_finding_gate') || normalizedName.includes('summary_reconciliation') || normalizedName.includes('repeated_judgment')) return 'review-finding-gate'

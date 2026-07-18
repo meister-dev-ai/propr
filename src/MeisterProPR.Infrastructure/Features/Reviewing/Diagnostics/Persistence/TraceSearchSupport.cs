@@ -28,6 +28,11 @@ internal static class TraceSearchSupport
             return "duplicate-suppression";
         }
 
+        if (normalizedName.StartsWith("publication_", StringComparison.Ordinal))
+        {
+            return "publication";
+        }
+
         if (normalizedName.Contains("comment_relevance", StringComparison.Ordinal))
         {
             return "comment-relevance";

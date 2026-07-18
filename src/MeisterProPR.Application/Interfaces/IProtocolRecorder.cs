@@ -221,6 +221,23 @@ public interface IProtocolRecorder
         CancellationToken ct = default);
 
     /// <summary>
+    ///     Records a comment-publication event emitted while posting review threads to the SCM provider. Never throws.
+    ///     Valid <paramref name="eventName" /> values are prefixed <c>publication_</c> (e.g.
+    ///     <c>publication_thread_post_failed</c>).
+    /// </summary>
+    /// <param name="protocolId">The protocol this event belongs to.</param>
+    /// <param name="eventName">The publication event name.</param>
+    /// <param name="details">JSON-serialised metadata for the event, or <see langword="null" />.</param>
+    /// <param name="error">Provider error message when a thread creation failed, or <see langword="null" />.</param>
+    /// <param name="ct">Cancellation token.</param>
+    Task RecordPublicationEventAsync(
+        Guid protocolId,
+        string eventName,
+        string? details,
+        string? error,
+        CancellationToken ct = default);
+
+    /// <summary>
     ///     Records a comment-relevance filter event on the existing protocol path. Never throws.
     ///     Valid <paramref name="eventName" /> values are defined by the Reviewing module's
     ///     comment-relevance protocol event family.

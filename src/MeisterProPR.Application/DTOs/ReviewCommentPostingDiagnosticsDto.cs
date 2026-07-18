@@ -22,6 +22,15 @@ public sealed record ReviewCommentPostingDiagnosticsDto
     /// <summary>Candidate findings suppressed as duplicates or carried-forward artifacts.</summary>
     public int SuppressedCount { get; init; }
 
+    /// <summary>
+    ///     Number of comment threads whose creation was rejected by the provider during this posting pass.
+    ///     A non-zero value alongside a non-empty <see cref="PostedComments" /> means the review published partially.
+    /// </summary>
+    public int FailedCount { get; init; }
+
+    /// <summary>Per-thread creation failures captured during this posting pass, each carrying the provider error.</summary>
+    public IReadOnlyList<ReviewCommentPostingFailure> PostingFailures { get; init; } = [];
+
     /// <summary>Count of candidates skipped because they originated from carried-forward file results.</summary>
     public int CarriedForwardCandidatesSkipped { get; init; }
 
@@ -94,6 +103,20 @@ public sealed record PostedReviewCommentRef(
     string? ProviderThreadId,
     string? FilePath,
     int? Line);
+
+/// <summary>
+///     A single comment-thread creation that the SCM provider rejected during a posting pass. Captured so the
+///     remaining threads can still be posted and the failure surfaced instead of aborting the whole pass.
+/// </summary>
+/// <param name="ThreadKind">Which thread failed — <c>"summary"</c> for the PR-level summary or <c>"inline"</c> for a finding.</param>
+/// <param name="FilePath">File the failed thread was anchored to, when applicable.</param>
+/// <param name="Line">Line the failed thread was anchored to, when applicable.</param>
+/// <param name="Error">Provider error message reported for the rejected creation.</param>
+public sealed record ReviewCommentPostingFailure(
+    string ThreadKind,
+    string? FilePath,
+    int? Line,
+    string Error);
 
 /// <summary>
 ///     Result returned by the historical thread-memory duplicate-suppression lookup.
