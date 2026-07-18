@@ -220,4 +220,28 @@ describe('useClientDetailViewModel (FR-007, FR-008, FR-012)', () => {
     expect(vm.notFound.value).toBe(true)
     expect(mockRouterPush).toHaveBeenCalledWith({ name: 'clients' })
   })
+
+  it('surfaces a load error (not "not found") for a non-404 error response and stays on the page', async () => {
+    mockGet.mockReset()
+    mockRouterPush.mockClear()
+    mockGet.mockResolvedValueOnce({ data: undefined, response: { status: 500, ok: false } })
+    const vm = useClientDetailViewModel({ autoLoad: false })
+    await vm.loadClient()
+
+    expect(vm.loadError.value).toBe(true)
+    expect(vm.notFound.value).toBe(false)
+    expect(mockRouterPush).not.toHaveBeenCalledWith({ name: 'clients' })
+  })
+
+  it('surfaces a load error when the request throws and does not redirect', async () => {
+    mockGet.mockReset()
+    mockRouterPush.mockClear()
+    mockGet.mockRejectedValueOnce(new Error('network down'))
+    const vm = useClientDetailViewModel({ autoLoad: false })
+    await vm.loadClient()
+
+    expect(vm.loadError.value).toBe(true)
+    expect(vm.notFound.value).toBe(false)
+    expect(mockRouterPush).not.toHaveBeenCalledWith({ name: 'clients' })
+  })
 })

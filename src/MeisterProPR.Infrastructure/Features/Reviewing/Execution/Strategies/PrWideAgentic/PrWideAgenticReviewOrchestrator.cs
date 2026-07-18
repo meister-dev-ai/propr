@@ -68,8 +68,10 @@ public sealed partial class PrWideAgenticReviewOrchestrator(
         CancellationToken ct,
         IChatClient? overrideClient = null)
     {
-        var prWideContext = baseContext;
-        // The standalone PR-wide strategy has no per-pass entry, so it takes the client-level baseline effort.
+        // Clone before mutating so the client-level baseline effort applied to the standalone PR-wide strategy
+        // (which has no per-pass entry) never leaks back into the caller's shared context. Mirrors
+        // GenerateCandidatesAsync, which clones-then-mutates the pass context for the same reason.
+        var prWideContext = CloneContext(baseContext, baseContext.ActiveProtocolId, baseContext.ProtocolRecorder);
         prWideContext.ActiveReasoningEffort = baseContext.BaselineReasoningEffort;
         var ownsProtocolPass = false;
         var totalInputTokens = 0L;
@@ -376,6 +378,12 @@ public sealed partial class PrWideAgenticReviewOrchestrator(
                     return (await this.RecordPlanAsync(job, baseContext, parsedPlan, ct), inputTokens, outputTokens, 1);
                 }
             }
+            catch (OperationCanceledException) when (ct.IsCancellationRequested)
+            {
+                // Honor cancellation: a superseded/cancelled review must stop here rather than burn tokens
+                // on the fallback path (and every later stage).
+                throw;
+            }
             catch (Exception ex)
             {
                 LogStageFallback(this._logger, "planning", job.Id, ex.Message);
@@ -562,6 +570,10 @@ public sealed partial class PrWideAgenticReviewOrchestrator(
                 {
                     return (parsed, inputTokens, outputTokens, 1);
                 }
+            }
+            catch (OperationCanceledException) when (ct.IsCancellationRequested)
+            {
+                throw;
             }
             catch (Exception ex)
             {
@@ -898,6 +910,10 @@ public sealed partial class PrWideAgenticReviewOrchestrator(
                 {
                     return (parsed, inputTokens, outputTokens, 1);
                 }
+            }
+            catch (OperationCanceledException) when (ct.IsCancellationRequested)
+            {
+                throw;
             }
             catch (Exception ex)
             {

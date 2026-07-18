@@ -59,6 +59,7 @@ export interface ClientDetailViewModel {
   client: Ref<ClientDetailDto | null>
   loading: Ref<boolean>
   notFound: Ref<boolean>
+  loadError: Ref<boolean>
   saving: Ref<boolean>
   saveError: Ref<string>
   showDeleteDialog: Ref<boolean>
@@ -242,6 +243,7 @@ export function useClientDetailViewModel(options: UseClientDetailViewModelOption
   const client = ref<ClientDetailDto | null>(null)
   const loading = ref(false)
   const notFound = ref(false)
+  const loadError = ref(false)
   const saving = ref(false)
   const saveError = ref('')
   const showDeleteDialog = ref(false)
@@ -331,11 +333,20 @@ export function useClientDetailViewModel(options: UseClientDetailViewModelOption
 
   async function loadClient(): Promise<void> {
     loading.value = true
+    notFound.value = false
+    loadError.value = false
     try {
       const { data, response } = await getClientFn(clientId)
       if (response && (response as Response).status === 404) {
         notFound.value = true
         router.push({ name: 'clients' })
+        return
+      }
+      if (!data) {
+        // A non-404 error response — openapi-fetch resolves non-2xx with data: undefined rather than
+        // throwing — is a load failure, not a missing record. Surface it and keep the user on the page
+        // instead of masquerading as "not found" and redirecting away.
+        loadError.value = true
         return
       }
       applyClient(data as ClientDetailDto)
@@ -353,8 +364,9 @@ export function useClientDetailViewModel(options: UseClientDetailViewModelOption
         applyClientReviewProfile(profileResult.value.data as ClientReviewProfileDto)
       }
     } catch {
-      notFound.value = true
-      router.push({ name: 'clients' })
+      // Network/transport failure (or a thrown non-2xx) — a load error, not a missing record. Do not
+      // redirect: keep the user on the page so a retry is possible.
+      loadError.value = true
     } finally {
       loading.value = false
     }
@@ -553,6 +565,7 @@ export function useClientDetailViewModel(options: UseClientDetailViewModelOption
     client,
     loading,
     notFound,
+    loadError,
     saving,
     saveError,
     showDeleteDialog,

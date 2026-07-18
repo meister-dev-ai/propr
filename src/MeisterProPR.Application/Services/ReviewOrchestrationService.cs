@@ -805,7 +805,9 @@ public sealed partial class ReviewOrchestrationService(
         // Same-revision resume (files changed at this revision) and cross-revision carry-forward (unchanged
         // files) must never both write a result row for the same path. Resume runs first so a result computed
         // at the current revision wins over an inherited one from an earlier revision.
-        var claimedPaths = new HashSet<string>(StringComparer.Ordinal);
+        // Case-insensitive to match changedPathsSet so the no-duplicate guarantee holds even when resume and
+        // carry-forward emit the same logical path in different casing (e.g. src/File.cs vs src/file.cs).
+        var claimedPaths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         await this.ResumePriorFileResultsAsync(job, resumeJob, changedPathsSet, claimedPaths, ct);
         var carriedForwardPaths = await this.CarryForwardBaselineResultsAsync(
             job, baselineJob, baselineIsFullCoverage, changedPathsSet, exclusionRules, claimedPaths, ct);

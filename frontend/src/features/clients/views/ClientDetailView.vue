@@ -79,6 +79,9 @@
             <p v-if="notFound" class="error" style="padding-top: 1rem">
                 Client not found.
             </p>
+            <p v-else-if="loadError" class="error" style="padding-top: 1rem">
+                Failed to load client. Please try again.
+            </p>
             <p v-else-if="loading" class="loading" style="padding-top: 1rem">
                 Loading…
             </p>
@@ -169,6 +172,7 @@ const {
     client,
     loading,
     notFound,
+    loadError,
     canManageClient,
     activeTab,
     providerUpgradeMessage,
