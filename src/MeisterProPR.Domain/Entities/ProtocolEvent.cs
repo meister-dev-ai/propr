@@ -38,6 +38,12 @@ public sealed class ProtocolEvent
     /// </summary>
     public long? CachedInputTokens { get; init; }
 
+    /// <summary>Cache-write token count for this AI call. <see langword="null" /> when the provider did not return usage data.</summary>
+    public long? CacheWriteTokens { get; init; }
+
+    /// <summary>Reasoning token count for this AI call. <see langword="null" /> when the provider did not return usage data.</summary>
+    public long? ReasoningTokens { get; init; }
+
     /// <summary>Cache outcome for this event when it represents an AI call.</summary>
     public CacheCallStatus CacheStatus { get; init; } = CacheCallStatus.NotApplicable;
 

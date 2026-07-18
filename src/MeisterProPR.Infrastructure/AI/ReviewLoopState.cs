@@ -37,6 +37,12 @@ internal sealed class ReviewLoopState
     /// <summary>Gets the cumulative cached input token count across observable AI calls.</summary>
     public long TotalCachedInputTokens { get; private set; }
 
+    /// <summary>Gets the cumulative cache-write token count across observable AI calls.</summary>
+    public long TotalCacheWriteTokens { get; private set; }
+
+    /// <summary>Gets the cumulative reasoning token count across observable AI calls.</summary>
+    public long TotalReasoningTokens { get; private set; }
+
     /// <summary>Gets whether at least one AI call exposed cached-input usage details.</summary>
     public bool ObservedCacheUsageDetails { get; private set; }
 
@@ -128,10 +134,33 @@ internal sealed class ReviewLoopState
         this.ToolCallCount++;
     }
 
-    /// <summary>Accumulates token usage from one AI response.</summary>
+    /// <summary>Accumulates the normalized token usage extracted from one AI response.</summary>
+    /// <param name="usage">The normalized usage record; a usage flagged estimated contributes no cache observation.</param>
+    public void AccumulateTokens(AiTokenUsage usage)
+    {
+        this.TotalInputTokens += usage.InputTokens;
+        this.TotalOutputTokens += usage.OutputTokens;
+        this.TotalCacheWriteTokens += usage.CacheWriteTokens;
+        this.TotalReasoningTokens += usage.ReasoningTokens;
+        if (!usage.IsEstimated)
+        {
+            this.TotalCachedInputTokens += usage.CachedInputTokens;
+            this.ObservedCacheUsageDetails = true;
+        }
+    }
+
+    /// <summary>Accumulates raw token counts from one AI response.</summary>
     /// <param name="inputTokens">Input token count reported by the response, or <see langword="null" /> when unavailable.</param>
     /// <param name="outputTokens">Output token count reported by the response, or <see langword="null" /> when unavailable.</param>
-    public void AccumulateTokens(long? inputTokens, long? outputTokens, long? cachedInputTokens = null)
+    /// <param name="cachedInputTokens">Cache-read input tokens reported by the response, or <see langword="null" /> when the provider exposed no cache detail.</param>
+    /// <param name="cacheWriteTokens">Cache-write tokens reported by the response, or <see langword="null" /> when unavailable.</param>
+    /// <param name="reasoningTokens">Reasoning tokens reported by the response, or <see langword="null" /> when unavailable.</param>
+    public void AccumulateTokens(
+        long? inputTokens,
+        long? outputTokens,
+        long? cachedInputTokens = null,
+        long? cacheWriteTokens = null,
+        long? reasoningTokens = null)
     {
         this.TotalInputTokens += inputTokens ?? 0L;
         this.TotalOutputTokens += outputTokens ?? 0L;
@@ -140,6 +169,9 @@ internal sealed class ReviewLoopState
             this.TotalCachedInputTokens += cachedInputTokens.Value;
             this.ObservedCacheUsageDetails = true;
         }
+
+        this.TotalCacheWriteTokens += cacheWriteTokens ?? 0L;
+        this.TotalReasoningTokens += reasoningTokens ?? 0L;
     }
 
     /// <summary>Records a snapshot of confidence scores produced at the current iteration.</summary>

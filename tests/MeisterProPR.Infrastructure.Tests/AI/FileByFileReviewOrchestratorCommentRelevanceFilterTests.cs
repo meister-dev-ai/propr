@@ -195,7 +195,10 @@ public sealed class FileByFileReviewOrchestratorCommentRelevanceFilterTests
                 Arg.Any<string?>(),
                 Arg.Any<string?>(),
                 Arg.Any<CancellationToken>(),
-                ReviewProtocolEventNames.CommentRelevanceEvaluatorAiCall);
+                ReviewProtocolEventNames.CommentRelevanceEvaluatorAiCall,
+                cachedInputTokens: Arg.Any<long?>(),
+                cacheWriteTokens: Arg.Any<long?>(),
+                reasoningTokens: Arg.Any<long?>());
         await protocolRecorder.Received(1)
             .AddTokensAsync(
                 Arg.Any<Guid>(),
@@ -203,7 +206,10 @@ public sealed class FileByFileReviewOrchestratorCommentRelevanceFilterTests
                 71,
                 AiConnectionModelCategory.Default,
                 "test-evaluator",
-                Arg.Any<CancellationToken>());
+                Arg.Any<CancellationToken>(),
+                Arg.Any<long>(),
+                Arg.Any<long>(),
+                Arg.Any<long>());
     }
 
     [Fact]

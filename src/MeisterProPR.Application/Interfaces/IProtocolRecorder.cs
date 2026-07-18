@@ -75,7 +75,9 @@ public interface IProtocolRecorder
         PrefixEligibilityStatus prefixEligibility = PrefixEligibilityStatus.NotApplicable,
         string? finalizationAttemptKind = null,
         string? finalizationReason = null,
-        string? finalizationOutcome = null);
+        string? finalizationOutcome = null,
+        long? cacheWriteTokens = null,
+        long? reasoningTokens = null);
 
     /// <summary>
     ///     Records explicit prompt-stage evidence for one executed prompt-driven stage. Never throws.
@@ -138,6 +140,10 @@ public interface IProtocolRecorder
     /// <param name="toolCallCount">Total number of tool invocations.</param>
     /// <param name="finalConfidence">Final aggregated confidence score, or <see langword="null" />.</param>
     /// <param name="ct">Cancellation token.</param>
+    /// <param name="totalCachedInputTokens">Sum of cache-read input tokens, or <see langword="null" /> when not observed.</param>
+    /// <param name="cacheObservability">Whether cache usage was observable for this protocol.</param>
+    /// <param name="totalCacheWriteTokens">Sum of cache-write tokens, or <see langword="null" /> when not observed.</param>
+    /// <param name="totalReasoningTokens">Sum of reasoning tokens, or <see langword="null" /> when not observed.</param>
     Task SetCompletedAsync(
         Guid protocolId,
         string outcome,
@@ -148,7 +154,9 @@ public interface IProtocolRecorder
         int? finalConfidence,
         CancellationToken ct = default,
         long? totalCachedInputTokens = null,
-        CacheObservabilityStatus cacheObservability = CacheObservabilityStatus.Unknown);
+        CacheObservabilityStatus cacheObservability = CacheObservabilityStatus.Unknown,
+        long? totalCacheWriteTokens = null,
+        long? totalReasoningTokens = null);
 
     /// <summary>
     ///     Adds token counts to an existing protocol's totals and propagates them to the job aggregate. Never throws.
@@ -164,13 +172,19 @@ public interface IProtocolRecorder
     /// </param>
     /// <param name="modelId">The effective model ID for this out-of-loop call. Null to skip tier breakdown update.</param>
     /// <param name="ct">Cancellation token.</param>
+    /// <param name="cachedInputTokens">Additional cache-read input tokens to add.</param>
+    /// <param name="cacheWriteTokens">Additional cache-write tokens to add.</param>
+    /// <param name="reasoningTokens">Additional reasoning tokens to add.</param>
     Task AddTokensAsync(
         Guid protocolId,
         long inputTokens,
         long outputTokens,
         AiConnectionModelCategory? connectionCategory = null,
         string? modelId = null,
-        CancellationToken ct = default);
+        CancellationToken ct = default,
+        long cachedInputTokens = 0,
+        long cacheWriteTokens = 0,
+        long reasoningTokens = 0);
 
     /// <summary>
     ///     Records a memory system operation event. Never throws.

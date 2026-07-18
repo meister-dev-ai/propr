@@ -23,8 +23,14 @@ namespace MeisterProPR.Domain.ValueObjects;
 /// <param name="OutputTokens">
 ///     Output token count reported by the AI provider for this evaluation, or <see langword="null" />.
 /// </param>
+/// <param name="CachedInputTokens">Cache-read input token count reported for this evaluation, or <see langword="null" />.</param>
+/// <param name="CacheWriteTokens">Cache-write token count reported for this evaluation, or <see langword="null" />.</param>
+/// <param name="ReasoningTokens">Reasoning token count reported for this evaluation, or <see langword="null" />.</param>
 public sealed record ThreadResolutionResult(
     bool IsResolved,
     string? ReplyText,
     long? InputTokens = null,
-    long? OutputTokens = null);
+    long? OutputTokens = null,
+    long? CachedInputTokens = null,
+    long? CacheWriteTokens = null,
+    long? ReasoningTokens = null);

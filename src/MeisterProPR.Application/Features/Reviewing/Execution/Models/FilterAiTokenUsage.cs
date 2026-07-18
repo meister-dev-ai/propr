@@ -14,4 +14,7 @@ public sealed record FilterAiTokenUsage(
     long InputTokens,
     long OutputTokens,
     AiConnectionModelCategory ModelCategory,
-    string? ModelId);
+    string? ModelId,
+    long CachedInputTokens = 0,
+    long CacheWriteTokens = 0,
+    long ReasoningTokens = 0);

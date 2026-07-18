@@ -161,6 +161,8 @@ public sealed class InMemoryReviewDiagnosticsReader(InMemoryReviewJobRepository 
             RepeatedJudgment = ResolveRepeatedJudgment(protocol),
             Workspace = ResolveWorkspace(protocol),
             TotalCachedInputTokens = protocol.TotalCachedInputTokens,
+            TotalCacheWriteTokens = protocol.TotalCacheWriteTokens,
+            TotalReasoningTokens = protocol.TotalReasoningTokens,
             CacheObservability = protocol.CacheObservability,
             IsInherited = inheritance is not null,
             Inheritance = inheritance,
@@ -258,6 +260,8 @@ public sealed class InMemoryReviewDiagnosticsReader(InMemoryReviewJobRepository 
             e.Error)
         {
             CachedInputTokens = e.CachedInputTokens,
+            CacheWriteTokens = e.CacheWriteTokens,
+            ReasoningTokens = e.ReasoningTokens,
             CacheStatus = e.CacheStatus,
             CacheMissCategory = e.CacheMissCategory,
             PrefixEligibility = e.PrefixEligibility,

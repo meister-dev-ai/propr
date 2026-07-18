@@ -111,6 +111,8 @@ public sealed class JsonEvaluationArtifactWriter : IEvaluationArtifactWriter
                     outputSummary = @event.OutputSummary,
                     error = @event.Error,
                     cachedInputTokens = @event.CachedInputTokens,
+                    cacheWriteTokens = @event.CacheWriteTokens,
+                    reasoningTokens = @event.ReasoningTokens,
                     finalizationAttemptKind = @event.FinalizationAttemptKind,
                     toolEvidence = @event.ToolEvidence is null
                         ? null
@@ -139,6 +141,8 @@ public sealed class JsonEvaluationArtifactWriter : IEvaluationArtifactWriter
             {
                 totalInputTokens = artifact.TokenUsage.TotalInputTokens,
                 totalCachedInputTokens = artifact.TokenUsage.TotalCachedInputTokens,
+                totalCacheWriteTokens = artifact.TokenUsage.TotalCacheWriteTokens,
+                totalReasoningTokens = artifact.TokenUsage.TotalReasoningTokens,
                 totalEffectiveInputTokens = artifact.TokenUsage.TotalEffectiveInputTokens,
                 totalOutputTokens = artifact.TokenUsage.TotalOutputTokens,
                 totalToolReplayTokens = artifact.TokenUsage.TotalToolReplayTokens,

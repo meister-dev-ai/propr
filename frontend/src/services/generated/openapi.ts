@@ -11452,27 +11452,83 @@ export interface components {
         };
         /** @description Response DTO for `GET /admin/clients/{clientId}/token-usage`. */
         ClientTokenUsageDto: {
-            /** Format: uuid */
+            /**
+             * Format: uuid
+             * @description The client the usage belongs to.
+             */
             clientId?: string;
-            /** Format: date */
+            /**
+             * Format: date
+             * @description Inclusive start of the reported date range.
+             */
             from?: string;
-            /** Format: date */
+            /**
+             * Format: date
+             * @description Inclusive end of the reported date range.
+             */
             to?: string;
-            /** Format: int64 */
+            /**
+             * Format: int64
+             * @description Sum of input tokens across all samples (includes the cached portion).
+             */
             totalInputTokens?: number;
-            /** Format: int64 */
+            /**
+             * Format: int64
+             * @description Sum of output tokens across all samples (includes the reasoning portion).
+             */
             totalOutputTokens?: number;
+            /** @description The per-(model, day) usage samples. */
             samples?: components["schemas"]["ClientTokenUsageSampleDto"][] | null;
+            /**
+             * Format: int64
+             * @description Sum of cache-read input tokens across all samples.
+             */
+            totalCachedInputTokens?: number;
+            /**
+             * Format: int64
+             * @description Sum of cache-write tokens across all samples.
+             */
+            totalCacheWriteTokens?: number;
+            /**
+             * Format: int64
+             * @description Sum of reasoning tokens across all samples.
+             */
+            totalReasoningTokens?: number;
         };
         /** @description A single (model, day) token usage data point returned by the token-usage dashboard endpoint. */
         ClientTokenUsageSampleDto: {
+            /** @description The AI model identifier. */
             modelId?: string | null;
-            /** Format: date */
+            /**
+             * Format: date
+             * @description The UTC date the tokens were consumed.
+             */
             date?: string;
-            /** Format: int64 */
+            /**
+             * Format: int64
+             * @description Total input tokens (includes the cached portion).
+             */
             inputTokens?: number;
-            /** Format: int64 */
+            /**
+             * Format: int64
+             * @description Total output tokens (includes the reasoning portion).
+             */
             outputTokens?: number;
+            /**
+             * Format: int64
+             * @description Cache-read input tokens.
+             */
+            cachedInputTokens?: number;
+            /**
+             * Format: int64
+             * @description Cache-write tokens.
+             */
+            cacheWriteTokens?: number;
+            /**
+             * Format: int64
+             * @description Reasoning tokens.
+             */
+            reasoningTokens?: number;
         };
         /**
          * @description The native review surface used by a provider.
@@ -13398,7 +13454,8 @@ export interface components {
         };
         /**
          * @description Represents the token cost contribution of a single effort-tier / model-ID combination within a review job.
-         *     Stored as a JSONB array in the `review_jobs.token_breakdown` column.
+         *     Stored as a JSONB array in the `review_jobs.token_breakdown` column. The cache and reasoning fields are
+         *     additive: rows written before they existed deserialize with each new field at zero.
          */
         TokenBreakdownEntry: {
             connectionCategory?: components["schemas"]["AiConnectionModelCategory"];
@@ -13406,14 +13463,29 @@ export interface components {
             modelId?: string | null;
             /**
              * Format: int64
-             * @description Accumulated input tokens for this tier/model combination.
+             * @description Accumulated input tokens for this tier/model combination (includes the cached portion).
              */
             totalInputTokens?: number;
             /**
              * Format: int64
-             * @description Accumulated output tokens for this tier/model combination.
+             * @description Accumulated output tokens for this tier/model combination (includes the reasoning portion).
              */
             totalOutputTokens?: number;
+            /**
+             * Format: int64
+             * @description Accumulated input tokens served from the provider prompt cache.
+             */
+            totalCachedInputTokens?: number;
+            /**
+             * Format: int64
+             * @description Accumulated tokens written to the provider prompt cache; zero for providers without a separate cache-write charge.
+             */
+            totalCacheWriteTokens?: number;
+            /**
+             * Format: int64
+             * @description Accumulated reasoning tokens (a portion of TotalOutputTokens).
+             */
+            totalReasoningTokens?: number;
         };
         /** @description Identifies a pull request to unblock. */
         UnblockPullRequestRequest: {

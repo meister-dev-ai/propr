@@ -109,14 +109,20 @@ public sealed class CommentRelevanceFilterExecutorTests
             Arg.Is<string?>(value => value == null),
             Arg.Any<CancellationToken>(),
             Arg.Is<string?>(value => value == ReviewProtocolEventNames.CommentRelevanceEvaluatorAiCall),
-            Arg.Is<string?>(value => value == null));
+            Arg.Is<string?>(value => value == null),
+            cachedInputTokens: Arg.Any<long?>(),
+            cacheWriteTokens: Arg.Any<long?>(),
+            reasoningTokens: Arg.Any<long?>());
         await protocolRecorder.Received().AddTokensAsync(
             Arg.Is(protocolId),
             14,
             6,
             AiConnectionModelCategory.Default,
             Arg.Is<string?>(value => value == "filter-model"),
-            Arg.Any<CancellationToken>());
+            Arg.Any<CancellationToken>(),
+            Arg.Any<long>(),
+            Arg.Any<long>(),
+            Arg.Any<long>());
     }
 
     [Fact]

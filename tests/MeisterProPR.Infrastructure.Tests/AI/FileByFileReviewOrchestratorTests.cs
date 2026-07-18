@@ -1516,7 +1516,11 @@ public class FileByFileReviewOrchestratorTests
                 Arg.Any<int>(),
                 Arg.Any<int>(),
                 Arg.Any<int?>(),
-                Arg.Any<CancellationToken>());
+                Arg.Any<CancellationToken>(),
+                Arg.Any<long?>(),
+                Arg.Any<CacheObservabilityStatus>(),
+                Arg.Any<long?>(),
+                Arg.Any<long?>());
     }
 
     [Fact]

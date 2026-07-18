@@ -38,6 +38,21 @@ internal sealed class ClientTokenUsageSampleConfiguration : IEntityTypeConfigura
             .HasColumnName("output_tokens")
             .IsRequired();
 
+        builder.Property(s => s.CachedInputTokens)
+            .HasColumnName("cached_input_tokens")
+            .IsRequired()
+            .HasDefaultValue(0L);
+
+        builder.Property(s => s.CacheWriteTokens)
+            .HasColumnName("cache_write_tokens")
+            .IsRequired()
+            .HasDefaultValue(0L);
+
+        builder.Property(s => s.ReasoningTokens)
+            .HasColumnName("reasoning_tokens")
+            .IsRequired()
+            .HasDefaultValue(0L);
+
         // Unique index on (client_id, model_id, date) — enables PostgreSQL upsert via ON CONFLICT
         builder.HasIndex(s => new { s.ClientId, s.ModelId, s.Date })
             .IsUnique()

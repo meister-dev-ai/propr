@@ -2,6 +2,7 @@
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
 using System.Text.Json;
+using MeisterProPR.Application.AI;
 using MeisterProPR.Application.Features.Reviewing.Execution.Models;
 using MeisterProPR.Application.Features.Reviewing.Execution.Ports;
 using MeisterProPR.Application.Interfaces;
@@ -465,6 +466,8 @@ internal sealed class PrLevelReviewVerificationExecutor(
             return;
         }
 
+        var usage = AiTokenUsageExtractor.FromResponse(response);
+
         await protocolRecorder.RecordAiCallAsync(
             protocolId.Value,
             0,
@@ -474,15 +477,21 @@ internal sealed class PrLevelReviewVerificationExecutor(
             systemPrompt,
             responseText,
             ct,
-            "ai_call_pr_verification");
+            "ai_call_pr_verification",
+            cachedInputTokens: usage.IsEstimated ? null : usage.CachedInputTokens,
+            cacheWriteTokens: usage.IsEstimated ? null : usage.CacheWriteTokens,
+            reasoningTokens: usage.IsEstimated ? null : usage.ReasoningTokens);
 
         await protocolRecorder.AddTokensAsync(
             protocolId.Value,
-            response.Usage?.InputTokenCount ?? 0,
-            response.Usage?.OutputTokenCount ?? 0,
+            usage.InputTokens,
+            usage.OutputTokens,
             AiConnectionModelCategory.Default,
             modelId,
-            ct);
+            ct,
+            usage.CachedInputTokens,
+            usage.CacheWriteTokens,
+            usage.ReasoningTokens);
     }
 
     private async Task RecordDegradedAsync(

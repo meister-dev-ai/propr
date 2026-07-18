@@ -487,7 +487,10 @@ public sealed class ThreadMemoryServiceTests
                 Arg.Any<string?>(),
                 Arg.Any<string?>(),
                 Arg.Any<CancellationToken>(),
-                Arg.Is<string?>(n => n == "ai_call_memory_reconsideration"));
+                Arg.Is<string?>(n => n == "ai_call_memory_reconsideration"),
+                cachedInputTokens: Arg.Any<long?>(),
+                cacheWriteTokens: Arg.Any<long?>(),
+                reasoningTokens: Arg.Any<long?>());
     }
 
     [Fact]

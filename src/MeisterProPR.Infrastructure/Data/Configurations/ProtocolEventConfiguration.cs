@@ -23,6 +23,8 @@ internal sealed class ProtocolEventConfiguration : IEntityTypeConfiguration<Prot
         builder.Property(e => e.InputTokens).HasColumnName("input_tokens").IsRequired(false);
         builder.Property(e => e.OutputTokens).HasColumnName("output_tokens").IsRequired(false);
         builder.Property(e => e.CachedInputTokens).HasColumnName("cached_input_tokens").IsRequired(false);
+        builder.Property(e => e.CacheWriteTokens).HasColumnName("cache_write_tokens").IsRequired(false);
+        builder.Property(e => e.ReasoningTokens).HasColumnName("reasoning_tokens").IsRequired(false);
         builder.Property(e => e.CacheStatus).HasColumnName("cache_status").HasConversion<short>().IsRequired();
         builder.Property(e => e.CacheMissCategory).HasColumnName("cache_miss_category").HasMaxLength(128).IsRequired(false);
         builder.Property(e => e.PrefixEligibility).HasColumnName("prefix_eligibility").HasConversion<short>().IsRequired();

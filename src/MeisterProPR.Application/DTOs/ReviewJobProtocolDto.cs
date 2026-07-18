@@ -88,6 +88,12 @@ public partial record ReviewJobProtocolDto
     /// <summary>Sum of cached input tokens across AI calls where the provider reported cached usage.</summary>
     public long? TotalCachedInputTokens { get; init; }
 
+    /// <summary>Sum of cache-write tokens across AI calls in this protocol pass.</summary>
+    public long? TotalCacheWriteTokens { get; init; }
+
+    /// <summary>Sum of reasoning tokens across AI calls in this protocol pass.</summary>
+    public long? TotalReasoningTokens { get; init; }
+
     /// <summary>Roll-up of cache observability for this protocol pass.</summary>
     public CacheObservabilityStatus CacheObservability { get; init; } = CacheObservabilityStatus.Unknown;
 
@@ -151,6 +157,12 @@ public partial record ProtocolEventDto
 {
     /// <summary>Cached input tokens read from a provider cache for this AI call.</summary>
     public long? CachedInputTokens { get; init; }
+
+    /// <summary>Cache-write tokens for this AI call.</summary>
+    public long? CacheWriteTokens { get; init; }
+
+    /// <summary>Reasoning tokens for this AI call.</summary>
+    public long? ReasoningTokens { get; init; }
 
     /// <summary>Cache outcome for this AI call.</summary>
     public CacheCallStatus CacheStatus { get; init; } = CacheCallStatus.NotApplicable;

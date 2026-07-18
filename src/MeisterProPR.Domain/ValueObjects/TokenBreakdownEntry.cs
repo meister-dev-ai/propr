@@ -7,14 +7,21 @@ namespace MeisterProPR.Domain.ValueObjects;
 
 /// <summary>
 ///     Represents the token cost contribution of a single effort-tier / model-ID combination within a review job.
-///     Stored as a JSONB array in the <c>review_jobs.token_breakdown</c> column.
+///     Stored as a JSONB array in the <c>review_jobs.token_breakdown</c> column. The cache and reasoning fields are
+///     additive: rows written before they existed deserialize with each new field at zero.
 /// </summary>
 /// <param name="ConnectionCategory">The AI connection category (effort tier) that generated these tokens.</param>
 /// <param name="ModelId">The effective AI model deployment name (e.g. "gpt-4o", "gpt-4o-mini").</param>
-/// <param name="TotalInputTokens">Accumulated input tokens for this tier/model combination.</param>
-/// <param name="TotalOutputTokens">Accumulated output tokens for this tier/model combination.</param>
+/// <param name="TotalInputTokens">Accumulated input tokens for this tier/model combination (includes the cached portion).</param>
+/// <param name="TotalOutputTokens">Accumulated output tokens for this tier/model combination (includes the reasoning portion).</param>
+/// <param name="TotalCachedInputTokens">Accumulated input tokens served from the provider prompt cache.</param>
+/// <param name="TotalCacheWriteTokens">Accumulated tokens written to the provider prompt cache; zero for providers without a separate cache-write charge.</param>
+/// <param name="TotalReasoningTokens">Accumulated reasoning tokens (a portion of <paramref name="TotalOutputTokens" />).</param>
 public sealed record TokenBreakdownEntry(
     AiConnectionModelCategory ConnectionCategory,
     string ModelId,
     long TotalInputTokens,
-    long TotalOutputTokens);
+    long TotalOutputTokens,
+    long TotalCachedInputTokens = 0,
+    long TotalCacheWriteTokens = 0,
+    long TotalReasoningTokens = 0);

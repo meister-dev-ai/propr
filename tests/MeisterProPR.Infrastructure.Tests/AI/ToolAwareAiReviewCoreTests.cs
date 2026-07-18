@@ -1619,7 +1619,10 @@ public class ToolAwareAiReviewCoreTests
             .Returns(
                 new ChatResponse(new ChatMessage(ChatRole.Assistant, json))
                 {
-                    Usage = new UsageDetails { InputTokenCount = 2048, CachedInputTokenCount = 1024, OutputTokenCount = 50 },
+                    Usage = new UsageDetails
+                    {
+                        InputTokenCount = 2048, CachedInputTokenCount = 1024, OutputTokenCount = 50, ReasoningTokenCount = 128,
+                    },
                 });
 
         var sut = new ToolAwareAiReviewCore(
@@ -1657,9 +1660,12 @@ public class ToolAwareAiReviewCoreTests
                 PrefixEligibilityStatus.Eligible,
                 Arg.Any<string?>(),
                 Arg.Any<string?>(),
-                Arg.Any<string?>());
+                Arg.Any<string?>(),
+                Arg.Any<long?>(),
+                128L);
         Assert.NotNull(context.LoopMetrics);
         Assert.Equal(1024L, context.LoopMetrics!.TotalCachedInputTokens);
+        Assert.Equal(128L, context.LoopMetrics.TotalReasoningTokens);
     }
 
     [Fact]
@@ -1713,7 +1719,9 @@ public class ToolAwareAiReviewCoreTests
                 PrefixEligibilityStatus.Eligible,
                 Arg.Any<string?>(),
                 Arg.Any<string?>(),
-                Arg.Any<string?>());
+                Arg.Any<string?>(),
+                Arg.Any<long?>(),
+                Arg.Any<long?>());
     }
 
     // A tool-only turn (empty assistant text) records the structured envelope with its tool calls,

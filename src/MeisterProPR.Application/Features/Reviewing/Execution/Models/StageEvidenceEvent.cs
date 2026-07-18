@@ -20,6 +20,8 @@ public sealed record StageEvidenceEvent(
     string? Error,
     PromptExperimentEvidence? PromptExperimentEvidence = null,
     long? CachedInputTokens = null,
+    long? CacheWriteTokens = null,
+    long? ReasoningTokens = null,
     ProtocolToolEvidenceSnapshot? ToolEvidence = null,
     string? FinalizationAttemptKind = null);
 

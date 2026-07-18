@@ -1597,7 +1597,10 @@ public sealed partial class ReviewOrchestrationService(
                         null,
                         null,
                         resolution.ReplyText,
-                        ct);
+                        ct,
+                        cachedInputTokens: resolution.CachedInputTokens,
+                        cacheWriteTokens: resolution.CacheWriteTokens,
+                        reasoningTokens: resolution.ReasoningTokens);
                     var outcome = resolution.IsResolved ? "Resolved" : "NotResolved";
                     await protocolRecorder.SetCompletedAsync(
                         protocolId.Value,
@@ -1607,7 +1610,11 @@ public sealed partial class ReviewOrchestrationService(
                         1,
                         0,
                         null,
-                        ct);
+                        ct,
+                        resolution.CachedInputTokens ?? 0,
+                        resolution.CachedInputTokens.HasValue ? CacheObservabilityStatus.Observable : CacheObservabilityStatus.Unobservable,
+                        resolution.CacheWriteTokens ?? 0,
+                        resolution.ReasoningTokens ?? 0);
                 }
 
                 var resolvedAction = BuildResolvedThreadAction(thread, behavior, resolution, canReply);

@@ -4,6 +4,7 @@
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using MeisterProPR.Application.AI;
 using MeisterProPR.Application.Features.Reviewing.Execution.Models;
 using MeisterProPR.Application.Features.Reviewing.Execution.Ports;
 using MeisterProPR.Domain.Enums;
@@ -62,13 +63,17 @@ internal sealed partial class AiCommentRelevanceAmbiguityEvaluator(ILogger<AiCom
                     "Comment relevance evaluator returned an unparseable response.");
             }
 
+            var usage = AiTokenUsageExtractor.FromResponse(response);
             var tokenUsage = new FilterAiTokenUsage(
                 "hybrid-v1",
                 request.FilePath,
-                response.Usage?.InputTokenCount ?? 0,
-                response.Usage?.OutputTokenCount ?? 0,
+                usage.InputTokens,
+                usage.OutputTokens,
                 AiConnectionModelCategory.Default,
-                modelId);
+                modelId,
+                usage.CachedInputTokens,
+                usage.CacheWriteTokens,
+                usage.ReasoningTokens);
 
             return new CommentRelevanceAmbiguityEvaluationResult(
                 parsed,

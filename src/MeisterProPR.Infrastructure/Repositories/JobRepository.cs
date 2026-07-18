@@ -528,6 +528,8 @@ public sealed partial class JobRepository(
                 InputTokens = e.InputTokens,
                 OutputTokens = e.OutputTokens,
                 CachedInputTokens = e.CachedInputTokens,
+                CacheWriteTokens = e.CacheWriteTokens,
+                ReasoningTokens = e.ReasoningTokens,
                 CacheStatus = e.CacheStatus,
                 CacheMissCategory = e.CacheMissCategory,
                 PrefixEligibility = e.PrefixEligibility,

@@ -31,6 +31,9 @@ namespace MeisterProPR.Application.ValueObjects;
 /// <param name="ProviderResponseId">Opaque provider-managed response-chain identifier, when available.</param>
 /// <param name="ActivePromptMode">The effective prompt-submission mode at loop completion.</param>
 /// <param name="TotalCachedInputTokens">Sum of cached input tokens across observable AI calls in the loop.</param>
+/// <param name="TotalCacheWriteTokens">Sum of cache-write tokens across observable AI calls in the loop.</param>
+/// <param name="TotalReasoningTokens">Sum of reasoning tokens across observable AI calls in the loop.</param>
+/// <param name="ObservedCacheUsageDetails">Whether at least one AI call in the loop reported usage, so cache metrics were observable (independent of the hit count).</param>
 public sealed record ReviewLoopMetrics(
     int ToolCallCount,
     string? ToolCallsJson,
@@ -45,4 +48,7 @@ public sealed record ReviewLoopMetrics(
     string? ProviderConversationId = null,
     string? ProviderResponseId = null,
     AgentReviewPromptMode ActivePromptMode = AgentReviewPromptMode.FullReplayFallback,
-    long TotalCachedInputTokens = 0);
+    long TotalCachedInputTokens = 0,
+    long TotalCacheWriteTokens = 0,
+    long TotalReasoningTokens = 0,
+    bool ObservedCacheUsageDetails = false);

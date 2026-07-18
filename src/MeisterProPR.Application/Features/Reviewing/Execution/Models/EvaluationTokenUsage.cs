@@ -14,7 +14,9 @@ public sealed record EvaluationTokenUsage(
     long TotalCachedInputTokens = 0,
     long TotalEffectiveInputTokens = 0,
     long TotalToolReplayTokens = 0,
-    int FinalizationCallCount = 0);
+    int FinalizationCallCount = 0,
+    long TotalCacheWriteTokens = 0,
+    long TotalReasoningTokens = 0);
 
 /// <summary>
 ///     One token-usage breakdown bucket.

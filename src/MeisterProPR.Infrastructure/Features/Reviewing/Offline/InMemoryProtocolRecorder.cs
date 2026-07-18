@@ -63,7 +63,9 @@ public sealed class InMemoryProtocolRecorder(InMemoryReviewJobRepository jobs) :
         PrefixEligibilityStatus prefixEligibility = PrefixEligibilityStatus.NotApplicable,
         string? finalizationAttemptKind = null,
         string? finalizationReason = null,
-        string? finalizationOutcome = null)
+        string? finalizationOutcome = null,
+        long? cacheWriteTokens = null,
+        long? reasoningTokens = null)
     {
         var protocol = this.FindProtocol(protocolId);
         if (protocol is null)
@@ -82,6 +84,8 @@ public sealed class InMemoryProtocolRecorder(InMemoryReviewJobRepository jobs) :
                 InputTokens = inputTokens,
                 OutputTokens = outputTokens,
                 CachedInputTokens = cachedInputTokens,
+                CacheWriteTokens = cacheWriteTokens,
+                ReasoningTokens = reasoningTokens,
                 CacheStatus = cacheStatus,
                 CacheMissCategory = Sanitize(cacheMissCategory),
                 PrefixEligibility = prefixEligibility,
@@ -201,7 +205,9 @@ public sealed class InMemoryProtocolRecorder(InMemoryReviewJobRepository jobs) :
         int? finalConfidence,
         CancellationToken ct = default,
         long? totalCachedInputTokens = null,
-        CacheObservabilityStatus cacheObservability = CacheObservabilityStatus.Unknown)
+        CacheObservabilityStatus cacheObservability = CacheObservabilityStatus.Unknown,
+        long? totalCacheWriteTokens = null,
+        long? totalReasoningTokens = null)
     {
         var protocol = this.FindProtocol(protocolId);
         if (protocol is null)
@@ -214,6 +220,8 @@ public sealed class InMemoryProtocolRecorder(InMemoryReviewJobRepository jobs) :
         protocol.TotalInputTokens = totalInputTokens;
         protocol.TotalOutputTokens = totalOutputTokens;
         protocol.TotalCachedInputTokens = totalCachedInputTokens;
+        protocol.TotalCacheWriteTokens = totalCacheWriteTokens;
+        protocol.TotalReasoningTokens = totalReasoningTokens;
         protocol.CacheObservability = cacheObservability;
         protocol.IterationCount = iterationCount;
         protocol.ToolCallCount = toolCallCount;
@@ -226,7 +234,10 @@ public sealed class InMemoryProtocolRecorder(InMemoryReviewJobRepository jobs) :
                 protocol.AiConnectionCategory ?? AiConnectionModelCategory.Default,
                 protocol.ModelId ?? "(default)",
                 totalInputTokens,
-                totalOutputTokens);
+                totalOutputTokens,
+                totalCachedInputTokens ?? 0,
+                totalCacheWriteTokens ?? 0,
+                totalReasoningTokens ?? 0);
         }
 
         return Task.CompletedTask;
@@ -238,7 +249,10 @@ public sealed class InMemoryProtocolRecorder(InMemoryReviewJobRepository jobs) :
         long outputTokens,
         AiConnectionModelCategory? connectionCategory = null,
         string? modelId = null,
-        CancellationToken ct = default)
+        CancellationToken ct = default,
+        long cachedInputTokens = 0,
+        long cacheWriteTokens = 0,
+        long reasoningTokens = 0)
     {
         var protocol = this.FindProtocol(protocolId);
         if (protocol is null)
@@ -248,6 +262,20 @@ public sealed class InMemoryProtocolRecorder(InMemoryReviewJobRepository jobs) :
 
         protocol.TotalInputTokens = (protocol.TotalInputTokens ?? 0) + inputTokens;
         protocol.TotalOutputTokens = (protocol.TotalOutputTokens ?? 0) + outputTokens;
+        if (cachedInputTokens > 0)
+        {
+            protocol.TotalCachedInputTokens = (protocol.TotalCachedInputTokens ?? 0) + cachedInputTokens;
+        }
+
+        if (cacheWriteTokens > 0)
+        {
+            protocol.TotalCacheWriteTokens = (protocol.TotalCacheWriteTokens ?? 0) + cacheWriteTokens;
+        }
+
+        if (reasoningTokens > 0)
+        {
+            protocol.TotalReasoningTokens = (protocol.TotalReasoningTokens ?? 0) + reasoningTokens;
+        }
 
         var job = jobs.GetById(protocol.JobId);
         if (job is not null)
@@ -256,7 +284,10 @@ public sealed class InMemoryProtocolRecorder(InMemoryReviewJobRepository jobs) :
                 connectionCategory ?? AiConnectionModelCategory.Default,
                 modelId ?? protocol.ModelId ?? "(default)",
                 inputTokens,
-                outputTokens);
+                outputTokens,
+                cachedInputTokens,
+                cacheWriteTokens,
+                reasoningTokens);
         }
 
         return Task.CompletedTask;

@@ -74,6 +74,11 @@ public sealed class ProRVPrefilter : IProRVPrefilter
         var responseText = response.Text ?? string.Empty;
         var inputTokens = response.Usage?.InputTokenCount;
         var outputTokens = response.Usage?.OutputTokenCount;
+
+        // Native MEAI usage properties: the OpenAI adapter populates these on both the
+        // Chat-Completions and Responses paths. No provider reports cache-write today.
+        var cachedInputTokens = response.Usage?.CachedInputTokenCount;
+        var reasoningTokens = response.Usage?.ReasoningTokenCount;
         if (!TryParseRankedChecks(responseText, checks, request.MaxResults, out var rankedChecks))
         {
             return new ProRVPrefilterResult(
@@ -84,7 +89,9 @@ public sealed class ProRVPrefilter : IProRVPrefilter
                 responseText,
                 "The ProRV prefilter model response could not be parsed.",
                 inputTokens,
-                outputTokens);
+                outputTokens,
+                cachedInputTokens: cachedInputTokens,
+                reasoningTokens: reasoningTokens);
         }
 
         var items = rankedChecks
@@ -112,7 +119,9 @@ public sealed class ProRVPrefilter : IProRVPrefilter
             items,
             responseText,
             inputTokens: inputTokens,
-            outputTokens: outputTokens);
+            outputTokens: outputTokens,
+            cachedInputTokens: cachedInputTokens,
+            reasoningTokens: reasoningTokens);
     }
 
     internal static string? ResolveLanguage(ProRVPrefilterRequest request)

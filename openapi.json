@@ -17339,22 +17339,27 @@
         "properties": {
           "clientId": {
             "type": "string",
+            "description": "The client the usage belongs to.",
             "format": "uuid"
           },
           "from": {
             "type": "string",
+            "description": "Inclusive start of the reported date range.",
             "format": "date"
           },
           "to": {
             "type": "string",
+            "description": "Inclusive end of the reported date range.",
             "format": "date"
           },
           "totalInputTokens": {
             "type": "integer",
+            "description": "Sum of input tokens across all samples (includes the cached portion).",
             "format": "int64"
           },
           "totalOutputTokens": {
             "type": "integer",
+            "description": "Sum of output tokens across all samples (includes the reasoning portion).",
             "format": "int64"
           },
           "samples": {
@@ -17362,7 +17367,23 @@
             "items": {
               "$ref": "#/components/schemas/ClientTokenUsageSampleDto"
             },
+            "description": "The per-(model, day) usage samples.",
             "nullable": true
+          },
+          "totalCachedInputTokens": {
+            "type": "integer",
+            "description": "Sum of cache-read input tokens across all samples.",
+            "format": "int64"
+          },
+          "totalCacheWriteTokens": {
+            "type": "integer",
+            "description": "Sum of cache-write tokens across all samples.",
+            "format": "int64"
+          },
+          "totalReasoningTokens": {
+            "type": "integer",
+            "description": "Sum of reasoning tokens across all samples.",
+            "format": "int64"
           }
         },
         "additionalProperties": false,
@@ -17373,18 +17394,37 @@
         "properties": {
           "modelId": {
             "type": "string",
+            "description": "The AI model identifier.",
             "nullable": true
           },
           "date": {
             "type": "string",
+            "description": "The UTC date the tokens were consumed.",
             "format": "date"
           },
           "inputTokens": {
             "type": "integer",
+            "description": "Total input tokens (includes the cached portion).",
             "format": "int64"
           },
           "outputTokens": {
             "type": "integer",
+            "description": "Total output tokens (includes the reasoning portion).",
+            "format": "int64"
+          },
+          "cachedInputTokens": {
+            "type": "integer",
+            "description": "Cache-read input tokens.",
+            "format": "int64"
+          },
+          "cacheWriteTokens": {
+            "type": "integer",
+            "description": "Cache-write tokens.",
+            "format": "int64"
+          },
+          "reasoningTokens": {
+            "type": "integer",
+            "description": "Reasoning tokens.",
             "format": "int64"
           }
         },
@@ -22159,17 +22199,32 @@
           },
           "totalInputTokens": {
             "type": "integer",
-            "description": "Accumulated input tokens for this tier/model combination.",
+            "description": "Accumulated input tokens for this tier/model combination (includes the cached portion).",
             "format": "int64"
           },
           "totalOutputTokens": {
             "type": "integer",
-            "description": "Accumulated output tokens for this tier/model combination.",
+            "description": "Accumulated output tokens for this tier/model combination (includes the reasoning portion).",
+            "format": "int64"
+          },
+          "totalCachedInputTokens": {
+            "type": "integer",
+            "description": "Accumulated input tokens served from the provider prompt cache.",
+            "format": "int64"
+          },
+          "totalCacheWriteTokens": {
+            "type": "integer",
+            "description": "Accumulated tokens written to the provider prompt cache; zero for providers without a separate cache-write charge.",
+            "format": "int64"
+          },
+          "totalReasoningTokens": {
+            "type": "integer",
+            "description": "Accumulated reasoning tokens (a portion of TotalOutputTokens).",
             "format": "int64"
           }
         },
         "additionalProperties": false,
-        "description": "Represents the token cost contribution of a single effort-tier / model-ID combination within a review job.\nStored as a JSONB array in the `review_jobs.token_breakdown` column."
+        "description": "Represents the token cost contribution of a single effort-tier / model-ID combination within a review job.\nStored as a JSONB array in the `review_jobs.token_breakdown` column. The cache and reasoning fields are\nadditive: rows written before they existed deserialize with each new field at zero."
       },
       "UnblockPullRequestRequest": {
         "type": "object",

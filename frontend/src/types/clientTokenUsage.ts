@@ -7,6 +7,9 @@ export interface ClientTokenUsageSample {
   date: string // ISO date string YYYY-MM-DD
   inputTokens: number
   outputTokens: number
+  cachedInputTokens?: number
+  cacheWriteTokens?: number
+  reasoningTokens?: number
 }
 
 export interface ClientTokenUsageResponse {
@@ -16,4 +19,7 @@ export interface ClientTokenUsageResponse {
   totalInputTokens: number
   totalOutputTokens: number
   samples: ClientTokenUsageSample[]
+  totalCachedInputTokens?: number
+  totalCacheWriteTokens?: number
+  totalReasoningTokens?: number
 }

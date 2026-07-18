@@ -26,6 +26,8 @@ internal sealed class ReviewJobProtocolConfiguration : IEntityTypeConfiguration<
         builder.Property(p => p.TotalInputTokens).HasColumnName("total_input_tokens").IsRequired(false);
         builder.Property(p => p.TotalOutputTokens).HasColumnName("total_output_tokens").IsRequired(false);
         builder.Property(p => p.TotalCachedInputTokens).HasColumnName("total_cached_input_tokens").IsRequired(false);
+        builder.Property(p => p.TotalCacheWriteTokens).HasColumnName("total_cache_write_tokens").IsRequired(false);
+        builder.Property(p => p.TotalReasoningTokens).HasColumnName("total_reasoning_tokens").IsRequired(false);
         builder.Property(p => p.CacheObservability)
             .HasColumnName("cache_observability")
             .HasConversion<short>()

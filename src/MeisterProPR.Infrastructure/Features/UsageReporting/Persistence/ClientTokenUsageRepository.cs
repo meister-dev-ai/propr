@@ -24,25 +24,35 @@ public sealed class ClientTokenUsageRepository(MeisterProPRDbContext db) : IClie
         DateOnly date,
         long inputTokens,
         long outputTokens,
-        CancellationToken ct)
+        CancellationToken ct,
+        long cachedInputTokens = 0,
+        long cacheWriteTokens = 0,
+        long reasoningTokens = 0)
     {
         if (db.Database.ProviderName?.Contains("Npgsql", StringComparison.OrdinalIgnoreCase) == true)
         {
             // PostgreSQL: atomic upsert via ON CONFLICT DO UPDATE — no read-modify-write race.
             await db.Database.ExecuteSqlRawAsync(
                 """
-                INSERT INTO client_token_usage_samples (id, client_id, model_id, date, input_tokens, output_tokens)
-                VALUES (gen_random_uuid(), {0}, {1}, {2}, {3}, {4})
+                INSERT INTO client_token_usage_samples
+                    (id, client_id, model_id, date, input_tokens, output_tokens, cached_input_tokens, cache_write_tokens, reasoning_tokens)
+                VALUES (gen_random_uuid(), {0}, {1}, {2}, {3}, {4}, {5}, {6}, {7})
                 ON CONFLICT (client_id, model_id, date)
                 DO UPDATE SET
-                    input_tokens  = client_token_usage_samples.input_tokens  + EXCLUDED.input_tokens,
-                    output_tokens = client_token_usage_samples.output_tokens + EXCLUDED.output_tokens
+                    input_tokens        = client_token_usage_samples.input_tokens        + EXCLUDED.input_tokens,
+                    output_tokens       = client_token_usage_samples.output_tokens       + EXCLUDED.output_tokens,
+                    cached_input_tokens = client_token_usage_samples.cached_input_tokens + EXCLUDED.cached_input_tokens,
+                    cache_write_tokens  = client_token_usage_samples.cache_write_tokens  + EXCLUDED.cache_write_tokens,
+                    reasoning_tokens    = client_token_usage_samples.reasoning_tokens    + EXCLUDED.reasoning_tokens
                 """,
                 clientId,
                 modelId,
                 date,
                 inputTokens,
-                outputTokens);
+                outputTokens,
+                cachedInputTokens,
+                cacheWriteTokens,
+                reasoningTokens);
         }
         else
         {
@@ -63,12 +73,18 @@ public sealed class ClientTokenUsageRepository(MeisterProPRDbContext db) : IClie
                         Date = date,
                         InputTokens = inputTokens,
                         OutputTokens = outputTokens,
+                        CachedInputTokens = cachedInputTokens,
+                        CacheWriteTokens = cacheWriteTokens,
+                        ReasoningTokens = reasoningTokens,
                     });
             }
             else
             {
                 existing.InputTokens += inputTokens;
                 existing.OutputTokens += outputTokens;
+                existing.CachedInputTokens += cachedInputTokens;
+                existing.CacheWriteTokens += cacheWriteTokens;
+                existing.ReasoningTokens += reasoningTokens;
             }
 
             await db.SaveChangesAsync(ct);

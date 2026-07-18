@@ -6,6 +6,7 @@ using System.Reflection;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using MeisterProPR.Application.AI;
 using MeisterProPR.Application.Features.Reviewing.Execution.Models;
 using MeisterProPR.Application.Features.Reviewing.Execution.Services;
 using MeisterProPR.Application.Interfaces;
@@ -258,10 +259,11 @@ internal sealed partial class ToolAwareAiReviewCore(
                 AppendResponseToState(state, response);
                 var responseMessage = response.Messages.Last();
 
+                var usage = AiTokenUsageExtractor.FromResponse(response);
                 var inputTokens = response.Usage?.InputTokenCount;
                 var outputTokens = response.Usage?.OutputTokenCount;
                 var cachedInputTokens = response.Usage?.CachedInputTokenCount;
-                state.AccumulateTokens(inputTokens, outputTokens, cachedInputTokens);
+                state.AccumulateTokens(usage);
                 state.UpdateContinuationHandle(CreateContinuationHandle(response, state), response.ContinuationToken);
                 state.RecordTurn(
                     state.Session.Mode == AgentReviewSessionMode.StatelessReplay
@@ -291,6 +293,8 @@ internal sealed partial class ToolAwareAiReviewCore(
                         outputSample,
                         cancellationToken,
                         cachedInputTokens: cachedInputTokens,
+                        cacheWriteTokens: usage.IsEstimated ? null : usage.CacheWriteTokens,
+                        reasoningTokens: usage.IsEstimated ? null : usage.ReasoningTokens,
                         cacheStatus: ResolveCacheStatus(systemContext, cachedInputTokens, messagesToSend),
                         cacheMissCategory: ResolveCacheMissCategory(systemContext, cachedInputTokens, messagesToSend),
                         prefixEligibility: ResolvePrefixEligibility(systemContext, messagesToSend));
@@ -433,7 +437,8 @@ internal sealed partial class ToolAwareAiReviewCore(
                 }
 
                 var finalCachedInputTokens = finalResponse.Usage?.CachedInputTokenCount;
-                state.AccumulateTokens(finalResponse.Usage?.InputTokenCount, finalResponse.Usage?.OutputTokenCount, finalCachedInputTokens);
+                var finalUsage = AiTokenUsageExtractor.FromResponse(finalResponse);
+                state.AccumulateTokens(finalUsage);
                 state.UpdateContinuationHandle(CreateContinuationHandle(finalResponse, state), finalResponse.ContinuationToken);
                 lastTextResponse = finalResponse.Text ?? "";
 
@@ -450,6 +455,8 @@ internal sealed partial class ToolAwareAiReviewCore(
                         cancellationToken,
                         "ai_call_forced_final",
                         cachedInputTokens: finalCachedInputTokens,
+                        cacheWriteTokens: finalUsage.IsEstimated ? null : finalUsage.CacheWriteTokens,
+                        reasoningTokens: finalUsage.IsEstimated ? null : finalUsage.ReasoningTokens,
                         cacheStatus: ResolveCacheStatus(systemContext, finalCachedInputTokens, BuildMessagesForForcedFinalTurn(state)),
                         cacheMissCategory: ResolveCacheMissCategory(systemContext, finalCachedInputTokens, BuildMessagesForForcedFinalTurn(state)),
                         prefixEligibility: ResolvePrefixEligibility(systemContext, BuildMessagesForForcedFinalTurn(state)),
@@ -562,10 +569,8 @@ internal sealed partial class ToolAwareAiReviewCore(
         }
 
         var correctionCachedInputTokens = correctionResponse.Usage?.CachedInputTokenCount;
-        state.AccumulateTokens(
-            correctionResponse.Usage?.InputTokenCount,
-            correctionResponse.Usage?.OutputTokenCount,
-            correctionCachedInputTokens);
+        var correctionUsage = AiTokenUsageExtractor.FromResponse(correctionResponse);
+        state.AccumulateTokens(correctionUsage);
 
         var corrected = correctionResponse.Text ?? string.Empty;
         if (systemContext.ActiveProtocolId.HasValue && systemContext.ProtocolRecorder is not null)
@@ -581,6 +586,8 @@ internal sealed partial class ToolAwareAiReviewCore(
                 cancellationToken,
                 "ai_call_schema_repair",
                 cachedInputTokens: correctionCachedInputTokens,
+                cacheWriteTokens: correctionUsage.IsEstimated ? null : correctionUsage.CacheWriteTokens,
+                reasoningTokens: correctionUsage.IsEstimated ? null : correctionUsage.ReasoningTokens,
                 cacheStatus: ResolveCacheStatus(systemContext, correctionCachedInputTokens, state.Messages),
                 cacheMissCategory: ResolveCacheMissCategory(systemContext, correctionCachedInputTokens, state.Messages),
                 prefixEligibility: ResolvePrefixEligibility(systemContext, state.Messages),
@@ -2104,7 +2111,10 @@ internal sealed partial class ToolAwareAiReviewCore(
             state.Session.ContinuationHandle?.ProviderSessionId,
             state.Session.ContinuationHandle?.ProviderResponseId,
             state.Session.ActivePromptMode,
-            state.TotalCachedInputTokens);
+            state.TotalCachedInputTokens,
+            state.TotalCacheWriteTokens,
+            state.TotalReasoningTokens,
+            state.ObservedCacheUsageDetails);
     }
 
     [LoggerMessage(

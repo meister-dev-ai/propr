@@ -3,6 +3,7 @@ using System;
 using MeisterProPR.Infrastructure.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 using Pgvector;
@@ -12,9 +13,11 @@ using Pgvector;
 namespace MeisterProPR.Infrastructure.Migrations
 {
     [DbContext(typeof(MeisterProPRDbContext))]
-    partial class MeisterProPRDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260718082424_CaptureFullTokenUsage")]
+    partial class CaptureFullTokenUsage
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -23,56 +26,6 @@ namespace MeisterProPR.Infrastructure.Migrations
 
             NpgsqlModelBuilderExtensions.HasPostgresExtension(modelBuilder, "vector");
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
-
-            modelBuilder.Entity("MeisterProPR.Domain.Entities.BlockedPullRequest", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .HasColumnType("uuid")
-                        .HasColumnName("id");
-
-                    b.Property<DateTimeOffset>("BlockedAt")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("blocked_at");
-
-                    b.Property<Guid>("BlockedByUserId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("blocked_by_user_id");
-
-                    b.Property<Guid>("ClientId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("client_id");
-
-                    b.Property<string>("ProviderProjectKey")
-                        .IsRequired()
-                        .HasColumnType("text")
-                        .HasColumnName("provider_project_key");
-
-                    b.Property<string>("ProviderScopePath")
-                        .IsRequired()
-                        .HasColumnType("text")
-                        .HasColumnName("provider_scope_path");
-
-                    b.Property<int>("PullRequestId")
-                        .HasColumnType("integer")
-                        .HasColumnName("pull_request_id");
-
-                    b.Property<string>("Reason")
-                        .HasColumnType("text")
-                        .HasColumnName("reason");
-
-                    b.Property<string>("RepositoryId")
-                        .IsRequired()
-                        .HasColumnType("text")
-                        .HasColumnName("repository_id");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("ClientId", "ProviderScopePath", "ProviderProjectKey", "RepositoryId", "PullRequestId")
-                        .IsUnique()
-                        .HasDatabaseName("uq_blocked_pull_requests_pr");
-
-                    b.ToTable("blocked_pull_requests", (string)null);
-                });
 
             modelBuilder.Entity("MeisterProPR.Domain.Entities.ClientTokenUsageSample", b =>
                 {
@@ -624,10 +577,6 @@ namespace MeisterProPR.Infrastructure.Migrations
                         .HasColumnType("smallint")
                         .HasColumnName("cache_status");
 
-                    b.Property<long?>("CacheWriteTokens")
-                        .HasColumnType("bigint")
-                        .HasColumnName("cache_write_tokens");
-
                     b.Property<long?>("CachedInputTokens")
                         .HasColumnType("bigint")
                         .HasColumnName("cached_input_tokens");
@@ -705,10 +654,6 @@ namespace MeisterProPR.Infrastructure.Migrations
                     b.Property<Guid>("ProtocolId")
                         .HasColumnType("uuid")
                         .HasColumnName("protocol_id");
-
-                    b.Property<long?>("ReasoningTokens")
-                        .HasColumnType("bigint")
-                        .HasColumnName("reasoning_tokens");
 
                     b.Property<DateTimeOffset?>("StartedAt")
                         .HasColumnType("timestamp with time zone")
@@ -1346,10 +1291,6 @@ namespace MeisterProPR.Infrastructure.Migrations
                         .HasColumnType("integer")
                         .HasColumnName("tool_call_count");
 
-                    b.Property<long?>("TotalCacheWriteTokens")
-                        .HasColumnType("bigint")
-                        .HasColumnName("total_cache_write_tokens");
-
                     b.Property<long?>("TotalCachedInputTokens")
                         .HasColumnType("bigint")
                         .HasColumnName("total_cached_input_tokens");
@@ -1361,10 +1302,6 @@ namespace MeisterProPR.Infrastructure.Migrations
                     b.Property<long?>("TotalOutputTokens")
                         .HasColumnType("bigint")
                         .HasColumnName("total_output_tokens");
-
-                    b.Property<long?>("TotalReasoningTokens")
-                        .HasColumnType("bigint")
-                        .HasColumnName("total_reasoning_tokens");
 
                     b.HasKey("Id");
 
@@ -3321,15 +3258,6 @@ namespace MeisterProPR.Infrastructure.Migrations
                         .HasDatabaseName("ix_webhook_repo_filters_config_source_ref");
 
                     b.ToTable("webhook_repo_filters", (string)null);
-                });
-
-            modelBuilder.Entity("MeisterProPR.Domain.Entities.BlockedPullRequest", b =>
-                {
-                    b.HasOne("MeisterProPR.Infrastructure.Data.Models.ClientRecord", null)
-                        .WithMany()
-                        .HasForeignKey("ClientId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
                 });
 
             modelBuilder.Entity("MeisterProPR.Domain.Entities.ClientTokenUsageSample", b =>

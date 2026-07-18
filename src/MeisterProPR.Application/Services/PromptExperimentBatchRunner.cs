@@ -242,6 +242,8 @@ public sealed class PromptExperimentBatchRunner(
             @event.Error,
             TryCreatePromptEvidence(@event),
             @event.CachedInputTokens,
+            @event.CacheWriteTokens,
+            @event.ReasoningTokens,
             @event.ToolEvidence is null
                 ? null
                 : new ProtocolToolEvidenceSnapshot(
@@ -358,14 +360,15 @@ public sealed class PromptExperimentBatchRunner(
 
     private static EvaluationTokenUsage ProjectTokenUsage(ReviewJob job)
     {
-        var byModel = job.TokenBreakdown
+        var breakdown = job.TokenBreakdown;
+        var byModel = breakdown
             .GroupBy(entry => entry.ModelId, StringComparer.Ordinal)
             .Select(group => new EvaluationTokenUsageBreakdown(
                 group.Key,
                 group.Sum(entry => entry.TotalInputTokens),
                 group.Sum(entry => entry.TotalOutputTokens)))
             .ToArray();
-        var byCategory = job.TokenBreakdown
+        var byCategory = breakdown
             .GroupBy(entry => entry.ConnectionCategory.ToString(), StringComparer.Ordinal)
             .Select(group => new EvaluationTokenUsageBreakdown(
                 group.Key,
@@ -373,11 +376,17 @@ public sealed class PromptExperimentBatchRunner(
                 group.Sum(entry => entry.TotalOutputTokens)))
             .ToArray();
 
+        // Derive the top-level totals from the breakdown itself so the artifact stays internally
+        // consistent with byModel/byCategory, rather than trusting the job's flat aggregate columns
+        // which could be stale or partial if an upstream collector dropped a counter.
         return new EvaluationTokenUsage(
-            job.TotalInputTokensAggregated ?? 0,
-            job.TotalOutputTokensAggregated ?? 0,
+            breakdown.Sum(entry => entry.TotalInputTokens),
+            breakdown.Sum(entry => entry.TotalOutputTokens),
             byModel,
-            byCategory);
+            byCategory,
+            TotalCachedInputTokens: breakdown.Sum(entry => entry.TotalCachedInputTokens),
+            TotalCacheWriteTokens: breakdown.Sum(entry => entry.TotalCacheWriteTokens),
+            TotalReasoningTokens: breakdown.Sum(entry => entry.TotalReasoningTokens));
     }
 
     private sealed class NullChatClient : IChatClient

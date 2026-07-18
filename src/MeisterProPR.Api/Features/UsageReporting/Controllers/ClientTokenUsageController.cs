@@ -66,7 +66,14 @@ public sealed partial class ClientTokenUsageController(
         var samples = await tokenUsageRepository.GetByClientAndDateRangeAsync(clientId, fromDate, toDate, ct);
 
         var sampleDtos = samples
-            .Select(s => new ClientTokenUsageSampleDto(s.ModelId, s.Date, s.InputTokens, s.OutputTokens))
+            .Select(s => new ClientTokenUsageSampleDto(
+                s.ModelId,
+                s.Date,
+                s.InputTokens,
+                s.OutputTokens,
+                s.CachedInputTokens,
+                s.CacheWriteTokens,
+                s.ReasoningTokens))
             .ToList();
 
         var dto = new ClientTokenUsageDto(
@@ -75,7 +82,10 @@ public sealed partial class ClientTokenUsageController(
             toDate,
             sampleDtos.Sum(s => s.InputTokens),
             sampleDtos.Sum(s => s.OutputTokens),
-            sampleDtos);
+            sampleDtos,
+            sampleDtos.Sum(s => s.CachedInputTokens),
+            sampleDtos.Sum(s => s.CacheWriteTokens),
+            sampleDtos.Sum(s => s.ReasoningTokens));
 
         LogTokenUsageQueried(logger, clientId, fromDate, toDate);
         return this.Ok(dto);

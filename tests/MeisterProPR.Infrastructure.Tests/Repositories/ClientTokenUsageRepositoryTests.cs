@@ -71,14 +71,17 @@ public sealed class ClientTokenUsageRepositoryTests(PostgresContainerFixture fix
         var date = DateOnly.FromDateTime(DateTime.UtcNow);
         const string modelId = "gpt-4o";
 
-        await this._repo.UpsertAsync(this._clientId, modelId, date, 100, 50, default);
-        await this._repo.UpsertAsync(this._clientId, modelId, date, 200, 75, default);
+        await this._repo.UpsertAsync(this._clientId, modelId, date, 100, 50, default, 40, 0, 20);
+        await this._repo.UpsertAsync(this._clientId, modelId, date, 200, 75, default, 60, 0, 30);
 
         var sample = await this._dbContext.ClientTokenUsageSamples
             .SingleAsync(s => s.ClientId == this._clientId && s.ModelId == modelId && s.Date == date);
 
         Assert.Equal(300, sample.InputTokens);
         Assert.Equal(125, sample.OutputTokens);
+        Assert.Equal(100, sample.CachedInputTokens);
+        Assert.Equal(0, sample.CacheWriteTokens);
+        Assert.Equal(50, sample.ReasoningTokens);
     }
 
     // T054: two different models on the same day produce two separate rows

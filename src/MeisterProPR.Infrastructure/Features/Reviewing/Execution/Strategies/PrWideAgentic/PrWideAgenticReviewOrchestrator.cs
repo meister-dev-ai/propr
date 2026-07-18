@@ -2,6 +2,7 @@
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
 using System.Text.Json;
+using MeisterProPR.Application.AI;
 using MeisterProPR.Application.Features.Reviewing.Execution.Models;
 using MeisterProPR.Application.Features.Reviewing.Execution.Ports;
 using MeisterProPR.Application.Features.Reviewing.Execution.Services;
@@ -76,6 +77,9 @@ public sealed partial class PrWideAgenticReviewOrchestrator(
         var ownsProtocolPass = false;
         var totalInputTokens = 0L;
         var totalOutputTokens = 0L;
+        var totalCachedInputTokens = 0L;
+        var totalCacheWriteTokens = 0L;
+        var totalReasoningTokens = 0L;
         var totalAiCalls = 0;
         var totalToolCalls = 0;
 
@@ -103,22 +107,34 @@ public sealed partial class PrWideAgenticReviewOrchestrator(
 
         try
         {
-            var (plan, planInputTokens, planOutputTokens, planAiCalls) = await this.CreatePlanAsync(job, pr, prWideContext, overrideClient, ct);
+            var (plan, planInputTokens, planOutputTokens, planAiCalls, planCachedInputTokens, planCacheWriteTokens, planReasoningTokens) =
+                await this.CreatePlanAsync(job, pr, prWideContext, overrideClient, ct);
             totalInputTokens += planInputTokens;
             totalOutputTokens += planOutputTokens;
+            totalCachedInputTokens += planCachedInputTokens;
+            totalCacheWriteTokens += planCacheWriteTokens;
+            totalReasoningTokens += planReasoningTokens;
             totalAiCalls += planAiCalls;
 
-            var (investigations, investigationInputTokens, investigationOutputTokens, investigationAiCalls, investigationToolCalls) =
+            var (investigations, investigationInputTokens, investigationOutputTokens, investigationAiCalls, investigationToolCalls,
+                    investigationCachedInputTokens, investigationCacheWriteTokens, investigationReasoningTokens) =
                 await this.RunInvestigationsAsync(job, pr, prWideContext, plan, overrideClient, ct);
             totalInputTokens += investigationInputTokens;
             totalOutputTokens += investigationOutputTokens;
+            totalCachedInputTokens += investigationCachedInputTokens;
+            totalCacheWriteTokens += investigationCacheWriteTokens;
+            totalReasoningTokens += investigationReasoningTokens;
             totalAiCalls += investigationAiCalls;
             totalToolCalls += investigationToolCalls;
 
-            var (synthesis, synthesisInputTokens, synthesisOutputTokens, synthesisAiCalls) =
+            var (synthesis, synthesisInputTokens, synthesisOutputTokens, synthesisAiCalls, synthesisCachedInputTokens, synthesisCacheWriteTokens,
+                    synthesisReasoningTokens) =
                 await this.RecordSynthesisAsync(job, prWideContext, plan, investigations, overrideClient, ct);
             totalInputTokens += synthesisInputTokens;
             totalOutputTokens += synthesisOutputTokens;
+            totalCachedInputTokens += synthesisCachedInputTokens;
+            totalCacheWriteTokens += synthesisCacheWriteTokens;
+            totalReasoningTokens += synthesisReasoningTokens;
             totalAiCalls += synthesisAiCalls;
 
             ReviewResult result;
@@ -142,7 +158,11 @@ public sealed partial class PrWideAgenticReviewOrchestrator(
                     totalAiCalls,
                     totalToolCalls,
                     null,
-                    ct);
+                    ct,
+                    totalCachedInputTokens,
+                    (totalInputTokens > 0 || totalOutputTokens > 0) ? CacheObservabilityStatus.Observable : CacheObservabilityStatus.Unobservable,
+                    totalCacheWriteTokens,
+                    totalReasoningTokens);
             }
 
             return result;
@@ -159,7 +179,11 @@ public sealed partial class PrWideAgenticReviewOrchestrator(
                     totalAiCalls,
                     totalToolCalls,
                     null,
-                    ct);
+                    ct,
+                    totalCachedInputTokens,
+                    (totalInputTokens > 0 || totalOutputTokens > 0) ? CacheObservabilityStatus.Observable : CacheObservabilityStatus.Unobservable,
+                    totalCacheWriteTokens,
+                    totalReasoningTokens);
             }
 
             throw;
@@ -194,6 +218,9 @@ public sealed partial class PrWideAgenticReviewOrchestrator(
         var ownsProtocolPass = false;
         var totalInputTokens = 0L;
         var totalOutputTokens = 0L;
+        var totalCachedInputTokens = 0L;
+        var totalCacheWriteTokens = 0L;
+        var totalReasoningTokens = 0L;
         var totalAiCalls = 0;
         var totalToolCalls = 0;
 
@@ -220,24 +247,36 @@ public sealed partial class PrWideAgenticReviewOrchestrator(
 
         try
         {
-            var (plan, planInputTokens, planOutputTokens, planAiCalls) = await this.CreatePlanAsync(job, pr, passContext, overrideClient, ct);
+            var (plan, planInputTokens, planOutputTokens, planAiCalls, planCachedInputTokens, planCacheWriteTokens, planReasoningTokens) =
+                await this.CreatePlanAsync(job, pr, passContext, overrideClient, ct);
             totalInputTokens += planInputTokens;
             totalOutputTokens += planOutputTokens;
+            totalCachedInputTokens += planCachedInputTokens;
+            totalCacheWriteTokens += planCacheWriteTokens;
+            totalReasoningTokens += planReasoningTokens;
             totalAiCalls += planAiCalls;
 
             plan = ApplyBudget(plan, budget);
 
-            var (investigations, investigationInputTokens, investigationOutputTokens, investigationAiCalls, investigationToolCalls) =
+            var (investigations, investigationInputTokens, investigationOutputTokens, investigationAiCalls, investigationToolCalls,
+                    investigationCachedInputTokens, investigationCacheWriteTokens, investigationReasoningTokens) =
                 await this.RunInvestigationsAsync(job, pr, passContext, plan, overrideClient, ct);
             totalInputTokens += investigationInputTokens;
             totalOutputTokens += investigationOutputTokens;
+            totalCachedInputTokens += investigationCachedInputTokens;
+            totalCacheWriteTokens += investigationCacheWriteTokens;
+            totalReasoningTokens += investigationReasoningTokens;
             totalAiCalls += investigationAiCalls;
             totalToolCalls += investigationToolCalls;
 
-            var (synthesis, synthesisInputTokens, synthesisOutputTokens, synthesisAiCalls) =
+            var (synthesis, synthesisInputTokens, synthesisOutputTokens, synthesisAiCalls, synthesisCachedInputTokens, synthesisCacheWriteTokens,
+                    synthesisReasoningTokens) =
                 await this.RecordSynthesisAsync(job, passContext, plan, investigations, overrideClient, ct);
             totalInputTokens += synthesisInputTokens;
             totalOutputTokens += synthesisOutputTokens;
+            totalCachedInputTokens += synthesisCachedInputTokens;
+            totalCacheWriteTokens += synthesisCacheWriteTokens;
+            totalReasoningTokens += synthesisReasoningTokens;
             totalAiCalls += synthesisAiCalls;
 
             var changedRanges = ReviewDiffProcessor.BuildChangedLineRangesByPath(pr.ChangedFiles);
@@ -271,7 +310,11 @@ public sealed partial class PrWideAgenticReviewOrchestrator(
                     totalAiCalls,
                     totalToolCalls,
                     null,
-                    ct);
+                    ct,
+                    totalCachedInputTokens,
+                    (totalInputTokens > 0 || totalOutputTokens > 0) ? CacheObservabilityStatus.Observable : CacheObservabilityStatus.Unobservable,
+                    totalCacheWriteTokens,
+                    totalReasoningTokens);
             }
 
             return candidates;
@@ -286,7 +329,11 @@ public sealed partial class PrWideAgenticReviewOrchestrator(
                 totalAiCalls,
                 totalToolCalls,
                 null,
-                ct);
+                ct,
+                totalCachedInputTokens,
+                (totalInputTokens > 0 || totalOutputTokens > 0) ? CacheObservabilityStatus.Observable : CacheObservabilityStatus.Unobservable,
+                totalCacheWriteTokens,
+                totalReasoningTokens);
 
             throw;
         }
@@ -346,7 +393,8 @@ public sealed partial class PrWideAgenticReviewOrchestrator(
             ct);
     }
 
-    private async Task<(PrWideReviewPlan Plan, long InputTokens, long OutputTokens, int AiCalls)> CreatePlanAsync(
+    private async Task<(PrWideReviewPlan Plan, long InputTokens, long OutputTokens, int AiCalls, long CachedInputTokens, long CacheWriteTokens, long
+        ReasoningTokens)> CreatePlanAsync(
         ReviewJob job,
         PullRequest pr,
         ReviewSystemContext baseContext,
@@ -370,12 +418,17 @@ public sealed partial class PrWideAgenticReviewOrchestrator(
                     new ChatOptions { ModelId = baseContext.ModelId }.ApplyReasoning(
                         this._options.CaptureReasoningInProtocol, baseContext.ActiveReasoningEffort), ct);
                 await this.RecordAiResponseAsync(baseContext, 1, messages, response, "pr_wide_planning", ct);
-                var inputTokens = response.Usage?.InputTokenCount ?? 0;
-                var outputTokens = response.Usage?.OutputTokenCount ?? 0;
+                var usage = AiTokenUsageExtractor.FromResponse(response);
+                var inputTokens = usage.InputTokens;
+                var outputTokens = usage.OutputTokens;
+                var cachedInputTokens = usage.CachedInputTokens;
+                var cacheWriteTokens = usage.CacheWriteTokens;
+                var reasoningTokens = usage.ReasoningTokens;
 
                 if (PrWideArtifactParser.TryParsePlan(response.Text, out var parsedPlan) && parsedPlan is not null)
                 {
-                    return (await this.RecordPlanAsync(job, baseContext, parsedPlan, ct), inputTokens, outputTokens, 1);
+                    return (await this.RecordPlanAsync(job, baseContext, parsedPlan, ct), inputTokens, outputTokens, 1, cachedInputTokens, cacheWriteTokens,
+                        reasoningTokens);
                 }
             }
             catch (OperationCanceledException) when (ct.IsCancellationRequested)
@@ -419,10 +472,11 @@ public sealed partial class PrWideAgenticReviewOrchestrator(
             tasks,
             tasks.Count == 0 ? "No risky changed areas required deeper investigation." : null);
 
-        return (await this.RecordPlanAsync(job, baseContext, plan, ct), 0, 0, 0);
+        return (await this.RecordPlanAsync(job, baseContext, plan, ct), 0, 0, 0, 0, 0, 0);
     }
 
-    private async Task<(IReadOnlyList<PrWideInvestigationResult> Results, long InputTokens, long OutputTokens, int AiCalls, int ToolCalls)>
+    private async Task<(IReadOnlyList<PrWideInvestigationResult> Results, long InputTokens, long OutputTokens, int AiCalls, int ToolCalls, long
+            CachedInputTokens, long CacheWriteTokens, long ReasoningTokens)>
         RunInvestigationsAsync(
             ReviewJob job,
             PullRequest pr,
@@ -433,12 +487,15 @@ public sealed partial class PrWideAgenticReviewOrchestrator(
     {
         if (plan.InvestigationTasks.Count == 0)
         {
-            return ([], 0, 0, 0, 0);
+            return ([], 0, 0, 0, 0, 0, 0, 0);
         }
 
         var results = new List<PrWideInvestigationResult>(plan.InvestigationTasks.Count);
         long totalInputTokens = 0;
         long totalOutputTokens = 0;
+        long totalCachedInputTokens = 0;
+        long totalCacheWriteTokens = 0;
+        long totalReasoningTokens = 0;
         var totalAiCalls = 0;
         var totalToolCalls = 0;
         foreach (var task in plan.InvestigationTasks)
@@ -463,11 +520,14 @@ public sealed partial class PrWideAgenticReviewOrchestrator(
                 },
                 ct);
 
-            var (investigation, inputTokens, outputTokens, aiCalls) =
+            var (investigation, inputTokens, outputTokens, aiCalls, cachedInputTokens, cacheWriteTokens, reasoningTokens) =
                 await this.RunSingleInvestigationAsync(pr, baseContext, plan, task, overrideClient, ct);
             results.Add(investigation);
             totalInputTokens += inputTokens;
             totalOutputTokens += outputTokens;
+            totalCachedInputTokens += cachedInputTokens;
+            totalCacheWriteTokens += cacheWriteTokens;
+            totalReasoningTokens += reasoningTokens;
             totalAiCalls += aiCalls;
             totalToolCalls += investigation.ToolUsage.Count(usage => string.Equals(
                 usage.Status, BoundedReviewContextTools.SuccessStatus, StringComparison.Ordinal));
@@ -493,10 +553,12 @@ public sealed partial class PrWideAgenticReviewOrchestrator(
                 ct);
         }
 
-        return (results, totalInputTokens, totalOutputTokens, totalAiCalls, totalToolCalls);
+        return (results, totalInputTokens, totalOutputTokens, totalAiCalls, totalToolCalls, totalCachedInputTokens, totalCacheWriteTokens,
+            totalReasoningTokens);
     }
 
-    private async Task<(PrWideInvestigationResult Result, long InputTokens, long OutputTokens, int AiCalls)> RunSingleInvestigationAsync(
+    private async Task<(PrWideInvestigationResult Result, long InputTokens, long OutputTokens, int AiCalls, long CachedInputTokens, long CacheWriteTokens, long
+        ReasoningTokens)> RunSingleInvestigationAsync(
         PullRequest pr,
         ReviewSystemContext baseContext,
         PrWideReviewPlan plan,
@@ -507,7 +569,7 @@ public sealed partial class PrWideAgenticReviewOrchestrator(
         var reviewTools = baseContext.ReviewTools;
         if (reviewTools is null)
         {
-            return (new PrWideInvestigationResult(task.Id, "degraded", [], [], [], true), 0, 0, 0);
+            return (new PrWideInvestigationResult(task.Id, "degraded", [], [], [], true), 0, 0, 0, 0, 0, 0);
         }
 
         var boundedTools = new BoundedReviewContextTools(
@@ -563,12 +625,16 @@ public sealed partial class PrWideAgenticReviewOrchestrator(
                     new ChatOptions { ModelId = baseContext.ModelId }.ApplyReasoning(
                         this._options.CaptureReasoningInProtocol, baseContext.ActiveReasoningEffort), ct);
                 await this.RecordAiResponseAsync(baseContext, 1, messages, response, $"pr_wide_investigation_{task.Id}", ct);
-                var inputTokens = response.Usage?.InputTokenCount ?? 0;
-                var outputTokens = response.Usage?.OutputTokenCount ?? 0;
+                var usage = AiTokenUsageExtractor.FromResponse(response);
+                var inputTokens = usage.InputTokens;
+                var outputTokens = usage.OutputTokens;
+                var cachedInputTokens = usage.CachedInputTokens;
+                var cacheWriteTokens = usage.CacheWriteTokens;
+                var reasoningTokens = usage.ReasoningTokens;
 
                 if (PrWideArtifactParser.TryParseInvestigationResult(response.Text, task, boundedTools.Attempts.ToList(), out var parsed) && parsed is not null)
                 {
-                    return (parsed, inputTokens, outputTokens, 1);
+                    return (parsed, inputTokens, outputTokens, 1, cachedInputTokens, cacheWriteTokens, reasoningTokens);
                 }
             }
             catch (OperationCanceledException) when (ct.IsCancellationRequested)
@@ -604,10 +670,14 @@ public sealed partial class PrWideAgenticReviewOrchestrator(
                 false),
             0,
             0,
+            0,
+            0,
+            0,
             0);
     }
 
-    private async Task<(PrWideSynthesisResult Synthesis, long InputTokens, long OutputTokens, int AiCalls)> RecordSynthesisAsync(
+    private async Task<(PrWideSynthesisResult Synthesis, long InputTokens, long OutputTokens, int AiCalls, long CachedInputTokens, long CacheWriteTokens, long
+        ReasoningTokens)> RecordSynthesisAsync(
         ReviewJob job,
         ReviewSystemContext baseContext,
         PrWideReviewPlan plan,
@@ -615,7 +685,8 @@ public sealed partial class PrWideAgenticReviewOrchestrator(
         IChatClient? overrideClient,
         CancellationToken ct)
     {
-        var (synthesis, inputTokens, outputTokens, aiCalls) = await this.SynthesizeCandidatesAsync(plan, investigations, baseContext, overrideClient, ct);
+        var (synthesis, inputTokens, outputTokens, aiCalls, cachedInputTokens, cacheWriteTokens, reasoningTokens) =
+            await this.SynthesizeCandidatesAsync(plan, investigations, baseContext, overrideClient, ct);
         var candidateCount = synthesis.CandidateFindings.Count;
 
         foreach (var candidate in synthesis.CandidateFindings)
@@ -670,7 +741,7 @@ public sealed partial class PrWideAgenticReviewOrchestrator(
             ct);
 
         LogArtifactsRecorded(this._logger, job.Id);
-        return (synthesis, inputTokens, outputTokens, aiCalls);
+        return (synthesis, inputTokens, outputTokens, aiCalls, cachedInputTokens, cacheWriteTokens, reasoningTokens);
     }
 
     private async Task RecordDelegatedCompletionAsync(
@@ -877,7 +948,8 @@ public sealed partial class PrWideAgenticReviewOrchestrator(
             ct);
     }
 
-    private async Task<(PrWideSynthesisResult Synthesis, long InputTokens, long OutputTokens, int AiCalls)> SynthesizeCandidatesAsync(
+    private async Task<(PrWideSynthesisResult Synthesis, long InputTokens, long OutputTokens, int AiCalls, long CachedInputTokens, long CacheWriteTokens, long
+        ReasoningTokens)> SynthesizeCandidatesAsync(
         PrWideReviewPlan plan,
         IReadOnlyList<PrWideInvestigationResult> investigations,
         ReviewSystemContext baseContext,
@@ -901,14 +973,18 @@ public sealed partial class PrWideAgenticReviewOrchestrator(
                     new ChatOptions { ModelId = baseContext.ModelId }.ApplyReasoning(
                         this._options.CaptureReasoningInProtocol, baseContext.ActiveReasoningEffort), ct);
                 await this.RecordAiResponseAsync(baseContext, 1, messages, response, "pr_wide_synthesis", ct);
-                var inputTokens = response.Usage?.InputTokenCount ?? 0;
-                var outputTokens = response.Usage?.OutputTokenCount ?? 0;
+                var usage = AiTokenUsageExtractor.FromResponse(response);
+                var inputTokens = usage.InputTokens;
+                var outputTokens = usage.OutputTokens;
+                var cachedInputTokens = usage.CachedInputTokens;
+                var cacheWriteTokens = usage.CacheWriteTokens;
+                var reasoningTokens = usage.ReasoningTokens;
 
                 if (PrWideArtifactParser.TryParseSynthesisResult(response.Text, out var parsed) &&
                     parsed is not null &&
                     parsed.CandidateFindings.Count > 0)
                 {
-                    return (parsed, inputTokens, outputTokens, 1);
+                    return (parsed, inputTokens, outputTokens, 1, cachedInputTokens, cacheWriteTokens, reasoningTokens);
                 }
             }
             catch (OperationCanceledException) when (ct.IsCancellationRequested)
@@ -935,6 +1011,9 @@ public sealed partial class PrWideAgenticReviewOrchestrator(
                 candidates),
             0,
             0,
+            0,
+            0,
+            0,
             0);
     }
 
@@ -958,6 +1037,7 @@ public sealed partial class PrWideAgenticReviewOrchestrator(
                                this._options.CaptureReasoningInProtocol,
                                this._options.MaxReasoningSummaryChars)
                            ?? response.Text;
+        var usage = AiTokenUsageExtractor.FromResponse(response);
 
         await context.ProtocolRecorder.RecordAiCallAsync(
             context.ActiveProtocolId.Value,
@@ -968,7 +1048,10 @@ public sealed partial class PrWideAgenticReviewOrchestrator(
             systemPrompt,
             outputSample,
             ct,
-            eventName);
+            eventName,
+            cachedInputTokens: usage.IsEstimated ? null : usage.CachedInputTokens,
+            cacheWriteTokens: usage.IsEstimated ? null : usage.CacheWriteTokens,
+            reasoningTokens: usage.IsEstimated ? null : usage.ReasoningTokens);
     }
 
     private static string? GetInputSample(IReadOnlyList<ChatMessage> messages)

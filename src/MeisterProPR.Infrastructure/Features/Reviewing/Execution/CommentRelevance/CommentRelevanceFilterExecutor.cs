@@ -182,7 +182,10 @@ internal sealed class CommentRelevanceFilterExecutor(
             JsonSerializer.Serialize(new { implementationId = result.ImplementationId, result = "completed" }),
             null,
             ct,
-            ReviewProtocolEventNames.CommentRelevanceEvaluatorAiCall);
+            ReviewProtocolEventNames.CommentRelevanceEvaluatorAiCall,
+            cachedInputTokens: result.AiTokenUsage.CachedInputTokens,
+            cacheWriteTokens: result.AiTokenUsage.CacheWriteTokens,
+            reasoningTokens: result.AiTokenUsage.ReasoningTokens);
 
         await protocolRecorder.AddTokensAsync(
             protocolId.Value,
@@ -190,6 +193,9 @@ internal sealed class CommentRelevanceFilterExecutor(
             result.AiTokenUsage.OutputTokens,
             result.AiTokenUsage.ModelCategory,
             result.AiTokenUsage.ModelId,
-            ct);
+            ct,
+            result.AiTokenUsage.CachedInputTokens,
+            result.AiTokenUsage.CacheWriteTokens,
+            result.AiTokenUsage.ReasoningTokens);
     }
 }

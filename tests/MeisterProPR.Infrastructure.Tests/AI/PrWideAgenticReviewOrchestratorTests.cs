@@ -268,7 +268,11 @@ public sealed class PrWideAgenticReviewOrchestratorTests
             0,
             2,
             null,
-            Arg.Any<CancellationToken>());
+            Arg.Any<CancellationToken>(),
+            Arg.Any<long?>(),
+            Arg.Any<CacheObservabilityStatus>(),
+            Arg.Any<long?>(),
+            Arg.Any<long?>());
 
         await protocolRecorder.Received().RecordPrWideStageEventAsync(
             prWideProtocolId,
@@ -512,7 +516,10 @@ public sealed class PrWideAgenticReviewOrchestratorTests
             Arg.Any<string?>(),
             Arg.Any<CancellationToken>(),
             Arg.Any<string?>(),
-            Arg.Any<string?>());
+            Arg.Any<string?>(),
+            cachedInputTokens: Arg.Any<long?>(),
+            cacheWriteTokens: Arg.Any<long?>(),
+            reasoningTokens: Arg.Any<long?>());
 
         await protocolRecorder.Received(1).SetCompletedAsync(
             prWideProtocolId,
@@ -522,7 +529,11 @@ public sealed class PrWideAgenticReviewOrchestratorTests
             3,
             1,
             null,
-            Arg.Any<CancellationToken>());
+            Arg.Any<CancellationToken>(),
+            Arg.Any<long?>(),
+            Arg.Any<CacheObservabilityStatus>(),
+            Arg.Any<long?>(),
+            Arg.Any<long?>());
     }
 
     [Fact]
@@ -645,7 +656,11 @@ public sealed class PrWideAgenticReviewOrchestratorTests
             Arg.Any<int>(),
             Arg.Any<int>(),
             Arg.Is<int?>(finalConfidence => finalConfidence == null),
-            Arg.Any<CancellationToken>());
+            Arg.Any<CancellationToken>(),
+            Arg.Any<long?>(),
+            Arg.Any<CacheObservabilityStatus>(),
+            Arg.Any<long?>(),
+            Arg.Any<long?>());
     }
 
     private static ReviewJob CreateJob()

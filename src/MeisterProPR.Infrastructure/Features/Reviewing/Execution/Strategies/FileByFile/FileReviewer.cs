@@ -739,6 +739,7 @@ internal sealed partial class FileReviewer(
             proRvPrefilter,
             logger,
             ProRvLensStageId,
+            ProRVFocusedReviewGuidanceResolver.ProRVRuntimeSources.LensEntryModel,
             ct);
 
         // Only cache a completed ranking; a skip/failure returns empty guidance but must not short-circuit a
@@ -1287,9 +1288,11 @@ internal sealed partial class FileReviewer(
                 m.FinalConfidence,
                 ct,
                 m.TotalCachedInputTokens,
-                m.TotalCachedInputTokens > 0
+                m.ObservedCacheUsageDetails
                     ? CacheObservabilityStatus.Observable
-                    : CacheObservabilityStatus.Unobservable);
+                    : CacheObservabilityStatus.Unobservable,
+                m.TotalCacheWriteTokens,
+                m.TotalReasoningTokens);
         }
     }
 
@@ -1321,6 +1324,7 @@ internal sealed partial class FileReviewer(
             "ai_call_failure",
             ex.Message);
 
+        var failedCached = m?.TotalCachedInputTokens ?? 0;
         await protocolRecorder.SetCompletedAsync(
             protocolId.Value,
             "Failed",
@@ -1329,7 +1333,11 @@ internal sealed partial class FileReviewer(
             m?.Iterations ?? 0,
             m?.ToolCallCount ?? 0,
             null,
-            ct);
+            ct,
+            failedCached,
+            m?.ObservedCacheUsageDetails == true ? CacheObservabilityStatus.Observable : CacheObservabilityStatus.Unobservable,
+            m?.TotalCacheWriteTokens ?? 0,
+            m?.TotalReasoningTokens ?? 0);
     }
 
     private async Task<Guid?> BeginAugmentationProtocolAsync(
@@ -1386,7 +1394,9 @@ internal sealed partial class FileReviewer(
             m?.FinalConfidence,
             ct,
             cached,
-            cached > 0 ? CacheObservabilityStatus.Observable : CacheObservabilityStatus.Unobservable);
+            m?.ObservedCacheUsageDetails == true ? CacheObservabilityStatus.Observable : CacheObservabilityStatus.Unobservable,
+            m?.TotalCacheWriteTokens ?? 0,
+            m?.TotalReasoningTokens ?? 0);
     }
 
     private async Task<Guid?> BeginNewProtocolAsync(

@@ -160,6 +160,18 @@ internal sealed class ReviewJobEntityTypeConfiguration : IEntityTypeConfiguratio
             .HasColumnName("total_output_tokens_aggregated")
             .IsRequired(false);
 
+        builder.Property(j => j.TotalCachedInputTokensAggregated)
+            .HasColumnName("total_cached_input_tokens_aggregated")
+            .IsRequired(false);
+
+        builder.Property(j => j.TotalCacheWriteTokensAggregated)
+            .HasColumnName("total_cache_write_tokens_aggregated")
+            .IsRequired(false);
+
+        builder.Property(j => j.TotalReasoningTokensAggregated)
+            .HasColumnName("total_reasoning_tokens_aggregated")
+            .IsRequired(false);
+
         builder.Property(j => j.InScopeChangedFileCount)
             .HasColumnName("in_scope_changed_file_count")
             .IsRequired(false);

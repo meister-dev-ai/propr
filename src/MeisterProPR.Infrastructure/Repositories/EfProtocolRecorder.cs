@@ -75,7 +75,9 @@ public sealed class EfProtocolRecorder(
         PrefixEligibilityStatus prefixEligibility = PrefixEligibilityStatus.NotApplicable,
         string? finalizationAttemptKind = null,
         string? finalizationReason = null,
-        string? finalizationOutcome = null)
+        string? finalizationOutcome = null,
+        long? cacheWriteTokens = null,
+        long? reasoningTokens = null)
     {
         try
         {
@@ -90,6 +92,8 @@ public sealed class EfProtocolRecorder(
                 InputTokens = inputTokens,
                 OutputTokens = outputTokens,
                 CachedInputTokens = cachedInputTokens,
+                CacheWriteTokens = cacheWriteTokens,
+                ReasoningTokens = reasoningTokens,
                 CacheStatus = cacheStatus,
                 CacheMissCategory = Sanitize(cacheMissCategory),
                 PrefixEligibility = prefixEligibility,
@@ -227,7 +231,9 @@ public sealed class EfProtocolRecorder(
         int? finalConfidence,
         CancellationToken ct = default,
         long? totalCachedInputTokens = null,
-        CacheObservabilityStatus cacheObservability = CacheObservabilityStatus.Unknown)
+        CacheObservabilityStatus cacheObservability = CacheObservabilityStatus.Unknown,
+        long? totalCacheWriteTokens = null,
+        long? totalReasoningTokens = null)
     {
         try
         {
@@ -245,6 +251,12 @@ public sealed class EfProtocolRecorder(
             protocol.TotalCachedInputTokens = totalCachedInputTokens.HasValue
                 ? (protocol.TotalCachedInputTokens ?? 0) + totalCachedInputTokens.Value
                 : protocol.TotalCachedInputTokens;
+            protocol.TotalCacheWriteTokens = totalCacheWriteTokens.HasValue
+                ? (protocol.TotalCacheWriteTokens ?? 0) + totalCacheWriteTokens.Value
+                : protocol.TotalCacheWriteTokens;
+            protocol.TotalReasoningTokens = totalReasoningTokens.HasValue
+                ? (protocol.TotalReasoningTokens ?? 0) + totalReasoningTokens.Value
+                : protocol.TotalReasoningTokens;
             protocol.CacheObservability = cacheObservability;
             protocol.IterationCount = iterationCount;
             protocol.ToolCallCount = toolCallCount;
@@ -257,12 +269,26 @@ public sealed class EfProtocolRecorder(
                 // Always accumulate into breakdown, using Default category if none specified
                 var category = protocol.AiConnectionCategory ?? AiConnectionModelCategory.Default;
                 var modelId = protocol.ModelId ?? "(default)";
-                job.AccumulateTierTokens(category, modelId, totalInputTokens, totalOutputTokens);
+                var cachedInputTokens = totalCachedInputTokens ?? 0;
+                var cacheWriteTokens = totalCacheWriteTokens ?? 0;
+                var reasoningTokens = totalReasoningTokens ?? 0;
+                job.AccumulateTierTokens(
+                    category,
+                    modelId,
+                    totalInputTokens,
+                    totalOutputTokens,
+                    cachedInputTokens,
+                    cacheWriteTokens,
+                    reasoningTokens);
 
                 await db.SaveChangesAsync(ct);
 
                 // Upsert daily token usage aggregate for the client owning this job.
-                if (totalInputTokens > 0 || totalOutputTokens > 0)
+                if (totalInputTokens > 0
+                    || totalOutputTokens > 0
+                    || cachedInputTokens > 0
+                    || cacheWriteTokens > 0
+                    || reasoningTokens > 0)
                 {
                     var usageRepo = new ClientTokenUsageRepository(db);
                     await usageRepo.UpsertAsync(
@@ -271,7 +297,10 @@ public sealed class EfProtocolRecorder(
                         DateOnly.FromDateTime(DateTime.UtcNow),
                         totalInputTokens,
                         totalOutputTokens,
-                        ct);
+                        ct,
+                        cachedInputTokens,
+                        cacheWriteTokens,
+                        reasoningTokens);
                 }
             }
         }
@@ -288,7 +317,10 @@ public sealed class EfProtocolRecorder(
         long outputTokens,
         AiConnectionModelCategory? connectionCategory = null,
         string? modelId = null,
-        CancellationToken ct = default)
+        CancellationToken ct = default,
+        long cachedInputTokens = 0,
+        long cacheWriteTokens = 0,
+        long reasoningTokens = 0)
     {
         try
         {
@@ -301,6 +333,21 @@ public sealed class EfProtocolRecorder(
 
             protocol.TotalInputTokens = (protocol.TotalInputTokens ?? 0) + inputTokens;
             protocol.TotalOutputTokens = (protocol.TotalOutputTokens ?? 0) + outputTokens;
+            if (cachedInputTokens > 0)
+            {
+                protocol.TotalCachedInputTokens = (protocol.TotalCachedInputTokens ?? 0) + cachedInputTokens;
+            }
+
+            if (cacheWriteTokens > 0)
+            {
+                protocol.TotalCacheWriteTokens = (protocol.TotalCacheWriteTokens ?? 0) + cacheWriteTokens;
+            }
+
+            if (reasoningTokens > 0)
+            {
+                protocol.TotalReasoningTokens = (protocol.TotalReasoningTokens ?? 0) + reasoningTokens;
+            }
+
             await db.SaveChangesAsync(ct);
 
             var job = await db.ReviewJobs.FindAsync([protocol.JobId], ct);
@@ -309,7 +356,14 @@ public sealed class EfProtocolRecorder(
                 // Always accumulate into breakdown, using provided category or Default if none
                 var category = connectionCategory ?? AiConnectionModelCategory.Default;
                 var effectiveModelId = modelId ?? "(default)";
-                job.AccumulateTierTokens(category, effectiveModelId, inputTokens, outputTokens);
+                job.AccumulateTierTokens(
+                    category,
+                    effectiveModelId,
+                    inputTokens,
+                    outputTokens,
+                    cachedInputTokens,
+                    cacheWriteTokens,
+                    reasoningTokens);
 
                 await db.SaveChangesAsync(ct);
             }

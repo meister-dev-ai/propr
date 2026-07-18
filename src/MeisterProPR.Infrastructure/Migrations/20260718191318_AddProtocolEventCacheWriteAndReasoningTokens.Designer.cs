@@ -3,6 +3,7 @@ using System;
 using MeisterProPR.Infrastructure.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 using Pgvector;
@@ -12,9 +13,11 @@ using Pgvector;
 namespace MeisterProPR.Infrastructure.Migrations
 {
     [DbContext(typeof(MeisterProPRDbContext))]
-    partial class MeisterProPRDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260718191318_AddProtocolEventCacheWriteAndReasoningTokens")]
+    partial class AddProtocolEventCacheWriteAndReasoningTokens
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -1346,10 +1349,6 @@ namespace MeisterProPR.Infrastructure.Migrations
                         .HasColumnType("integer")
                         .HasColumnName("tool_call_count");
 
-                    b.Property<long?>("TotalCacheWriteTokens")
-                        .HasColumnType("bigint")
-                        .HasColumnName("total_cache_write_tokens");
-
                     b.Property<long?>("TotalCachedInputTokens")
                         .HasColumnType("bigint")
                         .HasColumnName("total_cached_input_tokens");
@@ -1361,10 +1360,6 @@ namespace MeisterProPR.Infrastructure.Migrations
                     b.Property<long?>("TotalOutputTokens")
                         .HasColumnType("bigint")
                         .HasColumnName("total_output_tokens");
-
-                    b.Property<long?>("TotalReasoningTokens")
-                        .HasColumnType("bigint")
-                        .HasColumnName("total_reasoning_tokens");
 
                     b.HasKey("Id");
 

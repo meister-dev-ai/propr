@@ -116,7 +116,10 @@ public sealed class PrLevelReviewVerificationExecutorTests
             Arg.Any<string?>(),
             Arg.Is<string?>(output => output != null && output.Contains("\"verdict\":\"supported\"", StringComparison.Ordinal)),
             Arg.Any<CancellationToken>(),
-            "ai_call_pr_verification");
+            "ai_call_pr_verification",
+            cachedInputTokens: Arg.Any<long?>(),
+            cacheWriteTokens: Arg.Any<long?>(),
+            reasoningTokens: Arg.Any<long?>());
     }
 
     [Fact]

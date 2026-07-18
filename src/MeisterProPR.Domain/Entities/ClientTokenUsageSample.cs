@@ -21,9 +21,18 @@ public sealed class ClientTokenUsageSample
     /// <summary>The UTC date on which tokens were consumed.</summary>
     public DateOnly Date { get; set; }
 
-    /// <summary>Total input/prompt tokens consumed on this date by this model for this client.</summary>
+    /// <summary>Total input/prompt tokens consumed on this date by this model for this client (includes the cached portion).</summary>
     public long InputTokens { get; set; }
 
-    /// <summary>Total output/completion tokens consumed on this date by this model for this client.</summary>
+    /// <summary>Total output/completion tokens consumed on this date by this model for this client (includes the reasoning portion).</summary>
     public long OutputTokens { get; set; }
+
+    /// <summary>Total cache-read input tokens consumed on this date by this model for this client.</summary>
+    public long CachedInputTokens { get; set; }
+
+    /// <summary>Total cache-write tokens consumed on this date by this model for this client.</summary>
+    public long CacheWriteTokens { get; set; }
+
+    /// <summary>Total reasoning tokens consumed on this date by this model for this client.</summary>
+    public long ReasoningTokens { get; set; }
 }

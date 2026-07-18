@@ -3,6 +3,7 @@
 
 using System.Text;
 using System.Text.Json;
+using MeisterProPR.Application.AI;
 using MeisterProPR.Application.Interfaces;
 using MeisterProPR.Domain.ValueObjects;
 using Microsoft.Extensions.AI;
@@ -78,11 +79,8 @@ public sealed class AgentAiCommentResolutionCore : IAiCommentResolutionCore
             messages,
             new ChatOptions { ModelId = modelId },
             cancellationToken);
-        return ParseResult(
-            response.Text ?? "",
-            response.Usage?.InputTokenCount,
-            response.Usage?.OutputTokenCount,
-            true);
+        var usage = AiTokenUsageExtractor.FromResponse(response);
+        return ParseResult(response.Text ?? "", usage, true);
     }
 
     /// <inheritdoc />
@@ -103,7 +101,8 @@ public sealed class AgentAiCommentResolutionCore : IAiCommentResolutionCore
             messages,
             new ChatOptions { ModelId = modelId },
             cancellationToken);
-        return ParseResult(response.Text ?? "", response.Usage?.InputTokenCount, response.Usage?.OutputTokenCount);
+        var usage = AiTokenUsageExtractor.FromResponse(response);
+        return ParseResult(response.Text ?? "", usage);
     }
 
     private static string BuildCodeChangeUserMessage(PrCommentThread thread, PullRequest pr)
@@ -189,29 +188,34 @@ public sealed class AgentAiCommentResolutionCore : IAiCommentResolutionCore
 
     private static ThreadResolutionResult ParseResult(
         string json,
-        long? inputTokens,
-        long? outputTokens,
+        AiTokenUsage usage,
         bool requireReplyWhenResolved = false)
     {
+        long? input = usage.IsEstimated ? null : usage.InputTokens;
+        long? output = usage.IsEstimated ? null : usage.OutputTokens;
+        long? cached = usage.IsEstimated ? null : usage.CachedInputTokens;
+        long? cacheWrite = usage.IsEstimated ? null : usage.CacheWriteTokens;
+        long? reasoning = usage.IsEstimated ? null : usage.ReasoningTokens;
+
         try
         {
             var dto = JsonSerializer.Deserialize<ResolutionDto>(json, JsonOptions);
             if (dto is null)
             {
-                return new ThreadResolutionResult(false, null, inputTokens, outputTokens);
+                return new ThreadResolutionResult(false, null, input, output, cached, cacheWrite, reasoning);
             }
 
             var normalizedReplyText = NormalizeReplyText(dto.ReplyText);
             if (dto.Resolved && requireReplyWhenResolved && normalizedReplyText is null)
             {
-                return new ThreadResolutionResult(false, null, inputTokens, outputTokens);
+                return new ThreadResolutionResult(false, null, input, output, cached, cacheWrite, reasoning);
             }
 
-            return new ThreadResolutionResult(dto.Resolved, normalizedReplyText, inputTokens, outputTokens);
+            return new ThreadResolutionResult(dto.Resolved, normalizedReplyText, input, output, cached, cacheWrite, reasoning);
         }
         catch (JsonException)
         {
-            return new ThreadResolutionResult(false, null, inputTokens, outputTokens);
+            return new ThreadResolutionResult(false, null, input, output, cached, cacheWrite, reasoning);
         }
     }
 

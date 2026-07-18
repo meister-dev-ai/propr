@@ -218,6 +218,28 @@ public class ReviewJobTests
     }
 
     [Fact]
+    public void AccumulateTierTokens_AccumulatesCacheAndReasoningTokens()
+    {
+        var job = CreateJob();
+
+        job.AccumulateTierTokens(AiConnectionModelCategory.HighEffort, "gpt-4o", 1000, 400, cachedInputTokens: 250, reasoningTokens: 120);
+        job.AccumulateTierTokens(AiConnectionModelCategory.HighEffort, "gpt-4o", 500, 200, cachedInputTokens: 100, reasoningTokens: 60);
+
+        Assert.Single(job.TokenBreakdown);
+        var entry = job.TokenBreakdown[0];
+        Assert.Equal(1500, entry.TotalInputTokens);
+        Assert.Equal(600, entry.TotalOutputTokens);
+        Assert.Equal(350, entry.TotalCachedInputTokens);
+        Assert.Equal(0, entry.TotalCacheWriteTokens);
+        Assert.Equal(180, entry.TotalReasoningTokens);
+
+        // Flat aggregates mirror the breakdown sums.
+        Assert.Equal(350, job.TotalCachedInputTokensAggregated);
+        Assert.Equal(0, job.TotalCacheWriteTokensAggregated);
+        Assert.Equal(180, job.TotalReasoningTokensAggregated);
+    }
+
+    [Fact]
     public void AccumulateTierTokens_TracksMultipleTiers()
     {
         var job = CreateJob();

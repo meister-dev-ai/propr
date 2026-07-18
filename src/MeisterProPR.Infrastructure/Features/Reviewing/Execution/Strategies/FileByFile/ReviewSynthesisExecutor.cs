@@ -2,6 +2,7 @@
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
 using System.Text.Json;
+using MeisterProPR.Application.AI;
 using MeisterProPR.Application.DTOs;
 using MeisterProPR.Application.Features.Reviewing.Execution.Models;
 using MeisterProPR.Application.Features.Reviewing.Execution.Ports;
@@ -357,8 +358,14 @@ internal sealed class ReviewSynthesisExecutor(
                 ct);
 
             var responseText = response.Text ?? string.Empty;
-            var totalInputTokens = response.Usage?.InputTokenCount ?? 0;
-            var totalOutputTokens = response.Usage?.OutputTokenCount ?? 0;
+            var usage = AiTokenUsageExtractor.FromResponse(response);
+            var totalInputTokens = usage.InputTokens;
+            var totalOutputTokens = usage.OutputTokens;
+            var totalCachedInputTokens = usage.CachedInputTokens;
+            var totalCacheWriteTokens = usage.CacheWriteTokens;
+            var totalReasoningTokens = usage.ReasoningTokens;
+            var aiCallCount = 1;
+            var observedCacheUsage = !usage.IsEstimated;
 
             if (SynthesisResponseParser.TryParse(responseText, out var parsedSummary, out var parsedCrossCuttingFindings))
             {
@@ -380,8 +387,14 @@ internal sealed class ReviewSynthesisExecutor(
                     new ChatOptions { ModelId = baseContext.ModelId, Temperature = baseContext.Temperature },
                     ct);
 
-                totalInputTokens += repairResponse.Usage?.InputTokenCount ?? 0;
-                totalOutputTokens += repairResponse.Usage?.OutputTokenCount ?? 0;
+                var repairUsage = AiTokenUsageExtractor.FromResponse(repairResponse);
+                totalInputTokens += repairUsage.InputTokens;
+                totalOutputTokens += repairUsage.OutputTokens;
+                totalCachedInputTokens += repairUsage.CachedInputTokens;
+                totalCacheWriteTokens += repairUsage.CacheWriteTokens;
+                totalReasoningTokens += repairUsage.ReasoningTokens;
+                aiCallCount++;
+                observedCacheUsage |= !repairUsage.IsEstimated;
 
                 var repairedText = repairResponse.Text ?? string.Empty;
                 if (SynthesisResponseParser.TryParse(repairedText, out parsedSummary, out parsedCrossCuttingFindings))
@@ -425,10 +438,14 @@ internal sealed class ReviewSynthesisExecutor(
                     "Completed",
                     totalInputTokens,
                     totalOutputTokens,
-                    1,
+                    aiCallCount,
                     0,
                     null,
-                    ct);
+                    ct,
+                    totalCachedInputTokens,
+                    observedCacheUsage ? CacheObservabilityStatus.Observable : CacheObservabilityStatus.Unobservable,
+                    totalCacheWriteTokens,
+                    totalReasoningTokens);
             }
 
             logger.LogInformation("Completed synthesis for job {JobId}", job.Id);

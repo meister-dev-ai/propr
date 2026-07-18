@@ -24,9 +24,9 @@
             </div>
           </div>
 
-          <button class="btn-slide" :disabled="loadingReview || loadingProCursor" @click="handleRefresh">
+          <button class="btn-slide" :disabled="loadingReview || loadingProCursor || exportingProCursor" @click="handleRefresh">
             <div class="sign"><i class="fi fi-rr-refresh"></i></div>
-            <span class="text">{{ loadingReview || loadingProCursor ? 'Refreshing' : 'Refresh' }}</span>
+            <span class="text">{{ loadingReview || loadingProCursor ? 'Refreshing' : exportingProCursor ? 'Exporting' : 'Refresh' }}</span>
           </button>
         </div>
       </div>
@@ -57,6 +57,18 @@
             <span class="summary-label">Output Tokens</span>
             <span class="summary-value">{{ formatNumber(totalOutputTokens) }}</span>
             <i class="fi fi-rr-arrow-up-from-bracket summary-icon"></i>
+          </div>
+
+          <div class="summary-card usage-cached">
+            <span class="summary-label">Cached Input Tokens</span>
+            <span class="summary-value">{{ formatNumber(totalCachedInputTokens) }}</span>
+            <i class="fi fi-rr-database summary-icon"></i>
+          </div>
+
+          <div class="summary-card usage-reasoning">
+            <span class="summary-label">Reasoning Tokens</span>
+            <span class="summary-value">{{ formatNumber(totalReasoningTokens) }}</span>
+            <i class="fi fi-rr-brain summary-icon"></i>
           </div>
         </div>
 
@@ -263,6 +275,8 @@ const {
   periodPresets,
   totalInputTokens,
   totalOutputTokens,
+  totalCachedInputTokens,
+  totalReasoningTokens,
   hasReviewSamples,
   proCursorTotalTokens,
   proCursorEstimatedCost,

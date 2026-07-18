@@ -74,6 +74,9 @@ public sealed class ClientTokenUsageControllerTests(ClientTokenUsageControllerTe
                     Date = today,
                     InputTokens = 1000,
                     OutputTokens = 500,
+                    CachedInputTokens = 300,
+                    CacheWriteTokens = 0,
+                    ReasoningTokens = 120,
                 },
                 new ClientTokenUsageSample
                 {
@@ -83,6 +86,9 @@ public sealed class ClientTokenUsageControllerTests(ClientTokenUsageControllerTe
                     Date = yesterday,
                     InputTokens = 200,
                     OutputTokens = 100,
+                    CachedInputTokens = 50,
+                    CacheWriteTokens = 0,
+                    ReasoningTokens = 20,
                 });
             await db.SaveChangesAsync();
         }
@@ -103,17 +109,23 @@ public sealed class ClientTokenUsageControllerTests(ClientTokenUsageControllerTe
         // Verify totals
         Assert.Equal(1200, body.GetProperty("totalInputTokens").GetInt64());
         Assert.Equal(600, body.GetProperty("totalOutputTokens").GetInt64());
+        Assert.Equal(350, body.GetProperty("totalCachedInputTokens").GetInt64());
+        Assert.Equal(0, body.GetProperty("totalCacheWriteTokens").GetInt64());
+        Assert.Equal(140, body.GetProperty("totalReasoningTokens").GetInt64());
 
         // Verify samples shape
         var samples = body.GetProperty("samples");
         Assert.Equal(2, samples.GetArrayLength());
 
-        // Verify at least one sample has the expected shape (modelId, date, inputTokens, outputTokens)
+        // Verify at least one sample has the expected shape (modelId, date, and the token counts)
         var firstSample = samples[0];
         Assert.True(firstSample.TryGetProperty("modelId", out _));
         Assert.True(firstSample.TryGetProperty("date", out _));
         Assert.True(firstSample.TryGetProperty("inputTokens", out _));
         Assert.True(firstSample.TryGetProperty("outputTokens", out _));
+        Assert.True(firstSample.TryGetProperty("cachedInputTokens", out _));
+        Assert.True(firstSample.TryGetProperty("cacheWriteTokens", out _));
+        Assert.True(firstSample.TryGetProperty("reasoningTokens", out _));
     }
 
     [Fact]

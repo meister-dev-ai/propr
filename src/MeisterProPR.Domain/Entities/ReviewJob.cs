@@ -247,6 +247,15 @@ public sealed class ReviewJob
     /// <summary>Running aggregate of output tokens across all protocol passes.</summary>
     public long? TotalOutputTokensAggregated { get; private set; }
 
+    /// <summary>Running aggregate of cache-read input tokens across all protocol passes.</summary>
+    public long? TotalCachedInputTokensAggregated { get; private set; }
+
+    /// <summary>Running aggregate of cache-write tokens across all protocol passes.</summary>
+    public long? TotalCacheWriteTokensAggregated { get; private set; }
+
+    /// <summary>Running aggregate of reasoning tokens across all protocol passes.</summary>
+    public long? TotalReasoningTokensAggregated { get; private set; }
+
     /// <summary>
     ///     The number of in-scope changed files after exclusions for this iteration, fixed once at dispatch
     ///     planning. Null until dispatch planning runs. Denominator of the "files reviewed" progress metric.
@@ -293,10 +302,18 @@ public sealed class ReviewJob
     }
 
     /// <summary>Increments the token aggregates. Called after each protocol pass completes.</summary>
-    public void AccumulateTokens(long inputTokens, long outputTokens)
+    public void AccumulateTokens(
+        long inputTokens,
+        long outputTokens,
+        long cachedInputTokens = 0,
+        long cacheWriteTokens = 0,
+        long reasoningTokens = 0)
     {
         this.TotalInputTokensAggregated = (this.TotalInputTokensAggregated ?? 0) + inputTokens;
         this.TotalOutputTokensAggregated = (this.TotalOutputTokensAggregated ?? 0) + outputTokens;
+        this.TotalCachedInputTokensAggregated = (this.TotalCachedInputTokensAggregated ?? 0) + cachedInputTokens;
+        this.TotalCacheWriteTokensAggregated = (this.TotalCacheWriteTokensAggregated ?? 0) + cacheWriteTokens;
+        this.TotalReasoningTokensAggregated = (this.TotalReasoningTokensAggregated ?? 0) + reasoningTokens;
     }
 
     /// <summary>
@@ -308,7 +325,10 @@ public sealed class ReviewJob
         AiConnectionModelCategory category,
         string modelId,
         long inputTokens,
-        long outputTokens)
+        long outputTokens,
+        long cachedInputTokens = 0,
+        long cacheWriteTokens = 0,
+        long reasoningTokens = 0)
     {
         var existing = this.TokenBreakdown.Find(e =>
             e.ConnectionCategory == category &&
@@ -322,14 +342,25 @@ public sealed class ReviewJob
                 {
                     TotalInputTokens = existing.TotalInputTokens + inputTokens,
                     TotalOutputTokens = existing.TotalOutputTokens + outputTokens,
+                    TotalCachedInputTokens = existing.TotalCachedInputTokens + cachedInputTokens,
+                    TotalCacheWriteTokens = existing.TotalCacheWriteTokens + cacheWriteTokens,
+                    TotalReasoningTokens = existing.TotalReasoningTokens + reasoningTokens,
                 });
         }
         else
         {
-            this.TokenBreakdown.Add(new TokenBreakdownEntry(category, modelId, inputTokens, outputTokens));
+            this.TokenBreakdown.Add(
+                new TokenBreakdownEntry(
+                    category,
+                    modelId,
+                    inputTokens,
+                    outputTokens,
+                    cachedInputTokens,
+                    cacheWriteTokens,
+                    reasoningTokens));
         }
 
-        this.AccumulateTokens(inputTokens, outputTokens);
+        this.AccumulateTokens(inputTokens, outputTokens, cachedInputTokens, cacheWriteTokens, reasoningTokens);
     }
 
     /// <summary>Records the AI connection and model used at job-start time.</summary>

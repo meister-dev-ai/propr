@@ -20,7 +20,10 @@ public interface IClientTokenUsageRepository
         DateOnly date,
         long inputTokens,
         long outputTokens,
-        CancellationToken ct);
+        CancellationToken ct,
+        long cachedInputTokens = 0,
+        long cacheWriteTokens = 0,
+        long reasoningTokens = 0);
 
     /// <summary>
     ///     Returns all samples for <paramref name="clientId" /> whose date falls within the

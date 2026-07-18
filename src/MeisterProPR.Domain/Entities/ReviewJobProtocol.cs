@@ -60,6 +60,12 @@ public sealed class ReviewJobProtocol
     /// </summary>
     public long? TotalCachedInputTokens { get; set; }
 
+    /// <summary>Sum of cache-write tokens across AI calls in this protocol pass. <see langword="null" /> when never observed.</summary>
+    public long? TotalCacheWriteTokens { get; set; }
+
+    /// <summary>Sum of reasoning tokens across AI calls in this protocol pass. <see langword="null" /> when never observed.</summary>
+    public long? TotalReasoningTokens { get; set; }
+
     /// <summary>Cache observability roll-up for this protocol pass.</summary>
     public CacheObservabilityStatus CacheObservability { get; set; } = CacheObservabilityStatus.Unknown;
 

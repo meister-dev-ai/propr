@@ -4,6 +4,7 @@
 using System.Collections.Concurrent;
 using System.Text;
 using System.Text.Json;
+using MeisterProPR.Application.AI;
 using MeisterProPR.Application.DTOs;
 using MeisterProPR.Application.Interfaces;
 using MeisterProPR.Application.Options;
@@ -705,6 +706,7 @@ public sealed partial class ThreadMemoryService(
             // Record the reconsideration AI call in the protocol for full token traceability.
             if (protocolId.HasValue)
             {
+                var usage = AiTokenUsageExtractor.FromResponse(response);
                 var inputTokens = response.Usage?.InputTokenCount;
                 var outputTokens = response.Usage?.OutputTokenCount;
                 await protocolRecorder.RecordAiCallAsync(
@@ -716,14 +718,20 @@ public sealed partial class ThreadMemoryService(
                     systemMsg,
                     text,
                     ct,
-                    "ai_call_memory_reconsideration");
+                    "ai_call_memory_reconsideration",
+                    cachedInputTokens: usage.IsEstimated ? null : usage.CachedInputTokens,
+                    cacheWriteTokens: usage.IsEstimated ? null : usage.CacheWriteTokens,
+                    reasoningTokens: usage.IsEstimated ? null : usage.ReasoningTokens);
                 await protocolRecorder.AddTokensAsync(
                     protocolId.Value,
-                    inputTokens ?? 0,
-                    outputTokens ?? 0,
+                    usage.InputTokens,
+                    usage.OutputTokens,
                     AiConnectionModelCategory.MemoryReconsideration,
                     effectiveModelId,
-                    ct);
+                    ct,
+                    usage.CachedInputTokens,
+                    usage.CacheWriteTokens,
+                    usage.ReasoningTokens);
             }
 
             // Parse the AI response using the same mechanism as the main review loop.

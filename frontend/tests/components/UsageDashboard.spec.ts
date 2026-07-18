@@ -55,6 +55,9 @@ describe('UsageDashboard', () => {
       to: '2026-03-30',
       totalInputTokens: 900,
       totalOutputTokens: 150,
+      totalCachedInputTokens: 300,
+      totalCacheWriteTokens: 0,
+      totalReasoningTokens: 60,
       samples: [
         {
           connectionCategory: 0,
@@ -62,6 +65,9 @@ describe('UsageDashboard', () => {
           date: '2026-03-01',
           inputTokens: 900,
           outputTokens: 150,
+          cachedInputTokens: 300,
+          cacheWriteTokens: 0,
+          reasoningTokens: 60,
         },
       ],
     })
@@ -162,6 +168,29 @@ describe('UsageDashboard', () => {
     expect(wrapper.text()).toContain('$1.10')
     expect(wrapper.text()).toContain('19 events used estimated token counts')
     expect(wrapper.text()).toContain('Platform Wiki')
+  })
+
+  it('renders reviewer input, output, cached, and reasoning token totals', async () => {
+    const { default: UsageDashboard } = await import('@/components/UsageDashboard.vue')
+    const wrapper = mount(UsageDashboard, {
+      props: { clientId: 'client-1' },
+      global: {
+        stubs: {
+          ProgressOrb: { template: '<div class="orb-stub" />' },
+        },
+      },
+    })
+
+    await flushPromises()
+
+    const text = wrapper.text()
+    expect(text).toContain('Input Tokens')
+    expect(text).toContain('Output Tokens')
+    expect(text).toContain('Cached Input Tokens')
+    expect(text).toContain('Reasoning Tokens')
+    expect(text).toContain('900')
+    expect(text).toContain('300')
+    expect(text).toContain('60')
   })
 
   it('exports the selected ProCursor range as CSV', async () => {

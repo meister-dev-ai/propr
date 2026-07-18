@@ -29,6 +29,7 @@ internal static class ProRVFocusedReviewGuidanceResolver
         IProRVPrefilter? proRvPrefilter,
         ILogger logger,
         string stageId,
+        string runtimeSource,
         CancellationToken ct)
     {
         var recording = new ProtocolRecordingHandle(protocolId, protocolRecorder);
@@ -77,7 +78,7 @@ internal static class ProRVFocusedReviewGuidanceResolver
                 recording,
                 file.Path,
                 stageId,
-                ProRVRuntimeSources.LensEntryModel,
+                runtimeSource,
                 modelId,
                 result,
                 ct);
@@ -104,7 +105,7 @@ internal static class ProRVFocusedReviewGuidanceResolver
                 new ProRVStageLocation(file.Path, stageId),
                 new
                 {
-                    runtimeSource = ProRVRuntimeSources.LensEntryModel,
+                    runtimeSource,
                     modelId,
                     proRvStatus = result.Status.ToString(),
                     guidanceCount = guidance.Count,
@@ -118,7 +119,7 @@ internal static class ProRVFocusedReviewGuidanceResolver
                 result.Status == ProRVPrefilterStatus.Success ? ProRVStageExecutionStates.Completed : ProRVStageExecutionStates.Failed,
                 result.Status == ProRVPrefilterStatus.Success ? null : result.FailureReason,
                 result.Status,
-                ProRVRuntimeSources.LensEntryModel,
+                runtimeSource,
                 modelId,
                 result.Language,
                 guidance);
@@ -167,7 +168,10 @@ internal static class ProRVFocusedReviewGuidanceResolver
             result.RawResponse,
             ct,
             ReviewProtocolEventNames.ProRVPrefilterAiCall,
-            result.Status == ProRVPrefilterStatus.Success ? null : result.FailureReason);
+            result.Status == ProRVPrefilterStatus.Success ? null : result.FailureReason,
+            cachedInputTokens: result.CachedInputTokens,
+            cacheWriteTokens: result.CacheWriteTokens,
+            reasoningTokens: result.ReasoningTokens);
 
         if (result.InputTokens.GetValueOrDefault() > 0 || result.OutputTokens.GetValueOrDefault() > 0)
         {
@@ -176,7 +180,10 @@ internal static class ProRVFocusedReviewGuidanceResolver
                 result.InputTokens.GetValueOrDefault(),
                 result.OutputTokens.GetValueOrDefault(),
                 modelId: modelId,
-                ct: ct);
+                ct: ct,
+                cachedInputTokens: result.CachedInputTokens.GetValueOrDefault(),
+                cacheWriteTokens: result.CacheWriteTokens.GetValueOrDefault(),
+                reasoningTokens: result.ReasoningTokens.GetValueOrDefault());
         }
     }
 

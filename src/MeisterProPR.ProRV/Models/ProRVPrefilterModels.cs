@@ -91,7 +91,10 @@ public sealed class ProRVPrefilterResult
         string? rawResponse = null,
         string? failureReason = null,
         long? inputTokens = null,
-        long? outputTokens = null)
+        long? outputTokens = null,
+        long? cachedInputTokens = null,
+        long? cacheWriteTokens = null,
+        long? reasoningTokens = null)
     {
         this.Status = status;
         this.FilePath = filePath;
@@ -101,6 +104,9 @@ public sealed class ProRVPrefilterResult
         this.FailureReason = failureReason;
         this.InputTokens = inputTokens;
         this.OutputTokens = outputTokens;
+        this.CachedInputTokens = cachedInputTokens;
+        this.CacheWriteTokens = cacheWriteTokens;
+        this.ReasoningTokens = reasoningTokens;
     }
 
     /// <summary>
@@ -142,6 +148,21 @@ public sealed class ProRVPrefilterResult
     ///     Gets the provider-reported output token count for the prefilter call when available.
     /// </summary>
     public long? OutputTokens { get; }
+
+    /// <summary>
+    ///     Gets the provider-reported cache-read input token count for the prefilter call when available.
+    /// </summary>
+    public long? CachedInputTokens { get; }
+
+    /// <summary>
+    ///     Gets the provider-reported cache-write token count for the prefilter call when available.
+    /// </summary>
+    public long? CacheWriteTokens { get; }
+
+    /// <summary>
+    ///     Gets the provider-reported reasoning token count for the prefilter call when available.
+    /// </summary>
+    public long? ReasoningTokens { get; }
 }
 
 /// <summary>
