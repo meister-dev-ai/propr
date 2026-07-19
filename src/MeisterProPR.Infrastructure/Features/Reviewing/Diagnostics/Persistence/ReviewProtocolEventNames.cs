@@ -57,6 +57,7 @@ public static class ReviewProtocolEventNames
     public const string SecuritySpecialistPassRan = "security_specialist_pass_ran";
     public const string ReviewFindingGateSummary = "review_finding_gate_summary";
     public const string ReviewFindingGateDecision = "review_finding_gate_decision";
+    public const string FindingFinalizationCheck = "finding_finalization_check";
     public const string ReviewAgentSessionBinding = "review_agent_session_binding";
     public const string ReviewAgentSessionTurn = "review_agent_session_turn";
     public const string ReviewAgentSessionFallback = "review_agent_session_fallback";

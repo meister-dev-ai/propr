@@ -97,4 +97,12 @@ public sealed record ReviewComment
     ///     that could not be classified (unknown line or a file with no resolvable changed ranges).
     /// </summary>
     public ReviewCommentScopeRelation? ScopeRelation { get; init; }
+
+    /// <summary>
+    ///     Whether the reviewer read the actual source at this comment's cited line while producing it,
+    ///     derived from the review pass's recorded file-read tool calls. Provenance metadata only: it does
+    ///     not participate in deduplication and is <see langword="null" /> when grounding is not applicable
+    ///     (unknown line, or a comment produced outside the file-by-file read loop).
+    /// </summary>
+    public ReviewCommentReadGrounding? SourceReadGrounding { get; init; }
 }

@@ -242,6 +242,14 @@ public sealed record CandidateReviewFinding
     public ChangedLineRelation? ScopeRelation { get; init; }
 
     /// <summary>
+    ///     Gets whether the reviewer read the actual source at this finding's cited line while producing it,
+    ///     carried forward from the source comment. Captures grounding, not correctness. <see langword="null" />
+    ///     when not applicable (unknown line, or a finding produced outside the file-by-file read loop, e.g. a
+    ///     PR-wide-pass finding). Consumed by the finding-finalization pipeline's reread check.
+    /// </summary>
+    public ReviewCommentReadGrounding? ReadGrounding { get; init; }
+
+    /// <summary>
     ///     Gets merged-candidate metadata when the finding has been through late-steering merge.
     /// </summary>
     public MergedCandidateFinding? MergedFinding { get; init; }

@@ -90,4 +90,22 @@ public static class ReviewFindingGateReasonCodes
     ///     changed-line anchor for an inline thread. Distinguishes a location shortfall from a verification one.
     /// </summary>
     public const string PrWideMissingChangedLineAnchor = "pr_wide_missing_changed_line_anchor";
+
+    /// <summary>
+    ///     Reason code attached to an ERROR finding whose cited source lines were read during the pass that
+    ///     produced it — the finding is grounded and publishes unchanged. Label only; never changes disposition.
+    /// </summary>
+    public const string ErrorFindingRereadVerified = "error_finding_reread_verified";
+
+    /// <summary>
+    ///     Reason code attached to an ERROR finding that was published without any read covering its cited lines.
+    ///     The finding is still posted at ERROR severity but annotated as unverified.
+    /// </summary>
+    public const string ErrorFindingRereadUnverified = "error_finding_reread_unverified";
+
+    /// <summary>
+    ///     Reason code used when an ERROR finding is discarded because a covering read proved its cited lines are
+    ///     absent from the source (read successfully but the line lies beyond the file's content).
+    /// </summary>
+    public const string ErrorFindingRereadContradicted = "error_finding_reread_contradicted";
 }

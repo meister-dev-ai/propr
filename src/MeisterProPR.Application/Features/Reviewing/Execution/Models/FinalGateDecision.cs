@@ -33,6 +33,10 @@ public sealed record FinalGateDecision
     /// <param name="blockedInvariantIds">Blocking invariants associated with the decision.</param>
     /// <param name="evidenceSnapshot">Evidence snapshot used while making the decision.</param>
     /// <param name="summaryText">Optional summary text emitted for summary-only decisions.</param>
+    /// <param name="publicationNote">
+    ///     Optional note appended to the published comment body when the decision publishes. Used by
+    ///     finalization checks to annotate an otherwise-unchanged finding (e.g. an unverified ERROR).
+    /// </param>
     public FinalGateDecision(
         string findingId,
         string disposition,
@@ -40,7 +44,8 @@ public sealed record FinalGateDecision
         string ruleSource,
         IReadOnlyList<string>? blockedInvariantIds,
         EvidenceReference? evidenceSnapshot,
-        string? summaryText)
+        string? summaryText,
+        string? publicationNote = null)
     {
         if (string.IsNullOrWhiteSpace(findingId))
         {
@@ -77,6 +82,7 @@ public sealed record FinalGateDecision
         this.SummaryText = string.Equals(disposition, SummaryOnlyDisposition, StringComparison.Ordinal)
             ? summaryText
             : null;
+        this.PublicationNote = string.IsNullOrWhiteSpace(publicationNote) ? null : publicationNote;
     }
 
     /// <summary>
@@ -113,6 +119,12 @@ public sealed record FinalGateDecision
     ///     Gets the optional summary text emitted for summary-only decisions.
     /// </summary>
     public string? SummaryText { get; }
+
+    /// <summary>
+    ///     Gets the optional note appended to the published comment body when this decision publishes.
+    ///     <see langword="null" /> when no note applies.
+    /// </summary>
+    public string? PublicationNote { get; }
 
     /// <summary>
     ///     Converts the decision into a persisted final-gate decision record.

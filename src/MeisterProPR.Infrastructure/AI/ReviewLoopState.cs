@@ -49,6 +49,20 @@ internal sealed class ReviewLoopState
     /// <summary>Gets the ordered history of tool invocations.</summary>
     public List<ReviewToolCall> ToolCallHistory { get; } = [];
 
+    private readonly List<FileReadRecord> fileReads = [];
+
+    /// <summary>Gets the structured file reads captured during the loop, used to ground finalized findings.</summary>
+    public IReadOnlyList<FileReadRecord> FileReads
+    {
+        get
+        {
+            lock (this.fileReads)
+            {
+                return this.fileReads.ToArray();
+            }
+        }
+    }
+
     /// <summary>Gets the ordered history of confidence snapshots.</summary>
     public List<ConfidenceSnapshot> ConfidenceSnapshots { get; } = [];
 
@@ -132,6 +146,17 @@ internal sealed class ReviewLoopState
                 outcome,
                 phaseTimings));
         this.ToolCallCount++;
+    }
+
+    /// <summary>Records a structured file read measured at the get_file_content call site.</summary>
+    /// <param name="record">The measured read record.</param>
+    public void RecordFileRead(FileReadRecord record)
+    {
+        ArgumentNullException.ThrowIfNull(record);
+        lock (this.fileReads)
+        {
+            this.fileReads.Add(record);
+        }
     }
 
     /// <summary>Accumulates the normalized token usage extracted from one AI response.</summary>

@@ -28,6 +28,26 @@ public sealed class CandidateFindingFactoryTests
     }
 
     [Fact]
+    public void Build_ThreadsSourceReadGroundingOntoPerFileFinding()
+    {
+        var covered = new ReviewComment("src/Foo.cs", 12, CommentSeverity.Error, "Grounded error.")
+        {
+            SourceReadGrounding = ReviewCommentReadGrounding.Covered,
+        };
+        var unread = new ReviewComment("src/Bar.cs", 5, CommentSeverity.Error, "Ungrounded error.")
+        {
+            SourceReadGrounding = ReviewCommentReadGrounding.NotRead,
+        };
+        var sut = new CandidateFindingFactory(null);
+
+        var findings = sut.Build(
+            [CreateCompletedFileResult("src/Foo.cs", [covered]), CreateCompletedFileResult("src/Bar.cs", [unread])]);
+
+        Assert.Equal(ReviewCommentReadGrounding.Covered, findings[0].ReadGrounding);
+        Assert.Equal(ReviewCommentReadGrounding.NotRead, findings[1].ReadGrounding);
+    }
+
+    [Fact]
     public void Build_WithMultiPassUnionOriginComment_StampsUnionProvenance()
     {
         var baselineComment = new ReviewComment("src/Foo.cs", 12, CommentSeverity.Warning, "Baseline finding.");

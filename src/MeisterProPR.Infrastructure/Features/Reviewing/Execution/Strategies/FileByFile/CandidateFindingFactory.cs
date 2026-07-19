@@ -55,7 +55,10 @@ internal sealed class CandidateFindingFactory(IReviewClaimExtractor? reviewClaim
                     comment.FilePath,
                     normalizedLineNumber,
                     invariantCheckContext: this.BuildInvariantCheckContext(fileResult, comment, index + 1),
-                    scopeRelation: ClassifyScopeRelation(comment.FilePath ?? fileResult.FilePath, normalizedLineNumber, changedLineRangesByPath));
+                    scopeRelation: ClassifyScopeRelation(comment.FilePath ?? fileResult.FilePath, normalizedLineNumber, changedLineRangesByPath))
+                {
+                    ReadGrounding = comment.SourceReadGrounding,
+                };
                 originalFindings.Add(finding);
 
                 var signature = CreateCommentSignature(comment);
@@ -213,7 +216,10 @@ internal sealed class CandidateFindingFactory(IReviewClaimExtractor? reviewClaim
                 comment.FilePath,
                 normalizedLineNumber,
                 null),
-            scopeRelation: ClassifyScopeRelation(comment.FilePath, normalizedLineNumber, changedLineRangesByPath));
+            scopeRelation: ClassifyScopeRelation(comment.FilePath, normalizedLineNumber, changedLineRangesByPath))
+        {
+            ReadGrounding = comment.SourceReadGrounding,
+        };
     }
 
     private IReadOnlyDictionary<string, string>? BuildInvariantCheckContext(

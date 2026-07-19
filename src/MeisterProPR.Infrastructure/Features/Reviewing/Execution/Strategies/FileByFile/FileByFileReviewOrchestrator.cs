@@ -16,6 +16,7 @@ using MeisterProPR.Domain.ValueObjects;
 using MeisterProPR.Infrastructure.Features.Reviewing.Diagnostics.Persistence;
 using MeisterProPR.Infrastructure.Features.Reviewing.Execution.CommentRelevance;
 using MeisterProPR.Infrastructure.Features.Reviewing.Execution.Deduplication;
+using MeisterProPR.Infrastructure.Features.Reviewing.Execution.ReviewFindingGate;
 using MeisterProPR.Infrastructure.Features.Reviewing.Execution.Screening;
 using MeisterProPR.Infrastructure.Features.Reviewing.Execution.Verification;
 using MeisterProPR.ProRV.Abstractions;
@@ -367,7 +368,8 @@ internal sealed partial class FileByFileReviewOrchestrator(
             aiClientFactory,
             aiRuntimeResolver,
             chatClient,
-            new SemanticFindingDeduplicator(new AiFindingMergeJudge(aiRuntimeResolver)));
+            new SemanticFindingDeduplicator(new AiFindingMergeJudge(aiRuntimeResolver)),
+            new ReviewFindingFinalizationPipeline([new RereadFinalizationCheck()], protocolRecorder));
     }
 
     private CandidateFindingFactory GetCandidateFindingFactory()

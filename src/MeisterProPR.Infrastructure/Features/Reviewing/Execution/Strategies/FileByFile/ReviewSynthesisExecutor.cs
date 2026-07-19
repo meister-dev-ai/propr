@@ -43,7 +43,8 @@ internal sealed class ReviewSynthesisExecutor(
     IAiChatClientFactory? aiClientFactory,
     IAiRuntimeResolver? aiRuntimeResolver,
     IChatClient? defaultChatClient = null,
-    IFindingDeduplicator? findingDeduplicator = null)
+    IFindingDeduplicator? findingDeduplicator = null,
+    IReviewFindingFinalizationPipeline? reviewFindingFinalizationPipeline = null)
 {
     private static readonly JsonSerializerOptions FinalGateJsonOptions = new(JsonSerializerDefaults.Web);
 
@@ -196,6 +197,14 @@ internal sealed class ReviewSynthesisExecutor(
         var gateDecisions = skipFinalGate
             ? candidateFindings.Select(CreatePublishDecision).ToArray()
             : await gate.EvaluateAsync(candidateFindings, invariantFacts, ct);
+
+        // Post-gate finalization checks (e.g. the reread-before-ERROR floor) refine the gate's decisions:
+        // annotating, downgrading, or discarding findings that fail a check. Skipped when the base gate is
+        // skipped (offline) so the offline path stays deterministic.
+        if (!skipFinalGate && reviewFindingFinalizationPipeline is not null)
+        {
+            gateDecisions = await reviewFindingFinalizationPipeline.ApplyAsync(candidateFindings, gateDecisions, protocolId, ct).ConfigureAwait(false);
+        }
         var reconciler = summaryReconciliationService ?? new SummaryReconciliationService();
         var skipSummaryReconciliation = await this.TryRecordSkippedStepAsync(protocolId, baseContext, FileByFileReviewStepIds.SummaryReconciliation, ct);
         var reconciliation = skipSummaryReconciliation
@@ -545,7 +554,7 @@ internal sealed class ReviewSynthesisExecutor(
         return deduped.ToList();
     }
 
-    private static IReadOnlyList<ReviewComment> MaterializePublishedComments(
+    internal static IReadOnlyList<ReviewComment> MaterializePublishedComments(
         IReadOnlyList<CandidateReviewFinding> candidateFindings,
         IReadOnlyList<FinalGateDecision> decisions)
     {
@@ -553,7 +562,11 @@ internal sealed class ReviewSynthesisExecutor(
         return candidateFindings
             .Where(finding => decisionsById.TryGetValue(finding.FindingId, out var decision)
                               && string.Equals(decision.Disposition, FinalGateDecision.PublishDisposition, StringComparison.Ordinal))
-            .Select(finding => FileByFileReviewOrchestrator.CreateReviewComment(finding.FilePath, finding.LineNumber, finding.Severity, finding.Message)
+            .Select(finding => FileByFileReviewOrchestrator.CreateReviewComment(
+                    finding.FilePath,
+                    finding.LineNumber,
+                    finding.Severity,
+                    AppendPublicationNote(finding.Message, decisionsById[finding.FindingId].PublicationNote))
                 with
                 {
                     OriginPassKind = finding.Provenance.ResolveOriginPassKindName(),
@@ -562,6 +575,13 @@ internal sealed class ReviewSynthesisExecutor(
                     ScopeRelation = ReviewCommentScopeRelationMapper.Map(finding.ScopeRelation),
                 })
             .ToList();
+    }
+
+    // Appends a finalization-check note (e.g. an unverified-ERROR notice) to the published comment body as a
+    // trailing paragraph. Returns the message unchanged when no note applies.
+    private static string AppendPublicationNote(string message, string? publicationNote)
+    {
+        return string.IsNullOrWhiteSpace(publicationNote) ? message : $"{message}\n\n{publicationNote}";
     }
 
     private async Task<bool> TryRecordSkippedStepAsync(

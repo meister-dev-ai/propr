@@ -132,6 +132,7 @@ internal sealed partial class ToolAwareAiReviewCore(
             systemContext.ReviewTools,
             options.Value.EnableStructuralReferenceTools,
             systemContext.IncludeLinkedItemsInContext && options.Value.EnableLinkedItemTools,
+            state.RecordFileRead,
             cancellationToken);
         var effectiveModelId = systemContext.ModelId ?? opts.ModelId;
         var usesManagedSessionTransport = ShouldUseAgentFrameworkManagedSession(systemContext);
@@ -493,7 +494,7 @@ internal sealed partial class ToolAwareAiReviewCore(
             systemContext.ReviewSession = state.Session;
             systemContext.LoopMetrics = BuildLoopMetrics(state);
 
-            return ParseReviewResult(lastTextResponse);
+            return ParseReviewResult(lastTextResponse, state.FileReads);
         }
         finally
         {
@@ -1355,6 +1356,7 @@ internal sealed partial class ToolAwareAiReviewCore(
         IReviewContextTools? reviewTools,
         bool enableStructuralReferenceTools,
         bool enableLinkedItemTools,
+        Action<FileReadRecord> recordFileRead,
         CancellationToken cancellationToken)
     {
         if (reviewTools is null)
@@ -1383,9 +1385,15 @@ internal sealed partial class ToolAwareAiReviewCore(
 
         var getFileContent = AIFunctionFactory.Create(
             async (string path, string branch, int startLine, int endLine) =>
-                AnnotateFileContentToolResult(
-                    await reviewTools.GetFileContentAsync(path, branch, startLine, endLine, cancellationToken),
-                    startLine),
+            {
+                var content = await reviewTools.GetFileContentAsync(path, branch, startLine, endLine, cancellationToken);
+
+                // Measure the read for grounding at the source, from the raw content — before it is annotated
+                // for the model or bounded for replay — so the reread gate never has to reconstruct it later.
+                recordFileRead(ReviewReadGroundingEvaluator.CreateReadRecord(path, startLine, endLine, content));
+
+                return AnnotateFileContentToolResult(content, startLine);
+            },
             new AIFunctionFactoryOptions
             {
                 Name = "get_file_content",
@@ -1965,7 +1973,7 @@ internal sealed partial class ToolAwareAiReviewCore(
         }
     }
 
-    private static ReviewResult ParseReviewResult(string json)
+    private static ReviewResult ParseReviewResult(string json, IReadOnlyList<FileReadRecord> fileReads)
     {
         var normalized = NormalizeJsonPayload(json);
         if (string.IsNullOrWhiteSpace(normalized))
@@ -1979,11 +1987,16 @@ internal sealed partial class ToolAwareAiReviewCore(
             return new ReviewResult("", new List<ReviewComment>().AsReadOnly());
         }
 
+        // Stamp read-grounding from the reads captured during the pass, so the finalization pipeline can enforce
+        // the reread rule after the findings are persisted and reloaded for synthesis.
         var comments = (dto.Comments ?? []).Select(c => new ReviewComment(
                 c.FilePath,
                 c.LineNumber,
                 Enum.TryParse<CommentSeverity>(c.Severity, true, out var sev) ? sev : CommentSeverity.Info,
-                c.Message ?? ""))
+                c.Message ?? "")
+            {
+                SourceReadGrounding = ReviewReadGroundingEvaluator.Classify(c.FilePath, c.LineNumber, fileReads),
+            })
             .ToList();
 
         return new ReviewResult(dto.Summary ?? "", comments.AsReadOnly());

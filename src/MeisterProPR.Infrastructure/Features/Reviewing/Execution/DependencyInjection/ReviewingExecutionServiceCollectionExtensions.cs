@@ -47,6 +47,10 @@ public static class ReviewingExecutionServiceCollectionExtensions
         services.AddTransient<IReviewJobProcessor>(sp => sp.GetRequiredService<ReviewOrchestrationService>());
         services.AddCommentRelevanceFiltering(selectedCommentRelevanceFilterId);
         services.AddSingleton<IDeterministicReviewFindingGate, DeterministicReviewFindingGate>();
+        // Post-gate finalization checks compose on top of the deterministic gate without altering it. The
+        // reread-before-ERROR floor is the first check; further checks join by being registered here.
+        services.AddSingleton<IFindingFinalizationCheck, RereadFinalizationCheck>();
+        services.AddScoped<IReviewFindingFinalizationPipeline, ReviewFindingFinalizationPipeline>();
         services.AddSingleton<IReviewInvariantFactProvider, DomainReviewInvariantFactProvider>();
         services.AddSingleton<IReviewInvariantFactProvider, PersistenceReviewInvariantFactProvider>();
         services.AddSingleton<IReviewClaimExtractor, DeterministicReviewClaimExtractor>();
