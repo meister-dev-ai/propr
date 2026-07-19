@@ -454,6 +454,96 @@ public sealed class GitHubReviewThreadStatusProviderTests
         }
     }
 
+    [Fact]
+    public async Task GetReviewerThreadStatusesAsync_OutdatedThread_ReportsCodeChanged()
+    {
+        var clientId = Guid.NewGuid();
+        var host = new ProviderHostRef(ScmProvider.GitHub, "https://github.com");
+        var connectionRepository = CreateConnectionRepository(clientId, host);
+        var httpClientFactory = CreateHttpClientFactory(request => request.RequestUri!.AbsoluteUri switch
+        {
+            "https://api.github.com/user" => CreateJsonResponse(new { login = "meister-dev" }),
+            "https://api.github.com/graphql" => CreateJsonResponse(
+                new
+                {
+                    data = new
+                    {
+                        repository = new
+                        {
+                            pullRequest = new
+                            {
+                                reviewThreads = new
+                                {
+                                    nodes = new object[]
+                                    {
+                                        new
+                                        {
+                                            isResolved = true,
+                                            isOutdated = true,
+                                            path = "src/changed.ts",
+                                            line = 18,
+                                            comments = new
+                                            {
+                                                nodes = new object[]
+                                                {
+                                                    new
+                                                    {
+                                                        databaseId = 501, body = "Fix this.",
+                                                        createdAt = "2026-04-14T08:00:00Z",
+                                                        author = new { login = "meister-dev" },
+                                                    },
+                                                },
+                                            },
+                                        },
+                                        new
+                                        {
+                                            isResolved = true,
+                                            isOutdated = false,
+                                            path = "src/untouched.ts",
+                                            line = 10,
+                                            comments = new
+                                            {
+                                                nodes = new object[]
+                                                {
+                                                    new
+                                                    {
+                                                        databaseId = 601, body = "Fix this too.",
+                                                        createdAt = "2026-04-14T08:02:00Z",
+                                                        author = new { login = "meister-dev" },
+                                                    },
+                                                },
+                                            },
+                                        },
+                                    },
+                                },
+                            },
+                        },
+                    },
+                }),
+            _ => new HttpResponseMessage(HttpStatusCode.NotFound),
+        });
+        var sut = new GitHubReviewThreadStatusProvider(
+            new GitHubConnectionVerifier(connectionRepository, httpClientFactory),
+            httpClientFactory);
+
+        var result = await sut.GetReviewerThreadStatusesAsync(
+            "https://github.com",
+            "meister-dev-ai",
+            "meister-dev-ai/propr",
+            8,
+            Guid.Empty,
+            clientId,
+            CancellationToken.None);
+
+        Assert.Equal(2, result.Count);
+        Assert.Equal(
+            ThreadAnchorCodeChange.Changed,
+            result.Single(entry => entry.ThreadId == 501).CodeChangedSinceRaised);
+        Assert.Equal(
+            ThreadAnchorCodeChange.Unchanged,
+            result.Single(entry => entry.ThreadId == 601).CodeChangedSinceRaised);
+    }
+
     private static IClientScmConnectionRepository CreateConnectionRepository(Guid clientId, ProviderHostRef host)
     {
         var repository = Substitute.For<IClientScmConnectionRepository>();

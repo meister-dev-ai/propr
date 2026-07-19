@@ -181,7 +181,17 @@ public sealed class ThreadMemoryServiceTests
     }
 
     private static ThreadResolvedDomainEvent ResolvedEvent(string commentHistory) =>
-        new(ClientId, "repo-1", 42, 7, "src/Foo.cs", "diff", commentHistory, DateTimeOffset.UtcNow);
+        new(
+            ClientId,
+            "repo-1",
+            42,
+            7,
+            "src/Foo.cs",
+            "diff",
+            commentHistory,
+            DateTimeOffset.UtcNow,
+            ThreadResolutionIntent.ClaimsFix,
+            ThreadAnchorCodeChange.Changed);
 
     private static async Task AssertNoOpAsync(IMemoryActivityLog activityLog, string expectedReason)
     {

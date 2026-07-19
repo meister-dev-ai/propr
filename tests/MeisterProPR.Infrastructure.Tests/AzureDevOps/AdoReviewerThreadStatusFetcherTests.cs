@@ -4,6 +4,7 @@
 using Azure.Core;
 using MeisterProPR.Application.DTOs;
 using MeisterProPR.Application.Interfaces;
+using MeisterProPR.Domain.Enums;
 using MeisterProPR.Domain.ValueObjects;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.TeamFoundation.SourceControl.WebApi;
@@ -127,6 +128,101 @@ public sealed class AdoReviewerThreadStatusFetcherTests
         Assert.Contains("Dev: I think it's fine.", entry.CommentHistory);
         Assert.Contains("Bot: Can you clarify?", entry.CommentHistory);
         Assert.DoesNotContain("Auto-status", entry.CommentHistory);
+    }
+
+    [Fact]
+    public async Task GetReviewerThreadStatusesAsync_ResolvedThread_ReportsCodeChangeFromIterationDiff()
+    {
+        var reviewerId = Guid.NewGuid();
+        var botId = Guid.NewGuid();
+
+        var gitClient = MakeGitClient();
+
+        GitPullRequestCommentThread ResolvedThread(int id, string filePath) => new()
+        {
+            Id = id,
+            Status = CommentThreadStatus.Fixed,
+            ThreadContext = new CommentThreadContext { FilePath = filePath },
+            PullRequestThreadContext = new GitPullRequestCommentThreadContext
+            {
+                IterationContext = new CommentIterationContext
+                {
+                    FirstComparingIteration = 1,
+                    SecondComparingIteration = 1,
+                },
+            },
+            Comments = new List<Comment> { CreateComment("Bot", botId, "Please fix this.") },
+        };
+
+        gitClient.GetThreadsAsync(
+                Arg.Any<string>(),
+                Arg.Any<string>(),
+                Arg.Any<int>(),
+                Arg.Any<int?>(),
+                Arg.Any<int?>(),
+                Arg.Any<object>(),
+                Arg.Any<CancellationToken>())
+            .Returns(
+                Task.FromResult(
+                    new List<GitPullRequestCommentThread>
+                    {
+                        ResolvedThread(42, "/src/Changed.cs"),
+                        ResolvedThread(43, "/src/Untouched.cs"),
+                    }));
+
+        gitClient.GetPullRequestIterationsAsync(
+                Arg.Any<string>(),
+                Arg.Any<string>(),
+                Arg.Any<int>(),
+                Arg.Any<bool?>(),
+                Arg.Any<object>(),
+                Arg.Any<CancellationToken>())
+            .Returns(
+                Task.FromResult(
+                    new List<GitPullRequestIteration>
+                    {
+                        new() { Id = 1 },
+                        new() { Id = 2 },
+                    }));
+
+        gitClient.GetPullRequestIterationChangesAsync(
+                Arg.Any<string>(),
+                Arg.Any<string>(),
+                Arg.Any<int>(),
+                Arg.Any<int>(),
+                Arg.Any<int?>(),
+                Arg.Any<int?>(),
+                Arg.Any<int?>(),
+                Arg.Any<object>(),
+                Arg.Any<CancellationToken>())
+            .Returns(
+                Task.FromResult(
+                    new GitPullRequestIterationChanges
+                    {
+                        ChangeEntries = new List<GitPullRequestChange>
+                        {
+                            new() { Item = new GitItem { Path = "/src/Changed.cs" } },
+                        },
+                    }));
+
+        var sut = BuildSut(gitClient, botId);
+
+        var result = await sut.GetReviewerThreadStatusesAsync(
+            "https://dev.azure.com/testorg",
+            "TestProject",
+            "repo-id",
+            1,
+            reviewerId,
+            Guid.NewGuid(),
+            CancellationToken.None);
+
+        Assert.Equal(2, result.Count);
+        Assert.Equal(
+            ThreadAnchorCodeChange.Changed,
+            result.Single(entry => entry.ThreadId == 42).CodeChangedSinceRaised);
+        Assert.Equal(
+            ThreadAnchorCodeChange.Unchanged,
+            result.Single(entry => entry.ThreadId == 43).CodeChangedSinceRaised);
     }
 
     [Fact]

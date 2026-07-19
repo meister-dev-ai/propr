@@ -60,7 +60,12 @@ internal sealed class GitLabReviewThreadStatusProvider(
                 item.Notes.Any(note => note.Resolved) ? "Fixed" : "Active",
                 ResolveFilePath(item.Notes),
                 BuildCommentHistory(item.Notes),
-                item.Notes.Count(note => !AuthorMatches(note.Author, authoredUsername))))
+                item.Notes.Count(note => !AuthorMatches(note.Author, authoredUsername)),
+                // GitLab's discussions API exposes no per-thread "outdated" flag, so whether the anchored
+                // code changed since the finding was raised cannot be determined from this response alone
+                // (it would need a commit compare against the merge-request head). Reporting Unknown keeps
+                // a claimed fix from being trusted without corroboration rather than guessing.
+                ThreadAnchorCodeChange.Unknown))
             .ToList()
             .AsReadOnly();
     }

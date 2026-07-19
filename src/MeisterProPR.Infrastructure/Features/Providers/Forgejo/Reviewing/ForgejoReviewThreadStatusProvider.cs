@@ -58,9 +58,20 @@ internal sealed class ForgejoReviewThreadStatusProvider(
                 DetermineStatus(group, authoredUsername),
                 group[0].Comment.Path,
                 BuildCommentHistory(group),
-                group.Count(comment => !AuthorMatches(comment.Comment.User, authoredUsername))))
+                group.Count(comment => !AuthorMatches(comment.Comment.User, authoredUsername)),
+                DetermineCodeChange(group)))
             .ToList()
             .AsReadOnly();
+    }
+
+    // An invalidated review comment is one whose diff line no longer exists in the current diff, i.e.
+    // the anchored code changed. When no comment is flagged invalidated the signal is left undetermined
+    // rather than asserting the code is unchanged, so an absent flag never grants a false "fixed".
+    private static ThreadAnchorCodeChange DetermineCodeChange(IReadOnlyList<ForgejoReviewCommentEnvelope> comments)
+    {
+        return comments.Any(comment => comment.Comment.Invalidated)
+            ? ThreadAnchorCodeChange.Changed
+            : ThreadAnchorCodeChange.Unknown;
     }
 
     private async Task<string> ResolveRepositoryPathAsync(
@@ -228,7 +239,9 @@ internal sealed class ForgejoReviewThreadStatusProvider(
         int? OriginalPosition,
         [property: JsonPropertyName("created_at")]
         DateTimeOffset CreatedAt,
-        [property: JsonPropertyName("user")] ForgejoUserResponse? User);
+        [property: JsonPropertyName("user")] ForgejoUserResponse? User,
+        [property: JsonPropertyName("invalidated")]
+        bool Invalidated = false);
 
     private sealed record ForgejoUserResponse(
         [property: JsonPropertyName("id")] long Id,

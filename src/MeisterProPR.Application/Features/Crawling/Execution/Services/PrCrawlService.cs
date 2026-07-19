@@ -4,6 +4,7 @@
 using MeisterProPR.Application.DTOs;
 using MeisterProPR.Application.Features.Crawling.Execution.Models;
 using MeisterProPR.Application.Features.Crawling.Execution.Ports;
+using MeisterProPR.Application.Features.Crawling.Execution.Services;
 using MeisterProPR.Application.Features.Reviewing.Execution.Models;
 using MeisterProPR.Application.Interfaces;
 using MeisterProPR.Application.Support;
@@ -533,8 +534,9 @@ public sealed partial class PrCrawlService(
             {
                 var stored = scan.Threads.FirstOrDefault(t => t.ThreadId == thread.ThreadId);
                 var previousStatus = stored?.LastSeenStatus;
-                var isCurrentlyResolved = IsResolvedStatus(thread.Status);
-                var wasPreviouslyResolved = IsResolvedStatus(previousStatus);
+                var currentIntent = ThreadResolutionStatusInterpreter.InterpretIntent(thread.Status);
+                var isCurrentlyResolved = ThreadResolutionStatusInterpreter.IsResolved(currentIntent);
+                var wasPreviouslyResolved = ThreadResolutionStatusInterpreter.IsResolved(ThreadResolutionStatusInterpreter.InterpretIntent(previousStatus));
 
                 if (isCurrentlyResolved && !wasPreviouslyResolved)
                 {
@@ -547,7 +549,9 @@ public sealed partial class PrCrawlService(
                             thread.FilePath,
                             null,
                             thread.CommentHistory,
-                            DateTimeOffset.UtcNow),
+                            DateTimeOffset.UtcNow,
+                            currentIntent,
+                            thread.CodeChangedSinceRaised),
                         ct);
                 }
                 else if (!isCurrentlyResolved && wasPreviouslyResolved)
@@ -619,14 +623,6 @@ public sealed partial class PrCrawlService(
         }
 
         await prScanRepository!.UpsertAsync(updatedScan, ct);
-    }
-
-    private static bool IsResolvedStatus(string? status)
-    {
-        return string.Equals(status, "Fixed", StringComparison.OrdinalIgnoreCase) ||
-               string.Equals(status, "Closed", StringComparison.OrdinalIgnoreCase) ||
-               string.Equals(status, "WontFix", StringComparison.OrdinalIgnoreCase) ||
-               string.Equals(status, "ByDesign", StringComparison.OrdinalIgnoreCase);
     }
 
     private sealed record ResolvedReviewer(ReviewerIdentity? ConfiguredTriggerReviewer, Guid? EffectiveReviewerId);

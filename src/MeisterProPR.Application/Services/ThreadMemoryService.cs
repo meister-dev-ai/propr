@@ -55,6 +55,21 @@ public sealed partial class ThreadMemoryService(
             return;
         }
 
+        // Grounding gate: a close that only claims a fix must be corroborated by an actual code change
+        // before it becomes suppression memory. A thread closed before (or without) the code was updated
+        // otherwise teaches a future review to discard a still-valid finding. A deliberate human
+        // acceptance (by-design / won't-fix) is itself the resolution and needs no code change.
+        if (evt.Intent == ThreadResolutionIntent.ClaimsFix &&
+            evt.CodeChangedSinceRaised != ThreadAnchorCodeChange.Changed)
+        {
+            var groundingReason = evt.CodeChangedSinceRaised == ThreadAnchorCodeChange.Unchanged
+                ? "closed_without_code_change"
+                : "code_change_undetermined";
+            await this.RecordResolvedSkipAsync(evt, groundingReason, ct);
+            LogResolvedSkipped(logger, evt.ThreadId, evt.ClientId, groundingReason);
+            return;
+        }
+
         try
         {
             var resolution = await embedder.GenerateResolutionSummaryAsync(
@@ -64,10 +79,15 @@ public sealed partial class ThreadMemoryService(
                 evt.ClientId,
                 ct);
 
-            // Clarity gate: only store a genuine, determinable resolution. Threads closed without a
-            // conclusion, and threads the model could not classify (including a failed summary call),
-            // are skipped so speculative or placeholder "resolutions" never reach a future review.
-            if (!resolution.IsStorable)
+            // Clarity gate: only store a genuine, determinable resolution. A code-corroborated fix still
+            // must read as a real resolution; a deliberate human acceptance is trusted as long as a real
+            // summary was produced (its clarity may read as "closed without resolution" from comments
+            // alone even though the human explicitly accepted the concern). A failed summary call is
+            // never stored either way.
+            var storable = evt.Intent == ThreadResolutionIntent.AcceptedByHuman
+                ? resolution.Summary != ThreadResolutionSummary.GenerationFailedSummary
+                : resolution.IsStorable;
+            if (!storable)
             {
                 var reason = ClassifySkipReason(resolution);
                 await this.RecordResolvedSkipAsync(evt, reason, ct);

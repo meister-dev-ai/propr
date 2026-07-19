@@ -57,6 +57,7 @@ public sealed partial class AdoReviewerThreadStatusFetcher(
             }
 
             var results = new List<PrThreadStatusEntry>();
+            var iterationChanges = new IterationChangeCache();
 
             foreach (var thread in rawThreads)
             {
@@ -83,13 +84,23 @@ public sealed partial class AdoReviewerThreadStatusFetcher(
                     !string.Equals(c.CommentType.ToString(), "system", StringComparison.OrdinalIgnoreCase) &&
                     !IsReviewerOwnedAuthor(c.Author?.Id, reviewerId, authorizedIdentityId));
 
+                var codeChange = await this.ResolveAnchorCodeChangeAsync(
+                    gitClient,
+                    projectId,
+                    repositoryId,
+                    pullRequestId,
+                    thread,
+                    iterationChanges,
+                    ct);
+
                 results.Add(
                     new PrThreadStatusEntry(
                         thread.Id,
                         thread.Status.ToString(),
                         thread.ThreadContext?.FilePath,
                         commentHistory,
-                        nonReviewerReplyCount));
+                        nonReviewerReplyCount,
+                        codeChange));
             }
 
             return results.AsReadOnly();
@@ -126,6 +137,84 @@ public sealed partial class AdoReviewerThreadStatusFetcher(
         return (await connection.GetClientAsync<GitHttpClient>(ct), connection.AuthorizedIdentity?.Id);
     }
 
+    // Resolves whether the code a resolved thread is anchored to changed after the finding was raised,
+    // by comparing the iteration the thread was left on against the latest iteration's changed files.
+    // Any failure or missing context is reported as Unknown so a claimed fix is never trusted on a guess.
+    private async Task<ThreadAnchorCodeChange> ResolveAnchorCodeChangeAsync(
+        GitHttpClient gitClient,
+        string projectId,
+        string repositoryId,
+        int pullRequestId,
+        GitPullRequestCommentThread thread,
+        IterationChangeCache iterationChanges,
+        CancellationToken ct)
+    {
+        if (!IsResolvedThreadStatus(thread.Status))
+        {
+            return ThreadAnchorCodeChange.Unknown;
+        }
+
+        var filePath = thread.ThreadContext?.FilePath;
+        var threadIteration = thread.PullRequestThreadContext?.IterationContext?.SecondComparingIteration;
+        if (string.IsNullOrWhiteSpace(filePath) || threadIteration is null)
+        {
+            return ThreadAnchorCodeChange.Unknown;
+        }
+
+        try
+        {
+            var latestIteration = await iterationChanges.GetLatestIterationIdAsync(
+                gitClient,
+                projectId,
+                repositoryId,
+                pullRequestId,
+                ct);
+            if (latestIteration is null)
+            {
+                return ThreadAnchorCodeChange.Unknown;
+            }
+
+            if (threadIteration.Value >= latestIteration.Value)
+            {
+                // The thread is anchored to the latest iteration; nothing was pushed after it.
+                return ThreadAnchorCodeChange.Unchanged;
+            }
+
+            var changedPaths = await iterationChanges.GetChangedPathsAsync(
+                gitClient,
+                projectId,
+                repositoryId,
+                pullRequestId,
+                threadIteration.Value,
+                latestIteration.Value,
+                ct);
+            if (changedPaths is null)
+            {
+                return ThreadAnchorCodeChange.Unknown;
+            }
+
+            if (changedPaths.Paths.Contains(filePath))
+            {
+                return ThreadAnchorCodeChange.Changed;
+            }
+
+            // The anchored file is absent from the change set. Only trust "unchanged" when the set is
+            // complete; a truncated listing cannot rule the file out, so it stays undetermined.
+            return changedPaths.Complete ? ThreadAnchorCodeChange.Unchanged : ThreadAnchorCodeChange.Unknown;
+        }
+        catch (Exception ex)
+        {
+            LogCodeChangeResolutionFailed(logger, pullRequestId, thread.Id, ex);
+            return ThreadAnchorCodeChange.Unknown;
+        }
+    }
+
+    private static bool IsResolvedThreadStatus(CommentThreadStatus status)
+    {
+        return status is CommentThreadStatus.Fixed or CommentThreadStatus.Closed
+            or CommentThreadStatus.WontFix or CommentThreadStatus.ByDesign;
+    }
+
     private static bool IsReviewerOwnedAuthor(string? authorId, Guid reviewerId, Guid? authorizedIdentityId)
     {
         if (!Guid.TryParse(authorId, out var parsedAuthorId))
@@ -160,4 +249,93 @@ public sealed partial class AdoReviewerThreadStatusFetcher(
         Level = LogLevel.Warning,
         Message = "Failed to fetch reviewer thread statuses for PR #{PullRequestId}. Returning empty list.")]
     private static partial void LogFetchFailed(ILogger logger, int pullRequestId, Exception ex);
+
+    [LoggerMessage(
+        Level = LogLevel.Debug,
+        Message = "Could not resolve anchor code-change signal for PR #{PullRequestId} thread {ThreadId}; treating as undetermined.")]
+    private static partial void LogCodeChangeResolutionFailed(ILogger logger, int pullRequestId, int threadId, Exception ex);
+
+    // Per-request cache for pull-request iteration data so repeated threads share the same lookups.
+    private sealed class IterationChangeCache
+    {
+        private const int ChangePageSize = 2000;
+
+        private readonly Dictionary<int, IterationChangeSet?> _changesByFromIteration = new();
+        private bool _latestResolved;
+        private int? _latestIterationId;
+
+        public async Task<int?> GetLatestIterationIdAsync(
+            GitHttpClient gitClient,
+            string projectId,
+            string repositoryId,
+            int pullRequestId,
+            CancellationToken ct)
+        {
+            if (this._latestResolved)
+            {
+                return this._latestIterationId;
+            }
+
+            this._latestResolved = true;
+            var iterations = await gitClient.GetPullRequestIterationsAsync(
+                projectId,
+                repositoryId,
+                pullRequestId,
+                cancellationToken: ct);
+            var maxId = iterations?
+                .Where(iteration => iteration.Id.HasValue)
+                .Select(iteration => iteration.Id!.Value)
+                .DefaultIfEmpty(0)
+                .Max() ?? 0;
+            this._latestIterationId = maxId > 0 ? maxId : null;
+            return this._latestIterationId;
+        }
+
+        public async Task<IterationChangeSet?> GetChangedPathsAsync(
+            GitHttpClient gitClient,
+            string projectId,
+            string repositoryId,
+            int pullRequestId,
+            int fromIteration,
+            int toIteration,
+            CancellationToken ct)
+        {
+            if (this._changesByFromIteration.TryGetValue(fromIteration, out var cached))
+            {
+                return cached;
+            }
+
+            var changes = await gitClient.GetPullRequestIterationChangesAsync(
+                projectId,
+                repositoryId,
+                pullRequestId,
+                toIteration,
+                top: ChangePageSize,
+                compareTo: fromIteration,
+                cancellationToken: ct);
+
+            IterationChangeSet? result = null;
+            if (changes?.ChangeEntries is not null)
+            {
+                var paths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                var entryCount = 0;
+                foreach (var change in changes.ChangeEntries)
+                {
+                    entryCount++;
+                    var path = change?.Item?.Path;
+                    if (!string.IsNullOrWhiteSpace(path))
+                    {
+                        paths.Add(path);
+                    }
+                }
+
+                result = new IterationChangeSet(paths, entryCount < ChangePageSize);
+            }
+
+            this._changesByFromIteration[fromIteration] = result;
+            return result;
+        }
+    }
+
+    private sealed record IterationChangeSet(HashSet<string> Paths, bool Complete);
 }

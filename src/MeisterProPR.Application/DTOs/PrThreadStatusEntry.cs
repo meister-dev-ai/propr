@@ -1,6 +1,8 @@
 // Copyright (c) Andreas Rain.
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
+using MeisterProPR.Domain.Enums;
+
 namespace MeisterProPR.Application.DTOs;
 
 /// <summary>
@@ -19,9 +21,16 @@ namespace MeisterProPR.Application.DTOs;
 ///     Used by the crawl service to detect same-iteration conversational follow-up without
 ///     creating a duplicate review job for unchanged pull requests.
 /// </param>
+/// <param name="CodeChangedSinceRaised">
+///     Whether the code the thread is anchored to has changed since the finding was first raised, as
+///     determined by the provider (e.g. an outdated diff hunk). Drives whether a "fixed" close is
+///     trusted as memory. Defaults to <see cref="ThreadAnchorCodeChange.Unknown" /> when a provider
+///     does not supply the signal.
+/// </param>
 public sealed record PrThreadStatusEntry(
     long ThreadId,
     string Status,
     string? FilePath,
     string CommentHistory,
-    int NonReviewerReplyCount = 0);
+    int NonReviewerReplyCount = 0,
+    ThreadAnchorCodeChange CodeChangedSinceRaised = ThreadAnchorCodeChange.Unknown);

@@ -681,8 +681,9 @@ public sealed class PullRequestSynchronizationService(
             {
                 var stored = scan.Threads.FirstOrDefault(candidate => candidate.ThreadId == thread.ThreadId);
                 var previousStatus = stored?.LastSeenStatus;
-                var isCurrentlyResolved = IsResolvedStatus(thread.Status);
-                var wasPreviouslyResolved = IsResolvedStatus(previousStatus);
+                var currentIntent = ThreadResolutionStatusInterpreter.InterpretIntent(thread.Status);
+                var isCurrentlyResolved = ThreadResolutionStatusInterpreter.IsResolved(currentIntent);
+                var wasPreviouslyResolved = ThreadResolutionStatusInterpreter.IsResolved(ThreadResolutionStatusInterpreter.InterpretIntent(previousStatus));
 
                 if (isCurrentlyResolved && !wasPreviouslyResolved)
                 {
@@ -695,7 +696,9 @@ public sealed class PullRequestSynchronizationService(
                             thread.FilePath,
                             null,
                             thread.CommentHistory,
-                            DateTimeOffset.UtcNow),
+                            DateTimeOffset.UtcNow,
+                            currentIntent,
+                            thread.CodeChangedSinceRaised),
                         ct);
                 }
                 else if (!isCurrentlyResolved && wasPreviouslyResolved)
@@ -1023,14 +1026,6 @@ public sealed class PullRequestSynchronizationService(
         }
 
         return false;
-    }
-
-    private static bool IsResolvedStatus(string? status)
-    {
-        return string.Equals(status, "Fixed", StringComparison.OrdinalIgnoreCase) ||
-               string.Equals(status, "Closed", StringComparison.OrdinalIgnoreCase) ||
-               string.Equals(status, "WontFix", StringComparison.OrdinalIgnoreCase) ||
-               string.Equals(status, "ByDesign", StringComparison.OrdinalIgnoreCase);
     }
 
     private async Task<string> ResolveReviewPipelineProfileIdAsync(

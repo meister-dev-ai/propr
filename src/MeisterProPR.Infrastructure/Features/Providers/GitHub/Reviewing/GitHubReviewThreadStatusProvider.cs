@@ -18,7 +18,7 @@ internal sealed class GitHubReviewThreadStatusProvider(
     IHttpClientFactory httpClientFactory) : IProviderReviewerThreadStatusFetcher
 {
     private const string GitHubReviewThreadsQuery =
-        "query ReviewThreads($owner: String!, $name: String!, $pullRequestNumber: Int!) { repository(owner: $owner, name: $name) { pullRequest(number: $pullRequestNumber) { reviewThreads(first: 100) { nodes { isResolved path line comments(first: 100) { nodes { databaseId body createdAt author { login } } } } } } } }";
+        "query ReviewThreads($owner: String!, $name: String!, $pullRequestNumber: Int!) { repository(owner: $owner, name: $name) { pullRequest(number: $pullRequestNumber) { reviewThreads(first: 100) { nodes { isResolved isOutdated path line comments(first: 100) { nodes { databaseId body createdAt author { login } } } } } } } }";
 
     public ScmProvider Provider => ScmProvider.GitHub;
 
@@ -51,7 +51,10 @@ internal sealed class GitHubReviewThreadStatusProvider(
                 thread.Comments.Nodes.Count(comment => !string.Equals(
                     comment.Author?.Login,
                     authoredLogin,
-                    StringComparison.OrdinalIgnoreCase))))
+                    StringComparison.OrdinalIgnoreCase)),
+                // An outdated review thread is one whose diff hunk is no longer part of the current diff,
+                // i.e. the anchored code changed after the finding was raised.
+                thread.IsOutdated ? ThreadAnchorCodeChange.Changed : ThreadAnchorCodeChange.Unchanged))
             .ToList()
             .AsReadOnly();
     }
@@ -189,6 +192,8 @@ internal sealed class GitHubReviewThreadStatusProvider(
     private sealed record GitHubReviewThreadNode(
         [property: JsonPropertyName("isResolved")]
         bool IsResolved,
+        [property: JsonPropertyName("isOutdated")]
+        bool IsOutdated,
         [property: JsonPropertyName("path")] string? Path,
         [property: JsonPropertyName("line")] int? Line,
         [property: JsonPropertyName("comments")]
