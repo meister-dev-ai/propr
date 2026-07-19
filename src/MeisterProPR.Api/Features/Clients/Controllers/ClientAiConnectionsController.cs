@@ -605,7 +605,8 @@ public sealed partial class ClientAiConnectionsController(
             requestModel.LastSeenAt,
             requestModel.InputCostPer1MUsd,
             requestModel.OutputCostPer1MUsd,
-            requestModel.MaxContextTokens);
+            requestModel.MaxContextTokens,
+            requestModel.CachedInputCostPer1MUsd);
     }
 
     private void AddEmbeddingModelErrors(AiConfiguredModelRequest requestModel, string remoteModelId)
@@ -790,7 +791,8 @@ public sealed partial class ClientAiConnectionsController(
             model.LastSeenAt,
             model.InputCostPer1MUsd,
             model.OutputCostPer1MUsd,
-            model.MaxContextTokens);
+            model.MaxContextTokens,
+            model.CachedInputCostPer1MUsd);
     }
 
     private static AiPurposeBindingRequest ToBindingRequest(AiPurposeBindingDto binding)
@@ -824,7 +826,8 @@ public sealed record AiConfiguredModelRequest(
     DateTimeOffset? LastSeenAt = null,
     decimal? InputCostPer1MUsd = null,
     decimal? OutputCostPer1MUsd = null,
-    int? MaxContextTokens = null);
+    int? MaxContextTokens = null,
+    decimal? CachedInputCostPer1MUsd = null);
 
 /// <summary>Purpose binding payload item for create and update flows.</summary>
 public sealed record AiPurposeBindingRequest(
@@ -869,7 +872,8 @@ public sealed record CreateAiConnectionRequest(
             model.MaxInputTokens!.Value,
             model.EmbeddingDimensions!.Value,
             model.InputCostPer1MUsd,
-            model.OutputCostPer1MUsd))
+            model.OutputCostPer1MUsd,
+            model.CachedInputCostPer1MUsd))
         .ToList()
         .AsReadOnly();
 
@@ -912,7 +916,8 @@ public sealed record UpdateAiConnectionRequest(
             model.MaxInputTokens!.Value,
             model.EmbeddingDimensions!.Value,
             model.InputCostPer1MUsd,
-            model.OutputCostPer1MUsd))
+            model.OutputCostPer1MUsd,
+            model.CachedInputCostPer1MUsd))
         .ToList()
         .AsReadOnly();
 

@@ -40,6 +40,8 @@ public sealed class AiConfiguredModelRecord
 
     public decimal? OutputCostPer1MUsd { get; set; }
 
+    public decimal? CachedInputCostPer1MUsd { get; set; }
+
     public AiConnectionProfileRecord? ConnectionProfile { get; set; }
 
     public ICollection<AiPurposeBindingRecord> PurposeBindings { get; set; } = [];

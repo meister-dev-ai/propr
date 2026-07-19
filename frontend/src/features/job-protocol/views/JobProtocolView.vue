@@ -43,6 +43,7 @@
                 <div class="stat-pill"><span class="stat-label">Total Tokens</span><span class="stat-value fat-tokens">{{ vm.formatTokens(vm.totalInputTokens + vm.totalOutputTokens) }}</span></div>
                 <div class="stat-pill"><span class="stat-label">Cached Input</span><span class="stat-value fat-tokens">{{ vm.formatTokens(vm.totalCachedInputTokens) }}</span></div>
                 <div class="stat-pill"><span class="stat-label">Effective Input</span><span class="stat-value fat-tokens">{{ vm.formatTokens(vm.totalEffectiveInputTokens) }}</span></div>
+                <div class="stat-pill"><span class="stat-label">Est. Cost</span><span class="stat-value fat-tokens">{{ vm.costIsApproximate && vm.totalEstimatedCostUsd != null ? '≈ ' : '' }}{{ formatUsd(vm.totalEstimatedCostUsd) }}</span></div>
             </div>
 
             <div class="detail-tabs">
@@ -76,6 +77,7 @@ import JobProtocolSummaryTab from '@/features/job-protocol/components/JobProtoco
 import JobProtocolTokensTab from '@/features/job-protocol/components/JobProtocolTokensTab.vue'
 import JobProtocolTraceTab from '@/features/job-protocol/components/JobProtocolTraceTab.vue'
 import { useJobProtocolViewModel } from '@/features/job-protocol/composables/useJobProtocolViewModel'
+import { formatUsd } from '@/components/usageDashboardFormatters'
 
 const vm = useJobProtocolViewModel()
 </script>

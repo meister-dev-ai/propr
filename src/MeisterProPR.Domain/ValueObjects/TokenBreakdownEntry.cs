@@ -17,6 +17,8 @@ namespace MeisterProPR.Domain.ValueObjects;
 /// <param name="TotalCachedInputTokens">Accumulated input tokens served from the provider prompt cache.</param>
 /// <param name="TotalCacheWriteTokens">Accumulated tokens written to the provider prompt cache; zero for providers without a separate cache-write charge.</param>
 /// <param name="TotalReasoningTokens">Accumulated reasoning tokens (a portion of <paramref name="TotalOutputTokens" />).</param>
+/// <param name="EstimatedCostUsd">Estimated USD cost for this tier/model computed from its cumulative token totals; <see langword="null" /> when the model has no configured pricing.</param>
+/// <param name="CostIsApproximate">True when <paramref name="EstimatedCostUsd" /> rests on a fallback rate, a missing rate, or estimated token counts.</param>
 public sealed record TokenBreakdownEntry(
     AiConnectionModelCategory ConnectionCategory,
     string ModelId,
@@ -24,4 +26,6 @@ public sealed record TokenBreakdownEntry(
     long TotalOutputTokens,
     long TotalCachedInputTokens = 0,
     long TotalCacheWriteTokens = 0,
-    long TotalReasoningTokens = 0);
+    long TotalReasoningTokens = 0,
+    decimal? EstimatedCostUsd = null,
+    bool CostIsApproximate = false);

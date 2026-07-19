@@ -77,6 +77,7 @@ public sealed class ClientTokenUsageControllerTests(ClientTokenUsageControllerTe
                     CachedInputTokens = 300,
                     CacheWriteTokens = 0,
                     ReasoningTokens = 120,
+                    EstimatedCostUsd = 0.05m,
                 },
                 new ClientTokenUsageSample
                 {
@@ -89,6 +90,7 @@ public sealed class ClientTokenUsageControllerTests(ClientTokenUsageControllerTe
                     CachedInputTokens = 50,
                     CacheWriteTokens = 0,
                     ReasoningTokens = 20,
+                    EstimatedCostUsd = 0.01m,
                 });
             await db.SaveChangesAsync();
         }
@@ -112,6 +114,7 @@ public sealed class ClientTokenUsageControllerTests(ClientTokenUsageControllerTe
         Assert.Equal(350, body.GetProperty("totalCachedInputTokens").GetInt64());
         Assert.Equal(0, body.GetProperty("totalCacheWriteTokens").GetInt64());
         Assert.Equal(140, body.GetProperty("totalReasoningTokens").GetInt64());
+        Assert.Equal(0.06m, body.GetProperty("totalEstimatedCostUsd").GetDecimal());
 
         // Verify samples shape
         var samples = body.GetProperty("samples");
@@ -126,6 +129,11 @@ public sealed class ClientTokenUsageControllerTests(ClientTokenUsageControllerTe
         Assert.True(firstSample.TryGetProperty("cachedInputTokens", out _));
         Assert.True(firstSample.TryGetProperty("cacheWriteTokens", out _));
         Assert.True(firstSample.TryGetProperty("reasoningTokens", out _));
+        Assert.True(firstSample.TryGetProperty("estimatedCostUsd", out _));
+
+        // Per-sample cost round-trips (samples ordered by date ascending: yesterday's gpt-5-mini first).
+        Assert.Equal(0.01m, samples[0].GetProperty("estimatedCostUsd").GetDecimal());
+        Assert.Equal(0.05m, samples[1].GetProperty("estimatedCostUsd").GetDecimal());
     }
 
     [Fact]

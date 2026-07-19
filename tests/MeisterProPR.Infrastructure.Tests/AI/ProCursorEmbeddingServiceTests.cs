@@ -76,4 +76,62 @@ public sealed class ProCursorEmbeddingServiceTests
         Assert.Equal(expectedInputs, capturedInputs);
         Assert.Equal(model.EmbeddingDimensions!.Value, capturedDimensions);
     }
+
+    [Fact]
+    public async Task GenerateEmbeddingsAsync_RecordsEstimatedCost_MatchingLegacyFormula()
+    {
+        const string tokenizer = "cl100k_base";
+        const int dimensions = 1536;
+        const decimal inputRate = 0.13m;
+        const decimal outputRate = 0.26m;
+        const long promptTokens = 1500;
+        const long completionTokens = 7;
+
+        var deployment = new ProCursorEmbeddingDeploymentDto(
+            Guid.NewGuid(),
+            "text-embedding-3-small",
+            tokenizer,
+            8192,
+            dimensions,
+            inputRate,
+            outputRate);
+
+        var embeddingBroker = Substitute.For<IProCursorEmbeddingBroker>();
+        embeddingBroker.GetDeploymentAsync(ClientId, Arg.Any<int?>(), Arg.Any<CancellationToken>())
+            .Returns(deployment);
+        embeddingBroker.GenerateEmbeddingsAsync(
+                ClientId,
+                Arg.Any<IReadOnlyList<string>>(),
+                dimensions,
+                Arg.Any<CancellationToken>())
+            .Returns(
+                new ProCursorEmbeddingBatchResponse(
+                    [[0.1f, 0.2f]],
+                    promptTokens,
+                    completionTokens,
+                    promptTokens + completionTokens));
+
+        ProCursorTokenUsageCaptureRequest? captured = null;
+        var recorder = Substitute.For<IProCursorTokenUsageRecorder>();
+        recorder
+            .When(r => r.RecordAsync(Arg.Any<ProCursorTokenUsageCaptureRequest>(), Arg.Any<CancellationToken>()))
+            .Do(callInfo => captured = callInfo.Arg<ProCursorTokenUsageCaptureRequest>());
+
+        var options = Microsoft.Extensions.Options.Options.Create(new ProCursorOptions { EmbeddingDimensions = dimensions });
+        var service = new ProCursorEmbeddingService(options, embeddingBroker, recorder);
+
+        var usageContext = new ProCursorEmbeddingUsageContext(
+            Guid.NewGuid(),
+            "source-name",
+            "req-prefix");
+
+        _ = await service.GenerateEmbeddingsAsync(ClientId, ["alpha"], usageContext);
+
+        Assert.NotNull(captured);
+
+        // The refactor to the shared calculator MUST reproduce the legacy embedding cost value exactly.
+        var expected = (inputRate * promptTokens / 1_000_000m) + (outputRate * completionTokens / 1_000_000m);
+        Assert.Equal(expected, captured!.EstimatedCostUsd);
+        Assert.False(captured.TokensEstimated);
+    }
 }

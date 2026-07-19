@@ -11054,6 +11054,8 @@ export interface components {
             outputCostPer1MUsd?: number | null;
             /** Format: int32 */
             maxContextTokens?: number | null;
+            /** Format: double */
+            cachedInputCostPer1MUsd?: number | null;
             /** @description Returns true when the model supports chat workloads. */
             readonly supportsChat?: boolean;
             /** @description Returns true when the model supports embeddings. */
@@ -11083,6 +11085,8 @@ export interface components {
             outputCostPer1MUsd?: number | null;
             /** Format: int32 */
             maxContextTokens?: number | null;
+            /** Format: double */
+            cachedInputCostPer1MUsd?: number | null;
         };
         /**
          * @description Origin of a configured model entry.
@@ -11361,6 +11365,8 @@ export interface components {
             defaultReviewPipelineProfileId?: string | null;
             /** Format: date-time */
             defaultReviewPipelineProfileUpdatedAtUtc?: string | null;
+            /** Format: int64 */
+            recentUsageTokens?: number | null;
         };
         /** @description Client-scoped review profile response. */
         ClientReviewProfileResponse: {
@@ -11494,6 +11500,11 @@ export interface components {
              * @description Sum of reasoning tokens across all samples.
              */
             totalReasoningTokens?: number;
+            /**
+             * Format: double
+             * @description Sum of estimated USD cost across all samples; null when no sample has a priced cost.
+             */
+            totalEstimatedCostUsd?: number | null;
         };
         /** @description A single (model, day) token usage data point returned by the token-usage dashboard endpoint. */
         ClientTokenUsageSampleDto: {
@@ -11529,6 +11540,11 @@ export interface components {
              * @description Reasoning tokens.
              */
             reasoningTokens?: number;
+            /**
+             * Format: double
+             * @description Accumulated estimated USD cost for this (model, day); null when no priced contribution was recorded.
+             */
+            estimatedCostUsd?: number | null;
         };
         /**
          * @description The native review surface used by a provider.
@@ -11805,6 +11821,9 @@ export interface components {
             filesReviewed?: number;
             /** Format: int32 */
             filesInScope?: number | null;
+            /** Format: double */
+            totalEstimatedCostUsd?: number | null;
+            costIsApproximate?: boolean;
         };
         /** @description Single job item in the list response. */
         JobListItem: {
@@ -11841,6 +11860,9 @@ export interface components {
             filesReviewed?: number;
             /** Format: int32 */
             filesInScope?: number | null;
+            /** Format: double */
+            totalEstimatedCostUsd?: number | null;
+            costIsApproximate?: boolean;
         };
         /** @description Response for the job list endpoint. */
         JobListResponse: {
@@ -12045,6 +12067,9 @@ export interface components {
             /** Format: int64 */
             totalOutputTokens?: number | null;
             tokenBreakdown?: components["schemas"]["TokenBreakdownEntry"][] | null;
+            /** Format: double */
+            totalEstimatedCostUsd?: number | null;
+            costIsApproximate?: boolean;
         };
         /** @description Aggregated view of all review activity for a specific pull request. */
         PrReviewViewDto: {
@@ -12068,6 +12093,9 @@ export interface components {
             /** Format: int32 */
             contributedMemoryCount?: number;
             contributedMemories?: components["schemas"]["ContributingMemorySummaryDto"][] | null;
+            /** Format: double */
+            totalEstimatedCostUsd?: number | null;
+            costIsApproximate?: boolean;
         };
         /**
          * @description Stable-prefix eligibility recorded for one cache-sensitive AI call.
@@ -12587,6 +12615,16 @@ export interface components {
              * @description Cached input tokens read from a provider cache for this AI call.
              */
             cachedInputTokens?: number | null;
+            /**
+             * Format: int64
+             * @description Cache-write tokens for this AI call.
+             */
+            cacheWriteTokens?: number | null;
+            /**
+             * Format: int64
+             * @description Reasoning tokens for this AI call.
+             */
+            reasoningTokens?: number | null;
             cacheStatus?: components["schemas"]["CacheCallStatus"];
             /** @description Actionable miss or unavailable reason when cache status is not a hit. */
             cacheMissCategory?: string | null;
@@ -13076,6 +13114,16 @@ export interface components {
              * @description Sum of cached input tokens across AI calls where the provider reported cached usage.
              */
             totalCachedInputTokens?: number | null;
+            /**
+             * Format: int64
+             * @description Sum of cache-write tokens across AI calls in this protocol pass.
+             */
+            totalCacheWriteTokens?: number | null;
+            /**
+             * Format: int64
+             * @description Sum of reasoning tokens across AI calls in this protocol pass.
+             */
+            totalReasoningTokens?: number | null;
             cacheObservability?: components["schemas"]["CacheObservabilityStatus"];
             /** @description True when this pass was inherited from a prior same-revision retry source job. */
             isInherited?: boolean;
@@ -13486,6 +13534,13 @@ export interface components {
              * @description Accumulated reasoning tokens (a portion of TotalOutputTokens).
              */
             totalReasoningTokens?: number;
+            /**
+             * Format: double
+             * @description Estimated USD cost for this tier/model computed from its cumulative token totals; null when the model has no configured pricing.
+             */
+            estimatedCostUsd?: number | null;
+            /** @description True when EstimatedCostUsd rests on a fallback rate, a missing rate, or estimated token counts. */
+            costIsApproximate?: boolean;
         };
         /** @description Identifies a pull request to unblock. */
         UnblockPullRequestRequest: {

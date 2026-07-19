@@ -39,6 +39,8 @@ namespace MeisterProPR.Application.DTOs;
 ///     In-scope changed files after exclusions, fixed at job start (the progress denominator);
 ///     null until dispatch planning runs.
 /// </param>
+/// <param name="TotalEstimatedCostUsd">Persisted per-job USD cost; null when the model had no configured pricing.</param>
+/// <param name="CostIsApproximate">True when the cost relied on a fallback rate or mixes priced and unpriced tiers.</param>
 public sealed record JobListPageItemDto(
     Guid Id,
     Guid? ClientId,
@@ -61,4 +63,6 @@ public sealed record JobListPageItemDto(
     string? PrRepositoryName,
     string? AiModel,
     int FilesReviewed,
-    int? FilesInScope);
+    int? FilesInScope,
+    decimal? TotalEstimatedCostUsd,
+    bool CostIsApproximate);

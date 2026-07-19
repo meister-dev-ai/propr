@@ -273,22 +273,33 @@
                         <span>Max Context Tokens</span>
                         <input v-model="model.maxContextTokens" type="number" min="1" placeholder="128000 (default)" />
                       </label>
-
-                      <div class="form-field checkbox-group-field">
-                        <span style="visibility: hidden">Options</span>
-                        <div class="checkboxes-wrapper">
-                          <label class="checkbox-field">
-                            <input v-model="model.supportsStructuredOutput" type="checkbox" />
-                            <span>Structured Output</span>
-                          </label>
-
-                          <label class="checkbox-field">
-                            <input v-model="model.supportsToolUse" type="checkbox" />
-                            <span>Tool Use</span>
-                          </label>
-                        </div>
-                      </div>
                     </template>
+
+                    <label class="form-field">
+                      <span>Input Cost / 1M (USD)</span>
+                      <input v-model="model.inputCostPer1MUsd" type="number" min="0" step="0.000001" placeholder="e.g. 2.50" />
+                    </label>
+
+                    <label class="form-field">
+                      <span>Output Cost / 1M (USD)</span>
+                      <input v-model="model.outputCostPer1MUsd" type="number" min="0" step="0.000001" placeholder="e.g. 10.00" />
+                    </label>
+
+                    <label v-if="model.kind === 'chat'" class="form-field">
+                      <span>Cached Input Cost / 1M (USD)</span>
+                      <input v-model="model.cachedInputCostPer1MUsd" type="number" min="0" step="0.000001" placeholder="e.g. 1.25 (optional)" />
+                    </label>
+                  </div>
+
+                  <div v-if="model.kind === 'chat'" class="ai-model-toggles">
+                    <label class="checkbox-field">
+                      <input v-model="model.supportsStructuredOutput" type="checkbox" />
+                      <span>Structured Output</span>
+                    </label>
+                    <label class="checkbox-field">
+                      <input v-model="model.supportsToolUse" type="checkbox" />
+                      <span>Tool Use</span>
+                    </label>
                   </div>
                 </div>
               </div>
@@ -683,6 +694,26 @@ const bindingsForSection = <T extends { purpose: string }>(bindings: T[], sectio
 
 .form-field span {
   font-weight: 600;
+}
+
+/* Uniform inputs: drop the native number spinners so cost/token boxes match the text fields. */
+.ai-form-grid input[type='number'] {
+  appearance: textfield;
+  -moz-appearance: textfield;
+}
+
+.ai-form-grid input[type='number']::-webkit-outer-spin-button,
+.ai-form-grid input[type='number']::-webkit-inner-spin-button {
+  appearance: none;
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+.ai-model-toggles {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1.25rem;
+  margin-top: 1rem;
 }
 
 .checkbox-field {

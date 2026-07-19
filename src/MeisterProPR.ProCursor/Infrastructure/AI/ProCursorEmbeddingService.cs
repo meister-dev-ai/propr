@@ -5,6 +5,8 @@ using System.Security.Cryptography;
 using System.Text;
 using MeisterProPR.Application.DTOs.ProCursor;
 using MeisterProPR.Application.Interfaces;
+using MeisterProPR.Domain.Services;
+using MeisterProPR.Domain.ValueObjects;
 using MeisterProPR.ProCursor.Options;
 using Microsoft.Extensions.Options;
 
@@ -201,14 +203,13 @@ public sealed class ProCursorEmbeddingService(
         long completionTokens,
         ProCursorEmbeddingDeploymentDto capability)
     {
-        if (!capability.InputCostPer1MUsd.HasValue && !capability.OutputCostPer1MUsd.HasValue)
-        {
-            return null;
-        }
-
-        var promptCost = capability.InputCostPer1MUsd.GetValueOrDefault() * promptTokens / 1_000_000m;
-        var completionCost = capability.OutputCostPer1MUsd.GetValueOrDefault() * completionTokens / 1_000_000m;
-        return promptCost + completionCost;
+        return AiCostCalculator.Calculate(
+                new AiTokenUsage(promptTokens, completionTokens),
+                new ModelPricing(
+                    capability.InputCostPer1MUsd,
+                    capability.OutputCostPer1MUsd,
+                    capability.CachedInputCostPer1MUsd))
+            .Usd;
     }
 
     private static IReadOnlyList<ProCursorExtractedChunk> SplitChunkToFitBudget(

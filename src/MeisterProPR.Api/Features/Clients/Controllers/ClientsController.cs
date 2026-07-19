@@ -19,9 +19,10 @@ namespace MeisterProPR.Api.Controllers;
 [Route("clients")]
 public sealed class ClientsController(
     IClientAdminService clientAdminService,
-    ITenantAdminService tenantAdminService) : ControllerBase
+    ITenantAdminService tenantAdminService,
+    IClientTokenUsageRepository usageRepository) : ControllerBase
 {
-    private static ClientResponse ToClientResponse(ClientDto client)
+    private static ClientResponse ToClientResponse(ClientDto client, long? recentUsageTokens = null)
     {
         return new ClientResponse(
             client.Id,
@@ -43,7 +44,8 @@ public sealed class ClientsController(
             client.TenantSlug,
             client.TenantDisplayName,
             client.DefaultReviewPipelineProfileId,
-            client.DefaultReviewPipelineProfileUpdatedAtUtc);
+            client.DefaultReviewPipelineProfileUpdatedAtUtc,
+            recentUsageTokens);
     }
 
     private IActionResult? ValidateRequest(ValidationResult result)
@@ -257,11 +259,16 @@ public sealed class ClientsController(
             return auth;
         }
 
+        // Trailing-30-day token usage per client for the directory's "USAGE (30D)" column, summed from the
+        // per-client daily usage samples (the same source the usage dashboard reads).
+        var today = DateOnly.FromDateTime(DateTime.UtcNow);
+        var usageByClient = await usageRepository.GetRecentTotalsByClientAsync(today.AddDays(-30), today, ct);
+
         var isAdmin = AuthHelpers.IsAdmin(this.HttpContext);
         if (isAdmin)
         {
             var all = await clientAdminService.GetAllAsync(ct);
-            return this.Ok(all.Select(ToClientResponse).ToList());
+            return this.Ok(all.Select(c => ToClientResponse(c, usageByClient.GetValueOrDefault(c.Id))).ToList());
         }
 
         var clientIds = AuthHelpers.GetClientRoles(this.HttpContext).Keys.ToList();
@@ -271,7 +278,7 @@ public sealed class ClientsController(
         }
 
         var scoped = await clientAdminService.GetByIdsAsync(clientIds, ct);
-        return this.Ok(scoped.Select(ToClientResponse).ToList());
+        return this.Ok(scoped.Select(c => ToClientResponse(c, usageByClient.GetValueOrDefault(c.Id))).ToList());
     }
 
     /// <summary>
@@ -356,7 +363,8 @@ public sealed record ClientResponse(
     string? TenantSlug,
     string? TenantDisplayName,
     string? DefaultReviewPipelineProfileId,
-    DateTimeOffset? DefaultReviewPipelineProfileUpdatedAtUtc);
+    DateTimeOffset? DefaultReviewPipelineProfileUpdatedAtUtc,
+    long? RecentUsageTokens = null);
 
 /// <summary>One entry in a client's ordered review-pass list: an additional multi-pass union pass bound to a model.</summary>
 /// <param name="Ordinal">Zero-based position of this pass after the implicit tier baseline pass.</param>

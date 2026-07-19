@@ -147,6 +147,9 @@ export function useClientAiConnectionsTab(props: { clientId: string }) {
       embeddingDimensions: model.embeddingDimensions == null ? '' : String(model.embeddingDimensions),
       supportsStructuredOutput: Boolean(model.supportsStructuredOutput),
       supportsToolUse: Boolean(model.supportsToolUse),
+      inputCostPer1MUsd: model.inputCostPer1MUsd == null ? '' : String(model.inputCostPer1MUsd),
+      outputCostPer1MUsd: model.outputCostPer1MUsd == null ? '' : String(model.outputCostPer1MUsd),
+      cachedInputCostPer1MUsd: model.cachedInputCostPer1MUsd == null ? '' : String(model.cachedInputCostPer1MUsd),
     }))
     const modelLookup = new Map<string, string>()
     for (const model of editor.models) {
@@ -208,6 +211,9 @@ export function useClientAiConnectionsTab(props: { clientId: string }) {
       embeddingDimensions: '',
       supportsStructuredOutput: true,
       supportsToolUse: true,
+      inputCostPer1MUsd: '',
+      outputCostPer1MUsd: '',
+      cachedInputCostPer1MUsd: '',
     })
     editingModelId.value = newModelId
   }
@@ -253,6 +259,9 @@ export function useClientAiConnectionsTab(props: { clientId: string }) {
     embeddingDimensions: discovered.embeddingDimensions == null ? '' : String(discovered.embeddingDimensions),
     supportsStructuredOutput: Boolean(discovered.supportsStructuredOutput),
     supportsToolUse: Boolean(discovered.supportsToolUse),
+    inputCostPer1MUsd: discovered.inputCostPer1MUsd == null ? '' : String(discovered.inputCostPer1MUsd),
+    outputCostPer1MUsd: discovered.outputCostPer1MUsd == null ? '' : String(discovered.outputCostPer1MUsd),
+    cachedInputCostPer1MUsd: discovered.cachedInputCostPer1MUsd == null ? '' : String(discovered.cachedInputCostPer1MUsd),
   })
 
   const mergeDiscoveredModels = (discoveredModels: AiConfiguredModelDto[]) => {
@@ -315,6 +324,9 @@ export function useClientAiConnectionsTab(props: { clientId: string }) {
       embeddingDimensions: model.kind === 'embedding' && model.embeddingDimensions ? Number(model.embeddingDimensions) : undefined,
       supportsStructuredOutput: model.kind === 'chat' ? model.supportsStructuredOutput : false,
       supportsToolUse: model.kind === 'chat' ? model.supportsToolUse : false,
+      inputCostPer1MUsd: model.inputCostPer1MUsd ? Number(model.inputCostPer1MUsd) : undefined,
+      outputCostPer1MUsd: model.outputCostPer1MUsd ? Number(model.outputCostPer1MUsd) : undefined,
+      cachedInputCostPer1MUsd: model.cachedInputCostPer1MUsd ? Number(model.cachedInputCostPer1MUsd) : undefined,
       source: 'manual',
     }))
   }

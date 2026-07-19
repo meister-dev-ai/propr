@@ -6,6 +6,7 @@ using MeisterProPR.Application.Features.Reviewing.Execution.Models;
 using MeisterProPR.Application.Interfaces;
 using MeisterProPR.Domain.Entities;
 using MeisterProPR.Domain.Enums;
+using MeisterProPR.Domain.Services;
 using MeisterProPR.Domain.ValueObjects;
 using MeisterProPR.Infrastructure.Data;
 using MeisterProPR.Infrastructure.Features.Reviewing.Diagnostics.Persistence;
@@ -24,7 +25,8 @@ namespace MeisterProPR.Infrastructure.Repositories;
 /// </summary>
 public sealed class EfProtocolRecorder(
     IDbContextFactory<MeisterProPRDbContext> contextFactory,
-    ILogger<EfProtocolRecorder> logger) : IProtocolRecorder
+    ILogger<EfProtocolRecorder> logger,
+    IModelPricingResolver? pricingResolver = null) : IProtocolRecorder
 {
     /// <inheritdoc />
     public async Task<Guid> BeginAsync(
@@ -283,6 +285,19 @@ public sealed class EfProtocolRecorder(
 
                 await db.SaveChangesAsync(ct);
 
+                // Best-effort cost: a pricing-lookup failure must never break token recording.
+                var passCostDelta = await this.ApplyTierCostAsync(
+                    db,
+                    job,
+                    category,
+                    modelId,
+                    totalInputTokens,
+                    totalOutputTokens,
+                    cachedInputTokens,
+                    cacheWriteTokens,
+                    reasoningTokens,
+                    ct);
+
                 // Upsert daily token usage aggregate for the client owning this job.
                 if (totalInputTokens > 0
                     || totalOutputTokens > 0
@@ -300,7 +315,8 @@ public sealed class EfProtocolRecorder(
                         ct,
                         cachedInputTokens,
                         cacheWriteTokens,
-                        reasoningTokens);
+                        reasoningTokens,
+                        passCostDelta);
                 }
             }
         }
@@ -366,11 +382,87 @@ public sealed class EfProtocolRecorder(
                     reasoningTokens);
 
                 await db.SaveChangesAsync(ct);
+
+                // Best-effort cost: a pricing-lookup failure must never break token recording.
+                _ = await this.ApplyTierCostAsync(
+                    db,
+                    job,
+                    category,
+                    effectiveModelId,
+                    inputTokens,
+                    outputTokens,
+                    cachedInputTokens,
+                    cacheWriteTokens,
+                    reasoningTokens,
+                    ct);
             }
         }
         catch (Exception ex)
         {
             logger.LogWarning(ex, "Failed to add tokens for protocol {ProtocolId}", protocolId);
+        }
+    }
+
+    /// <summary>
+    ///     Resolves the model's pricing, recomputes the tier's cumulative cost onto the job's breakdown and
+    ///     total, and returns the per-pass cost delta for the daily usage sample. Best-effort: token recording
+    ///     has already been persisted before this runs, and any failure here is swallowed so cost never breaks
+    ///     token recording. Returns <see langword="null" /> when no resolver is configured or on failure.
+    /// </summary>
+    private async Task<decimal?> ApplyTierCostAsync(
+        MeisterProPRDbContext db,
+        ReviewJob job,
+        AiConnectionModelCategory category,
+        string modelId,
+        long passInputTokens,
+        long passOutputTokens,
+        long passCachedInputTokens,
+        long passCacheWriteTokens,
+        long passReasoningTokens,
+        CancellationToken ct)
+    {
+        if (pricingResolver is null)
+        {
+            return null;
+        }
+
+        try
+        {
+            var pricing = await pricingResolver.ResolveAsync(job.AiConnectionId ?? Guid.Empty, category, modelId, ct)
+                          ?? new ModelPricing(null, null);
+
+            var tierEntry = job.TokenBreakdown.FirstOrDefault(entry =>
+                entry.ConnectionCategory == category &&
+                string.Equals(entry.ModelId, modelId, StringComparison.Ordinal));
+
+            if (tierEntry is not null)
+            {
+                var cumulative = AiCostCalculator.Calculate(
+                    new AiTokenUsage(
+                        tierEntry.TotalInputTokens,
+                        tierEntry.TotalOutputTokens,
+                        tierEntry.TotalCachedInputTokens,
+                        tierEntry.TotalCacheWriteTokens,
+                        tierEntry.TotalReasoningTokens),
+                    pricing);
+                job.SetTierCost(category, modelId, cumulative.Usd, cumulative.IsApproximate);
+                await db.SaveChangesAsync(ct);
+            }
+
+            return AiCostCalculator.Calculate(
+                    new AiTokenUsage(
+                        passInputTokens,
+                        passOutputTokens,
+                        passCachedInputTokens,
+                        passCacheWriteTokens,
+                        passReasoningTokens),
+                    pricing)
+                .Usd;
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "Failed to compute estimated cost for job {JobId}", job.Id);
+            return null;
         }
     }
 

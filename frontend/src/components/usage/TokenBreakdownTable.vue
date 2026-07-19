@@ -14,6 +14,7 @@
           <th class="num-col">Cached Input</th>
           <th class="num-col">Effective Input</th>
           <th class="num-col">Output Tokens</th>
+          <th class="num-col">Est. Cost</th>
           <th class="num-col">% of Total</th>
         </tr>
       </thead>
@@ -25,6 +26,7 @@
           <td class="num-col">{{ formatTokens(entry.cachedInputTokens) }}</td>
           <td class="num-col">{{ formatTokens(entry.effectiveInputTokens) }}</td>
           <td class="num-col">{{ formatTokens(entry.outputTokens) }}</td>
+          <td class="num-col">{{ formatCost(entry.estimatedCostUsd, entry.costIsApproximate) }}</td>
           <td class="num-col">{{ pct(entry) }}</td>
         </tr>
       </tbody>
@@ -35,6 +37,7 @@
           <td class="num-col">{{ formatTokens(sumCachedInput) }}</td>
           <td class="num-col">{{ formatTokens(sumEffectiveInput) }}</td>
           <td class="num-col">{{ formatTokens(sumOutput) }}</td>
+          <td class="num-col">{{ formatCost(sumCost, anyApproximate) }}</td>
           <td class="num-col">100%</td>
         </tr>
       </tfoot>
@@ -49,6 +52,7 @@
 
 <script setup lang="ts">
 import { computed } from 'vue'
+import { formatUsd } from '@/components/usageDashboardFormatters'
 
 interface TokenBreakdownEntry {
   connectionCategory?: number | string | null
@@ -61,6 +65,8 @@ interface TokenBreakdownEntry {
   inputTokens?: number | null
   outputTokens?: number | null
   cachedInputTokens?: number | null
+  estimatedCostUsd?: number | null
+  costIsApproximate?: boolean | null
 }
 
 interface NormalizedBreakdownEntry {
@@ -71,6 +77,8 @@ interface NormalizedBreakdownEntry {
   cachedInputTokens: number
   effectiveInputTokens: number
   outputTokens: number
+  estimatedCostUsd: number | null
+  costIsApproximate: boolean
 }
 
 const props = defineProps<{
@@ -158,6 +166,8 @@ const normalizedBreakdown = computed<NormalizedBreakdownEntry[]>(() =>
       cachedInputTokens,
       effectiveInputTokens: Math.max(0, inputTokens - cachedInputTokens),
       outputTokens: entry.totalOutputTokens ?? entry.outputTokens ?? 0,
+      estimatedCostUsd: entry.estimatedCostUsd ?? null,
+      costIsApproximate: entry.costIsApproximate ?? false,
     }
   }),
 )
@@ -168,11 +178,30 @@ const sumEffectiveInput = computed(() => normalizedBreakdown.value.reduce((s, e)
 const sumOutput = computed(() => normalizedBreakdown.value.reduce((s, e) => s + e.outputTokens, 0))
 const grandTotal = computed(() => sumInput.value + sumOutput.value)
 
+// Null-aware cost total: null when no tier is priced.
+const sumCost = computed<number | null>(() => {
+  const priced = normalizedBreakdown.value.filter((e) => e.estimatedCostUsd != null)
+  return priced.length === 0 ? null : priced.reduce((s, e) => s + (e.estimatedCostUsd ?? 0), 0)
+})
+const anyApproximate = computed<boolean>(() => {
+  const anyPriced = normalizedBreakdown.value.some((e) => e.estimatedCostUsd != null)
+  const anyUnpriced = normalizedBreakdown.value.some((e) => e.estimatedCostUsd == null)
+  return normalizedBreakdown.value.some((e) => e.costIsApproximate) || (anyPriced && anyUnpriced)
+})
+
 function pct(entry: NormalizedBreakdownEntry): string {
   const total = grandTotal.value
   if (!total) return '—'
   const share = ((entry.inputTokens + entry.outputTokens) / total) * 100
   return share.toFixed(1) + '%'
+}
+
+function formatCost(value: number | null | undefined, approximate: boolean): string {
+  if (value == null) {
+    return '—'
+  }
+
+  return `${approximate ? '≈' : ''}${formatUsd(value)}`
 }
 </script>
 

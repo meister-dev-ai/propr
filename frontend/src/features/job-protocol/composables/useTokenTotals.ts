@@ -58,6 +58,26 @@ export function useTokenTotals(
             })
         })
 
+        // The protocol passes carry no cost; enrich the recomputed per-tier rows with the
+        // USD cost persisted on ReviewJob.TokenBreakdown (computed once at review time).
+        const persistedCost = new Map<string, { cost: number | null; approximate: boolean }>()
+        for (const entry of jobDetail.value?.tokenBreakdown ?? []) {
+            const category = entry.connectionCategory ?? null
+            const model = entry.modelId ?? null
+            const key = `${String(category ?? 'unknown')}|${model ?? '(default)'}`
+            persistedCost.set(key, {
+                cost: entry.estimatedCostUsd ?? null,
+                approximate: Boolean(entry.costIsApproximate),
+            })
+        }
+        grouped.forEach((entry, key) => {
+            const match = persistedCost.get(key)
+            if (match) {
+                entry.estimatedCostUsd = match.cost
+                entry.costIsApproximate = match.approximate
+            }
+        })
+
         return Array.from(grouped.values()).sort((left, right) => {
             const leftTotal = left.totalInputTokens + left.totalOutputTokens
             const rightTotal = right.totalInputTokens + right.totalOutputTokens

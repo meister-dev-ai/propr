@@ -50,7 +50,8 @@ public sealed record ProCursorEmbeddingDeploymentDto(
     int MaxInputTokens,
     int EmbeddingDimensions,
     decimal? InputCostPer1MUsd = null,
-    decimal? OutputCostPer1MUsd = null);
+    decimal? OutputCostPer1MUsd = null,
+    decimal? CachedInputCostPer1MUsd = null);
 
 /// <summary>
 ///     Request used to generate one embedding vector per input string.

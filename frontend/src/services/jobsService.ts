@@ -36,6 +36,8 @@ export interface TokenBreakdownEntry {
   modelId: string
   totalInputTokens: number
   totalOutputTokens: number
+  estimatedCostUsd?: number | null
+  costIsApproximate?: boolean
 }
 
 export interface JobListItem {
@@ -82,6 +84,8 @@ export interface JobDetailResponse {
   reviewTemperature: number | null
   tokenBreakdown: TokenBreakdownEntry[]
   breakdownConsistent: boolean | null
+  totalEstimatedCostUsd?: number | null
+  costIsApproximate?: boolean
 }
 
 export interface GetJobProtocolOptions {
@@ -97,6 +101,8 @@ export interface PrJobSummaryDto {
   totalInputTokens: number | null
   totalOutputTokens: number | null
   tokenBreakdown: TokenBreakdownEntry[]
+  totalEstimatedCostUsd?: number | null
+  costIsApproximate?: boolean
 }
 
 export interface ThreadMemorySummaryDto {
@@ -133,6 +139,8 @@ export interface PrReviewViewDto {
   originatedMemories: ThreadMemorySummaryDto[]
   contributedMemoryCount: number
   contributedMemories: ContributingMemorySummaryDto[]
+  totalEstimatedCostUsd?: number | null
+  costIsApproximate?: boolean
 }
 
 // ──────────────────────────────────────────────────────────────────────────────

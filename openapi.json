@@ -16344,6 +16344,11 @@
             "format": "int32",
             "nullable": true
           },
+          "cachedInputCostPer1MUsd": {
+            "type": "number",
+            "format": "double",
+            "nullable": true
+          },
           "supportsChat": {
             "type": "boolean",
             "description": "Returns true when the model supports chat workloads.",
@@ -16429,6 +16434,11 @@
           "maxContextTokens": {
             "type": "integer",
             "format": "int32",
+            "nullable": true
+          },
+          "cachedInputCostPer1MUsd": {
+            "type": "number",
+            "format": "double",
             "nullable": true
           }
         },
@@ -17090,6 +17100,11 @@
             "type": "string",
             "format": "date-time",
             "nullable": true
+          },
+          "recentUsageTokens": {
+            "type": "integer",
+            "format": "int64",
+            "nullable": true
           }
         },
         "additionalProperties": false,
@@ -17384,6 +17399,12 @@
             "type": "integer",
             "description": "Sum of reasoning tokens across all samples.",
             "format": "int64"
+          },
+          "totalEstimatedCostUsd": {
+            "type": "number",
+            "description": "Sum of estimated USD cost across all samples; null when no sample has a priced cost.",
+            "format": "double",
+            "nullable": true
           }
         },
         "additionalProperties": false,
@@ -17426,6 +17447,12 @@
             "type": "integer",
             "description": "Reasoning tokens.",
             "format": "int64"
+          },
+          "estimatedCostUsd": {
+            "type": "number",
+            "description": "Accumulated estimated USD cost for this (model, day); null when no priced contribution was recorded.",
+            "format": "double",
+            "nullable": true
           }
         },
         "additionalProperties": false,
@@ -18215,6 +18242,14 @@
             "type": "integer",
             "format": "int32",
             "nullable": true
+          },
+          "totalEstimatedCostUsd": {
+            "type": "number",
+            "format": "double",
+            "nullable": true
+          },
+          "costIsApproximate": {
+            "type": "boolean"
           }
         },
         "additionalProperties": false,
@@ -18315,6 +18350,14 @@
             "type": "integer",
             "format": "int32",
             "nullable": true
+          },
+          "totalEstimatedCostUsd": {
+            "type": "number",
+            "format": "double",
+            "nullable": true
+          },
+          "costIsApproximate": {
+            "type": "boolean"
           }
         },
         "additionalProperties": false,
@@ -18780,6 +18823,14 @@
               "$ref": "#/components/schemas/TokenBreakdownEntry"
             },
             "nullable": true
+          },
+          "totalEstimatedCostUsd": {
+            "type": "number",
+            "format": "double",
+            "nullable": true
+          },
+          "costIsApproximate": {
+            "type": "boolean"
           }
         },
         "additionalProperties": false,
@@ -18854,6 +18905,14 @@
               "$ref": "#/components/schemas/ContributingMemorySummaryDto"
             },
             "nullable": true
+          },
+          "totalEstimatedCostUsd": {
+            "type": "number",
+            "format": "double",
+            "nullable": true
+          },
+          "costIsApproximate": {
+            "type": "boolean"
           }
         },
         "additionalProperties": false,
@@ -20156,6 +20215,18 @@
             "format": "int64",
             "nullable": true
           },
+          "cacheWriteTokens": {
+            "type": "integer",
+            "description": "Cache-write tokens for this AI call.",
+            "format": "int64",
+            "nullable": true
+          },
+          "reasoningTokens": {
+            "type": "integer",
+            "description": "Reasoning tokens for this AI call.",
+            "format": "int64",
+            "nullable": true
+          },
           "cacheStatus": {
             "$ref": "#/components/schemas/CacheCallStatus"
           },
@@ -21293,6 +21364,18 @@
             "format": "int64",
             "nullable": true
           },
+          "totalCacheWriteTokens": {
+            "type": "integer",
+            "description": "Sum of cache-write tokens across AI calls in this protocol pass.",
+            "format": "int64",
+            "nullable": true
+          },
+          "totalReasoningTokens": {
+            "type": "integer",
+            "description": "Sum of reasoning tokens across AI calls in this protocol pass.",
+            "format": "int64",
+            "nullable": true
+          },
           "cacheObservability": {
             "$ref": "#/components/schemas/CacheObservabilityStatus"
           },
@@ -22221,6 +22304,16 @@
             "type": "integer",
             "description": "Accumulated reasoning tokens (a portion of TotalOutputTokens).",
             "format": "int64"
+          },
+          "estimatedCostUsd": {
+            "type": "number",
+            "description": "Estimated USD cost for this tier/model computed from its cumulative token totals; null when the model has no configured pricing.",
+            "format": "double",
+            "nullable": true
+          },
+          "costIsApproximate": {
+            "type": "boolean",
+            "description": "True when EstimatedCostUsd rests on a fallback rate, a missing rate, or estimated token counts."
           }
         },
         "additionalProperties": false,

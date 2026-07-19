@@ -5,6 +5,8 @@ using MeisterProPR.Application.Interfaces;
 using MeisterProPR.Domain.Entities;
 using MeisterProPR.Infrastructure.Data;
 using Microsoft.EntityFrameworkCore;
+using Npgsql;
+using NpgsqlTypes;
 
 namespace MeisterProPR.Infrastructure.Repositories;
 
@@ -27,23 +29,31 @@ public sealed class ClientTokenUsageRepository(MeisterProPRDbContext db) : IClie
         CancellationToken ct,
         long cachedInputTokens = 0,
         long cacheWriteTokens = 0,
-        long reasoningTokens = 0)
+        long reasoningTokens = 0,
+        decimal? estimatedCostUsd = null)
     {
         if (db.Database.ProviderName?.Contains("Npgsql", StringComparison.OrdinalIgnoreCase) == true)
         {
             // PostgreSQL: atomic upsert via ON CONFLICT DO UPDATE — no read-modify-write race.
+            // The nullable cost accumulates only when at least one side is priced; when both the
+            // stored value and the incoming delta are null (unpriced model) the sample stays null,
+            // so "pricing unknown" is never silently collapsed into a real zero.
             await db.Database.ExecuteSqlRawAsync(
                 """
                 INSERT INTO client_token_usage_samples
-                    (id, client_id, model_id, date, input_tokens, output_tokens, cached_input_tokens, cache_write_tokens, reasoning_tokens)
-                VALUES (gen_random_uuid(), {0}, {1}, {2}, {3}, {4}, {5}, {6}, {7})
+                    (id, client_id, model_id, date, input_tokens, output_tokens, cached_input_tokens, cache_write_tokens, reasoning_tokens, estimated_cost_usd)
+                VALUES (gen_random_uuid(), {0}, {1}, {2}, {3}, {4}, {5}, {6}, {7}, @estimated_cost_usd)
                 ON CONFLICT (client_id, model_id, date)
                 DO UPDATE SET
                     input_tokens        = client_token_usage_samples.input_tokens        + EXCLUDED.input_tokens,
                     output_tokens       = client_token_usage_samples.output_tokens       + EXCLUDED.output_tokens,
                     cached_input_tokens = client_token_usage_samples.cached_input_tokens + EXCLUDED.cached_input_tokens,
                     cache_write_tokens  = client_token_usage_samples.cache_write_tokens  + EXCLUDED.cache_write_tokens,
-                    reasoning_tokens    = client_token_usage_samples.reasoning_tokens    + EXCLUDED.reasoning_tokens
+                    reasoning_tokens    = client_token_usage_samples.reasoning_tokens    + EXCLUDED.reasoning_tokens,
+                    estimated_cost_usd  = CASE
+                                              WHEN client_token_usage_samples.estimated_cost_usd IS NULL AND EXCLUDED.estimated_cost_usd IS NULL THEN NULL
+                                              ELSE COALESCE(client_token_usage_samples.estimated_cost_usd, 0) + COALESCE(EXCLUDED.estimated_cost_usd, 0)
+                                          END
                 """,
                 clientId,
                 modelId,
@@ -52,7 +62,11 @@ public sealed class ClientTokenUsageRepository(MeisterProPRDbContext db) : IClie
                 outputTokens,
                 cachedInputTokens,
                 cacheWriteTokens,
-                reasoningTokens);
+                reasoningTokens,
+                new NpgsqlParameter("estimated_cost_usd", NpgsqlDbType.Numeric)
+                {
+                    Value = (object?)estimatedCostUsd ?? DBNull.Value,
+                });
         }
         else
         {
@@ -76,6 +90,7 @@ public sealed class ClientTokenUsageRepository(MeisterProPRDbContext db) : IClie
                         CachedInputTokens = cachedInputTokens,
                         CacheWriteTokens = cacheWriteTokens,
                         ReasoningTokens = reasoningTokens,
+                        EstimatedCostUsd = estimatedCostUsd,
                     });
             }
             else
@@ -85,6 +100,9 @@ public sealed class ClientTokenUsageRepository(MeisterProPRDbContext db) : IClie
                 existing.CachedInputTokens += cachedInputTokens;
                 existing.CacheWriteTokens += cacheWriteTokens;
                 existing.ReasoningTokens += reasoningTokens;
+                existing.EstimatedCostUsd = existing.EstimatedCostUsd is null && estimatedCostUsd is null
+                    ? null
+                    : (existing.EstimatedCostUsd ?? 0m) + (estimatedCostUsd ?? 0m);
             }
 
             await db.SaveChangesAsync(ct);
@@ -103,5 +121,20 @@ public sealed class ClientTokenUsageRepository(MeisterProPRDbContext db) : IClie
             .OrderBy(s => s.Date)
             .ThenBy(s => s.ModelId)
             .ToListAsync(ct);
+    }
+
+    /// <inheritdoc />
+    public async Task<IReadOnlyDictionary<Guid, long>> GetRecentTotalsByClientAsync(
+        DateOnly from,
+        DateOnly to,
+        CancellationToken ct)
+    {
+        var totals = await db.ClientTokenUsageSamples
+            .Where(s => s.Date >= from && s.Date <= to)
+            .GroupBy(s => s.ClientId)
+            .Select(g => new { ClientId = g.Key, Total = g.Sum(s => s.InputTokens + s.OutputTokens) })
+            .ToListAsync(ct);
+
+        return totals.ToDictionary(t => t.ClientId, t => t.Total);
     }
 }

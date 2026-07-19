@@ -32,6 +32,8 @@ export interface PrGroup {
   latestActivityAt: string
   totalInTokens: number
   totalOutTokens: number
+  totalEstimatedCostUsd: number | null
+  costIsApproximate: boolean
   clientId: string
   items: JobListItem[]
 }
@@ -431,6 +433,8 @@ function buildGroups(items: JobListItem[]): PrGroup[] {
         latestActivityAt: item.submittedAt ?? '',
         totalInTokens: 0,
         totalOutTokens: 0,
+        totalEstimatedCostUsd: null,
+        costIsApproximate: false,
         clientId: item.clientId ?? '',
         items: [],
       })
@@ -463,6 +467,15 @@ function buildGroups(items: JobListItem[]): PrGroup[] {
       const rightDate = right.completedAt ?? right.processingStartedAt ?? right.submittedAt ?? ''
       return rightDate.localeCompare(leftDate)
     })
+
+    // Null-aware cost rollup across the PR's jobs: total is null unless at least one job is priced;
+    // approximate when any job is approximate or the group mixes priced and unpriced jobs.
+    const anyPriced = group.items.some((item) => item.totalEstimatedCostUsd != null)
+    const anyUnpriced = group.items.some((item) => item.totalEstimatedCostUsd == null)
+    group.totalEstimatedCostUsd = anyPriced
+      ? group.items.reduce((sum, item) => sum + (item.totalEstimatedCostUsd ?? 0), 0)
+      : null
+    group.costIsApproximate = group.items.some((item) => item.costIsApproximate) || (anyPriced && anyUnpriced)
   }
 
   return [...map.values()].sort((left, right) => right.latestActivityAt.localeCompare(left.latestActivityAt))

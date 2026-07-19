@@ -35,6 +35,10 @@
                     <span class="fat-tokens total-value">{{ formatTokens(group.totalInTokens) }} In</span>
                     <span class="totals-separator">/</span>
                     <span class="fat-tokens total-value">{{ formatTokens(group.totalOutTokens) }} Out</span>
+                    <template v-if="group.totalEstimatedCostUsd != null">
+                        <span class="totals-separator">·</span>
+                        <span class="fat-tokens total-value" title="Estimated cost">{{ group.costIsApproximate ? '≈ ' : '' }}{{ formatUsd(group.totalEstimatedCostUsd) }}</span>
+                    </template>
                 </div>
                 <div class="pr-card-actions">
                     <RouterLink
@@ -206,6 +210,7 @@ import ModalDialog from '@/components/dialogs/ModalDialog.vue'
 import OverflowMenu from '@/components/OverflowMenu.vue'
 import ProgressOrb from '@/components/ProgressOrb.vue'
 import { useReviewHistoryViewModel, type PrGroup } from '@/features/reviews/view-models/useReviewHistoryViewModel'
+import { formatUsd } from '@/components/usageDashboardFormatters'
 import { formatFilesReviewed } from '@/utils/reviewProgress'
 import type { components } from '@/types'
 import MarkdownIt from 'markdown-it'

@@ -126,6 +126,9 @@ public sealed class ClientsControllerReviewerTests(ClientsControllerReviewerTest
                 services.AddDbContextFactory<MeisterProPRDbContext>(options =>
                     options.UseInMemoryDatabase(dbName, dbRoot));
                 services.AddScoped<IClientAdminService, ClientAdminService>();
+                services
+                    .AddScoped<MeisterProPR.Application.Interfaces.IClientTokenUsageRepository,
+                        MeisterProPR.Infrastructure.Repositories.ClientTokenUsageRepository>();
                 services.AddScoped<IClientAdoOrganizationScopeRepository, ClientAdoOrganizationScopeRepository>();
 
                 ReplaceService(services, Substitute.For<IPullRequestFetcher>());

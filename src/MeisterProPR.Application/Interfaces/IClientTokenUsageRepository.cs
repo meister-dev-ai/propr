@@ -23,7 +23,8 @@ public interface IClientTokenUsageRepository
         CancellationToken ct,
         long cachedInputTokens = 0,
         long cacheWriteTokens = 0,
-        long reasoningTokens = 0);
+        long reasoningTokens = 0,
+        decimal? estimatedCostUsd = null);
 
     /// <summary>
     ///     Returns all samples for <paramref name="clientId" /> whose date falls within the
@@ -31,6 +32,16 @@ public interface IClientTokenUsageRepository
     /// </summary>
     Task<IReadOnlyList<ClientTokenUsageSample>> GetByClientAndDateRangeAsync(
         Guid clientId,
+        DateOnly from,
+        DateOnly to,
+        CancellationToken ct);
+
+    /// <summary>
+    ///     Returns the total tokens (input + output) each client accumulated within the inclusive
+    ///     [<paramref name="from" />, <paramref name="to" />] date range, keyed by client id. Clients
+    ///     with no samples in the range are absent from the result.
+    /// </summary>
+    Task<IReadOnlyDictionary<Guid, long>> GetRecentTotalsByClientAsync(
         DateOnly from,
         DateOnly to,
         CancellationToken ct);

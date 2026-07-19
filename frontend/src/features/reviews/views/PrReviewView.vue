@@ -94,6 +94,10 @@
                         <span class="stat-value fat-tokens">{{ formatTokens(data.totalOutputTokens) }}</span>
                     </div>
                     <div class="stat-pill">
+                        <span class="stat-label">Est. Cost</span>
+                        <span class="stat-value">{{ formatCost(data.totalEstimatedCostUsd, data.costIsApproximate) }}</span>
+                    </div>
+                    <div class="stat-pill">
                         <span class="stat-label">Memories</span>
                         <span class="stat-value">{{ data.originatedMemoryCount }}</span>
                     </div>
@@ -437,6 +441,18 @@ function formatTokens(n: number | null | undefined): string {
     if (n >= 1_000_000) return (n / 1_000_000).toFixed(1) + 'M'
     if (n >= 1_000) return (n / 1_000).toFixed(1) + 'K'
     return String(n)
+}
+
+const usdFormatter = new Intl.NumberFormat('en-US', {
+    style: 'currency',
+    currency: 'USD',
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+})
+
+function formatCost(value: number | null | undefined, approximate: boolean | null | undefined): string {
+    if (value == null) return '—'
+    return `${approximate ? '≈' : ''}${usdFormatter.format(value)}`
 }
 
 function formatDate(iso: string): string {

@@ -478,6 +478,9 @@ public sealed class TenantAdministrationApiFactory : WebApplicationFactory<Progr
             services.AddScoped<IRefreshTokenRepository, RefreshTokenRepository>();
             services.AddScoped<IUserPatRepository, UserPatRepository>();
             services.AddScoped<IClientAdminService, ClientAdminService>();
+            services
+                .AddScoped<MeisterProPR.Application.Interfaces.IClientTokenUsageRepository,
+                    MeisterProPR.Infrastructure.Repositories.ClientTokenUsageRepository>();
             services.AddScoped<ITenantAdminService, TenantAdminService>();
             services.AddScoped<ITenantMembershipService, TenantMembershipService>();
             services.AddScoped<ITenantMemberClientAccessService, TenantMemberClientAccessService>();

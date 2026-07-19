@@ -6,6 +6,7 @@ using MeisterProPR.Application.Features.Reviewing.Execution.Models;
 using MeisterProPR.Application.Interfaces;
 using MeisterProPR.Domain.Entities;
 using MeisterProPR.Domain.Enums;
+using MeisterProPR.Domain.Services;
 using MeisterProPR.Domain.ValueObjects;
 using MeisterProPR.Infrastructure.Features.Reviewing.Diagnostics.Persistence;
 
@@ -14,7 +15,9 @@ namespace MeisterProPR.Infrastructure.Features.Reviewing.Offline;
 /// <summary>
 ///     In-memory <see cref="IProtocolRecorder" /> used by offline review execution.
 /// </summary>
-public sealed class InMemoryProtocolRecorder(InMemoryReviewJobRepository jobs) : IProtocolRecorder
+public sealed class InMemoryProtocolRecorder(
+    InMemoryReviewJobRepository jobs,
+    IModelPricingResolver? pricingResolver = null) : IProtocolRecorder
 {
     public Task<Guid> BeginAsync(
         Guid jobId,
@@ -195,7 +198,7 @@ public sealed class InMemoryProtocolRecorder(InMemoryReviewJobRepository jobs) :
         return Task.CompletedTask;
     }
 
-    public Task SetCompletedAsync(
+    public async Task SetCompletedAsync(
         Guid protocolId,
         string outcome,
         long totalInputTokens,
@@ -212,7 +215,7 @@ public sealed class InMemoryProtocolRecorder(InMemoryReviewJobRepository jobs) :
         var protocol = this.FindProtocol(protocolId);
         if (protocol is null)
         {
-            return Task.CompletedTask;
+            return;
         }
 
         protocol.CompletedAt = DateTimeOffset.UtcNow;
@@ -230,20 +233,21 @@ public sealed class InMemoryProtocolRecorder(InMemoryReviewJobRepository jobs) :
         var job = jobs.GetById(protocol.JobId);
         if (job is not null)
         {
+            var category = protocol.AiConnectionCategory ?? AiConnectionModelCategory.Default;
+            var modelId = protocol.ModelId ?? "(default)";
             job.AccumulateTierTokens(
-                protocol.AiConnectionCategory ?? AiConnectionModelCategory.Default,
-                protocol.ModelId ?? "(default)",
+                category,
+                modelId,
                 totalInputTokens,
                 totalOutputTokens,
                 totalCachedInputTokens ?? 0,
                 totalCacheWriteTokens ?? 0,
                 totalReasoningTokens ?? 0);
+            await this.ApplyTierCostAsync(job, category, modelId, ct);
         }
-
-        return Task.CompletedTask;
     }
 
-    public Task AddTokensAsync(
+    public async Task AddTokensAsync(
         Guid protocolId,
         long inputTokens,
         long outputTokens,
@@ -257,7 +261,7 @@ public sealed class InMemoryProtocolRecorder(InMemoryReviewJobRepository jobs) :
         var protocol = this.FindProtocol(protocolId);
         if (protocol is null)
         {
-            return Task.CompletedTask;
+            return;
         }
 
         protocol.TotalInputTokens = (protocol.TotalInputTokens ?? 0) + inputTokens;
@@ -280,17 +284,62 @@ public sealed class InMemoryProtocolRecorder(InMemoryReviewJobRepository jobs) :
         var job = jobs.GetById(protocol.JobId);
         if (job is not null)
         {
+            var category = connectionCategory ?? AiConnectionModelCategory.Default;
+            var effectiveModelId = modelId ?? protocol.ModelId ?? "(default)";
             job.AccumulateTierTokens(
-                connectionCategory ?? AiConnectionModelCategory.Default,
-                modelId ?? protocol.ModelId ?? "(default)",
+                category,
+                effectiveModelId,
                 inputTokens,
                 outputTokens,
                 cachedInputTokens,
                 cacheWriteTokens,
                 reasoningTokens);
+            await this.ApplyTierCostAsync(job, category, effectiveModelId, ct);
+        }
+    }
+
+    /// <summary>
+    ///     Best-effort tier-cost computation for the offline recorder. Resolves the model's pricing (when a
+    ///     resolver is configured) and recomputes the tier's cumulative cost onto the job. Any failure is
+    ///     swallowed so cost never breaks offline token recording.
+    /// </summary>
+    private async Task ApplyTierCostAsync(
+        ReviewJob job,
+        AiConnectionModelCategory category,
+        string modelId,
+        CancellationToken ct)
+    {
+        if (pricingResolver is null)
+        {
+            return;
         }
 
-        return Task.CompletedTask;
+        try
+        {
+            var pricing = await pricingResolver.ResolveAsync(job.AiConnectionId ?? Guid.Empty, category, modelId, ct)
+                          ?? new ModelPricing(null, null);
+
+            var entry = job.TokenBreakdown.FirstOrDefault(candidate =>
+                candidate.ConnectionCategory == category &&
+                string.Equals(candidate.ModelId, modelId, StringComparison.Ordinal));
+
+            if (entry is not null)
+            {
+                var cost = AiCostCalculator.Calculate(
+                    new AiTokenUsage(
+                        entry.TotalInputTokens,
+                        entry.TotalOutputTokens,
+                        entry.TotalCachedInputTokens,
+                        entry.TotalCacheWriteTokens,
+                        entry.TotalReasoningTokens),
+                    pricing);
+                job.SetTierCost(category, modelId, cost.Usd, cost.IsApproximate);
+            }
+        }
+        catch (Exception)
+        {
+            // Offline cost is best-effort; a resolver failure must never break token recording.
+        }
     }
 
     public Task RecordMemoryEventAsync(

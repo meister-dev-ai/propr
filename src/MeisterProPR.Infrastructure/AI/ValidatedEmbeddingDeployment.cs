@@ -24,5 +24,6 @@ public sealed record ValidatedEmbeddingDeployment(
         this.Model.MaxInputTokens ?? 0,
         this.Model.EmbeddingDimensions ?? 0,
         this.Model.InputCostPer1MUsd,
-        this.Model.OutputCostPer1MUsd);
+        this.Model.OutputCostPer1MUsd,
+        this.Model.CachedInputCostPer1MUsd);
 }

@@ -30,7 +30,8 @@ public sealed class LocalProPrEmbeddingBroker(IAiRuntimeResolver aiRuntimeResolv
             runtime.Model.MaxInputTokens ?? 0,
             runtime.Model.EmbeddingDimensions ?? runtime.Dimensions,
             runtime.Model.InputCostPer1MUsd,
-            runtime.Model.OutputCostPer1MUsd);
+            runtime.Model.OutputCostPer1MUsd,
+            runtime.Model.CachedInputCostPer1MUsd);
     }
 
     public async Task<ProCursorEmbeddingBatchResponse> GenerateEmbeddingsAsync(

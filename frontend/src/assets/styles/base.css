@@ -70,6 +70,34 @@ select {
   font-family: inherit;
 }
 
+/* Make selects read as input fields: strip the inconsistent native arrow, keep the same filled
+ * box + border as the text inputs (appearance:none drops the native fill in some engines, so set
+ * it explicitly), and draw a clear chevron affordance so users know the field is clickable. */
+select {
+  appearance: none;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  cursor: pointer;
+  padding-right: 2.5rem;
+  background-color: var(--color-bg);
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='%23a0a0a0' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 0.85rem center;
+}
+
+/* A global control reset (`button, input, select, textarea { border-style: none; background: transparent }`)
+ * strips the box from selects — text inputs keep theirs only because their `input[type="…"]` selectors
+ * outrank it. Plain `select` ties and loses, so restore the filled box explicitly with higher specificity
+ * (`:not([multiple])` → (0,1,1)) so every dropdown reads as an input field like the text fields. */
+select:not([multiple]) {
+  border: 1px solid var(--color-border);
+  background-color: var(--color-bg);
+}
+
+select:hover {
+  border-color: var(--color-border-hover);
+}
+
 select option {
   background: var(--color-bg);
   color: var(--color-text);

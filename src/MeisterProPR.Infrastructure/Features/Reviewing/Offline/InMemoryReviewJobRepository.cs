@@ -220,7 +220,9 @@ public sealed class InMemoryReviewJobRepository : IJobRepository
                 job.PrRepositoryName,
                 job.AiModel,
                 job.FileReviewResults.Count(r => r.IsComplete && !r.IsFailed && !r.IsExcluded && !r.IsCarriedForward),
-                job.InScopeChangedFileCount))
+                job.InScopeChangedFileCount,
+                job.TotalEstimatedCostUsd,
+                job.CostIsApproximate))
             .ToList()
             .AsReadOnly();
         return Task.FromResult<(int total, IReadOnlyList<JobListPageItemDto> items)>((ordered.Count, page));

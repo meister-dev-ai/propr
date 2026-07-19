@@ -73,8 +73,13 @@ public sealed partial class ClientTokenUsageController(
                 s.OutputTokens,
                 s.CachedInputTokens,
                 s.CacheWriteTokens,
-                s.ReasoningTokens))
+                s.ReasoningTokens,
+                s.EstimatedCostUsd))
             .ToList();
+
+        var totalEstimatedCostUsd = sampleDtos.Any(s => s.EstimatedCostUsd.HasValue)
+            ? sampleDtos.Sum(s => s.EstimatedCostUsd ?? 0m)
+            : (decimal?)null;
 
         var dto = new ClientTokenUsageDto(
             clientId,
@@ -85,7 +90,8 @@ public sealed partial class ClientTokenUsageController(
             sampleDtos,
             sampleDtos.Sum(s => s.CachedInputTokens),
             sampleDtos.Sum(s => s.CacheWriteTokens),
-            sampleDtos.Sum(s => s.ReasoningTokens));
+            sampleDtos.Sum(s => s.ReasoningTokens),
+            totalEstimatedCostUsd);
 
         LogTokenUsageQueried(logger, clientId, fromDate, toDate);
         return this.Ok(dto);

@@ -10,6 +10,7 @@ export interface ClientTokenUsageSample {
   cachedInputTokens?: number
   cacheWriteTokens?: number
   reasoningTokens?: number
+  estimatedCostUsd?: number | null
 }
 
 export interface ClientTokenUsageResponse {
@@ -22,4 +23,5 @@ export interface ClientTokenUsageResponse {
   totalCachedInputTokens?: number
   totalCacheWriteTokens?: number
   totalReasoningTokens?: number
+  totalEstimatedCostUsd?: number | null
 }

@@ -172,6 +172,16 @@ internal sealed class ReviewJobEntityTypeConfiguration : IEntityTypeConfiguratio
             .HasColumnName("total_reasoning_tokens_aggregated")
             .IsRequired(false);
 
+        builder.Property(j => j.TotalEstimatedCostUsd)
+            .HasColumnName("total_estimated_cost_usd")
+            .HasPrecision(18, 6)
+            .IsRequired(false);
+
+        builder.Property(j => j.CostIsApproximate)
+            .HasColumnName("cost_is_approximate")
+            .IsRequired()
+            .HasDefaultValue(false);
+
         builder.Property(j => j.InScopeChangedFileCount)
             .HasColumnName("in_scope_changed_file_count")
             .IsRequired(false);

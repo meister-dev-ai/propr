@@ -23,7 +23,8 @@ public sealed record AiConfiguredModelDto(
     DateTimeOffset? LastSeenAt = null,
     decimal? InputCostPer1MUsd = null,
     decimal? OutputCostPer1MUsd = null,
-    int? MaxContextTokens = null)
+    int? MaxContextTokens = null,
+    decimal? CachedInputCostPer1MUsd = null)
 {
     /// <summary>Returns <see langword="true" /> when the model supports chat workloads.</summary>
     public bool SupportsChat => this.OperationKinds.Contains(AiOperationKind.Chat);

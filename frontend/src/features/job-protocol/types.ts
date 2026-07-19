@@ -61,6 +61,8 @@ export interface TokenBreakdownEntry {
     totalInputTokens: number
     totalOutputTokens: number
     totalCachedInputTokens?: number | null
+    estimatedCostUsd?: number | null
+    costIsApproximate?: boolean | null
 }
 
 export interface JobDetail {
@@ -68,6 +70,8 @@ export interface JobDetail {
     reviewTemperature: number | null
     tokenBreakdown: components['schemas']['TokenBreakdownEntry'][]
     breakdownConsistent: boolean | null
+    totalEstimatedCostUsd?: number | null
+    costIsApproximate?: boolean | null
     submittedAt?: string | null
     processingStartedAt?: string | null
     completedAt?: string | null

@@ -70,6 +70,12 @@
             <span class="summary-value">{{ formatNumber(totalReasoningTokens) }}</span>
             <i class="fi fi-rr-brain summary-icon"></i>
           </div>
+
+          <div class="summary-card usage-cost">
+            <span class="summary-label">Estimated Cost</span>
+            <span class="summary-value">{{ formatUsd(totalEstimatedCostUsd) }}</span>
+            <i class="fi fi-rr-badge-dollar summary-icon"></i>
+          </div>
         </div>
 
         <div v-if="!hasReviewSamples" class="empty-state empty-state--compact">
@@ -277,6 +283,7 @@ const {
   totalOutputTokens,
   totalCachedInputTokens,
   totalReasoningTokens,
+  totalEstimatedCostUsd,
   hasReviewSamples,
   proCursorTotalTokens,
   proCursorEstimatedCost,
@@ -445,9 +452,14 @@ const {
 
       .summary-card {
         position: relative;
-        display: flex;
-        flex-direction: column;
-        gap: 0.4rem;
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto;
+        grid-template-areas:
+          'label icon'
+          'value value';
+        align-items: center;
+        column-gap: 0.75rem;
+        row-gap: 0.5rem;
         padding: 1.15rem 1.25rem;
         border-radius: var(--radius-xl);
         border: 1px solid rgba(148, 163, 184, 0.16);
@@ -469,6 +481,7 @@ const {
       .usage-estimated::before { background: var(--color-suggestion); }
 
       .summary-label {
+        grid-area: label;
         color: var(--color-text-muted);
         font-size: 0.76rem;
         font-weight: 700;
@@ -477,6 +490,7 @@ const {
       }
 
       .summary-value {
+        grid-area: value;
         font-size: clamp(1.75rem, 4vw, 2.4rem);
         line-height: 1;
         font-weight: 800;
@@ -484,11 +498,11 @@ const {
       }
 
       .summary-icon {
-        position: absolute;
-        top: 1rem;
-        right: 1rem;
-        font-size: 1.25rem;
-        opacity: 0.22;
+        grid-area: icon;
+        align-self: start;
+        font-size: 1.2rem;
+        opacity: 0.4;
+        color: var(--color-text-muted);
       }
 
       .usage-callout {

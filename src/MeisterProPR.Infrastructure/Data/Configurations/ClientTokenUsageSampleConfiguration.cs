@@ -53,6 +53,10 @@ internal sealed class ClientTokenUsageSampleConfiguration : IEntityTypeConfigura
             .IsRequired()
             .HasDefaultValue(0L);
 
+        builder.Property(s => s.EstimatedCostUsd)
+            .HasColumnName("estimated_cost_usd")
+            .HasPrecision(18, 6);
+
         // Unique index on (client_id, model_id, date) — enables PostgreSQL upsert via ON CONFLICT
         builder.HasIndex(s => new { s.ClientId, s.ModelId, s.Date })
             .IsUnique()

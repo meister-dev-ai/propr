@@ -120,6 +120,9 @@ public sealed class ControllerSmokeTests(ControllerSmokeTests.SmokeFactory facto
                 services.AddDbContext<MeisterProPRDbContext>(opts =>
                     opts.UseInMemoryDatabase(dbName, dbRoot));
                 services.AddScoped<IClientAdminService, ClientAdminService>();
+                services
+                    .AddScoped<MeisterProPR.Application.Interfaces.IClientTokenUsageRepository,
+                        MeisterProPR.Infrastructure.Repositories.ClientTokenUsageRepository>();
 
                 var userRepo = Substitute.For<IUserRepository>();
                 userRepo.GetByIdWithAssignmentsAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>())

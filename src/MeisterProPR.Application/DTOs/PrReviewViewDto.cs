@@ -21,7 +21,9 @@ public sealed record PrReviewViewDto(
     int OriginatedMemoryCount,
     IReadOnlyList<ThreadMemorySummaryDto> OriginatedMemories,
     int ContributedMemoryCount,
-    IReadOnlyList<ContributingMemorySummaryDto> ContributedMemories);
+    IReadOnlyList<ContributingMemorySummaryDto> ContributedMemories,
+    decimal? TotalEstimatedCostUsd = null,
+    bool CostIsApproximate = false);
 
 /// <summary>Summary of a single review job within the PR view.</summary>
 public sealed record PrJobSummaryDto(
@@ -32,7 +34,9 @@ public sealed record PrJobSummaryDto(
     int? FindingCount,
     long? TotalInputTokens,
     long? TotalOutputTokens,
-    IReadOnlyList<TokenBreakdownEntry> TokenBreakdown);
+    IReadOnlyList<TokenBreakdownEntry> TokenBreakdown,
+    decimal? TotalEstimatedCostUsd = null,
+    bool CostIsApproximate = false);
 
 /// <summary>Summary of a thread memory record that originated from this pull request.</summary>
 public sealed record ThreadMemorySummaryDto(

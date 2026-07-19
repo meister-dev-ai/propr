@@ -726,7 +726,8 @@ public sealed class AiConnectionRepositoryTests
                         null,
                         0.2m,
                         0.4m,
-                        200_000),
+                        200_000,
+                        0.1m),
                 ],
                 [
                     new AiPurposeBindingDto(Guid.Empty, AiPurpose.EmbeddingDefault, null, "text-embedding-3-small", AiProtocolMode.Embeddings),
@@ -742,6 +743,7 @@ public sealed class AiConnectionRepositoryTests
         Assert.Equal(0.2m, configuredModel.InputCostPer1MUsd);
         Assert.Equal(0.4m, configuredModel.OutputCostPer1MUsd);
         Assert.Equal(200_000, configuredModel.MaxContextTokens);
+        Assert.Equal(0.1m, configuredModel.CachedInputCostPer1MUsd);
     }
 
     [Fact]

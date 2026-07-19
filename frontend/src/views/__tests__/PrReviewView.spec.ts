@@ -73,6 +73,8 @@ describe('PrReviewView', () => {
       originatedMemories: [{ memoryRecordId: 'mem-1', threadId: 12, filePath: 'src/foo.ts', resolutionSummaryExcerpt: 'Resolved issue', source: 0, storedAt: '2026-04-25T10:06:00Z' }],
       contributedMemoryCount: 0,
       contributedMemories: [],
+      totalEstimatedCostUsd: 1.234567,
+      costIsApproximate: false,
     })
 
     const wrapper = await mountView()
@@ -87,6 +89,8 @@ describe('PrReviewView', () => {
     expect(wrapper.text()).toContain('PR Review View')
     expect(wrapper.text()).toContain('PR #42')
     expect(wrapper.text()).toContain('Review Jobs')
+    expect(wrapper.text()).toContain('Est. Cost')
+    expect(wrapper.text()).toContain('$1.23')
   })
 
   it('surfaces the service error when the PR review request fails', async () => {

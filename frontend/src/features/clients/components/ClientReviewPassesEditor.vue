@@ -398,7 +398,7 @@ const onConnectionChange = (index: number): void => {
      two flexible middle columns identically — the "Connection"/"Model" headers then line up above the selects.
      The actions column is wide enough to hold the two reorder buttons plus Remove so they never overflow left
      onto the Shadow cell. */
-  --review-pass-cols: 4.5rem minmax(0, 1fr) minmax(0, 1fr) 9rem 8rem 7rem 4.5rem 10.5rem;
+  --review-pass-cols: 4.5rem minmax(9rem, 1fr) minmax(9rem, 1fr) 9rem 8rem 7rem 4.5rem 10.5rem;
   border: 1px solid var(--color-border);
   border-radius: var(--radius-lg);
   background: var(--color-surface);
@@ -432,6 +432,10 @@ const onConnectionChange = (index: number): void => {
 .review-passes-table {
   display: grid;
   gap: 0.4rem;
+  /* When the container is too narrow for all columns, scroll horizontally instead of letting the
+     flexible Connection/Model columns collapse and overlap their headers. */
+  overflow-x: auto;
+  padding-bottom: 0.25rem;
 }
 
 .review-passes-columns {

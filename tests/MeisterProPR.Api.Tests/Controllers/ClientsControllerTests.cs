@@ -953,6 +953,9 @@ public sealed class ClientsControllerTests(ClientsControllerTests.ClientsApiFact
                         // ignores transactions and otherwise throws TransactionIgnoredWarning.
                         .ConfigureWarnings(w => w.Ignore(InMemoryEventId.TransactionIgnoredWarning)));
                 services.AddScoped<IClientAdminService, ClientAdminService>();
+                services
+                    .AddScoped<MeisterProPR.Application.Interfaces.IClientTokenUsageRepository,
+                        MeisterProPR.Infrastructure.Repositories.ClientTokenUsageRepository>();
                 services.AddScoped<IClientAdoOrganizationScopeRepository, ClientAdoOrganizationScopeRepository>();
                 services.AddScoped<IAiConnectionRepository, AiConnectionRepository>();
 
@@ -1188,6 +1191,9 @@ public sealed class ClientsControllerJwtTests(ClientsControllerJwtTests.ClientsJ
                         // ignores transactions and otherwise throws TransactionIgnoredWarning.
                         .ConfigureWarnings(w => w.Ignore(InMemoryEventId.TransactionIgnoredWarning)));
                 services.AddScoped<IClientAdminService, ClientAdminService>();
+                services
+                    .AddScoped<MeisterProPR.Application.Interfaces.IClientTokenUsageRepository,
+                        MeisterProPR.Infrastructure.Repositories.ClientTokenUsageRepository>();
                 services.AddScoped<IClientAdoOrganizationScopeRepository, ClientAdoOrganizationScopeRepository>();
 
                 // IJwtTokenService must be explicit for in-memory (non-DB) mode

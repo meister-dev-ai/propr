@@ -214,6 +214,9 @@ export function useJobProtocolViewModel() {
         protocolBreakdownConsistent,
     } = useTokenTotals(protocols, jobDetail)
 
+    const totalEstimatedCostUsd = computed(() => jobDetail.value?.totalEstimatedCostUsd ?? null)
+    const costIsApproximate = computed(() => jobDetail.value?.costIsApproximate ?? false)
+
     const routeClientId = computed(() =>
         (route.query?.clientId as string | undefined) ?? reviewStatus.value?.clientId ?? undefined,
     )
@@ -1758,6 +1761,8 @@ export function useJobProtocolViewModel() {
                     reviewTemperature: detail.reviewTemperature ?? null,
                     tokenBreakdown: detail.tokenBreakdown ?? [],
                     breakdownConsistent: detail.breakdownConsistent ?? null,
+                    totalEstimatedCostUsd: detail.totalEstimatedCostUsd ?? null,
+                    costIsApproximate: detail.costIsApproximate ?? null,
                     submittedAt: detail.submittedAt ?? null,
                     processingStartedAt: detail.processingStartedAt ?? null,
                     completedAt: detail.completedAt ?? null,
@@ -2224,6 +2229,8 @@ export function useJobProtocolViewModel() {
         totalOutputTokens,
         totalCachedInputTokens,
         totalEffectiveInputTokens,
+        totalEstimatedCostUsd,
+        costIsApproximate,
         overallDuration,
         reviewModelDisplay,
         activePassFileOutcome,

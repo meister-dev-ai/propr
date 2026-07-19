@@ -8,7 +8,7 @@
         <th>Display Name</th>
         <th>Tenant</th>
         <th>Status</th>
-        <th>Usage (30d)</th>
+        <th>Tokens (30d)</th>
         <th>Created</th>
       </tr>
     </thead>
@@ -28,9 +28,13 @@
           </span>
         </td>
         <td>
-          <span class="chip usage-badge" v-if="client.recentUsageTokens !== undefined">
+          <span
+            class="chip usage-badge"
+            v-if="client.recentUsageTokens !== undefined"
+            :title="`${(client.recentUsageTokens ?? 0).toLocaleString()} tokens · last 30 days`"
+          >
             <i class="fi fi-rr-chart-line-up"></i>
-            {{ formatTokens(client.recentUsageTokens) }}
+            {{ formatTokens(client.recentUsageTokens) }} tokens
           </span>
           <span class="chip usage-badge" v-else>
             <i class="fi fi-rr-minus-circle"></i> --
@@ -83,6 +87,12 @@ function formatDate(iso: string): string {
 
 function formatTokens(tokens?: number): string {
   if (!tokens) return '0'
+  if (tokens >= 1_000_000_000) {
+    return (tokens / 1_000_000_000).toFixed(1).replace(/\.0$/, '') + 'B'
+  }
+  if (tokens >= 1_000_000) {
+    return (tokens / 1_000_000).toFixed(1).replace(/\.0$/, '') + 'M'
+  }
   if (tokens >= 1000) {
     return (tokens / 1000).toFixed(1).replace(/\.0$/, '') + 'k'
   }

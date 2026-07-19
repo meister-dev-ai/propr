@@ -266,4 +266,92 @@ public class ReviewJobTests
         Assert.Equal(300, job.TotalInputTokensAggregated);
         Assert.Equal(150, job.TotalOutputTokensAggregated);
     }
+
+    [Fact]
+    public void SetTierCost_UpdatesMatchingEntryAndJobTotal()
+    {
+        var job = CreateJob();
+        job.AccumulateTierTokens(AiConnectionModelCategory.HighEffort, "gpt-4o", 1000, 500);
+
+        job.SetTierCost(AiConnectionModelCategory.HighEffort, "gpt-4o", 1.25m, false);
+
+        var entry = Assert.Single(job.TokenBreakdown);
+        Assert.Equal(1.25m, entry.EstimatedCostUsd);
+        Assert.False(entry.CostIsApproximate);
+        Assert.Equal(1.25m, job.TotalEstimatedCostUsd);
+        Assert.False(job.CostIsApproximate);
+    }
+
+    [Fact]
+    public void SetTierCost_SumsCostsAcrossPricedTiers()
+    {
+        var job = CreateJob();
+        job.AccumulateTierTokens(AiConnectionModelCategory.LowEffort, "gpt-4o-mini", 100, 50);
+        job.AccumulateTierTokens(AiConnectionModelCategory.HighEffort, "gpt-4o", 200, 100);
+
+        job.SetTierCost(AiConnectionModelCategory.LowEffort, "gpt-4o-mini", 0.5m, false);
+        job.SetTierCost(AiConnectionModelCategory.HighEffort, "gpt-4o", 2.5m, false);
+
+        Assert.Equal(3.0m, job.TotalEstimatedCostUsd);
+        Assert.False(job.CostIsApproximate);
+    }
+
+    [Fact]
+    public void SetTierCost_AllTiersUnpriced_TotalIsNullAndApproximate()
+    {
+        var job = CreateJob();
+        job.AccumulateTierTokens(AiConnectionModelCategory.HighEffort, "gpt-4o", 200, 100);
+
+        job.SetTierCost(AiConnectionModelCategory.HighEffort, "gpt-4o", null, true);
+
+        Assert.Null(job.TotalEstimatedCostUsd);
+        Assert.True(job.CostIsApproximate);
+    }
+
+    [Fact]
+    public void SetTierCost_MixedPricedAndUnpriced_SumsPricedAndFlagsApproximate()
+    {
+        var job = CreateJob();
+        job.AccumulateTierTokens(AiConnectionModelCategory.LowEffort, "gpt-4o-mini", 100, 50);
+        job.AccumulateTierTokens(AiConnectionModelCategory.HighEffort, "gpt-4o", 200, 100);
+
+        job.SetTierCost(AiConnectionModelCategory.LowEffort, "gpt-4o-mini", 0.75m, false);
+        job.SetTierCost(AiConnectionModelCategory.HighEffort, "gpt-4o", null, true);
+
+        Assert.Equal(0.75m, job.TotalEstimatedCostUsd);
+        Assert.True(job.CostIsApproximate);
+    }
+
+    [Fact]
+    public void SetTierCost_ApproximateEntryPropagatesToJobFlag()
+    {
+        var job = CreateJob();
+        job.AccumulateTierTokens(AiConnectionModelCategory.HighEffort, "gpt-4o", 200, 100);
+
+        job.SetTierCost(AiConnectionModelCategory.HighEffort, "gpt-4o", 1.0m, true);
+
+        Assert.Equal(1.0m, job.TotalEstimatedCostUsd);
+        Assert.True(job.CostIsApproximate);
+    }
+
+    [Fact]
+    public void SetTierCost_IsIdempotentWhenRecomputedFromCumulativeTotals()
+    {
+        var job = CreateJob();
+        job.AccumulateTierTokens(AiConnectionModelCategory.HighEffort, "gpt-4o", 200, 100);
+
+        job.SetTierCost(AiConnectionModelCategory.HighEffort, "gpt-4o", 2.0m, false);
+        job.SetTierCost(AiConnectionModelCategory.HighEffort, "gpt-4o", 2.0m, false);
+
+        Assert.Single(job.TokenBreakdown);
+        Assert.Equal(2.0m, job.TotalEstimatedCostUsd);
+    }
+
+    [Fact]
+    public void SetTierCost_DefaultsAreNullAndNotApproximate()
+    {
+        var job = CreateJob();
+        Assert.Null(job.TotalEstimatedCostUsd);
+        Assert.False(job.CostIsApproximate);
+    }
 }

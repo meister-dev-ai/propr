@@ -91,6 +91,9 @@ public sealed class PrReviewViewController(
                         {
                             TotalInputTokens = existing.TotalInputTokens + entry.TotalInputTokens,
                             TotalOutputTokens = existing.TotalOutputTokens + entry.TotalOutputTokens,
+                            EstimatedCostUsd = SumNullableCost(existing.EstimatedCostUsd, entry.EstimatedCostUsd),
+                            CostIsApproximate = existing.CostIsApproximate || entry.CostIsApproximate
+                                                                           || existing.EstimatedCostUsd.HasValue != entry.EstimatedCostUsd.HasValue,
                         });
                 }
                 else
@@ -104,6 +107,15 @@ public sealed class PrReviewViewController(
         var breakdownOutput = breakdown.Sum(e => e.TotalOutputTokens);
         var breakdownConsistent = breakdown.Count == 0 ||
                                   (breakdownInput == totalInput && breakdownOutput == totalOutput);
+
+        // Null-aware cost rollup: null when no tier is priced; approximate when any tier is
+        // approximate or the PR mixes priced and unpriced tiers.
+        var anyPricedTier = breakdown.Any(e => e.EstimatedCostUsd.HasValue);
+        var anyUnpricedTier = breakdown.Any(e => !e.EstimatedCostUsd.HasValue);
+        var totalEstimatedCostUsd = anyPricedTier
+            ? breakdown.Sum(e => e.EstimatedCostUsd ?? 0m)
+            : (decimal?)null;
+        var costIsApproximate = breakdown.Any(e => e.CostIsApproximate) || (anyPricedTier && anyUnpricedTier);
 
         var originatedPaged = await memoryRepository.GetPagedAsync(
             clientId,
@@ -215,7 +227,9 @@ public sealed class PrReviewViewController(
                 j.Result?.Comments.Count,
                 j.TotalInputTokensAggregated ?? j.Protocols.Sum(p => p.TotalInputTokens),
                 j.TotalOutputTokensAggregated ?? j.Protocols.Sum(p => p.TotalOutputTokens),
-                j.TokenBreakdown))
+                j.TokenBreakdown,
+                j.TotalEstimatedCostUsd,
+                j.CostIsApproximate))
             .ToList()
             .AsReadOnly();
 
@@ -233,9 +247,21 @@ public sealed class PrReviewViewController(
             originatedPaged.TotalCount,
             originatedMemories,
             externalContributingIds.Count,
-            contributingMemories.AsReadOnly());
+            contributingMemories.AsReadOnly(),
+            totalEstimatedCostUsd,
+            costIsApproximate);
 
         return this.Ok(dto);
+    }
+
+    private static decimal? SumNullableCost(decimal? left, decimal? right)
+    {
+        if (left is null && right is null)
+        {
+            return null;
+        }
+
+        return (left ?? 0m) + (right ?? 0m);
     }
 }
 

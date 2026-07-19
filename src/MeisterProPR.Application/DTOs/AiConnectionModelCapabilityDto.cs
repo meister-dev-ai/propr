@@ -12,10 +12,12 @@ namespace MeisterProPR.Application.DTOs;
 /// <param name="EmbeddingDimensions">Embedding vector width returned by the deployment.</param>
 /// <param name="InputCostPer1MUsd">Optional USD price per one million prompt/input tokens.</param>
 /// <param name="OutputCostPer1MUsd">Optional USD price per one million completion/output tokens.</param>
+/// <param name="CachedInputCostPer1MUsd">Optional USD price per one million cached (cache-read) input tokens.</param>
 public sealed record AiConnectionModelCapabilityDto(
     string ModelName,
     string TokenizerName,
     int MaxInputTokens,
     int EmbeddingDimensions,
     decimal? InputCostPer1MUsd = null,
-    decimal? OutputCostPer1MUsd = null);
+    decimal? OutputCostPer1MUsd = null,
+    decimal? CachedInputCostPer1MUsd = null);

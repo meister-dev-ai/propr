@@ -17,6 +17,9 @@ export type EditableModel = {
   embeddingDimensions: string
   supportsStructuredOutput: boolean
   supportsToolUse: boolean
+  inputCostPer1MUsd: string
+  outputCostPer1MUsd: string
+  cachedInputCostPer1MUsd: string
 }
 
 export type EditableBinding = {

@@ -13,6 +13,7 @@ namespace MeisterProPR.Application.DTOs;
 /// <param name="CachedInputTokens">Cache-read input tokens.</param>
 /// <param name="CacheWriteTokens">Cache-write tokens.</param>
 /// <param name="ReasoningTokens">Reasoning tokens.</param>
+/// <param name="EstimatedCostUsd">Accumulated estimated USD cost for this (model, day); null when no priced contribution was recorded.</param>
 public sealed record ClientTokenUsageSampleDto(
     string ModelId,
     DateOnly Date,
@@ -20,7 +21,8 @@ public sealed record ClientTokenUsageSampleDto(
     long OutputTokens,
     long CachedInputTokens = 0,
     long CacheWriteTokens = 0,
-    long ReasoningTokens = 0);
+    long ReasoningTokens = 0,
+    decimal? EstimatedCostUsd = null);
 
 /// <summary>
 ///     Response DTO for <c>GET /admin/clients/{clientId}/token-usage</c>.
@@ -34,6 +36,7 @@ public sealed record ClientTokenUsageSampleDto(
 /// <param name="TotalCachedInputTokens">Sum of cache-read input tokens across all samples.</param>
 /// <param name="TotalCacheWriteTokens">Sum of cache-write tokens across all samples.</param>
 /// <param name="TotalReasoningTokens">Sum of reasoning tokens across all samples.</param>
+/// <param name="TotalEstimatedCostUsd">Sum of estimated USD cost across all samples; null when no sample has a priced cost.</param>
 public sealed record ClientTokenUsageDto(
     Guid ClientId,
     DateOnly From,
@@ -43,4 +46,5 @@ public sealed record ClientTokenUsageDto(
     IReadOnlyList<ClientTokenUsageSampleDto> Samples,
     long TotalCachedInputTokens = 0,
     long TotalCacheWriteTokens = 0,
-    long TotalReasoningTokens = 0);
+    long TotalReasoningTokens = 0,
+    decimal? TotalEstimatedCostUsd = null);

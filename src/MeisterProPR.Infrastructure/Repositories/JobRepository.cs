@@ -245,7 +245,9 @@ public sealed partial class JobRepository(
                 // over boolean columns only — no file-result text is materialized. Mirrors the "reviewed"
                 // predicate reused across this repository (excludes excluded, failed, and carried-forward).
                 j.FileReviewResults.Count(r => r.IsComplete && !r.IsFailed && !r.IsExcluded && !r.IsCarriedForward),
-                j.InScopeChangedFileCount))
+                j.InScopeChangedFileCount,
+                j.TotalEstimatedCostUsd,
+                j.CostIsApproximate))
             .ToListAsync(ct)
             .ConfigureAwait(false);
 

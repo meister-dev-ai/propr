@@ -116,7 +116,9 @@ public sealed class JobsController(
                         j.PrRepositoryName,
                         j.AiModel,
                         j.FilesReviewed,
-                        j.FilesInScope))
+                        j.FilesInScope,
+                        j.TotalEstimatedCostUsd,
+                        j.CostIsApproximate))
                     .ToList()));
     }
 
@@ -182,7 +184,9 @@ public sealed class JobsController(
                 breakdown,
                 breakdownConsistent,
                 filesReviewed,
-                job.InScopeChangedFileCount));
+                job.InScopeChangedFileCount,
+                job.TotalEstimatedCostUsd,
+                job.CostIsApproximate));
     }
 
     /// <summary>Returns the review result (summary and comments) for a completed job.</summary>
@@ -404,7 +408,9 @@ public sealed class JobsController(
         string? PrRepositoryName = null,
         string? AiModel = null,
         int FilesReviewed = 0,
-        int? FilesInScope = null);
+        int? FilesInScope = null,
+        decimal? TotalEstimatedCostUsd = null,
+        bool CostIsApproximate = false);
 
     /// <summary>Response for the job list endpoint.</summary>
     public sealed record JobListResponse(int Total, IReadOnlyList<JobListItem> Items);
@@ -425,7 +431,9 @@ public sealed class JobsController(
         IReadOnlyList<TokenBreakdownEntry> TokenBreakdown,
         bool? BreakdownConsistent,
         int FilesReviewed = 0,
-        int? FilesInScope = null);
+        int? FilesInScope = null,
+        decimal? TotalEstimatedCostUsd = null,
+        bool CostIsApproximate = false);
 
     /// <summary>Response for the job result endpoint, combining status metadata with the review result.</summary>
     public sealed record ReviewJobResultDto(

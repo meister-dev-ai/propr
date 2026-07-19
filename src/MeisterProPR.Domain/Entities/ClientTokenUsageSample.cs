@@ -35,4 +35,10 @@ public sealed class ClientTokenUsageSample
 
     /// <summary>Total reasoning tokens consumed on this date by this model for this client.</summary>
     public long ReasoningTokens { get; set; }
+
+    /// <summary>
+    ///     Accumulated estimated USD cost of the tokens consumed on this date by this model for this client.
+    ///     Null until a priced contribution is recorded (distinct from a real cost of zero).
+    /// </summary>
+    public decimal? EstimatedCostUsd { get; set; }
 }

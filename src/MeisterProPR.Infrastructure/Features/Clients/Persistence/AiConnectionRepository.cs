@@ -452,7 +452,8 @@ public sealed class AiConnectionRepository(
             record.LastSeenAt,
             record.InputCostPer1MUsd,
             record.OutputCostPer1MUsd,
-            record.MaxContextTokens);
+            record.MaxContextTokens,
+            record.CachedInputCostPer1MUsd);
     }
 
     private static AiPurposeBindingDto ToBindingDto(AiPurposeBindingRecord record, AiConfiguredModelRecord model)
@@ -539,6 +540,7 @@ public sealed class AiConnectionRepository(
                     LastSeenAt = model.LastSeenAt,
                     InputCostPer1MUsd = model.InputCostPer1MUsd,
                     OutputCostPer1MUsd = model.OutputCostPer1MUsd,
+                    CachedInputCostPer1MUsd = model.CachedInputCostPer1MUsd,
                 };
             })
             .ToList();
@@ -724,7 +726,8 @@ public sealed class AiConnectionRepository(
                 !string.Equals(existing.Source, model.Source, StringComparison.Ordinal) ||
                 existing.LastSeenAt != model.LastSeenAt ||
                 existing.InputCostPer1MUsd != model.InputCostPer1MUsd ||
-                existing.OutputCostPer1MUsd != model.OutputCostPer1MUsd)
+                existing.OutputCostPer1MUsd != model.OutputCostPer1MUsd ||
+                existing.CachedInputCostPer1MUsd != model.CachedInputCostPer1MUsd)
             {
                 return false;
             }
@@ -855,7 +858,10 @@ public sealed class AiConnectionRepository(
                 modelCapabilities?.FirstOrDefault(capability => string.Equals(capability.ModelName, modelName, StringComparison.OrdinalIgnoreCase))
                     ?.InputCostPer1MUsd,
                 modelCapabilities?.FirstOrDefault(capability => string.Equals(capability.ModelName, modelName, StringComparison.OrdinalIgnoreCase))
-                    ?.OutputCostPer1MUsd))
+                    ?.OutputCostPer1MUsd,
+                CachedInputCostPer1MUsd: modelCapabilities?.FirstOrDefault(capability => string.Equals(
+                        capability.ModelName, modelName, StringComparison.OrdinalIgnoreCase))
+                    ?.CachedInputCostPer1MUsd))
             .ToList()
             .AsReadOnly();
 

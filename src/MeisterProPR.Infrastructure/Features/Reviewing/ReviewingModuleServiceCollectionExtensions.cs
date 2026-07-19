@@ -68,6 +68,7 @@ public static class ReviewingModuleServiceCollectionExtensions
         if (hasDatabase)
         {
             services.AddScoped<IJobRepository, JobRepository>();
+            services.AddSingleton<IModelPricingResolver, EfModelPricingResolver>();
             services.AddSingleton<IProtocolRecorder, EfProtocolRecorder>();
             services.AddScoped<IThreadMemoryRepository, ThreadMemoryRepository>();
             services.AddScoped<IMemoryActivityLog, MemoryActivityLogRepository>();

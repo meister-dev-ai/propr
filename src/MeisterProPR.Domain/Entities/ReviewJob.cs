@@ -257,6 +257,18 @@ public sealed class ReviewJob
     public long? TotalReasoningTokensAggregated { get; private set; }
 
     /// <summary>
+    ///     Sum of the per-tier <see cref="TokenBreakdownEntry.EstimatedCostUsd" /> values across all priced
+    ///     tiers, in USD. Null when no tier has configured pricing (distinct from a real cost of zero).
+    /// </summary>
+    public decimal? TotalEstimatedCostUsd { get; private set; }
+
+    /// <summary>
+    ///     True when the job cost rests on a fallback rate, a missing rate, estimated token counts, or a mix
+    ///     of priced and unpriced tiers.
+    /// </summary>
+    public bool CostIsApproximate { get; private set; }
+
+    /// <summary>
     ///     The number of in-scope changed files after exclusions for this iteration, fixed once at dispatch
     ///     planning. Null until dispatch planning runs. Denominator of the "files reviewed" progress metric.
     /// </summary>
@@ -361,6 +373,73 @@ public sealed class ReviewJob
         }
 
         this.AccumulateTokens(inputTokens, outputTokens, cachedInputTokens, cacheWriteTokens, reasoningTokens);
+    }
+
+    /// <summary>
+    ///     Records the estimated USD cost for the tier/model breakdown entry matching
+    ///     (<paramref name="category" />, <paramref name="modelId" />), then recomputes the null-aware job
+    ///     total and approximation flag. Idempotent: the cost is derived from the entry's cumulative token
+    ///     totals, so repeated calls after top-up merges converge on the same value. No-op when no matching
+    ///     entry exists yet.
+    /// </summary>
+    /// <param name="category">The AI connection category (effort tier) whose entry to update.</param>
+    /// <param name="modelId">The effective model deployment name whose entry to update.</param>
+    /// <param name="estimatedCostUsd">The estimated USD cost for the entry, or <see langword="null" /> when the model has no configured pricing.</param>
+    /// <param name="costIsApproximate">True when the estimate rests on a fallback rate, a missing rate, or estimated token counts.</param>
+    public void SetTierCost(
+        AiConnectionModelCategory category,
+        string modelId,
+        decimal? estimatedCostUsd,
+        bool costIsApproximate)
+    {
+        var index = this.TokenBreakdown.FindIndex(e =>
+            e.ConnectionCategory == category &&
+            string.Equals(e.ModelId, modelId, StringComparison.Ordinal));
+
+        if (index >= 0)
+        {
+            this.TokenBreakdown[index] = this.TokenBreakdown[index] with
+            {
+                EstimatedCostUsd = estimatedCostUsd,
+                CostIsApproximate = costIsApproximate,
+            };
+        }
+
+        this.RecomputeCost();
+    }
+
+    /// <summary>
+    ///     Recomputes <see cref="TotalEstimatedCostUsd" /> as the null-aware sum of the per-tier costs (null
+    ///     when every tier is unpriced) and <see cref="CostIsApproximate" /> as true when any tier is
+    ///     approximate or the job mixes priced and unpriced tiers.
+    /// </summary>
+    private void RecomputeCost()
+    {
+        decimal? total = null;
+        var anyApproximate = false;
+        var anyPriced = false;
+        var anyUnpriced = false;
+
+        foreach (var entry in this.TokenBreakdown)
+        {
+            if (entry.EstimatedCostUsd is { } cost)
+            {
+                total = (total ?? 0m) + cost;
+                anyPriced = true;
+            }
+            else
+            {
+                anyUnpriced = true;
+            }
+
+            if (entry.CostIsApproximate)
+            {
+                anyApproximate = true;
+            }
+        }
+
+        this.TotalEstimatedCostUsd = total;
+        this.CostIsApproximate = anyApproximate || (anyPriced && anyUnpriced);
     }
 
     /// <summary>Records the AI connection and model used at job-start time.</summary>

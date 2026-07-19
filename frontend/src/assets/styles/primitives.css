@@ -91,6 +91,41 @@
   text-decoration: none;
 }
 
+/* Compact icon+label action button (refresh, retry, export). */
+.btn-slide {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  padding: 0.55rem 1rem;
+  border-radius: var(--radius-pill);
+  border: 1px solid var(--color-border);
+  background: var(--color-surface);
+  color: var(--color-text);
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease-in-out;
+}
+
+.btn-slide:hover:not(:disabled) {
+  background: var(--color-border);
+  border-color: var(--color-border-hover);
+}
+
+.btn-slide:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.btn-slide .sign {
+  display: inline-flex;
+  align-items: center;
+}
+
+.btn-slide .text {
+  white-space: nowrap;
+}
+
 /* ── Chips (unified pill/badge system) ───────────────────────────────────────
  * Base + size + tone. Tones map onto the semantic palette tints in tokens.css.
  * Add new variants HERE rather than re-defining chips in component styles. */
