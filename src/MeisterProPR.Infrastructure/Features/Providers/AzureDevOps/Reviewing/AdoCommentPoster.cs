@@ -137,113 +137,224 @@ public sealed class AdoCommentPoster(
             ConsideredOpenThreads(existingThreads, botId),
             ConsideredResolvedThreads(existingThreads, botId));
 
-        var postedThreadCount = 0;
-        var failureExceptions = new List<Exception>();
+        var state = new PostingState();
 
-        // Post summary as PR-level thread, skipping if a bot summary already exists.
-        if (!HasBotSummary(existingThreads, botId, publicationIdentity))
-        {
-            try
-            {
-                var createdSummary = await threadFactory(BuildSummaryText(result), null, null, cancellationToken);
-                diagnostics.RecordPostedComments(CaptureCreatedComments(createdSummary, null, null));
-                postedThreadCount++;
-            }
+        await this.PostSummaryThreadIfNeededAsync(
+            result,
+            existingThreads,
+            botId,
+            publicationIdentity,
+            threadFactory,
+            diagnostics,
+            state,
+            cancellationToken);
 
-            // Isolate any provider failure so it cannot abort the rest of the pass. Request timeouts surface as
-            // TaskCanceledException (an OperationCanceledException), so gate on the caller token: only a
-            // caller-requested cancellation is allowed to propagate; everything else is recorded and posting continues.
-            catch (Exception ex) when (!cancellationToken.IsCancellationRequested)
-            {
-                diagnostics.RecordFailure(new ReviewCommentPostingFailure("summary", null, null, ex.Message));
-                failureExceptions.Add(ex);
-            }
-        }
-
-        // Post each inline comment, skipping locations the bot has already covered.
         foreach (var comment in result.Comments)
         {
-            var anchorContext = ResolveAnchorContext(
+            await this.PostInlineCommentIfNotSuppressedAsync(
                 comment,
-                iterationId,
-                compareToIterationId,
-                changeTrackingIds);
-            var (threadContext, prThreadContext) = BuildThreadContexts(anchorContext);
-            var normalizedFilePath = anchorContext.NormalizedFilePath;
-
-            var duplicateMatch = FindDeterministicDuplicateMatch(
                 existingThreads,
-                normalizedFilePath,
-                comment.LineNumber,
-                comment.Message,
-                botId);
-
-            if (duplicateMatch is not null)
-            {
-                diagnostics.RecordSuppression(duplicateMatch.ReasonCode);
-                continue;
-            }
-
-            var historicalMatch = await this.FindHistoricalDuplicateMatchAsync(
+                botId,
                 clientId,
                 repositoryId,
                 pullRequestId,
-                normalizedFilePath,
-                comment.Message,
+                iterationId,
+                compareToIterationId,
+                changeTrackingIds,
+                threadFactory,
+                diagnostics,
+                state,
                 cancellationToken);
-
-            diagnostics.RecordHistoricalEvaluation(historicalMatch);
-            if (historicalMatch.IsDuplicate && historicalMatch.ReasonCode is not null)
-            {
-                diagnostics.RecordSuppression(historicalMatch.ReasonCode);
-                continue;
-            }
-
-            if (historicalMatch.IsDegraded)
-            {
-                diagnostics.RecordFallbackCheck("deterministic_text_similarity");
-                var fallbackMatch = FindFallbackDuplicateMatch(
-                    existingThreads,
-                    normalizedFilePath,
-                    comment.LineNumber,
-                    comment.Message,
-                    botId);
-
-                if (fallbackMatch is not null)
-                {
-                    diagnostics.RecordSuppression(fallbackMatch.ReasonCode);
-                    continue;
-                }
-            }
-
-            try
-            {
-                var createdThread = await threadFactory(
-                    FormatInlineCommentBody(comment),
-                    threadContext,
-                    prThreadContext,
-                    cancellationToken);
-
-                diagnostics.RecordPosted();
-                diagnostics.RecordPostedComments(CaptureCreatedComments(createdThread, comment.FilePath, comment.LineNumber));
-                postedThreadCount++;
-            }
-            catch (Exception ex) when (!cancellationToken.IsCancellationRequested)
-            {
-                diagnostics.RecordFailure(new ReviewCommentPostingFailure("inline", comment.FilePath, comment.LineNumber, ex.Message));
-                failureExceptions.Add(ex);
-            }
         }
 
         var built = diagnostics.Build();
 
         // Every attempted thread was rejected: surface a publication failure rather than a silent success.
-        if (postedThreadCount == 0 && built.FailedCount > 0)
+        if (state.PostedThreadCount == 0 && built.FailedCount > 0)
         {
-            throw new ReviewCommentPublicationFailedException(built, failureExceptions);
+            throw new ReviewCommentPublicationFailedException(built, state.FailureExceptions);
         }
 
         return built;
+    }
+
+    private async Task PostSummaryThreadIfNeededAsync(
+        ReviewResult result,
+        IReadOnlyList<PrCommentThread>? existingThreads,
+        Guid? botId,
+        ReviewerIdentity? publicationIdentity,
+        AdoThreadFactory threadFactory,
+        PostingDiagnosticsBuilder diagnostics,
+        PostingState state,
+        CancellationToken cancellationToken)
+    {
+        // Post summary as PR-level thread, skipping if a bot summary already exists.
+        if (HasBotSummary(existingThreads, botId, publicationIdentity))
+        {
+            return;
+        }
+
+        try
+        {
+            var createdSummary = await threadFactory(BuildSummaryText(result), null, null, cancellationToken);
+            diagnostics.RecordPostedComments(CaptureCreatedComments(createdSummary, null, null));
+            state.PostedThreadCount++;
+        }
+
+        // Isolate any provider failure so it cannot abort the rest of the pass. Request timeouts surface as
+        // TaskCanceledException (an OperationCanceledException), so gate on the caller token: only a
+        // caller-requested cancellation is allowed to propagate; everything else is recorded and posting continues.
+        catch (Exception ex) when (!cancellationToken.IsCancellationRequested)
+        {
+            diagnostics.RecordFailure(new ReviewCommentPostingFailure("summary", null, null, ex.Message));
+            state.FailureExceptions.Add(ex);
+        }
+    }
+
+    private async Task PostInlineCommentIfNotSuppressedAsync(
+        ReviewComment comment,
+        IReadOnlyList<PrCommentThread>? existingThreads,
+        Guid? botId,
+        Guid? clientId,
+        string repositoryId,
+        int pullRequestId,
+        int iterationId,
+        int? compareToIterationId,
+        IReadOnlyDictionary<string, int> changeTrackingIds,
+        AdoThreadFactory threadFactory,
+        PostingDiagnosticsBuilder diagnostics,
+        PostingState state,
+        CancellationToken cancellationToken)
+    {
+        var anchorContext = ResolveAnchorContext(
+            comment,
+            iterationId,
+            compareToIterationId,
+            changeTrackingIds);
+        var (threadContext, prThreadContext) = BuildThreadContexts(anchorContext);
+        var normalizedFilePath = anchorContext.NormalizedFilePath;
+
+        var suppression = await this.ResolveInlineCommentSuppressionAsync(
+            comment,
+            existingThreads,
+            normalizedFilePath,
+            botId,
+            clientId,
+            repositoryId,
+            pullRequestId,
+            diagnostics,
+            cancellationToken);
+        if (suppression is not null)
+        {
+            return;
+        }
+
+        var posted = await this.PostSingleInlineCommentAsync(
+            comment,
+            threadContext,
+            prThreadContext,
+            threadFactory,
+            diagnostics,
+            state,
+            cancellationToken);
+        if (posted)
+        {
+            state.PostedThreadCount++;
+        }
+    }
+
+    private async Task<string?> ResolveInlineCommentSuppressionAsync(
+        ReviewComment comment,
+        IReadOnlyList<PrCommentThread>? existingThreads,
+        string? normalizedFilePath,
+        Guid? botId,
+        Guid? clientId,
+        string repositoryId,
+        int pullRequestId,
+        PostingDiagnosticsBuilder diagnostics,
+        CancellationToken cancellationToken)
+    {
+        var duplicateMatch = FindDeterministicDuplicateMatch(
+            existingThreads,
+            normalizedFilePath,
+            comment.LineNumber,
+            comment.Message,
+            botId);
+        if (duplicateMatch is not null)
+        {
+            diagnostics.RecordSuppression(duplicateMatch.ReasonCode);
+            return duplicateMatch.ReasonCode;
+        }
+
+        var historicalMatch = await this.FindHistoricalDuplicateMatchAsync(
+            clientId,
+            repositoryId,
+            pullRequestId,
+            normalizedFilePath,
+            comment.Message,
+            cancellationToken);
+
+        diagnostics.RecordHistoricalEvaluation(historicalMatch);
+        if (historicalMatch.IsDuplicate && historicalMatch.ReasonCode is not null)
+        {
+            diagnostics.RecordSuppression(historicalMatch.ReasonCode);
+            return historicalMatch.ReasonCode;
+        }
+
+        if (!historicalMatch.IsDegraded)
+        {
+            return null;
+        }
+
+        diagnostics.RecordFallbackCheck("deterministic_text_similarity");
+        var fallbackMatch = FindFallbackDuplicateMatch(
+            existingThreads,
+            normalizedFilePath,
+            comment.LineNumber,
+            comment.Message,
+            botId);
+        if (fallbackMatch is not null)
+        {
+            diagnostics.RecordSuppression(fallbackMatch.ReasonCode);
+            return fallbackMatch.ReasonCode;
+        }
+
+        return null;
+    }
+
+    private async Task<bool> PostSingleInlineCommentAsync(
+        ReviewComment comment,
+        CommentThreadContext? threadContext,
+        GitPullRequestCommentThreadContext? prThreadContext,
+        AdoThreadFactory threadFactory,
+        PostingDiagnosticsBuilder diagnostics,
+        PostingState state,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            var createdThread = await threadFactory(
+                FormatInlineCommentBody(comment),
+                threadContext,
+                prThreadContext,
+                cancellationToken);
+
+            diagnostics.RecordPosted();
+            diagnostics.RecordPostedComments(CaptureCreatedComments(createdThread, comment.FilePath, comment.LineNumber));
+            return true;
+        }
+        catch (Exception ex) when (!cancellationToken.IsCancellationRequested)
+        {
+            diagnostics.RecordFailure(new ReviewCommentPostingFailure("inline", comment.FilePath, comment.LineNumber, ex.Message));
+            state.FailureExceptions.Add(ex);
+            return false;
+        }
+    }
+
+    private sealed class PostingState
+    {
+        public int PostedThreadCount;
+        public List<Exception> FailureExceptions { get; } = [];
     }
 
     /// <summary>
