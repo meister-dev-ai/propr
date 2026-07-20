@@ -43,6 +43,19 @@
             </div>
         </div>
 
+        <div
+            v-if="vm.budgetSoftCapMessage"
+            class="budget-banner budget-banner--soft-capped"
+            data-testid="budget-soft-cap-banner"
+        >
+            <span class="budget-banner-icon">◑</span>
+            <div class="budget-banner-body">
+                <strong>Soft-capped</strong>
+                <p class="budget-banner-message">{{ vm.budgetSoftCapMessage }}</p>
+                <p v-if="vm.filesReviewedLabel" class="budget-banner-progress">{{ vm.filesReviewedLabel }} files reviewed.</p>
+            </div>
+        </div>
+
         <p v-if="vm.loading" class="loading">Loading…</p>
         <p v-else-if="vm.error" class="error">{{ vm.error }}</p>
         <p v-else-if="vm.protocols.length === 0" class="empty-state">No protocol available for this job.</p>
@@ -121,6 +134,12 @@ const vm = useJobProtocolViewModel()
     background: rgba(249, 115, 22, 0.1);
     border-color: rgba(249, 115, 22, 0.35);
     color: #f97316;
+}
+
+.budget-banner--soft-capped {
+    background: rgba(245, 158, 11, 0.1);
+    border-color: rgba(245, 158, 11, 0.35);
+    color: var(--color-warning);
 }
 
 .budget-banner-icon {

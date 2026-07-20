@@ -90,9 +90,16 @@
                         :class="rowClass(item)"
                     >
                         <div class="list-status-col">
-                            <div style="display: flex; align-items: center; gap: 0.5rem">
+                            <div style="display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap">
                                 <span :class="statusBadgeClass(item.status)">
                                     {{ statusLabel(item.status) }}
+                                </span>
+                                <span
+                                    v-if="item.budgetSoftCapped"
+                                    class="status-badge status-soft-capped"
+                                    title="This review stopped scanning further files after reaching its per-increment budget soft cap"
+                                >
+                                    Soft-capped
                                 </span>
                             </div>
                         </div>
@@ -647,6 +654,11 @@ function prReviewLink(group: PrGroup): object {
 .status-budget-exceeded {
     background: rgba(249, 115, 22, 0.18);
     color: #f97316;
+}
+
+.status-soft-capped {
+    background: rgba(245, 158, 11, 0.15);
+    color: var(--color-warning);
 }
 
 /* Row variants */

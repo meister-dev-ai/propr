@@ -10,6 +10,7 @@ using MeisterProPR.Application.Features.Reviewing.Execution.Models;
 using MeisterProPR.Application.Interfaces;
 using MeisterProPR.Domain.Enums;
 using MeisterProPR.Domain.ValueObjects;
+using MeisterProPR.Infrastructure.Features.Providers.Common;
 using MeisterProPR.Infrastructure.Utilities;
 using Microsoft.TeamFoundation.SourceControl.WebApi;
 
@@ -259,6 +260,16 @@ public sealed class AdoCommentPoster(
         {
             sb.Append($"\n\n**Carried forward unchanged files** ({result.CarriedForwardFilePaths.Count} files — results from prior review retained)\n\n");
             foreach (var path in result.CarriedForwardFilePaths)
+            {
+                var renderedPath = HtmlSanitizer.RenderForDisplay(path, ReviewBodyRenderingMode.Summary).RenderedText;
+                sb.Append($"- {renderedPath}\n");
+            }
+        }
+
+        if (result.BudgetSoftCapped)
+        {
+            sb.Append($"\n\n{ContextBudgetSummarySections.FormatBudgetSoftCapNote(result)}\n\n");
+            foreach (var path in result.BudgetSoftCapSkippedFilePaths)
             {
                 var renderedPath = HtmlSanitizer.RenderForDisplay(path, ReviewBodyRenderingMode.Summary).RenderedText;
                 sb.Append($"- {renderedPath}\n");

@@ -142,7 +142,7 @@ public class ReviewJobWorkerTests
         // Client month-to-date spend already at the soft cap, so the new job must be held rather than started.
         var capsProvider = Substitute.For<IBudgetCapsProvider>();
         capsProvider.GetCapsAsync(job.ClientId, Arg.Any<CancellationToken>())
-            .Returns(new BudgetCaps(80m, 100m, null, null, null));
+            .Returns(new BudgetCaps(80m, 100m, null, null, null, null));
         var accumulator = Substitute.For<IReviewSpendAccumulator>();
         accumulator.GetBaselineAsync(job, Arg.Any<DateOnly>(), Arg.Any<CancellationToken>())
             .Returns(new ReviewSpendBaseline(new ReviewScopeSpend(80m, false), ReviewScopeSpend.None, ReviewScopeSpend.None));

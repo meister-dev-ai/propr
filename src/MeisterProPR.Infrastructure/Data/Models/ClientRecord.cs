@@ -99,8 +99,15 @@ public sealed class ClientRecord
     public decimal? PullRequestBudgetHardCapUsd { get; set; }
 
     /// <summary>
-    ///     Optional default hard USD cap applied to each PR increment (a single review job) under this client. A
-    ///     single job cannot be held once started, so increments are governed by a hard cap only. Null means no limit.
+    ///     Optional default soft USD cap applied to each PR increment (a single review job) under this client. When a
+    ///     running job's spend reaches it, the job stops scanning further files and concludes with a synthesis that
+    ///     notes the review was soft-capped. Null means no limit.
+    /// </summary>
+    public decimal? IncrementBudgetSoftCapUsd { get; set; }
+
+    /// <summary>
+    ///     Optional default hard USD cap applied to each PR increment (a single review job) under this client. When
+    ///     reached, further model calls are cut. Null means no limit.
     /// </summary>
     public decimal? IncrementBudgetHardCapUsd { get; set; }
 

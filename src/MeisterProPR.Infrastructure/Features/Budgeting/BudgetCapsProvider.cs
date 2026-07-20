@@ -36,6 +36,7 @@ public sealed class BudgetCapsProvider(
                 client.MonthlyBudgetHardCapUsd,
                 client.PullRequestBudgetSoftCapUsd,
                 client.PullRequestBudgetHardCapUsd,
+                client.IncrementBudgetSoftCapUsd,
                 client.IncrementBudgetHardCapUsd))
             .FirstOrDefaultAsync(ct)
             .ConfigureAwait(false);

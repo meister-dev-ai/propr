@@ -2,7 +2,7 @@
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
 import { describe, expect, it } from 'vitest'
-import { formatBudgetBlockMessage } from '../budgetBlock'
+import { formatBudgetBlockMessage, formatBudgetSoftCapMessage } from '../budgetBlock'
 
 describe('formatBudgetBlockMessage', () => {
   it('returns null for a job that was not budget-blocked', () => {
@@ -42,5 +42,33 @@ describe('formatBudgetBlockMessage', () => {
     const message = formatBudgetBlockMessage('budgetExceeded', null)
     expect(message).toContain('a budget cap was reached')
     expect(message).toContain('Restart it after freeing budget.')
+  })
+
+  it('does not treat a completed soft-capped job as budget-blocked', () => {
+    expect(
+      formatBudgetBlockMessage('completed', { scope: 'increment', capKind: 'soft', thresholdUsd: 5, spentUsd: 6 }),
+    ).toBeNull()
+  })
+})
+
+describe('formatBudgetSoftCapMessage', () => {
+  it('explains a completed review that reached its per-increment soft cap', () => {
+    const message = formatBudgetSoftCapMessage('completed', {
+      scope: 'increment',
+      capKind: 'soft',
+      thresholdUsd: 5,
+      spentUsd: 6.5,
+    })
+
+    expect(message).toContain('per-increment soft cap of $5.00')
+    expect(message).toContain('spent $6.50')
+    expect(message).toContain('stopped scanning')
+    expect(message).toContain('synthesis')
+  })
+
+  it('returns null for a non-completed job or a hard-cap block', () => {
+    expect(formatBudgetSoftCapMessage('budgetExceeded', { capKind: 'hard' })).toBeNull()
+    expect(formatBudgetSoftCapMessage('completed', { capKind: 'hard' })).toBeNull()
+    expect(formatBudgetSoftCapMessage('completed', null)).toBeNull()
   })
 })

@@ -176,6 +176,47 @@ public sealed class JobRepositoryTests(PostgresContainerFixture fixture) : IAsyn
     }
 
     [Fact]
+    public async Task SetResultAsync_RecordsSoftCapMarker_WhileCompletingNormally()
+    {
+        // A per-increment soft-capped run finishes with a synthesis, so it completes normally; the breach is
+        // recorded on the completed job so the UI can mark it soft-capped, distinct from a hard cut.
+        var job = MakeJob();
+        await this._repo.AddAsync(job);
+        await this._repo.TryTransitionAsync(job.Id, JobStatus.Pending, JobStatus.Processing);
+        await this._repo.SetResultAsync(
+            job.Id,
+            new ReviewResult("summary", [])
+            {
+                BudgetSoftCapped = true,
+                BudgetSoftCapThresholdUsd = 5m,
+                BudgetSoftCapSpentUsd = 6m,
+                BudgetSoftCapSkippedFilePaths = ["src/skipped.cs"],
+            });
+
+        var stored = this._repo.GetById(job.Id);
+        Assert.NotNull(stored);
+        Assert.Equal(JobStatus.Completed, stored!.Status);
+        Assert.Equal(BudgetScopeKind.Increment, stored.BudgetBlockScope);
+        Assert.Equal(BudgetCapKind.Soft, stored.BudgetBlockCapKind);
+        Assert.Equal(5m, stored.BudgetBlockThresholdUsd);
+        Assert.Equal(6m, stored.BudgetBlockSpentUsd);
+    }
+
+    [Fact]
+    public async Task SetResultAsync_LeavesNoBudgetMarker_ForANormalCompletion()
+    {
+        var job = MakeJob();
+        await this._repo.AddAsync(job);
+        await this._repo.TryTransitionAsync(job.Id, JobStatus.Pending, JobStatus.Processing);
+        await this._repo.SetResultAsync(job.Id, new ReviewResult("summary", []));
+
+        var stored = this._repo.GetById(job.Id);
+        Assert.NotNull(stored);
+        Assert.Equal(JobStatus.Completed, stored!.Status);
+        Assert.Null(stored.BudgetBlockScope);
+    }
+
+    [Fact]
     public async Task FindCompletedJob_ReturnsMostRecentCompletedJob()
     {
         var job1 = MakeJob(prId: 500, iterationId: 2);

@@ -98,6 +98,11 @@ internal sealed class ClientEntityTypeConfiguration : IEntityTypeConfiguration<C
             .HasPrecision(18, 6)
             .IsRequired(false);
 
+        builder.Property(c => c.IncrementBudgetSoftCapUsd)
+            .HasColumnName("increment_budget_soft_cap_usd")
+            .HasPrecision(18, 6)
+            .IsRequired(false);
+
         builder.Property(c => c.IncrementBudgetHardCapUsd)
             .HasColumnName("increment_budget_hard_cap_usd")
             .HasPrecision(18, 6)

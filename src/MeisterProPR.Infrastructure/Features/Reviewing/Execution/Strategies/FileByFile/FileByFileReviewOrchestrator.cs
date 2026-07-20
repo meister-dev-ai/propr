@@ -133,6 +133,8 @@ internal sealed partial class FileByFileReviewOrchestrator(
         // verify -> gate -> publish path alongside the synthesized cross-cutting findings.
         var prWideCandidates = await this.RunPrWideScopePassesAsync(job, pr, baseContext, ct);
 
+        var budgetSoftCap = dispatchResult.BudgetSoftCap;
+
         if (dispatchResult.Exceptions.Count > 0)
         {
             // Attempt synthesis for the files that did succeed before propagating the partial failure.
@@ -141,7 +143,7 @@ internal sealed partial class FileByFileReviewOrchestrator(
             ReviewResult? partialResult = null;
             try
             {
-                partialResult = await this.SynthesizeResultsAsync(job, pr, baseContext, effectiveClient, prWideCandidates, ct);
+                partialResult = await this.SynthesizeResultsAsync(job, pr, baseContext, effectiveClient, prWideCandidates, budgetSoftCap, ct);
             }
             catch (Exception ex)
             {
@@ -151,7 +153,7 @@ internal sealed partial class FileByFileReviewOrchestrator(
             throw new PartialReviewFailureException(dispatchResult.Exceptions.Count, pr.ChangedFiles.Count, dispatchResult.Exceptions, partialResult);
         }
 
-        return await this.SynthesizeResultsAsync(job, pr, baseContext, effectiveClient, prWideCandidates, ct);
+        return await this.SynthesizeResultsAsync(job, pr, baseContext, effectiveClient, prWideCandidates, budgetSoftCap, ct);
     }
 
     // Runs each pr_wide-scope entry in the client's review-pass list once at the job level. Each entry resolves to
@@ -255,9 +257,10 @@ internal sealed partial class FileByFileReviewOrchestrator(
         ReviewSystemContext baseContext,
         IChatClient effectiveClient,
         IReadOnlyList<CandidateReviewFinding> prWideCandidates,
+        FileReviewDispatchPlanner.BudgetSoftCapSummary budgetSoftCap,
         CancellationToken ct)
     {
-        return await this.GetSynthesisExecutor().SynthesizeAsync(job, pr, baseContext, effectiveClient, prWideCandidates, ct);
+        return await this.GetSynthesisExecutor().SynthesizeAsync(job, pr, baseContext, effectiveClient, prWideCandidates, budgetSoftCap, ct);
     }
 
     private async Task RecordReviewProfileSelectedEventAsync(

@@ -58,6 +58,7 @@ internal sealed class ReviewSynthesisExecutor(
         ReviewSystemContext baseContext,
         IChatClient effectiveClient,
         IReadOnlyList<CandidateReviewFinding>? prWideCandidateFindings,
+        FileReviewDispatchPlanner.BudgetSoftCapSummary budgetSoftCap,
         CancellationToken ct)
     {
         var jobWithResults = await jobRepository.GetByIdWithFileResultsAsync(job.Id, ct);
@@ -167,6 +168,10 @@ internal sealed class ReviewSynthesisExecutor(
                 CarriedForwardCandidatesSkipped = carriedForwardCandidatesSkipped,
                 ContextDegradedFilePaths = contextDegradedFilePaths,
                 ContextSkippedFilePaths = contextSkippedFilePaths,
+                BudgetSoftCapped = budgetSoftCap.SoftCapped,
+                BudgetSoftCapThresholdUsd = budgetSoftCap.ThresholdUsd,
+                BudgetSoftCapSpentUsd = budgetSoftCap.SpentUsd,
+                BudgetSoftCapSkippedFilePaths = budgetSoftCap.SkippedFilePaths,
             };
         }
 
@@ -253,6 +258,10 @@ internal sealed class ReviewSynthesisExecutor(
             CarriedForwardCandidatesSkipped = carriedForwardCandidatesSkipped,
             ContextDegradedFilePaths = contextDegradedFilePaths,
             ContextSkippedFilePaths = contextSkippedFilePaths,
+            BudgetSoftCapped = budgetSoftCap.SoftCapped,
+            BudgetSoftCapThresholdUsd = budgetSoftCap.ThresholdUsd,
+            BudgetSoftCapSpentUsd = budgetSoftCap.SpentUsd,
+            BudgetSoftCapSkippedFilePaths = budgetSoftCap.SkippedFilePaths,
         };
     }
 

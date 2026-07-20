@@ -253,7 +253,9 @@ public sealed partial class JobRepository(
                 j.FileReviewResults.Count(r => r.IsComplete && !r.IsFailed && !r.IsExcluded && !r.IsCarriedForward),
                 j.InScopeChangedFileCount,
                 j.TotalEstimatedCostUsd,
-                j.CostIsApproximate))
+                j.CostIsApproximate,
+                // A completed job carries a budget block only when the per-increment soft cap stopped it early.
+                j.Status == JobStatus.Completed && j.BudgetBlockCapKind == BudgetCapKind.Soft))
             .ToListAsync(ct)
             .ConfigureAwait(false);
 
@@ -435,6 +437,17 @@ public sealed partial class JobRepository(
         job.ApplyResult(result);
         job.Status = JobStatus.Completed;
         job.CompletedAt = DateTimeOffset.UtcNow;
+
+        // A per-increment soft cap stops a running job from scanning further files but lets it finish with a
+        // synthesis, so the job completes normally. Record the breach on the completed job so the UI can mark the
+        // review soft-capped; the Completed status distinguishes it from a hard budget cut (BudgetExceeded).
+        if (result.BudgetSoftCapped
+            && result.BudgetSoftCapThresholdUsd is { } softCapThreshold
+            && result.BudgetSoftCapSpentUsd is { } softCapSpent)
+        {
+            job.SetBudgetBlock(BudgetScopeKind.Increment, BudgetCapKind.Soft, softCapThreshold, softCapSpent);
+        }
+
         await dbContext.SaveChangesAsync(ct).ConfigureAwait(false);
         await this.CloseOpenProtocolsAsync(id).ConfigureAwait(false);
     }

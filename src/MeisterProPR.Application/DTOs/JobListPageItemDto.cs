@@ -41,6 +41,10 @@ namespace MeisterProPR.Application.DTOs;
 /// </param>
 /// <param name="TotalEstimatedCostUsd">Persisted per-job USD cost; null when the model had no configured pricing.</param>
 /// <param name="CostIsApproximate">True when the cost relied on a fallback rate or mixes priced and unpriced tiers.</param>
+/// <param name="BudgetSoftCapped">
+///     True when this completed review stopped scanning further files early because the per-increment budget soft
+///     cap was reached. Lets the overview mark the row soft-capped without a distinct job status.
+/// </param>
 public sealed record JobListPageItemDto(
     Guid Id,
     Guid? ClientId,
@@ -65,4 +69,5 @@ public sealed record JobListPageItemDto(
     int FilesReviewed,
     int? FilesInScope,
     decimal? TotalEstimatedCostUsd,
-    bool CostIsApproximate);
+    bool CostIsApproximate,
+    bool BudgetSoftCapped);

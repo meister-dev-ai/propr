@@ -51,20 +51,56 @@ public sealed class BudgetScopeTests
     public void ThrowIfHardCapReached_IsANoOp_WhenNoHardCapIsConfigured()
     {
         var scope = new BudgetScope(
-            new BudgetCaps(MonthlySoftCapUsd: 5m, MonthlyHardCapUsd: null, PullRequestSoftCapUsd: null, PullRequestHardCapUsd: null, IncrementHardCapUsd: null),
+            new BudgetCaps(
+                MonthlySoftCapUsd: 5m, MonthlyHardCapUsd: null, PullRequestSoftCapUsd: null, PullRequestHardCapUsd: null, IncrementSoftCapUsd: null,
+                IncrementHardCapUsd: null),
             new ReviewSpendBaseline(new ReviewScopeSpend(1_000m, false), ReviewScopeSpend.None, ReviewScopeSpend.None));
 
         scope.ThrowIfHardCapReached();
         Assert.Null(scope.TrippedBreach);
     }
 
-    private static BudgetScope MakeScope(decimal incrementHardCapUsd, decimal incrementBaselineUsd)
+    [Fact]
+    public void IsIncrementSoftCapReached_IsFalse_WhileBaselinePlusRunningIsUnderTheCap()
+    {
+        var scope = MakeScope(incrementHardCapUsd: null, incrementBaselineUsd: 2m, incrementSoftCapUsd: 8m);
+        scope.RecordCall(3m); // effective increment spend 2 + 3 = 5 < 8
+
+        Assert.False(scope.IsIncrementSoftCapReached());
+        Assert.Null(scope.IncrementSoftCapBreach);
+    }
+
+    [Fact]
+    public void IsIncrementSoftCapReached_IsTrueAndRecordsBreach_WhenReached()
+    {
+        var scope = MakeScope(incrementHardCapUsd: null, incrementBaselineUsd: 2m, incrementSoftCapUsd: 8m);
+        scope.RecordCall(6m); // effective increment spend 2 + 6 = 8 >= 8
+
+        Assert.True(scope.IsIncrementSoftCapReached());
+        Assert.NotNull(scope.IncrementSoftCapBreach);
+        Assert.Equal(BudgetScopeKind.Increment, scope.IncrementSoftCapBreach!.Scope);
+        Assert.Equal(BudgetCapKind.Soft, scope.IncrementSoftCapBreach.CapKind);
+        Assert.Equal(8m, scope.IncrementSoftCapBreach.ThresholdUsd);
+    }
+
+    [Fact]
+    public void IsIncrementSoftCapReached_IsFalse_WhenNoIncrementSoftCapIsConfigured()
+    {
+        var scope = MakeScope(incrementHardCapUsd: 10m, incrementBaselineUsd: 0m, incrementSoftCapUsd: null);
+        scope.RecordCall(9m);
+
+        Assert.False(scope.IsIncrementSoftCapReached());
+        Assert.Null(scope.IncrementSoftCapBreach);
+    }
+
+    private static BudgetScope MakeScope(decimal? incrementHardCapUsd, decimal incrementBaselineUsd, decimal? incrementSoftCapUsd = null)
     {
         var caps = new BudgetCaps(
             MonthlySoftCapUsd: null,
             MonthlyHardCapUsd: null,
             PullRequestSoftCapUsd: null,
             PullRequestHardCapUsd: null,
+            IncrementSoftCapUsd: incrementSoftCapUsd,
             IncrementHardCapUsd: incrementHardCapUsd);
         var baseline = new ReviewSpendBaseline(
             ReviewScopeSpend.None,

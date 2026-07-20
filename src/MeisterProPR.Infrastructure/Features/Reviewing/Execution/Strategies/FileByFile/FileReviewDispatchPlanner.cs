@@ -1,6 +1,7 @@
 // Copyright (c) Andreas Rain.
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
+using MeisterProPR.Application.Features.Budgeting;
 using MeisterProPR.Application.Features.Reviewing.Execution.Models;
 using MeisterProPR.Application.Features.Reviewing.Execution.Services;
 using MeisterProPR.Application.Interfaces;
@@ -24,7 +25,8 @@ internal sealed class FileReviewDispatchPlanner(
     IProtocolRecorder protocolRecorder,
     FileReviewer fileReviewer,
     AiReviewOptions options,
-    ILogger<FileByFileReviewOrchestrator> logger)
+    ILogger<FileByFileReviewOrchestrator> logger,
+    IBudgetScopeAccessor? budgetScopeAccessor = null)
 {
     public async Task<FileReviewDispatchResult> ExecuteAsync(
         ReviewJob job,
@@ -73,9 +75,10 @@ internal sealed class FileReviewDispatchPlanner(
         ];
 
         var exceptions = new List<Exception>();
+        var budgetSoftCapSkippedFiles = new List<string>();
         if (filesToReview.Count == 0)
         {
-            return new FileReviewDispatchResult(existingResults, exceptions);
+            return new FileReviewDispatchResult(existingResults, exceptions, BudgetSoftCapSummary.None);
         }
 
         var semaphore = new SemaphoreSlim(options.MaxFileReviewConcurrency);
@@ -89,6 +92,24 @@ internal sealed class FileReviewDispatchPlanner(
             await semaphore.WaitAsync(ct);
             try
             {
+                // Per-increment soft cap: once this job's spend has reached it, stop starting new files. Files
+                // already in flight finish; queued files skip here so the review concludes with a synthesis over
+                // what was reviewed rather than being cut mid-call. Never applies to a job that has not spent yet.
+                var budgetScope = budgetScopeAccessor?.Current;
+                if (budgetScope is not null && budgetScope.IsIncrementSoftCapReached())
+                {
+                    lock (budgetSoftCapSkippedFiles)
+                    {
+                        budgetSoftCapSkippedFiles.Add(file.Path);
+                    }
+
+                    logger.LogInformation(
+                        "Skipped file {FilePath} in job {JobId}: per-increment budget soft cap reached",
+                        file.Path,
+                        job.Id);
+                    return;
+                }
+
                 var fileIndex = fileIndexByPath.GetValueOrDefault(file.Path, 1);
                 var existingResult = existingResults.GetValueOrDefault(file.Path);
                 await fileReviewer.ReviewAsync(
@@ -129,12 +150,26 @@ internal sealed class FileReviewDispatchPlanner(
         try
         {
             await Task.WhenAll(tasks);
-            return new FileReviewDispatchResult(existingResults, exceptions);
+            return new FileReviewDispatchResult(existingResults, exceptions, BuildBudgetSoftCapSummary(budgetSoftCapSkippedFiles));
         }
         finally
         {
             semaphore.Dispose();
         }
+    }
+
+    // Maps the ambient scope's recorded increment soft-cap breach (if any) plus the files this run consequently
+    // skipped into a provider-neutral summary. Threshold/spend are read from the breach recorded when the cap was
+    // first observed; the skipped set is non-empty exactly when the cap tripped.
+    private BudgetSoftCapSummary BuildBudgetSoftCapSummary(IReadOnlyList<string> skippedFiles)
+    {
+        var breach = budgetScopeAccessor?.Current?.IncrementSoftCapBreach;
+        if (breach is null)
+        {
+            return BudgetSoftCapSummary.None;
+        }
+
+        return new BudgetSoftCapSummary(true, breach.ThresholdUsd, breach.SpentUsd, skippedFiles);
     }
 
     private async Task MarkFileExcludedAsync(
@@ -225,5 +260,20 @@ internal sealed class FileReviewDispatchPlanner(
 
     internal sealed record FileReviewDispatchResult(
         IReadOnlyDictionary<string, ReviewFileResult> ExistingResults,
-        IReadOnlyList<Exception> Exceptions);
+        IReadOnlyList<Exception> Exceptions,
+        BudgetSoftCapSummary BudgetSoftCap);
+
+    /// <summary>
+    ///     Summary of a per-increment budget soft-cap stop within a review run: whether it tripped, the USD
+    ///     threshold reached and the metered spend at that point, and the file paths that were consequently not
+    ///     scanned. Provider-neutral so it can flow into the review summary without leaking budget types downstream.
+    /// </summary>
+    internal sealed record BudgetSoftCapSummary(
+        bool SoftCapped,
+        decimal? ThresholdUsd,
+        decimal? SpentUsd,
+        IReadOnlyList<string> SkippedFilePaths)
+    {
+        public static BudgetSoftCapSummary None { get; } = new(false, null, null, []);
+    }
 }

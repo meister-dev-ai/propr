@@ -17,6 +17,7 @@ public sealed class BudgetScope(BudgetCaps caps, ReviewSpendBaseline baseline)
     private decimal _runningUsd;
     private bool _runningApproximate;
     private BudgetBreach? _trippedBreach;
+    private BudgetBreach? _incrementSoftCapBreach;
 
     /// <summary>The client's resolved caps.</summary>
     public BudgetCaps Caps { get; } = caps;
@@ -60,6 +61,22 @@ public sealed class BudgetScope(BudgetCaps caps, ReviewSpendBaseline baseline)
             lock (this._gate)
             {
                 return this._trippedBreach;
+            }
+        }
+    }
+
+    /// <summary>
+    ///     The per-increment soft cap once it has been reached during this run, or <see langword="null" />. Recorded
+    ///     the first time <see cref="IsIncrementSoftCapReached" /> observes the cap so the orchestrator can complete
+    ///     the review with a soft-capped note and marker without re-deriving the breach.
+    /// </summary>
+    public BudgetBreach? IncrementSoftCapBreach
+    {
+        get
+        {
+            lock (this._gate)
+            {
+                return this._incrementSoftCapBreach;
             }
         }
     }
@@ -116,5 +133,41 @@ public sealed class BudgetScope(BudgetCaps caps, ReviewSpendBaseline baseline)
 
             throw new BudgetHardCapReachedException(breach);
         }
+    }
+
+    /// <summary>
+    ///     Returns whether the effective increment spend has reached the configured per-increment soft cap. Unlike
+    ///     the hard cap this never throws: the per-file dispatch loop calls it between files so a running job stops
+    ///     scanning further files once the cap is reached, then still concludes with a synthesis. The breach is
+    ///     recorded the first time it is observed so the outcome can be surfaced as a soft-capped note and marker.
+    /// </summary>
+    public bool IsIncrementSoftCapReached()
+    {
+        if (!this.Caps.IncrementSoftCapConfigured)
+        {
+            return false;
+        }
+
+        decimal running;
+        lock (this._gate)
+        {
+            running = this._runningUsd;
+        }
+
+        var breach = BudgetEvaluator.FindIncrementSoftCapBreach(
+            this.Caps,
+            this.Baseline.Increment.KnownUsd + running);
+
+        if (breach is null)
+        {
+            return false;
+        }
+
+        lock (this._gate)
+        {
+            this._incrementSoftCapBreach ??= breach;
+        }
+
+        return true;
     }
 }

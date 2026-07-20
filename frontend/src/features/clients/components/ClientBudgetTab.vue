@@ -9,10 +9,12 @@
             </div>
             <div class="section-card-body section-card-body--compact">
                 <p class="muted budget-intro">
-                    Optional USD spend caps. A <strong>soft cap</strong> holds new reviews once the scope's spend
-                    reaches it (running reviews still finish); a <strong>hard cap</strong> cuts further model calls
-                    mid-review and publishes the findings produced so far. Leave a field blank for no limit. Caps
-                    compose most-restrictively across scopes, and a held or stopped review is resumed by restarting it.
+                    Optional USD spend caps. Monthly and per-PR <strong>soft caps</strong> hold new reviews once the
+                    scope's spend reaches them (running reviews still finish); the per-increment <strong>soft cap</strong>
+                    instead stops a running review from scanning more files and finishes it with a synthesis. A
+                    <strong>hard cap</strong> cuts further model calls mid-review and publishes the findings produced so
+                    far. Leave a field blank for no limit. Caps compose most-restrictively across scopes, and a held or
+                    stopped review is resumed by restarting it.
                 </p>
                 <p v-if="!isBudgetingAvailable && budgetingUpgradeMessage" class="muted budget-upgrade">
                     {{ budgetingUpgradeMessage }}
@@ -39,10 +41,16 @@
                             name="pullRequestBudgetHardCapUsd" type="number" min="0" step="0.01" placeholder="No limit" />
                     </div>
                     <div class="form-field">
+                        <label for="incrementBudgetSoftCapUsd">Per-increment soft cap (USD)</label>
+                        <input id="incrementBudgetSoftCapUsd" v-model="editedIncrementBudgetSoftCapUsd"
+                            name="incrementBudgetSoftCapUsd" type="number" min="0" step="0.01" placeholder="No limit" />
+                        <p class="muted budget-field-note">When a single review reaches this, it stops scanning further files and finishes with a synthesis noting the review was soft-capped.</p>
+                    </div>
+                    <div class="form-field">
                         <label for="incrementBudgetHardCapUsd">Per-increment hard cap (USD)</label>
                         <input id="incrementBudgetHardCapUsd" v-model="editedIncrementBudgetHardCapUsd"
                             name="incrementBudgetHardCapUsd" type="number" min="0" step="0.01" placeholder="No limit" />
-                        <p class="muted budget-field-note">A single increment is one review job, so it is capped by a hard limit only.</p>
+                        <p class="muted budget-field-note">A single increment is one review job; reaching this cuts further model calls mid-review.</p>
                     </div>
                 </fieldset>
                 <div class="budget-actions">
@@ -70,6 +78,7 @@ const {
     editedMonthlyBudgetHardCapUsd,
     editedPullRequestBudgetSoftCapUsd,
     editedPullRequestBudgetHardCapUsd,
+    editedIncrementBudgetSoftCapUsd,
     editedIncrementBudgetHardCapUsd,
     saveBudgetConfig,
     isBudgetButtonEnabled,

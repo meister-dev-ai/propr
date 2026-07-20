@@ -57,3 +57,23 @@ export function formatBudgetBlockMessage(
     'Restart it after freeing budget.'
   )
 }
+
+/**
+ * Builds the explanation for a completed review that reached its per-increment soft cap, or null when the review
+ * was not soft-capped. Unlike a held or stopped review this one finished with a synthesis over the files it did
+ * review, so there is nothing to restart.
+ */
+export function formatBudgetSoftCapMessage(
+  status: string | null | undefined,
+  block: BudgetBlock | null | undefined,
+): string | null {
+  if (status !== 'completed' || block?.capKind !== 'soft') {
+    return null
+  }
+
+  return (
+    `This review reached its ${formatBudgetScope(block.scope)} soft cap of ` +
+    `${formatBudgetUsd(block.thresholdUsd)} (spent ${formatBudgetUsd(block.spentUsd)}), so it stopped scanning ` +
+    'further files and finished with a synthesis of what it reviewed.'
+  )
+}

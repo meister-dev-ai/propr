@@ -43,8 +43,25 @@ public static class BudgetEvaluator
     }
 
     /// <summary>
+    ///     Returns the increment soft-cap breach when the effective increment spend has reached the configured
+    ///     per-increment soft cap, or <see langword="null" /> otherwise. Unlike the monthly and per-PR soft caps
+    ///     (which gate admission), reaching this cap stops a running job from scanning further files and lets it
+    ///     conclude with a synthesis; it never holds a not-yet-started job.
+    /// </summary>
+    public static BudgetBreach? FindIncrementSoftCapBreach(BudgetCaps caps, decimal incrementSpentUsd)
+    {
+        if (caps.IncrementSoftCapUsd is { } incrementCap && incrementSpentUsd >= incrementCap)
+        {
+            return new BudgetBreach(BudgetScopeKind.Increment, BudgetCapKind.Soft, incrementCap, incrementSpentUsd);
+        }
+
+        return null;
+    }
+
+    /// <summary>
     ///     Returns the soft cap the review has reached given the effective spend in the pull-request and client
-    ///     scopes, or <see langword="null" /> when no soft cap is reached. The increment scope has no soft cap.
+    ///     scopes, or <see langword="null" /> when no soft cap is reached. The increment scope's soft cap is not an
+    ///     admission gate, so it is evaluated separately by <see cref="FindIncrementSoftCapBreach" />.
     /// </summary>
     public static BudgetBreach? FindSoftCapBreach(
         BudgetCaps caps,

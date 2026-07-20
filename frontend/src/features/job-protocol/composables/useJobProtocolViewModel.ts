@@ -7,7 +7,7 @@ import type { LocationQueryRaw } from 'vue-router'
 import { createAdminClient } from '@/services/api'
 import { createDismissal } from '@/services/findingDismissalsService'
 import { restartJob, stopJob } from '@/services/jobsService'
-import { formatBudgetBlockMessage } from './budgetBlock'
+import { formatBudgetBlockMessage, formatBudgetSoftCapMessage } from './budgetBlock'
 import { useSession } from '@/composables/useSession'
 import { RoleLevel } from '@/composables/roles'
 import { formatTriageDecision } from './formatTriageDecision'
@@ -290,6 +290,9 @@ export function useJobProtocolViewModel() {
 
     const budgetBlockMessage = computed<string | null>(() =>
         formatBudgetBlockMessage(jobStatus.value, jobDetail.value?.budgetStatus ?? null))
+
+    const budgetSoftCapMessage = computed<string | null>(() =>
+        formatBudgetSoftCapMessage(jobStatus.value, jobDetail.value?.budgetStatus ?? null))
 
     async function restart() {
         const jobId = route.params.id as string
@@ -2176,6 +2179,7 @@ export function useJobProtocolViewModel() {
         canRestart,
         isBudgetBlocked,
         budgetBlockMessage,
+        budgetSoftCapMessage,
         restarting,
         restart,
         canStop,

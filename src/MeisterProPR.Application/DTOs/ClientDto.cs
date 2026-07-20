@@ -38,15 +38,16 @@ public sealed record ClientDto(
 }
 
 /// <summary>
-///     A client's USD budget caps. Every value is optional; a null cap means no limit. Soft caps apply to the
-///     monthly-client and per-PR scopes (they stop admitting new jobs); hard caps apply to all three scopes (they
-///     cut further model calls). The increment scope is hard-only.
+///     A client's USD budget caps. Every value is optional; a null cap means no limit. Monthly-client and per-PR
+///     soft caps stop admitting new jobs; the increment soft cap instead stops a running job from scanning further
+///     files and concludes it with a synthesis. Hard caps apply to all three scopes and cut further model calls.
 /// </summary>
 public sealed record BudgetConfigDto(
     decimal? MonthlySoftCapUsd = null,
     decimal? MonthlyHardCapUsd = null,
     decimal? PullRequestSoftCapUsd = null,
     decimal? PullRequestHardCapUsd = null,
+    decimal? IncrementSoftCapUsd = null,
     decimal? IncrementHardCapUsd = null);
 
 /// <summary>

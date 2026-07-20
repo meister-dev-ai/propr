@@ -11327,9 +11327,9 @@ export interface components {
          */
         BudgetCapKind: "soft" | "hard";
         /**
-         * @description A client's USD budget caps. Every value is optional; a null cap means no limit. Soft caps apply to the
-         *     monthly-client and per-PR scopes (they stop admitting new jobs); hard caps apply to all three scopes (they
-         *     cut further model calls). The increment scope is hard-only.
+         * @description A client's USD budget caps. Every value is optional; a null cap means no limit. Monthly-client and per-PR
+         *     soft caps stop admitting new jobs; the increment soft cap instead stops a running job from scanning further
+         *     files and concludes it with a synthesis. Hard caps apply to all three scopes and cut further model calls.
          */
         BudgetConfigDto: {
             /** Format: double */
@@ -11340,6 +11340,8 @@ export interface components {
             pullRequestSoftCapUsd?: number | null;
             /** Format: double */
             pullRequestHardCapUsd?: number | null;
+            /** Format: double */
+            incrementSoftCapUsd?: number | null;
             /** Format: double */
             incrementHardCapUsd?: number | null;
         };
@@ -11904,6 +11906,7 @@ export interface components {
             /** Format: double */
             totalEstimatedCostUsd?: number | null;
             costIsApproximate?: boolean;
+            budgetSoftCapped?: boolean;
         };
         /** @description Response for the job list endpoint. */
         JobListResponse: {

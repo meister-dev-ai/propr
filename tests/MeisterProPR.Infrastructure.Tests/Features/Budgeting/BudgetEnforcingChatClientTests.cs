@@ -61,7 +61,7 @@ public sealed class BudgetEnforcingChatClientTests
 
     private static BudgetScope ScopeWithIncrementHardCap(decimal capUsd, decimal baselineUsd)
     {
-        var caps = new BudgetCaps(null, null, null, null, capUsd);
+        var caps = new BudgetCaps(null, null, null, null, null, capUsd);
         var baseline = new ReviewSpendBaseline(
             ReviewScopeSpend.None,
             ReviewScopeSpend.None,

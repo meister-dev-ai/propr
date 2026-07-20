@@ -56,13 +56,13 @@ public sealed class PatchClientRequestValidator : AbstractValidator<PatchClientR
         this.RuleFor(r => r.BudgetConfig)
             .Must(BeAValidBudgetConfig)
             .WithMessage(
-                "Budget caps must be non-negative, and a soft cap must not exceed its hard cap (for the monthly and "
-                + "per-PR scopes).")
+                "Budget caps must be non-negative, and a soft cap must not exceed its hard cap (for the monthly, "
+                + "per-PR, and per-increment scopes).")
             .When(r => r.BudgetConfig is not null);
     }
 
     // Each cap must be non-negative (null means "no limit"), and where both a soft and a hard cap are set for the
-    // same scope the soft cap must not exceed the hard one. The increment scope has a hard cap only.
+    // same scope the soft cap must not exceed the hard one.
     private static bool BeAValidBudgetConfig(BudgetConfigDto? config)
     {
         if (config is null)
@@ -76,6 +76,7 @@ public sealed class PatchClientRequestValidator : AbstractValidator<PatchClientR
             config.MonthlyHardCapUsd,
             config.PullRequestSoftCapUsd,
             config.PullRequestHardCapUsd,
+            config.IncrementSoftCapUsd,
             config.IncrementHardCapUsd,
         ];
 
@@ -90,6 +91,11 @@ public sealed class PatchClientRequestValidator : AbstractValidator<PatchClientR
         }
 
         if (config is { PullRequestSoftCapUsd: { } prSoft, PullRequestHardCapUsd: { } prHard } && prSoft > prHard)
+        {
+            return false;
+        }
+
+        if (config is { IncrementSoftCapUsd: { } incrementSoft, IncrementHardCapUsd: { } incrementHard } && incrementSoft > incrementHard)
         {
             return false;
         }

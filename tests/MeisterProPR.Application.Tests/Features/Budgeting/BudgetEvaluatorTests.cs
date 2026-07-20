@@ -15,6 +15,7 @@ public sealed class BudgetEvaluatorTests
         MonthlyHardCapUsd: 100m,
         PullRequestSoftCapUsd: 8m,
         PullRequestHardCapUsd: 10m,
+        IncrementSoftCapUsd: 4m,
         IncrementHardCapUsd: 5m);
 
     [Fact]
@@ -48,8 +49,37 @@ public sealed class BudgetEvaluatorTests
     [Fact]
     public void FindSoftCapBreach_IgnoresTheIncrementScope()
     {
-        // Even a large increment spend never trips a soft cap: the increment scope has none.
+        // The admission soft-cap breach never considers the increment scope: its soft cap is an in-run stop,
+        // evaluated separately by FindIncrementSoftCapBreach.
         var breach = BudgetEvaluator.FindSoftCapBreach(Caps, clientSpentUsd: 50m, pullRequestSpentUsd: 5m);
+        Assert.Null(breach);
+    }
+
+    [Fact]
+    public void FindIncrementSoftCapBreach_ReturnsIncrementSoftCap_WhenReached()
+    {
+        var breach = BudgetEvaluator.FindIncrementSoftCapBreach(Caps, incrementSpentUsd: 4m);
+
+        Assert.NotNull(breach);
+        Assert.Equal(BudgetScopeKind.Increment, breach!.Scope);
+        Assert.Equal(BudgetCapKind.Soft, breach.CapKind);
+        Assert.Equal(4m, breach.ThresholdUsd);
+        Assert.Equal(4m, breach.SpentUsd);
+    }
+
+    [Fact]
+    public void FindIncrementSoftCapBreach_ReturnsNull_WhenUnderCapOrUnconfigured()
+    {
+        Assert.Null(BudgetEvaluator.FindIncrementSoftCapBreach(Caps, incrementSpentUsd: 3.99m));
+        Assert.Null(BudgetEvaluator.FindIncrementSoftCapBreach(BudgetCaps.None, incrementSpentUsd: 1_000m));
+    }
+
+    [Fact]
+    public void FindAdmissionBreach_NeverReportsTheIncrementSoftCap()
+    {
+        // A brand-new job has no increment spend, and the increment soft cap is an in-run stop — so it must not
+        // gate admission even when the (hypothetical) increment spend is over the soft cap.
+        var breach = BudgetEvaluator.FindAdmissionBreach(Caps, clientSpentUsd: 10m, pullRequestSpentUsd: 1m, incrementSpentUsd: 4m);
         Assert.Null(breach);
     }
 

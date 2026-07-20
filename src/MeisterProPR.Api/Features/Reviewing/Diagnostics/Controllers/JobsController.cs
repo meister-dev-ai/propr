@@ -118,7 +118,8 @@ public sealed class JobsController(
                         j.FilesReviewed,
                         j.FilesInScope,
                         j.TotalEstimatedCostUsd,
-                        j.CostIsApproximate))
+                        j.CostIsApproximate,
+                        j.BudgetSoftCapped))
                     .ToList()));
     }
 
@@ -419,7 +420,8 @@ public sealed class JobsController(
         int FilesReviewed = 0,
         int? FilesInScope = null,
         decimal? TotalEstimatedCostUsd = null,
-        bool CostIsApproximate = false);
+        bool CostIsApproximate = false,
+        bool BudgetSoftCapped = false);
 
     /// <summary>Response for the job list endpoint.</summary>
     public sealed record JobListResponse(int Total, IReadOnlyList<JobListItem> Items);

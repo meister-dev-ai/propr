@@ -79,6 +79,7 @@ export interface ClientDetailViewModel {
   editedMonthlyBudgetHardCapUsd: Ref<string>
   editedPullRequestBudgetSoftCapUsd: Ref<string>
   editedPullRequestBudgetHardCapUsd: Ref<string>
+  editedIncrementBudgetSoftCapUsd: Ref<string>
   editedIncrementBudgetHardCapUsd: Ref<string>
   reviewProfiles: Ref<ReviewProfileCatalogItemDto[]>
   clientReviewProfile: Ref<ClientReviewProfileDto | null>
@@ -283,6 +284,7 @@ export function useClientDetailViewModel(options: UseClientDetailViewModelOption
   const editedMonthlyBudgetHardCapUsd = ref('')
   const editedPullRequestBudgetSoftCapUsd = ref('')
   const editedPullRequestBudgetHardCapUsd = ref('')
+  const editedIncrementBudgetSoftCapUsd = ref('')
   const editedIncrementBudgetHardCapUsd = ref('')
   const reviewProfiles = ref<ReviewProfileCatalogItemDto[]>([])
   const clientReviewProfile = ref<ClientReviewProfileDto | null>(null)
@@ -342,6 +344,7 @@ export function useClientDetailViewModel(options: UseClientDetailViewModelOption
     editedMonthlyBudgetHardCapUsd.value = capToInput(nextClient.budgetConfig?.monthlyHardCapUsd)
     editedPullRequestBudgetSoftCapUsd.value = capToInput(nextClient.budgetConfig?.pullRequestSoftCapUsd)
     editedPullRequestBudgetHardCapUsd.value = capToInput(nextClient.budgetConfig?.pullRequestHardCapUsd)
+    editedIncrementBudgetSoftCapUsd.value = capToInput(nextClient.budgetConfig?.incrementSoftCapUsd)
     editedIncrementBudgetHardCapUsd.value = capToInput(nextClient.budgetConfig?.incrementHardCapUsd)
   }
 
@@ -543,6 +546,7 @@ export function useClientDetailViewModel(options: UseClientDetailViewModelOption
       monthlyHardCapUsd: capFromInput(editedMonthlyBudgetHardCapUsd.value),
       pullRequestSoftCapUsd: capFromInput(editedPullRequestBudgetSoftCapUsd.value),
       pullRequestHardCapUsd: capFromInput(editedPullRequestBudgetHardCapUsd.value),
+      incrementSoftCapUsd: capFromInput(editedIncrementBudgetSoftCapUsd.value),
       incrementHardCapUsd: capFromInput(editedIncrementBudgetHardCapUsd.value),
     }
   }
@@ -617,6 +621,7 @@ export function useClientDetailViewModel(options: UseClientDetailViewModelOption
       edited.monthlyHardCapUsd !== (stored.monthlyHardCapUsd ?? null) ||
       edited.pullRequestSoftCapUsd !== (stored.pullRequestSoftCapUsd ?? null) ||
       edited.pullRequestHardCapUsd !== (stored.pullRequestHardCapUsd ?? null) ||
+      edited.incrementSoftCapUsd !== (stored.incrementSoftCapUsd ?? null) ||
       edited.incrementHardCapUsd !== (stored.incrementHardCapUsd ?? null)
     )
   }
@@ -662,6 +667,7 @@ export function useClientDetailViewModel(options: UseClientDetailViewModelOption
     editedMonthlyBudgetHardCapUsd,
     editedPullRequestBudgetSoftCapUsd,
     editedPullRequestBudgetHardCapUsd,
+    editedIncrementBudgetSoftCapUsd,
     editedIncrementBudgetHardCapUsd,
     reviewProfiles,
     clientReviewProfile,

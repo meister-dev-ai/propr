@@ -178,6 +178,7 @@ public sealed class ClientAdminService(
             client.MonthlyBudgetHardCapUsd = budgetConfig.MonthlyHardCapUsd;
             client.PullRequestBudgetSoftCapUsd = budgetConfig.PullRequestSoftCapUsd;
             client.PullRequestBudgetHardCapUsd = budgetConfig.PullRequestHardCapUsd;
+            client.IncrementBudgetSoftCapUsd = budgetConfig.IncrementSoftCapUsd;
             client.IncrementBudgetHardCapUsd = budgetConfig.IncrementHardCapUsd;
         }
 
@@ -390,6 +391,7 @@ public sealed class ClientAdminService(
                 client.MonthlyBudgetHardCapUsd,
                 client.PullRequestBudgetSoftCapUsd,
                 client.PullRequestBudgetHardCapUsd,
+                client.IncrementBudgetSoftCapUsd,
                 client.IncrementBudgetHardCapUsd));
     }
 

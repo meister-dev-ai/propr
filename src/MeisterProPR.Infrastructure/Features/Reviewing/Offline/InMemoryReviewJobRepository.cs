@@ -222,7 +222,8 @@ public sealed class InMemoryReviewJobRepository : IJobRepository
                 job.FileReviewResults.Count(r => r.IsComplete && !r.IsFailed && !r.IsExcluded && !r.IsCarriedForward),
                 job.InScopeChangedFileCount,
                 job.TotalEstimatedCostUsd,
-                job.CostIsApproximate))
+                job.CostIsApproximate,
+                job.Status == JobStatus.Completed && job.BudgetBlockCapKind == BudgetCapKind.Soft))
             .ToList()
             .AsReadOnly();
         return Task.FromResult<(int total, IReadOnlyList<JobListPageItemDto> items)>((ordered.Count, page));
@@ -337,6 +338,15 @@ public sealed class InMemoryReviewJobRepository : IJobRepository
             job.ApplyResult(result);
             job.Status = JobStatus.Completed;
             job.CompletedAt = DateTimeOffset.UtcNow;
+
+            // Mirror the persistent store: a per-increment soft-capped run completes normally but records the
+            // breach so it can be surfaced as soft-capped, distinct from a hard cut.
+            if (result.BudgetSoftCapped
+                && result.BudgetSoftCapThresholdUsd is { } softCapThreshold
+                && result.BudgetSoftCapSpentUsd is { } softCapSpent)
+            {
+                job.SetBudgetBlock(BudgetScopeKind.Increment, BudgetCapKind.Soft, softCapThreshold, softCapSpent);
+            }
         }
 
         return Task.CompletedTask;

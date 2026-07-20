@@ -35,4 +35,22 @@ public sealed record ReviewResult(
     ///     context window. Surfaced in the review summary so a skipped file is visible rather than missing.
     /// </summary>
     public IReadOnlyList<string> ContextSkippedFilePaths { get; init; } = [];
+
+    /// <summary>
+    ///     True when the review stopped scanning further files because the per-increment budget soft cap was
+    ///     reached mid-run. The review still completed with a synthesis over the files that were reviewed.
+    /// </summary>
+    public bool BudgetSoftCapped { get; init; }
+
+    /// <summary>The per-increment soft cap (USD) that was reached, when <see cref="BudgetSoftCapped" /> is true.</summary>
+    public decimal? BudgetSoftCapThresholdUsd { get; init; }
+
+    /// <summary>The metered spend (USD) that reached the soft cap, when <see cref="BudgetSoftCapped" /> is true.</summary>
+    public decimal? BudgetSoftCapSpentUsd { get; init; }
+
+    /// <summary>
+    ///     File paths not scanned because the per-increment budget soft cap was reached mid-run. Surfaced in the
+    ///     review summary so a budget-shortened review is never silently presented as a full one.
+    /// </summary>
+    public IReadOnlyList<string> BudgetSoftCapSkippedFilePaths { get; init; } = [];
 }
