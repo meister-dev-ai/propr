@@ -1,6 +1,7 @@
 // Copyright (c) Andreas Rain.
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
+using MeisterProPR.Application.Features.Budgeting;
 using MeisterProPR.Application.Features.Reviewing.Execution.Models;
 using MeisterProPR.Application.Features.Reviewing.Execution.Ports;
 using MeisterProPR.Application.Features.Reviewing.Execution.Strategies.Ports;
@@ -12,6 +13,7 @@ using MeisterProPR.CodeAnalysis.Roslyn.DependencyInjection;
 using MeisterProPR.CodeAnalysis.TreeSitter.DependencyInjection;
 using MeisterProPR.Infrastructure.AI;
 using MeisterProPR.Infrastructure.DependencyInjection;
+using MeisterProPR.Infrastructure.Features.Budgeting;
 using MeisterProPR.Infrastructure.Features.Providers.AzureDevOps.DependencyInjection;
 using MeisterProPR.Infrastructure.Features.Providers.Common;
 using MeisterProPR.Infrastructure.Features.Providers.Forgejo.DependencyInjection;
@@ -68,6 +70,7 @@ public static class ReviewingModuleServiceCollectionExtensions
         if (hasDatabase)
         {
             services.AddScoped<IJobRepository, JobRepository>();
+            services.AddScoped<IReviewSpendAccumulator, ReviewSpendAccumulator>();
             services.AddSingleton<IModelPricingResolver, EfModelPricingResolver>();
             services.AddSingleton<IProtocolRecorder, EfProtocolRecorder>();
             services.AddScoped<IThreadMemoryRepository, ThreadMemoryRepository>();
