@@ -186,7 +186,10 @@
                     mid-review and publishes the findings produced so far. Leave a field blank for no limit. Caps
                     compose most-restrictively across scopes, and a held or stopped review is resumed by restarting it.
                 </p>
-                <div class="budget-grid">
+                <p v-if="!isBudgetingAvailable && budgetingUpgradeMessage" class="muted budget-upgrade">
+                    {{ budgetingUpgradeMessage }}
+                </p>
+                <fieldset class="budget-grid" :disabled="!isBudgetingAvailable">
                     <div class="form-field">
                         <label for="monthlyBudgetSoftCapUsd">Monthly soft cap (USD)</label>
                         <input id="monthlyBudgetSoftCapUsd" v-model="editedMonthlyBudgetSoftCapUsd"
@@ -213,9 +216,9 @@
                             name="incrementBudgetHardCapUsd" type="number" min="0" step="0.01" placeholder="No limit" />
                         <p class="muted budget-field-note">A single increment is one review job, so it is capped by a hard limit only.</p>
                     </div>
-                </div>
+                </fieldset>
                 <div class="budget-actions">
-                    <button :disabled="!isBudgetButtonEnabled()"
+                    <button :disabled="!isBudgetingAvailable || !isBudgetButtonEnabled()"
                         class="btn-primary inline-save-btn budget-save-btn"
                         @click="saveBudgetConfig">
                         Save
@@ -278,6 +281,8 @@ const {
     saveBudgetConfig,
     isAdvancedSettingsButtonEnabled,
     isBudgetButtonEnabled,
+    isBudgetingAvailable,
+    budgetingUpgradeMessage,
     isReviewProfileButtonEnabled,
     handleDelete,
     handleOverviewNavigate,
@@ -343,6 +348,17 @@ const REASONING_EFFORT_OPTIONS: { value: string; label: string }[] = [
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 0.85rem 1rem;
+    /* Reset the fieldset defaults so the wrapper keeps behaving as a plain grid. */
+    border: 0;
+    margin: 0;
+    padding: 0;
+    min-inline-size: 0;
+}
+
+.budget-upgrade {
+    padding: 0 0 0.6rem;
+    color: var(--color-warning);
+    font-style: normal;
 }
 
 .budget-field-note {

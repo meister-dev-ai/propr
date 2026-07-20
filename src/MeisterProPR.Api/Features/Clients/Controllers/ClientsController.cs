@@ -5,8 +5,12 @@ using System.Text.Json.Serialization;
 using FluentValidation;
 using FluentValidation.Results;
 using MeisterProPR.Api.Extensions;
+using MeisterProPR.Api.Features.Licensing;
 using MeisterProPR.Application.DTOs;
 using MeisterProPR.Application.DTOs.AzureDevOps;
+using MeisterProPR.Application.Features.Licensing.Models;
+using MeisterProPR.Application.Features.Licensing.Ports;
+using MeisterProPR.Application.Features.Licensing.Support;
 using MeisterProPR.Application.Interfaces;
 using MeisterProPR.Domain.Enums;
 using MeisterProPR.Infrastructure.Features.IdentityAndAccess;
@@ -20,7 +24,8 @@ namespace MeisterProPR.Api.Controllers;
 public sealed class ClientsController(
     IClientAdminService clientAdminService,
     ITenantAdminService tenantAdminService,
-    IClientTokenUsageRepository usageRepository) : ControllerBase
+    IClientTokenUsageRepository usageRepository,
+    ILicensingCapabilityService? licensingCapabilityService = null) : ControllerBase
 {
     private static ClientResponse ToClientResponse(ClientDto client, long? recentUsageTokens = null)
     {
@@ -322,6 +327,19 @@ public sealed class ClientsController(
         if (reviewPassValidation is not null)
         {
             return reviewPassValidation;
+        }
+
+        if (request.BudgetConfig is not null)
+        {
+            // Budgeting is a licensed capability; setting caps requires it to be enabled for the installation.
+            var budgetCapability = await LicensingCapabilityGuard.GetUnavailableCapabilityAsync(
+                licensingCapabilityService,
+                PremiumCapabilityKey.Budgeting,
+                ct);
+            if (budgetCapability is not null)
+            {
+                return new PremiumFeatureUnavailableResult(budgetCapability);
+            }
         }
 
         var client = await clientAdminService.PatchAsync(

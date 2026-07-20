@@ -18,6 +18,9 @@ public static class PremiumCapabilityKey
     /// <summary>Capability key for guided crawl configuration and automated crawl setup.</summary>
     public const string CrawlConfigs = "crawl-configs";
 
+    /// <summary>Capability key for configuring and enforcing USD spend budgets.</summary>
+    public const string Budgeting = "budgeting";
+
     /// <summary>All known premium capability keys in their canonical order.</summary>
     public static IReadOnlyList<string> All { get; } =
     [
@@ -25,5 +28,6 @@ public static class PremiumCapabilityKey
         ParallelReviewExecution,
         MultipleScmProviders,
         CrawlConfigs,
+        Budgeting,
     ];
 }

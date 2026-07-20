@@ -89,6 +89,8 @@ export interface ClientDetailViewModel {
   activeTab: Ref<DetailTab>
   providerUpgradeMessage: ComputedRef<string>
   isCrawlConfigsAvailable: ComputedRef<boolean>
+  isBudgetingAvailable: ComputedRef<boolean>
+  budgetingUpgradeMessage: ComputedRef<string>
   isUsageTabAvailable: ComputedRef<boolean>
   loadClient: () => Promise<void>
   saveDisplayName: () => Promise<void>
@@ -295,6 +297,9 @@ export function useClientDetailViewModel(options: UseClientDetailViewModelOption
   const isCrawlConfigsAvailable = computed(
     () => crawlConfigsCapability.value?.isAvailable === true,
   )
+  const budgetingCapability = computed(() => getCapability('budgeting'))
+  const isBudgetingAvailable = computed(() => budgetingCapability.value?.isAvailable === true)
+  const budgetingUpgradeMessage = computed(() => budgetingCapability.value?.message ?? '')
   const isUsageTabAvailable = computed(() => isProCursorTokenUsageReportingEnabled)
   const availableTabs = computed<DetailTab[]>(() => {
     const tabs: DetailTab[] = ['history']
@@ -667,6 +672,8 @@ export function useClientDetailViewModel(options: UseClientDetailViewModelOption
     activeTab,
     providerUpgradeMessage,
     isCrawlConfigsAvailable,
+    isBudgetingAvailable,
+    budgetingUpgradeMessage,
     isUsageTabAvailable,
     loadClient,
     saveDisplayName,
