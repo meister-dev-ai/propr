@@ -28,37 +28,14 @@ internal static class RepositorySearchExecutor
         ArgumentNullException.ThrowIfNull(normalizeBranch);
         ArgumentNullException.ThrowIfNull(normalizePath);
 
-        var searchTerm = request.SearchTerm?.Trim() ?? string.Empty;
-        if (string.IsNullOrWhiteSpace(searchTerm))
+        if (string.IsNullOrWhiteSpace(request.SearchTerm?.Trim() ?? string.Empty))
         {
-            return new RepositorySearchResult(
-                RepositorySearchStatuses.InvalidRequest,
-                request.BranchSide,
-                request.PathScope,
-                NormalizeFileMask(request.FileMask),
-                [],
-                [new RepositorySearchLimitation(null, RepositorySearchLimitationReasons.InvalidRegex, "Search term is required.")],
-                false);
+            return BuildInvalidRequestResult(request, "Search term is required.");
         }
 
-        Regex regex;
-        try
+        if (!TryBuildSearchRegex(request.SearchTerm!.Trim(), out var regex, out var regexError))
         {
-            regex = ToolTimingCollectorContext.Record(
-                ProtocolEventToolPhaseNames.RequestPreparation,
-                "Request preparation",
-                () => new Regex(searchTerm, RegexOptions.CultureInvariant, TimeSpan.FromSeconds(1)));
-        }
-        catch (ArgumentException ex)
-        {
-            return new RepositorySearchResult(
-                RepositorySearchStatuses.InvalidRequest,
-                request.BranchSide,
-                request.PathScope,
-                NormalizeFileMask(request.FileMask),
-                [],
-                [new RepositorySearchLimitation(null, RepositorySearchLimitationReasons.InvalidRegex, ex.Message)],
-                false);
+            return BuildInvalidRequestResult(request, regexError);
         }
 
         var fileMask = NormalizeFileMask(request.FileMask);
@@ -80,103 +57,81 @@ internal static class RepositorySearchExecutor
                 false);
         }
 
-        var branch = candidateResolution.Branch;
-        var candidatePaths = candidateResolution.Paths;
-        var limitations = candidateResolution.Limitations.ToList();
+        var state = new SearchState(candidateResolution.Paths, candidateResolution.Limitations.ToList());
+        await ScanAllCandidatesAsync(
+            state,
+            regex,
+            candidateResolution.Branch,
+            maxFileSizeBytes,
+            fetchRawFileContentAsync,
+            ct);
 
-        var matches = new List<RepositorySearchMatch>();
-        var truncated = false;
+        var status = ToolTimingCollectorContext.Record(
+            ProtocolEventToolPhaseNames.ResultShaping,
+            "Result shaping",
+            () => ResolveStatus(state.Matches.Count, state.Limitations.Count, state.Truncated),
+            resolved => $"matches={state.Matches.Count};limitations={state.Limitations.Count};status={resolved}");
+        return new RepositorySearchResult(
+            status,
+            request.BranchSide,
+            request.PathScope,
+            fileMask,
+            state.Matches.AsReadOnly(),
+            state.Limitations.AsReadOnly(),
+            state.Truncated,
+            ToolTimingCollectorContext.CaptureSnapshot());
+    }
 
+    private static RepositorySearchResult BuildInvalidRequestResult(RepositorySearchRequest request, string message)
+    {
+        return new RepositorySearchResult(
+            RepositorySearchStatuses.InvalidRequest,
+            request.BranchSide,
+            request.PathScope,
+            NormalizeFileMask(request.FileMask),
+            [],
+            [new RepositorySearchLimitation(null, RepositorySearchLimitationReasons.InvalidRegex, message)],
+            false);
+    }
+
+    private static bool TryBuildSearchRegex(string searchTerm, out Regex regex, out string error)
+    {
+        try
+        {
+            regex = ToolTimingCollectorContext.Record(
+                ProtocolEventToolPhaseNames.RequestPreparation,
+                "Request preparation",
+                () => new Regex(searchTerm, RegexOptions.CultureInvariant, TimeSpan.FromSeconds(1)));
+            error = string.Empty;
+            return true;
+        }
+        catch (ArgumentException ex)
+        {
+            regex = null!;
+            error = ex.Message;
+            return false;
+        }
+    }
+
+    private static async Task ScanAllCandidatesAsync(
+        SearchState state,
+        Regex regex,
+        string branch,
+        int maxFileSizeBytes,
+        Func<string, string, CancellationToken, Task<string?>> fetchRawFileContentAsync,
+        CancellationToken ct)
+    {
         await ToolTimingCollectorContext.RecordAsync(
             ProtocolEventToolPhaseNames.RepositorySearch,
             "Repository search",
             async () =>
             {
                 var scanned = 0;
-                foreach (var candidatePath in candidatePaths)
+                foreach (var candidatePath in state.CandidatePaths)
                 {
                     scanned++;
-                    if (BinaryFileDetector.IsBinary(candidatePath))
-                    {
-                        limitations.Add(
-                            new RepositorySearchLimitation(candidatePath, RepositorySearchLimitationReasons.BinaryFile, "Binary files are not searchable."));
-                        continue;
-                    }
-
-                    string? content;
-                    try
-                    {
-                        content = await fetchRawFileContentAsync(candidatePath, branch, ct);
-                    }
-                    catch (Exception ex)
-                    {
-                        limitations.Add(new RepositorySearchLimitation(candidatePath, RepositorySearchLimitationReasons.ProviderFetchFailed, ex.Message));
-                        continue;
-                    }
-
-                    if (content is null)
-                    {
-                        limitations.Add(
-                            new RepositorySearchLimitation(
-                                candidatePath, RepositorySearchLimitationReasons.MissingOnBranch, "The file was not found on the requested branch."));
-                        continue;
-                    }
-
-                    var byteSize = Encoding.UTF8.GetByteCount(content);
-                    if (byteSize > maxFileSizeBytes)
-                    {
-                        limitations.Add(
-                            new RepositorySearchLimitation(
-                                candidatePath,
-                                RepositorySearchLimitationReasons.UnreadableFile,
-                                $"The file is too large to search ({byteSize} bytes exceeds the limit of {maxFileSizeBytes} bytes)."));
-                        continue;
-                    }
-
-                    var lines = content.Split('\n');
-                    var searchTerminated = false;
-                    try
-                    {
-                        for (var i = 0; i < lines.Length; i++)
-                        {
-                            if (!regex.IsMatch(lines[i]))
-                            {
-                                continue;
-                            }
-
-                            matches.Add(new RepositorySearchMatch(candidatePath, i + 1, lines[i].TrimEnd('\r')));
-                            if (matches.Count < RepositoryDiscoveryHelpers.MaxReturnedMatches)
-                            {
-                                continue;
-                            }
-
-                            truncated = HasMoreMatches(regex, lines, i + 1) || HasMoreCandidates(candidatePaths, candidatePath);
-                            if (truncated)
-                            {
-                                limitations.Add(
-                                    new RepositorySearchLimitation(
-                                        null,
-                                        RepositorySearchLimitationReasons.ResultTruncated,
-                                        $"Only the first {RepositoryDiscoveryHelpers.MaxReturnedMatches} matches were returned."));
-                            }
-
-                            searchTerminated = true;
-                            break;
-                        }
-                    }
-                    catch (RegexMatchTimeoutException)
-                    {
-                        // The pattern is pathologically expensive against this file's content; retrying it
-                        // against the remaining candidates would just repeat the same timeout for each one.
-                        limitations.Add(
-                            new RepositorySearchLimitation(
-                                candidatePath,
-                                RepositorySearchLimitationReasons.RegexTimedOut,
-                                "The search pattern took too long to match and was aborted; try a simpler pattern."));
-                        searchTerminated = true;
-                    }
-
-                    if (searchTerminated)
+                    var outcome = await ScanSingleCandidateAsync(candidatePath, branch, maxFileSizeBytes, regex, fetchRawFileContentAsync, state, ct);
+                    if (outcome == CandidateScanOutcome.Terminated)
                     {
                         break;
                     }
@@ -184,22 +139,140 @@ internal static class RepositorySearchExecutor
 
                 return scanned;
             },
-            scanned => $"files_scanned={scanned};matches={matches.Count};truncated={truncated}");
+            scanned => $"files_scanned={scanned};matches={state.Matches.Count};truncated={state.Truncated}");
+    }
 
-        var status = ToolTimingCollectorContext.Record(
-            ProtocolEventToolPhaseNames.ResultShaping,
-            "Result shaping",
-            () => ResolveStatus(matches.Count, limitations.Count, truncated),
-            resolved => $"matches={matches.Count};limitations={limitations.Count};status={resolved}");
-        return new RepositorySearchResult(
-            status,
-            request.BranchSide,
-            request.PathScope,
-            fileMask,
-            matches.AsReadOnly(),
-            limitations.AsReadOnly(),
-            truncated,
-            ToolTimingCollectorContext.CaptureSnapshot());
+    private static async Task<CandidateScanOutcome> ScanSingleCandidateAsync(
+        string candidatePath,
+        string branch,
+        int maxFileSizeBytes,
+        Regex regex,
+        Func<string, string, CancellationToken, Task<string?>> fetchRawFileContentAsync,
+        SearchState state,
+        CancellationToken ct)
+    {
+        if (BinaryFileDetector.IsBinary(candidatePath))
+        {
+            state.Limitations.Add(
+                new RepositorySearchLimitation(candidatePath, RepositorySearchLimitationReasons.BinaryFile, "Binary files are not searchable."));
+            return CandidateScanOutcome.Continue;
+        }
+
+        var content = await TryFetchFileContentAsync(candidatePath, branch, fetchRawFileContentAsync, state, ct);
+        if (content is null)
+        {
+            return CandidateScanOutcome.Continue;
+        }
+
+        if (Encoding.UTF8.GetByteCount(content) > maxFileSizeBytes)
+        {
+            var byteSize = Encoding.UTF8.GetByteCount(content);
+            state.Limitations.Add(
+                new RepositorySearchLimitation(
+                    candidatePath,
+                    RepositorySearchLimitationReasons.UnreadableFile,
+                    $"The file is too large to search ({byteSize} bytes exceeds the limit of {maxFileSizeBytes} bytes)."));
+            return CandidateScanOutcome.Continue;
+        }
+
+        return ScanFileContentForMatches(candidatePath, content, regex, state);
+    }
+
+    private static async Task<string?> TryFetchFileContentAsync(
+        string candidatePath,
+        string branch,
+        Func<string, string, CancellationToken, Task<string?>> fetchRawFileContentAsync,
+        SearchState state,
+        CancellationToken ct)
+    {
+        string? content;
+        try
+        {
+            content = await fetchRawFileContentAsync(candidatePath, branch, ct);
+        }
+        catch (Exception ex)
+        {
+            state.Limitations.Add(new RepositorySearchLimitation(candidatePath, RepositorySearchLimitationReasons.ProviderFetchFailed, ex.Message));
+            return null;
+        }
+
+        if (content is null)
+        {
+            state.Limitations.Add(
+                new RepositorySearchLimitation(
+                    candidatePath, RepositorySearchLimitationReasons.MissingOnBranch, "The file was not found on the requested branch."));
+            return null;
+        }
+
+        return content;
+    }
+
+    private static CandidateScanOutcome ScanFileContentForMatches(
+        string candidatePath,
+        string content,
+        Regex regex,
+        SearchState state)
+    {
+        var lines = content.Split('\n');
+        try
+        {
+            for (var i = 0; i < lines.Length; i++)
+            {
+                if (!regex.IsMatch(lines[i]))
+                {
+                    continue;
+                }
+
+                state.Matches.Add(new RepositorySearchMatch(candidatePath, i + 1, lines[i].TrimEnd('\r')));
+                if (state.Matches.Count >= RepositoryDiscoveryHelpers.MaxReturnedMatches)
+                {
+                    state.Truncated = HasMoreMatches(regex, lines, i + 1) || HasMoreCandidates(state.CandidatePaths, candidatePath);
+                    if (state.Truncated)
+                    {
+                        state.Limitations.Add(
+                            new RepositorySearchLimitation(
+                                null,
+                                RepositorySearchLimitationReasons.ResultTruncated,
+                                $"Only the first {RepositoryDiscoveryHelpers.MaxReturnedMatches} matches were returned."));
+                    }
+
+                    return CandidateScanOutcome.Terminated;
+                }
+            }
+        }
+        catch (RegexMatchTimeoutException)
+        {
+            // The pattern is pathologically expensive against this file's content; retrying it
+            // against the remaining candidates would just repeat the same timeout for each one.
+            state.Limitations.Add(
+                new RepositorySearchLimitation(
+                    candidatePath,
+                    RepositorySearchLimitationReasons.RegexTimedOut,
+                    "The search pattern took too long to match and was aborted; try a simpler pattern."));
+            return CandidateScanOutcome.Terminated;
+        }
+
+        return CandidateScanOutcome.Continue;
+    }
+
+    private sealed class SearchState
+    {
+        public SearchState(IReadOnlyList<string> candidatePaths, List<RepositorySearchLimitation> limitations)
+        {
+            this.CandidatePaths = candidatePaths;
+            this.Limitations = limitations;
+        }
+
+        public IReadOnlyList<string> CandidatePaths { get; }
+        public List<RepositorySearchMatch> Matches { get; } = [];
+        public List<RepositorySearchLimitation> Limitations { get; }
+        public bool Truncated;
+    }
+
+    private enum CandidateScanOutcome
+    {
+        Continue,
+        Terminated,
     }
 
     private static string ResolveStatus(int matchCount, int limitationCount, bool truncated)
