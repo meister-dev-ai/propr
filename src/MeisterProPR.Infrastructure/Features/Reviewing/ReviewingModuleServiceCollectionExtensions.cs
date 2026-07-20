@@ -75,7 +75,7 @@ public static class ReviewingModuleServiceCollectionExtensions
         {
             services.AddScoped<IJobRepository, JobRepository>();
             services.AddScoped<IReviewSpendAccumulator, ReviewSpendAccumulator>();
-            services.AddSingleton<IBudgetCapsProvider, BudgetCapsProvider>();
+            services.AddScoped<IBudgetCapsProvider, BudgetCapsProvider>();
             services.AddSingleton<IModelPricingResolver, EfModelPricingResolver>();
             services.AddSingleton<IProtocolRecorder, EfProtocolRecorder>();
             services.AddScoped<IThreadMemoryRepository, ThreadMemoryRepository>();
