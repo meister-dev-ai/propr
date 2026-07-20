@@ -14,6 +14,7 @@ const detailTabs = [
   'providers',
   'procursor',
   'ai',
+  'budget',
   'history',
   'dismissals',
   'prompt-overrides',

@@ -44,6 +44,10 @@
                             @click="activeTab = 'ai'">
                             <i class="fi fi-rr-robot"></i> AI Providers
                         </button>
+                        <button class="sidebar-nav-link" :class="{ active: activeTab === 'budget' }"
+                            @click="activeTab = 'budget'">
+                            <i class="fi fi-rr-badge-dollar"></i> Budget
+                        </button>
                     </div>
 
                     <div class="sidebar-nav-group">
@@ -139,6 +143,11 @@
                 <div v-if="canManageClient" v-show="activeTab === 'ai'">
                     <ClientAiConnectionsTab :client-id="client.id" />
                 </div>
+
+                <!-- Tab: Budget -->
+                <div v-if="canManageClient" v-show="activeTab === 'budget'">
+                    <ClientBudgetTab />
+                </div>
             </template>
 
         <TextViewerModal :isOpen="isTextViewerOpen" @update:isOpen="isTextViewerOpen = $event" :title="textViewerTitle"
@@ -151,6 +160,7 @@ import { provide, ref } from "vue";
 import { RouterLink } from "vue-router";
 import { AppNavDrawer, PageWithSidebar } from "@/components";
 import ClientSystemTab from "@/features/clients/components/ClientSystemTab.vue";
+import ClientBudgetTab from "@/features/clients/components/ClientBudgetTab.vue";
 import ClientCrawlConfigsTab from "@/features/clients/components/ClientCrawlConfigsTab.vue";
 import ClientWebhookConfigsTab from "@/features/clients/components/ClientWebhookConfigsTab.vue";
 import ClientProviderConnectionsTab from "@/features/clients/components/ClientProviderConnectionsTab.vue";
