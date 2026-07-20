@@ -451,6 +451,19 @@ public static class ReviewDiffProcessor
         }
 
         var diffLines = unifiedDiff.Replace("\r\n", "\n", StringComparison.Ordinal).Split('\n');
+        var (entries, sawValidHunkHeader, maxNewLine) = BuildDiffEntries(diffLines);
+
+        if (!sawValidHunkHeader)
+        {
+            return unifiedDiff;
+        }
+
+        return RenderAnnotatedDiff(unifiedDiff, entries, maxNewLine);
+    }
+
+    private static (List<(string Text, int? NewLineNumber, bool Annotate)> Entries, bool SawValidHunkHeader, int MaxNewLine)
+        BuildDiffEntries(string[] diffLines)
+    {
         var entries = new List<(string Text, int? NewLineNumber, bool Annotate)>(diffLines.Length);
         var hasHunkHeader = false;
         var sawValidHunkHeader = false;
@@ -507,11 +520,14 @@ public static class ReviewDiffProcessor
             currentNewLine++;
         }
 
-        if (!sawValidHunkHeader)
-        {
-            return unifiedDiff;
-        }
+        return (entries, sawValidHunkHeader, maxNewLine);
+    }
 
+    private static string RenderAnnotatedDiff(
+        string unifiedDiff,
+        List<(string Text, int? NewLineNumber, bool Annotate)> entries,
+        int maxNewLine)
+    {
         // Deletion-only diffs render no new-file numbers but still get the blank column so the
         // annotated format stays uniform.
         var width = Math.Max(1, maxNewLine.ToString(CultureInfo.InvariantCulture).Length);
