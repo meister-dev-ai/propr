@@ -1720,28 +1720,27 @@ export function useJobProtocolViewModel() {
         routeSelection: { routePassId: string | null; routeProtocolId: string | null; routeFile: string | null },
         currentActivePassId: string | null,
     ): string | undefined {
-        const { routePassId, routeProtocolId, routeFile } = routeSelection
-        const passFromFile = routeFile
-            ? normalizedProtocols.find(protocol => fileKeyForPass(protocol) === routeFile)?.id ?? null
+        const passFromFile = routeSelection.routeFile
+            ? normalizedProtocols.find(protocol => fileKeyForPass(protocol) === routeSelection.routeFile)?.id ?? null
             : null
 
-        if (routePassId && normalizedProtocols.some(protocol => protocol.id === routePassId)) {
-            return routePassId
-        }
+        return (
+            findMatchingPassId(normalizedProtocols, routeSelection.routePassId)
+            ?? findMatchingPassId(normalizedProtocols, routeSelection.routeProtocolId)
+            ?? passFromFile
+            ?? findMatchingPassId(normalizedProtocols, currentActivePassId)
+            ?? normalizedProtocols[0]?.id
+        ) ?? undefined;
+    }
 
-        if (routeProtocolId && normalizedProtocols.some(protocol => protocol.id === routeProtocolId)) {
-            return routeProtocolId
+    function findMatchingPassId(
+        normalizedProtocols: ReviewProtocolPass[],
+        candidate: string | null,
+    ): string | null {
+        if (!candidate) {
+            return null;
         }
-
-        if (passFromFile) {
-            return passFromFile
-        }
-
-        if (currentActivePassId && normalizedProtocols.some(protocol => protocol.id === currentActivePassId)) {
-            return currentActivePassId
-        }
-
-        return normalizedProtocols[0]?.id
+        return normalizedProtocols.some(protocol => protocol.id === candidate) ? candidate : null;
     }
 
     async function activateProtocolPass(protocolIdToLoad: string | undefined): Promise<void> {
