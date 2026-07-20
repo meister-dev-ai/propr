@@ -68,7 +68,6 @@ internal static class AnalyzerTestFactory
         return new TreeSitterStructuralCodeAnalyzer(
             probe,
             pool,
-            WrapOptions(options),
             logger ?? NullLogger<TreeSitterStructuralCodeAnalyzer>.Instance);
     }
 

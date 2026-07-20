@@ -2,6 +2,7 @@
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
 using System.Collections.ObjectModel;
+using System.Diagnostics.CodeAnalysis;
 using Microsoft.Agents.AI;
 using Microsoft.Extensions.AI;
 
@@ -86,6 +87,11 @@ internal sealed class AgentFrameworkReviewSessionTransport : IManagedReviewSessi
     }
 }
 
+[SuppressMessage(
+    "SonarAnalyzer.CSharp",
+    "S3871",
+    Justification =
+        "Exception is intentionally internal: the static factory takes the internal ObservedManagedSessionRun diagnostic type, so widening visibility would leak the diagnostic shape outside this assembly.")]
 internal sealed class ManagedReviewSessionTransportException : Exception
 {
     private ManagedReviewSessionTransportException(

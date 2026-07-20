@@ -259,7 +259,6 @@ public sealed class TreeSitterStructuralCodeAnalyzerTests
         var analyzer = new TreeSitterStructuralCodeAnalyzer(
             unavailableProbe,
             pool,
-            AnalyzerTestFactory.WrapOptions(),
             NullLogger<TreeSitterStructuralCodeAnalyzer>.Instance);
 
         Assert.False(analyzer.IsAvailable);

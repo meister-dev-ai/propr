@@ -2,11 +2,9 @@
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
 using System.Collections.Frozen;
-using MeisterProPR.Application.Options;
 using MeisterProPR.CodeAnalysis.TreeSitter.Parsing;
 using MeisterProPR.CodeAnalysis.TreeSitter.Startup;
 using Microsoft.Extensions.Logging;
-using Microsoft.Extensions.Options;
 using TS = TreeSitter;
 
 namespace MeisterProPR.CodeAnalysis.TreeSitter;
@@ -41,7 +39,6 @@ internal sealed class TreeSitterStructuralCodeAnalyzer : IStructuralCodeAnalyzer
         }.ToFrozenDictionary();
 
     private readonly ILogger<TreeSitterStructuralCodeAnalyzer> _logger;
-    private readonly IOptions<AiReviewOptions> _options;
     private readonly ParserPool _pool;
 
     private readonly IStructuralAnalyzerProbe _probe;
@@ -49,12 +46,10 @@ internal sealed class TreeSitterStructuralCodeAnalyzer : IStructuralCodeAnalyzer
     public TreeSitterStructuralCodeAnalyzer(
         IStructuralAnalyzerProbe probe,
         ParserPool pool,
-        IOptions<AiReviewOptions> options,
         ILogger<TreeSitterStructuralCodeAnalyzer> logger)
     {
         this._probe = probe;
         this._pool = pool;
-        this._options = options;
         this._logger = logger;
     }
 

@@ -466,7 +466,7 @@ function selectDiffTab() {
     }
     const jobId = pass.jobId ?? ''
     if (!jobId) return
-    void props.vm.loadFileDiff(jobId, fileResultId)
+    props.vm.loadFileDiff(jobId, fileResultId)
 }
 
 function retryFileDiff() {
@@ -475,7 +475,7 @@ function retryFileDiff() {
     const fileResultId = pass.fileResultId
     const jobId = pass.jobId ?? ''
     if (!jobId || !fileResultId) return
-    void props.vm.loadFileDiff(jobId, fileResultId)
+    props.vm.loadFileDiff(jobId, fileResultId)
 }
 </script>
 

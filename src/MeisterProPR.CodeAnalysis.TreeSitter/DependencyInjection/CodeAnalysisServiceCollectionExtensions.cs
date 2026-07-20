@@ -53,7 +53,6 @@ public static class CodeAnalysisServiceCollectionExtensions
                 var probe = sp.GetRequiredService<TreeSitterNativeProbe>();
                 var pool = sp.GetRequiredService<ParserPool>();
                 var logger = sp.GetRequiredService<ILogger<TreeSitterStructuralCodeAnalyzer>>();
-                var options = sp.GetRequiredService<IOptions<AiReviewOptions>>();
 
                 // Prime the native parse path once (background, best-effort) so the first reviewed
                 // file does not pay grammar-load / JIT / native-init cost inside its parse deadline.
@@ -62,7 +61,7 @@ public static class CodeAnalysisServiceCollectionExtensions
                     pool.WarmUp();
                 }
 
-                return new TreeSitterStructuralCodeAnalyzer(probe, pool, options, logger);
+                return new TreeSitterStructuralCodeAnalyzer(probe, pool, logger);
             });
 
         return services;

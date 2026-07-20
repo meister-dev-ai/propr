@@ -118,6 +118,8 @@ public sealed class LargePrMemoryProfilingTests(ITestOutputHelper output)
         }
 
         WriteReport("pr-retained-heap", report.ToString());
+
+        Assert.True(report.Length > 0, "Profile test should have produced output rows.");
     }
 
     [Fact]
@@ -243,6 +245,8 @@ public sealed class LargePrMemoryProfilingTests(ITestOutputHelper output)
                 $"retained protocol text  : {Mb(retainedText * 2L):F1} MB (unbounded InputTextSample/SystemPrompt/OutputSummary, UTF-16)"));
 
         WriteReport("filebyfile-memory", report.ToString());
+
+        Assert.True(report.Length > 0, "Profile test should have produced output rows.");
     }
 
     private static string DescribeProfile()

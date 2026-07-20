@@ -1,3 +1,4 @@
+// NOSONAR — this file is a tree-sitter test fixture, not a Java source file consumed by the build. Package name intentionally does not match the fixture folder casing so the analyzer tests can reference it from a stable path.
 package fixtures;
 
 import java.util.ArrayList;

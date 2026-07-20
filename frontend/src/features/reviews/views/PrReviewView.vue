@@ -390,7 +390,7 @@ watch(
 
         const instance = useRetainedPrData(identity)
         retained.value = instance
-        void instance.load()
+        instance.load()
     },
     { immediate: true },
 )

@@ -534,19 +534,10 @@ public sealed class FileByFileContextPrefetchStageTests
             return null;
         }
 
-        var options = Microsoft.Extensions.Options.Options.Create(
-            new AiReviewOptions
-            {
-                MaxFileReviewConcurrency = 3,
-                MaxStructuralParseBytes = 524_288,
-                StructuralParseTimeoutMs = 1_000,
-            });
-
         var pool = new ParserPool(3, 524_288, 1_000);
         return new TreeSitterAnalyzer(
             probe,
             pool,
-            options,
             NullLogger<TreeSitterAnalyzer>.Instance);
     }
 }
