@@ -3,6 +3,7 @@
 
 using FluentValidation;
 using MeisterProPR.Api.Controllers;
+using MeisterProPR.Application.DTOs;
 using MeisterProPR.Application.Features.Reviewing.Execution.Models;
 using MeisterProPR.Domain.Enums;
 
@@ -51,6 +52,49 @@ public sealed class PatchClientRequestValidator : AbstractValidator<PatchClientR
                 + "recognized lens, an optional recognized scope, a recognized reasoning effort, a distinct "
                 + "(configuredModelId, lens, scope, shadow) tuple, and unique, contiguous ordinals starting at 0.")
             .When(r => r.ReviewPasses is not null);
+
+        this.RuleFor(r => r.BudgetConfig)
+            .Must(BeAValidBudgetConfig)
+            .WithMessage(
+                "Budget caps must be non-negative, and a soft cap must not exceed its hard cap (for the monthly and "
+                + "per-PR scopes).")
+            .When(r => r.BudgetConfig is not null);
+    }
+
+    // Each cap must be non-negative (null means "no limit"), and where both a soft and a hard cap are set for the
+    // same scope the soft cap must not exceed the hard one. The increment scope has a hard cap only.
+    private static bool BeAValidBudgetConfig(BudgetConfigDto? config)
+    {
+        if (config is null)
+        {
+            return true;
+        }
+
+        decimal?[] caps =
+        [
+            config.MonthlySoftCapUsd,
+            config.MonthlyHardCapUsd,
+            config.PullRequestSoftCapUsd,
+            config.PullRequestHardCapUsd,
+            config.IncrementHardCapUsd,
+        ];
+
+        if (caps.Any(cap => cap is < 0m))
+        {
+            return false;
+        }
+
+        if (config is { MonthlySoftCapUsd: { } monthlySoft, MonthlyHardCapUsd: { } monthlyHard } && monthlySoft > monthlyHard)
+        {
+            return false;
+        }
+
+        if (config is { PullRequestSoftCapUsd: { } prSoft, PullRequestHardCapUsd: { } prHard } && prSoft > prHard)
+        {
+            return false;
+        }
+
+        return true;
     }
 
     // At most 4 additional passes (5 total with the implicit tier baseline), each bound to a non-empty configured

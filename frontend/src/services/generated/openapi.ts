@@ -11322,6 +11322,23 @@ export interface components {
             reason?: string | null;
         };
         /**
+         * @description A client's USD budget caps. Every value is optional; a null cap means no limit. Soft caps apply to the
+         *     monthly-client and per-PR scopes (they stop admitting new jobs); hard caps apply to all three scopes (they
+         *     cut further model calls). The increment scope is hard-only.
+         */
+        BudgetConfigDto: {
+            /** Format: double */
+            monthlySoftCapUsd?: number | null;
+            /** Format: double */
+            monthlyHardCapUsd?: number | null;
+            /** Format: double */
+            pullRequestSoftCapUsd?: number | null;
+            /** Format: double */
+            pullRequestHardCapUsd?: number | null;
+            /** Format: double */
+            incrementHardCapUsd?: number | null;
+        };
+        /**
          * @description Cache outcome recorded for one AI call.
          * @enum {string}
          */
@@ -11367,6 +11384,7 @@ export interface components {
             defaultReviewPipelineProfileUpdatedAtUtc?: string | null;
             /** Format: int64 */
             recentUsageTokens?: number | null;
+            budgetConfig?: components["schemas"]["BudgetConfigDto"];
         };
         /** @description Client-scoped review profile response. */
         ClientReviewProfileResponse: {
@@ -12045,6 +12063,7 @@ export interface components {
             includeLinkedItemsInContext?: boolean | null;
             reviewPasses?: components["schemas"]["ReviewPassEntry"][] | null;
             baselineReasoningEffort?: components["schemas"]["ReviewReasoningEffort"];
+            budgetConfig?: components["schemas"]["BudgetConfigDto"];
         };
         /** @description Patch payload for one premium capability override. */
         PatchPremiumCapabilityOverrideRequest: {

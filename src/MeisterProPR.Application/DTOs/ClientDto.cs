@@ -27,11 +27,27 @@ public sealed record ClientDto(
     ReviewReasoningEffort BaselineReasoningEffort = ReviewReasoningEffort.None,
     Guid? TenantId = null,
     string? TenantSlug = null,
-    string? TenantDisplayName = null)
+    string? TenantDisplayName = null,
+    BudgetConfigDto? BudgetConfig = null)
 {
     /// <summary>The ordered review-pass list, or an empty list when none are configured.</summary>
     public IReadOnlyList<ReviewPassDto> ReviewPassesOrEmpty => this.ReviewPasses ?? [];
+
+    /// <summary>The client's budget caps, or an all-null (uncapped) config when none are stored.</summary>
+    public BudgetConfigDto BudgetConfigOrEmpty => this.BudgetConfig ?? new BudgetConfigDto();
 }
+
+/// <summary>
+///     A client's USD budget caps. Every value is optional; a null cap means no limit. Soft caps apply to the
+///     monthly-client and per-PR scopes (they stop admitting new jobs); hard caps apply to all three scopes (they
+///     cut further model calls). The increment scope is hard-only.
+/// </summary>
+public sealed record BudgetConfigDto(
+    decimal? MonthlySoftCapUsd = null,
+    decimal? MonthlyHardCapUsd = null,
+    decimal? PullRequestSoftCapUsd = null,
+    decimal? PullRequestHardCapUsd = null,
+    decimal? IncrementHardCapUsd = null);
 
 /// <summary>
 ///     One entry in a client's ordered review-pass list: an additional multi-pass union pass bound to a configured

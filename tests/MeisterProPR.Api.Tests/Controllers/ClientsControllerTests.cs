@@ -746,6 +746,174 @@ public sealed class ClientsControllerTests(ClientsControllerTests.ClientsApiFact
     }
 
     [Fact]
+    public async Task PatchClient_BudgetConfig_PersistedAndReturned()
+    {
+        using var scope = factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<MeisterProPRDbContext>();
+        var tenantId = Guid.NewGuid();
+        db.Tenants.Add(CreateTenantRecord(tenantId, "budget-set", "Budget Set Tenant"));
+        var record = new ClientRecord
+        {
+            Id = Guid.NewGuid(),
+            TenantId = tenantId,
+            DisplayName = "Budget Set",
+            IsActive = true,
+            CreatedAt = DateTimeOffset.UtcNow,
+        };
+        db.Clients.Add(record);
+        await db.SaveChangesAsync();
+
+        var client = factory.CreateClient();
+        using var request = new HttpRequestMessage(HttpMethod.Patch, $"/clients/{record.Id}");
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", factory.GenerateAdminToken());
+        request.Content = JsonContent.Create(
+            new
+            {
+                budgetConfig = new
+                {
+                    monthlySoftCapUsd = 80m,
+                    monthlyHardCapUsd = 100m,
+                    pullRequestSoftCapUsd = 8m,
+                    pullRequestHardCapUsd = 10m,
+                    incrementHardCapUsd = 5m,
+                },
+            });
+
+        var response = await client.SendAsync(request);
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+
+        var body = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        var budget = body.RootElement.GetProperty("budgetConfig");
+        Assert.Equal(80m, budget.GetProperty("monthlySoftCapUsd").GetDecimal());
+        Assert.Equal(100m, budget.GetProperty("monthlyHardCapUsd").GetDecimal());
+        Assert.Equal(10m, budget.GetProperty("pullRequestHardCapUsd").GetDecimal());
+        Assert.Equal(5m, budget.GetProperty("incrementHardCapUsd").GetDecimal());
+
+        db.ChangeTracker.Clear();
+        var updated = await db.Clients.SingleAsync(c => c.Id == record.Id);
+        Assert.Equal(80m, updated.MonthlyBudgetSoftCapUsd);
+        Assert.Equal(100m, updated.MonthlyBudgetHardCapUsd);
+        Assert.Equal(5m, updated.IncrementBudgetHardCapUsd);
+    }
+
+    [Fact]
+    public async Task PatchClient_BudgetConfigWithOmittedCap_ClearsThatCap()
+    {
+        using var scope = factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<MeisterProPRDbContext>();
+        var tenantId = Guid.NewGuid();
+        db.Tenants.Add(CreateTenantRecord(tenantId, "budget-clear", "Budget Clear Tenant"));
+        var record = new ClientRecord
+        {
+            Id = Guid.NewGuid(),
+            TenantId = tenantId,
+            DisplayName = "Budget Clear",
+            IsActive = true,
+            CreatedAt = DateTimeOffset.UtcNow,
+            MonthlyBudgetSoftCapUsd = 80m,
+            MonthlyBudgetHardCapUsd = 100m,
+        };
+        db.Clients.Add(record);
+        await db.SaveChangesAsync();
+
+        var client = factory.CreateClient();
+        using var request = new HttpRequestMessage(HttpMethod.Patch, $"/clients/{record.Id}");
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", factory.GenerateAdminToken());
+        // The budget config is applied as a group: omitting the soft cap clears it while keeping the hard cap set.
+        request.Content = JsonContent.Create(new { budgetConfig = new { monthlyHardCapUsd = 100m } });
+
+        var response = await client.SendAsync(request);
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+
+        db.ChangeTracker.Clear();
+        var updated = await db.Clients.SingleAsync(c => c.Id == record.Id);
+        Assert.Null(updated.MonthlyBudgetSoftCapUsd);
+        Assert.Equal(100m, updated.MonthlyBudgetHardCapUsd);
+    }
+
+    [Fact]
+    public async Task PatchClient_OmittedBudgetConfig_LeavesExistingCapsUnchanged()
+    {
+        using var scope = factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<MeisterProPRDbContext>();
+        var tenantId = Guid.NewGuid();
+        db.Tenants.Add(CreateTenantRecord(tenantId, "budget-omit", "Budget Omit Tenant"));
+        var record = new ClientRecord
+        {
+            Id = Guid.NewGuid(),
+            TenantId = tenantId,
+            DisplayName = "Budget Omit",
+            IsActive = true,
+            CreatedAt = DateTimeOffset.UtcNow,
+            MonthlyBudgetHardCapUsd = 100m,
+        };
+        db.Clients.Add(record);
+        await db.SaveChangesAsync();
+
+        var client = factory.CreateClient();
+        using var request = new HttpRequestMessage(HttpMethod.Patch, $"/clients/{record.Id}");
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", factory.GenerateAdminToken());
+        request.Content = JsonContent.Create(new { displayName = "Renamed Client" });
+
+        var response = await client.SendAsync(request);
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+
+        var body = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        Assert.Equal(100m, body.RootElement.GetProperty("budgetConfig").GetProperty("monthlyHardCapUsd").GetDecimal());
+
+        db.ChangeTracker.Clear();
+        var updated = await db.Clients.SingleAsync(c => c.Id == record.Id);
+        Assert.Equal(100m, updated.MonthlyBudgetHardCapUsd);
+    }
+
+    [Fact]
+    public async Task PatchClient_BudgetSoftCapExceedsHardCap_Returns400()
+    {
+        var clientId = await this.SeedBudgetTestClientAsync("budget-soft-gt-hard");
+
+        var client = factory.CreateClient();
+        using var request = new HttpRequestMessage(HttpMethod.Patch, $"/clients/{clientId}");
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", factory.GenerateAdminToken());
+        request.Content = JsonContent.Create(new { budgetConfig = new { monthlySoftCapUsd = 120m, monthlyHardCapUsd = 100m } });
+
+        var response = await client.SendAsync(request);
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task PatchClient_NegativeBudgetCap_Returns400()
+    {
+        var clientId = await this.SeedBudgetTestClientAsync("budget-negative");
+
+        var client = factory.CreateClient();
+        using var request = new HttpRequestMessage(HttpMethod.Patch, $"/clients/{clientId}");
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", factory.GenerateAdminToken());
+        request.Content = JsonContent.Create(new { budgetConfig = new { incrementHardCapUsd = -1m } });
+
+        var response = await client.SendAsync(request);
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+    }
+
+    private async Task<Guid> SeedBudgetTestClientAsync(string slug)
+    {
+        using var scope = factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<MeisterProPRDbContext>();
+        var tenantId = Guid.NewGuid();
+        db.Tenants.Add(CreateTenantRecord(tenantId, slug, $"{slug} Tenant"));
+        var record = new ClientRecord
+        {
+            Id = Guid.NewGuid(),
+            TenantId = tenantId,
+            DisplayName = slug,
+            IsActive = true,
+            CreatedAt = DateTimeOffset.UtcNow,
+        };
+        db.Clients.Add(record);
+        await db.SaveChangesAsync();
+        return record.Id;
+    }
+
+    [Fact]
     public async Task PatchClient_ReviewPassWithChatModelOnClientConnection_Returns200()
     {
         var seeded = await this.SeedClientWithConnectionAsync("review-pass-valid");

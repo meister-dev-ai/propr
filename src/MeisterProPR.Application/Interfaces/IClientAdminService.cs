@@ -53,6 +53,11 @@ public interface IClientAdminService
     /// <param name="baselineReasoningEffort">
     ///     When non-null, sets the client-level reasoning effort for the implicit tier baseline review pass.
     /// </param>
+    /// <param name="budgetConfig">
+    ///     When non-null, replaces the client's USD budget caps wholesale; each cap within it may be null to clear
+    ///     that individual limit (the per-field "omit means unchanged" convention cannot express clearing a single
+    ///     nullable cap).
+    /// </param>
     /// <param name="ct">Cancellation token.</param>
     Task<ClientDto?> PatchAsync(
         Guid clientId,
@@ -68,6 +73,7 @@ public interface IClientAdminService
         bool? includeLinkedItemsInContext = null,
         IReadOnlyList<ReviewPassDto>? reviewPasses = null,
         ReviewReasoningEffort? baselineReasoningEffort = null,
+        BudgetConfigDto? budgetConfig = null,
         CancellationToken ct = default);
 
     /// <summary>

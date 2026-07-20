@@ -16975,6 +16975,38 @@
         "additionalProperties": false,
         "description": "A pull request currently blocked from review processing."
       },
+      "BudgetConfigDto": {
+        "type": "object",
+        "properties": {
+          "monthlySoftCapUsd": {
+            "type": "number",
+            "format": "double",
+            "nullable": true
+          },
+          "monthlyHardCapUsd": {
+            "type": "number",
+            "format": "double",
+            "nullable": true
+          },
+          "pullRequestSoftCapUsd": {
+            "type": "number",
+            "format": "double",
+            "nullable": true
+          },
+          "pullRequestHardCapUsd": {
+            "type": "number",
+            "format": "double",
+            "nullable": true
+          },
+          "incrementHardCapUsd": {
+            "type": "number",
+            "format": "double",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false,
+        "description": "A client's USD budget caps. Every value is optional; a null cap means no limit. Soft caps apply to the\nmonthly-client and per-PR scopes (they stop admitting new jobs); hard caps apply to all three scopes (they\ncut further model calls). The increment scope is hard-only."
+      },
       "CacheCallStatus": {
         "enum": [
           "notApplicable",
@@ -17105,6 +17137,9 @@
             "type": "integer",
             "format": "int64",
             "nullable": true
+          },
+          "budgetConfig": {
+            "$ref": "#/components/schemas/BudgetConfigDto"
           }
         },
         "additionalProperties": false,
@@ -18764,6 +18799,9 @@
           },
           "baselineReasoningEffort": {
             "$ref": "#/components/schemas/ReviewReasoningEffort"
+          },
+          "budgetConfig": {
+            "$ref": "#/components/schemas/BudgetConfigDto"
           }
         },
         "additionalProperties": false,

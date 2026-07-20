@@ -23,6 +23,7 @@ const detailTabs = [
 export type DetailTab = (typeof detailTabs)[number]
 export type ReviewPassEntry = components['schemas']['ReviewPassEntry']
 export type ReviewReasoningEffort = components['schemas']['ReviewReasoningEffort']
+export type BudgetConfig = components['schemas']['BudgetConfigDto']
 
 export interface ClientDetailDto {
   id: string
@@ -38,6 +39,7 @@ export interface ClientDetailDto {
   enableLanguageRobustScreening: boolean
   reviewPasses?: ReviewPassEntry[] | null
   baselineReasoningEffort?: ReviewReasoningEffort | null
+  budgetConfig?: BudgetConfig | null
 }
 
 export interface ReviewProfileCatalogItemDto {
@@ -72,6 +74,11 @@ export interface ClientDetailViewModel {
   editedEnableLanguageRobustScreening: Ref<boolean>
   editedReviewPasses: Ref<ReviewPassEntry[]>
   editedBaselineReasoningEffort: Ref<ReviewReasoningEffort>
+  editedMonthlyBudgetSoftCapUsd: Ref<string>
+  editedMonthlyBudgetHardCapUsd: Ref<string>
+  editedPullRequestBudgetSoftCapUsd: Ref<string>
+  editedPullRequestBudgetHardCapUsd: Ref<string>
+  editedIncrementBudgetHardCapUsd: Ref<string>
   reviewProfiles: Ref<ReviewProfileCatalogItemDto[]>
   clientReviewProfile: Ref<ClientReviewProfileDto | null>
   isProviderDetailOpen: Ref<boolean>
@@ -88,7 +95,9 @@ export interface ClientDetailViewModel {
   toggleStatus: () => Promise<void>
   saveAdvancedSettings: () => Promise<void>
   saveReviewProfile: () => Promise<void>
+  saveBudgetConfig: () => Promise<void>
   isAdvancedSettingsButtonEnabled: () => boolean
+  isBudgetButtonEnabled: () => boolean
   isReviewProfileButtonEnabled: () => boolean
   handleDelete: () => Promise<void>
   handleOverviewNavigate: (tab: string) => void
@@ -210,6 +219,17 @@ function isFailedPatch(result: { data?: unknown; error?: unknown; response?: Res
 
 /** Two pass lists are equal when they carry the same ordered (configured-model id, lens, scope, shadow,
  * reasoning effort) tuples. */
+/** Formats a stored numeric USD cap for a text input: null/undefined becomes an empty field ("no limit"). */
+export function capToInput(value: number | null | undefined): string {
+  return value == null ? '' : String(value)
+}
+
+/** Parses a USD cap text input back to a number, or null when blank ("no limit"). */
+export function capFromInput(value: string): number | null {
+  const trimmed = value.trim()
+  return trimmed === '' ? null : Number(trimmed)
+}
+
 export function reviewPassesEqual(left: ReviewPassEntry[], right: ReviewPassEntry[]): boolean {
   if (left.length !== right.length) {
     return false
@@ -256,6 +276,11 @@ export function useClientDetailViewModel(options: UseClientDetailViewModelOption
   const editedEnableLanguageRobustScreening = ref(false)
   const editedReviewPasses = ref<ReviewPassEntry[]>([])
   const editedBaselineReasoningEffort = ref<ReviewReasoningEffort>('none')
+  const editedMonthlyBudgetSoftCapUsd = ref('')
+  const editedMonthlyBudgetHardCapUsd = ref('')
+  const editedPullRequestBudgetSoftCapUsd = ref('')
+  const editedPullRequestBudgetHardCapUsd = ref('')
+  const editedIncrementBudgetHardCapUsd = ref('')
   const reviewProfiles = ref<ReviewProfileCatalogItemDto[]>([])
   const clientReviewProfile = ref<ClientReviewProfileDto | null>(null)
 
@@ -307,6 +332,11 @@ export function useClientDetailViewModel(options: UseClientDetailViewModelOption
     editedEnableLanguageRobustScreening.value = Boolean(nextClient.enableLanguageRobustScreening)
     editedReviewPasses.value = normalizeReviewPasses(nextClient.reviewPasses)
     editedBaselineReasoningEffort.value = nextClient.baselineReasoningEffort ?? 'none'
+    editedMonthlyBudgetSoftCapUsd.value = capToInput(nextClient.budgetConfig?.monthlySoftCapUsd)
+    editedMonthlyBudgetHardCapUsd.value = capToInput(nextClient.budgetConfig?.monthlyHardCapUsd)
+    editedPullRequestBudgetSoftCapUsd.value = capToInput(nextClient.budgetConfig?.pullRequestSoftCapUsd)
+    editedPullRequestBudgetHardCapUsd.value = capToInput(nextClient.budgetConfig?.pullRequestHardCapUsd)
+    editedIncrementBudgetHardCapUsd.value = capToInput(nextClient.budgetConfig?.incrementHardCapUsd)
   }
 
   function applyClientReviewProfile(nextProfile: ClientReviewProfileDto): void {
@@ -501,6 +531,35 @@ export function useClientDetailViewModel(options: UseClientDetailViewModelOption
     }
   }
 
+  function currentEditedBudgetConfig(): BudgetConfig {
+    return {
+      monthlySoftCapUsd: capFromInput(editedMonthlyBudgetSoftCapUsd.value),
+      monthlyHardCapUsd: capFromInput(editedMonthlyBudgetHardCapUsd.value),
+      pullRequestSoftCapUsd: capFromInput(editedPullRequestBudgetSoftCapUsd.value),
+      pullRequestHardCapUsd: capFromInput(editedPullRequestBudgetHardCapUsd.value),
+      incrementHardCapUsd: capFromInput(editedIncrementBudgetHardCapUsd.value),
+    }
+  }
+
+  async function saveBudgetConfig() {
+    if (!canManageClient.value || !client.value) return
+    saving.value = true
+    saveError.value = ''
+    try {
+      // The budget config is patched as a whole, so a blank field (null) clears that individual cap.
+      const result = await patchClientFn(clientId, { budgetConfig: currentEditedBudgetConfig() })
+      if (isFailedPatch(result)) {
+        saveError.value = extractValidationMessage(result.error, 'Failed to save budget.')
+        return
+      }
+      applyClient(result.data as ClientDetailDto | null | undefined)
+    } catch {
+      saveError.value = 'Failed to save budget.'
+    } finally {
+      saving.value = false
+    }
+  }
+
   async function saveReviewProfile() {
     if (!canManageClient.value || !client.value) return
     saving.value = true
@@ -541,6 +600,21 @@ export function useClientDetailViewModel(options: UseClientDetailViewModelOption
     )
   }
 
+  function isBudgetButtonEnabled(): boolean {
+    if (saving.value || client.value === null) {
+      return false
+    }
+    const stored = client.value.budgetConfig ?? {}
+    const edited = currentEditedBudgetConfig()
+    return (
+      edited.monthlySoftCapUsd !== (stored.monthlySoftCapUsd ?? null) ||
+      edited.monthlyHardCapUsd !== (stored.monthlyHardCapUsd ?? null) ||
+      edited.pullRequestSoftCapUsd !== (stored.pullRequestSoftCapUsd ?? null) ||
+      edited.pullRequestHardCapUsd !== (stored.pullRequestHardCapUsd ?? null) ||
+      edited.incrementHardCapUsd !== (stored.incrementHardCapUsd ?? null)
+    )
+  }
+
   function isReviewProfileButtonEnabled(): boolean {
     return (
       !saving.value &&
@@ -578,6 +652,11 @@ export function useClientDetailViewModel(options: UseClientDetailViewModelOption
     editedEnableLanguageRobustScreening,
     editedReviewPasses,
     editedBaselineReasoningEffort,
+    editedMonthlyBudgetSoftCapUsd,
+    editedMonthlyBudgetHardCapUsd,
+    editedPullRequestBudgetSoftCapUsd,
+    editedPullRequestBudgetHardCapUsd,
+    editedIncrementBudgetHardCapUsd,
     reviewProfiles,
     clientReviewProfile,
     isProviderDetailOpen,
@@ -594,7 +673,9 @@ export function useClientDetailViewModel(options: UseClientDetailViewModelOption
     toggleStatus,
     saveAdvancedSettings,
     saveReviewProfile,
+    saveBudgetConfig,
     isAdvancedSettingsButtonEnabled,
+    isBudgetButtonEnabled,
     isReviewProfileButtonEnabled,
     handleDelete,
     handleOverviewNavigate,

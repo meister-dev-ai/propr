@@ -74,6 +74,36 @@ public sealed class ClientRecord
     /// </summary>
     public bool IncludeLinkedItemsInContext { get; set; } = true;
 
+    /// <summary>
+    ///     Optional soft USD cap on this client's month-to-date review spend. When month-to-date spend reaches it,
+    ///     new review jobs are held rather than started (running jobs finish). Null means no limit.
+    /// </summary>
+    public decimal? MonthlyBudgetSoftCapUsd { get; set; }
+
+    /// <summary>
+    ///     Optional hard USD cap on this client's month-to-date review spend. When month-to-date spend reaches it,
+    ///     further model calls are cut. Null means no limit.
+    /// </summary>
+    public decimal? MonthlyBudgetHardCapUsd { get; set; }
+
+    /// <summary>
+    ///     Optional default soft USD cap applied to each pull request under this client (summed across the PR's
+    ///     review jobs). When reached, new jobs for that PR are held. Null means no limit.
+    /// </summary>
+    public decimal? PullRequestBudgetSoftCapUsd { get; set; }
+
+    /// <summary>
+    ///     Optional default hard USD cap applied to each pull request under this client (summed across the PR's
+    ///     review jobs). When reached, further model calls are cut. Null means no limit.
+    /// </summary>
+    public decimal? PullRequestBudgetHardCapUsd { get; set; }
+
+    /// <summary>
+    ///     Optional default hard USD cap applied to each PR increment (a single review job) under this client. A
+    ///     single job cannot be held once started, so increments are governed by a hard cap only. Null means no limit.
+    /// </summary>
+    public decimal? IncrementBudgetHardCapUsd { get; set; }
+
     public TenantRecord? Tenant { get; set; }
 
     public ICollection<ClientScmConnectionRecord> ScmConnections { get; set; } = [];

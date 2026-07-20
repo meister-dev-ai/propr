@@ -45,7 +45,8 @@ public sealed class ClientsController(
             client.TenantDisplayName,
             client.DefaultReviewPipelineProfileId,
             client.DefaultReviewPipelineProfileUpdatedAtUtc,
-            recentUsageTokens);
+            recentUsageTokens,
+            client.BudgetConfigOrEmpty);
     }
 
     private IActionResult? ValidateRequest(ValidationResult result)
@@ -339,6 +340,7 @@ public sealed class ClientsController(
                 .Select(pass => new ReviewPassDto(pass.Ordinal, pass.ConfiguredModelId, pass.Lens, pass.Scope, pass.Shadow, pass.ReasoningEffort))
                 .ToList(),
             request.BaselineReasoningEffort,
+            request.BudgetConfig,
             ct);
         return client is null ? this.NotFound() : this.Ok(ToClientResponse(client));
     }
@@ -364,7 +366,8 @@ public sealed record ClientResponse(
     string? TenantDisplayName,
     string? DefaultReviewPipelineProfileId,
     DateTimeOffset? DefaultReviewPipelineProfileUpdatedAtUtc,
-    long? RecentUsageTokens = null);
+    long? RecentUsageTokens = null,
+    BudgetConfigDto? BudgetConfig = null);
 
 /// <summary>One entry in a client's ordered review-pass list: an additional multi-pass union pass bound to a model.</summary>
 /// <param name="Ordinal">Zero-based position of this pass after the implicit tier baseline pass.</param>
@@ -433,4 +436,5 @@ public sealed record PatchClientRequest(
     bool? EnableMultiPassUnion = null,
     bool? IncludeLinkedItemsInContext = null,
     IReadOnlyList<ReviewPassEntry>? ReviewPasses = null,
-    ReviewReasoningEffort? BaselineReasoningEffort = null);
+    ReviewReasoningEffort? BaselineReasoningEffort = null,
+    BudgetConfigDto? BudgetConfig = null);

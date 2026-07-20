@@ -78,6 +78,31 @@ internal sealed class ClientEntityTypeConfiguration : IEntityTypeConfiguration<C
             .HasColumnName("include_linked_items_in_context")
             .HasDefaultValue(true);
 
+        builder.Property(c => c.MonthlyBudgetSoftCapUsd)
+            .HasColumnName("monthly_budget_soft_cap_usd")
+            .HasPrecision(18, 6)
+            .IsRequired(false);
+
+        builder.Property(c => c.MonthlyBudgetHardCapUsd)
+            .HasColumnName("monthly_budget_hard_cap_usd")
+            .HasPrecision(18, 6)
+            .IsRequired(false);
+
+        builder.Property(c => c.PullRequestBudgetSoftCapUsd)
+            .HasColumnName("pull_request_budget_soft_cap_usd")
+            .HasPrecision(18, 6)
+            .IsRequired(false);
+
+        builder.Property(c => c.PullRequestBudgetHardCapUsd)
+            .HasColumnName("pull_request_budget_hard_cap_usd")
+            .HasPrecision(18, 6)
+            .IsRequired(false);
+
+        builder.Property(c => c.IncrementBudgetHardCapUsd)
+            .HasColumnName("increment_budget_hard_cap_usd")
+            .HasPrecision(18, 6)
+            .IsRequired(false);
+
         builder.HasIndex(c => c.TenantId)
             .HasDatabaseName("ix_clients_tenant_id");
 

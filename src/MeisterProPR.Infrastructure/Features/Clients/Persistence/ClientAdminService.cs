@@ -73,6 +73,7 @@ public sealed class ClientAdminService(
         bool? includeLinkedItemsInContext = null,
         IReadOnlyList<ReviewPassDto>? reviewPasses = null,
         ReviewReasoningEffort? baselineReasoningEffort = null,
+        BudgetConfigDto? budgetConfig = null,
         CancellationToken ct = default)
     {
         var isCommunityEdition = await this.IsCommunityEditionAsync(ct);
@@ -167,6 +168,17 @@ public sealed class ClientAdminService(
                         ReasoningEffort = pass.ReasoningEffort == ReviewReasoningEffort.None ? null : pass.ReasoningEffort,
                     });
             }
+        }
+
+        if (budgetConfig is not null)
+        {
+            // Replace the budget caps as a group so an explicit null clears an individual cap; the per-field
+            // "omit means unchanged" convention used above cannot express clearing a single nullable cap.
+            client.MonthlyBudgetSoftCapUsd = budgetConfig.MonthlySoftCapUsd;
+            client.MonthlyBudgetHardCapUsd = budgetConfig.MonthlyHardCapUsd;
+            client.PullRequestBudgetSoftCapUsd = budgetConfig.PullRequestSoftCapUsd;
+            client.PullRequestBudgetHardCapUsd = budgetConfig.PullRequestHardCapUsd;
+            client.IncrementBudgetHardCapUsd = budgetConfig.IncrementHardCapUsd;
         }
 
         await dbContext.SaveChangesAsync(ct);
@@ -372,7 +384,13 @@ public sealed class ClientAdminService(
             client.BaselineReasoningEffort,
             tenantId,
             tenantSlug,
-            tenantDisplayName);
+            tenantDisplayName,
+            new BudgetConfigDto(
+                client.MonthlyBudgetSoftCapUsd,
+                client.MonthlyBudgetHardCapUsd,
+                client.PullRequestBudgetSoftCapUsd,
+                client.PullRequestBudgetHardCapUsd,
+                client.IncrementBudgetHardCapUsd));
     }
 
     private async Task<bool> IsCommunityEditionAsync(CancellationToken ct)
