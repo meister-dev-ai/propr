@@ -196,20 +196,16 @@ public sealed partial class ReviewOrchestrationService(
         var workspacePreparation = await this.PrepareWorkspaceForFetchAsync(job, prRef, ct);
         var earlyWorkspace = workspacePreparation.Workspace;
 
-        PullRequest? pr;
-        try
+        var pr = await this.TryFetchPullRequestWithCleanupAsync(
+            job,
+            compareToIterationId,
+            compareToReviewRevision,
+            earlyWorkspace,
+            workspacePreparation,
+            ct);
+        if (pr is null)
         {
-            pr = await this.FetchPullRequestAsync(job, compareToIterationId, compareToReviewRevision, earlyWorkspace, ct);
-            if (pr is null)
-            {
-                await DisposeEarlyWorkspaceAsync(earlyWorkspace, workspacePreparation);
-                return null;
-            }
-        }
-        catch
-        {
-            await DisposeEarlyWorkspaceAsync(earlyWorkspace, workspacePreparation);
-            throw;
+            return null;
         }
 
         var reviewerThreads = GetReviewerThreads(pr, reviewerId);
@@ -217,20 +213,17 @@ public sealed partial class ReviewOrchestrationService(
 
         if (!isNewIteration && !HasNewThreadReplies(reviewerThreads, scan!, reviewerId, pr.AuthorizedIdentityId, pr.AuthorizedIdentityName))
         {
-            LogSkippedNoChange(logger, job.Id, job.PullRequestId);
-            await DisposeEarlyWorkspaceAsync(earlyWorkspace, workspacePreparation);
-            await this.SaveScanAndDeleteJobAsync(job, pr, reviewerId, ct);
-            return null;
+            return await this.DisposeSkipAndFinalizeAsync(
+                job,
+                pr,
+                reviewerId,
+                earlyWorkspace,
+                workspacePreparation,
+                () => LogSkippedNoChange(logger, job.Id, job.PullRequestId),
+                ct);
         }
 
-        if (reviewer is not null && providerCapabilities.Any(capability => string.Equals(
-                capability,
-                "reviewAssignment",
-                StringComparison.Ordinal)))
-        {
-            await providerRegistry.GetReviewAssignmentService(job.Provider)
-                .AddOptionalReviewerAsync(job.ClientId, job.CodeReviewReference, reviewer, ct);
-        }
+        await this.AddOptionalReviewerIfSupportedAsync(job, reviewer, providerCapabilities, ct);
 
         await this.EvaluateExistingThreadsAsync(
             job,
@@ -245,10 +238,14 @@ public sealed partial class ReviewOrchestrationService(
 
         if (!isNewIteration)
         {
-            LogSkippedNoChange(logger, job.Id, job.PullRequestId);
-            await DisposeEarlyWorkspaceAsync(earlyWorkspace, workspacePreparation);
-            await this.SaveScanAndDeleteJobAsync(job, pr, reviewerId, ct);
-            return null;
+            return await this.DisposeSkipAndFinalizeAsync(
+                job,
+                pr,
+                reviewerId,
+                earlyWorkspace,
+                workspacePreparation,
+                () => LogSkippedNoChange(logger, job.Id, job.PullRequestId),
+                ct);
         }
 
         var (systemContext, carriedForwardPaths) = await this.BuildReviewContextAsync(
@@ -264,16 +261,19 @@ public sealed partial class ReviewOrchestrationService(
 
         if (systemContext is null)
         {
-            LogSkippedNoChange(logger, job.Id, job.PullRequestId);
-            await DisposeEarlyWorkspaceAsync(earlyWorkspace, workspacePreparation);
-            await this.SaveScanAndDeleteJobAsync(job, pr, reviewerId, ct);
-            return null;
+            return await this.DisposeSkipAndFinalizeAsync(
+                job,
+                pr,
+                reviewerId,
+                earlyWorkspace,
+                workspacePreparation,
+                () => LogSkippedNoChange(logger, job.Id, job.PullRequestId),
+                ct);
         }
 
         pr = await this.AttachLinkedItemsAsync(job, pr, systemContext, ct);
 
-        if (jobs.GetById(job.Id)?.Status is JobStatus.Cancelled or JobStatus.Superseded or JobStatus.Stopped or JobStatus.BudgetExceeded
-            or JobStatus.BudgetHeld)
+        if (this.IsJobStopped(job))
         {
             LogJobCancelledBeforeFileReview(logger, job.Id);
             return null;
@@ -281,8 +281,7 @@ public sealed partial class ReviewOrchestrationService(
 
         var result = await this.DispatchFileReviewAsync(job, pr, systemContext, overrideChatClient, ct);
 
-        if (jobs.GetById(job.Id)?.Status is JobStatus.Cancelled or JobStatus.Superseded or JobStatus.Stopped or JobStatus.BudgetExceeded
-            or JobStatus.BudgetHeld)
+        if (this.IsJobStopped(job))
         {
             LogJobCancelledAfterFileReview(logger, job.Id);
             return null;
@@ -295,17 +294,21 @@ public sealed partial class ReviewOrchestrationService(
 
         if (string.IsNullOrWhiteSpace(result.Summary) && result.Comments.Count == 0)
         {
-            LogSkippedEmptyReview(logger, job.Id, job.PullRequestId);
-            await this.SaveScanAndDeleteJobAsync(job, pr, reviewerId, ct);
-            return null;
+            return await this.DisposeSkipAndFinalizeAsync(
+                job,
+                pr,
+                reviewerId,
+                earlyWorkspace,
+                workspacePreparation,
+                () => LogSkippedEmptyReview(logger, job.Id, job.PullRequestId),
+                ct);
         }
 
         // Final status re-check immediately before the only step that posts to the provider. In a
         // multi-instance deployment a manual stop may land on another instance and never reach this
         // instance's cancellation token, so the persisted status is the last line of defence against
         // publishing the review of a job an administrator has stopped (or that was cancelled/superseded).
-        if (jobs.GetById(job.Id)?.Status is JobStatus.Cancelled or JobStatus.Superseded or JobStatus.Stopped or JobStatus.BudgetExceeded
-            or JobStatus.BudgetHeld)
+        if (this.IsJobStopped(job))
         {
             LogJobCancelledAfterFileReview(logger, job.Id);
             return null;
@@ -316,6 +319,81 @@ public sealed partial class ReviewOrchestrationService(
         await this.RetainIncrementDiffsAsync(job, pr, ct);
 
         return pr;
+    }
+
+    private async Task<PullRequest?> TryFetchPullRequestWithCleanupAsync(
+        ReviewJob job,
+        int? compareToIterationId,
+        ReviewRevision? compareToReviewRevision,
+        IReviewRepositoryWorkspace? earlyWorkspace,
+        ReviewRepositoryWorkspacePreparationResult workspacePreparation,
+        CancellationToken ct)
+    {
+        try
+        {
+            var pr = await this.FetchPullRequestAsync(
+                job,
+                compareToIterationId,
+                compareToReviewRevision,
+                earlyWorkspace,
+                ct);
+            if (pr is null)
+            {
+                await DisposeEarlyWorkspaceAsync(earlyWorkspace, workspacePreparation);
+                return null;
+            }
+
+            return pr;
+        }
+        catch
+        {
+            await DisposeEarlyWorkspaceAsync(earlyWorkspace, workspacePreparation);
+            throw;
+        }
+    }
+
+    private async Task AddOptionalReviewerIfSupportedAsync(
+        ReviewJob job,
+        ReviewerIdentity? reviewer,
+        IReadOnlyCollection<string> providerCapabilities,
+        CancellationToken ct)
+    {
+        if (reviewer is null)
+        {
+            return;
+        }
+
+        if (!providerCapabilities.Any(capability => string.Equals(
+                capability,
+                "reviewAssignment",
+                StringComparison.Ordinal)))
+        {
+            return;
+        }
+
+        await providerRegistry.GetReviewAssignmentService(job.Provider)
+            .AddOptionalReviewerAsync(job.ClientId, job.CodeReviewReference, reviewer, ct);
+    }
+
+    private async Task<PullRequest?> DisposeSkipAndFinalizeAsync(
+        ReviewJob job,
+        PullRequest pr,
+        Guid? reviewerId,
+        IReviewRepositoryWorkspace? earlyWorkspace,
+        ReviewRepositoryWorkspacePreparationResult workspacePreparation,
+        Action logSkip,
+        CancellationToken ct)
+    {
+        logSkip();
+        await DisposeEarlyWorkspaceAsync(earlyWorkspace, workspacePreparation);
+        await this.SaveScanAndDeleteJobAsync(job, pr, reviewerId, ct);
+        return null;
+    }
+
+    private bool IsJobStopped(ReviewJob job)
+    {
+        return jobs.GetById(job.Id)?.Status is JobStatus.Cancelled or JobStatus.Superseded or JobStatus.Stopped or JobStatus.BudgetExceeded
+            or JobStatus.BudgetHeld;
     }
 
     // Passive archive observer: when the producing connection opted in to diff retention, persist the
