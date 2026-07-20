@@ -41,22 +41,13 @@ internal static class RepositoryCodeSearchExecutor
             return InvalidRequest(request, searchMode, filters, "Search query text is required.");
         }
 
-        Regex? regex = null;
-        if (string.Equals(searchMode, CodeSearchModes.Regex, StringComparison.Ordinal))
+        var regexOutcome = await TryBuildSearchRegexAsync(queryText, searchMode, ct);
+        if (regexOutcome.InvalidRequest is not null)
         {
-            try
-            {
-                regex = ToolTimingCollectorContext.Record(
-                    ProtocolEventToolPhaseNames.RequestPreparation,
-                    "Request preparation",
-                    () => new Regex(queryText, RegexOptions.CultureInvariant, TimeSpan.FromSeconds(1)));
-            }
-            catch (ArgumentException ex)
-            {
-                return InvalidRequest(request, searchMode, filters, ex.Message);
-            }
+            return InvalidRequest(request, searchMode, filters, regexOutcome.InvalidRequest);
         }
-        else if (!IsSupportedMode(searchMode))
+
+        if (regexOutcome.UnsupportedMode)
         {
             return new CodeSearchResult(
                 RepositorySearchStatuses.InvalidRequest,
@@ -92,151 +83,90 @@ internal static class RepositoryCodeSearchExecutor
                 false);
         }
 
-        var limitations = candidateResolution.Limitations.ToList();
-        var matches = new List<CodeSearchMatch>();
-        var truncated = false;
+        var state = new SearchState(candidateResolution.Paths, candidateResolution.Limitations.ToList());
+        await ScanAllCandidatesAsync(
+            state,
+            searchMode,
+            queryText,
+            regexOutcome.Regex,
+            candidateResolution.Branch,
+            maxFileSizeBytes,
+            confirmRelatedSymbolStructurally,
+            structuralAnalyzer,
+            fetchRawFileContentAsync,
+            ct);
 
+        return new CodeSearchResult(
+            ResolveStatus(state.Matches.Count, state.Limitations.Count, state.Truncated),
+            request.BranchSide,
+            request.PathScope,
+            searchMode,
+            filters,
+            state.Matches.AsReadOnly(),
+            state.Limitations.AsReadOnly(),
+            state.Truncated,
+            ToolTimingCollectorContext.CaptureSnapshot());
+    }
+
+    private static async Task<RegexBuildOutcome> TryBuildSearchRegexAsync(
+        string queryText,
+        string searchMode,
+        CancellationToken ct)
+    {
+        if (string.Equals(searchMode, CodeSearchModes.Regex, StringComparison.Ordinal))
+        {
+            try
+            {
+                var regex = ToolTimingCollectorContext.Record(
+                    ProtocolEventToolPhaseNames.RequestPreparation,
+                    "Request preparation",
+                    () => new Regex(queryText, RegexOptions.CultureInvariant, TimeSpan.FromSeconds(1)));
+                return new RegexBuildOutcome(regex, null, false);
+            }
+            catch (ArgumentException ex)
+            {
+                return new RegexBuildOutcome(null, ex.Message, false);
+            }
+        }
+
+        _ = ct;
+        return new RegexBuildOutcome(null, null, !IsSupportedMode(searchMode));
+    }
+
+    private static async Task ScanAllCandidatesAsync(
+        SearchState state,
+        string searchMode,
+        string queryText,
+        Regex? regex,
+        string branch,
+        int maxFileSizeBytes,
+        bool confirmRelatedSymbolStructurally,
+        IStructuralCodeAnalyzer? structuralAnalyzer,
+        Func<string, string, CancellationToken, Task<string?>> fetchRawFileContentAsync,
+        CancellationToken ct)
+    {
         await ToolTimingCollectorContext.RecordAsync(
             ProtocolEventToolPhaseNames.RepositorySearch,
             "Repository search",
             async () =>
             {
                 var scanned = 0;
-                foreach (var candidatePath in candidateResolution.Paths)
+                foreach (var candidatePath in state.CandidatePaths)
                 {
                     scanned++;
-                    if (BinaryFileDetector.IsBinary(candidatePath))
-                    {
-                        limitations.Add(
-                            new RepositorySearchLimitation(candidatePath, RepositorySearchLimitationReasons.BinaryFile, "Binary files are not searchable."));
-                        continue;
-                    }
-
-                    string? content;
-                    try
-                    {
-                        content = await fetchRawFileContentAsync(candidatePath, candidateResolution.Branch, ct);
-                    }
-                    catch (OperationCanceledException) when (ct.IsCancellationRequested)
-                    {
-                        // Cancellation is not a per-file provider failure; let it unwind the scan.
-                        throw;
-                    }
-                    catch (Exception ex)
-                    {
-                        limitations.Add(new RepositorySearchLimitation(candidatePath, RepositorySearchLimitationReasons.ProviderFetchFailed, ex.Message));
-                        continue;
-                    }
-
-                    if (content is null)
-                    {
-                        limitations.Add(
-                            new RepositorySearchLimitation(
-                                candidatePath,
-                                RepositorySearchLimitationReasons.MissingOnBranch,
-                                "The file was not found on the requested branch."));
-                        continue;
-                    }
-
-                    var byteSize = Encoding.UTF8.GetByteCount(content);
-                    if (byteSize > maxFileSizeBytes)
-                    {
-                        limitations.Add(
-                            new RepositorySearchLimitation(
-                                candidatePath,
-                                RepositorySearchLimitationReasons.UnreadableFile,
-                                $"The file is too large to search ({byteSize} bytes exceeds the limit of {maxFileSizeBytes} bytes)."));
-                        continue;
-                    }
-
-                    var language = RepositoryDiscoveryHelpers.InferLanguage(candidatePath);
-                    var lines = content.Split('\n');
-
-                    // For related_symbol, post-filter substring matches through the structural backend so
-                    // comment/string occurrences are dropped. Kill-switch off (or an unsupported language /
-                    // unavailable backend) → today's substring behavior (no regression).
-                    HashSet<int>? confirmedLines = null;
-                    if (confirmRelatedSymbolStructurally
-                        && structuralAnalyzer is not null
-                        && string.Equals(searchMode, CodeSearchModes.RelatedSymbol, StringComparison.Ordinal)
-                        && structuralAnalyzer.CanAnalyze(candidatePath)
-                        && LanguagePaths.TryResolve(candidatePath) is { } structuralLanguage)
-                    {
-                        try
-                        {
-                            var request2 = new StructuralParseRequest(candidatePath, structuralLanguage, content, []);
-                            var confirmed = await structuralAnalyzer.ConfirmReferenceLinesAsync(request2, queryText, ct);
-                            confirmedLines = confirmed.Count == 0 ? new HashSet<int>() : [.. confirmed];
-                        }
-                        catch (OperationCanceledException)
-                        {
-                            throw;
-                        }
-                        catch
-                        {
-                            confirmedLines = null; // fail-soft to substring behavior
-                        }
-                    }
-
-                    var searchTerminated = false;
-                    try
-                    {
-                        for (var i = 0; i < lines.Length; i++)
-                        {
-                            var line = lines[i].TrimEnd('\r');
-                            if (!LineMatches(line, queryText, searchMode, regex))
-                            {
-                                continue;
-                            }
-
-                            // Structural confirmation: drop matches the backend did not confirm
-                            // as a real identifier/reference line (comment/string occurrences).
-                            if (confirmedLines is not null && !confirmedLines.Contains(i + 1))
-                            {
-                                continue;
-                            }
-
-                            matches.Add(
-                                new CodeSearchMatch(
-                                    candidatePath,
-                                    i + 1,
-                                    Truncate(line.Trim(), out var previewTruncated),
-                                    language,
-                                    matches.Count + 1,
-                                    previewTruncated));
-                            if (matches.Count < RepositoryDiscoveryHelpers.MaxReturnedMatches)
-                            {
-                                continue;
-                            }
-
-                            truncated = HasMoreMatches(lines, i + 1, queryText, searchMode, regex) ||
-                                        HasMoreCandidates(candidateResolution.Paths, candidatePath);
-                            if (truncated)
-                            {
-                                limitations.Add(
-                                    new RepositorySearchLimitation(
-                                        null,
-                                        RepositorySearchLimitationReasons.ResultTruncated,
-                                        $"Only the first {RepositoryDiscoveryHelpers.MaxReturnedMatches} matches were returned."));
-                            }
-
-                            searchTerminated = true;
-                            break;
-                        }
-                    }
-                    catch (RegexMatchTimeoutException)
-                    {
-                        // The pattern is pathologically expensive against this file's content; retrying it
-                        // against the remaining candidates would just repeat the same timeout for each one.
-                        limitations.Add(
-                            new RepositorySearchLimitation(
-                                candidatePath,
-                                RepositorySearchLimitationReasons.RegexTimedOut,
-                                "The search pattern took too long to match and was aborted; try a simpler pattern."));
-                        searchTerminated = true;
-                    }
-
-                    if (searchTerminated)
+                    var outcome = await ScanSingleCandidateAsync(
+                        candidatePath,
+                        branch,
+                        searchMode,
+                        queryText,
+                        regex,
+                        maxFileSizeBytes,
+                        confirmRelatedSymbolStructurally,
+                        structuralAnalyzer,
+                        fetchRawFileContentAsync,
+                        state,
+                        ct);
+                    if (outcome == CandidateScanOutcome.Terminated)
                     {
                         break;
                     }
@@ -244,19 +174,232 @@ internal static class RepositoryCodeSearchExecutor
 
                 return scanned;
             },
-            scanned => $"files_scanned={scanned};matches={matches.Count};truncated={truncated}");
-
-        return new CodeSearchResult(
-            ResolveStatus(matches.Count, limitations.Count, truncated),
-            request.BranchSide,
-            request.PathScope,
-            searchMode,
-            filters,
-            matches.AsReadOnly(),
-            limitations.AsReadOnly(),
-            truncated,
-            ToolTimingCollectorContext.CaptureSnapshot());
+            scanned => $"files_scanned={scanned};matches={state.Matches.Count};truncated={state.Truncated}");
     }
+
+    private static async Task<CandidateScanOutcome> ScanSingleCandidateAsync(
+        string candidatePath,
+        string branch,
+        string searchMode,
+        string queryText,
+        Regex? regex,
+        int maxFileSizeBytes,
+        bool confirmRelatedSymbolStructurally,
+        IStructuralCodeAnalyzer? structuralAnalyzer,
+        Func<string, string, CancellationToken, Task<string?>> fetchRawFileContentAsync,
+        SearchState state,
+        CancellationToken ct)
+    {
+        if (BinaryFileDetector.IsBinary(candidatePath))
+        {
+            state.Limitations.Add(
+                new RepositorySearchLimitation(candidatePath, RepositorySearchLimitationReasons.BinaryFile, "Binary files are not searchable."));
+            return CandidateScanOutcome.Continue;
+        }
+
+        var content = await TryFetchFileContentAsync(candidatePath, branch, fetchRawFileContentAsync, state, ct);
+        if (content is null)
+        {
+            return CandidateScanOutcome.Continue;
+        }
+
+        if (Encoding.UTF8.GetByteCount(content) > maxFileSizeBytes)
+        {
+            var byteSize = Encoding.UTF8.GetByteCount(content);
+            state.Limitations.Add(
+                new RepositorySearchLimitation(
+                    candidatePath,
+                    RepositorySearchLimitationReasons.UnreadableFile,
+                    $"The file is too large to search ({byteSize} bytes exceeds the limit of {maxFileSizeBytes} bytes)."));
+            return CandidateScanOutcome.Continue;
+        }
+
+        var language = RepositoryDiscoveryHelpers.InferLanguage(candidatePath);
+        var lines = content.Split('\n');
+
+        var confirmedLines = await TryConfirmLinesStructurallyAsync(
+            candidatePath,
+            content,
+            queryText,
+            searchMode,
+            confirmRelatedSymbolStructurally,
+            structuralAnalyzer,
+            ct);
+
+        return ScanFileContentForMatches(
+            candidatePath,
+            lines,
+            queryText,
+            searchMode,
+            regex,
+            language,
+            confirmedLines,
+            state);
+    }
+
+    private static async Task<string?> TryFetchFileContentAsync(
+        string candidatePath,
+        string branch,
+        Func<string, string, CancellationToken, Task<string?>> fetchRawFileContentAsync,
+        SearchState state,
+        CancellationToken ct)
+    {
+        string? content;
+        try
+        {
+            content = await fetchRawFileContentAsync(candidatePath, branch, ct);
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            // Cancellation is not a per-file provider failure; let it unwind the scan.
+            throw;
+        }
+        catch (Exception ex)
+        {
+            state.Limitations.Add(new RepositorySearchLimitation(candidatePath, RepositorySearchLimitationReasons.ProviderFetchFailed, ex.Message));
+            return null;
+        }
+
+        if (content is null)
+        {
+            state.Limitations.Add(
+                new RepositorySearchLimitation(
+                    candidatePath,
+                    RepositorySearchLimitationReasons.MissingOnBranch,
+                    "The file was not found on the requested branch."));
+            return null;
+        }
+
+        return content;
+    }
+
+    private static async Task<HashSet<int>?> TryConfirmLinesStructurallyAsync(
+        string candidatePath,
+        string content,
+        string queryText,
+        string searchMode,
+        bool confirmRelatedSymbolStructurally,
+        IStructuralCodeAnalyzer? structuralAnalyzer,
+        CancellationToken ct)
+    {
+        // For related_symbol, post-filter substring matches through the structural backend so
+        // comment/string occurrences are dropped. Kill-switch off (or an unsupported language /
+        // unavailable backend) → today's substring behavior (no regression).
+        if (!confirmRelatedSymbolStructurally
+            || structuralAnalyzer is null
+            || !string.Equals(searchMode, CodeSearchModes.RelatedSymbol, StringComparison.Ordinal)
+            || !structuralAnalyzer.CanAnalyze(candidatePath)
+            || LanguagePaths.TryResolve(candidatePath) is not { } structuralLanguage)
+        {
+            return null;
+        }
+
+        try
+        {
+            var structuralRequest = new StructuralParseRequest(candidatePath, structuralLanguage, content, []);
+            var confirmed = await structuralAnalyzer.ConfirmReferenceLinesAsync(structuralRequest, queryText, ct);
+            return confirmed.Count == 0 ? new HashSet<int>() : [.. confirmed];
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch
+        {
+            return null; // fail-soft to substring behavior
+        }
+    }
+
+    private static CandidateScanOutcome ScanFileContentForMatches(
+        string candidatePath,
+        string[] lines,
+        string queryText,
+        string searchMode,
+        Regex? regex,
+        string language,
+        HashSet<int>? confirmedLines,
+        SearchState state)
+    {
+        try
+        {
+            for (var i = 0; i < lines.Length; i++)
+            {
+                var line = lines[i].TrimEnd('\r');
+                if (!LineMatches(line, queryText, searchMode, regex))
+                {
+                    continue;
+                }
+
+                // Structural confirmation: drop matches the backend did not confirm
+                // as a real identifier/reference line (comment/string occurrences).
+                if (confirmedLines is not null && !confirmedLines.Contains(i + 1))
+                {
+                    continue;
+                }
+
+                state.Matches.Add(
+                    new CodeSearchMatch(
+                        candidatePath,
+                        i + 1,
+                        Truncate(line.Trim(), out var previewTruncated),
+                        language,
+                        state.Matches.Count + 1,
+                        previewTruncated));
+                if (state.Matches.Count < RepositoryDiscoveryHelpers.MaxReturnedMatches)
+                {
+                    continue;
+                }
+
+                state.Truncated = HasMoreMatches(lines, i + 1, queryText, searchMode, regex) ||
+                                  HasMoreCandidates(state.CandidatePaths, candidatePath);
+                if (state.Truncated)
+                {
+                    state.Limitations.Add(
+                        new RepositorySearchLimitation(
+                            null,
+                            RepositorySearchLimitationReasons.ResultTruncated,
+                            $"Only the first {RepositoryDiscoveryHelpers.MaxReturnedMatches} matches were returned."));
+                }
+
+                return CandidateScanOutcome.Terminated;
+            }
+        }
+        catch (RegexMatchTimeoutException)
+        {
+            // The pattern is pathologically expensive against this file's content; retrying it
+            // against the remaining candidates would just repeat the same timeout for each one.
+            state.Limitations.Add(
+                new RepositorySearchLimitation(
+                    candidatePath,
+                    RepositorySearchLimitationReasons.RegexTimedOut,
+                    "The search pattern took too long to match and was aborted; try a simpler pattern."));
+            return CandidateScanOutcome.Terminated;
+        }
+
+        return CandidateScanOutcome.Continue;
+    }
+
+    private sealed class SearchState
+    {
+        public SearchState(IReadOnlyList<string> candidatePaths, List<RepositorySearchLimitation> limitations)
+        {
+            this.CandidatePaths = candidatePaths;
+            this.Limitations = limitations;
+        }
+
+        public IReadOnlyList<string> CandidatePaths { get; }
+        public List<CodeSearchMatch> Matches { get; } = [];
+        public List<RepositorySearchLimitation> Limitations { get; }
+        public bool Truncated;
+    }
+
+    private enum CandidateScanOutcome
+    {
+        Continue,
+        Terminated,
+    }
+
+    private sealed record RegexBuildOutcome(Regex? Regex, string? InvalidRequest, bool UnsupportedMode);
 
     private static CodeSearchResult InvalidRequest(
         CodeSearchRequest request,
