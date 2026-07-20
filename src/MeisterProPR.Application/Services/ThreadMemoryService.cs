@@ -362,73 +362,14 @@ public sealed partial class ThreadMemoryService(
     {
         try
         {
-            // Build query composite text from file path + change excerpt + draft findings summary.
-            var queryText = BuildQueryText(filePath, changeExcerpt, draftResult.Summary);
-            var queryVector = await embedder.GenerateEmbeddingAsync(queryText, clientId, ct);
-
-            var semanticMatches = await repository.FindSimilarAsync(
-                clientId,
-                queryVector,
-                this._opts.MemoryTopN,
-                this._opts.MemoryMinSimilarity,
-                ct) ?? [];
-
-            var matches = semanticMatches;
-            var retrievalMode = semanticMatches.Count > 0 ? "semantic_similarity" : "no_match";
-
-            if (matches.Count == 0)
-            {
-                var exactFileMatches = await repository.FindByFilePathAsync(
-                    clientId,
-                    job.RepositoryId,
-                    filePath,
-                    this._opts.MemoryTopN,
-                    ct) ?? [];
-
-                if (exactFileMatches.Count > 0)
-                {
-                    matches = exactFileMatches;
-                    retrievalMode = "exact_file_fallback";
-                }
-            }
-
-            var similarityScores = semanticMatches.Select(m => m.SimilarityScore).ToList();
-
-            if (protocolId.HasValue)
-            {
-                var retrievalDetails = JsonSerializer.Serialize(
-                    new
-                    {
-                        filePath,
-                        resultCount = matches.Count,
-                        topN = this._opts.MemoryTopN,
-                        minSimilarity = this._opts.MemoryMinSimilarity,
-                        retrievalMode,
-                        similarityScores,
-                        matchSources = matches.Select(m => new
-                            {
-                                m.MemoryRecordId,
-                                m.ThreadId,
-                                m.FilePath,
-                                m.SimilarityScore,
-                                m.MatchSource,
-                            })
-                            .ToList(),
-                    });
-                await protocolRecorder.RecordMemoryEventAsync(
-                    protocolId.Value,
-                    "memory_retrieval_executed",
-                    retrievalDetails,
-                    null,
-                    ct);
-            }
+            var (matches, retrievalMode) = await this.RetrieveMemoryMatchesAsync(clientId, job, filePath, changeExcerpt, draftResult, ct);
+            await this.RecordRetrievalProtocolAsync(protocolId, filePath, matches, retrievalMode, ct);
 
             if (matches.Count == 0)
             {
                 return draftResult;
             }
 
-            // Reconsider draft findings with AI.
             var effectiveModelId = job.AiModel ?? this._opts.ModelId;
             var reconsideredResult = await this.ReconsiderWithAiAsync(
                 clientId,
@@ -439,116 +380,223 @@ public sealed partial class ThreadMemoryService(
                 temperature,
                 ct);
 
-            if (protocolId.HasValue && reconsideredResult is not null)
-            {
-                // Compute a diff between draft and reconsidered comments for traceability.
-                static string CommentKey(ReviewComment c)
-                {
-                    var msg = c.Message ?? string.Empty;
-                    return $"{c.FilePath}:{c.LineNumber}:{(msg.Length > 80 ? msg[..80] : msg)}";
-                }
-
-                var reconsideredKeys = new HashSet<string>(reconsideredResult.Comments.Select(CommentKey));
-
-                var discarded = draftResult.Comments
-                    .Where(c => !reconsideredKeys.Contains(CommentKey(c)))
-                    .Select(c =>
-                    {
-                        var msg = c.Message ?? string.Empty;
-                        return new
-                        {
-                            filePath = c.FilePath,
-                            lineNumber = c.LineNumber,
-                            severity = c.Severity.ToString().ToLowerInvariant(),
-                            message = msg.Length > 80 ? msg[..80] : msg,
-                        };
-                    })
-                    .ToList();
-
-                var draftSeverityByKey = new Dictionary<string, CommentSeverity>();
-                foreach (var c in draftResult.Comments)
-                {
-                    draftSeverityByKey.TryAdd(CommentKey(c), c.Severity);
-                }
-
-                var downgraded = reconsideredResult.Comments
-                    .Where(c => draftSeverityByKey.TryGetValue(CommentKey(c), out var origSev) && origSev != c.Severity)
-                    .Select(c =>
-                    {
-                        draftSeverityByKey.TryGetValue(CommentKey(c), out var origSev);
-                        var msg = c.Message ?? string.Empty;
-                        return new
-                        {
-                            filePath = c.FilePath,
-                            lineNumber = c.LineNumber,
-                            originalSeverity = origSev.ToString().ToLowerInvariant(),
-                            newSeverity = c.Severity.ToString().ToLowerInvariant(),
-                            message = msg.Length > 80 ? msg[..80] : msg,
-                        };
-                    })
-                    .ToList();
-
-                var reconsiderationDetails = JsonSerializer.Serialize(
-                    new
-                    {
-                        filePath,
-                        contributingMemoryIds = matches.Select(m => m.MemoryRecordId).ToList(),
-                        originalCommentCount = draftResult.Comments.Count,
-                        finalCommentCount = reconsideredResult.Comments.Count,
-                        retainedCount = reconsideredResult.Comments.Count - downgraded.Count,
-                        discardedCount = discarded.Count,
-                        downgradedCount = downgraded.Count,
-                        discarded,
-                        downgraded,
-                    });
-                await protocolRecorder.RecordMemoryEventAsync(
-                    protocolId.Value,
-                    "memory_reconsideration_completed",
-                    reconsiderationDetails,
-                    null,
-                    ct);
-            }
-            else if (protocolId.HasValue)
-            {
-                // AI returned null (empty response, parse failure, or inner exception).
-                // Emit a protocol event so the trace is not left dangling after memory_retrieval_executed.
-                var failureDetails = JsonSerializer.Serialize(
-                    new
-                    {
-                        filePath,
-                        contributingMemoryIds = matches.Select(m => m.MemoryRecordId).ToList(),
-                        originalCommentCount = draftResult.Comments.Count,
-                        reason = "ai_returned_null_or_parse_failed",
-                    });
-
-                await protocolRecorder.RecordMemoryEventAsync(
-                    protocolId.Value,
-                    "memory_reconsideration_failed",
-                    failureDetails,
-                    "Reconsideration AI call returned no usable result; draft findings retained unchanged.",
-                    ct);
-
-                LogReconsiderationFallback(logger, filePath, clientId);
-            }
+            await this.RecordReconsiderationProtocolAsync(protocolId, clientId, filePath, draftResult, reconsideredResult, matches, ct);
 
             return reconsideredResult ?? draftResult;
         }
         catch (Exception ex)
         {
             LogRetrieveAndReconsiderFailed(logger, filePath, clientId, ex);
-            if (protocolId.HasValue)
-            {
-                var details = JsonSerializer.Serialize(new { filePath, operationType = "retrieve_and_reconsider" });
-                await protocolRecorder.RecordMemoryEventAsync(
-                    protocolId.Value,
-                    "memory_operation_failed",
-                    details,
-                    ex.Message,
-                    ct);
-            }
-
+            await this.RecordOperationFailedProtocolAsync(protocolId, filePath, ex, ct);
             return draftResult;
         }
+    }
+
+    private async Task<(IReadOnlyList<ThreadMemoryMatchDto> Matches, string RetrievalMode)> RetrieveMemoryMatchesAsync(
+        Guid clientId,
+        ReviewJob job,
+        string filePath,
+        string? changeExcerpt,
+        ReviewResult draftResult,
+        CancellationToken ct)
+    {
+        // Build query composite text from file path + change excerpt + draft findings summary.
+        var queryText = BuildQueryText(filePath, changeExcerpt, draftResult.Summary);
+        var queryVector = await embedder.GenerateEmbeddingAsync(queryText, clientId, ct);
+
+        var semanticMatches = await repository.FindSimilarAsync(
+            clientId,
+            queryVector,
+            this._opts.MemoryTopN,
+            this._opts.MemoryMinSimilarity,
+            ct) ?? [];
+
+        if (semanticMatches.Count > 0)
+        {
+            return (semanticMatches, "semantic_similarity");
+        }
+
+        var exactFileMatches = await repository.FindByFilePathAsync(
+            clientId,
+            job.RepositoryId,
+            filePath,
+            this._opts.MemoryTopN,
+            ct) ?? [];
+
+        return exactFileMatches.Count > 0
+            ? (exactFileMatches, "exact_file_fallback")
+            : (semanticMatches, "no_match");
+    }
+
+    private async Task RecordRetrievalProtocolAsync(
+        Guid? protocolId,
+        string filePath,
+        IReadOnlyList<ThreadMemoryMatchDto> matches,
+        string retrievalMode,
+        CancellationToken ct)
+    {
+        if (!protocolId.HasValue)
+        {
+            return;
+        }
+
+        var similarityScores = matches.Select(m => m.SimilarityScore).ToList();
+        var retrievalDetails = JsonSerializer.Serialize(
+            new
+            {
+                filePath,
+                resultCount = matches.Count,
+                topN = this._opts.MemoryTopN,
+                minSimilarity = this._opts.MemoryMinSimilarity,
+                retrievalMode,
+                similarityScores,
+                matchSources = matches.Select(m => new
+                    {
+                        m.MemoryRecordId,
+                        m.ThreadId,
+                        m.FilePath,
+                        m.SimilarityScore,
+                        m.MatchSource,
+                    })
+                    .ToList(),
+            });
+        await protocolRecorder.RecordMemoryEventAsync(
+            protocolId.Value,
+            "memory_retrieval_executed",
+            retrievalDetails,
+            null,
+            ct);
+    }
+
+    private async Task RecordReconsiderationProtocolAsync(
+        Guid? protocolId,
+        Guid clientId,
+        string filePath,
+        ReviewResult draftResult,
+        ReviewResult? reconsideredResult,
+        IReadOnlyList<ThreadMemoryMatchDto> matches,
+        CancellationToken ct)
+    {
+        if (!protocolId.HasValue)
+        {
+            return;
+        }
+
+        if (reconsideredResult is not null)
+        {
+            var (discarded, downgraded) = ComputeReconsiderationDiff(draftResult, reconsideredResult);
+            var reconsiderationDetails = JsonSerializer.Serialize(
+                new
+                {
+                    filePath,
+                    contributingMemoryIds = matches.Select(m => m.MemoryRecordId).ToList(),
+                    originalCommentCount = draftResult.Comments.Count,
+                    finalCommentCount = reconsideredResult.Comments.Count,
+                    retainedCount = reconsideredResult.Comments.Count - downgraded.Count,
+                    discardedCount = discarded.Count,
+                    downgradedCount = downgraded.Count,
+                    discarded,
+                    downgraded,
+                });
+            await protocolRecorder.RecordMemoryEventAsync(
+                protocolId.Value,
+                "memory_reconsideration_completed",
+                reconsiderationDetails,
+                null,
+                ct);
+            return;
+        }
+
+        // AI returned null (empty response, parse failure, or inner exception).
+        // Emit a protocol event so the trace is not left dangling after memory_retrieval_executed.
+        var failureDetails = JsonSerializer.Serialize(
+            new
+            {
+                filePath,
+                contributingMemoryIds = matches.Select(m => m.MemoryRecordId).ToList(),
+                originalCommentCount = draftResult.Comments.Count,
+                reason = "ai_returned_null_or_parse_failed",
+            });
+        await protocolRecorder.RecordMemoryEventAsync(
+            protocolId.Value,
+            "memory_reconsideration_failed",
+            failureDetails,
+            "Reconsideration AI call returned no usable result; draft findings retained unchanged.",
+            ct);
+        LogReconsiderationFallback(logger, filePath, clientId);
+    }
+
+    private static (IReadOnlyList<object> Discarded, IReadOnlyList<object> Downgraded) ComputeReconsiderationDiff(
+        ReviewResult draftResult,
+        ReviewResult reconsideredResult)
+    {
+        var reconsideredKeys = new HashSet<string>(reconsideredResult.Comments.Select(CommentKey));
+        var discarded = draftResult.Comments
+            .Where(c => !reconsideredKeys.Contains(CommentKey(c)))
+            .Select(c => new
+            {
+                filePath = c.FilePath,
+                lineNumber = c.LineNumber,
+                severity = c.Severity.ToString().ToLowerInvariant(),
+                message = Truncate(c.Message),
+            })
+            .ToList();
+
+        var draftSeverityByKey = new Dictionary<string, CommentSeverity>();
+        foreach (var c in draftResult.Comments)
+        {
+            draftSeverityByKey.TryAdd(CommentKey(c), c.Severity);
+        }
+
+        var downgraded = reconsideredResult.Comments
+            .Where(c => draftSeverityByKey.TryGetValue(CommentKey(c), out var origSev) && origSev != c.Severity)
+            .Select(c =>
+            {
+                draftSeverityByKey.TryGetValue(CommentKey(c), out var origSev);
+                return new
+                {
+                    filePath = c.FilePath,
+                    lineNumber = c.LineNumber,
+                    originalSeverity = origSev.ToString().ToLowerInvariant(),
+                    newSeverity = c.Severity.ToString().ToLowerInvariant(),
+                    message = Truncate(c.Message),
+                };
+            })
+            .ToList();
+
+        return (discarded, downgraded);
+    }
+
+    private static string CommentKey(ReviewComment c)
+    {
+        var msg = c.Message ?? string.Empty;
+        return $"{c.FilePath}:{c.LineNumber}:{(msg.Length > 80 ? msg[..80] : msg)}";
+    }
+
+    private static string Truncate(string? message)
+    {
+        var msg = message ?? string.Empty;
+        return msg.Length > 80 ? msg[..80] : msg;
+    }
+
+    private async Task RecordOperationFailedProtocolAsync(
+        Guid? protocolId,
+        string filePath,
+        Exception ex,
+        CancellationToken ct)
+    {
+        if (!protocolId.HasValue)
+        {
+            return;
+        }
+
+        var details = JsonSerializer.Serialize(new { filePath, operationType = "retrieve_and_reconsider" });
+        await protocolRecorder.RecordMemoryEventAsync(
+            protocolId.Value,
+            "memory_operation_failed",
+            details,
+            ex.Message,
+            ct);
     }
 
     // Resolves the query embedding used for semantic duplicate-suppression lookup, marking the
