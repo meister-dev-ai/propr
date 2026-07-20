@@ -1716,8 +1716,6 @@ public sealed partial class ReviewOrchestrationService(
 
         foreach (var thread in reviewerThreads)
         {
-            var stored = scan?.Threads.FirstOrDefault(t => t.ThreadId == thread.ThreadId);
-
             // Skip threads that ADO already reports as resolved — no AI call needed.
             if (IsResolvedStatus(thread.Status))
             {
@@ -1726,112 +1724,175 @@ public sealed partial class ReviewOrchestrationService(
 
             try
             {
-                ThreadResolutionResult resolution;
-
-                var storedCount = stored?.LastSeenReplyCount ?? 0;
-                var userReplyCount = CountNonReviewerComments(
-                    thread.Comments,
+                await this.EvaluateReviewerThreadAsync(
+                    job,
+                    pr,
+                    thread,
+                    scan,
+                    isNewIteration,
+                    behavior,
                     reviewerId,
-                    pr.AuthorizedIdentityId,
-                    pr.AuthorizedIdentityName);
-                var hasNewReplies = userReplyCount > storedCount;
-
-                var evaluationKind = isNewIteration ? "code-change" : "conversational";
-                Guid? protocolId = null;
-                try
-                {
-                    protocolId = await protocolRecorder.BeginAsync(
-                        job.Id,
-                        job.RetryCount + 1,
-                        $"thread-{thread.ThreadId}-{evaluationKind}",
-                        ct: ct);
-                }
-                catch (Exception ex)
-                {
-                    LogProtocolBeginFailed(logger, job.Id, ex);
-                }
-
-                if (isNewIteration)
-                {
-                    resolution = await resolutionCore.EvaluateCodeChangeAsync(
-                        thread,
-                        pr,
-                        chatClient,
-                        job.AiModel ?? this._opts.ModelId,
-                        ct);
-                }
-                else if (hasNewReplies)
-                {
-                    resolution = await resolutionCore.EvaluateConversationalReplyAsync(
-                        thread,
-                        chatClient,
-                        job.AiModel ?? this._opts.ModelId,
-                        ct);
-                }
-                else
-                {
-                    if (protocolId.HasValue)
-                    {
-                        await protocolRecorder.SetCompletedAsync(protocolId.Value, "Skipped", 0, 0, 0, 0, null, ct);
-                    }
-
-                    continue;
-                }
-
-                if (protocolId.HasValue)
-                {
-                    await protocolRecorder.RecordAiCallAsync(
-                        protocolId.Value,
-                        1,
-                        resolution.InputTokens,
-                        resolution.OutputTokens,
-                        null,
-                        null,
-                        resolution.ReplyText,
-                        ct,
-                        cachedInputTokens: resolution.CachedInputTokens,
-                        cacheWriteTokens: resolution.CacheWriteTokens,
-                        reasoningTokens: resolution.ReasoningTokens);
-                    var outcome = resolution.IsResolved ? "Resolved" : "NotResolved";
-                    await protocolRecorder.SetCompletedAsync(
-                        protocolId.Value,
-                        outcome,
-                        resolution.InputTokens ?? 0,
-                        resolution.OutputTokens ?? 0,
-                        1,
-                        0,
-                        null,
-                        ct,
-                        resolution.CachedInputTokens ?? 0,
-                        resolution.CachedInputTokens.HasValue ? CacheObservabilityStatus.Observable : CacheObservabilityStatus.Unobservable,
-                        resolution.CacheWriteTokens ?? 0,
-                        resolution.ReasoningTokens ?? 0);
-                }
-
-                var resolvedAction = BuildResolvedThreadAction(thread, behavior, resolution, canReply);
-                if (resolvedAction.ShouldPostReply && resolvedAction.ReplyText is not null)
-                {
-                    await providerRegistry.GetReviewThreadReplyPublisher(job.Provider)
-                        .ReplyAsync(job.ClientId, CreateReviewThreadRef(job, thread), resolvedAction.ReplyText, ct);
-                }
-
-                if (resolvedAction.ShouldResolveThread)
-                {
-                    await providerRegistry.GetReviewThreadStatusWriter(job.Provider)
-                        .UpdateThreadStatusAsync(job.ClientId, CreateReviewThreadRef(job, thread), "fixed", ct);
-
-                    LogThreadResolved(logger, thread.ThreadId, job.PullRequestId);
-                }
-                else if (canReply && !resolution.IsResolved && resolution.ReplyText is not null && !isNewIteration)
-                {
-                    await providerRegistry.GetReviewThreadReplyPublisher(job.Provider)
-                        .ReplyAsync(job.ClientId, CreateReviewThreadRef(job, thread), resolution.ReplyText, ct);
-                }
+                    canReply,
+                    chatClient,
+                    ct);
             }
             catch (Exception ex)
             {
                 LogThreadEvaluationFailed(logger, thread.ThreadId, job.PullRequestId, ex);
             }
+        }
+    }
+
+    private async Task EvaluateReviewerThreadAsync(
+        ReviewJob job,
+        PullRequest pr,
+        PrCommentThread thread,
+        ReviewPrScan? scan,
+        bool isNewIteration,
+        CommentResolutionBehavior behavior,
+        Guid? reviewerId,
+        bool canReply,
+        IChatClient chatClient,
+        CancellationToken ct)
+    {
+        var stored = scan?.Threads.FirstOrDefault(t => t.ThreadId == thread.ThreadId);
+        var storedCount = stored?.LastSeenReplyCount ?? 0;
+        var userReplyCount = CountNonReviewerComments(
+            thread.Comments,
+            reviewerId,
+            pr.AuthorizedIdentityId,
+            pr.AuthorizedIdentityName);
+        var hasNewReplies = userReplyCount > storedCount;
+
+        var protocolId = await this.BeginThreadProtocolAsync(job, thread, isNewIteration, ct);
+
+        if (!isNewIteration && !hasNewReplies)
+        {
+            await this.MarkThreadProtocolSkippedAsync(protocolId, ct);
+            return;
+        }
+
+        var resolution = await this.EvaluateThreadAsync(job, thread, pr, chatClient, isNewIteration, hasNewReplies, ct);
+
+        await this.RecordEvaluationProtocolIfNeededAsync(protocolId, resolution, ct);
+        await this.ApplyResolvedThreadActionAsync(job, thread, behavior, resolution, canReply, isNewIteration, ct);
+    }
+
+    private async Task<Guid?> BeginThreadProtocolAsync(
+        ReviewJob job,
+        PrCommentThread thread,
+        bool isNewIteration,
+        CancellationToken ct)
+    {
+        var evaluationKind = isNewIteration ? "code-change" : "conversational";
+        try
+        {
+            return await protocolRecorder.BeginAsync(
+                job.Id,
+                job.RetryCount + 1,
+                $"thread-{thread.ThreadId}-{evaluationKind}",
+                ct: ct);
+        }
+        catch (Exception ex)
+        {
+            LogProtocolBeginFailed(logger, job.Id, ex);
+            return null;
+        }
+    }
+
+    private async Task MarkThreadProtocolSkippedAsync(Guid? protocolId, CancellationToken ct)
+    {
+        if (!protocolId.HasValue)
+        {
+            return;
+        }
+
+        await protocolRecorder.SetCompletedAsync(protocolId.Value, "Skipped", 0, 0, 0, 0, null, ct);
+    }
+
+    private async Task<ThreadResolutionResult> EvaluateThreadAsync(
+        ReviewJob job,
+        PrCommentThread thread,
+        PullRequest pr,
+        IChatClient chatClient,
+        bool isNewIteration,
+        bool hasNewReplies,
+        CancellationToken ct)
+    {
+        var modelId = job.AiModel ?? this._opts.ModelId;
+        return isNewIteration
+            ? await resolutionCore.EvaluateCodeChangeAsync(thread, pr, chatClient, modelId, ct)
+            : await resolutionCore.EvaluateConversationalReplyAsync(thread, chatClient, modelId, ct);
+    }
+
+    private async Task RecordEvaluationProtocolIfNeededAsync(
+        Guid? protocolId,
+        ThreadResolutionResult resolution,
+        CancellationToken ct)
+    {
+        if (!protocolId.HasValue)
+        {
+            return;
+        }
+
+        await protocolRecorder.RecordAiCallAsync(
+            protocolId.Value,
+            1,
+            resolution.InputTokens,
+            resolution.OutputTokens,
+            null,
+            null,
+            resolution.ReplyText,
+            ct,
+            cachedInputTokens: resolution.CachedInputTokens,
+            cacheWriteTokens: resolution.CacheWriteTokens,
+            reasoningTokens: resolution.ReasoningTokens);
+
+        var outcome = resolution.IsResolved ? "Resolved" : "NotResolved";
+        await protocolRecorder.SetCompletedAsync(
+            protocolId.Value,
+            outcome,
+            resolution.InputTokens ?? 0,
+            resolution.OutputTokens ?? 0,
+            1,
+            0,
+            null,
+            ct,
+            resolution.CachedInputTokens ?? 0,
+            resolution.CachedInputTokens.HasValue ? CacheObservabilityStatus.Observable : CacheObservabilityStatus.Unobservable,
+            resolution.CacheWriteTokens ?? 0,
+            resolution.ReasoningTokens ?? 0);
+    }
+
+    private async Task ApplyResolvedThreadActionAsync(
+        ReviewJob job,
+        PrCommentThread thread,
+        CommentResolutionBehavior behavior,
+        ThreadResolutionResult resolution,
+        bool canReply,
+        bool isNewIteration,
+        CancellationToken ct)
+    {
+        var resolvedAction = BuildResolvedThreadAction(thread, behavior, resolution, canReply);
+        if (resolvedAction.ShouldPostReply && resolvedAction.ReplyText is not null)
+        {
+            await providerRegistry.GetReviewThreadReplyPublisher(job.Provider)
+                .ReplyAsync(job.ClientId, CreateReviewThreadRef(job, thread), resolvedAction.ReplyText, ct);
+        }
+
+        if (resolvedAction.ShouldResolveThread)
+        {
+            await providerRegistry.GetReviewThreadStatusWriter(job.Provider)
+                .UpdateThreadStatusAsync(job.ClientId, CreateReviewThreadRef(job, thread), "fixed", ct);
+
+            LogThreadResolved(logger, thread.ThreadId, job.PullRequestId);
+            return;
+        }
+
+        if (canReply && !resolution.IsResolved && resolution.ReplyText is not null && !isNewIteration)
+        {
+            await providerRegistry.GetReviewThreadReplyPublisher(job.Provider)
+                .ReplyAsync(job.ClientId, CreateReviewThreadRef(job, thread), resolution.ReplyText, ct);
         }
     }
 
