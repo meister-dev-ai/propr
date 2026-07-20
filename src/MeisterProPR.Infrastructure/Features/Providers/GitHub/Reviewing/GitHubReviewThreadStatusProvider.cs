@@ -52,9 +52,12 @@ internal sealed class GitHubReviewThreadStatusProvider(
                     comment.Author?.Login,
                     authoredLogin,
                     StringComparison.OrdinalIgnoreCase)),
-                // An outdated review thread is one whose diff hunk is no longer part of the current diff,
-                // i.e. the anchored code changed after the finding was raised.
-                thread.IsOutdated ? ThreadAnchorCodeChange.Changed : ThreadAnchorCodeChange.Unchanged))
+                // GitHub's isOutdated only means the thread's diff hunk no longer maps onto the current
+                // diff: it is also set by rebases and unrelated churn, and never confirms the flagged
+                // concern was addressed. Treat an outdated thread as undetermined rather than a corroborated
+                // code change, so a claimed fix is not trusted as grounded without stronger evidence. A
+                // thread that is still current genuinely has an unchanged anchor.
+                thread.IsOutdated ? ThreadAnchorCodeChange.Unknown : ThreadAnchorCodeChange.Unchanged))
             .ToList()
             .AsReadOnly();
     }

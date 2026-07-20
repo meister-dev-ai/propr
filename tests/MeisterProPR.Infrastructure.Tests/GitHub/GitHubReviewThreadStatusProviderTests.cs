@@ -455,7 +455,7 @@ public sealed class GitHubReviewThreadStatusProviderTests
     }
 
     [Fact]
-    public async Task GetReviewerThreadStatusesAsync_OutdatedThread_ReportsCodeChanged()
+    public async Task GetReviewerThreadStatusesAsync_OutdatedThread_ReportsUnknownRatherThanChanged()
     {
         var clientId = Guid.NewGuid();
         var host = new ProviderHostRef(ScmProvider.GitHub, "https://github.com");
@@ -536,9 +536,14 @@ public sealed class GitHubReviewThreadStatusProviderTests
             CancellationToken.None);
 
         Assert.Equal(2, result.Count);
+
+        // An outdated thread is undetermined, not a corroborated code change: isOutdated is too weak a
+        // signal to trust a claimed fix as grounded (it fires on rebases/unrelated churn too).
         Assert.Equal(
-            ThreadAnchorCodeChange.Changed,
+            ThreadAnchorCodeChange.Unknown,
             result.Single(entry => entry.ThreadId == 501).CodeChangedSinceRaised);
+
+        // A thread that is still current genuinely has an unchanged anchor.
         Assert.Equal(
             ThreadAnchorCodeChange.Unchanged,
             result.Single(entry => entry.ThreadId == 601).CodeChangedSinceRaised);
