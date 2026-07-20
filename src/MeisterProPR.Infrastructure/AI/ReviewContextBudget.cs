@@ -189,13 +189,7 @@ public static class ReviewContextBudget
         string? tokenizerName,
         int inputBudget)
     {
-        var perMessageTokens = new int[messages.Count];
-        var total = 0;
-        for (var i = 0; i < messages.Count; i++)
-        {
-            perMessageTokens[i] = EstimateMessageTokens(tokenizerName, messages[i]);
-            total += perMessageTokens[i];
-        }
+        var (perMessageTokens, total) = MeasureMessageTokens(messages, tokenizerName);
 
         var originalTotal = total;
         if (total <= inputBudget)
@@ -204,6 +198,41 @@ public static class ReviewContextBudget
         }
 
         var working = messages.ToList();
+        var compacted = CompactToolResultsPass(working, perMessageTokens, tokenizerName, ref total, inputBudget);
+
+        // Fallback: if compacting every tool result was not enough, compact older plain-text assistant turns
+        // (oldest-first). The most recent assistant turn and any assistant message carrying a function call are
+        // preserved so tool-call/result pairing and the latest reasoning survive.
+        if (total > inputBudget)
+        {
+            compacted += CompactOlderAssistantPass(working, perMessageTokens, tokenizerName, ref total, inputBudget);
+        }
+
+        return new ToolHistoryTrimResult(working, compacted > 0, originalTotal, total, compacted);
+    }
+
+    private static (int[] PerMessageTokens, int Total) MeasureMessageTokens(
+        IReadOnlyList<ChatMessage> messages,
+        string? tokenizerName)
+    {
+        var perMessageTokens = new int[messages.Count];
+        var total = 0;
+        for (var i = 0; i < messages.Count; i++)
+        {
+            perMessageTokens[i] = EstimateMessageTokens(tokenizerName, messages[i]);
+            total += perMessageTokens[i];
+        }
+
+        return (perMessageTokens, total);
+    }
+
+    private static int CompactToolResultsPass(
+        List<ChatMessage> working,
+        int[] perMessageTokens,
+        string? tokenizerName,
+        ref int total,
+        int inputBudget)
+    {
         var compacted = 0;
         for (var i = 0; i < working.Count && total > inputBudget; i++)
         {
@@ -221,47 +250,57 @@ public static class ReviewContextBudget
             compacted++;
         }
 
-        // Fallback: if compacting every tool result was not enough, compact older plain-text assistant turns
-        // (oldest-first). The most recent assistant turn and any assistant message carrying a function call are
-        // preserved so tool-call/result pairing and the latest reasoning survive.
-        if (total > inputBudget)
+        return compacted;
+    }
+
+    private static int CompactOlderAssistantPass(
+        List<ChatMessage> working,
+        int[] perMessageTokens,
+        string? tokenizerName,
+        ref int total,
+        int inputBudget)
+    {
+        var lastAssistantIndex = FindLastAssistantIndex(working);
+
+        var compacted = 0;
+        for (var i = 0; i < working.Count && total > inputBudget; i++)
         {
-            var lastAssistantIndex = -1;
-            for (var i = working.Count - 1; i >= 0; i--)
+            if (i == lastAssistantIndex)
             {
-                if (working[i].Role == ChatRole.Assistant)
-                {
-                    lastAssistantIndex = i;
-                    break;
-                }
+                continue;
             }
 
-            for (var i = 0; i < working.Count && total > inputBudget; i++)
+            var message = working[i];
+            if (message.Role != ChatRole.Assistant
+                || message.Contents.OfType<FunctionCallContent>().Any()
+                || string.IsNullOrEmpty(message.Text)
+                || message.Text == CompactedAssistantPlaceholder)
             {
-                if (i == lastAssistantIndex)
-                {
-                    continue;
-                }
+                continue;
+            }
 
-                var message = working[i];
-                if (message.Role != ChatRole.Assistant
-                    || message.Contents.OfType<FunctionCallContent>().Any()
-                    || string.IsNullOrEmpty(message.Text)
-                    || message.Text == CompactedAssistantPlaceholder)
-                {
-                    continue;
-                }
+            var compactedMessage = new ChatMessage(ChatRole.Assistant, CompactedAssistantPlaceholder);
+            var newTokens = EstimateMessageTokens(tokenizerName, compactedMessage);
+            total += newTokens - perMessageTokens[i];
+            perMessageTokens[i] = newTokens;
+            working[i] = compactedMessage;
+            compacted++;
+        }
 
-                var compactedMessage = new ChatMessage(ChatRole.Assistant, CompactedAssistantPlaceholder);
-                var newTokens = EstimateMessageTokens(tokenizerName, compactedMessage);
-                total += newTokens - perMessageTokens[i];
-                perMessageTokens[i] = newTokens;
-                working[i] = compactedMessage;
-                compacted++;
+        return compacted;
+    }
+
+    private static int FindLastAssistantIndex(IReadOnlyList<ChatMessage> working)
+    {
+        for (var i = working.Count - 1; i >= 0; i--)
+        {
+            if (working[i].Role == ChatRole.Assistant)
+            {
+                return i;
             }
         }
 
-        return new ToolHistoryTrimResult(working, compacted > 0, originalTotal, total, compacted);
+        return -1;
     }
 
     private static int EstimateMinimalPayloadTokens(IReadOnlyList<ChatMessage> messages, string? tokenizerName)
