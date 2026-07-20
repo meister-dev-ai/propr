@@ -23,6 +23,17 @@ describe('budget cap input conversion', () => {
     expect(capFromInput('0')).toBe(0)
   })
 
+  // A <input type="number"> bound with v-model coerces its value to a number in the browser, so an edited cap
+  // reaches capFromInput as a number rather than a string. It must handle that instead of throwing on .trim(),
+  // otherwise entering any value throws during render and the Save button never activates.
+  it('capFromInput accepts a number (as a number input yields) without throwing', () => {
+    expect(capFromInput(50 as unknown as string)).toBe(50)
+    expect(capFromInput(0 as unknown as string)).toBe(0)
+    expect(capFromInput(12.5 as unknown as string)).toBe(12.5)
+    expect(capFromInput(null as unknown as string)).toBeNull()
+    expect(capFromInput(undefined as unknown as string)).toBeNull()
+  })
+
   it('a stored cap round-trips through the input and back unchanged', () => {
     expect(capFromInput(capToInput(80))).toBe(80)
     expect(capFromInput(capToInput(0))).toBe(0)

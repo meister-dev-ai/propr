@@ -44,8 +44,8 @@
                             @click="activeTab = 'ai'">
                             <i class="fi fi-rr-robot"></i> AI Providers
                         </button>
-                        <button class="sidebar-nav-link" :class="{ active: activeTab === 'budget' }"
-                            @click="activeTab = 'budget'">
+                        <button v-if="isBudgetingAvailable" class="sidebar-nav-link"
+                            :class="{ active: activeTab === 'budget' }" @click="activeTab = 'budget'">
                             <i class="fi fi-rr-badge-dollar"></i> Budget
                         </button>
                     </div>
@@ -187,6 +187,7 @@ const {
     activeTab,
     providerUpgradeMessage,
     isCrawlConfigsAvailable,
+    isBudgetingAvailable,
     isUsageTabAvailable,
 } = vm;
 

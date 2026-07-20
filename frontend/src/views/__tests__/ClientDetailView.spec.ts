@@ -228,4 +228,27 @@ describe('ClientDetailView', () => {
     })
   })
 
+  it('enables the budget Save button after entering a cap value', async () => {
+    hasClientRoleMock.mockImplementation((_clientId: string, minRole: number) => minRole <= 1)
+
+    const wrapper = await mountView()
+    await flushPromises()
+
+    const budgetNav = wrapper.findAll('.sidebar-nav-link').find((b) => b.text().includes('Budget'))
+    expect(budgetNav).toBeTruthy()
+    await budgetNav!.trigger('click')
+    await flushPromises()
+
+    const saveBtn = wrapper.find('button.budget-save-btn')
+    expect(saveBtn.exists()).toBe(true)
+    // Nothing changed yet, so Save starts disabled.
+    expect(saveBtn.attributes('disabled')).toBeDefined()
+
+    await wrapper.find('input[name="monthlyBudgetSoftCapUsd"]').setValue('50')
+    await flushPromises()
+
+    // Entering a cap makes the config dirty, so Save must activate.
+    expect(saveBtn.attributes('disabled')).toBeUndefined()
+  })
+
 })

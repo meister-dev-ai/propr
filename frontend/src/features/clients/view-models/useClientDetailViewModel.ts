@@ -228,9 +228,16 @@ export function capToInput(value: number | null | undefined): string {
   return value == null ? '' : String(value)
 }
 
-/** Parses a USD cap text input back to a number, or null when blank ("no limit"). */
-export function capFromInput(value: string): number | null {
-  const trimmed = value.trim()
+/**
+ * Parses a USD cap input back to a number, or null when blank ("no limit"). Accepts a number as well as a
+ * string because a `<input type="number">` bound with v-model coerces its value to a number in the browser, so
+ * an edited cap arrives here as a number rather than the string it started as.
+ */
+export function capFromInput(value: string | number | null | undefined): number | null {
+  if (typeof value === 'number') {
+    return Number.isFinite(value) ? value : null
+  }
+  const trimmed = (value ?? '').trim()
   return trimmed === '' ? null : Number(trimmed)
 }
 
