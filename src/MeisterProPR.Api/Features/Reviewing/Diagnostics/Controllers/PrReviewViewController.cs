@@ -5,6 +5,7 @@ using System.Text.Json;
 using MeisterProPR.Api.Extensions;
 using MeisterProPR.Application.DTOs;
 using MeisterProPR.Application.Interfaces;
+using MeisterProPR.Domain.Entities;
 using MeisterProPR.Domain.Enums;
 using MeisterProPR.Domain.ValueObjects;
 using MeisterProPR.Infrastructure.Features.Reviewing.Diagnostics.Persistence;
@@ -72,6 +73,82 @@ public sealed class PrReviewViewController(
             pageSize,
             cancellationToken);
 
+        var aggregation = AggregateTokenBreakdown(jobs);
+        var breakdownConsistent = aggregation.Breakdown.Count == 0 ||
+                                  (aggregation.BreakdownInput == aggregation.TotalInput
+                                   && aggregation.BreakdownOutput == aggregation.TotalOutput);
+        var costRollup = ComputeCostRollup(aggregation.Breakdown);
+
+        var originatedPaged = await memoryRepository.GetPagedAsync(
+            clientId,
+            null,
+            1,
+            50,
+            MemorySource.ThreadResolved,
+            query.RepositoryId,
+            query.PullRequestId.Value,
+            cancellationToken);
+        var originatedMemories = originatedPaged.Items
+            .Select(r => new ThreadMemorySummaryDto(
+                r.Id,
+                r.ThreadId,
+                r.FilePath,
+                r.ResolutionSummary.Length > 200 ? r.ResolutionSummary[..200] : r.ResolutionSummary,
+                r.MemorySource,
+                r.UpdatedAt))
+            .ToList()
+            .AsReadOnly();
+
+        var contributingMemoryIds = CollectContributingMemoryIds(jobs);
+        var originatedIds = new HashSet<Guid>(originatedMemories.Select(m => m.MemoryRecordId));
+        var externalContributingIds = contributingMemoryIds
+            .Where(id => !originatedIds.Contains(id))
+            .Take(50)
+            .ToList();
+
+        var contributingMemories = await ResolveContributingMemoriesAsync(
+            memoryRepository,
+            clientId,
+            externalContributingIds,
+            cancellationToken);
+
+        var jobSummaries = jobs.Select(j => new PrJobSummaryDto(
+                j.Id,
+                j.Status,
+                j.SubmittedAt,
+                j.CompletedAt,
+                j.Result?.Comments.Count,
+                j.TotalInputTokensAggregated ?? j.Protocols.Sum(p => p.TotalInputTokens),
+                j.TotalOutputTokensAggregated ?? j.Protocols.Sum(p => p.TotalOutputTokens),
+                j.TokenBreakdown,
+                j.TotalEstimatedCostUsd,
+                j.CostIsApproximate))
+            .ToList()
+            .AsReadOnly();
+
+        var dto = new PrReviewViewDto(
+            query.ProviderScopePath,
+            query.ProviderProjectKey,
+            query.RepositoryId,
+            query.PullRequestId.Value,
+            jobs.Count,
+            aggregation.TotalInput,
+            aggregation.TotalOutput,
+            aggregation.Breakdown.AsReadOnly(),
+            breakdownConsistent,
+            jobSummaries,
+            originatedPaged.TotalCount,
+            originatedMemories,
+            externalContributingIds.Count,
+            contributingMemories,
+            costRollup.TotalEstimatedCostUsd,
+            costRollup.CostIsApproximate);
+
+        return this.Ok(dto);
+    }
+
+    private static TokenAggregation AggregateTokenBreakdown(IReadOnlyList<ReviewJob> jobs)
+    {
         var breakdown = new List<TokenBreakdownEntry>();
         long totalInput = 0;
         long totalOutput = 0;
@@ -103,11 +180,16 @@ public sealed class PrReviewViewController(
             }
         }
 
-        var breakdownInput = breakdown.Sum(e => e.TotalInputTokens);
-        var breakdownOutput = breakdown.Sum(e => e.TotalOutputTokens);
-        var breakdownConsistent = breakdown.Count == 0 ||
-                                  (breakdownInput == totalInput && breakdownOutput == totalOutput);
+        return new TokenAggregation(
+            breakdown,
+            totalInput,
+            totalOutput,
+            breakdown.Sum(e => e.TotalInputTokens),
+            breakdown.Sum(e => e.TotalOutputTokens));
+    }
 
+    private static CostRollup ComputeCostRollup(IReadOnlyList<TokenBreakdownEntry> breakdown)
+    {
         // Null-aware cost rollup: null when no tier is priced; approximate when any tier is
         // approximate or the PR mixes priced and unpriced tiers.
         var anyPricedTier = breakdown.Any(e => e.EstimatedCostUsd.HasValue);
@@ -116,27 +198,11 @@ public sealed class PrReviewViewController(
             ? breakdown.Sum(e => e.EstimatedCostUsd ?? 0m)
             : (decimal?)null;
         var costIsApproximate = breakdown.Any(e => e.CostIsApproximate) || (anyPricedTier && anyUnpricedTier);
+        return new CostRollup(totalEstimatedCostUsd, costIsApproximate);
+    }
 
-        var originatedPaged = await memoryRepository.GetPagedAsync(
-            clientId,
-            null,
-            1,
-            50,
-            MemorySource.ThreadResolved,
-            query.RepositoryId,
-            query.PullRequestId.Value,
-            cancellationToken);
-        var originatedMemories = originatedPaged.Items
-            .Select(r => new ThreadMemorySummaryDto(
-                r.Id,
-                r.ThreadId,
-                r.FilePath,
-                r.ResolutionSummary.Length > 200 ? r.ResolutionSummary[..200] : r.ResolutionSummary,
-                r.MemorySource,
-                r.UpdatedAt))
-            .ToList()
-            .AsReadOnly();
-
+    private static HashSet<Guid> CollectContributingMemoryIds(IReadOnlyList<ReviewJob> jobs)
+    {
         var contributingMemoryIds = new HashSet<Guid>();
         foreach (var job in jobs)
         {
@@ -145,113 +211,92 @@ public sealed class PrReviewViewController(
                 foreach (var ev in protocol.Events.Where(e =>
                              e.Name == ReviewProtocolEventNames.MemoryReconsiderationCompleted && e.InputTextSample != null))
                 {
-                    try
-                    {
-                        var doc = JsonDocument.Parse(ev.InputTextSample!);
-                        if (doc.RootElement.TryGetProperty("contributingMemoryIds", out var idsEl))
-                        {
-                            foreach (var idEl in idsEl.EnumerateArray())
-                            {
-                                if (idEl.TryGetGuid(out var memId))
-                                {
-                                    contributingMemoryIds.Add(memId);
-                                }
-                            }
-                        }
-                    }
-                    catch (JsonException)
-                    {
-                        // The captured event body is a best-effort diagnostic sample; skip it if it isn't valid JSON.
-                    }
+                    AddContributingMemoryIdsFromEvent(ev.InputTextSample!, contributingMemoryIds);
                 }
             }
         }
 
-        var originatedIds = new HashSet<Guid>(originatedMemories.Select(m => m.MemoryRecordId));
-        var externalContributingIds = contributingMemoryIds
-            .Where(id => !originatedIds.Contains(id))
-            .Take(50)
-            .ToList();
+        return contributingMemoryIds;
+    }
 
-        var contributingMemories = new List<ContributingMemorySummaryDto>();
-
-        if (externalContributingIds.Count > 0)
+    private static void AddContributingMemoryIdsFromEvent(string inputTextSample, HashSet<Guid> sink)
+    {
+        try
         {
-            var remainingIds = new HashSet<Guid>(externalContributingIds);
-            var fetchPage = 1;
-            const int fetchPageSize = 200;
-
-            // The contributing-memory IDs come from request-scoped protocol JSON, so without a bound a
-            // high-cardinality set could page through the entire client-wide memory corpus in a single
-            // request. Cap the pages scanned; any IDs unresolved within this window are omitted from the
-            // detail list (the count reported above stays accurate).
-            const int maxPagesToScan = 25;
-            while (remainingIds.Count > 0 && fetchPage <= maxPagesToScan)
+            var doc = JsonDocument.Parse(inputTextSample);
+            if (!doc.RootElement.TryGetProperty("contributingMemoryIds", out var idsEl))
             {
-                var batch = await memoryRepository.GetPagedAsync(
-                    clientId,
-                    null,
-                    fetchPage,
-                    fetchPageSize,
-                    ct: cancellationToken);
-                foreach (var r in batch.Items)
-                {
-                    if (remainingIds.Remove(r.Id))
-                    {
-                        contributingMemories.Add(
-                            new ContributingMemorySummaryDto(
-                                r.Id,
-                                r.MemorySource,
-                                r.RepositoryId,
-                                r.PullRequestId > 0 ? r.PullRequestId : null,
-                                r.FilePath,
-                                r.ResolutionSummary.Length > 200 ? r.ResolutionSummary[..200] : r.ResolutionSummary,
-                                null));
-                    }
-                }
+                return;
+            }
 
-                if (fetchPage * fetchPageSize >= batch.TotalCount || remainingIds.Count == 0)
+            foreach (var idEl in idsEl.EnumerateArray())
+            {
+                if (idEl.TryGetGuid(out var memId))
                 {
-                    break;
+                    sink.Add(memId);
                 }
-
-                fetchPage++;
             }
         }
+        catch (JsonException)
+        {
+            // The captured event body is a best-effort diagnostic sample; skip it if it isn't valid JSON.
+        }
+    }
 
-        var jobSummaries = jobs.Select(j => new PrJobSummaryDto(
-                j.Id,
-                j.Status,
-                j.SubmittedAt,
-                j.CompletedAt,
-                j.Result?.Comments.Count,
-                j.TotalInputTokensAggregated ?? j.Protocols.Sum(p => p.TotalInputTokens),
-                j.TotalOutputTokensAggregated ?? j.Protocols.Sum(p => p.TotalOutputTokens),
-                j.TokenBreakdown,
-                j.TotalEstimatedCostUsd,
-                j.CostIsApproximate))
-            .ToList()
-            .AsReadOnly();
+    private static async Task<IReadOnlyList<ContributingMemorySummaryDto>> ResolveContributingMemoriesAsync(
+        IThreadMemoryRepository memoryRepository,
+        Guid clientId,
+        IReadOnlyList<Guid> externalContributingIds,
+        CancellationToken cancellationToken)
+    {
+        if (externalContributingIds.Count == 0)
+        {
+            return [];
+        }
 
-        var dto = new PrReviewViewDto(
-            query.ProviderScopePath,
-            query.ProviderProjectKey,
-            query.RepositoryId,
-            query.PullRequestId.Value,
-            jobs.Count,
-            totalInput,
-            totalOutput,
-            breakdown.AsReadOnly(),
-            breakdownConsistent,
-            jobSummaries,
-            originatedPaged.TotalCount,
-            originatedMemories,
-            externalContributingIds.Count,
-            contributingMemories.AsReadOnly(),
-            totalEstimatedCostUsd,
-            costIsApproximate);
+        var remainingIds = new HashSet<Guid>(externalContributingIds);
+        var contributingMemories = new List<ContributingMemorySummaryDto>();
+        var fetchPage = 1;
+        const int fetchPageSize = 200;
 
-        return this.Ok(dto);
+        // The contributing-memory IDs come from request-scoped protocol JSON, so without a bound a
+        // high-cardinality set could page through the entire client-wide memory corpus in a single
+        // request. Cap the pages scanned; any IDs unresolved within this window are omitted from the
+        // detail list (the count reported above stays accurate.
+        const int maxPagesToScan = 25;
+        while (remainingIds.Count > 0 && fetchPage <= maxPagesToScan)
+        {
+            var batch = await memoryRepository.GetPagedAsync(
+                clientId,
+                null,
+                fetchPage,
+                fetchPageSize,
+                ct: cancellationToken);
+            foreach (var r in batch.Items)
+            {
+                if (remainingIds.Remove(r.Id))
+                {
+                    contributingMemories.Add(
+                        new ContributingMemorySummaryDto(
+                            r.Id,
+                            r.MemorySource,
+                            r.RepositoryId,
+                            r.PullRequestId > 0 ? r.PullRequestId : null,
+                            r.FilePath,
+                            r.ResolutionSummary.Length > 200 ? r.ResolutionSummary[..200] : r.ResolutionSummary,
+                            null));
+                }
+            }
+
+            if (fetchPage * fetchPageSize >= batch.TotalCount || remainingIds.Count == 0)
+            {
+                break;
+            }
+
+            fetchPage++;
+        }
+
+        return contributingMemories;
     }
 
     private static decimal? SumNullableCost(decimal? left, decimal? right)
@@ -263,6 +308,15 @@ public sealed class PrReviewViewController(
 
         return (left ?? 0m) + (right ?? 0m);
     }
+
+    private sealed record TokenAggregation(
+        List<TokenBreakdownEntry> Breakdown,
+        long TotalInput,
+        long TotalOutput,
+        long BreakdownInput,
+        long BreakdownOutput);
+
+    private sealed record CostRollup(decimal? TotalEstimatedCostUsd, bool CostIsApproximate);
 }
 
 /// <summary>Query string for <see cref="PrReviewViewController.GetPrView" />.</summary>
