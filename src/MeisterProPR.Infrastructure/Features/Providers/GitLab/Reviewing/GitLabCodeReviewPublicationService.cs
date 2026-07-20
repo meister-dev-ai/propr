@@ -56,133 +56,188 @@ internal sealed class GitLabCodeReviewPublicationService(
         var nonInlineCommentCount = result.Comments.Count - inlineComments.Count;
         var totalDiscussions = inlineComments.Count + (string.IsNullOrWhiteSpace(summaryBody) ? 0 : 1);
 
-        var postedDiscussionCount = 0;
-        var postedInlineCount = 0;
-        var summaryPosted = false;
-        var postedComments = new List<PostedReviewCommentRef>();
-        var failures = new List<ReviewCommentPostingFailure>();
-        var failureExceptions = new List<Exception>();
+        var state = new PublicationState();
 
         // Post the summary discussion first — it does not depend on the inline diff revision, so an inline
         // problem cannot cost the summary and a summary rejection cannot abort the inline comments.
-        if (!string.IsNullOrWhiteSpace(summaryBody))
-        {
-            try
-            {
-                var captured = await PostDiscussionAsync(
-                    new GitLabDiscussionPostRequest(
-                        client,
-                        context.Connection.Secret,
-                        discussionUri,
-                        new GitLabDiscussionRequest(summaryBody, null),
-                        GitLabDiscussionTarget.Overview(1, totalDiscussions),
-                        postedDiscussionCount,
-                        null,
-                        null),
-                    ct);
-                if (captured is not null)
-                {
-                    postedComments.Add(captured);
-                }
-
-                postedDiscussionCount++;
-                summaryPosted = true;
-            }
-            catch (Exception ex) when (!ct.IsCancellationRequested)
-            {
-                failures.Add(new ReviewCommentPostingFailure("summary", null, null, ex.Message));
-                failureExceptions.Add(ex);
-            }
-        }
+        await this.PostSummaryIfNeededAsync(
+            client,
+            context.Connection.Secret,
+            discussionUri,
+            summaryBody,
+            totalDiscussions,
+            state,
+            ct);
 
         // Inline discussions need the merge request's latest diff revision. If that lookup fails, record it
         // as a per-thread failure for each inline comment rather than aborting the whole publish.
         if (inlineComments.Count > 0)
         {
-            GitLabInlineRevision? inlineRevision = null;
-            Exception? revisionFailure = null;
-            try
-            {
-                inlineRevision = await GetLatestInlineRevisionAsync(client, context.Connection.Secret, review, ct);
-            }
-            catch (Exception ex) when (!ct.IsCancellationRequested)
-            {
-                revisionFailure = ex;
-            }
-
-            foreach (var comment in inlineComments)
-            {
-                var normalizedPath = NormalizePath(comment.FilePath!);
-                if (inlineRevision is null)
-                {
-                    failures.Add(new ReviewCommentPostingFailure("inline", normalizedPath, comment.LineNumber, revisionFailure!.Message));
-                    continue;
-                }
-
-                try
-                {
-                    var captured = await PostDiscussionAsync(
-                        new GitLabDiscussionPostRequest(
-                            client,
-                            context.Connection.Secret,
-                            discussionUri,
-                            new GitLabDiscussionRequest(
-                                $"{FormatSeverity(comment.Severity)}: {comment.Message}",
-                                new GitLabDiscussionPosition(
-                                    "text",
-                                    inlineRevision.BaseSha,
-                                    inlineRevision.HeadSha,
-                                    inlineRevision.StartSha,
-                                    normalizedPath,
-                                    normalizedPath,
-                                    comment.LineNumber)),
-                            GitLabDiscussionTarget.Inline(
-                                postedDiscussionCount + 1,
-                                totalDiscussions,
-                                normalizedPath,
-                                comment.LineNumber!.Value),
-                            postedDiscussionCount,
-                            normalizedPath,
-                            comment.LineNumber),
-                        ct);
-                    if (captured is not null)
-                    {
-                        postedComments.Add(captured);
-                    }
-
-                    postedDiscussionCount++;
-                    postedInlineCount++;
-                }
-                catch (Exception ex) when (!ct.IsCancellationRequested)
-                {
-                    failures.Add(new ReviewCommentPostingFailure("inline", normalizedPath, comment.LineNumber, ex.Message));
-                    failureExceptions.Add(ex);
-                }
-            }
-
-            if (revisionFailure is not null)
-            {
-                failureExceptions.Add(revisionFailure);
-            }
+            await this.PostInlineCommentsAsync(
+                client,
+                context.Connection.Secret,
+                review,
+                discussionUri,
+                inlineComments,
+                totalDiscussions,
+                state,
+                ct);
         }
 
         var diagnostics = ReviewCommentPostingDiagnosticsDto.Empty(
                 result.Comments.Count + result.CarriedForwardCandidatesSkipped,
                 result.CarriedForwardCandidatesSkipped) with
             {
-                PostedCount = postedInlineCount + (summaryPosted ? nonInlineCommentCount : 0),
-                PostedComments = postedComments,
-                FailedCount = failures.Count,
-                PostingFailures = failures,
+                PostedCount = state.PostedInlineCount + (state.SummaryPosted ? nonInlineCommentCount : 0),
+                PostedComments = state.PostedComments,
+                FailedCount = state.Failures.Count,
+                PostingFailures = state.Failures,
             };
 
         // Every attempted discussion was rejected: surface a publication failure rather than a silent success.
-        if (postedDiscussionCount == 0 && failures.Count > 0)
+        if (state.PostedDiscussionCount == 0 && state.Failures.Count > 0)
         {
-            throw new ReviewCommentPublicationFailedException(diagnostics, failureExceptions);
+            throw new ReviewCommentPublicationFailedException(diagnostics, state.FailureExceptions);
         }
 
         return diagnostics;
+    }
+
+    private async Task PostSummaryIfNeededAsync(
+        HttpClient client,
+        string token,
+        Uri discussionUri,
+        string summaryBody,
+        int totalDiscussions,
+        PublicationState state,
+        CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(summaryBody))
+        {
+            return;
+        }
+
+        try
+        {
+            var captured = await PostDiscussionAsync(
+                new GitLabDiscussionPostRequest(
+                    client,
+                    token,
+                    discussionUri,
+                    new GitLabDiscussionRequest(summaryBody, null),
+                    GitLabDiscussionTarget.Overview(1, totalDiscussions),
+                    state.PostedDiscussionCount,
+                    null,
+                    null),
+                ct);
+            if (captured is not null)
+            {
+                state.PostedComments.Add(captured);
+            }
+
+            state.PostedDiscussionCount++;
+            state.SummaryPosted = true;
+        }
+        catch (Exception ex) when (!ct.IsCancellationRequested)
+        {
+            state.Failures.Add(new ReviewCommentPostingFailure("summary", null, null, ex.Message));
+            state.FailureExceptions.Add(ex);
+        }
+    }
+
+    private async Task PostInlineCommentsAsync(
+        HttpClient client,
+        string token,
+        CodeReviewRef review,
+        Uri discussionUri,
+        IReadOnlyList<ReviewComment> inlineComments,
+        int totalDiscussions,
+        PublicationState state,
+        CancellationToken ct)
+    {
+        var (inlineRevision, revisionFailure) = await this.ResolveInlineRevisionAsync(client, token, review, ct);
+
+        foreach (var comment in inlineComments)
+        {
+            var normalizedPath = NormalizePath(comment.FilePath!);
+            if (inlineRevision is null)
+            {
+                state.Failures.Add(new ReviewCommentPostingFailure("inline", normalizedPath, comment.LineNumber, revisionFailure!.Message));
+                continue;
+            }
+
+            try
+            {
+                var captured = await PostDiscussionAsync(
+                    new GitLabDiscussionPostRequest(
+                        client,
+                        token,
+                        discussionUri,
+                        new GitLabDiscussionRequest(
+                            $"{FormatSeverity(comment.Severity)}: {comment.Message}",
+                            new GitLabDiscussionPosition(
+                                "text",
+                                inlineRevision.BaseSha,
+                                inlineRevision.HeadSha,
+                                inlineRevision.StartSha,
+                                normalizedPath,
+                                normalizedPath,
+                                comment.LineNumber)),
+                        GitLabDiscussionTarget.Inline(
+                            state.PostedDiscussionCount + 1,
+                            totalDiscussions,
+                            normalizedPath,
+                            comment.LineNumber!.Value),
+                        state.PostedDiscussionCount,
+                        normalizedPath,
+                        comment.LineNumber),
+                    ct);
+                if (captured is not null)
+                {
+                    state.PostedComments.Add(captured);
+                }
+
+                state.PostedDiscussionCount++;
+                state.PostedInlineCount++;
+            }
+            catch (Exception ex) when (!ct.IsCancellationRequested)
+            {
+                state.Failures.Add(new ReviewCommentPostingFailure("inline", normalizedPath, comment.LineNumber, ex.Message));
+                state.FailureExceptions.Add(ex);
+            }
+        }
+
+        if (revisionFailure is not null)
+        {
+            state.FailureExceptions.Add(revisionFailure);
+        }
+    }
+
+    private async Task<(GitLabInlineRevision? Revision, Exception? Failure)> ResolveInlineRevisionAsync(
+        HttpClient client,
+        string token,
+        CodeReviewRef review,
+        CancellationToken ct)
+    {
+        try
+        {
+            var inlineRevision = await GetLatestInlineRevisionAsync(client, token, review, ct);
+            return (inlineRevision, null);
+        }
+        catch (Exception ex) when (!ct.IsCancellationRequested)
+        {
+            return (null, ex);
+        }
+    }
+
+    private sealed class PublicationState
+    {
+        public int PostedDiscussionCount;
+        public int PostedInlineCount;
+        public bool SummaryPosted;
+        public List<PostedReviewCommentRef> PostedComments { get; } = [];
+        public List<ReviewCommentPostingFailure> Failures { get; } = [];
+        public List<Exception> FailureExceptions { get; } = [];
     }
 
     // Posts a single discussion. On success, best-effort parses the created discussion's first note id —
