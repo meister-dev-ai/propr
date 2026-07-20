@@ -327,33 +327,10 @@ public sealed class TenantAuthService(
 
         if (linkedUser is not null)
         {
-            if (!linkedUser.IsActive)
-            {
-                return null;
-            }
-
-            var membership = await userRepository.GetTenantMembershipAsync(provider.TenantId, linkedUser.Id, ct);
-            if (membership is null)
-            {
-                return null;
-            }
-
-            await this.TouchExternalIdentityAsync(provider.TenantId, provider.Id, payload, ct);
-            return linkedUser;
+            return await this.CompleteLinkedExternalSignInAsync(provider, linkedUser, payload, ct);
         }
 
-        if (!payload.EmailVerified || string.IsNullOrWhiteSpace(payload.Email))
-        {
-            logger.LogWarning(
-                "TenantExternalSignInRejected TenantId={TenantId} ProviderId={ProviderId} Reason={Reason}",
-                provider.TenantId,
-                provider.Id,
-                "email_not_verified");
-
-            throw new TenantExternalSignInPolicyException(
-                "email_not_verified",
-                "The identity provider did not return a verified email address for this sign-in.");
-        }
+        EnsureEmailIsVerified(provider, payload);
 
         var email = payload.Email.Trim();
         var normalizedEmail = email.ToUpperInvariant();
@@ -363,88 +340,192 @@ public sealed class TenantAuthService(
             return null;
         }
 
-        if (provider.AllowedEmailDomains.Length > 0
-            && !provider.AllowedEmailDomains.Contains(domain, StringComparer.OrdinalIgnoreCase))
-        {
-            logger.LogWarning(
-                "TenantExternalSignInRejected TenantId={TenantId} ProviderId={ProviderId} Reason={Reason}",
-                provider.TenantId,
-                provider.Id,
-                "disallowed_domain");
-
-            throw new TenantExternalSignInPolicyException(
-                "disallowed_domain",
-                $"Email domain '{domain}' is not allowed for this tenant sign-in provider.");
-        }
+        await this.EnsureDomainIsAllowedAsync(provider, domain, ct);
 
         var existingUser = await userRepository.GetByNormalizedEmailAsync(normalizedEmail, ct);
         if (existingUser is not null)
         {
-            // Never silently bind an external identity to a pre-existing local-password account: the email
-            // claim is not a trustworthy key for an account whose owner controls a password. Require an
-            // explicit, authenticated link instead. (Brand-new users are still auto-provisioned below; only
-            // linking to an existing account is gated. Multi-tenant authorities, where a foreign tenant could
-            // assert an arbitrary email, are refused outright at provider configuration and sign-in.)
-            if (!string.IsNullOrWhiteSpace(existingUser.PasswordHash))
-            {
-                logger.LogWarning(
-                    "TenantExternalSignInRejected TenantId={TenantId} ProviderId={ProviderId} Reason={Reason} UserId={UserId}",
-                    provider.TenantId,
-                    provider.Id,
-                    "external_link_requires_confirmation",
-                    existingUser.Id);
-
-                throw new TenantExternalSignInPolicyException(
-                    "external_link_requires_confirmation",
-                    "An account with this email address already exists. Sign in with your existing method and link this identity provider from your account settings.");
-            }
-
-            var membership = await userRepository.GetTenantMembershipAsync(provider.TenantId, existingUser.Id, ct);
-            if (membership is not null)
-            {
-                if (!existingUser.IsActive)
-                {
-                    return null;
-                }
-
-                await this.LinkExternalIdentityAsync(provider.TenantId, provider.Id, existingUser.Id, payload, ct);
-                logger.LogInformation(
-                    "TenantExternalIdentityLinked TenantId={TenantId} ProviderId={ProviderId} UserId={UserId}",
-                    provider.TenantId,
-                    provider.Id,
-                    existingUser.Id);
-                return existingUser;
-            }
-
-            if (!provider.AutoCreateUsers)
-            {
-                logger.LogWarning(
-                    "TenantExternalSignInRejected TenantId={TenantId} ProviderId={ProviderId} Reason={Reason} UserId={UserId}",
-                    provider.TenantId,
-                    provider.Id,
-                    "auto_create_disabled_existing_user_without_membership",
-                    existingUser.Id);
-
-                throw new TenantExternalSignInPolicyException(
-                    "auto_create_disabled",
-                    "First-time sign-in is disabled for this provider. Ask a tenant administrator to enable sign-in for your account.");
-            }
-
-            if (!existingUser.IsActive)
-            {
-                return null;
-            }
-
-            await this.EnsureTenantMembershipAsync(provider.TenantId, existingUser.Id, ct);
-            await this.LinkExternalIdentityAsync(provider.TenantId, provider.Id, existingUser.Id, payload, ct);
-            logger.LogInformation(
-                "TenantExternalIdentityLinkedWithMembershipProvisioned TenantId={TenantId} ProviderId={ProviderId} UserId={UserId}",
-                provider.TenantId,
-                provider.Id,
-                existingUser.Id);
-            return existingUser;
+            return await this.CompleteExternalSignInForExistingUserAsync(provider, existingUser, payload, ct);
         }
 
+        return await this.ProvisionExternalUserAsync(provider, email, normalizedEmail, payload, ct);
+    }
+
+    private async Task<AppUser?> CompleteLinkedExternalSignInAsync(
+        TenantSsoProviderRecord provider,
+        AppUser linkedUser,
+        TenantExternalIdentityPayload payload,
+        CancellationToken ct)
+    {
+        if (!linkedUser.IsActive)
+        {
+            return null;
+        }
+
+        var membership = await userRepository.GetTenantMembershipAsync(provider.TenantId, linkedUser.Id, ct);
+        if (membership is null)
+        {
+            return null;
+        }
+
+        await this.TouchExternalIdentityAsync(provider.TenantId, provider.Id, payload, ct);
+        return linkedUser;
+    }
+
+    private void EnsureEmailIsVerified(
+        TenantSsoProviderRecord provider,
+        TenantExternalIdentityPayload payload)
+    {
+        if (payload.EmailVerified && !string.IsNullOrWhiteSpace(payload.Email))
+        {
+            return;
+        }
+
+        logger.LogWarning(
+            "TenantExternalSignInRejected TenantId={TenantId} ProviderId={ProviderId} Reason={Reason}",
+            provider.TenantId,
+            provider.Id,
+            "email_not_verified");
+
+        throw new TenantExternalSignInPolicyException(
+            "email_not_verified",
+            "The identity provider did not return a verified email address for this sign-in.");
+    }
+
+    private async Task EnsureDomainIsAllowedAsync(
+        TenantSsoProviderRecord provider,
+        string domain,
+        CancellationToken ct)
+    {
+        _ = ct;
+        if (provider.AllowedEmailDomains.Length == 0)
+        {
+            return;
+        }
+
+        if (provider.AllowedEmailDomains.Contains(domain, StringComparer.OrdinalIgnoreCase))
+        {
+            return;
+        }
+
+        logger.LogWarning(
+            "TenantExternalSignInRejected TenantId={TenantId} ProviderId={ProviderId} Reason={Reason}",
+            provider.TenantId,
+            provider.Id,
+            "disallowed_domain");
+
+        throw new TenantExternalSignInPolicyException(
+            "disallowed_domain",
+            $"Email domain '{domain}' is not allowed for this tenant sign-in provider.");
+    }
+
+    private async Task<AppUser?> CompleteExternalSignInForExistingUserAsync(
+        TenantSsoProviderRecord provider,
+        AppUser existingUser,
+        TenantExternalIdentityPayload payload,
+        CancellationToken ct)
+    {
+        // Never silently bind an external identity to a pre-existing local-password account: the email
+        // claim is not a trustworthy key for an account whose owner controls a password. Require an
+        // explicit, authenticated link instead. (Brand-new users are still auto-provisioned below; only
+        // linking to an existing account is gated. Multi-tenant authorities, where a foreign tenant could
+        // assert an arbitrary email, are refused outright at provider configuration and sign-in.)
+        if (!string.IsNullOrWhiteSpace(existingUser.PasswordHash))
+        {
+            this.ThrowExternalLinkRequiresConfirmation(provider, existingUser);
+        }
+
+        var membership = await userRepository.GetTenantMembershipAsync(provider.TenantId, existingUser.Id, ct);
+        if (membership is not null)
+        {
+            return await this.LinkExistingMembershipAsync(provider, existingUser, payload, ct);
+        }
+
+        this.EnsureAutoCreateEnabledForExistingUserAsync(provider, existingUser);
+        return await this.LinkExistingUserWithMembershipProvisioningAsync(provider, existingUser, payload, ct);
+    }
+
+    private void ThrowExternalLinkRequiresConfirmation(TenantSsoProviderRecord provider, AppUser existingUser)
+    {
+        logger.LogWarning(
+            "TenantExternalSignInRejected TenantId={TenantId} ProviderId={ProviderId} Reason={Reason} UserId={UserId}",
+            provider.TenantId,
+            provider.Id,
+            "external_link_requires_confirmation",
+            existingUser.Id);
+
+        throw new TenantExternalSignInPolicyException(
+            "external_link_requires_confirmation",
+            "An account with this email address already exists. Sign in with your existing method and link this identity provider from your account settings.");
+    }
+
+    private async Task<AppUser?> LinkExistingMembershipAsync(
+        TenantSsoProviderRecord provider,
+        AppUser existingUser,
+        TenantExternalIdentityPayload payload,
+        CancellationToken ct)
+    {
+        if (!existingUser.IsActive)
+        {
+            return null;
+        }
+
+        await this.LinkExternalIdentityAsync(provider.TenantId, provider.Id, existingUser.Id, payload, ct);
+        logger.LogInformation(
+            "TenantExternalIdentityLinked TenantId={TenantId} ProviderId={ProviderId} UserId={UserId}",
+            provider.TenantId,
+            provider.Id,
+            existingUser.Id);
+        return existingUser;
+    }
+
+    private void EnsureAutoCreateEnabledForExistingUserAsync(TenantSsoProviderRecord provider, AppUser existingUser)
+    {
+        if (provider.AutoCreateUsers)
+        {
+            return;
+        }
+
+        logger.LogWarning(
+            "TenantExternalSignInRejected TenantId={TenantId} ProviderId={ProviderId} Reason={Reason} UserId={UserId}",
+            provider.TenantId,
+            provider.Id,
+            "auto_create_disabled_existing_user_without_membership",
+            existingUser.Id);
+
+        throw new TenantExternalSignInPolicyException(
+            "auto_create_disabled",
+            "First-time sign-in is disabled for this provider. Ask a tenant administrator to enable sign-in for your account.");
+    }
+
+    private async Task<AppUser?> LinkExistingUserWithMembershipProvisioningAsync(
+        TenantSsoProviderRecord provider,
+        AppUser existingUser,
+        TenantExternalIdentityPayload payload,
+        CancellationToken ct)
+    {
+        if (!existingUser.IsActive)
+        {
+            return null;
+        }
+
+        await this.EnsureTenantMembershipAsync(provider.TenantId, existingUser.Id, ct);
+        await this.LinkExternalIdentityAsync(provider.TenantId, provider.Id, existingUser.Id, payload, ct);
+        logger.LogInformation(
+            "TenantExternalIdentityLinkedWithMembershipProvisioned TenantId={TenantId} ProviderId={ProviderId} UserId={UserId}",
+            provider.TenantId,
+            provider.Id,
+            existingUser.Id);
+        return existingUser;
+    }
+
+    private async Task<AppUser> ProvisionExternalUserAsync(
+        TenantSsoProviderRecord provider,
+        string email,
+        string normalizedEmail,
+        TenantExternalIdentityPayload payload,
+        CancellationToken ct)
+    {
         if (!provider.AutoCreateUsers)
         {
             logger.LogWarning(
