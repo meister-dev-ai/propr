@@ -7,6 +7,7 @@ import type { LocationQueryRaw } from 'vue-router'
 import { createAdminClient } from '@/services/api'
 import { createDismissal } from '@/services/findingDismissalsService'
 import { restartJob, stopJob } from '@/services/jobsService'
+import { formatBudgetBlockMessage } from './budgetBlock'
 import { useSession } from '@/composables/useSession'
 import { RoleLevel } from '@/composables/roles'
 import { formatTriageDecision } from './formatTriageDecision'
@@ -279,7 +280,16 @@ export function useJobProtocolViewModel() {
         }
     }
 
-    const canRestart = computed(() => jobStatus.value === 'failed')
+    const canRestart = computed(() =>
+        jobStatus.value === 'failed'
+        || jobStatus.value === 'budgetHeld'
+        || jobStatus.value === 'budgetExceeded')
+
+    const isBudgetBlocked = computed(() =>
+        jobStatus.value === 'budgetHeld' || jobStatus.value === 'budgetExceeded')
+
+    const budgetBlockMessage = computed<string | null>(() =>
+        formatBudgetBlockMessage(jobStatus.value, jobDetail.value?.budgetStatus ?? null))
 
     async function restart() {
         const jobId = route.params.id as string
@@ -1703,6 +1713,9 @@ export function useJobProtocolViewModel() {
             || jobLifecycleStatus === 'failed'
             || jobLifecycleStatus === 'cancelled'
             || jobLifecycleStatus === 'superseded'
+            || jobLifecycleStatus === 'stopped'
+            || jobLifecycleStatus === 'budgetHeld'
+            || jobLifecycleStatus === 'budgetExceeded'
         if (isProcessing && !pollInterval) {
             pollInterval = setInterval(() => {
                 void loadProtocol(false)
@@ -1768,6 +1781,7 @@ export function useJobProtocolViewModel() {
                     completedAt: detail.completedAt ?? null,
                     filesReviewed: detail.filesReviewed ?? 0,
                     filesInScope: detail.filesInScope ?? null,
+                    budgetStatus: detail.budgetStatus ?? null,
                 }
             }
             if (!activePassId.value && normalizedProtocols.length > 0 && normalizedProtocols[0].id) {
@@ -2160,6 +2174,8 @@ export function useJobProtocolViewModel() {
         jobDetail,
         jobStatus,
         canRestart,
+        isBudgetBlocked,
+        budgetBlockMessage,
         restarting,
         restart,
         canStop,

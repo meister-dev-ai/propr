@@ -11,7 +11,7 @@
                     v-if="vm.canRestart"
                     class="restart-review-btn"
                     :disabled="vm.restarting"
-                    title="Restart this failed review"
+                    title="Restart this review"
                     @click="vm.restart()"
                 >
                     {{ vm.restarting ? 'Restarting…' : 'Restart review ↻' }}
@@ -28,6 +28,20 @@
             </div>
             <h2>Job Protocol</h2>
         </AppTopBar>
+
+        <div
+            v-if="vm.isBudgetBlocked && vm.budgetBlockMessage"
+            class="budget-banner"
+            :class="vm.jobStatus === 'budgetExceeded' ? 'budget-banner--stopped' : 'budget-banner--held'"
+            data-testid="budget-banner"
+        >
+            <span class="budget-banner-icon">{{ vm.jobStatus === 'budgetExceeded' ? '◼' : '⏸' }}</span>
+            <div class="budget-banner-body">
+                <strong>{{ vm.jobStatus === 'budgetExceeded' ? 'Stopped by budget' : 'Held by budget' }}</strong>
+                <p class="budget-banner-message">{{ vm.budgetBlockMessage }}</p>
+                <p v-if="vm.filesReviewedLabel" class="budget-banner-progress">{{ vm.filesReviewedLabel }} files reviewed before stopping.</p>
+            </div>
+        </div>
 
         <p v-if="vm.loading" class="loading">Loading…</p>
         <p v-else-if="vm.error" class="error">{{ vm.error }}</p>
@@ -85,6 +99,49 @@ const vm = useJobProtocolViewModel()
 <style scoped>
 .header-stack {
     margin-bottom: 2rem;
+}
+
+.budget-banner {
+    display: flex;
+    gap: 0.85rem;
+    align-items: flex-start;
+    padding: 0.9rem 1.1rem;
+    border-radius: var(--radius-md, 8px);
+    border: 1px solid transparent;
+    margin-bottom: 1.5rem;
+}
+
+.budget-banner--held {
+    background: rgba(245, 158, 11, 0.1);
+    border-color: rgba(245, 158, 11, 0.35);
+    color: var(--color-warning);
+}
+
+.budget-banner--stopped {
+    background: rgba(249, 115, 22, 0.1);
+    border-color: rgba(249, 115, 22, 0.35);
+    color: #f97316;
+}
+
+.budget-banner-icon {
+    font-size: 1.1rem;
+    line-height: 1.4;
+}
+
+.budget-banner-body strong {
+    display: block;
+    margin-bottom: 0.25rem;
+}
+
+.budget-banner-message {
+    margin: 0;
+    color: var(--color-text);
+}
+
+.budget-banner-progress {
+    margin: 0.35rem 0 0;
+    color: var(--color-text-muted);
+    font-size: 0.85rem;
 }
 
 .header-nav-links {

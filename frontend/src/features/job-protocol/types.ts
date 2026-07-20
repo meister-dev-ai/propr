@@ -77,6 +77,7 @@ export interface JobDetail {
     completedAt?: string | null
     filesReviewed?: number
     filesInScope?: number | null
+    budgetStatus?: components['schemas']['BudgetStatusDto'] | null
 }
 
 export interface CommentRelevanceEventDetails {

@@ -168,6 +168,14 @@ public sealed class JobsController(
         // denominator from the job's snapshotted column.
         var filesReviewed = await jobRepository.CountReviewedFilesAsync(id, cancellationToken);
 
+        var budgetStatus = job.BudgetBlockScope is { } budgetScope
+            ? new BudgetStatusDto(
+                budgetScope,
+                job.BudgetBlockCapKind ?? BudgetCapKind.Hard,
+                job.BudgetBlockThresholdUsd ?? 0m,
+                job.BudgetBlockSpentUsd ?? 0m)
+            : null;
+
         return this.Ok(
             new JobDetailResponse(
                 job.Id,
@@ -186,7 +194,8 @@ public sealed class JobsController(
                 filesReviewed,
                 job.InScopeChangedFileCount,
                 job.TotalEstimatedCostUsd,
-                job.CostIsApproximate));
+                job.CostIsApproximate,
+                budgetStatus));
     }
 
     /// <summary>Returns the review result (summary and comments) for a completed job.</summary>
@@ -415,6 +424,16 @@ public sealed class JobsController(
     /// <summary>Response for the job list endpoint.</summary>
     public sealed record JobListResponse(int Total, IReadOnlyList<JobListItem> Items);
 
+    /// <summary>
+    ///     Why a budget held or stopped a review: the binding scope, whether the soft or hard cap was reached, the
+    ///     USD threshold, and the scope spend that reached it. Null when no budget blocked the job.
+    /// </summary>
+    public sealed record BudgetStatusDto(
+        BudgetScopeKind Scope,
+        BudgetCapKind CapKind,
+        decimal ThresholdUsd,
+        decimal SpentUsd);
+
     /// <summary>Detailed response for a single job, including the per-tier token breakdown.</summary>
     public sealed record JobDetailResponse(
         Guid Id,
@@ -433,7 +452,8 @@ public sealed class JobsController(
         int FilesReviewed = 0,
         int? FilesInScope = null,
         decimal? TotalEstimatedCostUsd = null,
-        bool CostIsApproximate = false);
+        bool CostIsApproximate = false,
+        BudgetStatusDto? BudgetStatus = null);
 
     /// <summary>Response for the job result endpoint, combining status metadata with the review result.</summary>
     public sealed record ReviewJobResultDto(

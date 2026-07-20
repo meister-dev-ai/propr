@@ -70,6 +70,14 @@ export interface JobListResponse {
   items: JobListItem[]
 }
 
+/** Why a budget held or stopped a review. Enum values mirror the backend BudgetScopeKind / BudgetCapKind. */
+export interface BudgetStatus {
+  scope: number // 0 = client monthly, 1 = pull request, 2 = increment
+  capKind: number // 0 = soft, 1 = hard
+  thresholdUsd: number
+  spentUsd: number
+}
+
 export interface JobDetailResponse {
   id: string
   clientId: string
@@ -86,6 +94,7 @@ export interface JobDetailResponse {
   breakdownConsistent: boolean | null
   totalEstimatedCostUsd?: number | null
   costIsApproximate?: boolean
+  budgetStatus?: BudgetStatus | null
 }
 
 export interface GetJobProtocolOptions {

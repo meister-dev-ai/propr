@@ -92,7 +92,7 @@
                         <div class="list-status-col">
                             <div style="display: flex; align-items: center; gap: 0.5rem">
                                 <span :class="statusBadgeClass(item.status)">
-                                    {{ item.status === 'processing' ? 'Reviewing' : item.status }}
+                                    {{ statusLabel(item.status) }}
                                 </span>
                             </div>
                         </div>
@@ -140,10 +140,10 @@
 
                         <div class="list-action-col">
                             <button
-                                v-if="item.status === 'failed' && item.id && canInspectClient(props.clientId || item.clientId)"
+                                v-if="(item.status === 'failed' || item.status === 'budgetHeld' || item.status === 'budgetExceeded') && item.id && canInspectClient(props.clientId || item.clientId)"
                                 class="btn-ghost restart-btn"
                                 :disabled="restartingJobs.has(item.id)"
-                                title="Restart this failed review"
+                                :title="item.status === 'failed' ? 'Restart this failed review' : 'Restart this budget-blocked review after freeing budget'"
                                 @click="restartJob(item)"
                             >
                                 {{ restartingJobs.has(item.id) ? 'Restarting…' : 'Restart ↻' }}
@@ -300,7 +300,18 @@ function rowClass(item: JobListItem): string {
     if (item.status === 'failed') return 'row-failed'
     if (item.status === 'processing') return 'row-processing'
     if (item.status === 'pending') return 'row-pending'
+    if (item.status === 'budgetHeld' || item.status === 'budgetExceeded') return 'row-budget'
     return ''
+}
+
+// Human-readable status label; the raw enum name is shown for statuses without a friendlier form.
+function statusLabel(status: JobStatus | undefined): string {
+    switch (status) {
+        case 'processing': return 'Reviewing'
+        case 'budgetHeld': return 'Budget held'
+        case 'budgetExceeded': return 'Budget stopped'
+        default: return status ?? ''
+    }
 }
 
 // The summary cell is only clickable when it has real content to show; a bare '—' fallback should not
@@ -316,6 +327,8 @@ function statusBadgeClass(status: JobStatus | undefined): string {
         case 'pending': return 'status-badge status-pending'
         case 'failed': return 'status-badge status-failed'
         case 'superseded': return 'status-badge status-superseded'
+        case 'budgetHeld': return 'status-badge status-budget-held'
+        case 'budgetExceeded': return 'status-badge status-budget-exceeded'
         default: return 'status-badge'
     }
 }
@@ -626,6 +639,16 @@ function prReviewLink(group: PrGroup): object {
     color: var(--color-warning);
 }
 
+.status-budget-held {
+    background: rgba(245, 158, 11, 0.15);
+    color: var(--color-warning);
+}
+
+.status-budget-exceeded {
+    background: rgba(249, 115, 22, 0.18);
+    color: #f97316;
+}
+
 /* Row variants */
 .row-failed {
     background: rgba(239, 68, 68, 0.05);
@@ -643,6 +666,13 @@ function prReviewLink(group: PrGroup): object {
 
 .row-pending {
     background: rgba(255, 255, 255, 0.01);
+}
+
+.row-budget {
+    background: rgba(245, 158, 11, 0.04);
+}
+.row-budget:hover {
+    background: rgba(245, 158, 11, 0.07);
 }
 
 .date-cell {

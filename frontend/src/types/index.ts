@@ -11322,6 +11322,11 @@ export interface components {
             reason?: string | null;
         };
         /**
+         * @description Which of a scope's two independent USD thresholds a budget decision refers to.
+         * @enum {string}
+         */
+        BudgetCapKind: "soft" | "hard";
+        /**
          * @description A client's USD budget caps. Every value is optional; a null cap means no limit. Soft caps apply to the
          *     monthly-client and per-PR scopes (they stop admitting new jobs); hard caps apply to all three scopes (they
          *     cut further model calls). The increment scope is hard-only.
@@ -11337,6 +11342,23 @@ export interface components {
             pullRequestHardCapUsd?: number | null;
             /** Format: double */
             incrementHardCapUsd?: number | null;
+        };
+        /**
+         * @description The granularity at which a USD budget cap is enforced.
+         * @enum {string}
+         */
+        BudgetScopeKind: "clientMonthly" | "pullRequest" | "increment";
+        /**
+         * @description Why a budget held or stopped a review: the binding scope, whether the soft or hard cap was reached, the
+         *     USD threshold, and the scope spend that reached it. Null when no budget blocked the job.
+         */
+        BudgetStatusDto: {
+            scope?: components["schemas"]["BudgetScopeKind"];
+            capKind?: components["schemas"]["BudgetCapKind"];
+            /** Format: double */
+            thresholdUsd?: number;
+            /** Format: double */
+            spentUsd?: number;
         };
         /**
          * @description Cache outcome recorded for one AI call.
@@ -11842,6 +11864,7 @@ export interface components {
             /** Format: double */
             totalEstimatedCostUsd?: number | null;
             costIsApproximate?: boolean;
+            budgetStatus?: components["schemas"]["BudgetStatusDto"];
         };
         /** @description Single job item in the list response. */
         JobListItem: {
