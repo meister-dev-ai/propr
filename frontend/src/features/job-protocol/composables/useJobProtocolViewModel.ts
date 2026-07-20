@@ -1206,22 +1206,113 @@ export function useJobProtocolViewModel() {
     }
 
     function buildEventRows(protocol: ReviewProtocolPass | null | undefined): EventDisplayRow[] {
-        if (protocol) {
-            const expanded = expandedEventParents.value
-            const filterKey = traceFilterCacheKey()
-            const cached = eventRowsCache.get(protocol)
-            if (cached?.collapseKey === expanded && cached?.filterKey === filterKey) {
-                return cached.rows
-            }
+        const cached = tryGetCachedEventRows(protocol)
+        if (cached) {
+            return cached
         }
+
         const mergedEvents = processEvents(protocol?.events)
         const filteredMergedEvents = protocol
             ? mergedEvents.filter(merged => matchesTraceFilters(protocol, merged.callDetails))
             : mergedEvents
         const rows: EventDisplayRow[] = []
         const { childEventsByParentId, childEventIds } = groupToolCallsByAiTurn(filteredMergedEvents)
+        const createDisplayRow = makeCreateDisplayRow(protocol)
+        const appendStandaloneRow = (merged: MergedEvent) => {
+            rows.push(createDisplayRow(merged, 0, null, null, false, 0, false))
+        }
 
-        const createDisplayRow = (
+        for (const merged of filteredMergedEvents) {
+            appendMergedEventRow(merged, childEventsByParentId, childEventIds, createDisplayRow, appendStandaloneRow, rows)
+        }
+
+        cacheEventRows(protocol, rows)
+        return rows
+    }
+
+    function tryGetCachedEventRows(protocol: ReviewProtocolPass | null | undefined): EventDisplayRow[] | null {
+        if (!protocol) {
+            return null;
+        }
+
+        const cached = eventRowsCache.get(protocol);
+        if (cached?.collapseKey !== expandedEventParents.value || cached?.filterKey !== traceFilterCacheKey()) {
+            return null;
+        }
+
+        return cached.rows;
+    }
+
+    function appendMergedEventRow(
+        merged: MergedEvent,
+        childEventsByParentId: Map<string, MergedEvent[]>,
+        childEventIds: Set<string>,
+        createDisplayRow: (
+            merged: MergedEvent,
+            depth: number,
+            parentId: string | null,
+            parentName: string | null,
+            isToolChild: boolean,
+            childCount: number,
+            isExpanded: boolean,
+        ) => EventDisplayRow,
+        appendStandaloneRow: (merged: MergedEvent) => void,
+        rows: EventDisplayRow[],
+    ): void {
+        if (isPrimaryAiTurnEvent(merged)) {
+            appendAiTurnAndChildren(merged, childEventsByParentId, createDisplayRow, rows)
+            return
+        }
+
+        if (!childEventIds.has(merged.id)) {
+            appendStandaloneRow(merged)
+        }
+    }
+
+    function appendAiTurnAndChildren(
+        merged: MergedEvent,
+        childEventsByParentId: Map<string, MergedEvent[]>,
+        createDisplayRow: (
+            merged: MergedEvent,
+            depth: number,
+            parentId: string | null,
+            parentName: string | null,
+            isToolChild: boolean,
+            childCount: number,
+            isExpanded: boolean,
+        ) => EventDisplayRow,
+        rows: EventDisplayRow[],
+    ): void {
+        const children = childEventsByParentId.get(merged.id) ?? []
+        // AI-turn parents collapse their tool-call children by default; the set tracks the ones the user
+        // has explicitly expanded. While a trace search is active everything expands so a matching child
+        // is never hidden inside a collapsed parent.
+        const isExpanded = hasActiveTraceFilters.value || expandedEventParents.value.has(merged.id)
+        rows.push(createDisplayRow(merged, 0, null, null, false, children.length, isExpanded))
+
+        if (!isExpanded) {
+            return
+        }
+
+        for (const child of children) {
+            rows.push(createDisplayRow(child, 1, merged.id, merged.name, true, 0, false))
+        }
+    }
+
+    function cacheEventRows(protocol: ReviewProtocolPass | null | undefined, rows: EventDisplayRow[]): void {
+        if (!protocol) {
+            return
+        }
+
+        eventRowsCache.set(protocol, {
+            collapseKey: expandedEventParents.value,
+            filterKey: traceFilterCacheKey(),
+            rows,
+        })
+    }
+
+    function makeCreateDisplayRow(protocol: ReviewProtocolPass | null | undefined) {
+        return (
             merged: MergedEvent,
             depth: number,
             parentId: string | null,
@@ -1255,42 +1346,6 @@ export function useJobProtocolViewModel() {
                 traceIsRedacted: traceRow?.isRedacted ?? false,
             }
         }
-
-        const appendStandaloneRow = (merged: MergedEvent) => {
-            rows.push(createDisplayRow(merged, 0, null, null, false, 0, false))
-        }
-
-        for (const merged of filteredMergedEvents) {
-            if (isPrimaryAiTurnEvent(merged)) {
-                const children = childEventsByParentId.get(merged.id) ?? []
-                // AI-turn parents collapse their tool-call children by default; the set tracks the ones the user
-                // has explicitly expanded. While a trace search is active everything expands so a matching child
-                // is never hidden inside a collapsed parent.
-                const isExpanded = hasActiveTraceFilters.value || expandedEventParents.value.has(merged.id)
-                rows.push(createDisplayRow(merged, 0, null, null, false, children.length, isExpanded))
-
-                if (isExpanded) {
-                    for (const child of children) {
-                        rows.push(createDisplayRow(child, 1, merged.id, merged.name, true, 0, false))
-                    }
-                }
-                continue
-            }
-
-            if (!childEventIds.has(merged.id)) {
-                appendStandaloneRow(merged)
-            }
-        }
-
-        if (protocol) {
-            eventRowsCache.set(protocol, {
-                collapseKey: expandedEventParents.value,
-                filterKey: traceFilterCacheKey(),
-                rows,
-            })
-        }
-
-        return rows
     }
 
     const reviewTraceRows = computed<EventDisplayRow[]>(() =>
