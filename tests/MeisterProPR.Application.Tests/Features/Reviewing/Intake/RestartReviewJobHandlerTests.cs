@@ -86,6 +86,56 @@ public sealed class RestartReviewJobHandlerTests
         await queue.Received(1).EnqueueAsync(result.NewJobId!.Value, Arg.Any<CancellationToken>());
     }
 
+    [Theory]
+    [InlineData(JobStatus.BudgetHeld)]
+    [InlineData(JobStatus.BudgetExceeded)]
+    public async Task HandleAsync_WhenBudgetBlocked_RetiresSourceThenClonesAndQueues(JobStatus status)
+    {
+        var jobs = Substitute.For<IJobRepository>();
+        var queue = Substitute.For<IReviewExecutionQueue>();
+        var job = MakeJob();
+        job.Status = status;
+        jobs.GetById(job.Id).Returns(job);
+        jobs.TryAddIfNoActiveDuplicateAsync(Arg.Any<ReviewJob>(), Arg.Any<CancellationToken>())
+            .Returns(new TryAddReviewJobResult(true, null, 0));
+
+        var sut = new RestartReviewJobHandler(jobs, queue, NullLogger<RestartReviewJobHandler>.Instance);
+
+        var result = await sut.HandleAsync(new RestartReviewJobCommand(job.Id));
+
+        Assert.Equal(RestartReviewJobOutcome.Restarted, result.Outcome);
+        Assert.NotNull(result.NewJobId);
+
+        // The budget-blocked source is retired first so the same-revision clone is not rejected as a duplicate.
+        await jobs.Received(1).SetSupersededAsync(job.Id, Arg.Any<CancellationToken>());
+        await jobs.Received(1).TryAddIfNoActiveDuplicateAsync(
+            Arg.Is<ReviewJob>(j =>
+                j.Id != job.Id &&
+                j.PullRequestId == job.PullRequestId &&
+                j.IterationId == job.IterationId &&
+                j.Status == JobStatus.Pending),
+            Arg.Any<CancellationToken>());
+        await queue.Received(1).EnqueueAsync(result.NewJobId!.Value, Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task HandleAsync_WhenFailed_DoesNotRetireTheSource()
+    {
+        var jobs = Substitute.For<IJobRepository>();
+        var queue = Substitute.For<IReviewExecutionQueue>();
+        var job = MakeJob();
+        job.Status = JobStatus.Failed;
+        jobs.GetById(job.Id).Returns(job);
+        jobs.TryAddIfNoActiveDuplicateAsync(Arg.Any<ReviewJob>(), Arg.Any<CancellationToken>())
+            .Returns(new TryAddReviewJobResult(true, null, 0));
+
+        var sut = new RestartReviewJobHandler(jobs, queue, NullLogger<RestartReviewJobHandler>.Instance);
+
+        await sut.HandleAsync(new RestartReviewJobCommand(job.Id));
+
+        await jobs.DidNotReceive().SetSupersededAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>());
+    }
+
     [Fact]
     public async Task HandleAsync_WhenActiveDuplicateExists_ReturnsDuplicateAndDoesNotEnqueue()
     {

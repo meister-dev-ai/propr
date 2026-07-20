@@ -180,6 +180,25 @@ public interface IReviewJobExecutionStore
         CancellationToken ct = default);
 
     /// <summary>
+    ///     Marks a queued job budget-held because a cap was already reached at admission, recording the binding
+    ///     scope, cap kind, threshold, and spend as the reason. No-op unless the job is currently pending.
+    /// </summary>
+    /// <param name="id">The review job identifier.</param>
+    /// <param name="scope">The budget scope whose cap was reached.</param>
+    /// <param name="capKind">Whether the soft or the hard cap was reached.</param>
+    /// <param name="thresholdUsd">The USD threshold that was reached.</param>
+    /// <param name="spentUsd">The scope spend that reached the threshold.</param>
+    /// <param name="ct">The cancellation token.</param>
+    /// <returns>A task representing the asynchronous operation.</returns>
+    Task SetBudgetHeldAsync(
+        Guid id,
+        BudgetScopeKind scope,
+        BudgetCapKind capKind,
+        decimal thresholdUsd,
+        decimal spentUsd,
+        CancellationToken ct = default);
+
+    /// <summary>
     ///     Updates the AI configuration of a review job.
     /// </summary>
     /// <param name="id">The review job identifier.</param>

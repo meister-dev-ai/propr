@@ -4,6 +4,8 @@
 using System.Collections.Concurrent;
 using System.Diagnostics;
 using MeisterProPR.Api.Telemetry;
+using MeisterProPR.Application.Features.Budgeting;
+using MeisterProPR.Application.Features.Budgeting.Models;
 using MeisterProPR.Application.Features.Licensing.Models;
 using MeisterProPR.Application.Features.Licensing.Ports;
 using MeisterProPR.Application.Features.Reviewing.Execution.Ports;
@@ -96,6 +98,8 @@ public sealed partial class ReviewJobWorker(
         var parallelReviewExecutionEnabled = licensingCapabilityService is null
                                              || await licensingCapabilityService.IsEnabledAsync(PremiumCapabilityKey.ParallelReviewExecution, stoppingToken);
         var maxConcurrentReviewJobs = workerOptions.Value.MaxConcurrentReviewJobs;
+        var budgetCapsProvider = tickScope.ServiceProvider.GetService<IBudgetCapsProvider>();
+        var spendAccumulator = tickScope.ServiceProvider.GetService<IReviewSpendAccumulator>();
 
         foreach (var job in jobRepository.GetPendingJobs())
         {
@@ -115,6 +119,18 @@ public sealed partial class ReviewJobWorker(
                 break;
             }
 
+            if (budgetCapsProvider is not null && spendAccumulator is not null)
+            {
+                var breach = await EvaluateAdmissionBreachAsync(budgetCapsProvider, spendAccumulator, job, stoppingToken);
+                if (breach is not null)
+                {
+                    // A soft or hard cap is already reached, so this new review is held rather than started. It
+                    // runs only when an operator restarts it after freeing budget — there is no automatic resume.
+                    await jobRepository.SetBudgetHeldAsync(job.Id, breach.Scope, breach.CapKind, breach.ThresholdUsd, breach.SpentUsd, stoppingToken);
+                    continue;
+                }
+            }
+
             if (!await jobRepository.TryTransitionAsync(job.Id, JobStatus.Pending, JobStatus.Processing, stoppingToken))
             {
                 continue;
@@ -132,6 +148,26 @@ public sealed partial class ReviewJobWorker(
                 },
                 TaskScheduler.Default);
         }
+    }
+
+    private static async Task<BudgetBreach?> EvaluateAdmissionBreachAsync(
+        IBudgetCapsProvider budgetCapsProvider,
+        IReviewSpendAccumulator spendAccumulator,
+        ReviewJob job,
+        CancellationToken ct)
+    {
+        var caps = await budgetCapsProvider.GetCapsAsync(job.ClientId, ct);
+        if (!caps.AnyConfigured)
+        {
+            return null;
+        }
+
+        var baseline = await spendAccumulator.GetBaselineAsync(job, DateOnly.FromDateTime(DateTime.UtcNow), ct);
+        return BudgetEvaluator.FindAdmissionBreach(
+            caps,
+            baseline.ClientMonthToDate.KnownUsd,
+            baseline.PullRequest.KnownUsd,
+            baseline.Increment.KnownUsd);
     }
 
     /// <summary>Processes a single job safely, handling exceptions and cancellations.</summary>

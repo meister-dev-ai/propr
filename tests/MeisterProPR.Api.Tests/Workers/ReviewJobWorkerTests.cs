@@ -3,6 +3,8 @@
 
 using MeisterProPR.Api.Telemetry;
 using MeisterProPR.Api.Workers;
+using MeisterProPR.Application.Features.Budgeting;
+using MeisterProPR.Application.Features.Budgeting.Models;
 using MeisterProPR.Application.Features.Reviewing.Execution.Ports;
 using MeisterProPR.Application.Options;
 using MeisterProPR.Domain.Entities;
@@ -118,6 +120,55 @@ public class ReviewJobWorkerTests
         var worker = new ReviewJobWorker(scopeFactory, CreateWorkerOptions(), CreateMetrics(), CreateCancellationRegistry(), logger);
 
         Assert.False(worker.IsRunning);
+    }
+
+    [Fact]
+    public async Task Worker_HoldsPendingJob_WhenABudgetCapIsAlreadyReached()
+    {
+        var repo = Substitute.For<IReviewJobExecutionStore>();
+        var job = CreateJob(202);
+        var held = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        repo.GetPendingJobs().Returns(new[] { job });
+        repo.GetStuckProcessingJobsAsync(Arg.Any<TimeSpan>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<IReadOnlyList<ReviewJob>>([]));
+        repo.SetBudgetHeldAsync(
+                job.Id, Arg.Any<BudgetScopeKind>(), Arg.Any<BudgetCapKind>(), Arg.Any<decimal>(), Arg.Any<decimal>(), Arg.Any<CancellationToken>())
+            .Returns(_ =>
+            {
+                held.TrySetResult();
+                return Task.CompletedTask;
+            });
+
+        // Client month-to-date spend already at the soft cap, so the new job must be held rather than started.
+        var capsProvider = Substitute.For<IBudgetCapsProvider>();
+        capsProvider.GetCapsAsync(job.ClientId, Arg.Any<CancellationToken>())
+            .Returns(new BudgetCaps(80m, 100m, null, null, null));
+        var accumulator = Substitute.For<IReviewSpendAccumulator>();
+        accumulator.GetBaselineAsync(job, Arg.Any<DateOnly>(), Arg.Any<CancellationToken>())
+            .Returns(new ReviewSpendBaseline(new ReviewScopeSpend(80m, false), ReviewScopeSpend.None, ReviewScopeSpend.None));
+
+        var logger = Substitute.For<ILogger<ReviewJobWorker>>();
+        var scopeFactory = Substitute.For<IServiceScopeFactory>();
+        var scope = Substitute.For<IServiceScope>();
+        var sp = Substitute.For<IServiceProvider>();
+        scopeFactory.CreateScope().Returns(scope);
+        scope.ServiceProvider.Returns(sp);
+        sp.GetService(typeof(IReviewJobExecutionStore)).Returns(repo);
+        sp.GetService(typeof(IBudgetCapsProvider)).Returns(capsProvider);
+        sp.GetService(typeof(IReviewSpendAccumulator)).Returns(accumulator);
+        sp.GetService(typeof(IReviewJobProcessor)).Returns(Substitute.For<IReviewJobProcessor>());
+
+        var worker = new ReviewJobWorker(scopeFactory, CreateWorkerOptions(), CreateMetrics(), CreateCancellationRegistry(), logger);
+        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+
+        _ = worker.StartAsync(cts.Token);
+        await held.Task.WaitAsync(TimeSpan.FromSeconds(2));
+
+        await cts.CancelAsync();
+        await worker.StopAsync(CancellationToken.None);
+
+        await repo.Received().SetBudgetHeldAsync(job.Id, BudgetScopeKind.ClientMonthly, BudgetCapKind.Soft, 80m, 80m, Arg.Any<CancellationToken>());
+        await repo.DidNotReceive().TryTransitionAsync(job.Id, JobStatus.Pending, JobStatus.Processing, Arg.Any<CancellationToken>());
     }
 
     [Fact]

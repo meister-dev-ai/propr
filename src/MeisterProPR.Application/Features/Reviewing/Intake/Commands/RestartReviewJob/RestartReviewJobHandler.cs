@@ -10,9 +10,11 @@ using Microsoft.Extensions.Logging;
 namespace MeisterProPR.Application.Features.Reviewing.Intake.Commands.RestartReviewJob;
 
 /// <summary>
-///     Handles manual restart of a failed review job. Automatic re-review of failed jobs is suppressed to avoid
-///     cost-inducing loops on deterministic failures; this explicit user action clones the failed job's coordinates
-///     into a fresh pending job and queues it for execution.
+///     Handles manual restart of a failed or budget-blocked review job. Automatic re-review is suppressed to
+///     avoid cost-inducing loops on deterministic failures and to keep budget recovery a deliberate operator
+///     action; this explicit request clones the source job's coordinates into a fresh pending job and queues it
+///     for execution. A budget-held or budget-exceeded source is retired first so the clone is not rejected as an
+///     active duplicate.
 /// </summary>
 public sealed partial class RestartReviewJobHandler(
     IJobRepository jobs,
@@ -30,10 +32,19 @@ public sealed partial class RestartReviewJobHandler(
             return new RestartReviewJobResult(RestartReviewJobOutcome.NotFound);
         }
 
-        if (source.Status != JobStatus.Failed)
+        if (source.Status is not (JobStatus.Failed or JobStatus.BudgetHeld or JobStatus.BudgetExceeded))
         {
             LogRestartRejectedNotFailed(logger, source.Id, source.Status);
             return new RestartReviewJobResult(RestartReviewJobOutcome.NotFailed, ClientId: source.ClientId);
+        }
+
+        if (source.Status is JobStatus.BudgetHeld or JobStatus.BudgetExceeded)
+        {
+            // A budget-blocked source is still considered live for its pull request, so retire it before adding
+            // the restart; otherwise the clone would be rejected as an active duplicate at the same revision. Any
+            // findings the source already produced are carried forward into the restart the same way a superseded
+            // job's results are.
+            await jobs.SetSupersededAsync(source.Id, cancellationToken);
         }
 
         var restarted = new ReviewJob(

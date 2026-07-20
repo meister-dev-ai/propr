@@ -157,6 +157,17 @@ public sealed class ReviewJobExecutionStoreAdapter(IJobRepository inner) : IRevi
         return inner.SetBudgetExceededAsync(id, scope, capKind, thresholdUsd, spentUsd, ct);
     }
 
+    public Task SetBudgetHeldAsync(
+        Guid id,
+        BudgetScopeKind scope,
+        BudgetCapKind capKind,
+        decimal thresholdUsd,
+        decimal spentUsd,
+        CancellationToken ct = default)
+    {
+        return inner.SetBudgetHeldAsync(id, scope, capKind, thresholdUsd, spentUsd, ct);
+    }
+
     public Task UpdateAiConfigAsync(
         Guid id,
         Guid? connectionId,
