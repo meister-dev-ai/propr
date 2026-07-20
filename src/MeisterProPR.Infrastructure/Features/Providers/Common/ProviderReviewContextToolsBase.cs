@@ -342,62 +342,8 @@ internal abstract class ProviderReviewContextToolsBase(
             return ReferenceLookupResult.UnavailableResult;
         }
 
-        var branchSide = NormalizeBranchSide(query.BranchSide);
-        var branchName = branchSide == RepositorySearchBranchSides.Target && this._targetBranch is not null
-            ? this._targetBranch
-            : this._sourceBranch;
-
-        var sites = new List<ReferenceSite>();
-        var scanned = 0;
-        var truncated = false;
-        var usedChars = 0;
-
-        using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
-        timeoutCts.CancelAfter(Math.Max(50, this._options.ReferenceResolutionTimeoutMs));
-        var token = timeoutCts.Token;
-
-        try
-        {
-            var candidateFiles = await this.ResolveCandidateFilesAsync(query.Symbol, branchSide, token);
-            truncated |= candidateFiles.Truncated;
-
-            foreach (var file in candidateFiles.Paths)
-            {
-                if (scanned >= this._options.MaxReferenceCandidateFiles)
-                {
-                    truncated = true;
-                    break;
-                }
-
-                var step = await this.ScanFileForReferencesAsync(file, branchName, query.Symbol, sites, usedChars, token);
-                usedChars = step.UsedChars;
-                if (step.Analyzed)
-                {
-                    scanned++;
-                }
-
-                if (step.Truncated)
-                {
-                    return new ReferenceLookupResult(sites, scanned, true, false);
-                }
-            }
-        }
-        catch (OperationCanceledException) when (!ct.IsCancellationRequested)
-        {
-            // Per-operation time budget exceeded: return what we have, flagged truncated.
-            return new ReferenceLookupResult(sites, scanned, true, false);
-        }
-        catch (OperationCanceledException)
-        {
-            throw;
-        }
-        catch (Exception ex)
-        {
-            this._logger.LogWarning(ex, "find_references failed for symbol {Symbol}; returning unavailable (fail-soft).", query.Symbol);
-            return ReferenceLookupResult.UnavailableResult;
-        }
-
-        return new ReferenceLookupResult(sites, scanned, truncated, false);
+        var (branchSide, branchName) = this.ResolveBranchContext(query);
+        return await this.FindReferencesCoreAsync(query.Symbol, branchSide, branchName, ct);
     }
 
     /// <inheritdoc />
@@ -413,22 +359,27 @@ internal abstract class ProviderReviewContextToolsBase(
             return DefinitionLookupResult.UnavailableResult;
         }
 
-        var branchSide = NormalizeBranchSide(query.BranchSide);
-        var branchName = branchSide == RepositorySearchBranchSides.Target && this._targetBranch is not null
-            ? this._targetBranch
-            : this._sourceBranch;
+        var (branchSide, branchName) = this.ResolveBranchContext(query);
+        return await this.GetDefinitionCoreAsync(query.Symbol, branchSide, branchName, ct);
+    }
 
-        var definitions = new List<DefinitionLookupSite>();
+    private async Task<ReferenceLookupResult> FindReferencesCoreAsync(
+        string symbol,
+        string branchSide,
+        string branchName,
+        CancellationToken ct)
+    {
+        var sites = new List<ReferenceSite>();
         var scanned = 0;
         var truncated = false;
+        var usedChars = 0;
 
-        using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
-        timeoutCts.CancelAfter(Math.Max(50, this._options.ReferenceResolutionTimeoutMs));
+        using var timeoutCts = this.CreateResolutionTimeoutSource(ct);
         var token = timeoutCts.Token;
 
         try
         {
-            var candidateFiles = await this.ResolveCandidateFilesAsync(query.Symbol, branchSide, token);
+            var candidateFiles = await this.ResolveCandidateFilesAsync(symbol, branchSide, token);
             truncated |= candidateFiles.Truncated;
 
             foreach (var file in candidateFiles.Paths)
@@ -439,7 +390,63 @@ internal abstract class ProviderReviewContextToolsBase(
                     break;
                 }
 
-                var (analyzed, hitLimit) = await this.ScanFileForDefinitionsAsync(file, branchName, query.Symbol, definitions, token);
+                var step = await this.ScanFileForReferencesAsync(file, branchName, symbol, sites, usedChars, token);
+                usedChars = step.UsedChars;
+                if (step.Analyzed)
+                {
+                    scanned++;
+                }
+
+                if (step.Truncated)
+                {
+                    return new ReferenceLookupResult(sites, scanned, true, false);
+                }
+            }
+        }
+        catch (OperationCanceledException) when (!ct.IsCancellationRequested)
+        {
+            return new ReferenceLookupResult(sites, scanned, true, false);
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            this._logger.LogWarning(ex, "find_references failed for symbol {Symbol}; returning unavailable (fail-soft).", symbol);
+            return ReferenceLookupResult.UnavailableResult;
+        }
+
+        return new ReferenceLookupResult(sites, scanned, truncated, false);
+    }
+
+    private async Task<DefinitionLookupResult> GetDefinitionCoreAsync(
+        string symbol,
+        string branchSide,
+        string branchName,
+        CancellationToken ct)
+    {
+        var definitions = new List<DefinitionLookupSite>();
+        var scanned = 0;
+        var truncated = false;
+
+        using var timeoutCts = this.CreateResolutionTimeoutSource(ct);
+        var token = timeoutCts.Token;
+
+        try
+        {
+            var candidateFiles = await this.ResolveCandidateFilesAsync(symbol, branchSide, token);
+            truncated |= candidateFiles.Truncated;
+
+            foreach (var file in candidateFiles.Paths)
+            {
+                if (scanned >= this._options.MaxReferenceCandidateFiles)
+                {
+                    truncated = true;
+                    break;
+                }
+
+                var (analyzed, hitLimit) = await this.ScanFileForDefinitionsAsync(file, branchName, symbol, definitions, token);
                 if (analyzed)
                 {
                     scanned++;
@@ -462,11 +469,27 @@ internal abstract class ProviderReviewContextToolsBase(
         }
         catch (Exception ex)
         {
-            this._logger.LogWarning(ex, "get_definition failed for symbol {Symbol}; returning unavailable (fail-soft).", query.Symbol);
+            this._logger.LogWarning(ex, "get_definition failed for symbol {Symbol}; returning unavailable (fail-soft).", symbol);
             return DefinitionLookupResult.UnavailableResult;
         }
 
         return new DefinitionLookupResult(definitions, scanned, truncated, false);
+    }
+
+    private (string BranchSide, string BranchName) ResolveBranchContext(SymbolReferenceQuery query)
+    {
+        var branchSide = NormalizeBranchSide(query.BranchSide);
+        var branchName = branchSide == RepositorySearchBranchSides.Target && this._targetBranch is not null
+            ? this._targetBranch
+            : this._sourceBranch;
+        return (branchSide, branchName);
+    }
+
+    private CancellationTokenSource CreateResolutionTimeoutSource(CancellationToken ct)
+    {
+        var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        timeoutCts.CancelAfter(Math.Max(50, this._options.ReferenceResolutionTimeoutMs));
+        return timeoutCts;
     }
 
     private async Task<ReferenceScanStep> ScanFileForReferencesAsync(
