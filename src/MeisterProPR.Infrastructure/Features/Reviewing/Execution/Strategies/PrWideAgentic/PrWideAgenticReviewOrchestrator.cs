@@ -74,68 +74,30 @@ public sealed partial class PrWideAgenticReviewOrchestrator(
         // GenerateCandidatesAsync, which clones-then-mutates the pass context for the same reason.
         var prWideContext = CloneContext(baseContext, baseContext.ActiveProtocolId, baseContext.ProtocolRecorder);
         prWideContext.ActiveReasoningEffort = baseContext.BaselineReasoningEffort;
-        var ownsProtocolPass = false;
-        var totalInputTokens = 0L;
-        var totalOutputTokens = 0L;
-        var totalCachedInputTokens = 0L;
-        var totalCacheWriteTokens = 0L;
-        var totalReasoningTokens = 0L;
-        var totalAiCalls = 0;
-        var totalToolCalls = 0;
+        var (ownsProtocolPass, prWideContextWithProtocol) =
+            await this.BeginProtocolIfNeededAsync(job, prWideContext, overrideClient, ct);
+        prWideContext = prWideContextWithProtocol;
 
-        if (!prWideContext.ActiveProtocolId.HasValue && prWideContext.ProtocolRecorder is not null)
-        {
-            try
-            {
-                var protocolId = await prWideContext.ProtocolRecorder.BeginAsync(
-                    job.Id,
-                    job.RetryCount + 1,
-                    "pr-wide-review",
-                    null,
-                    AiConnectionModelCategory.HighEffort,
-                    overrideClient is not null ? prWideContext.ModelId : prWideContext.DefaultReviewModelId ?? prWideContext.ModelId,
-                    ct);
-
-                prWideContext = CloneContext(prWideContext, protocolId, prWideContext.ProtocolRecorder);
-                ownsProtocolPass = true;
-            }
-            catch (Exception ex)
-            {
-                LogProtocolBeginFailed(this._logger, job.Id, ex);
-            }
-        }
-
+        var tokens = new TokenAccumulator();
         try
         {
             var (plan, planInputTokens, planOutputTokens, planAiCalls, planCachedInputTokens, planCacheWriteTokens, planReasoningTokens) =
                 await this.CreatePlanAsync(job, pr, prWideContext, overrideClient, ct);
-            totalInputTokens += planInputTokens;
-            totalOutputTokens += planOutputTokens;
-            totalCachedInputTokens += planCachedInputTokens;
-            totalCacheWriteTokens += planCacheWriteTokens;
-            totalReasoningTokens += planReasoningTokens;
-            totalAiCalls += planAiCalls;
+            tokens.AddPlan(planInputTokens, planOutputTokens, planAiCalls, planCachedInputTokens, planCacheWriteTokens, planReasoningTokens);
 
             var (investigations, investigationInputTokens, investigationOutputTokens, investigationAiCalls, investigationToolCalls,
                     investigationCachedInputTokens, investigationCacheWriteTokens, investigationReasoningTokens) =
                 await this.RunInvestigationsAsync(job, pr, prWideContext, plan, overrideClient, ct);
-            totalInputTokens += investigationInputTokens;
-            totalOutputTokens += investigationOutputTokens;
-            totalCachedInputTokens += investigationCachedInputTokens;
-            totalCacheWriteTokens += investigationCacheWriteTokens;
-            totalReasoningTokens += investigationReasoningTokens;
-            totalAiCalls += investigationAiCalls;
-            totalToolCalls += investigationToolCalls;
+            tokens.AddInvestigations(
+                investigationInputTokens, investigationOutputTokens, investigationAiCalls, investigationToolCalls,
+                investigationCachedInputTokens, investigationCacheWriteTokens, investigationReasoningTokens);
 
             var (synthesis, synthesisInputTokens, synthesisOutputTokens, synthesisAiCalls, synthesisCachedInputTokens, synthesisCacheWriteTokens,
                     synthesisReasoningTokens) =
                 await this.RecordSynthesisAsync(job, prWideContext, plan, investigations, overrideClient, ct);
-            totalInputTokens += synthesisInputTokens;
-            totalOutputTokens += synthesisOutputTokens;
-            totalCachedInputTokens += synthesisCachedInputTokens;
-            totalCacheWriteTokens += synthesisCacheWriteTokens;
-            totalReasoningTokens += synthesisReasoningTokens;
-            totalAiCalls += synthesisAiCalls;
+            tokens.AddSynthesis(
+                synthesisInputTokens, synthesisOutputTokens, synthesisAiCalls, synthesisCachedInputTokens, synthesisCacheWriteTokens,
+                synthesisReasoningTokens);
 
             ReviewResult result;
             if (this.CanRunNativeVerification())
@@ -148,45 +110,127 @@ public sealed partial class PrWideAgenticReviewOrchestrator(
                 await this.RecordDelegatedCompletionAsync(job, prWideContext, result, ct);
             }
 
-            if (ownsProtocolPass && prWideContext.ActiveProtocolId.HasValue && prWideContext.ProtocolRecorder is not null)
-            {
-                await prWideContext.ProtocolRecorder.SetCompletedAsync(
-                    prWideContext.ActiveProtocolId.Value,
-                    "Completed",
-                    totalInputTokens,
-                    totalOutputTokens,
-                    totalAiCalls,
-                    totalToolCalls,
-                    null,
-                    ct,
-                    totalCachedInputTokens,
-                    (totalInputTokens > 0 || totalOutputTokens > 0) ? CacheObservabilityStatus.Observable : CacheObservabilityStatus.Unobservable,
-                    totalCacheWriteTokens,
-                    totalReasoningTokens);
-            }
-
+            await this.FinalizeProtocolAsync(ownsProtocolPass, prWideContext, "Completed", tokens, ct);
             return result;
         }
         catch
         {
-            if (ownsProtocolPass && prWideContext.ActiveProtocolId.HasValue && prWideContext.ProtocolRecorder is not null)
-            {
-                await prWideContext.ProtocolRecorder.SetCompletedAsync(
-                    prWideContext.ActiveProtocolId.Value,
-                    "Failed",
-                    totalInputTokens,
-                    totalOutputTokens,
-                    totalAiCalls,
-                    totalToolCalls,
-                    null,
-                    ct,
-                    totalCachedInputTokens,
-                    (totalInputTokens > 0 || totalOutputTokens > 0) ? CacheObservabilityStatus.Observable : CacheObservabilityStatus.Unobservable,
-                    totalCacheWriteTokens,
-                    totalReasoningTokens);
-            }
-
+            await this.FinalizeProtocolAsync(ownsProtocolPass, prWideContext, "Failed", tokens, ct);
             throw;
+        }
+    }
+
+    private async Task<(bool OwnsProtocolPass, ReviewSystemContext Context)> BeginProtocolIfNeededAsync(
+        ReviewJob job,
+        ReviewSystemContext prWideContext,
+        IChatClient? overrideClient,
+        CancellationToken ct)
+    {
+        if (prWideContext.ActiveProtocolId.HasValue || prWideContext.ProtocolRecorder is null)
+        {
+            return (false, prWideContext);
+        }
+
+        try
+        {
+            var modelId = overrideClient is not null
+                ? prWideContext.ModelId
+                : prWideContext.DefaultReviewModelId ?? prWideContext.ModelId;
+            var protocolId = await prWideContext.ProtocolRecorder.BeginAsync(
+                job.Id,
+                job.RetryCount + 1,
+                "pr-wide-review",
+                null,
+                AiConnectionModelCategory.HighEffort,
+                modelId,
+                ct);
+
+            return (true, CloneContext(prWideContext, protocolId, prWideContext.ProtocolRecorder));
+        }
+        catch (Exception ex)
+        {
+            LogProtocolBeginFailed(this._logger, job.Id, ex);
+            return (false, prWideContext);
+        }
+    }
+
+    private async Task FinalizeProtocolAsync(
+        bool ownsProtocolPass,
+        ReviewSystemContext prWideContext,
+        string status,
+        TokenAccumulator tokens,
+        CancellationToken ct)
+    {
+        if (!ownsProtocolPass)
+        {
+            return;
+        }
+
+        if (!prWideContext.ActiveProtocolId.HasValue || prWideContext.ProtocolRecorder is null)
+        {
+            return;
+        }
+
+        var cacheStatus = tokens.InputTokens > 0 || tokens.OutputTokens > 0
+            ? CacheObservabilityStatus.Observable
+            : CacheObservabilityStatus.Unobservable;
+
+        await prWideContext.ProtocolRecorder.SetCompletedAsync(
+            prWideContext.ActiveProtocolId.Value,
+            status,
+            tokens.InputTokens,
+            tokens.OutputTokens,
+            tokens.AiCalls,
+            tokens.ToolCalls,
+            null,
+            ct,
+            tokens.CachedInputTokens,
+            cacheStatus,
+            tokens.CacheWriteTokens,
+            tokens.ReasoningTokens);
+    }
+
+    private sealed class TokenAccumulator
+    {
+        public long InputTokens;
+        public long OutputTokens;
+        public long CachedInputTokens;
+        public long CacheWriteTokens;
+        public long ReasoningTokens;
+        public int AiCalls;
+        public int ToolCalls;
+
+        public void AddPlan(long inputTokens, long outputTokens, int aiCalls, long cachedInputTokens, long cacheWriteTokens, long reasoningTokens)
+        {
+            InputTokens += inputTokens;
+            OutputTokens += outputTokens;
+            CachedInputTokens += cachedInputTokens;
+            CacheWriteTokens += cacheWriteTokens;
+            ReasoningTokens += reasoningTokens;
+            AiCalls += aiCalls;
+        }
+
+        public void AddInvestigations(
+            long inputTokens, long outputTokens, int aiCalls, int toolCalls, long cachedInputTokens, long cacheWriteTokens,
+            long reasoningTokens)
+        {
+            InputTokens += inputTokens;
+            OutputTokens += outputTokens;
+            CachedInputTokens += cachedInputTokens;
+            CacheWriteTokens += cacheWriteTokens;
+            ReasoningTokens += reasoningTokens;
+            AiCalls += aiCalls;
+            ToolCalls += toolCalls;
+        }
+
+        public void AddSynthesis(long inputTokens, long outputTokens, int aiCalls, long cachedInputTokens, long cacheWriteTokens, long reasoningTokens)
+        {
+            InputTokens += inputTokens;
+            OutputTokens += outputTokens;
+            CachedInputTokens += cachedInputTokens;
+            CacheWriteTokens += cacheWriteTokens;
+            ReasoningTokens += reasoningTokens;
+            AiCalls += aiCalls;
         }
     }
 
