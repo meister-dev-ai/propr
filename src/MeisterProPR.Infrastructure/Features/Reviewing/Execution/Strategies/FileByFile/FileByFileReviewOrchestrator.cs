@@ -127,13 +127,16 @@ internal sealed partial class FileByFileReviewOrchestrator(
             ?? throw new InvalidOperationException("No chat client available for file review orchestration.");
         await this.RecordReviewProfileSelectedEventAsync(job, baseContext, ct);
         var dispatchResult = await this.GetDispatchPlanner().ExecuteAsync(job, pr, baseContext, effectiveClient, ct);
+        var budgetSoftCap = dispatchResult.BudgetSoftCap;
 
         // Job-level PR-wide-scope pass entries run once over the whole change set here — after the per-file fan-out
         // and before synthesis — and their candidates are threaded into synthesis so they flow through the shared
-        // verify -> gate -> publish path alongside the synthesized cross-cutting findings.
-        var prWideCandidates = await this.RunPrWideScopePassesAsync(job, pr, baseContext, ct);
-
-        var budgetSoftCap = dispatchResult.BudgetSoftCap;
+        // verify -> gate -> publish path alongside the synthesized cross-cutting findings. When the per-increment
+        // soft cap has tripped, this is further scanning work, so it is skipped along with the remaining files and
+        // the job goes straight to synthesis of what was reviewed.
+        IReadOnlyList<CandidateReviewFinding> prWideCandidates = budgetSoftCap.SoftCapped
+            ? []
+            : await this.RunPrWideScopePassesAsync(job, pr, baseContext, ct);
 
         if (dispatchResult.Exceptions.Count > 0)
         {
