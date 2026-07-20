@@ -652,109 +652,40 @@ public sealed partial class ThreadMemoryService(
         float? temperature,
         CancellationToken ct)
     {
-        var effectiveChatClient = chatClient;
-        var effectiveModelId = modelId;
-
-        if (effectiveChatClient is null)
+        var resolved = await this.ResolveReconsiderationChatClientAsync(clientId, modelId, ct);
+        if (resolved is null)
         {
-            if (aiRuntimeResolver is not null)
-            {
-                var runtime = await aiRuntimeResolver.ResolveChatRuntimeAsync(
-                    clientId,
-                    AiPurpose.MemoryReconsideration,
-                    ct);
-                effectiveModelId = runtime.Model.RemoteModelId;
-                effectiveChatClient = runtime.ChatClient;
-            }
-
-            if (effectiveChatClient is null && (aiConnectionRepository is null || aiChatClientFactory is null))
-            {
-                return null;
-            }
-
-            if (effectiveChatClient is null)
-            {
-                var activeConnection = await aiConnectionRepository!.GetActiveForClientAsync(clientId, ct);
-                if (activeConnection is null)
-                {
-                    return null;
-                }
-
-                effectiveModelId = activeConnection.GetBoundModelId(AiPurpose.MemoryReconsideration) ??
-                                   activeConnection.ConfiguredModels.FirstOrDefault(model => model.SupportsChat)?.RemoteModelId ??
-                                   effectiveModelId;
-                effectiveChatClient = aiChatClientFactory!.CreateClient(
-                    activeConnection.BaseUrl,
-                    activeConnection.Secret);
-            }
+            return null;
         }
 
         try
         {
-            var draftJson = JsonSerializer.Serialize(
-                new
+            var (systemMsg, userMsg) = this.BuildReconsiderationMessages(draftResult, matches);
+
+            var response = await resolved.Value.ChatClient.GetResponseAsync(
+                new[]
                 {
-                    summary = draftResult.Summary,
-                    comments = draftResult.Comments.Select(c => new
-                    {
-                        file_path = c.FilePath,
-                        line_number = c.LineNumber,
-                        severity = c.Severity.ToString().ToLowerInvariant(),
-                        message = c.Message,
-                    }),
-                });
-
-            var systemMsg = BuildReconsiderationSystemPrompt();
-            var userMsg = BuildReconsiderationUserMessage(draftJson, matches);
-
-            var messages = new[]
-            {
-                new ChatMessage(ChatRole.System, systemMsg),
-                new ChatMessage(ChatRole.User, userMsg),
-            };
-
-            var response = await effectiveChatClient.GetResponseAsync(
-                messages,
-                new ChatOptions { ModelId = effectiveModelId, Temperature = temperature },
+                    new ChatMessage(ChatRole.System, systemMsg),
+                    new ChatMessage(ChatRole.User, userMsg),
+                },
+                new ChatOptions { ModelId = resolved.Value.ModelId, Temperature = temperature },
                 ct);
+
             var text = response.Text;
             if (string.IsNullOrWhiteSpace(text))
             {
                 return null;
             }
 
-            // Record the reconsideration AI call in the protocol for full token traceability.
-            if (protocolId.HasValue)
-            {
-                var usage = AiTokenUsageExtractor.FromResponse(response);
-                var inputTokens = response.Usage?.InputTokenCount;
-                var outputTokens = response.Usage?.OutputTokenCount;
-                await protocolRecorder.RecordAiCallAsync(
-                    protocolId.Value,
-                    0,
-                    inputTokens,
-                    outputTokens,
-                    userMsg,
-                    systemMsg,
-                    text,
-                    ct,
-                    "ai_call_memory_reconsideration",
-                    cachedInputTokens: usage.IsEstimated ? null : usage.CachedInputTokens,
-                    cacheWriteTokens: usage.IsEstimated ? null : usage.CacheWriteTokens,
-                    reasoningTokens: usage.IsEstimated ? null : usage.ReasoningTokens);
-                await protocolRecorder.AddTokensAsync(
-                    protocolId.Value,
-                    usage.InputTokens,
-                    usage.OutputTokens,
-                    AiConnectionModelCategory.MemoryReconsideration,
-                    effectiveModelId,
-                    ct,
-                    usage.CachedInputTokens,
-                    usage.CacheWriteTokens,
-                    usage.ReasoningTokens);
-            }
+            await this.RecordReconsiderationProtocolIfNeededAsync(
+                protocolId,
+                resolved.Value.ModelId,
+                systemMsg,
+                userMsg,
+                text,
+                response,
+                ct);
 
-            // Parse the AI response using the same mechanism as the main review loop.
             return ParseReconsiderationResponse(text, draftResult);
         }
         catch (Exception ex)
@@ -763,6 +694,108 @@ public sealed partial class ThreadMemoryService(
             return null;
         }
     }
+
+    private async Task<ResolvedChatClient?> ResolveReconsiderationChatClientAsync(
+        Guid clientId,
+        string modelId,
+        CancellationToken ct)
+    {
+        if (chatClient is not null)
+        {
+            return new ResolvedChatClient(chatClient, modelId);
+        }
+
+        if (aiRuntimeResolver is not null)
+        {
+            var runtime = await aiRuntimeResolver.ResolveChatRuntimeAsync(
+                clientId,
+                AiPurpose.MemoryReconsideration,
+                ct);
+            return new ResolvedChatClient(runtime.ChatClient, runtime.Model.RemoteModelId);
+        }
+
+        if (aiConnectionRepository is null || aiChatClientFactory is null)
+        {
+            return null;
+        }
+
+        var activeConnection = await aiConnectionRepository.GetActiveForClientAsync(clientId, ct);
+        if (activeConnection is null)
+        {
+            return null;
+        }
+
+        var resolvedModelId = activeConnection.GetBoundModelId(AiPurpose.MemoryReconsideration)
+                              ?? activeConnection.ConfiguredModels.FirstOrDefault(model => model.SupportsChat)?.RemoteModelId
+                              ?? modelId;
+        var client = aiChatClientFactory.CreateClient(activeConnection.BaseUrl, activeConnection.Secret);
+        return new ResolvedChatClient(client, resolvedModelId);
+    }
+
+    private (string SystemMessage, string UserMessage) BuildReconsiderationMessages(
+        ReviewResult draftResult,
+        IReadOnlyList<ThreadMemoryMatchDto> matches)
+    {
+        var draftJson = JsonSerializer.Serialize(
+            new
+            {
+                summary = draftResult.Summary,
+                comments = draftResult.Comments.Select(c => new
+                {
+                    file_path = c.FilePath,
+                    line_number = c.LineNumber,
+                    severity = c.Severity.ToString().ToLowerInvariant(),
+                    message = c.Message,
+                }),
+            });
+
+        return (BuildReconsiderationSystemPrompt(), BuildReconsiderationUserMessage(draftJson, matches));
+    }
+
+    private async Task RecordReconsiderationProtocolIfNeededAsync(
+        Guid? protocolId,
+        string effectiveModelId,
+        string systemMsg,
+        string userMsg,
+        string text,
+        ChatResponse response,
+        CancellationToken ct)
+    {
+        if (!protocolId.HasValue)
+        {
+            return;
+        }
+
+        // Record the reconsideration AI call in the protocol for full token traceability.
+        var usage = AiTokenUsageExtractor.FromResponse(response);
+        var inputTokens = response.Usage?.InputTokenCount;
+        var outputTokens = response.Usage?.OutputTokenCount;
+        await protocolRecorder.RecordAiCallAsync(
+            protocolId.Value,
+            0,
+            inputTokens,
+            outputTokens,
+            userMsg,
+            systemMsg,
+            text,
+            ct,
+            "ai_call_memory_reconsideration",
+            cachedInputTokens: usage.IsEstimated ? null : usage.CachedInputTokens,
+            cacheWriteTokens: usage.IsEstimated ? null : usage.CacheWriteTokens,
+            reasoningTokens: usage.IsEstimated ? null : usage.ReasoningTokens);
+        await protocolRecorder.AddTokensAsync(
+            protocolId.Value,
+            usage.InputTokens,
+            usage.OutputTokens,
+            AiConnectionModelCategory.MemoryReconsideration,
+            effectiveModelId,
+            ct,
+            usage.CachedInputTokens,
+            usage.CacheWriteTokens,
+            usage.ReasoningTokens);
+    }
+
+    private readonly record struct ResolvedChatClient(IChatClient ChatClient, string ModelId);
 
     private static string BuildReconsiderationSystemPrompt()
     {
