@@ -11892,7 +11892,7 @@ export interface components {
          * @description Status of a review job.
          * @enum {string}
          */
-        JobStatus: "pending" | "processing" | "completed" | "failed" | "cancelled" | "superseded" | "stopped";
+        JobStatus: "pending" | "processing" | "completed" | "failed" | "cancelled" | "superseded" | "stopped" | "budgetHeld" | "budgetExceeded";
         /** @description Installation-wide licensing summary for administration and session hydration. */
         LicensingSummaryDto: {
             edition?: components["schemas"]["InstallationEdition"];

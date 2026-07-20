@@ -32,7 +32,7 @@ public sealed class InMemoryReviewJobRepository : IJobRepository
                                 && string.Equals(candidate.ProjectId, job.ProjectId, StringComparison.Ordinal)
                                 && RepositoryMatches(candidate, job.RepositoryId, job.ProjectId)
                                 && candidate.PullRequestId == job.PullRequestId
-                                && candidate.Status is JobStatus.Pending or JobStatus.Processing)
+                                && candidate.Status is JobStatus.Pending or JobStatus.Processing or JobStatus.BudgetHeld or JobStatus.BudgetExceeded)
             .ToList();
 
         if (!string.IsNullOrWhiteSpace(currentRevisionKey))
@@ -89,7 +89,7 @@ public sealed class InMemoryReviewJobRepository : IJobRepository
             && RepositoryMatches(job, repositoryId, projectId)
             && job.PullRequestId == pullRequestId
             && job.IterationId == iterationId
-            && job.Status is JobStatus.Pending or JobStatus.Processing);
+            && job.Status is JobStatus.Pending or JobStatus.Processing or JobStatus.BudgetHeld or JobStatus.BudgetExceeded);
     }
 
     public ReviewJob? FindCompletedJob(
@@ -416,6 +416,42 @@ public sealed class InMemoryReviewJobRepository : IJobRepository
         return Task.CompletedTask;
     }
 
+    public Task SetBudgetExceededAsync(
+        Guid id,
+        BudgetScopeKind scope,
+        BudgetCapKind capKind,
+        decimal thresholdUsd,
+        decimal spentUsd,
+        CancellationToken ct = default)
+    {
+        if (this._jobs.TryGetValue(id, out var job) &&
+            job.Status is not (JobStatus.Completed or JobStatus.Failed or JobStatus.Cancelled or JobStatus.Superseded or JobStatus.Stopped))
+        {
+            job.SetBudgetBlock(scope, capKind, thresholdUsd, spentUsd);
+            job.Status = JobStatus.BudgetExceeded;
+            job.CompletedAt = DateTimeOffset.UtcNow;
+        }
+
+        return Task.CompletedTask;
+    }
+
+    public Task SetBudgetHeldAsync(
+        Guid id,
+        BudgetScopeKind scope,
+        BudgetCapKind capKind,
+        decimal thresholdUsd,
+        decimal spentUsd,
+        CancellationToken ct = default)
+    {
+        if (this._jobs.TryGetValue(id, out var job) && job.Status == JobStatus.Pending)
+        {
+            job.SetBudgetBlock(scope, capKind, thresholdUsd, spentUsd);
+            job.Status = JobStatus.BudgetHeld;
+        }
+
+        return Task.CompletedTask;
+    }
+
     public Task<IReadOnlyList<ReviewJob>> GetActiveJobsForConfigAsync(
         string organizationUrl,
         string projectId,
@@ -426,7 +462,7 @@ public sealed class InMemoryReviewJobRepository : IJobRepository
                 .Where(job =>
                     string.Equals(job.OrganizationUrl, organizationUrl, StringComparison.Ordinal)
                     && string.Equals(job.ProjectId, projectId, StringComparison.Ordinal)
-                    && job.Status is JobStatus.Pending or JobStatus.Processing)
+                    && job.Status is JobStatus.Pending or JobStatus.Processing or JobStatus.BudgetHeld or JobStatus.BudgetExceeded)
                 .ToList()
                 .AsReadOnly());
     }

@@ -18424,7 +18424,9 @@
           "failed",
           "cancelled",
           "superseded",
-          "stopped"
+          "stopped",
+          "budgetHeld",
+          "budgetExceeded"
         ],
         "type": "string",
         "description": "Status of a review job."

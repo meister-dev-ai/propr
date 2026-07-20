@@ -20,6 +20,12 @@ public sealed partial class JobRepository(
     IDbContextFactory<MeisterProPRDbContext> contextFactory,
     ILogger<JobRepository> logger) : IJobRepository
 {
+    // Jobs still live for a pull request — not yet terminal — so a newer push supersedes them, a closed PR
+    // cancels them, and intake treats them as an existing job rather than creating a duplicate. Budget-held and
+    // budget-exceeded jobs are waiting on a manual restart, so they remain live for these purposes.
+    private static readonly JobStatus[] ActiveJobStatuses =
+        [JobStatus.Pending, JobStatus.Processing, JobStatus.BudgetHeld, JobStatus.BudgetExceeded];
+
     /// <inheritdoc />
     public async Task<bool> TryTransitionAsync(Guid id, JobStatus from, JobStatus to, CancellationToken ct = default)
     {
@@ -93,7 +99,7 @@ public sealed partial class JobRepository(
                                  && RepositoryMatches(j, repositoryId, projectId)
                                  && j.PullRequestId == pullRequestId
                                  && j.IterationId == iterationId
-                                 && (j.Status == JobStatus.Pending || j.Status == JobStatus.Processing));
+                                 && ActiveJobStatuses.Contains(j.Status));
     }
 
     /// <inheritdoc />
@@ -314,7 +320,7 @@ public sealed partial class JobRepository(
             .Where(candidate => candidate.OrganizationUrl == job.OrganizationUrl
                                 && candidate.ProjectId == job.ProjectId
                                 && candidate.PullRequestId == job.PullRequestId
-                                && (candidate.Status == JobStatus.Pending || candidate.Status == JobStatus.Processing))
+                                && ActiveJobStatuses.Contains(candidate.Status))
             .ToListAsync(ct);
         activeJobs = activeJobs
             .Where(candidate => RepositoryMatches(candidate, job.RepositoryId, job.ProjectId))
@@ -642,6 +648,50 @@ public sealed partial class JobRepository(
     }
 
     /// <inheritdoc />
+    public async Task SetBudgetExceededAsync(
+        Guid id,
+        BudgetScopeKind scope,
+        BudgetCapKind capKind,
+        decimal thresholdUsd,
+        decimal spentUsd,
+        CancellationToken ct = default)
+    {
+        var job = await dbContext.ReviewJobs.FindAsync([id], ct);
+        if (job is null || job.Status is JobStatus.Completed or JobStatus.Failed or JobStatus.Cancelled or JobStatus.Superseded or JobStatus.Stopped)
+        {
+            // Never overwrite a deliberate terminal decision with a late budget cut.
+            return;
+        }
+
+        job.SetBudgetBlock(scope, capKind, thresholdUsd, spentUsd);
+        job.Status = JobStatus.BudgetExceeded;
+        job.CompletedAt = DateTimeOffset.UtcNow;
+        await dbContext.SaveChangesAsync(ct).ConfigureAwait(false);
+        await this.CloseOpenProtocolsAsync(id).ConfigureAwait(false);
+    }
+
+    /// <inheritdoc />
+    public async Task SetBudgetHeldAsync(
+        Guid id,
+        BudgetScopeKind scope,
+        BudgetCapKind capKind,
+        decimal thresholdUsd,
+        decimal spentUsd,
+        CancellationToken ct = default)
+    {
+        var job = await dbContext.ReviewJobs.FindAsync([id], ct);
+        if (job is null || job.Status != JobStatus.Pending)
+        {
+            // A job is held only from the queued state, before it is claimed for processing.
+            return;
+        }
+
+        job.SetBudgetBlock(scope, capKind, thresholdUsd, spentUsd);
+        job.Status = JobStatus.BudgetHeld;
+        await dbContext.SaveChangesAsync(ct).ConfigureAwait(false);
+    }
+
+    /// <inheritdoc />
     public async Task<IReadOnlyList<ReviewJob>> GetActiveJobsForConfigAsync(
         string organizationUrl,
         string projectId,
@@ -650,7 +700,7 @@ public sealed partial class JobRepository(
         var jobs = await dbContext.ReviewJobs
             .Where(j => j.OrganizationUrl == organizationUrl &&
                         j.ProjectId == projectId &&
-                        (j.Status == JobStatus.Pending || j.Status == JobStatus.Processing))
+                        ActiveJobStatuses.Contains(j.Status))
             .ToListAsync(ct);
 
         await this.HydrateSourceScopesAsync(jobs, ct);

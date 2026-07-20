@@ -182,6 +182,26 @@ internal sealed class ReviewJobEntityTypeConfiguration : IEntityTypeConfiguratio
             .IsRequired()
             .HasDefaultValue(false);
 
+        builder.Property(j => j.BudgetBlockScope)
+            .HasColumnName("budget_block_scope")
+            .HasConversion<int?>()
+            .IsRequired(false);
+
+        builder.Property(j => j.BudgetBlockCapKind)
+            .HasColumnName("budget_block_cap_kind")
+            .HasConversion<int?>()
+            .IsRequired(false);
+
+        builder.Property(j => j.BudgetBlockThresholdUsd)
+            .HasColumnName("budget_block_threshold_usd")
+            .HasPrecision(18, 6)
+            .IsRequired(false);
+
+        builder.Property(j => j.BudgetBlockSpentUsd)
+            .HasColumnName("budget_block_spent_usd")
+            .HasPrecision(18, 6)
+            .IsRequired(false);
+
         builder.Property(j => j.InScopeChangedFileCount)
             .HasColumnName("in_scope_changed_file_count")
             .IsRequired(false);

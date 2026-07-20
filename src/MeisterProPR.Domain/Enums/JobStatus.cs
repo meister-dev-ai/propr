@@ -38,4 +38,18 @@ public enum JobStatus
     ///     partial results are not treated as a reusable baseline.
     /// </summary>
     Stopped = 6,
+
+    /// <summary>
+    ///     Job was held before it started because a client or pull-request budget soft cap had been reached, so
+    ///     no new review was admitted. A held job never ran; it is resumed manually by restarting it once budget
+    ///     is freed, and it is still superseded by a newer push or cancelled when the pull request closes.
+    /// </summary>
+    BudgetHeld = 7,
+
+    /// <summary>
+    ///     Job was stopped in-flight because a hard budget cap was reached; the findings produced before the cap
+    ///     are published. It is resumed manually by restarting it once budget is freed (already-paid files are
+    ///     carried forward), and it is still superseded by a newer push or cancelled when the pull request closes.
+    /// </summary>
+    BudgetExceeded = 8,
 }

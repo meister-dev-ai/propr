@@ -242,6 +242,28 @@ public sealed class ReviewingDiagnosticsServiceCollectionExtensionsTests
             return Task.CompletedTask;
         }
 
+        public Task SetBudgetExceededAsync(
+            Guid id,
+            MeisterProPR.Domain.Enums.BudgetScopeKind scope,
+            MeisterProPR.Domain.Enums.BudgetCapKind capKind,
+            decimal thresholdUsd,
+            decimal spentUsd,
+            CancellationToken ct = default)
+        {
+            return Task.CompletedTask;
+        }
+
+        public Task SetBudgetHeldAsync(
+            Guid id,
+            MeisterProPR.Domain.Enums.BudgetScopeKind scope,
+            MeisterProPR.Domain.Enums.BudgetCapKind capKind,
+            decimal thresholdUsd,
+            decimal spentUsd,
+            CancellationToken ct = default)
+        {
+            return Task.CompletedTask;
+        }
+
         public Task<IReadOnlyList<ReviewJob>> GetActiveJobsForConfigAsync(
             string organizationUrl,
             string projectId,

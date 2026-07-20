@@ -177,6 +177,31 @@ public interface IJobRepository
     /// </summary>
     Task SetStoppedAsync(Guid id, CancellationToken ct = default);
 
+    /// <summary>
+    ///     Marks the job budget-exceeded because a hard cap was reached mid-review, recording the binding scope,
+    ///     cap kind, threshold, and spend as the reason. No-op if the job does not exist or is already in a
+    ///     deliberate terminal state (completed, failed, cancelled, superseded, or stopped).
+    /// </summary>
+    Task SetBudgetExceededAsync(
+        Guid id,
+        BudgetScopeKind scope,
+        BudgetCapKind capKind,
+        decimal thresholdUsd,
+        decimal spentUsd,
+        CancellationToken ct = default);
+
+    /// <summary>
+    ///     Marks a queued job budget-held because a cap was already reached at admission, recording the binding
+    ///     scope, cap kind, threshold, and spend as the reason. No-op unless the job is currently pending.
+    /// </summary>
+    Task SetBudgetHeldAsync(
+        Guid id,
+        BudgetScopeKind scope,
+        BudgetCapKind capKind,
+        decimal thresholdUsd,
+        decimal spentUsd,
+        CancellationToken ct = default);
+
     /// <summary>Returns all Pending or Processing jobs for the given ADO organisation/project combination.</summary>
     Task<IReadOnlyList<ReviewJob>> GetActiveJobsForConfigAsync(
         string organizationUrl,

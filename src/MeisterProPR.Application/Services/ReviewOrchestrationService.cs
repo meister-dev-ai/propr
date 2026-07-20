@@ -5,6 +5,8 @@ using System.Globalization;
 using System.Text.Json;
 using MeisterProPR.Application.DTOs;
 using MeisterProPR.Application.Exceptions;
+using MeisterProPR.Application.Features.Budgeting;
+using MeisterProPR.Application.Features.Budgeting.Models;
 using MeisterProPR.Application.Features.ReviewArchive;
 using MeisterProPR.Application.Features.Reviewing.Execution;
 using MeisterProPR.Application.Features.Reviewing.Execution.Models;
@@ -51,7 +53,10 @@ public sealed partial class ReviewOrchestrationService(
     IReviewRepositoryWorkspaceManager? workspaceManager = null,
     IClientScmConnectionRepository? scmConnectionRepository = null,
     IReviewArchiveIngestionService? reviewArchiveIngestionService = null,
-    IPostedCommentOriginStore? postedCommentOriginStore = null) : IReviewJobProcessor
+    IPostedCommentOriginStore? postedCommentOriginStore = null,
+    IBudgetCapsProvider? budgetCapsProvider = null,
+    IReviewSpendAccumulator? spendAccumulator = null,
+    IBudgetScopeAccessor? budgetScopeAccessor = null) : IReviewJobProcessor
 {
     private const string LocalWorkspacePreparedEventName = "local_workspace_prepared";
     private const string LocalWorkspaceFailedEventName = "local_workspace_failed";
@@ -79,6 +84,9 @@ public sealed partial class ReviewOrchestrationService(
             return;
         }
 
+        var budgetScope = await this.TryCreateBudgetScopeAsync(job, ct);
+        using var budgetScopeHandle = budgetScope is null ? null : budgetScopeAccessor!.BeginScope(budgetScope);
+
         PullRequest? pr = null;
 
         try
@@ -91,13 +99,30 @@ public sealed partial class ReviewOrchestrationService(
                 resolvedReviewRuntime.Value.Capabilities,
                 ct);
         }
+        catch (BudgetHardCapReachedException ex)
+        {
+            await this.HandleBudgetCutAsync(job, ex.Breach, ct);
+            return;
+        }
         catch (PartialReviewFailureException ex)
         {
+            // A hard-cap trip can surface wrapped as a partial failure; treat it as budget-exceeded if the scope
+            // tripped, otherwise fall back to the normal partial-failure handling.
+            if (await this.TryHandleBudgetCutAsync(job, budgetScope, ct))
+            {
+                return;
+            }
+
             await this.HandlePartialReviewFailureAsync(job, pr, ex, ct);
             return;
         }
         catch (Exception ex)
         {
+            if (await this.TryHandleBudgetCutAsync(job, budgetScope, ct))
+            {
+                return;
+            }
+
             LogReviewFailed(logger, job.Id, ex);
             await jobs.SetFailedAsync(job.Id, ex.Message, ct);
             return;
@@ -113,6 +138,40 @@ public sealed partial class ReviewOrchestrationService(
                 pr.AuthorizedIdentityId,
                 ct);
         }
+    }
+
+    private async Task<BudgetScope?> TryCreateBudgetScopeAsync(ReviewJob job, CancellationToken ct)
+    {
+        if (budgetScopeAccessor is null || budgetCapsProvider is null || spendAccumulator is null)
+        {
+            return null;
+        }
+
+        var caps = await budgetCapsProvider.GetCapsAsync(job.ClientId, ct);
+        if (!caps.AnyConfigured)
+        {
+            return null;
+        }
+
+        var baseline = await spendAccumulator.GetBaselineAsync(job, DateOnly.FromDateTime(DateTime.UtcNow), ct);
+        return new BudgetScope(caps, baseline);
+    }
+
+    private async Task<bool> TryHandleBudgetCutAsync(ReviewJob job, BudgetScope? budgetScope, CancellationToken ct)
+    {
+        if (budgetScope?.TrippedBreach is not { } breach)
+        {
+            return false;
+        }
+
+        await this.HandleBudgetCutAsync(job, breach, ct);
+        return true;
+    }
+
+    private async Task HandleBudgetCutAsync(ReviewJob job, BudgetBreach breach, CancellationToken ct)
+    {
+        LogBudgetHardCapReached(logger, job.Id, breach.Scope, breach.ThresholdUsd, breach.SpentUsd);
+        await jobs.SetBudgetExceededAsync(job.Id, breach.Scope, breach.CapKind, breach.ThresholdUsd, breach.SpentUsd, ct);
     }
 
     private async Task<PullRequest?> RunReviewPipelineAsync(
@@ -212,7 +271,8 @@ public sealed partial class ReviewOrchestrationService(
 
         pr = await this.AttachLinkedItemsAsync(job, pr, systemContext, ct);
 
-        if (jobs.GetById(job.Id)?.Status is JobStatus.Cancelled or JobStatus.Superseded or JobStatus.Stopped)
+        if (jobs.GetById(job.Id)?.Status is JobStatus.Cancelled or JobStatus.Superseded or JobStatus.Stopped or JobStatus.BudgetExceeded
+            or JobStatus.BudgetHeld)
         {
             LogJobCancelledBeforeFileReview(logger, job.Id);
             return null;
@@ -220,7 +280,8 @@ public sealed partial class ReviewOrchestrationService(
 
         var result = await this.DispatchFileReviewAsync(job, pr, systemContext, overrideChatClient, ct);
 
-        if (jobs.GetById(job.Id)?.Status is JobStatus.Cancelled or JobStatus.Superseded or JobStatus.Stopped)
+        if (jobs.GetById(job.Id)?.Status is JobStatus.Cancelled or JobStatus.Superseded or JobStatus.Stopped or JobStatus.BudgetExceeded
+            or JobStatus.BudgetHeld)
         {
             LogJobCancelledAfterFileReview(logger, job.Id);
             return null;
@@ -242,7 +303,8 @@ public sealed partial class ReviewOrchestrationService(
         // multi-instance deployment a manual stop may land on another instance and never reach this
         // instance's cancellation token, so the persisted status is the last line of defence against
         // publishing the review of a job an administrator has stopped (or that was cancelled/superseded).
-        if (jobs.GetById(job.Id)?.Status is JobStatus.Cancelled or JobStatus.Superseded or JobStatus.Stopped)
+        if (jobs.GetById(job.Id)?.Status is JobStatus.Cancelled or JobStatus.Superseded or JobStatus.Stopped or JobStatus.BudgetExceeded
+            or JobStatus.BudgetHeld)
         {
             LogJobCancelledAfterFileReview(logger, job.Id);
             return null;

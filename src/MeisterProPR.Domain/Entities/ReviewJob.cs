@@ -268,6 +268,18 @@ public sealed class ReviewJob
     /// </summary>
     public bool CostIsApproximate { get; private set; }
 
+    /// <summary>The budget scope whose cap held or stopped this job, or null when no budget blocked it.</summary>
+    public BudgetScopeKind? BudgetBlockScope { get; private set; }
+
+    /// <summary>Whether the soft or the hard cap held or stopped this job. Null when no budget blocked it.</summary>
+    public BudgetCapKind? BudgetBlockCapKind { get; private set; }
+
+    /// <summary>The USD threshold that held or stopped this job. Null when no budget blocked it.</summary>
+    public decimal? BudgetBlockThresholdUsd { get; private set; }
+
+    /// <summary>The scope spend that reached the threshold when this job was held or stopped. Null when no budget blocked it.</summary>
+    public decimal? BudgetBlockSpentUsd { get; private set; }
+
     /// <summary>
     ///     The number of in-scope changed files after exclusions for this iteration, fixed once at dispatch
     ///     planning. Null until dispatch planning runs. Denominator of the "files reviewed" progress metric.
@@ -440,6 +452,18 @@ public sealed class ReviewJob
 
         this.TotalEstimatedCostUsd = total;
         this.CostIsApproximate = anyApproximate || (anyPriced && anyUnpriced);
+    }
+
+    /// <summary>
+    ///     Records why a budget held or stopped this job: the binding scope, whether the soft or hard cap was
+    ///     reached, the USD threshold, and the scope spend that reached it. Surfaced to operators as the reason.
+    /// </summary>
+    public void SetBudgetBlock(BudgetScopeKind scope, BudgetCapKind capKind, decimal thresholdUsd, decimal spentUsd)
+    {
+        this.BudgetBlockScope = scope;
+        this.BudgetBlockCapKind = capKind;
+        this.BudgetBlockThresholdUsd = thresholdUsd;
+        this.BudgetBlockSpentUsd = spentUsd;
     }
 
     /// <summary>Records the AI connection and model used at job-start time.</summary>

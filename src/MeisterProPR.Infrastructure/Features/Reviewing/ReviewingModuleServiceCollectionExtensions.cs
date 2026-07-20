@@ -67,10 +67,15 @@ public static class ReviewingModuleServiceCollectionExtensions
 
         services.AddReviewingIntake();
 
+        // The budget scope accessor is a pure ambient holder (no database), so it is always available; the
+        // enforcing model-client decorators read it on each call and are inert when no scope is active.
+        services.TryAddSingleton<IBudgetScopeAccessor, BudgetScopeAccessor>();
+
         if (hasDatabase)
         {
             services.AddScoped<IJobRepository, JobRepository>();
             services.AddScoped<IReviewSpendAccumulator, ReviewSpendAccumulator>();
+            services.AddSingleton<IBudgetCapsProvider, BudgetCapsProvider>();
             services.AddSingleton<IModelPricingResolver, EfModelPricingResolver>();
             services.AddSingleton<IProtocolRecorder, EfProtocolRecorder>();
             services.AddScoped<IThreadMemoryRepository, ThreadMemoryRepository>();
