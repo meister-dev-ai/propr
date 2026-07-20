@@ -91,20 +91,42 @@ public sealed class ClientAdminService(
             return null;
         }
 
-        if (isActive.HasValue)
-        {
-            client.IsActive = isActive.Value;
-        }
+        ApplyScalarPatches(
+            client,
+            isActive,
+            displayName,
+            commentResolutionBehavior,
+            customSystemMessage,
+            defaultReviewPipelineProfileId,
+            scmCommentPostingEnabled,
+            enableEvidenceBackedVerification,
+            enableLanguageRobustScreening,
+            enableMultiPassUnion,
+            includeLinkedItemsInContext,
+            baselineReasoningEffort);
+        ReplaceReviewPassesIfProvided(client, reviewPasses);
 
-        if (displayName is not null)
-        {
-            client.DisplayName = displayName;
-        }
+        await dbContext.SaveChangesAsync(ct);
+        return await this.GetByIdAsync(clientId, ct);
+    }
 
-        if (commentResolutionBehavior.HasValue)
-        {
-            client.CommentResolutionBehavior = commentResolutionBehavior.Value;
-        }
+    private static void ApplyScalarPatches(
+        ClientRecord client,
+        bool? isActive,
+        string? displayName,
+        CommentResolutionBehavior? commentResolutionBehavior,
+        string? customSystemMessage,
+        string? defaultReviewPipelineProfileId,
+        bool? scmCommentPostingEnabled,
+        bool? enableEvidenceBackedVerification,
+        bool? enableLanguageRobustScreening,
+        bool? enableMultiPassUnion,
+        bool? includeLinkedItemsInContext,
+        ReviewReasoningEffort? baselineReasoningEffort)
+    {
+        ApplyIfHasValue(isActive, value => client.IsActive = value);
+        ApplyIfNotNull(displayName, value => client.DisplayName = value);
+        ApplyIfHasValue(commentResolutionBehavior, value => client.CommentResolutionBehavior = value);
 
         if (customSystemMessage is not null)
         {
@@ -117,74 +139,57 @@ public sealed class ClientAdminService(
             ApplyDefaultReviewPipelineProfile(client, defaultReviewPipelineProfileId);
         }
 
-        if (scmCommentPostingEnabled.HasValue)
+        ApplyIfHasValue(scmCommentPostingEnabled, value => client.ScmCommentPostingEnabled = value);
+        ApplyIfHasValue(enableEvidenceBackedVerification, value => client.EnableEvidenceBackedVerification = value);
+        ApplyIfHasValue(enableLanguageRobustScreening, value => client.EnableLanguageRobustScreening = value);
+        ApplyIfHasValue(enableMultiPassUnion, value => client.EnableMultiPassUnion = value);
+        ApplyIfHasValue(includeLinkedItemsInContext, value => client.IncludeLinkedItemsInContext = value);
+        ApplyIfHasValue(baselineReasoningEffort, value => client.BaselineReasoningEffort = value);
+    }
+
+    private static void ReplaceReviewPassesIfProvided(ClientRecord client, IReadOnlyList<ReviewPassDto>? reviewPasses)
+    {
+        if (reviewPasses is null)
         {
-            client.ScmCommentPostingEnabled = scmCommentPostingEnabled.Value;
+            return;
         }
 
-        if (enableEvidenceBackedVerification.HasValue)
+        // Wholesale replace the ordered pass list: clear the existing rows (cascade-deleted) and re-add the
+        // requested entries with normalized sequential ordinals in the caller's declared order.
+        client.ReviewPasses.Clear();
+        var ordinal = 0;
+        foreach (var pass in reviewPasses.OrderBy(entry => entry.Ordinal))
         {
-            client.EnableEvidenceBackedVerification = enableEvidenceBackedVerification.Value;
+            client.ReviewPasses.Add(
+                new ClientReviewPassRecord
+                {
+                    Id = Guid.NewGuid(),
+                    ClientId = client.Id,
+                    Ordinal = ordinal++,
+                    ConfiguredModelId = pass.ConfiguredModelId,
+                    Lens = pass.Lens,
+                    Scope = pass.Scope,
+                    Shadow = pass.Shadow,
+                    // Store None as null so an unset effort keeps the column empty (null reads back as None).
+                    ReasoningEffort = pass.ReasoningEffort == ReviewReasoningEffort.None ? null : pass.ReasoningEffort,
+                });
         }
+    }
 
-        if (enableLanguageRobustScreening.HasValue)
+    private static void ApplyIfHasValue<T>(T? value, Action<T> apply) where T : struct
+    {
+        if (value.HasValue)
         {
-            client.EnableLanguageRobustScreening = enableLanguageRobustScreening.Value;
+            apply(value.Value);
         }
+    }
 
-        if (enableMultiPassUnion.HasValue)
+    private static void ApplyIfNotNull<T>(T? value, Action<T> apply) where T : class
+    {
+        if (value is not null)
         {
-            client.EnableMultiPassUnion = enableMultiPassUnion.Value;
+            apply(value);
         }
-
-        if (includeLinkedItemsInContext.HasValue)
-        {
-            client.IncludeLinkedItemsInContext = includeLinkedItemsInContext.Value;
-        }
-
-        if (baselineReasoningEffort.HasValue)
-        {
-            client.BaselineReasoningEffort = baselineReasoningEffort.Value;
-        }
-
-        if (reviewPasses is not null)
-        {
-            // Wholesale replace the ordered pass list: clear the existing rows (cascade-deleted) and re-add the
-            // requested entries with normalized sequential ordinals in the caller's declared order.
-            client.ReviewPasses.Clear();
-            var ordinal = 0;
-            foreach (var pass in reviewPasses.OrderBy(entry => entry.Ordinal))
-            {
-                client.ReviewPasses.Add(
-                    new ClientReviewPassRecord
-                    {
-                        Id = Guid.NewGuid(),
-                        ClientId = client.Id,
-                        Ordinal = ordinal++,
-                        ConfiguredModelId = pass.ConfiguredModelId,
-                        Lens = pass.Lens,
-                        Scope = pass.Scope,
-                        Shadow = pass.Shadow,
-                        // Store None as null so an unset effort keeps the column empty (null reads back as None).
-                        ReasoningEffort = pass.ReasoningEffort == ReviewReasoningEffort.None ? null : pass.ReasoningEffort,
-                    });
-            }
-        }
-
-        if (budgetConfig is not null)
-        {
-            // Replace the budget caps as a group so an explicit null clears an individual cap; the per-field
-            // "omit means unchanged" convention used above cannot express clearing a single nullable cap.
-            client.MonthlyBudgetSoftCapUsd = budgetConfig.MonthlySoftCapUsd;
-            client.MonthlyBudgetHardCapUsd = budgetConfig.MonthlyHardCapUsd;
-            client.PullRequestBudgetSoftCapUsd = budgetConfig.PullRequestSoftCapUsd;
-            client.PullRequestBudgetHardCapUsd = budgetConfig.PullRequestHardCapUsd;
-            client.IncrementBudgetSoftCapUsd = budgetConfig.IncrementSoftCapUsd;
-            client.IncrementBudgetHardCapUsd = budgetConfig.IncrementHardCapUsd;
-        }
-
-        await dbContext.SaveChangesAsync(ct);
-        return await this.GetByIdAsync(clientId, ct);
     }
 
     /// <inheritdoc />
