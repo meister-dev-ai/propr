@@ -328,93 +328,24 @@ public sealed partial class AdoPrFetcher(
             return null;
         }
 
-        var changeType = change.ChangeType switch
-        {
-            VersionControlChangeType.Add => ChangeType.Add,
-            VersionControlChangeType.Edit => ChangeType.Edit,
-            VersionControlChangeType.Delete => ChangeType.Delete,
-            _ when change.ChangeType.HasFlag(VersionControlChangeType.Rename) => ChangeType.Rename,
-            _ => ChangeType.Edit,
-        };
-
-        // For renames/moves, the original path is stored in SourceServerItem.
-        // We must fetch base content at that path on the base commit; the new path didn't exist there.
-        // SourceServerItem may be null when ADO does not populate it (e.g. cross-tree moves); skip the
-        // base fetch in that case rather than using the new path which would produce a spurious 404.
-        var originalPath = changeType == ChangeType.Rename
-            ? change.SourceServerItem
-            : null;
-
+        var changeType = MapAdoChangeType(change);
+        var originalPath = ExtractOriginalPathForRename(change, changeType);
         var renameWithMissingSource = changeType == ChangeType.Rename && originalPath is null;
-
         var isBinary = BinaryFileDetector.IsBinary(path);
 
-        var headContent = "";
-        var baseContent = "";
-        string? diff = null;
-
-        if (!isBinary)
-        {
-            if (workspace is not null)
-            {
-                // Read content directly from the local git workspace — avoids N GetItemAsync calls
-                if (changeType != ChangeType.Delete)
-                {
-                    headContent = await workspace.ReadFileAsync(path, "source", cancellationToken) ?? "";
-                }
-
-                if (changeType != ChangeType.Add && !renameWithMissingSource)
-                {
-                    var basePathToRead = originalPath ?? path;
-                    baseContent = await workspace.ReadFileAsync(basePathToRead, "target", cancellationToken) ?? "";
-                }
-                else if (renameWithMissingSource)
-                {
-                    logger.LogInformation(
-                        "Skipping base content fetch for renamed file {Path}: SourceServerItem is not available",
-                        path);
-                }
-
-                diff = await workspace.GetUnifiedDiffAsync(path, cancellationToken);
-            }
-            else
-            {
-                if (changeType != ChangeType.Delete && sourceCommit.Length >= 6)
-                {
-                    headContent = await this.TryResolveHeadContentAsync(
-                        gitClient,
-                        projectId,
-                        repositoryId,
-                        path,
-                        sourceCommit,
-                        cancellationToken);
-                }
-
-                if (changeType != ChangeType.Add && !renameWithMissingSource && baseCommit.Length >= 6)
-                {
-                    var basePathToFetch = originalPath ?? path;
-                    baseContent = await this.TryResolveBaseContentAsync(
-                        gitClient,
-                        projectId,
-                        repositoryId,
-                        basePathToFetch,
-                        baseCommit,
-                        cancellationToken);
-                }
-                else if (renameWithMissingSource)
-                {
-                    logger.LogInformation(
-                        "Skipping base content fetch for renamed file {Path}: SourceServerItem is not available",
-                        path);
-                }
-                else if (changeType != ChangeType.Add && baseCommit.Length < 6)
-                {
-                    logger.LogInformation(
-                        "Skipping base content fetch for {Path}: base commit SHA is absent or malformed",
-                        path);
-                }
-            }
-        }
+        var (headContent, baseContent, diff) = await this.ReadChangeContentAsync(
+            gitClient,
+            projectId,
+            repositoryId,
+            path,
+            sourceCommit,
+            baseCommit,
+            changeType,
+            originalPath,
+            renameWithMissingSource,
+            isBinary,
+            workspace,
+            cancellationToken);
 
         var repoRelativePath = ToRepoRelativePath(path);
         var resolvedDiff = isBinary ? "" : diff ?? BuildUnifiedDiff(baseContent, headContent, repoRelativePath);
@@ -426,6 +357,144 @@ public sealed partial class AdoPrFetcher(
             resolvedDiff,
             isBinary,
             originalPath is null ? null : ToRepoRelativePath(originalPath));
+    }
+
+    private static ChangeType MapAdoChangeType(GitPullRequestChange change)
+    {
+        return change.ChangeType switch
+        {
+            VersionControlChangeType.Add => ChangeType.Add,
+            VersionControlChangeType.Edit => ChangeType.Edit,
+            VersionControlChangeType.Delete => ChangeType.Delete,
+            _ when change.ChangeType.HasFlag(VersionControlChangeType.Rename) => ChangeType.Rename,
+            _ => ChangeType.Edit,
+        };
+    }
+
+    // For renames/moves, the original path is stored in SourceServerItem.
+    // We must fetch base content at that path on the base commit; the new path didn't exist there.
+    // SourceServerItem may be null when ADO does not populate it (e.g. cross-tree moves); skip the
+    // base fetch in that case rather than using the new path which would produce a spurious 404.
+    private static string? ExtractOriginalPathForRename(GitPullRequestChange change, ChangeType changeType)
+    {
+        return changeType == ChangeType.Rename ? change.SourceServerItem : null;
+    }
+
+    private async Task<(string HeadContent, string BaseContent, string? Diff)> ReadChangeContentAsync(
+        GitHttpClient gitClient,
+        string projectId,
+        string repositoryId,
+        string path,
+        string sourceCommit,
+        string baseCommit,
+        ChangeType changeType,
+        string? originalPath,
+        bool renameWithMissingSource,
+        bool isBinary,
+        IReviewRepositoryWorkspace? workspace,
+        CancellationToken cancellationToken)
+    {
+        if (isBinary)
+        {
+            return (string.Empty, string.Empty, null);
+        }
+
+        return workspace is not null
+            ? await this.ReadChangeContentFromWorkspaceAsync(workspace, path, changeType, originalPath, renameWithMissingSource, cancellationToken)
+            : await this.ReadChangeContentFromRemoteAsync(
+                gitClient,
+                projectId,
+                repositoryId,
+                path,
+                sourceCommit,
+                baseCommit,
+                changeType,
+                originalPath,
+                renameWithMissingSource,
+                cancellationToken);
+    }
+
+    private async Task<(string HeadContent, string BaseContent, string? Diff)> ReadChangeContentFromWorkspaceAsync(
+        IReviewRepositoryWorkspace workspace,
+        string path,
+        ChangeType changeType,
+        string? originalPath,
+        bool renameWithMissingSource,
+        CancellationToken cancellationToken)
+    {
+        var headContent = string.Empty;
+        var baseContent = string.Empty;
+
+        // Read content directly from the local git workspace — avoids N GetItemAsync calls
+        if (changeType != ChangeType.Delete)
+        {
+            headContent = await workspace.ReadFileAsync(path, "source", cancellationToken) ?? string.Empty;
+        }
+
+        if (changeType != ChangeType.Add && !renameWithMissingSource)
+        {
+            var basePathToRead = originalPath ?? path;
+            baseContent = await workspace.ReadFileAsync(basePathToRead, "target", cancellationToken) ?? string.Empty;
+        }
+
+        var diff = await workspace.GetUnifiedDiffAsync(path, cancellationToken);
+        return (headContent, baseContent, diff);
+    }
+
+    private async Task<(string HeadContent, string BaseContent, string? Diff)> ReadChangeContentFromRemoteAsync(
+        GitHttpClient gitClient,
+        string projectId,
+        string repositoryId,
+        string path,
+        string sourceCommit,
+        string baseCommit,
+        ChangeType changeType,
+        string? originalPath,
+        bool renameWithMissingSource,
+        CancellationToken cancellationToken)
+    {
+        var headContent = string.Empty;
+        var baseContent = string.Empty;
+
+        if (changeType != ChangeType.Delete && sourceCommit.Length >= 6)
+        {
+            headContent = await this.TryResolveHeadContentAsync(
+                gitClient,
+                projectId,
+                repositoryId,
+                path,
+                sourceCommit,
+                cancellationToken);
+        }
+
+        if (changeType == ChangeType.Add || renameWithMissingSource)
+        {
+            if (renameWithMissingSource)
+            {
+                logger.LogInformation(
+                    "Skipping base content fetch for renamed file {Path}: SourceServerItem is not available",
+                    path);
+            }
+        }
+        else if (baseCommit.Length >= 6)
+        {
+            var basePathToFetch = originalPath ?? path;
+            baseContent = await this.TryResolveBaseContentAsync(
+                gitClient,
+                projectId,
+                repositoryId,
+                basePathToFetch,
+                baseCommit,
+                cancellationToken);
+        }
+        else
+        {
+            logger.LogInformation(
+                "Skipping base content fetch for {Path}: base commit SHA is absent or malformed",
+                path);
+        }
+
+        return (headContent, baseContent, null);
     }
 
     /// <summary>
