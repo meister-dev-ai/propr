@@ -734,74 +734,90 @@ public sealed partial class ReviewOrchestrationService(
         var iterationKey = ReviewRevisionKeys.GetStoredKey(job.ReviewRevisionReference, job.IterationId);
         var isNewIteration = scan is null || scan.LastProcessedCommitId != iterationKey;
 
-        ReviewJob? baselineJob = null;
-        var baselineIsFullCoverage = false;
-        ReviewJob? resumeJob = null;
-        int? compareToIterationId = null;
-        ReviewRevision? compareToReviewRevision = null;
-        var currentRevisionKey = ReviewRevisionKeys.TryGetStoredKey(job.ReviewRevisionReference);
+        var resumeJob = await this.FindResumeJobIfAnyAsync(job, ct);
 
-        if (!string.IsNullOrWhiteSpace(currentRevisionKey))
-        {
-            resumeJob = await jobs.GetBestTerminalJobWithFileResultsByStoredRevisionAsync(
-                job.OrganizationUrl,
-                job.ProjectId,
-                job.RepositoryId,
-                job.PullRequestId,
-                currentRevisionKey,
-                ct);
-
-            if (resumeJob?.Id == job.Id)
-            {
-                resumeJob = null;
-            }
-        }
-
-        if (isNewIteration)
-        {
-            // Select the carry-forward baseline from job history — the most-recent terminal job at a
-            // different revision — rather than from the scan. This lets a prior review that was
-            // cancelled/failed/superseded mid-flight still seed the next review's unchanged files.
-            baselineJob = await jobs.GetLatestReusableTerminalJobAsync(
-                job.OrganizationUrl,
-                job.ProjectId,
-                job.RepositoryId,
-                job.PullRequestId,
-                job.Id,
-                iterationKey,
-                ct);
-
-            if (baselineJob is not null)
-            {
-                baselineIsFullCoverage = ReviewBaselineSelection.IsFullCoverage(baselineJob);
-                if (baselineIsFullCoverage)
-                {
-                    // Full-coverage baseline: delta-scope against it so only files changed since the
-                    // baseline are re-reviewed. The compare handle is provider-neutral — Azure DevOps
-                    // reads the iteration id off the baseline job, other providers read its review revision.
-                    if (job.Provider == ScmProvider.AzureDevOps)
-                    {
-                        var baselineIterationId = ResolveBaselineIterationId(baselineJob);
-                        if (baselineIterationId is > 0 && baselineIterationId < job.IterationId)
-                        {
-                            compareToIterationId = baselineIterationId;
-                        }
-                        else
-                        {
-                            // Out-of-order or unavailable iteration id: fall back to a full fetch and treat
-                            // the baseline purely as an AI-skip set rather than risk a negative delta.
-                            baselineIsFullCoverage = false;
-                        }
-                    }
-                    else
-                    {
-                        compareToReviewRevision = baselineJob.ReviewRevisionReference;
-                    }
-                }
-            }
-        }
+        var (baselineJob, baselineIsFullCoverage, compareToIterationId, compareToReviewRevision) =
+            await this.ResolveCarryForwardBaselineAsync(job, isNewIteration, iterationKey, ct);
 
         return (scan, isNewIteration, baselineJob, baselineIsFullCoverage, resumeJob, compareToIterationId, compareToReviewRevision);
+    }
+
+    private async Task<ReviewJob?> FindResumeJobIfAnyAsync(ReviewJob job, CancellationToken ct)
+    {
+        var currentRevisionKey = ReviewRevisionKeys.TryGetStoredKey(job.ReviewRevisionReference);
+        if (string.IsNullOrWhiteSpace(currentRevisionKey))
+        {
+            return null;
+        }
+
+        var resumeJob = await jobs.GetBestTerminalJobWithFileResultsByStoredRevisionAsync(
+            job.OrganizationUrl,
+            job.ProjectId,
+            job.RepositoryId,
+            job.PullRequestId,
+            currentRevisionKey,
+            ct);
+
+        // A resume job that points at this very job is not a real resume candidate.
+        return resumeJob?.Id == job.Id ? null : resumeJob;
+    }
+
+    private async Task<(
+            ReviewJob? BaselineJob,
+            bool BaselineIsFullCoverage,
+            int? CompareToIterationId,
+            ReviewRevision? CompareToReviewRevision)>
+        ResolveCarryForwardBaselineAsync(
+            ReviewJob job,
+            bool isNewIteration,
+            string iterationKey,
+            CancellationToken ct)
+    {
+        if (!isNewIteration)
+        {
+            return (null, false, null, null);
+        }
+
+        // Select the carry-forward baseline from job history — the most-recent terminal job at a
+        // different revision — rather than from the scan. This lets a prior review that was
+        // cancelled/failed/superseded mid-flight still seed the next review's unchanged files.
+        var baselineJob = await jobs.GetLatestReusableTerminalJobAsync(
+            job.OrganizationUrl,
+            job.ProjectId,
+            job.RepositoryId,
+            job.PullRequestId,
+            job.Id,
+            iterationKey,
+            ct);
+
+        if (baselineJob is null)
+        {
+            return (null, false, null, null);
+        }
+
+        var baselineIsFullCoverage = ReviewBaselineSelection.IsFullCoverage(baselineJob);
+        if (!baselineIsFullCoverage)
+        {
+            return (baselineJob, false, null, null);
+        }
+
+        // Full-coverage baseline: delta-scope against it so only files changed since the
+        // baseline are re-reviewed. The compare handle is provider-neutral — Azure DevOps
+        // reads the iteration id off the baseline job, other providers read its review revision.
+        if (job.Provider == ScmProvider.AzureDevOps)
+        {
+            var baselineIterationId = ResolveBaselineIterationId(baselineJob);
+            if (baselineIterationId is > 0 && baselineIterationId < job.IterationId)
+            {
+                return (baselineJob, true, baselineIterationId, null);
+            }
+
+            // Out-of-order or unavailable iteration id: fall back to a full fetch and treat
+            // the baseline purely as an AI-skip set rather than risk a negative delta.
+            return (baselineJob, false, null, null);
+        }
+
+        return (baselineJob, true, null, baselineJob.ReviewRevisionReference);
     }
 
     // Derives the Azure DevOps iteration id to compare against from the baseline job itself: prefer the
