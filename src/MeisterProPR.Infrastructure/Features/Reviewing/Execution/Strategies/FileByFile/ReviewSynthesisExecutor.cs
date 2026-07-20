@@ -205,6 +205,7 @@ internal sealed class ReviewSynthesisExecutor(
         {
             gateDecisions = await reviewFindingFinalizationPipeline.ApplyAsync(candidateFindings, gateDecisions, protocolId, ct).ConfigureAwait(false);
         }
+
         var reconciler = summaryReconciliationService ?? new SummaryReconciliationService();
         var skipSummaryReconciliation = await this.TryRecordSkippedStepAsync(protocolId, baseContext, FileByFileReviewStepIds.SummaryReconciliation, ct);
         var reconciliation = skipSummaryReconciliation

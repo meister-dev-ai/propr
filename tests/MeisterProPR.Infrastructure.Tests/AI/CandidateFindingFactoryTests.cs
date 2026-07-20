@@ -40,8 +40,7 @@ public sealed class CandidateFindingFactoryTests
         };
         var sut = new CandidateFindingFactory(null);
 
-        var findings = sut.Build(
-            [CreateCompletedFileResult("src/Foo.cs", [covered]), CreateCompletedFileResult("src/Bar.cs", [unread])]);
+        var findings = sut.Build([CreateCompletedFileResult("src/Foo.cs", [covered]), CreateCompletedFileResult("src/Bar.cs", [unread])]);
 
         Assert.Equal(ReviewCommentReadGrounding.Covered, findings[0].ReadGrounding);
         Assert.Equal(ReviewCommentReadGrounding.NotRead, findings[1].ReadGrounding);
