@@ -94,84 +94,7 @@ try
     var isTesting = builder.Environment.IsEnvironment("Testing");
     var disableHostedServices = builder.Configuration.GetValue<bool>("MEISTER_DISABLE_HOSTED_SERVICES");
 
-    builder.Host.UseSerilog((context, services, configuration) =>
-    {
-        static string? RedactSecret(string? value)
-        {
-            return string.IsNullOrWhiteSpace(value) ? value : "[REDACTED]";
-        }
-
-        configuration
-            .ReadFrom.Configuration(context.Configuration)
-            .ReadFrom.Services(services)
-            .Enrich.FromLogContext()
-            .Enrich.WithProperty("Application", "Meister DEV ProPR")
-            // Scrub secrets from log output: X-Ado-Token, X-User-Pat, AZURE_CLIENT_SECRET, AdoClientSecret
-            .Destructure.ByTransforming<CreateAiConnectionRequest>(request => new
-            {
-                request.DisplayName,
-                request.EndpointUrl,
-                request.Models,
-                ApiKey = RedactSecret(request.ApiKey),
-                request.ModelCapabilities,
-                request.ModelCategory,
-            })
-            .Destructure.ByTransforming<UpdateAiConnectionRequest>(request => new
-            {
-                request.DisplayName,
-                request.EndpointUrl,
-                request.Models,
-                ApiKey = RedactSecret(request.ApiKey),
-                request.ModelCapabilities,
-            })
-            .Destructure.ByTransforming<CreateClientProviderConnectionRequest>(request => new
-            {
-                request.ProviderFamily,
-                request.HostBaseUrl,
-                request.AuthenticationKind,
-                request.UserName,
-                request.OAuthTenantId,
-                request.OAuthClientId,
-                request.DisplayName,
-                Secret = RedactSecret(request.Secret),
-                request.IsActive,
-            })
-            .Destructure.ByTransforming<PatchClientProviderConnectionRequest>(request => new
-            {
-                request.HostBaseUrl,
-                request.AuthenticationKind,
-                request.UserName,
-                request.OAuthTenantId,
-                request.OAuthClientId,
-                request.DisplayName,
-                Secret = RedactSecret(request.Secret),
-                request.IsActive,
-            })
-            .Destructure.ByTransforming<DiscoverModelsRequest>(request => new
-            {
-                request.EndpointUrl,
-                ApiKey = RedactSecret(request.ApiKey),
-            })
-            .Destructure.ByTransforming<HttpRequest>(r => new
-            {
-                r.Method,
-                r.Path,
-                HasProCursorSharedKey = r.Headers.ContainsKey(ProCursorSharedKeyAuthenticationDefaults.HeaderName),
-            });
-
-        if (!context.HostingEnvironment.IsDevelopment())
-        {
-            configuration.WriteTo.Console(new JsonFormatter());
-        }
-
-        var lokiUrl = context.Configuration["LOKI_URL"];
-        if (!string.IsNullOrWhiteSpace(lokiUrl))
-        {
-            configuration.WriteTo.GrafanaLoki(
-                lokiUrl,
-                [new LokiLabel { Key = "app", Value = "meister-dev-propr" }]);
-        }
-    });
+    builder.Host.UseSerilog((context, services, configuration) => { ConfigureSerilog(context, services, configuration); });
 
     builder.Services.Configure<HostOptions>(opts =>
         opts.ShutdownTimeout = TimeSpan.FromMinutes(3));
@@ -601,6 +524,85 @@ catch (Exception ex) when (ex is not HostAbortedException and not InvalidOperati
 finally
 {
     await Log.CloseAndFlushAsync();
+}
+
+static void ConfigureSerilog(HostBuilderContext context, IServiceProvider services, LoggerConfiguration configuration)
+{
+    static string? RedactSecret(string? value)
+    {
+        return string.IsNullOrWhiteSpace(value) ? value : "[REDACTED]";
+    }
+
+    configuration
+        .ReadFrom.Configuration(context.Configuration)
+        .ReadFrom.Services(services)
+        .Enrich.FromLogContext()
+        .Enrich.WithProperty("Application", "Meister DEV ProPR")
+        // Scrub secrets from log output: X-Ado-Token, X-User-Pat, AZURE_CLIENT_SECRET, AdoClientSecret
+        .Destructure.ByTransforming<CreateAiConnectionRequest>(request => new
+        {
+            request.DisplayName,
+            request.EndpointUrl,
+            request.Models,
+            ApiKey = RedactSecret(request.ApiKey),
+            request.ModelCapabilities,
+            request.ModelCategory,
+        })
+        .Destructure.ByTransforming<UpdateAiConnectionRequest>(request => new
+        {
+            request.DisplayName,
+            request.EndpointUrl,
+            request.Models,
+            ApiKey = RedactSecret(request.ApiKey),
+            request.ModelCapabilities,
+        })
+        .Destructure.ByTransforming<CreateClientProviderConnectionRequest>(request => new
+        {
+            request.ProviderFamily,
+            request.HostBaseUrl,
+            request.AuthenticationKind,
+            request.UserName,
+            request.OAuthTenantId,
+            request.OAuthClientId,
+            request.DisplayName,
+            Secret = RedactSecret(request.Secret),
+            request.IsActive,
+        })
+        .Destructure.ByTransforming<PatchClientProviderConnectionRequest>(request => new
+        {
+            request.HostBaseUrl,
+            request.AuthenticationKind,
+            request.UserName,
+            request.OAuthTenantId,
+            request.OAuthClientId,
+            request.DisplayName,
+            Secret = RedactSecret(request.Secret),
+            request.IsActive,
+        })
+        .Destructure.ByTransforming<DiscoverModelsRequest>(request => new
+        {
+            request.EndpointUrl,
+            ApiKey = RedactSecret(request.ApiKey),
+        })
+        .Destructure.ByTransforming<HttpRequest>(r => new
+        {
+            r.Method,
+            r.Path,
+            HasProCursorSharedKey = r.Headers.ContainsKey(ProCursorSharedKeyAuthenticationDefaults.HeaderName),
+        });
+
+    if (!context.HostingEnvironment.IsDevelopment())
+    {
+        configuration.WriteTo.Console(new JsonFormatter());
+    }
+
+    var lokiUrl = context.Configuration["LOKI_URL"];
+    if (!string.IsNullOrWhiteSpace(lokiUrl))
+    {
+        configuration.WriteTo.GrafanaLoki(
+            lokiUrl,
+            [new LokiLabel { Key = "app", Value = "meister-dev-propr" }]);
+    }
 }
 
 /// <summary>Entry point for the API application used by tests and host.</summary>
