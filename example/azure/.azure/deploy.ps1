@@ -265,7 +265,7 @@ Write-Success "All parameters valid"
 $BackendImage      = "ghcr.io/meister-dev-ai/propr`:$ImageTag"
 $ProCursorImage    = "ghcr.io/meister-dev-ai/propr/procursor`:$ImageTag"
 $FrontendImage     = "ghcr.io/meister-dev-ai/propr/frontend`:$ImageTag"
-$ReverseProxyImage = "nginx:alpine"
+$ReverseProxyImage = "nginxinc/nginx-unprivileged:alpine"
 $DbImage           = "pgvector/pgvector:pg17"
 
 Write-Host ""

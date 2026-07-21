@@ -149,7 +149,7 @@ The deployment pulls these public images directly:
 - Backend App: `ghcr.io/meister-dev-ai/propr:<tag>`
 - ProCursor App: `ghcr.io/meister-dev-ai/propr/procursor:<tag>`
 - Frontend App: `ghcr.io/meister-dev-ai/propr/frontend:<tag>`
-- Reverse proxy: `nginx:alpine`
+- Reverse proxy: `nginxinc/nginx-unprivileged:alpine`
 - Database: `pgvector/pgvector:pg17`
 
 No Azure Container Registry is provisioned and no image build or push step is required. If the GHCR images are private in your environment, add registry credentials to the container app configuration before deploying.

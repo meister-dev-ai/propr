@@ -327,7 +327,7 @@ resource reverseProxy 'Microsoft.App/containerapps@2025-10-02-preview' = {
       activeRevisionsMode: 'Single'
       ingress: {
         external: true
-        targetPort: 80
+        targetPort: 8080
         transport: 'Auto'
         traffic: [{ weight: 100, latestRevision: true }]
         allowInsecure: false
@@ -336,7 +336,10 @@ resource reverseProxy 'Microsoft.App/containerapps@2025-10-02-preview' = {
     template: {
       containers: [
         {
-          image: 'nginx:alpine'
+          // Unprivileged nginx variant: runs as UID 101 (non-root) and listens on 8080
+          // (nginx-aca.conf is set to match). The runtime env-substitution start command
+          // writes the rendered config into /etc/nginx/conf.d as that user.
+          image: 'nginxinc/nginx-unprivileged:alpine'
           name: '${projectName}-reverse-proxy'
           command: ['/bin/sh', '-c']
           args: [reverseProxyStartCommand]
@@ -346,9 +349,9 @@ resource reverseProxy 'Microsoft.App/containerapps@2025-10-02-preview' = {
           ]
           resources: { cpu: json('0.25'), memory: '0.5Gi' }
           probes: [
-            { type: 'Liveness',  failureThreshold: 3,   periodSeconds: 10, successThreshold: 1, tcpSocket: { port: 80 }, timeoutSeconds: 5 }
-            { type: 'Readiness', failureThreshold: 48,  periodSeconds: 5,  successThreshold: 1, tcpSocket: { port: 80 }, timeoutSeconds: 5 }
-            { type: 'Startup',   failureThreshold: 240, periodSeconds: 1,  successThreshold: 1, initialDelaySeconds: 1, tcpSocket: { port: 80 }, timeoutSeconds: 3 }
+            { type: 'Liveness',  failureThreshold: 3,   periodSeconds: 10, successThreshold: 1, tcpSocket: { port: 8080 }, timeoutSeconds: 5 }
+            { type: 'Readiness', failureThreshold: 48,  periodSeconds: 5,  successThreshold: 1, tcpSocket: { port: 8080 }, timeoutSeconds: 5 }
+            { type: 'Startup',   failureThreshold: 240, periodSeconds: 1,  successThreshold: 1, initialDelaySeconds: 1, tcpSocket: { port: 8080 }, timeoutSeconds: 3 }
           ]
         }
       ]
