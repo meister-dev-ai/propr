@@ -17,8 +17,12 @@ RUN npx openapi-typescript ./openapi.json -o src/services/generated/openapi.ts
 RUN npm run build
 
 # Stage 2: Serve
-# docker.io/library/nginx:alpine
-FROM docker.io/library/nginx@sha256:4a73073bd557c65b759505da037898b61f1be6cbcc3c2c3aeac22d2a470c1752
+# docker.io/library/nginx:alpine-slim
+# The slim variant omits the image-filter/dav/xslt/geoip modules and their
+# native library closure (libtiff, freetype, libgd, nghttp2). Serving the built
+# SPA needs none of them, and dropping them clears the libtiff CVEs (no Alpine
+# fix available) that the full alpine tag carries.
+FROM docker.io/library/nginx@sha256:45b82ed5f285b90d63df07ba70430fdd8f25624b416617d9e6dc93412b2006dc
 COPY frontend/nginx.conf /etc/nginx/conf.d/default.conf
 COPY --from=builder /app/dist /usr/share/nginx/html
 # Run as the unprivileged nginx user (uid 101, already present in the base image)
