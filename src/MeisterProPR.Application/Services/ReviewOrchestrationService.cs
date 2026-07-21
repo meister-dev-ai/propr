@@ -294,6 +294,10 @@ public sealed partial class ReviewOrchestrationService(
 
         if (string.IsNullOrWhiteSpace(result.Summary) && result.Comments.Count == 0)
         {
+            // Unlike the pre-dispatch skip paths, this one runs after DispatchFileReviewAsync,
+            // whose finally block already disposed the review workspace. Disposing again here
+            // would call DisposeAsync (and thus ReleaseLease) a second time on the same lease,
+            // which is not idempotent, so leave the workspace disposal to the dispatch path.
             return await this.DisposeSkipAndFinalizeAsync(
                 job,
                 pr,
@@ -301,7 +305,8 @@ public sealed partial class ReviewOrchestrationService(
                 earlyWorkspace,
                 workspacePreparation,
                 () => LogSkippedEmptyReview(logger, job.Id, job.PullRequestId),
-                ct);
+                ct,
+                disposeWorkspace: false);
         }
 
         // Final status re-check immediately before the only step that posts to the provider. In a
@@ -382,10 +387,15 @@ public sealed partial class ReviewOrchestrationService(
         IReviewRepositoryWorkspace? earlyWorkspace,
         ReviewRepositoryWorkspacePreparationResult workspacePreparation,
         Action logSkip,
-        CancellationToken ct)
+        CancellationToken ct,
+        bool disposeWorkspace = true)
     {
         logSkip();
-        await DisposeEarlyWorkspaceAsync(earlyWorkspace, workspacePreparation);
+        if (disposeWorkspace)
+        {
+            await DisposeEarlyWorkspaceAsync(earlyWorkspace, workspacePreparation);
+        }
+
         await this.SaveScanAndDeleteJobAsync(job, pr, reviewerId, ct);
         return null;
     }
