@@ -105,6 +105,7 @@ public sealed class ClientAdminService(
             includeLinkedItemsInContext,
             baselineReasoningEffort);
         ReplaceReviewPassesIfProvided(client, reviewPasses);
+        ReplaceBudgetCapsIfProvided(client, budgetConfig);
 
         await dbContext.SaveChangesAsync(ct);
         return await this.GetByIdAsync(clientId, ct);
@@ -174,6 +175,23 @@ public sealed class ClientAdminService(
                     ReasoningEffort = pass.ReasoningEffort == ReviewReasoningEffort.None ? null : pass.ReasoningEffort,
                 });
         }
+    }
+
+    private static void ReplaceBudgetCapsIfProvided(ClientRecord client, BudgetConfigDto? budgetConfig)
+    {
+        if (budgetConfig is null)
+        {
+            return;
+        }
+
+        // Replace the budget caps as a group so an explicit null clears an individual cap; the per-field
+        // "omit means unchanged" convention used above cannot express clearing a single nullable cap.
+        client.MonthlyBudgetSoftCapUsd = budgetConfig.MonthlySoftCapUsd;
+        client.MonthlyBudgetHardCapUsd = budgetConfig.MonthlyHardCapUsd;
+        client.PullRequestBudgetSoftCapUsd = budgetConfig.PullRequestSoftCapUsd;
+        client.PullRequestBudgetHardCapUsd = budgetConfig.PullRequestHardCapUsd;
+        client.IncrementBudgetSoftCapUsd = budgetConfig.IncrementSoftCapUsd;
+        client.IncrementBudgetHardCapUsd = budgetConfig.IncrementHardCapUsd;
     }
 
     private static void ApplyIfHasValue<T>(T? value, Action<T> apply) where T : struct
