@@ -86,6 +86,9 @@ internal sealed class ReviewLoopState
     /// <summary>Gets the durable system messages that should be preserved when replay is required.</summary>
     public List<ChatMessage> PersistentMessages { get; } = [];
 
+    /// <summary>Tracks the most recent non-empty assistant text response so the loop can detect a no-text exit.</summary>
+    public string? LastTextResponse { get; set; }
+
     /// <summary>Gets the compacted summary of bulky tool context retained for later turns.</summary>
     public string? CompactedPayloadSummary { get; private set; }
 

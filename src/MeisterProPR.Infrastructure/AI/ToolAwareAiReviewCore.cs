@@ -1,6 +1,7 @@
 // Copyright (c) Andreas Rain.
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
+using System.Collections.Generic;
 using System.Diagnostics;
 using System.Reflection;
 using System.Text;
@@ -65,8 +66,80 @@ internal sealed partial class ToolAwareAiReviewCore(
             MaxRetainedEvidenceChars = opts.MaxRetainedToolEvidenceChars,
         };
 
-        string userMessage;
+        var userMessage = await this.BuildInitialMessagesAsync(state, pullRequest, systemContext, cancellationToken);
 
+        var setup = await this.BuildTransportSetupAsync(state, systemContext, opts, cancellationToken);
+        if (setup.SkippedReview is not null)
+        {
+            return setup.SkippedReview;
+        }
+
+        var effectiveMaxIterations = this.ResolveEffectiveMaxIterations(systemContext, opts, pullRequest);
+        var effectiveClient = this.ResolveEffectiveChatClient(systemContext);
+
+        var getResponse = this.BuildGetResponseDelegate(state, systemContext, setup, effectiveClient, opts, cancellationToken);
+
+        using var activity = ActivitySource.StartActivity("ReviewLoop");
+        activity?.SetTag("pr.id", pullRequest.PullRequestId);
+        activity?.SetTag("pr.iteration", pullRequest.IterationId);
+
+        LogReviewLoopStarted(logger, pullRequest.PullRequestId, pullRequest.IterationId, effectiveMaxIterations);
+
+        try
+        {
+            var lastTextResponse = await RunReviewLoopAsync(
+                state,
+                systemContext,
+                setup,
+                effectiveClient,
+                effectiveMaxIterations,
+                getResponse,
+                pullRequest.PullRequestId,
+                opts,
+                cancellationToken);
+
+            lastTextResponse = await this.RepairFinalResponseIfNeededAsync(
+                effectiveClient,
+                setup.ManagedSessionTransport,
+                state,
+                setup.ChatOptions,
+                setup.EffectiveModelId,
+                systemContext,
+                pullRequest.PullRequestId,
+                lastTextResponse,
+                cancellationToken);
+
+            activity?.SetTag("loop.iterations", state.Iteration);
+            activity?.SetTag("loop.tool_calls", state.ToolCallCount);
+
+            LogReviewLoopFinished(logger, pullRequest.PullRequestId, state.Iteration, state.ToolCallCount);
+
+            state.MarkCompleted();
+            systemContext.ReviewSession = state.Session;
+            systemContext.LoopMetrics = BuildLoopMetrics(state);
+
+            return ParseReviewResult(lastTextResponse, state.FileReads);
+        }
+        finally
+        {
+            // Ensure metrics are always captured so callers can record accurate stats even on failure.
+            if (systemContext.ReviewSession is not { Status: AgentReviewSessionStatus.Completed })
+            {
+                state.MarkFailed();
+                systemContext.ReviewSession = state.Session;
+            }
+
+            systemContext.LoopMetrics ??= BuildLoopMetrics(state);
+        }
+    }
+
+    private async Task<string> BuildInitialMessagesAsync(
+        ReviewLoopState state,
+        PullRequest pullRequest,
+        ReviewSystemContext systemContext,
+        CancellationToken cancellationToken)
+    {
+        string userMessage;
         if (systemContext.PerFileHint is { } hint)
         {
             // Per-file review path: two System messages — global persona (S1) + per-file context (S2). Both stay
@@ -128,6 +201,15 @@ internal sealed partial class ToolAwareAiReviewCore(
                 cancellationToken);
         }
 
+        return userMessage;
+    }
+
+    private async Task<TransportSetup> BuildTransportSetupAsync(
+        ReviewLoopState state,
+        ReviewSystemContext systemContext,
+        AiReviewOptions opts,
+        CancellationToken cancellationToken)
+    {
         var rawTools = BuildTools(
             systemContext.ReviewTools,
             options.Value.EnableStructuralReferenceTools,
@@ -136,9 +218,9 @@ internal sealed partial class ToolAwareAiReviewCore(
             cancellationToken);
         var effectiveModelId = systemContext.ModelId ?? opts.ModelId;
         var usesManagedSessionTransport = ShouldUseAgentFrameworkManagedSession(systemContext);
-        var transportTools = usesManagedSessionTransport
+        List<AIFunction> transportTools = usesManagedSessionTransport
             ? this.WrapToolsForManagedSession(rawTools, state, systemContext, opts.MaxToolResultReplayCharacters, cancellationToken)
-            : rawTools;
+            : [.. rawTools.OfType<AIFunction>()];
         var chatOptions = new ChatOptions
         {
             MaxOutputTokens = ResolveMaxOutputTokens(opts, systemContext.PerFileHint?.ComplexityTier),
@@ -156,19 +238,15 @@ internal sealed partial class ToolAwareAiReviewCore(
         var budgetFileLabel = systemContext.PerFileHint?.FilePath ?? "whole-pr";
 
         var preflight = ReviewContextBudget.ClassifyInitialPayload(state.Messages, budgetTokenizer, inputBudget, maxContextTokens);
-        if (preflight.Classification == ContextBudgetClassification.Skipped)
+        var skipped = await this.HandlePreflightSkipAsync(
+            preflight,
+            systemContext,
+            budgetFileLabel,
+            inputBudget,
+            cancellationToken);
+        if (skipped is not null)
         {
-            systemContext.ContextBudgetOutcome = ReviewContextBudgetOutcome.Skipped;
-            LogContextBudgetFileSkipped(logger, budgetFileLabel, preflight.EstimatedInputTokens, inputBudget);
-            await this.RecordContextBudgetEventAsync(
-                systemContext,
-                ReviewProtocolEventNames.ContextBudgetFileSkipped,
-                BuildContextBudgetDetails(budgetFileLabel, preflight),
-                cancellationToken);
-            return new ReviewResult(
-                $"Skipped: '{budgetFileLabel}' exceeds the model context window " +
-                $"(~{preflight.EstimatedInputTokens} input tokens over the {inputBudget}-token budget). The file was not reviewed.",
-                []);
+            return new TransportSetup(default!, default!, default!, default!, default!, skipped);
         }
 
         if (preflight.Classification == ContextBudgetClassification.DegradedDiffOnly)
@@ -186,9 +264,49 @@ internal sealed partial class ToolAwareAiReviewCore(
         state.InitializeSession(ResolveInitialSessionMode(systemContext));
         systemContext.ReviewSession = state.Session;
 
-        var lastTextResponse = "";
-        var seenAssistantTurns = new HashSet<string>(StringComparer.Ordinal);
+        var managedSessionTransport = usesManagedSessionTransport
+            ? (managedSessionTransportFactory ?? new ManagedReviewSessionTransportFactory()).Create(ResolveEffectiveChatClient(systemContext), transportTools)
+            : null;
 
+        return new TransportSetup(
+            rawTools,
+            [.. transportTools],
+            chatOptions,
+            effectiveModelId,
+            managedSessionTransport,
+            null);
+    }
+
+    private async Task<ReviewResult?> HandlePreflightSkipAsync(
+        ContextBudgetPreflight preflight,
+        ReviewSystemContext systemContext,
+        string budgetFileLabel,
+        int inputBudget,
+        CancellationToken cancellationToken)
+    {
+        if (preflight.Classification != ContextBudgetClassification.Skipped)
+        {
+            return null;
+        }
+
+        systemContext.ContextBudgetOutcome = ReviewContextBudgetOutcome.Skipped;
+        LogContextBudgetFileSkipped(logger, budgetFileLabel, preflight.EstimatedInputTokens, inputBudget);
+        await this.RecordContextBudgetEventAsync(
+            systemContext,
+            ReviewProtocolEventNames.ContextBudgetFileSkipped,
+            BuildContextBudgetDetails(budgetFileLabel, preflight),
+            cancellationToken);
+        return new ReviewResult(
+            $"Skipped: '{budgetFileLabel}' exceeds the model context window " +
+            $"(~{preflight.EstimatedInputTokens} input tokens over the {inputBudget}-token budget). The file was not reviewed.",
+            []);
+    }
+
+    private int ResolveEffectiveMaxIterations(
+        ReviewSystemContext systemContext,
+        AiReviewOptions opts,
+        PullRequest pullRequest)
+    {
         // T037: per-file override wins over the global option
         var effectiveMaxIterations = systemContext.PerFileHint?.MaxIterationsOverride ?? opts.MaxIterations;
         if (systemContext.PerFileHint?.MaxIterationsOverride is { } overrideVal)
@@ -200,14 +318,29 @@ internal sealed partial class ToolAwareAiReviewCore(
                 pullRequest.PullRequestId);
         }
 
-        // T044: use tier-specific client when configured; fall back to injected default
-        var effectiveClient = systemContext.TierChatClient ?? chatClient
-            ?? throw new InvalidOperationException("No chat client available for review execution.");
-        var managedSessionTransport = usesManagedSessionTransport
-            ? (managedSessionTransportFactory ?? new ManagedReviewSessionTransportFactory()).Create(effectiveClient, transportTools)
-            : null;
+        return effectiveMaxIterations;
+    }
 
-        async Task<ChatResponse> GetResponseAsync(IEnumerable<ChatMessage> messages, ChatOptions responseOptions)
+    private IChatClient ResolveEffectiveChatClient(ReviewSystemContext systemContext)
+    {
+        // T044: use tier-specific client when configured; fall back to injected default
+        return systemContext.TierChatClient ?? chatClient
+            ?? throw new InvalidOperationException("No chat client available for review execution.");
+    }
+
+    private Func<IEnumerable<ChatMessage>, ChatOptions, Task<ChatResponse>> BuildGetResponseDelegate(
+        ReviewLoopState state,
+        ReviewSystemContext systemContext,
+        TransportSetup setup,
+        IChatClient effectiveClient,
+        AiReviewOptions opts,
+        CancellationToken cancellationToken)
+    {
+        var budgetTokenizer = systemContext.TokenizerName;
+        var maxContextTokens = ReviewContextBudget.ResolveMaxContextTokens(systemContext.MaxContextTokens);
+        var inputBudget = ReviewContextBudget.ComputeInputBudget(maxContextTokens, setup.ChatOptions.MaxOutputTokens ?? 0);
+
+        return async (messages, responseOptions) =>
         {
             // Choke point for every provider call in the loop: trim accumulated tool-result history to fit the
             // input budget before sending, so a growing transcript never overflows the model context window.
@@ -218,296 +351,456 @@ internal sealed partial class ToolAwareAiReviewCore(
                 inputBudget,
                 state.Iteration,
                 cancellationToken);
-            return await (ShouldUseAgentFrameworkManagedSession(state, systemContext, managedSessionTransport)
-                ? managedSessionTransport!.GetResponseAsync(toSend, responseOptions, cancellationToken)
+            return await (ShouldUseAgentFrameworkManagedSession(state, systemContext, setup.ManagedSessionTransport)
+                ? setup.ManagedSessionTransport!.GetResponseAsync(toSend, responseOptions, cancellationToken)
                 : effectiveClient.GetResponseAsync(toSend, responseOptions, cancellationToken));
-        }
+        };
+    }
 
-        using var activity = ActivitySource.StartActivity("ReviewLoop");
-        activity?.SetTag("pr.id", pullRequest.PullRequestId);
-        activity?.SetTag("pr.iteration", pullRequest.IterationId);
+    private async Task<string> RunReviewLoopAsync(
+        ReviewLoopState state,
+        ReviewSystemContext systemContext,
+        TransportSetup setup,
+        IChatClient effectiveClient,
+        int effectiveMaxIterations,
+        Func<IEnumerable<ChatMessage>, ChatOptions, Task<ChatResponse>> getResponse,
+        int pullRequestId,
+        AiReviewOptions opts,
+        CancellationToken cancellationToken)
+    {
+        var seenAssistantTurns = new HashSet<string>(StringComparer.Ordinal);
 
-        LogReviewLoopStarted(logger, pullRequest.PullRequestId, pullRequest.IterationId, effectiveMaxIterations);
-
-        try
+        while (state.Iteration <= effectiveMaxIterations)
         {
-            while (state.Iteration <= effectiveMaxIterations)
-            {
-                LogIterationStarted(logger, state.Iteration, effectiveMaxIterations);
+            LogIterationStarted(logger, state.Iteration, effectiveMaxIterations);
 
-                ApplySessionModeToOptions(chatOptions, state);
-                var messagesToSend = BuildMessagesForCurrentTurn(state);
+            ApplySessionModeToOptions(setup.ChatOptions, state);
+            var messagesToSend = BuildMessagesForCurrentTurn(state);
 
-                // Capture input sample BEFORE AddRange so we get the last message that was sent to the AI.
-                // Tool result messages have FunctionResultContent (no .Text), so serialize them explicitly.
-                var inputSample = GetInputSample(messagesToSend);
-                var systemPrompt = GetSystemPrompt(messagesToSend);
+            // Capture input sample BEFORE AddRange so we get the last message that was sent to the AI.
+            // Tool result messages have FunctionResultContent (no .Text), so serialize them explicitly.
+            var inputSample = GetInputSample(messagesToSend);
+            var systemPrompt = GetSystemPrompt(messagesToSend);
 
-                ChatResponse response;
-                try
-                {
-                    response = await GetResponseAsync(messagesToSend, chatOptions);
-                }
-                catch (Exception ex) when (this.TryDowngradeProviderManagedSession(state, systemContext, ex))
-                {
-                    ApplySessionModeToOptions(chatOptions, state);
-                    messagesToSend = BuildMessagesForCurrentTurn(state);
-                    inputSample = GetInputSample(messagesToSend);
-                    systemPrompt = GetSystemPrompt(messagesToSend);
-                    response = await GetResponseAsync(messagesToSend, chatOptions);
-                }
-
-                AppendResponseToState(state, response);
-                var responseMessage = response.Messages.Last();
-
-                var usage = AiTokenUsageExtractor.FromResponse(response);
-                var inputTokens = response.Usage?.InputTokenCount;
-                var outputTokens = response.Usage?.OutputTokenCount;
-                var cachedInputTokens = response.Usage?.CachedInputTokenCount;
-                state.AccumulateTokens(usage);
-                state.UpdateContinuationHandle(CreateContinuationHandle(response, state), response.ContinuationToken);
-                state.RecordTurn(
-                    state.Session.Mode == AgentReviewSessionMode.StatelessReplay
-                        ? ReviewTurnContextStrategy.FullContext
-                        : ReviewTurnContextStrategy.DeltaContext,
-                    inputSample,
-                    inputTokens,
-                    outputTokens);
-                systemContext.ReviewSession = state.Session;
-
-                if (systemContext.ActiveProtocolId.HasValue && systemContext.ProtocolRecorder is not null)
-                {
-                    // Structured, write-time-bounded assistant-turn record: verbatim text, optional bounded
-                    // reasoning, and each tool call as {name, arguments}. Function-call-only turns still record
-                    // their calls (rather than collapsing to a bare name list) and carry no text.
-                    var outputSample = AssistantTurnOutputRecord.Build(
-                        responseMessage,
-                        opts.CaptureReasoningInProtocol,
-                        opts.MaxReasoningSummaryChars);
-                    await systemContext.ProtocolRecorder.RecordAiCallAsync(
-                        systemContext.ActiveProtocolId.Value,
-                        state.Iteration,
-                        inputTokens,
-                        outputTokens,
-                        inputSample,
-                        systemPrompt,
-                        outputSample,
-                        cancellationToken,
-                        cachedInputTokens: cachedInputTokens,
-                        cacheWriteTokens: usage.IsEstimated ? null : usage.CacheWriteTokens,
-                        reasoningTokens: usage.IsEstimated ? null : usage.ReasoningTokens,
-                        cacheStatus: ResolveCacheStatus(systemContext, cachedInputTokens, messagesToSend),
-                        cacheMissCategory: ResolveCacheMissCategory(systemContext, cachedInputTokens, messagesToSend),
-                        prefixEligibility: ResolvePrefixEligibility(systemContext, messagesToSend));
-                    await RecordSessionBindingEventIfNeededAsync(systemContext, state, cancellationToken);
-                    await RecordSessionTurnEventAsync(systemContext, state, inputSample, outputSample, cancellationToken);
-                }
-
-                var functionCalls = responseMessage.Contents.OfType<FunctionCallContent>().ToList();
-
-                var text = response.Text ?? "";
-                if (!string.IsNullOrWhiteSpace(text))
-                {
-                    lastTextResponse = text;
-                }
-
-                var turnFingerprint = BuildAssistantTurnFingerprint(text, functionCalls);
-                if (turnFingerprint is not null && !seenAssistantTurns.Add(turnFingerprint))
-                {
-                    LogRepeatedAssistantTurn(logger, pullRequest.PullRequestId, state.Iteration);
-                    break;
-                }
-
-                if (functionCalls.Count > 0)
-                {
-                    LogToolCallsReceived(logger, functionCalls.Count, state.Iteration);
-
-                    var toolResultContents = new List<AIContent>();
-                    foreach (var call in functionCalls)
-                    {
-                        var invocation = await this.InvokeToolAsync(call, rawTools, cancellationToken);
-                        var boundedResultText = invocation.BoundedResultJson;
-                        toolResultContents.Add(new FunctionResultContent(call.CallId, boundedResultText));
-                        state.RecordToolCall(
-                            call.Name ?? "",
-                            invocation.ArgumentsJson,
-                            boundedResultText,
-                            invocation.StartedAt,
-                            invocation.CompletedAt,
-                            invocation.DurationMs,
-                            invocation.WaitDurationMs,
-                            invocation.ActiveDurationMs,
-                            invocation.TimingAvailability,
-                            invocation.ToolOutcome,
-                            invocation.PhaseTimings);
-
-                        if (systemContext.ActiveProtocolId.HasValue && systemContext.ProtocolRecorder is not null)
-                        {
-                            await systemContext.ProtocolRecorder.RecordToolCallAsync(
-                                systemContext.ActiveProtocolId.Value,
-                                call.Name ?? "",
-                                invocation.ArgumentsJson,
-                                boundedResultText,
-                                state.Iteration,
-                                cancellationToken,
-                                invocation.StartedAt,
-                                invocation.CompletedAt,
-                                invocation.DurationMs,
-                                invocation.WaitDurationMs,
-                                invocation.ActiveDurationMs,
-                                invocation.TimingAvailability,
-                                invocation.ToolOutcome,
-                                invocation.PhaseTimings,
-                                invocation.WasBounded ? "Bounded" : null,
-                                invocation.WasBounded ? invocation.OriginalPayloadTokens : null,
-                                invocation.WasBounded ? invocation.BoundedPayloadTokens : null,
-                                invocation.WasBounded ? true : null);
-                        }
-                    }
-
-                    state.Messages.Add(new ChatMessage(ChatRole.Tool, toolResultContents));
-                    state.CompactReplayHistory();
-                    systemContext.ReviewSession = state.Session;
-
-                    state.Iteration++;
-                    continue;
-                }
-
-                if (TryParseAgenticResponse(text, out var dto) && dto?.ConfidenceEvaluations is not null)
-                {
-                    var scores = dto.ConfidenceEvaluations
-                        .Where(e => e.Concern is not null)
-                        .Select(e => new ConfidenceScore(e.Concern!, e.Confidence))
-                        .ToList()
-                        .AsReadOnly();
-
-                    state.RecordConfidenceSnapshot(scores);
-                    LogConfidenceSnapshot(logger, state.Iteration, scores.Count);
-
-                    var allMeetThreshold = scores.Count > 0 && scores.All(s => s.Score >= opts.ConfidenceThreshold);
-                    // investigation_complete: false means the AI explicitly signals it needs more tool calls;
-                    // honour that regardless of confidence scores. Only LoopComplete is an unconditional escape hatch.
-                    var investigationIncomplete = dto.InvestigationComplete == false;
-                    if (dto.LoopComplete || (allMeetThreshold && !investigationIncomplete))
-                    {
-                        LogLoopComplete(logger, state.Iteration, allMeetThreshold, dto.LoopComplete);
-                        break;
-                    }
-                }
-                else
-                {
-                    // Pure review JSON without confidence_evaluations — treat as final
-                    break;
-                }
-
-                state.Iteration++;
-            }
-
-            // If the loop exited without ever capturing a text response (e.g., iteration limit hit
-            // while the AI was still making tool calls), do one final forced call without tools so
-            // the AI can emit its best-effort review from the context gathered so far.
-            if (string.IsNullOrWhiteSpace(lastTextResponse))
-            {
-                LogForcingFinalReview(logger, pullRequest.PullRequestId, state.Iteration);
-                PrepareForForcedFinalTurn(state);
-                systemContext.ReviewSession = state.Session;
-                state.Messages.Add(
-                    new ChatMessage(
-                        ChatRole.User,
-                        "Iteration limit reached. Provide your final review now. " +
-                        "CRITICAL: Your entire response must be a single raw JSON object with keys: " +
-                        "summary, comments, confidence_evaluations, loop_complete (set to true), investigation_complete (set to true). " +
-                        "Do NOT use markdown code fences. Do NOT add any text outside the JSON. " +
-                        "The response must start with '{' and end with '}'."));
-                var finalOptions = new ChatOptions
-                        { MaxOutputTokens = chatOptions.MaxOutputTokens, ModelId = effectiveModelId, Temperature = systemContext.Temperature }
-                    .ApplyReasoning(opts.CaptureReasoningInProtocol, systemContext.ActiveReasoningEffort);
-                ChatResponse finalResponse;
-                try
-                {
-                    finalResponse = await GetResponseAsync(
-                        BuildMessagesForForcedFinalTurn(state),
-                        finalOptions);
-                }
-                catch (Exception ex) when (this.TryDowngradeProviderManagedSession(state, systemContext, ex))
-                {
-                    systemContext.ReviewSession = state.Session;
-                    finalResponse = await GetResponseAsync(
-                        BuildMessagesForForcedFinalTurn(state),
-                        finalOptions);
-                }
-
-                var finalCachedInputTokens = finalResponse.Usage?.CachedInputTokenCount;
-                var finalUsage = AiTokenUsageExtractor.FromResponse(finalResponse);
-                state.AccumulateTokens(finalUsage);
-                state.UpdateContinuationHandle(CreateContinuationHandle(finalResponse, state), finalResponse.ContinuationToken);
-                lastTextResponse = finalResponse.Text ?? "";
-
-                if (systemContext.ActiveProtocolId.HasValue && systemContext.ProtocolRecorder is not null)
-                {
-                    await systemContext.ProtocolRecorder.RecordAiCallAsync(
-                        systemContext.ActiveProtocolId.Value,
-                        state.Iteration,
-                        finalResponse.Usage?.InputTokenCount,
-                        finalResponse.Usage?.OutputTokenCount,
-                        GetInputSample(BuildMessagesForForcedFinalTurn(state)),
-                        GetSystemPrompt(BuildMessagesForForcedFinalTurn(state)),
-                        lastTextResponse,
-                        cancellationToken,
-                        "ai_call_forced_final",
-                        cachedInputTokens: finalCachedInputTokens,
-                        cacheWriteTokens: finalUsage.IsEstimated ? null : finalUsage.CacheWriteTokens,
-                        reasoningTokens: finalUsage.IsEstimated ? null : finalUsage.ReasoningTokens,
-                        cacheStatus: ResolveCacheStatus(systemContext, finalCachedInputTokens, BuildMessagesForForcedFinalTurn(state)),
-                        cacheMissCategory: ResolveCacheMissCategory(systemContext, finalCachedInputTokens, BuildMessagesForForcedFinalTurn(state)),
-                        prefixEligibility: ResolvePrefixEligibility(systemContext, BuildMessagesForForcedFinalTurn(state)),
-                        finalizationAttemptKind: "ForcedFinal",
-                        finalizationReason: "iteration_limit_reached",
-                        finalizationOutcome: string.IsNullOrWhiteSpace(lastTextResponse) ? "StillInvalid" : "ProducedFinalText");
-                }
-
-                if (string.IsNullOrWhiteSpace(lastTextResponse))
-                {
-                    throw new InvalidOperationException(
-                        $"AI returned an empty response for the forced final review of PR {pullRequest.PullRequestId}. " +
-                        "Review job cannot be completed.");
-                }
-            }
-
-            lastTextResponse = await this.RepairFinalResponseIfNeededAsync(
-                effectiveClient,
-                managedSessionTransport,
+            var response = await ExecuteSingleTurnAsync(
                 state,
-                chatOptions,
-                effectiveModelId,
                 systemContext,
-                pullRequest.PullRequestId,
-                lastTextResponse,
+                setup,
+                effectiveClient,
+                messagesToSend,
+                setup.ChatOptions,
+                getResponse,
                 cancellationToken);
 
-            activity?.SetTag("loop.iterations", state.Iteration);
-            activity?.SetTag("loop.tool_calls", state.ToolCallCount);
+            // Re-capture input sample + system prompt in case the downgrade path rebuilt
+            // the message list inside ExecuteSingleTurnAsync.
+            inputSample = GetInputSample(messagesToSend);
+            systemPrompt = GetSystemPrompt(messagesToSend);
 
-            LogReviewLoopFinished(logger, pullRequest.PullRequestId, state.Iteration, state.ToolCallCount);
+            var turnOutcome = await ProcessTurnResponseAsync(
+                state,
+                systemContext,
+                setup,
+                response,
+                inputSample,
+                systemPrompt,
+                messagesToSend,
+                seenAssistantTurns,
+                pullRequestId,
+                opts,
+                cancellationToken);
 
-            state.MarkCompleted();
-            systemContext.ReviewSession = state.Session;
-            systemContext.LoopMetrics = BuildLoopMetrics(state);
-
-            return ParseReviewResult(lastTextResponse, state.FileReads);
-        }
-        finally
-        {
-            // Ensure metrics are always captured so callers can record accurate stats even on failure.
-            if (systemContext.ReviewSession is not { Status: AgentReviewSessionStatus.Completed })
+            if (turnOutcome == TurnOutcome.TerminateLoop || turnOutcome == TurnOutcome.RepeatedTurn)
             {
-                state.MarkFailed();
-                systemContext.ReviewSession = state.Session;
+                break;
             }
 
-            systemContext.LoopMetrics ??= BuildLoopMetrics(state);
+            // Both the tool-call branch (state.Iteration advanced inside HandleToolCallsIfAnyAsync's
+            // pre-refactor shape) and the "still investigating" branch (low confidence, no loop_complete)
+            // need to advance state.Iteration so the while condition eventually fires. The pre-refactor
+            // ReviewAsync had state.Iteration++ at the end of the while body; restoring that here keeps
+            // a stuck "still investigating" response from spinning the loop forever at the same iteration
+            // and growing state.Messages / state.TurnHistory / state.ConfidenceSnapshots without bound.
+            state.Iteration++;
+        }
+
+        var lastTextResponse = state.LastTextResponse ?? "";
+        if (string.IsNullOrWhiteSpace(lastTextResponse))
+        {
+            lastTextResponse = await RunForcedFinalTurnAsync(
+                state,
+                systemContext,
+                setup,
+                effectiveClient,
+                getResponse,
+                pullRequestId,
+                opts,
+                cancellationToken);
+        }
+
+        return lastTextResponse;
+    }
+
+    private async Task<ChatResponse> ExecuteSingleTurnAsync(
+        ReviewLoopState state,
+        ReviewSystemContext systemContext,
+        TransportSetup setup,
+        IChatClient effectiveClient,
+        IList<ChatMessage> messagesToSend,
+        ChatOptions chatOptions,
+        Func<IEnumerable<ChatMessage>, ChatOptions, Task<ChatResponse>> getResponse,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            return await getResponse(messagesToSend, chatOptions);
+        }
+        catch (Exception ex) when (this.TryDowngradeProviderManagedSession(state, systemContext, ex))
+        {
+            ApplySessionModeToOptions(chatOptions, state);
+            messagesToSend = BuildMessagesForCurrentTurn(state);
+            return await getResponse(messagesToSend, chatOptions);
         }
     }
+
+    private async Task<TurnOutcome> ProcessTurnResponseAsync(
+        ReviewLoopState state,
+        ReviewSystemContext systemContext,
+        TransportSetup setup,
+        ChatResponse response,
+        string? inputSample,
+        string? systemPrompt,
+        IList<ChatMessage> messagesToSend,
+        HashSet<string> seenAssistantTurns,
+        int pullRequestId,
+        AiReviewOptions opts,
+        CancellationToken cancellationToken)
+    {
+        AppendResponseToState(state, response);
+        var responseMessage = response.Messages.Last();
+
+        var usage = AiTokenUsageExtractor.FromResponse(response);
+        var inputTokens = response.Usage?.InputTokenCount;
+        var outputTokens = response.Usage?.OutputTokenCount;
+        var cachedInputTokens = response.Usage?.CachedInputTokenCount;
+        state.AccumulateTokens(usage);
+        state.UpdateContinuationHandle(CreateContinuationHandle(response, state), response.ContinuationToken);
+        state.RecordTurn(
+            state.Session.Mode == AgentReviewSessionMode.StatelessReplay
+                ? ReviewTurnContextStrategy.FullContext
+                : ReviewTurnContextStrategy.DeltaContext,
+            inputSample,
+            inputTokens,
+            outputTokens);
+        systemContext.ReviewSession = state.Session;
+
+        await this.RecordTurnProtocolEventsAsync(
+            systemContext,
+            state,
+            responseMessage,
+            usage,
+            inputTokens,
+            outputTokens,
+            cachedInputTokens,
+            inputSample,
+            systemPrompt,
+            messagesToSend,
+            opts,
+            cancellationToken);
+
+        var functionCalls = responseMessage.Contents.OfType<FunctionCallContent>().ToList();
+        var text = response.Text ?? "";
+
+        var toolCallOutcome = await this.HandleToolCallsIfAnyAsync(
+            state, systemContext, setup, functionCalls, text, seenAssistantTurns, pullRequestId, cancellationToken);
+
+        if (toolCallOutcome == ToolCallOutcome.RepeatedTurn)
+        {
+            return TurnOutcome.RepeatedTurn;
+        }
+
+        if (toolCallOutcome == ToolCallOutcome.ToolCallsHandled)
+        {
+            return TurnOutcome.Continue;
+        }
+
+        // No tool calls on this turn: capture the text so the forced-final path sees the
+        // latest non-empty assistant text instead of always running an extra round-trip.
+        if (!string.IsNullOrWhiteSpace(text))
+        {
+            state.LastTextResponse = text;
+        }
+
+        if (TryParseAgenticResponse(text, out var dto) && dto?.ConfidenceEvaluations is not null)
+        {
+            var scores = dto.ConfidenceEvaluations
+                .Where(e => e.Concern is not null)
+                .Select(e => new ConfidenceScore(e.Concern!, e.Confidence))
+                .ToList()
+                .AsReadOnly();
+
+            state.RecordConfidenceSnapshot(scores);
+            LogConfidenceSnapshot(logger, state.Iteration, scores.Count);
+
+            var allMeetThreshold = scores.Count > 0 && scores.All(s => s.Score >= opts.ConfidenceThreshold);
+            // investigation_complete: false means the AI explicitly signals it needs more tool calls;
+            // honour that regardless of confidence scores. Only LoopComplete is an unconditional escape hatch.
+            var investigationIncomplete = dto.InvestigationComplete == false;
+            if (dto.LoopComplete || (allMeetThreshold && !investigationIncomplete))
+            {
+                LogLoopComplete(logger, state.Iteration, allMeetThreshold, dto.LoopComplete);
+                return TurnOutcome.TerminateLoop;
+            }
+        }
+        else
+        {
+            // Pure review JSON without confidence_evaluations — treat as final
+            return TurnOutcome.TerminateLoop;
+        }
+
+        return TurnOutcome.Continue;
+    }
+
+    private async Task RecordTurnProtocolEventsAsync(
+        ReviewSystemContext systemContext,
+        ReviewLoopState state,
+        ChatMessage responseMessage,
+        AiTokenUsage usage,
+        long? inputTokens,
+        long? outputTokens,
+        long? cachedInputTokens,
+        string? inputSample,
+        string? systemPrompt,
+        IList<ChatMessage> messagesToSend,
+        AiReviewOptions opts,
+        CancellationToken cancellationToken)
+    {
+        if (!systemContext.ActiveProtocolId.HasValue || systemContext.ProtocolRecorder is null)
+        {
+            return;
+        }
+
+        // Structured, write-time-bounded assistant-turn record: verbatim text, optional bounded
+        // reasoning, and each tool call as {name, arguments}. Function-call-only turns still record
+        // their calls (rather than collapsing to a bare name list) and carry no text.
+        var outputSample = AssistantTurnOutputRecord.Build(
+            responseMessage,
+            opts.CaptureReasoningInProtocol,
+            opts.MaxReasoningSummaryChars);
+        await systemContext.ProtocolRecorder.RecordAiCallAsync(
+            systemContext.ActiveProtocolId.Value,
+            state.Iteration,
+            inputTokens,
+            outputTokens,
+            inputSample,
+            systemPrompt,
+            outputSample,
+            cancellationToken,
+            cachedInputTokens: cachedInputTokens,
+            cacheWriteTokens: usage.IsEstimated ? null : usage.CacheWriteTokens,
+            reasoningTokens: usage.IsEstimated ? null : usage.ReasoningTokens,
+            cacheStatus: ResolveCacheStatus(systemContext, cachedInputTokens, messagesToSend),
+            cacheMissCategory: ResolveCacheMissCategory(systemContext, cachedInputTokens, messagesToSend),
+            prefixEligibility: ResolvePrefixEligibility(systemContext, messagesToSend));
+        await RecordSessionBindingEventIfNeededAsync(systemContext, state, cancellationToken);
+        await RecordSessionTurnEventAsync(systemContext, state, inputSample, outputSample, cancellationToken);
+    }
+
+    private async Task<ToolCallOutcome> HandleToolCallsIfAnyAsync(
+        ReviewLoopState state,
+        ReviewSystemContext systemContext,
+        TransportSetup setup,
+        IReadOnlyList<FunctionCallContent> functionCalls,
+        string text,
+        HashSet<string> seenAssistantTurns,
+        int pullRequestId,
+        CancellationToken cancellationToken)
+    {
+        if (functionCalls.Count == 0)
+        {
+            return ToolCallOutcome.NoToolCalls;
+        }
+
+        // Repeated-turn fingerprint check runs BEFORE the tool-invocation loop so a duplicate
+        // assistant turn short-circuits without re-invoking the tools (matches the pre-refactor
+        // ordering, and prevents the tool from being called twice in a row on a stuck turn).
+        var turnFingerprint = BuildAssistantTurnFingerprint(text, functionCalls);
+        if (turnFingerprint is not null && !seenAssistantTurns.Add(turnFingerprint))
+        {
+            LogRepeatedAssistantTurn(logger, pullRequestId, state.Iteration);
+            return ToolCallOutcome.RepeatedTurn;
+        }
+
+        LogToolCallsReceived(logger, functionCalls.Count, state.Iteration);
+
+        var toolResultContents = new List<AIContent>();
+        foreach (var call in functionCalls)
+        {
+            var invocation = await this.InvokeToolAsync(call, setup.RawTools, cancellationToken);
+            var boundedResultText = invocation.BoundedResultJson;
+            toolResultContents.Add(new FunctionResultContent(call.CallId, boundedResultText));
+            state.RecordToolCall(
+                call.Name ?? "",
+                invocation.ArgumentsJson,
+                boundedResultText,
+                invocation.StartedAt,
+                invocation.CompletedAt,
+                invocation.DurationMs,
+                invocation.WaitDurationMs,
+                invocation.ActiveDurationMs,
+                invocation.TimingAvailability,
+                invocation.ToolOutcome,
+                invocation.PhaseTimings);
+
+            await this.RecordToolCallProtocolEventAsync(systemContext, call, invocation, state, cancellationToken);
+        }
+
+        if (!string.IsNullOrWhiteSpace(text))
+        {
+            state.LastTextResponse = text;
+        }
+
+        state.Messages.Add(new ChatMessage(ChatRole.Tool, toolResultContents));
+        state.CompactReplayHistory();
+        systemContext.ReviewSession = state.Session;
+        return ToolCallOutcome.ToolCallsHandled;
+    }
+
+    private async Task RecordToolCallProtocolEventAsync(
+        ReviewSystemContext systemContext,
+        FunctionCallContent call,
+        ToolInvocationTelemetry invocation,
+        ReviewLoopState state,
+        CancellationToken cancellationToken)
+    {
+        if (!systemContext.ActiveProtocolId.HasValue || systemContext.ProtocolRecorder is null)
+        {
+            return;
+        }
+
+        await systemContext.ProtocolRecorder.RecordToolCallAsync(
+            systemContext.ActiveProtocolId.Value,
+            call.Name ?? "",
+            invocation.ArgumentsJson,
+            invocation.BoundedResultJson,
+            state.Iteration,
+            cancellationToken,
+            invocation.StartedAt,
+            invocation.CompletedAt,
+            invocation.DurationMs,
+            invocation.WaitDurationMs,
+            invocation.ActiveDurationMs,
+            invocation.TimingAvailability,
+            invocation.ToolOutcome,
+            invocation.PhaseTimings,
+            invocation.WasBounded ? "Bounded" : null,
+            invocation.WasBounded ? invocation.OriginalPayloadTokens : null,
+            invocation.WasBounded ? invocation.BoundedPayloadTokens : null,
+            invocation.WasBounded ? true : null);
+    }
+
+    private async Task<string> RunForcedFinalTurnAsync(
+        ReviewLoopState state,
+        ReviewSystemContext systemContext,
+        TransportSetup setup,
+        IChatClient effectiveClient,
+        Func<IEnumerable<ChatMessage>, ChatOptions, Task<ChatResponse>> getResponse,
+        int pullRequestId,
+        AiReviewOptions opts,
+        CancellationToken cancellationToken)
+    {
+        // If the loop exited without ever capturing a text response (e.g., iteration limit hit
+        // while the AI was still making tool calls), do one final forced call without tools so
+        // the AI can emit its best-effort review from the context gathered so far.
+        LogForcingFinalReview(logger, pullRequestId, state.Iteration);
+        PrepareForForcedFinalTurn(state);
+        systemContext.ReviewSession = state.Session;
+        state.Messages.Add(
+            new ChatMessage(
+                ChatRole.User,
+                "Iteration limit reached. Provide your final review now. " +
+                "CRITICAL: Your entire response must be a single raw JSON object with keys: " +
+                "summary, comments, confidence_evaluations, loop_complete (set to true), investigation_complete (set to true). " +
+                "Do NOT use markdown code fences. Do NOT add any text outside the JSON. " +
+                "The response must start with '{' and end with '}'."));
+        var finalOptions = new ChatOptions
+                { MaxOutputTokens = setup.ChatOptions.MaxOutputTokens, ModelId = setup.EffectiveModelId, Temperature = systemContext.Temperature }
+            .ApplyReasoning(opts.CaptureReasoningInProtocol, systemContext.ActiveReasoningEffort);
+        ChatResponse finalResponse;
+        try
+        {
+            finalResponse = await getResponse(
+                BuildMessagesForForcedFinalTurn(state),
+                finalOptions);
+        }
+        catch (Exception ex) when (this.TryDowngradeProviderManagedSession(state, systemContext, ex))
+        {
+            systemContext.ReviewSession = state.Session;
+            finalResponse = await getResponse(
+                BuildMessagesForForcedFinalTurn(state),
+                finalOptions);
+        }
+
+        var finalCachedInputTokens = finalResponse.Usage?.CachedInputTokenCount;
+        var finalUsage = AiTokenUsageExtractor.FromResponse(finalResponse);
+        state.AccumulateTokens(finalUsage);
+        state.UpdateContinuationHandle(CreateContinuationHandle(finalResponse, state), finalResponse.ContinuationToken);
+        var lastTextResponse = finalResponse.Text ?? "";
+
+        if (systemContext.ActiveProtocolId.HasValue && systemContext.ProtocolRecorder is not null)
+        {
+            await systemContext.ProtocolRecorder.RecordAiCallAsync(
+                systemContext.ActiveProtocolId.Value,
+                state.Iteration,
+                finalResponse.Usage?.InputTokenCount,
+                finalResponse.Usage?.OutputTokenCount,
+                GetInputSample(BuildMessagesForForcedFinalTurn(state)),
+                GetSystemPrompt(BuildMessagesForForcedFinalTurn(state)),
+                lastTextResponse,
+                cancellationToken,
+                "ai_call_forced_final",
+                cachedInputTokens: finalCachedInputTokens,
+                cacheWriteTokens: finalUsage.IsEstimated ? null : finalUsage.CacheWriteTokens,
+                reasoningTokens: finalUsage.IsEstimated ? null : finalUsage.ReasoningTokens,
+                cacheStatus: ResolveCacheStatus(systemContext, finalCachedInputTokens, BuildMessagesForForcedFinalTurn(state)),
+                cacheMissCategory: ResolveCacheMissCategory(systemContext, finalCachedInputTokens, BuildMessagesForForcedFinalTurn(state)),
+                prefixEligibility: ResolvePrefixEligibility(systemContext, BuildMessagesForForcedFinalTurn(state)),
+                finalizationAttemptKind: "ForcedFinal",
+                finalizationReason: "iteration_limit_reached",
+                finalizationOutcome: string.IsNullOrWhiteSpace(lastTextResponse) ? "StillInvalid" : "ProducedFinalText");
+        }
+
+        if (string.IsNullOrWhiteSpace(lastTextResponse))
+        {
+            throw new InvalidOperationException(
+                $"AI returned an empty response for the forced final review of PR {pullRequestId}. " +
+                "Review job cannot be completed.");
+        }
+
+        return lastTextResponse;
+    }
+
+    private enum TurnOutcome
+    {
+        Continue,
+        TerminateLoop,
+        RepeatedTurn,
+    }
+
+    private enum ToolCallOutcome
+    {
+        NoToolCalls,
+        ToolCallsHandled,
+        RepeatedTurn,
+    }
+
+    private sealed record TransportSetup(
+        IReadOnlyList<AIFunction> RawTools,
+        IReadOnlyList<AITool> TransportTools,
+        ChatOptions ChatOptions,
+        string EffectiveModelId,
+        IManagedReviewSessionTransport? ManagedSessionTransport,
+        ReviewResult? SkippedReview);
 
     private async Task<string> RepairFinalResponseIfNeededAsync(
         IChatClient effectiveClient,
