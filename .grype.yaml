@@ -1,6 +1,6 @@
 ignore:
   # nghttp2-libs is a compile-time dependency of the Alpine nginx package.
-  # The frontend container listens on plain HTTP/1.1 (port 80, no TLS, no http2
+  # The frontend container listens on plain HTTP/1.1 (port 8080, no TLS, no http2
   # directive in nginx.conf), so HTTP/2 is never activated and this CVE has no
   # attack surface in this deployment.
   - vulnerability: CVE-2026-27135

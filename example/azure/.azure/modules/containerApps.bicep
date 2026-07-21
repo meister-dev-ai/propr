@@ -294,7 +294,7 @@ resource frontend 'Microsoft.App/containerapps@2025-10-02-preview' = {
       activeRevisionsMode: 'Single'
       ingress: {
         external: false
-        targetPort: 80
+        targetPort: 8080
         transport: 'Auto'
         traffic: [{ weight: 100, latestRevision: true }]
         allowInsecure: true
