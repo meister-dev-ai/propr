@@ -9317,6 +9317,83 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/admin/tenants/{tenantId}/budget/spend": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Returns the tenant's aggregate current-period spend and a trailing per-month trend. */
+        get: {
+            parameters: {
+                query?: {
+                    /** @description Number of trailing months to include in the trend (default 12; clamped to 1-24). */
+                    months?: number;
+                };
+                header?: never;
+                path: {
+                    /** @description Tenant identifier. */
+                    tenantId: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Aggregate spend, summed client caps, projected period spend, and the per-month trend. */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["TenantSpendDto"];
+                        "application/json": components["schemas"]["TenantSpendDto"];
+                        "text/json": components["schemas"]["TenantSpendDto"];
+                    };
+                };
+                /** @description Missing or invalid credentials. */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Caller is not an administrator of this tenant. */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description The Budgeting capability is not licensed for this installation. */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/admin/tenants/{tenantId}/clients": {
         parameters: {
             query?: never;
@@ -13880,6 +13957,79 @@ export interface components {
          * @enum {string}
          */
         TenantRole: "tenantUser" | "tenantAdministrator";
+        /**
+         * @description Response DTO for `GET /admin/tenants/{tenantId}/budget/spend`: the tenant's aggregate USD spend for the
+         *     current monthly period plus a trailing per-month trend. Because budgets are configured per client, the caps
+         *     here are the SUM of the tenant's clients' monthly caps (a reference total, not a tenant-level cap); they are
+         *     null when no client in the tenant has that cap configured.
+         */
+        TenantSpendDto: {
+            /**
+             * Format: uuid
+             * @description The tenant the spend belongs to.
+             */
+            tenantId?: string;
+            /**
+             * Format: date
+             * @description Inclusive first day of the current monthly period (UTC).
+             */
+            periodStart?: string;
+            /**
+             * Format: date
+             * @description Inclusive last day of the current monthly period (UTC).
+             */
+            periodEnd?: string;
+            /**
+             * Format: date
+             * @description The UTC date spend was computed as of.
+             */
+            asOf?: string;
+            /**
+             * Format: double
+             * @description Aggregate estimated USD spent across the tenant's clients this period to date.
+             */
+            spentToDateUsd?: number;
+            /**
+             * Format: double
+             * @description Sum of the tenant's clients' monthly soft caps, or null when none are configured.
+             */
+            monthlySoftCapUsd?: number | null;
+            /**
+             * Format: double
+             * @description Sum of the tenant's clients' monthly hard caps, or null when none are configured.
+             */
+            monthlyHardCapUsd?: number | null;
+            /**
+             * Format: double
+             * @description The projected full-period aggregate spend on the current run-rate.
+             */
+            projectedPeriodSpendUsd?: number | null;
+            /** @description Per-month aggregate spend over the trailing window, oldest first. */
+            months?: components["schemas"]["TenantSpendMonthDto"][] | null;
+        };
+        /** @description Aggregated USD spend for a single calendar month across a tenant. */
+        TenantSpendMonthDto: {
+            /**
+             * Format: int32
+             * @description The calendar year.
+             */
+            year?: number;
+            /**
+             * Format: int32
+             * @description The calendar month (1-12).
+             */
+            month?: number;
+            /**
+             * Format: date
+             * @description Inclusive first day of the month (UTC).
+             */
+            periodStart?: string;
+            /**
+             * Format: double
+             * @description Aggregate estimated USD spent across the tenant's clients that month (month-to-date for the current month).
+             */
+            spentUsd?: number;
+        };
         /** @description Tenant-owned external sign-in provider metadata returned by admin APIs. */
         TenantSsoProviderDto: {
             /** Format: uuid */

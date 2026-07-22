@@ -55,4 +55,15 @@ public interface IClientTokenUsageRepository
         DateOnly from,
         DateOnly to,
         CancellationToken ct);
+
+    /// <summary>
+    ///     Returns the estimated USD cost aggregated per calendar month across the given <paramref name="clientIds" />
+    ///     within the inclusive [<paramref name="from" />, <paramref name="to" />] date range, keyed by (year, month).
+    ///     Unpriced usage is omitted from the sum. Months with no samples are absent from the result.
+    /// </summary>
+    Task<IReadOnlyDictionary<(int Year, int Month), decimal>> GetMonthlyCostForClientsAsync(
+        IReadOnlyCollection<Guid> clientIds,
+        DateOnly from,
+        DateOnly to,
+        CancellationToken ct);
 }

@@ -153,4 +153,25 @@ public sealed class ClientTokenUsageRepository(MeisterProPRDbContext db) : IClie
 
         return totals.ToDictionary(t => t.ClientId, t => t.Cost ?? 0m);
     }
+
+    /// <inheritdoc />
+    public async Task<IReadOnlyDictionary<(int Year, int Month), decimal>> GetMonthlyCostForClientsAsync(
+        IReadOnlyCollection<Guid> clientIds,
+        DateOnly from,
+        DateOnly to,
+        CancellationToken ct)
+    {
+        if (clientIds.Count == 0)
+        {
+            return new Dictionary<(int, int), decimal>();
+        }
+
+        var rows = await db.ClientTokenUsageSamples
+            .Where(s => clientIds.Contains(s.ClientId) && s.Date >= from && s.Date <= to)
+            .GroupBy(s => new { s.Date.Year, s.Date.Month })
+            .Select(g => new { g.Key.Year, g.Key.Month, Cost = g.Sum(s => s.EstimatedCostUsd) })
+            .ToListAsync(ct);
+
+        return rows.ToDictionary(r => (r.Year, r.Month), r => r.Cost ?? 0m);
+    }
 }

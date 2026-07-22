@@ -469,6 +469,62 @@ function buildMockTenantBudgetOverview(tenantId: string) {
   }
 }
 
+// Builds the tenant-wide aggregate spend view: a trailing per-month trend that sums each client's history
+// month-by-month, with the current-period spend-to-date and projection derived from that same current-month
+// bucket — mirroring the real service, where both read the one current-month cost rollup and cannot diverge.
+function buildMockTenantSpend(tenantId: string, months = 12) {
+  const now = new Date()
+  const year = now.getUTCFullYear()
+  const month = now.getUTCMonth() + 1
+  const daysInMonth = new Date(Date.UTC(year, month, 0)).getUTCDate()
+  const day = now.getUTCDate()
+  const clientIds = ['1', '2', '3']
+  const clamped = Math.min(Math.max(months, 1), 24)
+
+  let softCap = 0
+  let hardCap = 0
+  let anySoft = false
+  let anyHard = false
+  const trend = new Map<string, { year: number; month: number; periodStart: string; spentUsd: number }>()
+
+  for (const id of clientIds) {
+    const caps = budgetCapsForClient(id)
+    if (caps.monthlySoftCapUsd != null) {
+      softCap += caps.monthlySoftCapUsd
+      anySoft = true
+    }
+    if (caps.monthlyHardCapUsd != null) {
+      hardCap += caps.monthlyHardCapUsd
+      anyHard = true
+    }
+
+    for (const m of buildMockBudgetHistory(id, clamped).months) {
+      const key = `${m.year}-${pad2(m.month)}`
+      const existing = trend.get(key)
+      if (existing) {
+        existing.spentUsd = Math.round((existing.spentUsd + m.spentUsd) * 100) / 100
+      } else {
+        trend.set(key, { year: m.year, month: m.month, periodStart: m.periodStart, spentUsd: m.spentUsd })
+      }
+    }
+  }
+
+  const spentToDateUsd = trend.get(`${year}-${pad2(month)}`)?.spentUsd ?? 0
+  const projectedPeriodSpendUsd = Math.round(((spentToDateUsd / Math.max(day, 1)) * daysInMonth) * 100) / 100
+
+  return {
+    tenantId,
+    periodStart: `${year}-${pad2(month)}-01`,
+    periodEnd: `${year}-${pad2(month)}-${pad2(daysInMonth)}`,
+    asOf: `${year}-${pad2(month)}-${pad2(day)}`,
+    spentToDateUsd,
+    monthlySoftCapUsd: anySoft ? Math.round(softCap * 100) / 100 : null,
+    monthlyHardCapUsd: anyHard ? Math.round(hardCap * 100) / 100 : null,
+    projectedPeriodSpendUsd,
+    months: [...trend.values()].sort((a, b) => a.year - b.year || a.month - b.month),
+  }
+}
+
 function projectTraceSearchMatches() {
   return (protocolMockData as Array<Record<string, any>>)
     .flatMap((protocol) => (protocol.events ?? []).map((event: Record<string, any>) => ({ protocol, event })))
@@ -2125,6 +2181,12 @@ export const handlers = [
   http.get(`${base}/admin/tenants/:tenantId/budget/overview`, async ({ params }) => {
     await delay(300)
     return HttpResponse.json(buildMockTenantBudgetOverview(String(params.tenantId)))
+  }),
+
+  http.get(`${base}/admin/tenants/:tenantId/budget/spend`, async ({ params, request }) => {
+    await delay(300)
+    const months = Number(new URL(request.url).searchParams.get('months') ?? '12')
+    return HttpResponse.json(buildMockTenantSpend(String(params.tenantId), Number.isFinite(months) ? months : 12))
   }),
 
   http.get(`${base}/admin/review-profiles`, async () => {

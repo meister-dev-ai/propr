@@ -76,6 +76,24 @@ public sealed class TenantBudgetOverviewControllerTests(TenantBudgetOverviewCont
         Assert.Equal(HttpStatusCode.Conflict, response.StatusCode);
     }
 
+    [Fact]
+    public async Task GetSpend_WhenLicensed_ReturnsAggregateSpendAndTrend()
+    {
+        factory.BudgetingAvailable = true;
+        var http = factory.CreateClient();
+        using var request = new HttpRequestMessage(HttpMethod.Get, $"/admin/tenants/{factory.TenantId}/budget/spend?months=6");
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", factory.GenerateAdminToken());
+
+        var response = await http.SendAsync(request);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var body = JsonDocument.Parse(await response.Content.ReadAsStringAsync()).RootElement;
+        Assert.Equal(factory.TenantId.ToString(), body.GetProperty("tenantId").GetString());
+        Assert.Equal(100m, body.GetProperty("spentToDateUsd").GetDecimal());
+        Assert.Equal(200m, body.GetProperty("monthlyHardCapUsd").GetDecimal());
+        Assert.Equal(2, body.GetProperty("months").GetArrayLength());
+    }
+
     public sealed class TenantBudgetApiFactory : WebApplicationFactory<Program>
     {
         private const string TestJwtSecret = "test-tenant-budget-overview-jwt!";
@@ -118,6 +136,21 @@ public sealed class TenantBudgetOverviewControllerTests(TenantBudgetOverviewCont
                     new TenantBudgetOverviewClientDto(Guid.NewGuid(), "Acme", 30m, 80m, 100m, 60m),
                 ]);
 
+        private TenantSpendDto SampleSpend() =>
+            new(
+                this.TenantId,
+                new DateOnly(2026, 7, 1),
+                new DateOnly(2026, 7, 31),
+                new DateOnly(2026, 7, 15),
+                100m,
+                80m,
+                200m,
+                130m,
+                [
+                    new TenantSpendMonthDto(2026, 6, new DateOnly(2026, 6, 1), 90m),
+                    new TenantSpendMonthDto(2026, 7, new DateOnly(2026, 7, 1), 100m),
+                ]);
+
         protected override void ConfigureWebHost(IWebHostBuilder builder)
         {
             builder.UseEnvironment("Testing");
@@ -146,6 +179,11 @@ public sealed class TenantBudgetOverviewControllerTests(TenantBudgetOverviewCont
                 overview.GetOverviewAsync(this.TenantId, Arg.Any<CancellationToken>())
                     .Returns(_ => Task.FromResult(this.SampleOverview()));
                 services.AddScoped(_ => overview);
+
+                var spend = Substitute.For<ITenantBudgetSpendService>();
+                spend.GetSpendAsync(this.TenantId, Arg.Any<int>(), Arg.Any<CancellationToken>())
+                    .Returns(_ => Task.FromResult(this.SampleSpend()));
+                services.AddScoped(_ => spend);
 
                 var licensing = Substitute.For<ILicensingCapabilityService>();
                 licensing.GetCapabilityAsync(PremiumCapabilityKey.Budgeting, Arg.Any<CancellationToken>())

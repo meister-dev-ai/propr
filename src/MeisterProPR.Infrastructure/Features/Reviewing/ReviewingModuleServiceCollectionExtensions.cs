@@ -82,6 +82,7 @@ public static class ReviewingModuleServiceCollectionExtensions
             services.AddScoped<IBudgetCapsProvider, BudgetCapsProvider>();
             services.AddScoped<IClientBudgetConsumptionService, ClientBudgetConsumptionService>();
             services.AddScoped<ITenantBudgetOverviewService, TenantBudgetOverviewService>();
+            services.AddScoped<ITenantBudgetSpendService, TenantBudgetSpendService>();
             services.AddScoped<IBudgetEventRepository, BudgetEventRepository>();
             services.AddScoped<IBudgetEventPublisher, BudgetEventPublisher>();
             services.AddSingleton<IModelPricingResolver, EfModelPricingResolver>();

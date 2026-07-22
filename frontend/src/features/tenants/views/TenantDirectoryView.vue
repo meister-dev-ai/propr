@@ -42,6 +42,9 @@
               <RouterLink v-if="isBudgetingAvailable" class="btn-secondary btn-sm" :to="{ name: 'tenant-budget-overview', params: { tenantId: tenant.id } }">
                 Budget overview
               </RouterLink>
+              <RouterLink v-if="isBudgetingAvailable" class="btn-secondary btn-sm" :to="{ name: 'tenant-spend', params: { tenantId: tenant.id } }">
+                Spend
+              </RouterLink>
               <RouterLink class="btn-primary btn-sm" :to="{ name: 'tenant-settings', params: { tenantId: tenant.id } }">
                 Tenant settings
               </RouterLink>

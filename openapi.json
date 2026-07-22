@@ -13557,6 +13557,117 @@
         }
       }
     },
+    "/admin/tenants/{tenantId}/budget/spend": {
+      "get": {
+        "tags": [
+          "TenantBudgetOverview"
+        ],
+        "summary": "Returns the tenant's aggregate current-period spend and a trailing per-month trend.",
+        "parameters": [
+          {
+            "name": "tenantId",
+            "in": "path",
+            "description": "Tenant identifier.",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "months",
+            "in": "query",
+            "description": "Number of trailing months to include in the trend (default 12; clamped to 1-24).",
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Aggregate spend, summed client caps, projected period spend, and the per-month trend.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/TenantSpendDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TenantSpendDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TenantSpendDto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid credentials.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Caller is not an administrator of this tenant.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "The Budgeting capability is not licensed for this installation.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/admin/tenants/{tenantId}/clients": {
       "get": {
         "tags": [
@@ -22748,6 +22859,91 @@
         ],
         "type": "string",
         "description": "Tenant-scoped authorization role for a tenant membership."
+      },
+      "TenantSpendDto": {
+        "type": "object",
+        "properties": {
+          "tenantId": {
+            "type": "string",
+            "description": "The tenant the spend belongs to.",
+            "format": "uuid"
+          },
+          "periodStart": {
+            "type": "string",
+            "description": "Inclusive first day of the current monthly period (UTC).",
+            "format": "date"
+          },
+          "periodEnd": {
+            "type": "string",
+            "description": "Inclusive last day of the current monthly period (UTC).",
+            "format": "date"
+          },
+          "asOf": {
+            "type": "string",
+            "description": "The UTC date spend was computed as of.",
+            "format": "date"
+          },
+          "spentToDateUsd": {
+            "type": "number",
+            "description": "Aggregate estimated USD spent across the tenant's clients this period to date.",
+            "format": "double"
+          },
+          "monthlySoftCapUsd": {
+            "type": "number",
+            "description": "Sum of the tenant's clients' monthly soft caps, or null when none are configured.",
+            "format": "double",
+            "nullable": true
+          },
+          "monthlyHardCapUsd": {
+            "type": "number",
+            "description": "Sum of the tenant's clients' monthly hard caps, or null when none are configured.",
+            "format": "double",
+            "nullable": true
+          },
+          "projectedPeriodSpendUsd": {
+            "type": "number",
+            "description": "The projected full-period aggregate spend on the current run-rate.",
+            "format": "double",
+            "nullable": true
+          },
+          "months": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/TenantSpendMonthDto"
+            },
+            "description": "Per-month aggregate spend over the trailing window, oldest first.",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false,
+        "description": "Response DTO for `GET /admin/tenants/{tenantId}/budget/spend`: the tenant's aggregate USD spend for the\ncurrent monthly period plus a trailing per-month trend. Because budgets are configured per client, the caps\nhere are the SUM of the tenant's clients' monthly caps (a reference total, not a tenant-level cap); they are\nnull when no client in the tenant has that cap configured."
+      },
+      "TenantSpendMonthDto": {
+        "type": "object",
+        "properties": {
+          "year": {
+            "type": "integer",
+            "description": "The calendar year.",
+            "format": "int32"
+          },
+          "month": {
+            "type": "integer",
+            "description": "The calendar month (1-12).",
+            "format": "int32"
+          },
+          "periodStart": {
+            "type": "string",
+            "description": "Inclusive first day of the month (UTC).",
+            "format": "date"
+          },
+          "spentUsd": {
+            "type": "number",
+            "description": "Aggregate estimated USD spent across the tenant's clients that month (month-to-date for the current month).",
+            "format": "double"
+          }
+        },
+        "additionalProperties": false,
+        "description": "Aggregated USD spend for a single calendar month across a tenant."
       },
       "TenantSsoProviderDto": {
         "type": "object",
