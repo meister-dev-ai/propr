@@ -20,6 +20,7 @@ const detailTabs = [
   'dismissals',
   'prompt-overrides',
   'usage',
+  'spend',
 ] as const
 
 export type DetailTab = (typeof detailTabs)[number]

@@ -3045,6 +3045,80 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/admin/clients/{clientId}/budget/consumption": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Returns the client's monthly budget consumption and forecast for the current period. */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    /** @description Client identifier. */
+                    clientId: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Current-period spend, configured caps, and the projected period spend. */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ClientBudgetConsumptionDto"];
+                        "application/json": components["schemas"]["ClientBudgetConsumptionDto"];
+                        "text/json": components["schemas"]["ClientBudgetConsumptionDto"];
+                    };
+                };
+                /** @description Missing or invalid credentials. */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Caller lacks access to the client. */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description The Budgeting capability is not licensed for this installation. */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/clients/{clientId}/provider-connections": {
         parameters: {
             query?: never;
@@ -11345,6 +11419,19 @@ export interface components {
             /** Format: double */
             incrementHardCapUsd?: number | null;
         };
+        /** @description USD spend recorded on a single day of the reporting period. */
+        BudgetDailySpendDto: {
+            /**
+             * Format: date
+             * @description The UTC date.
+             */
+            date?: string;
+            /**
+             * Format: double
+             * @description Estimated USD spent on that date (unpriced usage is omitted, not coerced to zero).
+             */
+            spentUsd?: number;
+        };
         /**
          * @description The granularity at which a USD budget cap is enforced.
          * @enum {string}
@@ -11381,6 +11468,62 @@ export interface components {
         ChangePasswordRequest: {
             currentPassword?: string | null;
             newPassword?: string | null;
+        };
+        /**
+         * @description Response DTO for `GET /admin/clients/{clientId}/budget/consumption`: the client's spend against its
+         *     monthly budget for the current period, plus a trajectory projection. The monthly period is calendar-based
+         *     (UTC) and resets each month, matching how the guardrail phase accumulates client-scope spend.
+         */
+        ClientBudgetConsumptionDto: {
+            /**
+             * Format: uuid
+             * @description The client the consumption belongs to.
+             */
+            clientId?: string;
+            /**
+             * Format: date
+             * @description Inclusive first day of the current monthly period (UTC).
+             */
+            periodStart?: string;
+            /**
+             * Format: date
+             * @description Inclusive last day of the current monthly period (UTC).
+             */
+            periodEnd?: string;
+            /**
+             * Format: date
+             * @description The day the period resets to zero (first day of the next month, UTC).
+             */
+            nextResetOn?: string;
+            /**
+             * Format: date
+             * @description The UTC date the spend was computed as of.
+             */
+            asOf?: string;
+            /**
+             * Format: double
+             * @description Estimated USD spent in the period up to and including AsOf.
+             */
+            spentToDateUsd?: number;
+            /** @description True when some usage in the period lacked pricing, so the total is a lower bound. */
+            spendIsApproximate?: boolean;
+            /**
+             * Format: double
+             * @description The configured monthly soft cap, or null when unset (no limit).
+             */
+            monthlySoftCapUsd?: number | null;
+            /**
+             * Format: double
+             * @description The configured monthly hard cap, or null when unset (no limit).
+             */
+            monthlyHardCapUsd?: number | null;
+            /**
+             * Format: double
+             * @description The projected full-period spend on the current run-rate, or null when it cannot be projected (no elapsed days).
+             */
+            projectedPeriodSpendUsd?: number | null;
+            /** @description Per-day estimated spend across the period, ordered by date ascending. */
+            dailySpend?: components["schemas"]["BudgetDailySpendDto"][] | null;
         };
         /** @description Client response — key, ADO secret, and credential metadata are never included. */
         ClientResponse: {

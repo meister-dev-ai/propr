@@ -171,6 +171,9 @@ public sealed class MeisterProPRDbContext(DbContextOptions<MeisterProPRDbContext
     /// <summary>Provenance rows mapping posted provider comments back to the review job that posted them.</summary>
     public DbSet<PostedCommentOrigin> PostedCommentOrigins => this.Set<PostedCommentOrigin>();
 
+    /// <summary>Budget cap-reached transitions, the queryable contract for a notification/alerting capability.</summary>
+    public DbSet<BudgetEvent> BudgetEvents => this.Set<BudgetEvent>();
+
     /// <inheritdoc />
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {

@@ -74,7 +74,9 @@ static string FindRepoRoot(string startDirectory)
 
     while (current is not null)
     {
-        if (Directory.Exists(Path.Combine(current.FullName, ".git")))
+        // A checkout has a .git directory; a worktree has a .git file pointing at the shared git dir.
+        var gitMarker = Path.Combine(current.FullName, ".git");
+        if (Directory.Exists(gitMarker) || File.Exists(gitMarker))
         {
             return current.FullName;
         }

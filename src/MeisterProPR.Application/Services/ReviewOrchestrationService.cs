@@ -57,7 +57,8 @@ public sealed partial class ReviewOrchestrationService(
     IPostedCommentOriginStore? postedCommentOriginStore = null,
     IBudgetCapsProvider? budgetCapsProvider = null,
     IReviewSpendAccumulator? spendAccumulator = null,
-    IBudgetScopeAccessor? budgetScopeAccessor = null) : IReviewJobProcessor
+    IBudgetScopeAccessor? budgetScopeAccessor = null,
+    IBudgetEventPublisher? budgetEventPublisher = null) : IReviewJobProcessor
 {
     private const string LocalWorkspacePreparedEventName = "local_workspace_prepared";
     private const string LocalWorkspaceFailedEventName = "local_workspace_failed";
@@ -129,6 +130,13 @@ public sealed partial class ReviewOrchestrationService(
             return;
         }
 
+        // A completed run that stopped scanning at the per-increment soft cap emits a soft-cap event (the hard-cut
+        // path returns above, so at most one event fires per job).
+        if (budgetScope?.IncrementSoftCapBreach is { } incrementSoftCapBreach)
+        {
+            await this.EmitBudgetEventAsync(job, incrementSoftCapBreach, ct);
+        }
+
         if (pr is not null)
         {
             await this.SaveScanAsync(
@@ -173,6 +181,20 @@ public sealed partial class ReviewOrchestrationService(
     {
         LogBudgetHardCapReached(logger, job.Id, breach.Scope, breach.ThresholdUsd, breach.SpentUsd);
         await jobs.SetBudgetExceededAsync(job.Id, breach.Scope, breach.CapKind, breach.ThresholdUsd, breach.SpentUsd, ct);
+        await this.EmitBudgetEventAsync(job, breach, ct);
+    }
+
+    /// <summary>Publishes a budget event for a reached cap, for a downstream alerting capability. Never throws.</summary>
+    private async Task EmitBudgetEventAsync(ReviewJob job, BudgetBreach breach, CancellationToken ct)
+    {
+        if (budgetEventPublisher is null)
+        {
+            return;
+        }
+
+        await budgetEventPublisher.PublishAsync(
+            BudgetEventNotification.FromBreach(breach, job.ClientId, job.Id, job.PullRequestId, job.IterationId),
+            ct);
     }
 
     private async Task<PullRequest?> RunReviewPipelineAsync(

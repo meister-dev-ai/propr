@@ -101,6 +101,7 @@ public sealed partial class ReviewJobWorker(
         var maxConcurrentReviewJobs = workerOptions.Value.MaxConcurrentReviewJobs;
         var budgetCapsProvider = tickScope.ServiceProvider.GetService<IBudgetCapsProvider>();
         var spendAccumulator = tickScope.ServiceProvider.GetService<IReviewSpendAccumulator>();
+        var budgetEventPublisher = tickScope.ServiceProvider.GetService<IBudgetEventPublisher>();
 
         foreach (var job in jobRepository.GetPendingJobs())
         {
@@ -128,6 +129,13 @@ public sealed partial class ReviewJobWorker(
                     // A soft or hard cap is already reached, so this new review is held rather than started. It
                     // runs only when an operator restarts it after freeing budget — there is no automatic resume.
                     await jobRepository.SetBudgetHeldAsync(job.Id, breach.Scope, breach.CapKind, breach.ThresholdUsd, breach.SpentUsd, stoppingToken);
+                    if (budgetEventPublisher is not null)
+                    {
+                        await budgetEventPublisher.PublishAsync(
+                            BudgetEventNotification.FromBreach(breach, job.ClientId, job.Id, job.PullRequestId, job.IterationId),
+                            stoppingToken);
+                    }
+
                     continue;
                 }
             }

@@ -69,11 +69,15 @@
                         </button>
                     </div>
 
-                    <div v-if="isUsageTabAvailable" class="sidebar-nav-group">
+                    <div v-if="isUsageTabAvailable || (isBudgetingAvailable && canManageClient)" class="sidebar-nav-group">
                         <h4>Analytics</h4>
-                        <button class="sidebar-nav-link" :class="{ active: activeTab === 'usage' }"
+                        <button v-if="isUsageTabAvailable" class="sidebar-nav-link" :class="{ active: activeTab === 'usage' }"
                             @click="activeTab = 'usage'">
                             <i class="fi fi-rr-chart-histogram"></i> Tokens & Usage
+                        </button>
+                        <button v-if="isBudgetingAvailable && canManageClient" class="sidebar-nav-link"
+                            :class="{ active: activeTab === 'spend' }" @click="activeTab = 'spend'">
+                            <i class="fi fi-rr-chart-line-up"></i> Spend &amp; Budget
                         </button>
                     </div>
                 </div>
@@ -125,6 +129,13 @@
                     <UsageDashboard :clientId="client.id" />
                 </div>
 
+                <!-- Tab: Spend & Budget (FinOps). Content host mirrors the Budget tab: rendered for managers so a
+                     deep link on an unlicensed install shows the upgrade note rather than a blank panel; the nav
+                     entry stays hidden until Budgeting is licensed. -->
+                <div v-if="canManageClient" v-show="activeTab === 'spend'">
+                    <ClientSpendTab />
+                </div>
+
                 <!-- Tab: Review History -->
                 <div v-show="activeTab === 'history'">
                     <ReviewHistorySection :clientId="client.id" />
@@ -162,6 +173,7 @@ import { RouterLink } from "vue-router";
 import { AppNavDrawer, PageWithSidebar } from "@/components";
 import ClientSystemTab from "@/features/clients/components/ClientSystemTab.vue";
 import ClientBudgetTab from "@/features/clients/components/ClientBudgetTab.vue";
+import ClientSpendTab from "@/features/clients/components/ClientSpendTab.vue";
 import ClientCrawlConfigsTab from "@/features/clients/components/ClientCrawlConfigsTab.vue";
 import ClientWebhookConfigsTab from "@/features/clients/components/ClientWebhookConfigsTab.vue";
 import ClientProviderConnectionsTab from "@/features/clients/components/ClientProviderConnectionsTab.vue";

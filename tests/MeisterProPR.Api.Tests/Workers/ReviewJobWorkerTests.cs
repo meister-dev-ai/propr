@@ -147,6 +147,16 @@ public class ReviewJobWorkerTests
         accumulator.GetBaselineAsync(job, Arg.Any<DateOnly>(), Arg.Any<CancellationToken>())
             .Returns(new ReviewSpendBaseline(new ReviewScopeSpend(80m, false), ReviewScopeSpend.None, ReviewScopeSpend.None));
 
+        // The held transition also emits a budget event for a downstream alerting capability.
+        var published = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var eventPublisher = Substitute.For<IBudgetEventPublisher>();
+        eventPublisher.PublishAsync(Arg.Any<BudgetEventNotification>(), Arg.Any<CancellationToken>())
+            .Returns(_ =>
+            {
+                published.TrySetResult();
+                return Task.CompletedTask;
+            });
+
         var logger = Substitute.For<ILogger<ReviewJobWorker>>();
         var scopeFactory = Substitute.For<IServiceScopeFactory>();
         var scope = Substitute.For<IServiceScope>();
@@ -156,19 +166,27 @@ public class ReviewJobWorkerTests
         sp.GetService(typeof(IReviewJobExecutionStore)).Returns(repo);
         sp.GetService(typeof(IBudgetCapsProvider)).Returns(capsProvider);
         sp.GetService(typeof(IReviewSpendAccumulator)).Returns(accumulator);
+        sp.GetService(typeof(IBudgetEventPublisher)).Returns(eventPublisher);
         sp.GetService(typeof(IReviewJobProcessor)).Returns(Substitute.For<IReviewJobProcessor>());
 
         var worker = new ReviewJobWorker(scopeFactory, CreateWorkerOptions(), CreateMetrics(), CreateCancellationRegistry(), logger);
         using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
 
         _ = worker.StartAsync(cts.Token);
-        await held.Task.WaitAsync(TimeSpan.FromSeconds(2));
+        await Task.WhenAll(held.Task, published.Task).WaitAsync(TimeSpan.FromSeconds(2));
 
         await cts.CancelAsync();
         await worker.StopAsync(CancellationToken.None);
 
         await repo.Received().SetBudgetHeldAsync(job.Id, BudgetScopeKind.ClientMonthly, BudgetCapKind.Soft, 80m, 80m, Arg.Any<CancellationToken>());
         await repo.DidNotReceive().TryTransitionAsync(job.Id, JobStatus.Pending, JobStatus.Processing, Arg.Any<CancellationToken>());
+        await eventPublisher.Received().PublishAsync(
+            Arg.Is<BudgetEventNotification>(n =>
+                n.EventType == BudgetEventType.SoftCapReached &&
+                n.Scope == BudgetScopeKind.ClientMonthly &&
+                n.ClientId == job.ClientId &&
+                n.JobId == job.Id),
+            Arg.Any<CancellationToken>());
     }
 
     [Fact]

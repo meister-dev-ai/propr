@@ -60,6 +60,18 @@ function getMockSsoCapability() {
   }
 }
 
+function getMockBudgetingCapability() {
+  return {
+    key: 'budgeting',
+    displayName: 'Budgeting',
+    requiresCommercial: true,
+    defaultWhenCommercial: true,
+    overrideState: 'default',
+    isAvailable: true,
+    message: null,
+  }
+}
+
 function getMockTenantBySlug(tenantSlug: string) {
   return mockTenants.find((tenant) => tenant.slug === tenantSlug) ?? null
 }
@@ -316,7 +328,70 @@ function buildMockClient(id: string, displayName = `Mocked Client ${id}`, overri
     enableEvidenceBackedVerification: false,
     enableMultiPassUnion: false,
     enableLanguageRobustScreening: false,
+    // Client "3" (Umbrella) is intentionally uncapped to exercise the no-budget state; others carry caps.
+    budgetConfig: id === '3'
+      ? null
+      : {
+        monthlySoftCapUsd: 80,
+        monthlyHardCapUsd: 100,
+        pullRequestSoftCapUsd: null,
+        pullRequestHardCapUsd: null,
+        incrementSoftCapUsd: null,
+        incrementHardCapUsd: null,
+      },
     ...overrides,
+  }
+}
+
+function pad2(value: number): string {
+  return String(value).padStart(2, '0')
+}
+
+// Builds a representative current-period budget-consumption payload. Dates track the real current month so the
+// forecast projection stays legible on any day; client "3" (Umbrella) has no caps to exercise the no-budget state.
+function buildMockBudgetConsumption(clientId: string) {
+  const now = new Date()
+  const year = now.getUTCFullYear()
+  const month = now.getUTCMonth()
+  const daysInMonth = new Date(Date.UTC(year, month + 1, 0)).getUTCDate()
+  const dayOfMonth = now.getUTCDate()
+  const monthLabel = pad2(month + 1)
+
+  const noBudget = clientId === '3'
+  const monthlySoftCapUsd = noBudget ? null : 80
+  const monthlyHardCapUsd = noBudget ? null : 100
+  // Pin the projection to a fixed target so the trajectory line reads the same regardless of the day of month.
+  const projectedTargetUsd = noBudget ? 55 : 90
+  const spentToDateUsd = Math.round(((projectedTargetUsd * dayOfMonth) / daysInMonth) * 100) / 100
+
+  const weights = Array.from({ length: dayOfMonth }, (_, i) => 1 + (i % 4) * 0.5)
+  const weightSum = weights.reduce((sum, w) => sum + w, 0)
+  let allocated = 0
+  const dailySpend = weights.map((weight, i) => {
+    const isLast = i === dayOfMonth - 1
+    const amount = isLast
+      ? Math.round((spentToDateUsd - allocated) * 100) / 100
+      : Math.round(spentToDateUsd * (weight / weightSum) * 100) / 100
+    if (!isLast) {
+      allocated += amount
+    }
+    return { date: `${year}-${monthLabel}-${pad2(i + 1)}`, spentUsd: Math.max(0, amount) }
+  })
+
+  const projectedPeriodSpendUsd = Math.round(((spentToDateUsd / dayOfMonth) * daysInMonth) * 100) / 100
+
+  return {
+    clientId,
+    periodStart: `${year}-${monthLabel}-01`,
+    periodEnd: `${year}-${monthLabel}-${pad2(daysInMonth)}`,
+    nextResetOn: month === 11 ? `${year + 1}-01-01` : `${year}-${pad2(month + 2)}-01`,
+    asOf: `${year}-${monthLabel}-${pad2(dayOfMonth)}`,
+    spentToDateUsd,
+    spendIsApproximate: false,
+    monthlySoftCapUsd,
+    monthlyHardCapUsd,
+    projectedPeriodSpendUsd,
+    dailySpend,
   }
 }
 
@@ -1637,7 +1712,7 @@ export const handlers = [
     return HttpResponse.json({
       edition: mockEdition,
       availableSignInMethods: mockSsoCapabilityAvailable ? ['password', 'sso'] : ['password'],
-      capabilities: [getMockSsoCapability()],
+      capabilities: [getMockSsoCapability(), getMockBudgetingCapability()],
     })
   }),
 
@@ -1659,7 +1734,7 @@ export const handlers = [
 
     return HttpResponse.json({
       edition: mockEdition,
-      capabilities: [getMockSsoCapability()],
+      capabilities: [getMockSsoCapability(), getMockBudgetingCapability()],
     })
   }),
 
@@ -1707,7 +1782,7 @@ export const handlers = [
       tenantRoles: isAdmin ? { 'tenant-1': 1 } : { 'tenant-1': 0 },
       hasLocalPassword: isAdmin || !username.includes('sso'),
       edition: mockEdition,
-      capabilities: [getMockSsoCapability()],
+      capabilities: [getMockSsoCapability(), getMockBudgetingCapability()],
     })
   }),
 
@@ -1959,6 +2034,11 @@ export const handlers = [
     const id = String(params.id)
     const body = await request.json() as any
     return HttpResponse.json(buildMockClient(id, body.displayName ?? `Mocked Client ${id}`, body))
+  }),
+
+  http.get(`${base}/admin/clients/:clientId/budget/consumption`, async ({ params }) => {
+    await delay(300)
+    return HttpResponse.json(buildMockBudgetConsumption(String(params.clientId)))
   }),
 
   http.get(`${base}/admin/review-profiles`, async () => {

@@ -72,11 +72,17 @@ public static class ReviewingModuleServiceCollectionExtensions
         // enforcing model-client decorators read it on each call and are inert when no scope is active.
         services.TryAddSingleton<IBudgetScopeAccessor, BudgetScopeAccessor>();
 
+        // Ambient wall-clock used by the budget consumption report to resolve the current monthly period.
+        services.TryAddSingleton(TimeProvider.System);
+
         if (hasDatabase)
         {
             services.AddScoped<IJobRepository, JobRepository>();
             services.AddScoped<IReviewSpendAccumulator, ReviewSpendAccumulator>();
             services.AddScoped<IBudgetCapsProvider, BudgetCapsProvider>();
+            services.AddScoped<IClientBudgetConsumptionService, ClientBudgetConsumptionService>();
+            services.AddScoped<IBudgetEventRepository, BudgetEventRepository>();
+            services.AddScoped<IBudgetEventPublisher, BudgetEventPublisher>();
             services.AddSingleton<IModelPricingResolver, EfModelPricingResolver>();
             services.AddSingleton<IProtocolRecorder, EfProtocolRecorder>();
             services.AddScoped<IThreadMemoryRepository, ThreadMemoryRepository>();
