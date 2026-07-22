@@ -137,4 +137,20 @@ public sealed class ClientTokenUsageRepository(MeisterProPRDbContext db) : IClie
 
         return totals.ToDictionary(t => t.ClientId, t => t.Total);
     }
+
+    /// <inheritdoc />
+    public async Task<IReadOnlyDictionary<Guid, decimal>> GetCostByClientAndDateRangeAsync(
+        DateOnly from,
+        DateOnly to,
+        CancellationToken ct)
+    {
+        // SQL SUM ignores NULLs, so unpriced samples are omitted from the total rather than counted as zero.
+        var totals = await db.ClientTokenUsageSamples
+            .Where(s => s.Date >= from && s.Date <= to)
+            .GroupBy(s => s.ClientId)
+            .Select(g => new { ClientId = g.Key, Cost = g.Sum(s => s.EstimatedCostUsd) })
+            .ToListAsync(ct);
+
+        return totals.ToDictionary(t => t.ClientId, t => t.Cost ?? 0m);
+    }
 }

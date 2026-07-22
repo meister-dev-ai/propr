@@ -80,6 +80,65 @@ public sealed class ClientBudgetConsumptionControllerTests(ClientBudgetConsumpti
         Assert.Equal(PremiumCapabilityKey.Budgeting, body.GetProperty("feature").GetString());
     }
 
+    [Fact]
+    public async Task GetConsumption_WithPeriod_PassesTheParsedMonthToTheService()
+    {
+        factory.BudgetingAvailable = true;
+        var http = factory.CreateClient();
+        using var request = new HttpRequestMessage(HttpMethod.Get, $"/admin/clients/{factory.ClientId}/budget/consumption?period=2026-06");
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", factory.GenerateAdminToken());
+
+        var response = await http.SendAsync(request);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        await factory.Consumption.Received().GetConsumptionAsync(factory.ClientId, 2026, 6, Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task GetConsumption_WithMalformedPeriod_Returns400()
+    {
+        factory.BudgetingAvailable = true;
+        var http = factory.CreateClient();
+        using var request = new HttpRequestMessage(HttpMethod.Get, $"/admin/clients/{factory.ClientId}/budget/consumption?period=not-a-month");
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", factory.GenerateAdminToken());
+
+        var response = await http.SendAsync(request);
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task GetHistory_WhenLicensed_ReturnsPerMonthSpend()
+    {
+        factory.BudgetingAvailable = true;
+        var http = factory.CreateClient();
+        using var request = new HttpRequestMessage(HttpMethod.Get, $"/admin/clients/{factory.ClientId}/budget/history?months=6");
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", factory.GenerateAdminToken());
+
+        var response = await http.SendAsync(request);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var body = JsonDocument.Parse(await response.Content.ReadAsStringAsync()).RootElement;
+        Assert.Equal(100m, body.GetProperty("monthlyHardCapUsd").GetDecimal());
+        var months = body.GetProperty("months");
+        Assert.Equal(JsonValueKind.Array, months.ValueKind);
+        Assert.Equal(2, months.GetArrayLength());
+        Assert.Equal(42m, months[1].GetProperty("spentUsd").GetDecimal());
+    }
+
+    [Fact]
+    public async Task GetHistory_WhenNotLicensed_ReturnsPremiumUnavailable()
+    {
+        factory.BudgetingAvailable = false;
+        var http = factory.CreateClient();
+        using var request = new HttpRequestMessage(HttpMethod.Get, $"/admin/clients/{factory.ClientId}/budget/history");
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", factory.GenerateAdminToken());
+
+        var response = await http.SendAsync(request);
+
+        Assert.Equal(HttpStatusCode.Conflict, response.StatusCode);
+    }
+
     public sealed class BudgetApiFactory : WebApplicationFactory<Program>
     {
         private const string TestJwtSecret = "test-budget-consumption-jwt-32ch";
@@ -88,6 +147,9 @@ public sealed class ClientBudgetConsumptionControllerTests(ClientBudgetConsumpti
         private readonly InMemoryDatabaseRoot _dbRoot = new();
 
         public Guid ClientId { get; } = Guid.NewGuid();
+
+        /// <summary>The substituted consumption service, exposed so tests can assert on the arguments it received.</summary>
+        public IClientBudgetConsumptionService Consumption { get; } = Substitute.For<IClientBudgetConsumptionService>();
 
         /// <summary>Toggles whether the substituted licensing service reports the Budgeting capability as available.</summary>
         public bool BudgetingAvailable { get; set; } = true;
@@ -125,6 +187,16 @@ public sealed class ClientBudgetConsumptionControllerTests(ClientBudgetConsumpti
                 88m,
                 [new BudgetDailySpendDto(new DateOnly(2026, 7, 15), 42m)]);
 
+        private ClientBudgetHistoryDto SampleHistory() =>
+            new(
+                this.ClientId,
+                80m,
+                100m,
+                [
+                    new BudgetMonthSpendDto(2026, 6, new DateOnly(2026, 6, 1), 55m, false),
+                    new BudgetMonthSpendDto(2026, 7, new DateOnly(2026, 7, 1), 42m, false),
+                ]);
+
         protected override void ConfigureWebHost(IWebHostBuilder builder)
         {
             builder.UseEnvironment("Testing");
@@ -150,10 +222,11 @@ public sealed class ClientBudgetConsumptionControllerTests(ClientBudgetConsumpti
                     opts.UseInMemoryDatabase(dbName, dbRoot));
 
                 // Substitute the consumption service so the controller test isolates auth + the license gate.
-                var consumption = Substitute.For<IClientBudgetConsumptionService>();
-                consumption.GetConsumptionAsync(this.ClientId, Arg.Any<CancellationToken>())
+                this.Consumption.GetConsumptionAsync(this.ClientId, Arg.Any<int?>(), Arg.Any<int?>(), Arg.Any<CancellationToken>())
                     .Returns(_ => Task.FromResult(this.SampleConsumption()));
-                services.AddScoped(_ => consumption);
+                this.Consumption.GetHistoryAsync(this.ClientId, Arg.Any<int>(), Arg.Any<CancellationToken>())
+                    .Returns(_ => Task.FromResult(this.SampleHistory()));
+                services.AddScoped(_ => this.Consumption);
 
                 // Substitute licensing so availability is controllable per test via BudgetingAvailable.
                 var licensing = Substitute.For<ILicensingCapabilityService>();

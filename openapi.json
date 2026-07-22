@@ -4189,7 +4189,7 @@
         "tags": [
           "ClientBudgetConsumption"
         ],
-        "summary": "Returns the client's monthly budget consumption and forecast for the current period.",
+        "summary": "Returns the client's monthly budget consumption and forecast for a period (the current month by default).",
         "parameters": [
           {
             "name": "clientId",
@@ -4200,11 +4200,19 @@
               "type": "string",
               "format": "uuid"
             }
+          },
+          {
+            "name": "period",
+            "in": "query",
+            "description": "Optional target month as `YYYY-MM`; omit for the current month. A past month returns full-month actuals without a forecast.",
+            "schema": {
+              "type": "string"
+            }
           }
         ],
         "responses": {
           "200": {
-            "description": "Current-period spend, configured caps, and the projected period spend.",
+            "description": "Period spend, the currently configured caps, and (current month only) the projected period spend.",
             "content": {
               "text/plain": {
                 "schema": {
@@ -4219,6 +4227,137 @@
               "text/json": {
                 "schema": {
                   "$ref": "#/components/schemas/ClientBudgetConsumptionDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The period parameter is not a valid YYYY-MM month.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid credentials.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Caller lacks access to the client.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "The Budgeting capability is not licensed for this installation.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/admin/clients/{clientId}/budget/history": {
+      "get": {
+        "tags": [
+          "ClientBudgetConsumption"
+        ],
+        "summary": "Returns the client's estimated USD spend per month over a trailing window, with the currently configured caps.",
+        "parameters": [
+          {
+            "name": "clientId",
+            "in": "path",
+            "description": "Client identifier.",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "months",
+            "in": "query",
+            "description": "Number of trailing months to include (default 12; clamped to 1-24).",
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Per-month spend and the currently configured monthly caps.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClientBudgetHistoryDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClientBudgetHistoryDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClientBudgetHistoryDto"
                 }
               }
             }
@@ -13316,6 +13455,108 @@
         }
       }
     },
+    "/admin/tenants/{tenantId}/budget/overview": {
+      "get": {
+        "tags": [
+          "TenantBudgetOverview"
+        ],
+        "summary": "Returns current-period spend against budget for every client in the tenant.",
+        "parameters": [
+          {
+            "name": "tenantId",
+            "in": "path",
+            "description": "Tenant identifier.",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Per-client spend, configured caps, and projected period spend for the current period.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/TenantBudgetOverviewDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TenantBudgetOverviewDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TenantBudgetOverviewDto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid credentials.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Caller is not an administrator of this tenant.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "The Budgeting capability is not licensed for this installation.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/admin/tenants/{tenantId}/clients": {
       "get": {
         "tags": [
@@ -17139,6 +17380,37 @@
         "additionalProperties": false,
         "description": "USD spend recorded on a single day of the reporting period."
       },
+      "BudgetMonthSpendDto": {
+        "type": "object",
+        "properties": {
+          "year": {
+            "type": "integer",
+            "description": "The calendar year.",
+            "format": "int32"
+          },
+          "month": {
+            "type": "integer",
+            "description": "The calendar month (1-12).",
+            "format": "int32"
+          },
+          "periodStart": {
+            "type": "string",
+            "description": "Inclusive first day of the month (UTC).",
+            "format": "date"
+          },
+          "spentUsd": {
+            "type": "number",
+            "description": "Estimated USD spent in the month (month-to-date for the current, in-progress month; the full month for past\nmonths). Unpriced usage is omitted, not coerced to zero.",
+            "format": "double"
+          },
+          "spendIsApproximate": {
+            "type": "boolean",
+            "description": "True when some usage in the month lacked pricing, so the total is a lower bound."
+          }
+        },
+        "additionalProperties": false,
+        "description": "Estimated USD spend for a single calendar month in a client's budget history."
+      },
       "BudgetScopeKind": {
         "enum": [
           "clientMonthly",
@@ -17289,6 +17561,38 @@
         },
         "additionalProperties": false,
         "description": "Response DTO for `GET /admin/clients/{clientId}/budget/consumption`: the client's spend against its\nmonthly budget for the current period, plus a trajectory projection. The monthly period is calendar-based\n(UTC) and resets each month, matching how the guardrail phase accumulates client-scope spend."
+      },
+      "ClientBudgetHistoryDto": {
+        "type": "object",
+        "properties": {
+          "clientId": {
+            "type": "string",
+            "description": "The client the history belongs to.",
+            "format": "uuid"
+          },
+          "monthlySoftCapUsd": {
+            "type": "number",
+            "description": "The currently configured monthly soft cap, or null when unset (no limit).",
+            "format": "double",
+            "nullable": true
+          },
+          "monthlyHardCapUsd": {
+            "type": "number",
+            "description": "The currently configured monthly hard cap, or null when unset (no limit).",
+            "format": "double",
+            "nullable": true
+          },
+          "months": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/BudgetMonthSpendDto"
+            },
+            "description": "One entry per month in the window, oldest first (months with no spend are present with zero).",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false,
+        "description": "Response DTO for `GET /admin/clients/{clientId}/budget/history`: the client's estimated USD spend per\ncalendar month over a trailing window, plus the currently configured monthly caps for comparison. Because\ncaps are not snapshotted historically, the caps describe the current configuration, not the caps that were\nin effect in each past month."
       },
       "ClientResponse": {
         "type": "object",
@@ -22186,6 +22490,81 @@
         "additionalProperties": false,
         "description": "Tenant-authenticated session payload returned by tenant login endpoints."
       },
+      "TenantBudgetOverviewClientDto": {
+        "type": "object",
+        "properties": {
+          "clientId": {
+            "type": "string",
+            "description": "The client identifier.",
+            "format": "uuid"
+          },
+          "displayName": {
+            "type": "string",
+            "description": "The client's display name.",
+            "nullable": true
+          },
+          "spentToDateUsd": {
+            "type": "number",
+            "description": "Estimated USD spent this period to date (unpriced usage omitted).",
+            "format": "double"
+          },
+          "monthlySoftCapUsd": {
+            "type": "number",
+            "description": "The configured monthly soft cap, or null when unset (no limit).",
+            "format": "double",
+            "nullable": true
+          },
+          "monthlyHardCapUsd": {
+            "type": "number",
+            "description": "The configured monthly hard cap, or null when unset (no limit).",
+            "format": "double",
+            "nullable": true
+          },
+          "projectedPeriodSpendUsd": {
+            "type": "number",
+            "description": "The projected full-period spend on the current run-rate.",
+            "format": "double",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false,
+        "description": "One client's current-period spend against its monthly budget, as a row in the tenant overview."
+      },
+      "TenantBudgetOverviewDto": {
+        "type": "object",
+        "properties": {
+          "tenantId": {
+            "type": "string",
+            "description": "The tenant the overview belongs to.",
+            "format": "uuid"
+          },
+          "periodStart": {
+            "type": "string",
+            "description": "Inclusive first day of the current monthly period (UTC).",
+            "format": "date"
+          },
+          "periodEnd": {
+            "type": "string",
+            "description": "Inclusive last day of the current monthly period (UTC).",
+            "format": "date"
+          },
+          "asOf": {
+            "type": "string",
+            "description": "The UTC date spend was computed as of.",
+            "format": "date"
+          },
+          "clients": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/TenantBudgetOverviewClientDto"
+            },
+            "description": "One row per client in the tenant, ordered by spend-to-date descending.",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false,
+        "description": "Response DTO for `GET /admin/tenants/{tenantId}/budget/overview`: current-period spend against budget\nfor every client in a tenant, ordered by spend descending. The period is the current calendar month (UTC)."
+      },
       "TenantClientSummaryDto": {
         "type": "object",
         "properties": {
@@ -23106,6 +23485,9 @@
     },
     {
       "name": "TenantAuth"
+    },
+    {
+      "name": "TenantBudgetOverview"
     },
     {
       "name": "TenantMemberClientAccess"

@@ -5,6 +5,7 @@
 using MeisterProPR.Application.DTOs;
 using MeisterProPR.Application.Features.Budgeting;
 using MeisterProPR.Application.Interfaces;
+using MeisterProPR.Domain.Entities;
 using MeisterProPR.Domain.Services;
 
 namespace MeisterProPR.Infrastructure.Features.Budgeting;
@@ -12,29 +13,46 @@ namespace MeisterProPR.Infrastructure.Features.Budgeting;
 /// <summary>
 ///     Composes a client's monthly budget consumption from the configured caps
 ///     (<see cref="IBudgetCapsProvider" />) and the per-client daily usage samples, and projects the full-period
-///     spend with <see cref="BudgetForecastCalculator" />. The current period is the calendar month (UTC), so the
-///     total resets at the month boundary — the same period the guardrail phase enforces against. All spend sums
-///     are null-aware: unpriced usage is omitted from the total and flags the result approximate.
+///     spend with <see cref="BudgetForecastCalculator" />. A period is the calendar month (UTC), so the total resets
+///     at the month boundary — the same period the guardrail phase enforces against. All spend sums are null-aware:
+///     unpriced usage is omitted from the total and flags the result approximate.
 /// </summary>
 public sealed class ClientBudgetConsumptionService(
     IBudgetCapsProvider capsProvider,
     IClientTokenUsageRepository usageRepository,
     TimeProvider timeProvider) : IClientBudgetConsumptionService
 {
+    private const int MinHistoryMonths = 1;
+    private const int MaxHistoryMonths = 24;
+
     /// <inheritdoc />
-    public async Task<ClientBudgetConsumptionDto> GetConsumptionAsync(Guid clientId, CancellationToken ct = default)
+    public async Task<ClientBudgetConsumptionDto> GetConsumptionAsync(
+        Guid clientId,
+        int? year = null,
+        int? month = null,
+        CancellationToken ct = default)
     {
         var caps = await capsProvider.GetCapsAsync(clientId, ct).ConfigureAwait(false);
 
-        var asOf = DateOnly.FromDateTime(timeProvider.GetUtcNow().UtcDateTime);
-        var periodStart = new DateOnly(asOf.Year, asOf.Month, 1);
-        var daysInPeriod = DateTime.DaysInMonth(asOf.Year, asOf.Month);
-        var periodEnd = new DateOnly(asOf.Year, asOf.Month, daysInPeriod);
-        var nextResetOn = periodStart.AddMonths(1);
+        var today = DateOnly.FromDateTime(timeProvider.GetUtcNow().UtcDateTime);
+        var targetYear = year ?? today.Year;
+        var targetMonth = month ?? today.Month;
 
-        var samples = await usageRepository
-            .GetByClientAndDateRangeAsync(clientId, periodStart, asOf, ct)
-            .ConfigureAwait(false);
+        var periodStart = new DateOnly(targetYear, targetMonth, 1);
+        var daysInPeriod = DateTime.DaysInMonth(targetYear, targetMonth);
+        var periodEnd = new DateOnly(targetYear, targetMonth, daysInPeriod);
+        var nextResetOn = periodStart.AddMonths(1);
+        var currentMonthStart = new DateOnly(today.Year, today.Month, 1);
+
+        // Current month: measured up to today, with a trajectory forecast. Past month: the whole (already-complete)
+        // month, no forecast. Future month: nothing has been spent yet.
+        var isCurrentMonth = periodStart == currentMonthStart;
+        var isFutureMonth = periodStart > currentMonthStart;
+        var asOf = isCurrentMonth ? today : isFutureMonth ? periodStart : periodEnd;
+
+        IReadOnlyList<ClientTokenUsageSample> samples = isFutureMonth
+            ? []
+            : await usageRepository.GetByClientAndDateRangeAsync(clientId, periodStart, asOf, ct).ConfigureAwait(false);
 
         var spentToDate = samples
             .Where(sample => sample.EstimatedCostUsd.HasValue)
@@ -49,7 +67,9 @@ public sealed class ClientBudgetConsumptionService(
                 group.Where(sample => sample.EstimatedCostUsd.HasValue).Sum(sample => sample.EstimatedCostUsd!.Value)))
             .ToList();
 
-        var projectedPeriodSpend = BudgetForecastCalculator.ProjectPeriodSpend(spentToDate, asOf.Day, daysInPeriod);
+        var projectedPeriodSpend = isCurrentMonth
+            ? BudgetForecastCalculator.ProjectPeriodSpend(spentToDate, today.Day, daysInPeriod)
+            : null;
 
         return new ClientBudgetConsumptionDto(
             clientId,
@@ -63,5 +83,38 @@ public sealed class ClientBudgetConsumptionService(
             caps.MonthlyHardCapUsd,
             projectedPeriodSpend,
             dailySpend);
+    }
+
+    /// <inheritdoc />
+    public async Task<ClientBudgetHistoryDto> GetHistoryAsync(Guid clientId, int monthsBack, CancellationToken ct = default)
+    {
+        var caps = await capsProvider.GetCapsAsync(clientId, ct).ConfigureAwait(false);
+
+        var today = DateOnly.FromDateTime(timeProvider.GetUtcNow().UtcDateTime);
+        var currentMonthStart = new DateOnly(today.Year, today.Month, 1);
+        var clampedMonths = Math.Clamp(monthsBack, MinHistoryMonths, MaxHistoryMonths);
+        var firstMonthStart = currentMonthStart.AddMonths(-(clampedMonths - 1));
+
+        var samples = await usageRepository
+            .GetByClientAndDateRangeAsync(clientId, firstMonthStart, today, ct)
+            .ConfigureAwait(false);
+
+        var byMonth = samples
+            .GroupBy(sample => new { sample.Date.Year, sample.Date.Month })
+            .ToDictionary(
+                group => (group.Key.Year, group.Key.Month),
+                group => (
+                    Spent: group.Where(sample => sample.EstimatedCostUsd.HasValue).Sum(sample => sample.EstimatedCostUsd!.Value),
+                    Approximate: group.Any(sample => !sample.EstimatedCostUsd.HasValue)));
+
+        var months = new List<BudgetMonthSpendDto>(clampedMonths);
+        for (var offset = 0; offset < clampedMonths; offset++)
+        {
+            var monthStart = firstMonthStart.AddMonths(offset);
+            byMonth.TryGetValue((monthStart.Year, monthStart.Month), out var bucket);
+            months.Add(new BudgetMonthSpendDto(monthStart.Year, monthStart.Month, monthStart, bucket.Spent, bucket.Approximate));
+        }
+
+        return new ClientBudgetHistoryDto(clientId, caps.MonthlySoftCapUsd, caps.MonthlyHardCapUsd, months);
     }
 }

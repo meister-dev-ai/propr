@@ -37,6 +37,7 @@ vi.mock('@/composables/useSession', () => ({
     isAdmin: computed(() => isAdmin.value),
     edition: computed(() => edition.value),
     hasTenantRole: hasTenantRoleMock,
+    isCapabilityAvailable: () => false,
   }),
 }))
 

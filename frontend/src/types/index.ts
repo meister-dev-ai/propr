@@ -3052,10 +3052,13 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Returns the client's monthly budget consumption and forecast for the current period. */
+        /** Returns the client's monthly budget consumption and forecast for a period (the current month by default). */
         get: {
             parameters: {
-                query?: never;
+                query?: {
+                    /** @description Optional target month as `YYYY-MM`; omit for the current month. A past month returns full-month actuals without a forecast. */
+                    period?: string;
+                };
                 header?: never;
                 path: {
                     /** @description Client identifier. */
@@ -3065,7 +3068,7 @@ export interface paths {
             };
             requestBody?: never;
             responses: {
-                /** @description Current-period spend, configured caps, and the projected period spend. */
+                /** @description Period spend, the currently configured caps, and (current month only) the projected period spend. */
                 200: {
                     headers: {
                         [name: string]: unknown;
@@ -3074,6 +3077,94 @@ export interface paths {
                         "text/plain": components["schemas"]["ClientBudgetConsumptionDto"];
                         "application/json": components["schemas"]["ClientBudgetConsumptionDto"];
                         "text/json": components["schemas"]["ClientBudgetConsumptionDto"];
+                    };
+                };
+                /** @description The period parameter is not a valid YYYY-MM month. */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Missing or invalid credentials. */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Caller lacks access to the client. */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description The Budgeting capability is not licensed for this installation. */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/clients/{clientId}/budget/history": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Returns the client's estimated USD spend per month over a trailing window, with the currently configured caps. */
+        get: {
+            parameters: {
+                query?: {
+                    /** @description Number of trailing months to include (default 12; clamped to 1-24). */
+                    months?: number;
+                };
+                header?: never;
+                path: {
+                    /** @description Client identifier. */
+                    clientId: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Per-month spend and the currently configured monthly caps. */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ClientBudgetHistoryDto"];
+                        "application/json": components["schemas"]["ClientBudgetHistoryDto"];
+                        "text/json": components["schemas"]["ClientBudgetHistoryDto"];
                     };
                 };
                 /** @description Missing or invalid credentials. */
@@ -9152,6 +9243,80 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/admin/tenants/{tenantId}/budget/overview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Returns current-period spend against budget for every client in the tenant. */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    /** @description Tenant identifier. */
+                    tenantId: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Per-client spend, configured caps, and projected period spend for the current period. */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["TenantBudgetOverviewDto"];
+                        "application/json": components["schemas"]["TenantBudgetOverviewDto"];
+                        "text/json": components["schemas"]["TenantBudgetOverviewDto"];
+                    };
+                };
+                /** @description Missing or invalid credentials. */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Caller is not an administrator of this tenant. */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description The Budgeting capability is not licensed for this installation. */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/admin/tenants/{tenantId}/clients": {
         parameters: {
             query?: never;
@@ -11432,6 +11597,32 @@ export interface components {
              */
             spentUsd?: number;
         };
+        /** @description Estimated USD spend for a single calendar month in a client's budget history. */
+        BudgetMonthSpendDto: {
+            /**
+             * Format: int32
+             * @description The calendar year.
+             */
+            year?: number;
+            /**
+             * Format: int32
+             * @description The calendar month (1-12).
+             */
+            month?: number;
+            /**
+             * Format: date
+             * @description Inclusive first day of the month (UTC).
+             */
+            periodStart?: string;
+            /**
+             * Format: double
+             * @description Estimated USD spent in the month (month-to-date for the current, in-progress month; the full month for past
+             *     months). Unpriced usage is omitted, not coerced to zero.
+             */
+            spentUsd?: number;
+            /** @description True when some usage in the month lacked pricing, so the total is a lower bound. */
+            spendIsApproximate?: boolean;
+        };
         /**
          * @description The granularity at which a USD budget cap is enforced.
          * @enum {string}
@@ -11524,6 +11715,31 @@ export interface components {
             projectedPeriodSpendUsd?: number | null;
             /** @description Per-day estimated spend across the period, ordered by date ascending. */
             dailySpend?: components["schemas"]["BudgetDailySpendDto"][] | null;
+        };
+        /**
+         * @description Response DTO for `GET /admin/clients/{clientId}/budget/history`: the client's estimated USD spend per
+         *     calendar month over a trailing window, plus the currently configured monthly caps for comparison. Because
+         *     caps are not snapshotted historically, the caps describe the current configuration, not the caps that were
+         *     in effect in each past month.
+         */
+        ClientBudgetHistoryDto: {
+            /**
+             * Format: uuid
+             * @description The client the history belongs to.
+             */
+            clientId?: string;
+            /**
+             * Format: double
+             * @description The currently configured monthly soft cap, or null when unset (no limit).
+             */
+            monthlySoftCapUsd?: number | null;
+            /**
+             * Format: double
+             * @description The currently configured monthly hard cap, or null when unset (no limit).
+             */
+            monthlyHardCapUsd?: number | null;
+            /** @description One entry per month in the window, oldest first (months with no spend are present with zero). */
+            months?: components["schemas"]["BudgetMonthSpendDto"][] | null;
         };
         /** @description Client response — key, ADO secret, and credential metadata are never included. */
         ClientResponse: {
@@ -13534,6 +13750,64 @@ export interface components {
             /** Format: int32 */
             expiresIn?: number;
             tokenType?: string | null;
+        };
+        /** @description One client's current-period spend against its monthly budget, as a row in the tenant overview. */
+        TenantBudgetOverviewClientDto: {
+            /**
+             * Format: uuid
+             * @description The client identifier.
+             */
+            clientId?: string;
+            /** @description The client's display name. */
+            displayName?: string | null;
+            /**
+             * Format: double
+             * @description Estimated USD spent this period to date (unpriced usage omitted).
+             */
+            spentToDateUsd?: number;
+            /**
+             * Format: double
+             * @description The configured monthly soft cap, or null when unset (no limit).
+             */
+            monthlySoftCapUsd?: number | null;
+            /**
+             * Format: double
+             * @description The configured monthly hard cap, or null when unset (no limit).
+             */
+            monthlyHardCapUsd?: number | null;
+            /**
+             * Format: double
+             * @description The projected full-period spend on the current run-rate.
+             */
+            projectedPeriodSpendUsd?: number | null;
+        };
+        /**
+         * @description Response DTO for `GET /admin/tenants/{tenantId}/budget/overview`: current-period spend against budget
+         *     for every client in a tenant, ordered by spend descending. The period is the current calendar month (UTC).
+         */
+        TenantBudgetOverviewDto: {
+            /**
+             * Format: uuid
+             * @description The tenant the overview belongs to.
+             */
+            tenantId?: string;
+            /**
+             * Format: date
+             * @description Inclusive first day of the current monthly period (UTC).
+             */
+            periodStart?: string;
+            /**
+             * Format: date
+             * @description Inclusive last day of the current monthly period (UTC).
+             */
+            periodEnd?: string;
+            /**
+             * Format: date
+             * @description The UTC date spend was computed as of.
+             */
+            asOf?: string;
+            /** @description One row per client in the tenant, ordered by spend-to-date descending. */
+            clients?: components["schemas"]["TenantBudgetOverviewClientDto"][] | null;
         };
         /** @description Lightweight identity of a client within a tenant, used to populate member client-access pickers. */
         TenantClientSummaryDto: {

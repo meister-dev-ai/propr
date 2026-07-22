@@ -39,6 +39,9 @@
               <RouterLink class="btn-secondary btn-sm" :to="{ name: 'tenant-members', params: { tenantId: tenant.id } }">
                 Tenant members
               </RouterLink>
+              <RouterLink v-if="isBudgetingAvailable" class="btn-secondary btn-sm" :to="{ name: 'tenant-budget-overview', params: { tenantId: tenant.id } }">
+                Budget overview
+              </RouterLink>
               <RouterLink class="btn-primary btn-sm" :to="{ name: 'tenant-settings', params: { tenantId: tenant.id } }">
                 Tenant settings
               </RouterLink>
@@ -59,11 +62,15 @@
 </template>
 
 <script setup lang="ts">
+import { computed } from 'vue'
 import { RouterLink } from 'vue-router'
 import TenantCreateForm from '@/features/tenants/components/TenantCreateForm.vue'
+import { useSession } from '@/composables/useSession'
 import { useTenantDirectoryViewModel } from '@/features/tenants/view-models/useTenantDirectoryViewModel'
 
 const vm = useTenantDirectoryViewModel()
+const { isCapabilityAvailable } = useSession()
+const isBudgetingAvailable = computed(() => isCapabilityAvailable('budgeting'))
 </script>
 
 <style scoped>

@@ -45,4 +45,14 @@ public interface IClientTokenUsageRepository
         DateOnly from,
         DateOnly to,
         CancellationToken ct);
+
+    /// <summary>
+    ///     Returns the estimated USD cost each client accumulated within the inclusive
+    ///     [<paramref name="from" />, <paramref name="to" />] date range, keyed by client id. Unpriced usage is
+    ///     omitted from the sum (not coerced to zero). Clients with no samples in the range are absent from the result.
+    /// </summary>
+    Task<IReadOnlyDictionary<Guid, decimal>> GetCostByClientAndDateRangeAsync(
+        DateOnly from,
+        DateOnly to,
+        CancellationToken ct);
 }

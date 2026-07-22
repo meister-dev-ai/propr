@@ -13,8 +13,21 @@ namespace MeisterProPR.Application.Features.Budgeting;
 public interface IClientBudgetConsumptionService
 {
     /// <summary>
-    ///     Returns the current-period consumption and forecast for <paramref name="clientId" />, computed as of the
-    ///     current UTC date. Spend and caps reflect the calendar-month period, which resets at the month boundary.
+    ///     Returns the consumption for <paramref name="clientId" /> for a calendar-month period. When
+    ///     <paramref name="year" /> and <paramref name="month" /> are null the current month is used and a trajectory
+    ///     forecast is included; for a past month the full-month actuals are returned with no forecast (the month is
+    ///     complete). Caps always reflect the current configuration (caps are not snapshotted historically).
     /// </summary>
-    Task<ClientBudgetConsumptionDto> GetConsumptionAsync(Guid clientId, CancellationToken ct = default);
+    Task<ClientBudgetConsumptionDto> GetConsumptionAsync(
+        Guid clientId,
+        int? year = null,
+        int? month = null,
+        CancellationToken ct = default);
+
+    /// <summary>
+    ///     Returns the client's estimated USD spend per calendar month over the trailing <paramref name="monthsBack" />
+    ///     months (including the current, in-progress month), with the currently configured monthly caps for
+    ///     comparison.
+    /// </summary>
+    Task<ClientBudgetHistoryDto> GetHistoryAsync(Guid clientId, int monthsBack, CancellationToken ct = default);
 }

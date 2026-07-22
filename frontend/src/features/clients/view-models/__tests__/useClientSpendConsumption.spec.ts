@@ -3,7 +3,7 @@
 
 import { describe, expect, it } from 'vitest'
 import { useClientSpendConsumption } from '@/features/clients/view-models/useClientSpendConsumption'
-import type { ClientBudgetConsumption } from '@/services/budgetConsumptionService'
+import type { ClientBudgetConsumption, ClientBudgetHistory } from '@/services/budgetConsumptionService'
 
 function fixture(overrides: Partial<ClientBudgetConsumption> = {}): ClientBudgetConsumption {
   return {
@@ -97,5 +97,48 @@ describe('useClientSpendConsumption', () => {
     expect(spend.meterCapUsd.value).toBeNull()
     expect(spend.remainingUsd.value).toBeNull()
     expect(spend.spendChartData.value.datasets).toHaveLength(2)
+  })
+
+  it('loads history and builds a monthly chart with cap reference lines', async () => {
+    const historyData: ClientBudgetHistory = {
+      clientId: 'c1',
+      monthlySoftCapUsd: 80,
+      monthlyHardCapUsd: 100,
+      months: [
+        { year: 2026, month: 6, periodStart: '2026-06-01', spentUsd: 55, spendIsApproximate: false },
+        { year: 2026, month: 7, periodStart: '2026-07-01', spentUsd: 42, spendIsApproximate: false },
+      ],
+    }
+    const spend = useClientSpendConsumption('c1', { historyLoader: async () => ({ data: historyData }) })
+
+    await spend.loadHistory()
+
+    expect(spend.history.value).toEqual(historyData)
+    const chart = spend.historyChartData.value
+    expect(chart.labels).toHaveLength(2)
+    // Monthly spend line + soft cap + hard cap reference lines.
+    expect(chart.datasets).toHaveLength(3)
+    expect((chart.datasets[0].data as number[])).toEqual([55, 42])
+  })
+
+  it('requests the selected month when the picker steps to the previous month', async () => {
+    const periods: (string | undefined)[] = []
+    const spend = useClientSpendConsumption('c1', {
+      loader: async (_clientId, period) => {
+        periods.push(period)
+        return { data: fixture() }
+      },
+    })
+
+    await spend.loadConsumption()
+    const first = periods.at(-1)
+    await spend.goToPreviousMonth()
+    const afterBack = periods.at(-1)
+
+    expect(first).toMatch(/^\d{4}-\d{2}$/)
+    expect(afterBack).toMatch(/^\d{4}-\d{2}$/)
+    // Stepping back changes the requested period and the picker is no longer on the current month.
+    expect(afterBack).not.toBe(first)
+    expect(spend.isCurrentPeriod.value).toBe(false)
   })
 })

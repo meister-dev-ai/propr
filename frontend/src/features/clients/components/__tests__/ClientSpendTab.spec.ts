@@ -6,7 +6,7 @@ import { computed } from 'vue'
 import { flushPromises, mount } from '@vue/test-utils'
 import ClientSpendTab from '@/features/clients/components/ClientSpendTab.vue'
 import { ClientDetailVmKey } from '@/features/clients/view-models/useClientDetailViewModel'
-import type { ClientBudgetConsumption } from '@/services/budgetConsumptionService'
+import type { ClientBudgetConsumption, ClientBudgetHistory } from '@/services/budgetConsumptionService'
 
 vi.mock('vue-chartjs', () => ({
   Line: { name: 'LineChartStub', template: '<div class="line-chart-stub" />' },
@@ -41,6 +41,18 @@ function consumption(overrides: Partial<ClientBudgetConsumption> = {}): ClientBu
   }
 }
 
+function history(): ClientBudgetHistory {
+  return {
+    clientId: 'c1',
+    monthlySoftCapUsd: 80,
+    monthlyHardCapUsd: 100,
+    months: [
+      { year: 2026, month: 6, periodStart: '2026-06-01', spentUsd: 55, spendIsApproximate: false },
+      { year: 2026, month: 7, periodStart: '2026-07-01', spentUsd: 42, spendIsApproximate: false },
+    ],
+  }
+}
+
 function makeVm(opts: { available?: boolean; message?: string } = {}) {
   return {
     clientId: 'c1',
@@ -49,9 +61,14 @@ function makeVm(opts: { available?: boolean; message?: string } = {}) {
   }
 }
 
-function mountTab(vm: ReturnType<typeof makeVm>, loader: (clientId: string) => Promise<{ data?: ClientBudgetConsumption | null; error?: unknown }>) {
+type ConsumptionLoader = (clientId: string, period?: string) => Promise<{ data?: ClientBudgetConsumption | null; error?: unknown }>
+
+function mountTab(vm: ReturnType<typeof makeVm>, loader: ConsumptionLoader) {
   return mount(ClientSpendTab, {
-    props: { loader },
+    props: {
+      loader,
+      historyLoader: async () => ({ data: history() }),
+    },
     global: {
       provide: { [ClientDetailVmKey as symbol]: vm },
       stubs: { ProgressOrb: { template: '<div class="orb-stub" />' } },
@@ -80,9 +97,33 @@ describe('ClientSpendTab', () => {
     expect(text).toContain('$42.00')
     expect(text).toContain('$80.00')
     expect(text).toContain('$100.00')
-    expect(wrapper.find('.meter').exists()).toBe(true)
+    expect(wrapper.find('.budget-meter').exists()).toBe(true)
     // Projected 130 exceeds the hard cap 100.
     expect(text).toContain('hard cap')
+  })
+
+  it('renders the period picker and the 12-month history chart', async () => {
+    const wrapper = mountTab(makeVm(), async () => ({ data: consumption() }))
+    await flushPromises()
+
+    expect(wrapper.find('.period-picker').exists()).toBe(true)
+    expect(wrapper.text()).toContain('Last 12 months')
+    // Two Line charts: the current-period cumulative chart and the 12-month history chart.
+    expect(wrapper.findAll('.line-chart-stub').length).toBe(2)
+  })
+
+  it('reloads consumption for the selected month when the picker steps back', async () => {
+    const loader = vi.fn(async (_clientId: string, _period?: string) => ({ data: consumption() }))
+    const wrapper = mountTab(makeVm(), loader)
+    await flushPromises()
+    loader.mockClear()
+
+    await wrapper.find('.period-picker .period-nav').trigger('click')
+    await flushPromises()
+
+    expect(loader).toHaveBeenCalledTimes(1)
+    const period = loader.mock.calls[0][1]
+    expect(period).toMatch(/^\d{4}-\d{2}$/)
   })
 
   it('renders the no-budget state when no caps are configured', async () => {
@@ -93,7 +134,7 @@ describe('ClientSpendTab', () => {
     await flushPromises()
 
     expect(wrapper.text()).toContain('No monthly budget configured')
-    expect(wrapper.find('.meter').exists()).toBe(false)
+    expect(wrapper.find('.budget-meter').exists()).toBe(false)
   })
 
   it('shows an error state with a retry affordance when the load fails', async () => {

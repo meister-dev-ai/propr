@@ -110,6 +110,48 @@ public sealed class ClientBudgetConsumptionServiceTests
         Assert.Equal(0m, result.ProjectedPeriodSpendUsd);
     }
 
+    [Fact]
+    public async Task GetConsumptionAsync_ForAPastMonth_ReturnsFullMonthActualsWithNoForecast()
+    {
+        this.GivenCaps(new BudgetCaps(80m, 100m, null, null, null, null));
+        // The mock returns these regardless of range; they represent June's samples for the June query.
+        this.GivenSamples(
+            Sample(new DateOnly(2026, 6, 3), 15m),
+            Sample(new DateOnly(2026, 6, 28), 20m));
+
+        // "Now" is mid-July; request the previous (complete) month.
+        var service = this.CreateService(new DateTimeOffset(2026, 7, 15, 0, 0, 0, TimeSpan.Zero));
+        var result = await service.GetConsumptionAsync(ClientId, 2026, 6);
+
+        Assert.Equal(new DateOnly(2026, 6, 1), result.PeriodStart);
+        Assert.Equal(new DateOnly(2026, 6, 30), result.PeriodEnd);
+        // A past month is measured across the whole (already-complete) month.
+        Assert.Equal(new DateOnly(2026, 6, 30), result.AsOf);
+        Assert.Equal(35m, result.SpentToDateUsd);
+        // Caps still reflect the current configuration; no forecast for a complete month.
+        Assert.Equal(100m, result.MonthlyHardCapUsd);
+        Assert.Null(result.ProjectedPeriodSpendUsd);
+    }
+
+    [Fact]
+    public async Task GetHistoryAsync_ReturnsOneEntryPerMonth_ZeroFillingMonthsWithoutSpend()
+    {
+        this.GivenCaps(new BudgetCaps(80m, 100m, null, null, null, null));
+        // May has spend, June none, July (current) has month-to-date spend.
+        this.GivenSamples(
+            Sample(new DateOnly(2026, 5, 10), 12m),
+            Sample(new DateOnly(2026, 7, 2), 8m));
+
+        var service = this.CreateService(new DateTimeOffset(2026, 7, 15, 0, 0, 0, TimeSpan.Zero));
+        var history = await service.GetHistoryAsync(ClientId, monthsBack: 3);
+
+        Assert.Equal(100m, history.MonthlyHardCapUsd);
+        Assert.Equal(3, history.Months.Count);
+        Assert.Equal((2026, 5, 12m), (history.Months[0].Year, history.Months[0].Month, history.Months[0].SpentUsd));
+        Assert.Equal((2026, 6, 0m), (history.Months[1].Year, history.Months[1].Month, history.Months[1].SpentUsd));
+        Assert.Equal((2026, 7, 8m), (history.Months[2].Year, history.Months[2].Month, history.Months[2].SpentUsd));
+    }
+
     private static ClientTokenUsageSample Sample(DateOnly date, decimal? costUsd, string modelId = "gpt-4o") =>
         new()
         {

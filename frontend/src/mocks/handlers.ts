@@ -347,28 +347,50 @@ function pad2(value: number): string {
   return String(value).padStart(2, '0')
 }
 
-// Builds a representative current-period budget-consumption payload. Dates track the real current month so the
-// forecast projection stays legible on any day; client "3" (Umbrella) has no caps to exercise the no-budget state.
-function buildMockBudgetConsumption(clientId: string) {
-  const now = new Date()
-  const year = now.getUTCFullYear()
-  const month = now.getUTCMonth()
-  const daysInMonth = new Date(Date.UTC(year, month + 1, 0)).getUTCDate()
-  const dayOfMonth = now.getUTCDate()
-  const monthLabel = pad2(month + 1)
-
+// Client "3" (Umbrella) has no caps to exercise the no-budget state; others carry monthly caps.
+function budgetCapsForClient(clientId: string) {
   const noBudget = clientId === '3'
-  const monthlySoftCapUsd = noBudget ? null : 80
-  const monthlyHardCapUsd = noBudget ? null : 100
-  // Pin the projection to a fixed target so the trajectory line reads the same regardless of the day of month.
-  const projectedTargetUsd = noBudget ? 55 : 90
-  const spentToDateUsd = Math.round(((projectedTargetUsd * dayOfMonth) / daysInMonth) * 100) / 100
+  return { monthlySoftCapUsd: noBudget ? null : 80, monthlyHardCapUsd: noBudget ? null : 100 }
+}
 
-  const weights = Array.from({ length: dayOfMonth }, (_, i) => 1 + (i % 4) * 0.5)
-  const weightSum = weights.reduce((sum, w) => sum + w, 0)
+// Builds a representative budget-consumption payload for a period (the current month by default). Dates track the
+// real calendar so the picker + forecast read sensibly on any day; a past month returns full-month actuals with no
+// forecast.
+function buildMockBudgetConsumption(clientId: string, period?: string | null) {
+  const now = new Date()
+  const currentYear = now.getUTCFullYear()
+  const currentMonth = now.getUTCMonth() + 1
+
+  let year = currentYear
+  let month = currentMonth
+  if (period) {
+    const [parsedYear, parsedMonth] = period.split('-').map(Number)
+    if (Number.isFinite(parsedYear) && Number.isFinite(parsedMonth)) {
+      year = parsedYear
+      month = parsedMonth
+    }
+  }
+
+  const daysInMonth = new Date(Date.UTC(year, month, 0)).getUTCDate()
+  const monthLabel = pad2(month)
+  const isCurrent = year === currentYear && month === currentMonth
+  const isPast = year < currentYear || (year === currentYear && month < currentMonth)
+  const { monthlySoftCapUsd, monthlyHardCapUsd } = budgetCapsForClient(clientId)
+  const noBudget = clientId === '3'
+
+  const elapsedDays = isCurrent ? now.getUTCDate() : isPast ? daysInMonth : 0
+  const projectedTargetUsd = noBudget ? 55 : 90
+  const spentToDateUsd = elapsedDays === 0
+    ? 0
+    : isCurrent
+      ? Math.round(((projectedTargetUsd * elapsedDays) / daysInMonth) * 100) / 100
+      : Math.round((40 + ((month * 7) % 55)) * 100) / 100
+
+  const weights = Array.from({ length: elapsedDays }, (_, i) => 1 + (i % 4) * 0.5)
+  const weightSum = weights.reduce((sum, w) => sum + w, 0) || 1
   let allocated = 0
   const dailySpend = weights.map((weight, i) => {
-    const isLast = i === dayOfMonth - 1
+    const isLast = i === elapsedDays - 1
     const amount = isLast
       ? Math.round((spentToDateUsd - allocated) * 100) / 100
       : Math.round(spentToDateUsd * (weight / weightSum) * 100) / 100
@@ -378,20 +400,72 @@ function buildMockBudgetConsumption(clientId: string) {
     return { date: `${year}-${monthLabel}-${pad2(i + 1)}`, spentUsd: Math.max(0, amount) }
   })
 
-  const projectedPeriodSpendUsd = Math.round(((spentToDateUsd / dayOfMonth) * daysInMonth) * 100) / 100
-
   return {
     clientId,
     periodStart: `${year}-${monthLabel}-01`,
     periodEnd: `${year}-${monthLabel}-${pad2(daysInMonth)}`,
-    nextResetOn: month === 11 ? `${year + 1}-01-01` : `${year}-${pad2(month + 2)}-01`,
-    asOf: `${year}-${monthLabel}-${pad2(dayOfMonth)}`,
+    nextResetOn: month === 12 ? `${year + 1}-01-01` : `${year}-${pad2(month + 1)}-01`,
+    asOf: isCurrent ? `${year}-${monthLabel}-${pad2(elapsedDays)}` : `${year}-${monthLabel}-${pad2(daysInMonth)}`,
     spentToDateUsd,
     spendIsApproximate: false,
     monthlySoftCapUsd,
     monthlyHardCapUsd,
-    projectedPeriodSpendUsd,
+    projectedPeriodSpendUsd: isCurrent
+      ? Math.round(((spentToDateUsd / Math.max(elapsedDays, 1)) * daysInMonth) * 100) / 100
+      : null,
     dailySpend,
+  }
+}
+
+// Builds a trailing-window monthly spend history; the last month is the current (partial) month.
+function buildMockBudgetHistory(clientId: string, months = 12) {
+  const now = new Date()
+  const { monthlySoftCapUsd, monthlyHardCapUsd } = budgetCapsForClient(clientId)
+  const clamped = Math.min(Math.max(months, 1), 24)
+  const entries = []
+  for (let offset = clamped - 1; offset >= 0; offset -= 1) {
+    const monthStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - offset, 1))
+    const year = monthStart.getUTCFullYear()
+    const month = monthStart.getUTCMonth() + 1
+    const fullMonth = Math.round((35 + ((month * 11) % 55)) * 100) / 100
+    const isCurrent = offset === 0
+    const daysInMonth = new Date(Date.UTC(year, month, 0)).getUTCDate()
+    const spentUsd = isCurrent
+      ? Math.round((fullMonth * (now.getUTCDate() / daysInMonth)) * 100) / 100
+      : fullMonth
+    entries.push({ year, month, periodStart: `${year}-${pad2(month)}-01`, spentUsd, spendIsApproximate: false })
+  }
+  return { clientId, monthlySoftCapUsd, monthlyHardCapUsd, months: entries }
+}
+
+// Builds a tenant-wide overview reusing each mock client's current-period consumption, ordered by spend desc.
+function buildMockTenantBudgetOverview(tenantId: string) {
+  const now = new Date()
+  const year = now.getUTCFullYear()
+  const month = now.getUTCMonth() + 1
+  const daysInMonth = new Date(Date.UTC(year, month, 0)).getUTCDate()
+  const names: Record<string, string> = { '1': 'Acme Corp', '2': 'Globex Inc', '3': 'Umbrella Corp' }
+
+  const clients = ['1', '2', '3']
+    .map((id) => {
+      const consumption = buildMockBudgetConsumption(id)
+      return {
+        clientId: id,
+        displayName: names[id] ?? `Mocked Client ${id}`,
+        spentToDateUsd: consumption.spentToDateUsd,
+        monthlySoftCapUsd: consumption.monthlySoftCapUsd,
+        monthlyHardCapUsd: consumption.monthlyHardCapUsd,
+        projectedPeriodSpendUsd: consumption.projectedPeriodSpendUsd,
+      }
+    })
+    .sort((a, b) => b.spentToDateUsd - a.spentToDateUsd)
+
+  return {
+    tenantId,
+    periodStart: `${year}-${pad2(month)}-01`,
+    periodEnd: `${year}-${pad2(month)}-${pad2(daysInMonth)}`,
+    asOf: `${year}-${pad2(month)}-${pad2(now.getUTCDate())}`,
+    clients,
   }
 }
 
@@ -2036,9 +2110,21 @@ export const handlers = [
     return HttpResponse.json(buildMockClient(id, body.displayName ?? `Mocked Client ${id}`, body))
   }),
 
-  http.get(`${base}/admin/clients/:clientId/budget/consumption`, async ({ params }) => {
+  http.get(`${base}/admin/clients/:clientId/budget/consumption`, async ({ params, request }) => {
     await delay(300)
-    return HttpResponse.json(buildMockBudgetConsumption(String(params.clientId)))
+    const period = new URL(request.url).searchParams.get('period')
+    return HttpResponse.json(buildMockBudgetConsumption(String(params.clientId), period))
+  }),
+
+  http.get(`${base}/admin/clients/:clientId/budget/history`, async ({ params, request }) => {
+    await delay(300)
+    const months = Number(new URL(request.url).searchParams.get('months') ?? '12')
+    return HttpResponse.json(buildMockBudgetHistory(String(params.clientId), Number.isFinite(months) ? months : 12))
+  }),
+
+  http.get(`${base}/admin/tenants/:tenantId/budget/overview`, async ({ params }) => {
+    await delay(300)
+    return HttpResponse.json(buildMockTenantBudgetOverview(String(params.tenantId)))
   }),
 
   http.get(`${base}/admin/review-profiles`, async () => {
