@@ -19,6 +19,9 @@ export interface UseClientSpendConsumptionOptions {
   loader?: (clientId: string) => Promise<SpendConsumptionLoadResult>
 }
 
+// Chart.js draws to a <canvas> and does not resolve CSS var(), so series colours must be literal strings
+// here rather than tokens. Keep these in lockstep with the matching custom properties in tokens.css:
+// spend = --chart-1, projection = --color-suggestion, soft cap = --color-warning, hard cap = --color-danger.
 const SPEND_COLOR = '#4e91f3'
 const PROJECTION_COLOR = '#a855f7'
 const SOFT_CAP_COLOR = '#f59e0b'

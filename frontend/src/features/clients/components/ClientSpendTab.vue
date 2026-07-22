@@ -204,7 +204,7 @@ onMounted(() => {
 }
 
 .spend-error-icon {
-    color: #ef4444;
+    color: var(--color-danger);
 }
 
 .spend-summary {
@@ -220,13 +220,13 @@ onMounted(() => {
     flex-direction: column;
     gap: 0.35rem;
     padding: 1rem 1.1rem;
-    border: 1px solid var(--color-border, rgba(148, 163, 184, 0.3));
+    border: 1px solid var(--color-border);
     border-radius: 0.6rem;
-    background: var(--color-surface-alt, rgba(148, 163, 184, 0.06));
+    background: var(--color-muted-soft);
 }
 
 .spend-card.is-forecast-over {
-    border-color: #ef4444;
+    border-color: var(--color-danger);
 }
 
 .spend-label {
@@ -254,7 +254,7 @@ onMounted(() => {
 .meter {
     height: 0.7rem;
     border-radius: 999px;
-    background: rgba(148, 163, 184, 0.2);
+    background: var(--color-muted-soft);
     overflow: hidden;
 }
 
@@ -265,15 +265,15 @@ onMounted(() => {
 }
 
 .meter.is-ok .meter-fill {
-    background: #22c55e;
+    background: var(--color-success);
 }
 
 .meter.is-warning .meter-fill {
-    background: #f59e0b;
+    background: var(--color-warning);
 }
 
 .meter.is-danger .meter-fill {
-    background: #ef4444;
+    background: var(--color-danger);
 }
 
 .meter-caption {
@@ -283,18 +283,18 @@ onMounted(() => {
 }
 
 .over-budget {
-    color: #ef4444;
+    color: var(--color-danger);
     font-weight: 600;
 }
 
 .warn {
     margin-top: 0.4rem;
     font-size: 0.85rem;
-    color: #b45309;
+    color: var(--color-warning);
 }
 
 .warn.danger {
-    color: #ef4444;
+    color: var(--color-danger);
 }
 
 .no-budget {
