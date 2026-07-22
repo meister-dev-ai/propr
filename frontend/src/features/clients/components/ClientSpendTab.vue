@@ -122,9 +122,12 @@
                             <span>Loading history…</span>
                         </div>
                         <p v-else-if="spend.historyError.value" class="error">{{ spend.historyError.value }}</p>
-                        <div v-else class="chart-wrap">
-                            <Line :data="spend.historyChartData.value" :options="spend.chartOptions.value" />
-                        </div>
+                        <template v-else>
+                            <div class="chart-wrap">
+                                <Line :data="spend.historyChartData.value" :options="spend.chartOptions.value" />
+                            </div>
+                            <p class="history-note">The latest point is the current month to date; earlier months are complete.</p>
+                        </template>
                     </div>
                 </template>
             </div>
@@ -291,6 +294,12 @@ onMounted(() => {
     font-size: 0.95rem;
     color: var(--color-text-muted);
     margin-bottom: 0.75rem;
+}
+
+.history-note {
+    margin-top: 0.5rem;
+    font-size: 0.8rem;
+    color: var(--color-text-muted);
 }
 
 .approx-note {

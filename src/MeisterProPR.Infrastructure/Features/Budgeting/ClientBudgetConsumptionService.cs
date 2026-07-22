@@ -41,7 +41,9 @@ public sealed class ClientBudgetConsumptionService(
         var periodStart = new DateOnly(targetYear, targetMonth, 1);
         var daysInPeriod = DateTime.DaysInMonth(targetYear, targetMonth);
         var periodEnd = new DateOnly(targetYear, targetMonth, daysInPeriod);
-        var nextResetOn = periodStart.AddMonths(1);
+        // The last representable month (9999-12) has no next-month date; clamp so an out-of-range future period
+        // passed directly to the API does not overflow DateOnly.
+        var nextResetOn = periodStart < new DateOnly(9999, 12, 1) ? periodStart.AddMonths(1) : periodEnd;
         var currentMonthStart = new DateOnly(today.Year, today.Month, 1);
 
         // Current month: measured up to today, with a trajectory forecast. Past month: the whole (already-complete)

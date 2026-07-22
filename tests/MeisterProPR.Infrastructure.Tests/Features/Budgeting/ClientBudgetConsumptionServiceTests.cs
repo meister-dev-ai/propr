@@ -134,6 +134,23 @@ public sealed class ClientBudgetConsumptionServiceTests
     }
 
     [Fact]
+    public async Task GetConsumptionAsync_DoesNotOverflow_ForTheMaxRepresentableMonth()
+    {
+        // A far-future period passed directly to the API (year 9999, month 12) has no next-month date; the service
+        // must clamp rather than overflow DateOnly.
+        this.GivenCaps(BudgetCaps.None);
+
+        var service = this.CreateService(new DateTimeOffset(2026, 7, 10, 0, 0, 0, TimeSpan.Zero));
+        var result = await service.GetConsumptionAsync(ClientId, 9999, 12);
+
+        Assert.Equal(new DateOnly(9999, 12, 1), result.PeriodStart);
+        Assert.Equal(new DateOnly(9999, 12, 31), result.PeriodEnd);
+        Assert.Equal(new DateOnly(9999, 12, 31), result.NextResetOn);
+        Assert.Equal(0m, result.SpentToDateUsd);
+        Assert.Null(result.ProjectedPeriodSpendUsd);
+    }
+
+    [Fact]
     public async Task GetHistoryAsync_ReturnsOneEntryPerMonth_ZeroFillingMonthsWithoutSpend()
     {
         this.GivenCaps(new BudgetCaps(80m, 100m, null, null, null, null));

@@ -48,7 +48,9 @@
                         </label>
                     </div>
 
-                    <p v-if="vm.rows.value.length === 0" class="muted-hint">No clients match.</p>
+                    <p v-if="vm.rows.value.length === 0" class="muted-hint">
+                        {{ (vm.overview.value.clients?.length ?? 0) === 0 ? 'No clients in this tenant yet.' : 'No clients match your filter.' }}
+                    </p>
 
                     <ul v-else class="overview-list">
                         <li v-for="row in vm.rows.value" :key="row.clientId" class="overview-row">
