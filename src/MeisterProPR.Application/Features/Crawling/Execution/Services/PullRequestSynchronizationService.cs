@@ -224,7 +224,7 @@ public sealed class PullRequestSynchronizationService(
                 PullRequestSynchronizationReviewDecision.DuplicateActiveJob,
                 activeJobReconciliation.LifecycleDecision,
                 [
-                    ..activeJobReconciliation.ActionSummaries,
+                    .. activeJobReconciliation.ActionSummaries,
                     duplicateActionSummary,
                 ]);
         }
@@ -238,7 +238,7 @@ public sealed class PullRequestSynchronizationService(
                 activeJobReconciliation.DuplicateOutcome,
                 PullRequestSynchronizationLifecycleDecision.CancelledActiveJobs,
                 [
-                    ..activeJobReconciliation.ActionSummaries,
+                    .. activeJobReconciliation.ActionSummaries,
                     $"Cancelled {addResult.CancelledSupersededJobCount} superseded active review job(s) for PR #{request.PullRequestId} before evaluating revision {currentRevisionKey} via {request.SummaryLabel}.",
                 ]);
         }
@@ -262,7 +262,7 @@ public sealed class PullRequestSynchronizationService(
             PullRequestSynchronizationReviewDecision.Submitted,
             activeJobReconciliation.LifecycleDecision,
             [
-                ..activeJobReconciliation.ActionSummaries,
+                .. activeJobReconciliation.ActionSummaries,
                 $"Submitted review intake job for PR #{request.PullRequestId} at iteration {iterationId} via {request.SummaryLabel}.",
             ]);
     }

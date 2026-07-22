@@ -25,7 +25,11 @@ jobs:
         run: dotnet restore MeisterProPR.slnx
 
       - name: Install JetBrains cleanupcode
-        run: dotnet tool install --global JetBrains.ReSharper.GlobalTools
+        # Pin the ReSharper CLI version: this is a gating step, and an unpinned tool
+        # means a new JetBrains release can silently change formatting rules and fail
+        # the whole repo on files nobody touched. Bump this deliberately, alongside a
+        # matching reformat commit, when adopting a newer version.
+        run: dotnet tool install --global JetBrains.ReSharper.GlobalTools --version 2026.2.0
 
       - name: Add .NET tools to PATH
         run: echo "$HOME/.dotnet/tools" >> "$GITHUB_PATH"
