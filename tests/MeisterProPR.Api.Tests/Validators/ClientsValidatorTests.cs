@@ -352,6 +352,45 @@ public sealed class ClientsValidatorTests
     }
 
     [Fact]
+    public void PatchClient_NameBasedReviewPass_Passes()
+    {
+        var result = PatchClientValidator.Validate(
+            new PatchClientRequest(
+                ReviewPasses:
+                [
+                    new ReviewPassEntry(0, Guid.Empty, LogicalModelName: "deep"),
+                ]));
+
+        Assert.True(result.IsValid);
+    }
+
+    [Fact]
+    public void PatchClient_ReviewPassWithBothModelIdAndLogicalName_Fails()
+    {
+        var result = PatchClientValidator.Validate(
+            new PatchClientRequest(
+                ReviewPasses:
+                [
+                    new ReviewPassEntry(0, Guid.NewGuid(), LogicalModelName: "deep"),
+                ]));
+
+        Assert.False(result.IsValid);
+    }
+
+    [Fact]
+    public void PatchClient_ReviewPassWithNeitherModelIdNorLogicalName_Fails()
+    {
+        var result = PatchClientValidator.Validate(
+            new PatchClientRequest(
+                ReviewPasses:
+                [
+                    new ReviewPassEntry(0, Guid.Empty),
+                ]));
+
+        Assert.False(result.IsValid);
+    }
+
+    [Fact]
     public void PatchClient_ReviewPassListWithUndefinedReasoningEffort_Fails()
     {
         var result = PatchClientValidator.Validate(

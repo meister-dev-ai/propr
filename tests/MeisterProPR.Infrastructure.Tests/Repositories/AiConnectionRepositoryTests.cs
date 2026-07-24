@@ -2,6 +2,7 @@
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
 using MeisterProPR.Application.DTOs;
+using MeisterProPR.Application.Exceptions;
 using MeisterProPR.Application.Interfaces;
 using MeisterProPR.Domain.Entities;
 using MeisterProPR.Domain.Enums;
@@ -156,6 +157,150 @@ public sealed class AiConnectionRepositoryTests
             .ToList();
 
         return profile;
+    }
+
+    // Deleting a connection a logical model maps to (by connection id) is blocked, naming the referrer.
+    [Fact]
+    public async Task DeleteAsync_BlockedWhenLogicalModelMapsToConnection()
+    {
+        await using var db = CreateContext();
+        var (connectionId, modelId) = SeedConnectionWithModel(db);
+        db.LogicalModels.Add(NewLogicalModel("deep", connectionId, modelId));
+        await db.SaveChangesAsync();
+        var repo = CreateRepository(db);
+
+        var ex = await Assert.ThrowsAsync<LogicalModelReferenceInUseException>(() => repo.DeleteAsync(connectionId));
+        Assert.Contains("deep", ex.Message, StringComparison.Ordinal);
+        Assert.NotNull(await db.AiConnectionProfiles.FindAsync(connectionId));
+    }
+
+    // The block also fires when the logical model references one of the connection's configured models
+    // (even via a different connection id on the mapping).
+    [Fact]
+    public async Task DeleteAsync_BlockedWhenLogicalModelMapsToConfiguredModel()
+    {
+        await using var db = CreateContext();
+        var (connectionId, modelId) = SeedConnectionWithModel(db);
+        db.LogicalModels.Add(NewLogicalModel("sec", Guid.NewGuid(), modelId));
+        await db.SaveChangesAsync();
+        var repo = CreateRepository(db);
+
+        var ex = await Assert.ThrowsAsync<LogicalModelReferenceInUseException>(() => repo.DeleteAsync(connectionId));
+        Assert.Contains("sec", ex.Message, StringComparison.Ordinal);
+    }
+
+    // Once the referencing logical model is removed, the delete succeeds.
+    [Fact]
+    public async Task DeleteAsync_SucceedsAfterLogicalModelRemoved()
+    {
+        await using var db = CreateContext();
+        var (connectionId, modelId) = SeedConnectionWithModel(db);
+        var logicalModel = NewLogicalModel("deep", connectionId, modelId);
+        db.LogicalModels.Add(logicalModel);
+        await db.SaveChangesAsync();
+        var repo = CreateRepository(db);
+
+        await Assert.ThrowsAsync<LogicalModelReferenceInUseException>(() => repo.DeleteAsync(connectionId));
+
+        db.LogicalModels.Remove(logicalModel);
+        await db.SaveChangesAsync();
+
+        Assert.True(await repo.DeleteAsync(connectionId));
+    }
+
+    // Updating a connection to drop a configured model a logical model maps to is blocked.
+    [Fact]
+    public async Task UpdateAsync_BlockedWhenDroppingReferencedModel()
+    {
+        await using var db = CreateContext();
+        var repo = CreateRepository(db);
+        var clientId = Guid.NewGuid();
+        var created = await repo.AddAsync(clientId, CreateWriteRequest());
+        var chatModel = created.ConfiguredModels.First(model => model.SupportsChat);
+        db.LogicalModels.Add(NewLogicalModel("deep", created.Id, chatModel.Id));
+        await db.SaveChangesAsync();
+
+        // A request that keeps only the embedding model — dropping the referenced chat model.
+        var dropChat = new AiConnectionWriteRequestDto(
+            "Updated",
+            AiProviderKind.AzureOpenAi,
+            "https://updated.openai.azure.com/",
+            AiAuthMode.ApiKey,
+            AiDiscoveryMode.ManualOnly,
+            [
+                new AiConfiguredModelDto(
+                    Guid.Empty,
+                    "text-embedding-3-large",
+                    "text-embedding-3-large",
+                    [AiOperationKind.Embedding],
+                    [AiProtocolMode.Auto, AiProtocolMode.Embeddings],
+                    "cl100k_base",
+                    8192,
+                    3072),
+            ],
+            [],
+            null,
+            null,
+            "secret");
+
+        var ex = await Assert.ThrowsAsync<LogicalModelReferenceInUseException>(() => repo.UpdateAsync(created.Id, dropChat));
+        Assert.Contains("deep", ex.Message, StringComparison.Ordinal);
+
+        // The block precedes any mutation, so the connection still has the chat model (no partial write).
+        var reloaded = await repo.GetByIdAsync(created.Id);
+        Assert.Contains(reloaded!.ConfiguredModels, model => model.SupportsChat);
+    }
+
+    private static (Guid ConnectionId, Guid ModelId) SeedConnectionWithModel(MeisterProPRDbContext db, Guid? clientId = null)
+    {
+        var now = DateTimeOffset.UtcNow;
+        var connectionId = Guid.NewGuid();
+        var modelId = Guid.NewGuid();
+        db.AiConnectionProfiles.Add(
+            new AiConnectionProfileRecord
+            {
+                Id = connectionId,
+                ClientId = clientId ?? Guid.NewGuid(),
+                DisplayName = "conn",
+                ProviderKind = "AzureOpenAi",
+                BaseUrl = "https://x",
+                AuthMode = "ApiKey",
+                DiscoveryMode = "ManualOnly",
+                CreatedAt = now,
+                UpdatedAt = now,
+                ConfiguredModels =
+                [
+                    new AiConfiguredModelRecord
+                    {
+                        Id = modelId,
+                        ConnectionProfileId = connectionId,
+                        RemoteModelId = "gpt-x",
+                        DisplayName = "gpt-x",
+                        OperationKinds = ["Chat"],
+                        SupportedProtocolModes = ["Auto"],
+                        Source = "Manual",
+                    },
+                ],
+            });
+        return (connectionId, modelId);
+    }
+
+    private static LogicalModelRecord NewLogicalModel(string name, Guid connectionId, Guid modelId)
+    {
+        var now = DateTimeOffset.UtcNow;
+        return new LogicalModelRecord
+        {
+            Id = Guid.NewGuid(),
+            TenantId = Guid.NewGuid(),
+            Name = name,
+            Capability = AiOperationKind.Chat,
+            ConnectionId = connectionId,
+            ConfiguredModelId = modelId,
+            ReasoningEffort = ReviewReasoningEffort.None,
+            ProtocolMode = AiProtocolMode.Auto,
+            CreatedAt = now,
+            UpdatedAt = now,
+        };
     }
 
     private static AiConnectionWriteRequestDto CreateWriteRequest(

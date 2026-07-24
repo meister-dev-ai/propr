@@ -4425,6 +4425,429 @@
         }
       }
     },
+    "/clients/{clientId}/logical-models": {
+      "get": {
+        "tags": [
+          "ClientLogicalModels"
+        ],
+        "summary": "The logical models effective for this client — the client's overrides plus the tenant-catalog entries an\noverride does not shadow — for the pass and purpose editors' pickers.",
+        "parameters": [
+          {
+            "name": "clientId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/LogicalModelResponse"
+                  }
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/LogicalModelResponse"
+                  }
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/LogicalModelResponse"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/clients/{clientId}/logical-models/overrides": {
+      "get": {
+        "tags": [
+          "ClientLogicalModels"
+        ],
+        "summary": "The client's own override logical models (not the inherited tenant catalog).",
+        "parameters": [
+          {
+            "name": "clientId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/LogicalModelResponse"
+                  }
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/LogicalModelResponse"
+                  }
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/LogicalModelResponse"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "ClientLogicalModels"
+        ],
+        "summary": "Creates a per-client override logical model.",
+        "parameters": [
+          {
+            "name": "clientId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LogicalModelWriteRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LogicalModelWriteRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/LogicalModelWriteRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Created",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/LogicalModelResponse"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LogicalModelResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LogicalModelResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/clients/{clientId}/logical-models/overrides/{name}": {
+      "put": {
+        "tags": [
+          "ClientLogicalModels"
+        ],
+        "summary": "Updates a per-client override's mapping (connection, model, reasoning, protocol). 404 if absent.",
+        "parameters": [
+          {
+            "name": "clientId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LogicalModelWriteRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LogicalModelWriteRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/LogicalModelWriteRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "ClientLogicalModels"
+        ],
+        "summary": "Deletes a per-client override. 404 if it does not exist.",
+        "parameters": [
+          {
+            "name": "clientId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/clients/{clientId}/logical-models/overrides/{name}/rename": {
+      "post": {
+        "tags": [
+          "ClientLogicalModels"
+        ],
+        "summary": "Renames a per-client override. 404 if the old name is absent, 409 if the new name is taken.",
+        "parameters": [
+          {
+            "name": "clientId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RenameLogicalModelRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RenameLogicalModelRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/RenameLogicalModelRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/clients/{clientId}/logical-models/purposes": {
+      "get": {
+        "tags": [
+          "ClientLogicalModels"
+        ],
+        "summary": "The client's purpose → logical-model map.",
+        "parameters": [
+          {
+            "name": "clientId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/PurposeRoleResponse"
+                  }
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/PurposeRoleResponse"
+                  }
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/PurposeRoleResponse"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/clients/{clientId}/logical-models/purposes/{purpose}": {
+      "put": {
+        "tags": [
+          "ClientLogicalModels"
+        ],
+        "summary": "Maps an internal AI purpose to a logical model for this client.",
+        "parameters": [
+          {
+            "name": "clientId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "purpose",
+            "in": "path",
+            "description": "Product-owned AI purposes that resolve to configured models.",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/AiPurpose"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SetPurposeRoleRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SetPurposeRoleRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/SetPurposeRoleRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "ClientLogicalModels"
+        ],
+        "summary": "Removes a purpose mapping (the purpose then resolves through the client's AI purpose bindings again).",
+        "parameters": [
+          {
+            "name": "clientId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "purpose",
+            "in": "path",
+            "description": "Product-owned AI purposes that resolve to configured models.",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/AiPurpose"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
     "/clients/{clientId}/provider-connections": {
       "get": {
         "tags": [
@@ -13109,6 +13532,257 @@
         }
       }
     },
+    "/tenants/{tenantId}/ai-connections": {
+      "get": {
+        "tags": [
+          "TenantAiConnections"
+        ],
+        "summary": "Lists the tenant's connection profiles (with their configured models).",
+        "parameters": [
+          {
+            "name": "tenantId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/AiConnectionDto"
+                  }
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/AiConnectionDto"
+                  }
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/AiConnectionDto"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "TenantAiConnections"
+        ],
+        "summary": "Creates a tenant-scoped connection profile.",
+        "parameters": [
+          {
+            "name": "tenantId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateAiConnectionRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateAiConnectionRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateAiConnectionRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Created",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/AiConnectionDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AiConnectionDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AiConnectionDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/tenants/{tenantId}/ai-connections/{connectionId}": {
+      "delete": {
+        "tags": [
+          "TenantAiConnections"
+        ],
+        "summary": "Deletes a tenant connection profile. 404 if it is not this tenant's.",
+        "parameters": [
+          {
+            "name": "tenantId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "connectionId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "No Content"
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/tenants/{tenantId}/ai-connections/{connectionId}/verify": {
+      "post": {
+        "tags": [
+          "TenantAiConnections"
+        ],
+        "summary": "Verifies a tenant connection against its provider. 404 if it is not this tenant's.",
+        "parameters": [
+          {
+            "name": "tenantId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "connectionId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/AiVerificationResultDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AiVerificationResultDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AiVerificationResultDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/auth/tenants/{tenantSlug}/providers": {
       "get": {
         "tags": [
@@ -13664,6 +14338,246 @@
                 }
               }
             }
+          }
+        }
+      }
+    },
+    "/tenants/{tenantId}/logical-models": {
+      "get": {
+        "tags": [
+          "TenantLogicalModels"
+        ],
+        "summary": "The tenant-catalog logical models for this tenant.",
+        "parameters": [
+          {
+            "name": "tenantId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/LogicalModelResponse"
+                  }
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/LogicalModelResponse"
+                  }
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/LogicalModelResponse"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "TenantLogicalModels"
+        ],
+        "summary": "Creates a tenant-catalog logical model. 400 for the system tenant, 409 for a duplicate name.",
+        "parameters": [
+          {
+            "name": "tenantId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LogicalModelWriteRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LogicalModelWriteRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/LogicalModelWriteRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Created",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/LogicalModelResponse"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LogicalModelResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LogicalModelResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/tenants/{tenantId}/logical-models/{name}/rename": {
+      "post": {
+        "tags": [
+          "TenantLogicalModels"
+        ],
+        "summary": "Renames a tenant-catalog entry. 404 if the old name is absent, 409 if the new name is taken.",
+        "parameters": [
+          {
+            "name": "tenantId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RenameLogicalModelRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RenameLogicalModelRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/RenameLogicalModelRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/tenants/{tenantId}/logical-models/{name}": {
+      "put": {
+        "tags": [
+          "TenantLogicalModels"
+        ],
+        "summary": "Updates a tenant-catalog entry's mapping (connection, model, reasoning, protocol). 404 if absent.",
+        "parameters": [
+          {
+            "name": "tenantId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LogicalModelWriteRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LogicalModelWriteRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/LogicalModelWriteRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "TenantLogicalModels"
+        ],
+        "summary": "Deletes a tenant-catalog entry. 404 if it does not exist.",
+        "parameters": [
+          {
+            "name": "tenantId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
           }
         }
       }
@@ -16935,8 +17849,9 @@
           },
           "clientId": {
             "type": "string",
-            "description": "Owning client ID.",
-            "format": "uuid"
+            "description": "Owning client ID for a client-scoped connection; null for a tenant-scoped one.",
+            "format": "uuid",
+            "nullable": true
           },
           "displayName": {
             "type": "string",
@@ -17004,6 +17919,12 @@
               "type": "string"
             },
             "description": "Optional default query parameters appended by the driver.",
+            "nullable": true
+          },
+          "tenantId": {
+            "type": "string",
+            "description": "Owning tenant ID for a tenant-scoped connection (inherited by the tenant's clients); null for a client-scoped one.",
+            "format": "uuid",
             "nullable": true
           }
         },
@@ -18132,6 +19053,11 @@
             "description": "Accumulated estimated USD cost for this (model, day); null when no priced contribution was recorded.",
             "format": "double",
             "nullable": true
+          },
+          "logicalModelName": {
+            "type": "string",
+            "description": "The logical-model role the tokens were spent under, or the empty string for raw-model / non-logical-model usage.",
+            "nullable": true
           }
         },
         "additionalProperties": false,
@@ -19102,6 +20028,70 @@
         },
         "additionalProperties": false,
         "description": "Installation-wide licensing summary for administration and session hydration."
+      },
+      "LogicalModelResponse": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "name": {
+            "type": "string",
+            "nullable": true
+          },
+          "capability": {
+            "$ref": "#/components/schemas/AiOperationKind"
+          },
+          "connectionId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "configuredModelId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "reasoningEffort": {
+            "$ref": "#/components/schemas/ReviewReasoningEffort"
+          },
+          "protocolMode": {
+            "$ref": "#/components/schemas/AiProtocolMode"
+          },
+          "scope": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false,
+        "description": "One logical model as returned to the client, tagged by the scope it came from (client override or tenant)."
+      },
+      "LogicalModelWriteRequest": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "nullable": true
+          },
+          "capability": {
+            "$ref": "#/components/schemas/AiOperationKind"
+          },
+          "connectionId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "configuredModelId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "reasoningEffort": {
+            "$ref": "#/components/schemas/ReviewReasoningEffort"
+          },
+          "protocolMode": {
+            "$ref": "#/components/schemas/AiProtocolMode"
+          }
+        },
+        "additionalProperties": false,
+        "description": "Create/update payload for a logical model (the name is the business key within its scope)."
       },
       "LoginRequest": {
         "type": "object",
@@ -21602,6 +22592,20 @@
         "additionalProperties": false,
         "description": "Operator-facing provider operational status response."
       },
+      "PurposeRoleResponse": {
+        "type": "object",
+        "properties": {
+          "purpose": {
+            "$ref": "#/components/schemas/AiPurpose"
+          },
+          "logicalModelName": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false,
+        "description": "One purpose → logical-model mapping row."
+      },
       "PutClientReviewProfileRequest": {
         "type": "object",
         "properties": {
@@ -21623,6 +22627,17 @@
         },
         "additionalProperties": false,
         "description": "Refresh token request payload."
+      },
+      "RenameLogicalModelRequest": {
+        "type": "object",
+        "properties": {
+          "newName": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false,
+        "description": "Rename payload."
       },
       "ResolvedReviewerIdentityResponse": {
         "type": "object",
@@ -22248,6 +23263,11 @@
           },
           "reasoningEffort": {
             "$ref": "#/components/schemas/ReviewReasoningEffort"
+          },
+          "logicalModelName": {
+            "type": "string",
+            "description": "The named logical model this pass runs on (its connection, model, reasoning effort, and protocol come from the\nresolved role). When set, it takes precedence and ConfiguredModelId is ignored. A pass\nshould set exactly one of LogicalModelName or ConfiguredModelId.",
+            "nullable": true
           }
         },
         "additionalProperties": false,
@@ -22538,6 +23558,17 @@
         },
         "additionalProperties": false,
         "description": "Request body for setting a client-scoped provider reviewer-trigger identity."
+      },
+      "SetPurposeRoleRequest": {
+        "type": "object",
+        "properties": {
+          "logicalModelName": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false,
+        "description": "Payload to map a purpose to a logical model."
       },
       "SetUserActiveRequest": {
         "required": [
@@ -23164,6 +24195,11 @@
           "costIsApproximate": {
             "type": "boolean",
             "description": "True when EstimatedCostUsd rests on a fallback rate, a missing rate, or estimated token counts."
+          },
+          "logicalModelName": {
+            "type": "string",
+            "description": "The logical-model role that produced these tokens, captured at the time; null for raw-model / non-logical-model passes (and rows written before this dimension existed).",
+            "nullable": true
           }
         },
         "additionalProperties": false,
@@ -23620,6 +24656,9 @@
       "name": "ClientBudgetConsumption"
     },
     {
+      "name": "ClientLogicalModels"
+    },
+    {
       "name": "ClientProviderConnections"
     },
     {
@@ -23680,10 +24719,16 @@
       "name": "Reviews"
     },
     {
+      "name": "TenantAiConnections"
+    },
+    {
       "name": "TenantAuth"
     },
     {
       "name": "TenantBudgetOverview"
+    },
+    {
+      "name": "TenantLogicalModels"
     },
     {
       "name": "TenantMemberClientAccess"

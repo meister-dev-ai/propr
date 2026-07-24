@@ -6,6 +6,7 @@ using MeisterProPR.Application.Features.Clients.Support;
 using MeisterProPR.Application.Interfaces;
 using MeisterProPR.Domain.Enums;
 using MeisterProPR.Domain.ValueObjects;
+using MeisterProPR.Infrastructure.AI;
 using MeisterProPR.Infrastructure.Data;
 using MeisterProPR.Infrastructure.DependencyInjection;
 using MeisterProPR.Infrastructure.Features.Clients.Support;
@@ -78,6 +79,10 @@ public static class ClientsModuleServiceCollectionExtensions
             services.AddScoped<IProviderReadinessEvaluator, ProviderReadinessEvaluator>();
             services.AddScoped<IProviderOperationalStatusService, ProviderOperationalStatusService>();
             services.AddScoped<IAiConnectionRepository, AiConnectionRepository>();
+            services.AddScoped<ILogicalModelCapabilityValidator, LogicalModelCapabilityValidator>();
+            services.AddScoped<ILogicalModelCatalogRepository, LogicalModelCatalogRepository>();
+            services.AddScoped<ILogicalModelResolver, LogicalModelResolver>();
+            services.AddScoped<ILogicalModelMigrationBackfill, LogicalModelMigrationBackfill>();
         }
 
         return services;

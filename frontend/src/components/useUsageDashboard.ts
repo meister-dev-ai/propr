@@ -12,7 +12,7 @@ import {
   getProCursorClientTokenUsage,
   getProCursorTopSources,
 } from '@/services/proCursorService'
-import type { ClientTokenUsageResponse } from '@/types/clientTokenUsage'
+import type { ClientTokenUsageResponse, ReviewLogicalModelUsageRow } from '@/types/clientTokenUsage'
 import type {
   ProCursorTokenUsageGroupBy,
   ProCursorTokenUsageGranularity,
@@ -23,6 +23,7 @@ import type {
 } from '@/types/proCursorTokenUsage'
 import {
   PERIOD_PRESETS,
+  type ReviewChartGroupBy,
   buildProCursorChartData,
   buildReviewChartData,
   createChartOptions,
@@ -58,6 +59,34 @@ export function useUsageDashboard(props: { clientId: string }) {
   const totalReasoningTokens = computed(() => reviewUsage.value?.totalReasoningTokens ?? 0)
   const totalEstimatedCostUsd = computed(() => reviewUsage.value?.totalEstimatedCostUsd ?? null)
   const hasReviewSamples = computed(() => (reviewUsage.value?.samples.length ?? 0) > 0)
+
+  // Review usage rolled up per logical model (the empty name is raw / non-logical-model usage), so spend can be
+  // read by role rather than only by physical model. Sorted by total tokens, largest first.
+  const reviewUsageByLogicalModel = computed<ReviewLogicalModelUsageRow[]>(() => {
+    const rows = new Map<string, ReviewLogicalModelUsageRow>()
+    for (const sample of reviewUsage.value?.samples ?? []) {
+      const name = sample.logicalModelName ?? ''
+      const row = rows.get(name) ?? {
+        logicalModelName: name,
+        inputTokens: 0,
+        outputTokens: 0,
+        cachedInputTokens: 0,
+        reasoningTokens: 0,
+        estimatedCostUsd: null,
+      }
+      row.inputTokens += sample.inputTokens
+      row.outputTokens += sample.outputTokens
+      row.cachedInputTokens += sample.cachedInputTokens ?? 0
+      row.reasoningTokens += sample.reasoningTokens ?? 0
+      if (sample.estimatedCostUsd != null) {
+        row.estimatedCostUsd = (row.estimatedCostUsd ?? 0) + sample.estimatedCostUsd
+      }
+      rows.set(name, row)
+    }
+    return [...rows.values()].sort(
+      (a, b) => b.inputTokens + b.outputTokens - (a.inputTokens + a.outputTokens),
+    )
+  })
   const proCursorTotals = computed(() => proCursorUsage.value?.totals)
   const proCursorTotalTokens = computed(() => proCursorTotals.value?.totalTokens ?? 0)
   const proCursorEstimatedCost = computed(() => proCursorTotals.value?.estimatedCostUsd ?? null)
@@ -76,7 +105,11 @@ export function useUsageDashboard(props: { clientId: string }) {
   })
   const lastRollupCompletedLabel = computed(() => formatDateTime(proCursorUsage.value?.lastRollupCompletedAtUtc))
 
-  const reviewChartData = computed(() => buildReviewChartData(reviewUsage.value, hasReviewSamples.value))
+  // Which dimension the review chart plots one curve per — logical model (the new default) or the end model.
+  const reviewGroupBy = ref<ReviewChartGroupBy>('logicalModel')
+  const reviewChartData = computed(() =>
+    buildReviewChartData(reviewUsage.value, hasReviewSamples.value, reviewGroupBy.value),
+  )
   const reviewChartOptions = createChartOptions()
 
   const proCursorChartData = computed(() => buildProCursorChartData(proCursorUsage.value, proCursorGroupBy.value))
@@ -194,6 +227,8 @@ export function useUsageDashboard(props: { clientId: string }) {
     totalReasoningTokens,
     totalEstimatedCostUsd,
     hasReviewSamples,
+    reviewUsageByLogicalModel,
+    reviewGroupBy,
     proCursorTotalTokens,
     proCursorEstimatedCost,
     proCursorEstimatedEvents,

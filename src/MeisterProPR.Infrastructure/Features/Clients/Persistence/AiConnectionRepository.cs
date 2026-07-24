@@ -2,6 +2,7 @@
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
 using MeisterProPR.Application.DTOs;
+using MeisterProPR.Application.Exceptions;
 using MeisterProPR.Application.Interfaces;
 using MeisterProPR.Domain.Enums;
 using MeisterProPR.Infrastructure.Data;
@@ -34,6 +35,26 @@ public sealed class AiConnectionRepository(
                 .Include(profile => profile.PurposeBindings)
                 .Include(profile => profile.VerificationSnapshot)
                 .Where(profile => profile.ClientId == clientId)
+                .OrderByDescending(profile => profile.CreatedAt)
+                .AsNoTracking()
+                .ToListAsync(ct),
+            ct);
+
+        return records
+            .Select(this.ToDto)
+            .ToList()
+            .AsReadOnly();
+    }
+
+    /// <inheritdoc />
+    public async Task<IReadOnlyList<AiConnectionDto>> GetByTenantAsync(Guid tenantId, CancellationToken ct = default)
+    {
+        var records = await this.WithReadDbAsync(
+            db => db.AiConnectionProfiles
+                .Include(profile => profile.ConfiguredModels)
+                .Include(profile => profile.PurposeBindings)
+                .Include(profile => profile.VerificationSnapshot)
+                .Where(profile => profile.TenantId == tenantId)
                 .OrderByDescending(profile => profile.CreatedAt)
                 .AsNoTracking()
                 .ToListAsync(ct),
@@ -112,6 +133,39 @@ public sealed class AiConnectionRepository(
     }
 
     /// <inheritdoc />
+    public async Task<AiConnectionDto> AddTenantAsync(Guid tenantId, AiConnectionWriteRequestDto request, CancellationToken ct = default)
+    {
+        var profileId = Guid.NewGuid();
+        var now = DateTimeOffset.UtcNow;
+        var configuredModels = BuildConfiguredModels(profileId, request, null);
+        var bindings = BuildPurposeBindings(profileId, request.PurposeBindings, configuredModels, now);
+
+        var record = new AiConnectionProfileRecord
+        {
+            Id = profileId,
+            ClientId = null,
+            TenantId = tenantId,
+            DisplayName = request.DisplayName,
+            ProviderKind = request.ProviderKind.ToString(),
+            BaseUrl = request.BaseUrl,
+            AuthMode = request.AuthMode.ToString(),
+            ProtectedSecret = this.ProtectSecret(request.Secret),
+            DefaultHeaders = NormalizeMap(request.DefaultHeaders),
+            DefaultQueryParams = NormalizeMap(request.DefaultQueryParams),
+            DiscoveryMode = request.DiscoveryMode.ToString(),
+            IsActive = false,
+            ConfiguredModels = configuredModels,
+            PurposeBindings = bindings,
+            VerificationSnapshot = ToVerificationRecord(profileId, AiVerificationResultDto.NeverVerified),
+            CreatedAt = now,
+            UpdatedAt = now,
+        };
+        dbContext.AiConnectionProfiles.Add(record);
+        await dbContext.SaveChangesAsync(ct);
+        return this.ToDto(record);
+    }
+
+    /// <inheritdoc />
     public async Task<bool> UpdateAsync(
         Guid connectionId,
         AiConnectionWriteRequestDto request,
@@ -131,6 +185,17 @@ public sealed class AiConnectionRepository(
         var now = DateTimeOffset.UtcNow;
         var updatedBindings = BuildPurposeBindings(record.Id, request.PurposeBindings, updatedModels, now);
         var shouldInvalidateVerification = this.RequiresVerificationReset(record, request, updatedModels, updatedBindings);
+
+        // Block dropping a configured model that a logical model still maps to. Models kept across the update retain
+        // their id (BuildConfiguredModels matches by remote model id), so "removed" = old ids no longer present.
+        var removedModelIds = record.ConfiguredModels
+            .Select(model => model.Id)
+            .Except(updatedModels.Select(model => model.Id))
+            .ToList();
+        if (removedModelIds.Count > 0)
+        {
+            await this.GuardLogicalModelReferencesAsync([], removedModelIds, ct);
+        }
 
         record.DisplayName = request.DisplayName;
         record.ProviderKind = request.ProviderKind.ToString();
@@ -166,15 +231,48 @@ public sealed class AiConnectionRepository(
     /// <inheritdoc />
     public async Task<bool> DeleteAsync(Guid connectionId, CancellationToken ct = default)
     {
-        var record = await dbContext.AiConnectionProfiles.FindAsync([connectionId], ct);
+        var record = await dbContext.AiConnectionProfiles
+            .Include(profile => profile.ConfiguredModels)
+            .FirstOrDefaultAsync(profile => profile.Id == connectionId, ct);
         if (record is null)
         {
             return false;
         }
 
+        // A logical model must not be silently orphaned: block deleting a connection any logical model maps to,
+        // whether by the connection id or one of its configured models. The referrers are named in the error.
+        var modelIds = record.ConfiguredModels.Select(model => model.Id).ToList();
+        await this.GuardLogicalModelReferencesAsync([connectionId], modelIds, ct);
+
         dbContext.AiConnectionProfiles.Remove(record);
         await dbContext.SaveChangesAsync(ct);
         return true;
+    }
+
+    /// <summary>
+    ///     Throws <see cref="LogicalModelReferenceInUseException" /> when any logical model (tenant catalog or per-client
+    ///     override) maps to one of the given connection ids or configured-model ids. Queried directly against the
+    ///     logical-model tables (not the catalog repository) to avoid a dependency cycle.
+    /// </summary>
+    private async Task GuardLogicalModelReferencesAsync(
+        IReadOnlyCollection<Guid> connectionIds,
+        IReadOnlyCollection<Guid> configuredModelIds,
+        CancellationToken ct)
+    {
+        var tenantRefs = await dbContext.LogicalModels
+            .Where(x => connectionIds.Contains(x.ConnectionId) || configuredModelIds.Contains(x.ConfiguredModelId))
+            .Select(x => x.Name)
+            .ToListAsync(ct);
+        var clientRefs = await dbContext.LogicalModelOverrides
+            .Where(x => connectionIds.Contains(x.ConnectionId) || configuredModelIds.Contains(x.ConfiguredModelId))
+            .Select(x => x.Name)
+            .ToListAsync(ct);
+
+        var referrers = tenantRefs.Concat(clientRefs).Distinct(StringComparer.Ordinal).ToList();
+        if (referrers.Count > 0)
+        {
+            throw new LogicalModelReferenceInUseException(referrers);
+        }
     }
 
     /// <inheritdoc />
@@ -432,7 +530,8 @@ public sealed class AiConnectionRepository(
             record.UpdatedAt,
             NormalizeMap(record.DefaultHeaders),
             NormalizeMap(record.DefaultQueryParams),
-            this.UnprotectSecret(record.ProtectedSecret));
+            this.UnprotectSecret(record.ProtectedSecret),
+            record.TenantId);
     }
 
     private static AiConfiguredModelDto ToConfiguredModelDto(AiConfiguredModelRecord record)

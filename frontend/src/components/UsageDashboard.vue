@@ -88,12 +88,51 @@
           <div class="chart-card-header">
             <div>
               <h4>Trend</h4>
-              <p>Daily token consumption by model and effort tier.</p>
+              <p>Daily token consumption, one curve per {{ reviewGroupBy === 'logicalModel' ? 'logical model' : 'end model' }}.</p>
+            </div>
+            <div class="chart-groupby">
+              <label for="review-groupby">Group by</label>
+              <select id="review-groupby" v-model="reviewGroupBy">
+                <option value="logicalModel">Logical model</option>
+                <option value="model">End model</option>
+              </select>
             </div>
           </div>
 
           <div class="chart-container">
             <Line :data="reviewChartData" :options="reviewChartOptions" />
+          </div>
+        </div>
+
+        <div v-if="hasReviewSamples" class="chart-card">
+          <div class="chart-card-header">
+            <div>
+              <h4>By logical model</h4>
+              <p>Token spend attributed to the logical model that produced it.</p>
+            </div>
+          </div>
+
+          <div class="logical-model-usage-scroll">
+            <table>
+              <thead>
+                <tr>
+                  <th>Logical model</th>
+                  <th>Input</th>
+                  <th>Output</th>
+                  <th>Reasoning</th>
+                  <th>Est. cost</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="row in reviewUsageByLogicalModel" :key="row.logicalModelName || '(raw)'">
+                  <td>{{ row.logicalModelName || 'Raw model' }}</td>
+                  <td>{{ formatNumber(row.inputTokens) }}</td>
+                  <td>{{ formatNumber(row.outputTokens) }}</td>
+                  <td>{{ formatNumber(row.reasoningTokens) }}</td>
+                  <td>{{ formatUsd(row.estimatedCostUsd) }}</td>
+                </tr>
+              </tbody>
+            </table>
           </div>
         </div>
       </template>
@@ -285,6 +324,8 @@ const {
   totalReasoningTokens,
   totalEstimatedCostUsd,
   hasReviewSamples,
+  reviewUsageByLogicalModel,
+  reviewGroupBy,
   proCursorTotalTokens,
   proCursorEstimatedCost,
   proCursorEstimatedEvents,
@@ -550,8 +591,25 @@ const {
         height: 320px;
       }
 
+      .chart-groupby {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        font-size: 0.8rem;
+        color: var(--color-text-muted);
+        white-space: nowrap;
+      }
+
+      .chart-groupby select {
+        font-size: 0.8rem;
+      }
+
       .chart-container--procursor {
         height: 340px;
+      }
+
+      .logical-model-usage-scroll {
+        overflow-x: auto;
       }
 
       .procursor-grid {

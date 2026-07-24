@@ -161,18 +161,24 @@ public sealed class ClientAdminService(
         var ordinal = 0;
         foreach (var pass in reviewPasses.OrderBy(entry => entry.Ordinal))
         {
+            var isNameBased = !string.IsNullOrWhiteSpace(pass.LogicalModelName);
             client.ReviewPasses.Add(
                 new ClientReviewPassRecord
                 {
                     Id = Guid.NewGuid(),
                     ClientId = client.Id,
                     Ordinal = ordinal++,
-                    ConfiguredModelId = pass.ConfiguredModelId,
+                    // A pass binds exactly one of the two: a named logical model or a concrete model id.
+                    ConfiguredModelId = isNameBased ? null : pass.ConfiguredModelId,
+                    LogicalModelName = isNameBased ? pass.LogicalModelName : null,
                     Lens = pass.Lens,
                     Scope = pass.Scope,
                     Shadow = pass.Shadow,
-                    // Store None as null so an unset effort keeps the column empty (null reads back as None).
-                    ReasoningEffort = pass.ReasoningEffort == ReviewReasoningEffort.None ? null : pass.ReasoningEffort,
+                    // Per-pass effort applies only to legacy model-id passes; a name-based pass takes its effort from
+                    // the logical model. Store None as null so an unset effort keeps the column empty.
+                    ReasoningEffort = isNameBased || pass.ReasoningEffort == ReviewReasoningEffort.None
+                        ? null
+                        : pass.ReasoningEffort,
                 });
         }
     }
@@ -383,11 +389,12 @@ public sealed class ClientAdminService(
             .OrderBy(pass => pass.Ordinal)
             .Select(pass => new ReviewPassDto(
                 pass.Ordinal,
-                pass.ConfiguredModelId,
+                pass.ConfiguredModelId ?? Guid.Empty,
                 pass.Lens,
                 pass.Scope,
                 pass.Shadow,
-                pass.ReasoningEffort ?? ReviewReasoningEffort.None))
+                pass.ReasoningEffort ?? ReviewReasoningEffort.None,
+                pass.LogicalModelName))
             .ToList()
             .AsReadOnly();
 

@@ -87,11 +87,22 @@ export function getInclusiveDayCount(from: string, to: string): number {
   return Math.max(1, diff)
 }
 
-export function getReviewSeriesKey(sample: ClientTokenUsageSample): string {
+/** Which dimension the review usage chart plots one curve per. */
+export type ReviewChartGroupBy = 'logicalModel' | 'model'
+
+export function getReviewSeriesKey(sample: ClientTokenUsageSample, groupBy: ReviewChartGroupBy): string {
+  if (groupBy === 'logicalModel') {
+    return sample.logicalModelName?.trim() ? sample.logicalModelName : '(raw model)'
+  }
+
   return `${sample.connectionCategory ?? 5}_${sample.modelId}`
 }
 
-export function getReviewSeriesLabel(sample: ClientTokenUsageSample): string {
+export function getReviewSeriesLabel(sample: ClientTokenUsageSample, groupBy: ReviewChartGroupBy): string {
+  if (groupBy === 'logicalModel') {
+    return sample.logicalModelName?.trim() ? sample.logicalModelName : 'Raw model'
+  }
+
   const categoryName = CATEGORY_LABELS[sample.connectionCategory ?? 5] ?? 'Unknown'
   return `${categoryName} (${sample.modelId})`
 }
@@ -133,28 +144,36 @@ export function createChartOptions() {
   }
 }
 
-export function buildReviewChartData(usage: ClientTokenUsageResponse | null, hasSamples: boolean) {
+export function buildReviewChartData(
+  usage: ClientTokenUsageResponse | null,
+  hasSamples: boolean,
+  groupBy: ReviewChartGroupBy = 'model',
+) {
   if (!usage || !hasSamples) {
     return { labels: [], datasets: [] }
   }
 
   const datesSet = new Set<string>()
   const seriesSet = new Map<string, string>()
-  const lookup = new Map<string, Map<string, ClientTokenUsageSample>>()
+  // key -> date -> summed tokens. Several samples can share a series and date (e.g. the same end model used
+  // by two logical models, or the same logical model on two tiers), so tokens are accumulated, not overwritten.
+  const lookup = new Map<string, Map<string, number>>()
 
   for (const sample of usage.samples) {
     datesSet.add(sample.date)
-    const key = getReviewSeriesKey(sample)
+    const key = getReviewSeriesKey(sample, groupBy)
 
     if (!seriesSet.has(key)) {
-      seriesSet.set(key, getReviewSeriesLabel(sample))
+      seriesSet.set(key, getReviewSeriesLabel(sample, groupBy))
     }
 
     if (!lookup.has(key)) {
       lookup.set(key, new Map())
     }
 
-    lookup.get(key)?.set(sample.date, sample)
+    const byDate = lookup.get(key)!
+    const tokens = (sample.inputTokens ?? 0) + (sample.outputTokens ?? 0)
+    byDate.set(sample.date, (byDate.get(sample.date) ?? 0) + tokens)
   }
 
   const labels = Array.from(datesSet).sort()
@@ -163,10 +182,7 @@ export function buildReviewChartData(usage: ClientTokenUsageResponse | null, has
     const samplesByDate = lookup.get(key)
     return {
       label,
-      data: labels.map((date) => {
-        const sample = samplesByDate?.get(date)
-        return (sample?.inputTokens ?? 0) + (sample?.outputTokens ?? 0)
-      }),
+      data: labels.map((date) => samplesByDate?.get(date) ?? 0),
       borderColor: color,
       backgroundColor: `${color}22`,
       tension: 0.35,

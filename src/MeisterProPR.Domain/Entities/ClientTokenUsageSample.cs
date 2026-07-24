@@ -5,7 +5,7 @@ namespace MeisterProPR.Domain.Entities;
 
 /// <summary>
 ///     Represents a daily aggregate of token consumption for a single AI model, scoped to a client.
-///     One row per (ClientId, ModelId, Date) — updated via upsert on each job completion.
+///     One row per (ClientId, ModelId, LogicalModelName, Date) — updated via upsert on each job completion.
 /// </summary>
 public sealed class ClientTokenUsageSample
 {
@@ -17,6 +17,14 @@ public sealed class ClientTokenUsageSample
 
     /// <summary>The AI model identifier (e.g. "gpt-4o", "text-embedding-3-small").</summary>
     public string ModelId { get; set; } = string.Empty;
+
+    /// <summary>
+    ///     The logical-model role these tokens were spent under, captured at the time; the empty string for
+    ///     raw-model / non-logical-model usage. Part of the aggregate key so usage can be sliced by logical model.
+    ///     Non-null (empty rather than null) so the unique index and PostgreSQL <c>ON CONFLICT</c> upsert behave
+    ///     normally — NULLs would be treated as distinct and defeat the merge.
+    /// </summary>
+    public string LogicalModelName { get; set; } = string.Empty;
 
     /// <summary>The UTC date on which tokens were consumed.</summary>
     public DateOnly Date { get; set; }

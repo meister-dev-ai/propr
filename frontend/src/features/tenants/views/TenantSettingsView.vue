@@ -40,26 +40,85 @@
     </div>
 
     <template v-else>
+      <!-- The System tenant has no tenant-scoped connections or catalog (its clients are per-client only), so
+           these are offered only for editable tenants. Connections come first — logical models point at them. -->
+      <TenantAiConnectionsSection v-if="vm.tenant.value?.isEditable !== false" :tenant-id="vm.tenantId" />
+      <TenantLogicalModelsSection v-if="vm.tenant.value?.isEditable !== false" :tenant-id="vm.tenantId" />
       <template v-if="vm.isTenantSsoAvailable.value">
-        <TenantSsoProviderForm
-          :busy="vm.creatingProvider.value"
-          :error="vm.providerError.value"
-          :redirect-uri="vm.providerRedirectUri.value"
-          @submit="vm.createProvider"
+        <TenantProviderList
+          :providers="vm.providers.value"
+          :busy-provider-id="vm.deletingProviderId.value"
+          @add="openAddProvider"
+          @edit="openEditProvider"
+          @delete="vm.removeProvider"
         />
-        <TenantProviderList :providers="vm.providers.value" :busy-provider-id="vm.deletingProviderId.value" @delete="vm.removeProvider" />
+        <ModalDialog
+          :isOpen="providerModalOpen"
+          :title="editingProvider ? 'Edit SSO provider' : 'Add SSO provider'"
+          @update:isOpen="onProviderModalToggle"
+        >
+          <TenantSsoProviderForm
+            :provider="editingProvider"
+            :busy="vm.creatingProvider.value"
+            :error="vm.providerError.value"
+            :redirect-uri="vm.providerRedirectUri.value"
+            @submit="onProviderSubmit"
+          />
+        </ModalDialog>
       </template>
     </template>
   </div>
 </template>
 
 <script setup lang="ts">
+import { ref } from 'vue'
 import { RouterLink } from 'vue-router'
+import ModalDialog from '@/components/dialogs/ModalDialog.vue'
+import TenantAiConnectionsSection from '@/features/tenants/components/TenantAiConnectionsSection.vue'
+import TenantLogicalModelsSection from '@/features/tenants/components/TenantLogicalModelsSection.vue'
 import TenantProviderList from '@/features/tenants/components/TenantProviderList.vue'
 import TenantSsoProviderForm from '@/features/tenants/components/TenantSsoProviderForm.vue'
 import { useTenantSettingsViewModel } from '@/features/tenants/view-models/useTenantSettingsViewModel'
+import type { TenantSsoProviderDto, TenantSsoProviderInput } from '@/services/tenantSsoProvidersService'
 
 const vm = useTenantSettingsViewModel()
+
+// The add/edit form lives in a modal so tenant settings stays a scannable list. editingProvider is null for
+// an add, or the provider being edited.
+const providerModalOpen = ref(false)
+const editingProvider = ref<TenantSsoProviderDto | null>(null)
+
+function openAddProvider(): void {
+  editingProvider.value = null
+  providerModalOpen.value = true
+}
+
+function openEditProvider(provider: TenantSsoProviderDto): void {
+  editingProvider.value = provider
+  providerModalOpen.value = true
+}
+
+function onProviderModalToggle(open: boolean): void {
+  providerModalOpen.value = open
+  if (!open) {
+    editingProvider.value = null
+  }
+}
+
+async function onProviderSubmit(request: TenantSsoProviderInput): Promise<void> {
+  const editing = editingProvider.value
+  if (editing) {
+    await vm.updateProvider(editing.id, request)
+  } else {
+    await vm.createProvider(request)
+  }
+
+  // Keep the modal open on failure so the entered values (and the error) stay visible.
+  if (!vm.providerError.value) {
+    providerModalOpen.value = false
+    editingProvider.value = null
+  }
+}
 </script>
 
 <style scoped>

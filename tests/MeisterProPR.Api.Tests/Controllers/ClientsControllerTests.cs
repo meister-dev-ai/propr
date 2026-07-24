@@ -959,6 +959,32 @@ public sealed class ClientsControllerTests(ClientsControllerTests.ClientsApiFact
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
     }
 
+    [Fact]
+    public async Task PatchClient_ReviewPassWithConfiguredLogicalModel_Returns200()
+    {
+        var seeded = await this.SeedClientWithConnectionAsync("review-pass-logical-ok");
+        await this.SeedClientLogicalModelAsync(seeded.ClientId, "deep-review", seeded.ChatModelId);
+
+        var response = await this.PatchReviewPassesWithLogicalModelAsync(seeded.ClientId, "deep-review");
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var body = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        var passes = body.RootElement.GetProperty("reviewPasses").EnumerateArray().ToList();
+        Assert.Single(passes);
+        Assert.Equal("deep-review", passes[0].GetProperty("logicalModelName").GetString());
+    }
+
+    [Fact]
+    public async Task PatchClient_ReviewPassWithUnknownLogicalModel_Returns400()
+    {
+        var seeded = await this.SeedClientWithConnectionAsync("review-pass-logical-unknown");
+
+        // No logical model of this name is configured for the client, so ValidateReviewPassModelsAsync must reject it.
+        var response = await this.PatchReviewPassesWithLogicalModelAsync(seeded.ClientId, "does-not-exist");
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+    }
+
     private async Task<HttpResponseMessage> PatchReviewPassesAsync(Guid clientId, Guid configuredModelId)
     {
         var client = factory.CreateClient();
@@ -970,6 +996,41 @@ public sealed class ClientsControllerTests(ClientsControllerTests.ClientsApiFact
                 reviewPasses = new[] { new { ordinal = 0, configuredModelId } },
             });
         return await client.SendAsync(request);
+    }
+
+    private async Task<HttpResponseMessage> PatchReviewPassesWithLogicalModelAsync(Guid clientId, string logicalModelName)
+    {
+        var client = factory.CreateClient();
+        using var request = new HttpRequestMessage(HttpMethod.Patch, $"/clients/{clientId}");
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", factory.GenerateAdminToken());
+        request.Content = JsonContent.Create(
+            new
+            {
+                reviewPasses = new[] { new { ordinal = 0, logicalModelName } },
+            });
+        return await client.SendAsync(request);
+    }
+
+    private async Task SeedClientLogicalModelAsync(Guid clientId, string name, Guid configuredModelId)
+    {
+        using var scope = factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<MeisterProPRDbContext>();
+        var now = DateTimeOffset.UtcNow;
+        db.LogicalModelOverrides.Add(
+            new LogicalModelOverrideRecord
+            {
+                Id = Guid.NewGuid(),
+                ClientId = clientId,
+                Name = name,
+                Capability = AiOperationKind.Chat,
+                ConnectionId = Guid.NewGuid(),
+                ConfiguredModelId = configuredModelId,
+                ReasoningEffort = ReviewReasoningEffort.None,
+                ProtocolMode = AiProtocolMode.Auto,
+                CreatedAt = now,
+                UpdatedAt = now,
+            });
+        await db.SaveChangesAsync();
     }
 
     private async Task<(Guid ClientId, Guid ChatModelId, Guid EmbeddingModelId)> SeedClientWithConnectionAsync(string slug)
@@ -1126,6 +1187,8 @@ public sealed class ClientsControllerTests(ClientsControllerTests.ClientsApiFact
                         MeisterProPR.Infrastructure.Repositories.ClientTokenUsageRepository>();
                 services.AddScoped<IClientAdoOrganizationScopeRepository, ClientAdoOrganizationScopeRepository>();
                 services.AddScoped<IAiConnectionRepository, AiConnectionRepository>();
+                services.AddScoped<ILogicalModelCapabilityValidator, LogicalModelCapabilityValidator>();
+                services.AddScoped<ILogicalModelCatalogRepository, LogicalModelCatalogRepository>();
 
                 // IUserRepository stub (GetClients now injects it for non-admin JWT users)
                 var userRepo = Substitute.For<IUserRepository>();

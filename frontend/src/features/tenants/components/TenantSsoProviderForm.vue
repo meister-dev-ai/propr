@@ -3,16 +3,11 @@
 <!-- This file implements commercial-only functionality. A commercial license is required to activate or use that functionality. -->
 
 <template>
-  <section class="section-card tenant-provider-form-card">
-    <div class="section-card-header">
-      <div>
-        <h3>Add Provider</h3>
-        <p class="section-subtitle">Configure a tenant-scoped provider and optional first-sign-in policy.</p>
-      </div>
-    </div>
-
-    <div class="section-card-body">
-      <form data-testid="provider-submit" class="tenant-provider-form" @submit.prevent="handleSubmit">
+  <form data-testid="provider-submit" class="tenant-provider-form" @submit.prevent="handleSubmit">
+      <p class="section-subtitle tenant-provider-intro">
+        Configure a tenant-scoped single sign-on (SSO) identity provider for authentication, and its optional
+        first-sign-in policy.
+      </p>
         <div v-if="redirectUri" class="form-field tenant-provider-redirect-field">
           <label for="tenant-provider-redirect-uri">Redirect URI</label>
           <input
@@ -90,26 +85,27 @@
 
         <div class="form-actions">
           <button class="btn-primary btn-sm" type="submit" :disabled="busy">
-            {{ busy ? 'Saving…' : 'Add provider' }}
+            {{ busy ? 'Saving…' : provider ? 'Save changes' : 'Add SSO provider' }}
           </button>
         </div>
-      </form>
-    </div>
-  </section>
+  </form>
 </template>
 
 <script setup lang="ts">
-import { reactive } from 'vue'
-import type { TenantSsoProviderInput } from '@/services/tenantSsoProvidersService'
+import { reactive, watch } from 'vue'
+import type { TenantSsoProviderDto, TenantSsoProviderInput } from '@/services/tenantSsoProvidersService'
 
 const props = withDefaults(defineProps<{
   busy?: boolean
   error?: string
   redirectUri?: string
+  // When set, the form edits this provider (prefilled); when null it creates a new one.
+  provider?: TenantSsoProviderDto | null
 }>(), {
   busy: false,
   error: '',
   redirectUri: '',
+  provider: null,
 })
 
 const emit = defineEmits<{
@@ -162,11 +158,31 @@ function handleSubmit() {
     isEnabled: form.isEnabled,
     autoCreateUsers: form.autoCreateUsers,
   })
-
-  if (!props.busy) {
-    resetForm()
-  }
 }
+
+// Prefill from the provider being edited, or reset to defaults for a new one. The client secret is never
+// returned, so it stays blank on edit (a blank secret keeps the stored one).
+watch(
+  () => props.provider,
+  (provider) => {
+    if (!provider) {
+      resetForm()
+      return
+    }
+
+    form.displayName = provider.displayName
+    form.providerKind = provider.providerKind
+    form.protocolKind = provider.protocolKind
+    form.issuerOrAuthorityUrl = provider.issuerOrAuthorityUrl ?? ''
+    form.clientId = provider.clientId
+    form.clientSecret = ''
+    form.scopes = provider.scopes.join(', ')
+    form.allowedEmailDomains = provider.allowedEmailDomains.join(', ')
+    form.isEnabled = provider.isEnabled
+    form.autoCreateUsers = provider.autoCreateUsers
+  },
+  { immediate: true },
+)
 </script>
 
 <style scoped>

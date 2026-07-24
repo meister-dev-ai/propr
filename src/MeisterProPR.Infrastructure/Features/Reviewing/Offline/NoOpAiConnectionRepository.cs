@@ -17,6 +17,16 @@ public sealed class NoOpAiConnectionRepository : IAiConnectionRepository
         return Task.FromResult<IReadOnlyList<AiConnectionDto>>([]);
     }
 
+    public Task<IReadOnlyList<AiConnectionDto>> GetByTenantAsync(Guid tenantId, CancellationToken ct = default)
+    {
+        return Task.FromResult<IReadOnlyList<AiConnectionDto>>([]);
+    }
+
+    public Task<AiConnectionDto> AddTenantAsync(Guid tenantId, AiConnectionWriteRequestDto request, CancellationToken ct = default)
+    {
+        throw new NotSupportedException("Offline Reviewing composition does not persist AI connection profiles.");
+    }
+
     public Task<AiConnectionDto?> GetActiveForClientAsync(Guid clientId, CancellationToken ct = default)
     {
         return Task.FromResult<AiConnectionDto?>(null);

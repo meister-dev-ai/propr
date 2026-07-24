@@ -1,35 +1,70 @@
 <template>
-  <div class="section-card ai-connections-tab">
-    <div class="section-card-header ai-connections-header">
-      <div>
-        <h3>AI Providers</h3>
-        <p class="muted ai-connections-subtitle">
-          Configure one provider profile, discover or enter models, bind them to product purposes, verify, then activate.
+  <div class="ai-config-tab">
+    <!-- The subnavigation lives in the client sidebar (like the SCM-provider detail), so entering the AI
+         area swaps the left menu instead of nesting a second column inside the content. It is teleported only
+         while this tab is active, so it never leaks into the sidebar of another tab. -->
+    <Teleport to="#provider-sidebar-target">
+      <div v-if="active" class="sidebar-nav ai-config-subnav">
+        <button type="button" class="back-link ai-config-back" @click="emit('exit')">
+          <i class="fi fi-rr-arrow-left"></i> Back to configuration
+        </button>
+        <div class="sidebar-nav-group">
+          <h4>AI configuration</h4>
+          <button type="button" class="sidebar-nav-link" :class="{ active: subView === 'connections' }" data-testid="ai-subnav-connections" @click="subView = 'connections'">
+            <i class="fi fi-rr-plug"></i> Connections
+          </button>
+          <button type="button" class="sidebar-nav-link" :class="{ active: subView === 'logical-models' }" data-testid="ai-subnav-logical-models" @click="subView = 'logical-models'">
+            <i class="fi fi-rr-cube"></i> Logical models
+          </button>
+          <button type="button" class="sidebar-nav-link" :class="{ active: subView === 'purposes' }" data-testid="ai-subnav-purposes" @click="subView = 'purposes'">
+            <i class="fi fi-rr-bullseye-pointer"></i> Purposes
+          </button>
+          <button type="button" class="sidebar-nav-link" :class="{ active: subView === 'passes' }" data-testid="ai-subnav-passes" @click="subView = 'passes'">
+            <i class="fi fi-rr-layers"></i> Review passes
+          </button>
+        </div>
+      </div>
+    </Teleport>
+
+    <div class="ai-config-content">
+        <section v-show="subView === 'connections'" class="section-card ai-connections-tab">
+          <div class="section-card-header ai-connections-header">
+            <div>
+              <h3>Connections</h3>
+              <p class="muted ai-connections-subtitle">
+                Configure a provider profile, discover or enter its models, verify, then activate. Models are assigned to purposes and passes from the other sections.
+              </p>
+            </div>
+            <div class="ai-toolbar">
+              <button class="btn-secondary btn-sm" :disabled="loading" @click="refreshProfiles">Refresh</button>
+              <button class="btn-primary btn-sm" @click="openCreateEditor">Add Profile</button>
+            </div>
+          </div>
+
+          <div v-if="loading && profiles.length === 0" class="section-card-body">
+            <p class="muted">Loading AI providers…</p>
+          </div>
+          <div v-else class="section-card-body ai-shell">
+            <p v-if="loadError" class="error">{{ loadError }}</p>
+
+      <div class="ai-list-shell">
+        <p v-if="profiles.length === 0" class="muted ai-list-empty" data-testid="ai-connections-empty">
+          No AI connections yet. Use <strong>Add Profile</strong> to create one.
         </p>
-      </div>
-      <div class="ai-toolbar">
-        <button class="btn-secondary btn-sm" :disabled="loading" @click="refreshProfiles">Refresh</button>
-        <button class="btn-primary btn-sm" @click="openCreateEditor">Add Profile</button>
-      </div>
-    </div>
-
-    <div v-if="loading && profiles.length === 0" class="section-card-body">
-      <p class="muted">Loading AI providers…</p>
-    </div>
-    <div v-else class="section-card-body ai-shell">
-      <p v-if="loadError" class="error">{{ loadError }}</p>
-
-      <div v-if="showListView" class="ai-list-shell">
-        <p class="muted ai-list-hint">
+        <p v-else class="muted ai-list-hint">
           Select a profile to inspect its bindings, verification state, and provider details.
         </p>
 
-        <div class="ai-profile-list">
+        <div v-if="profiles.length > 0" class="ai-profile-list">
           <article
             v-for="profile in profiles"
             :key="profile.id"
             class="ai-profile-card"
+            role="button"
+            tabindex="0"
             @click="openEditEditor(profile)"
+            @keydown.enter="openEditEditor(profile)"
+            @keydown.space.prevent="openEditEditor(profile)"
           >
             <div class="ai-profile-card-header">
               <div>
@@ -97,20 +132,19 @@
         </div>
       </div>
 
-      <div v-else class="ai-detail-shell">
-        <div v-if="profiles.length > 0" class="ai-detail-nav">
-          <button class="btn-secondary btn-sm" @click="goBackToList">Back to list</button>
-          <p class="muted ai-detail-nav-copy">
-            {{ editor.mode === 'edit' ? 'Editing the selected AI provider.' : 'Creating a new AI provider.' }}
-          </p>
-        </div>
-
+      <ModalDialog
+        :isOpen="!showListView"
+        :title="editor.mode === 'edit' ? 'Edit AI provider' : 'Add AI provider'"
+        @update:isOpen="open => { if (!open) { goBackToList() } }"
+      >
+      <div class="ai-detail-shell">
         <div class="ai-editor-card">
           <div class="ai-editor-header">
             <div>
               <h4>{{ editor.mode === 'edit' ? 'Edit AI Provider' : 'Create AI Provider' }}</h4>
               <p class="muted">
-                Bind one or more configured models to the review, memory, and embedding purposes MeisterProPR uses at runtime.
+                Configure the provider connection and its models. Assign those models to purposes and review passes
+                from the Purposes and Review passes sections.
               </p>
             </div>
           </div>
@@ -306,51 +340,11 @@
             </div>
           </div>
 
-          <div class="ai-subsection">
-            <div class="ai-subsection-header">
-              <div>
-                <h5>Purpose Bindings</h5>
-                <p class="muted">Each runtime purpose resolves through one enabled binding on the active profile.</p>
-              </div>
-            </div>
-
-            <div class="ai-binding-editor-grid compact-bindings">
-              <template v-for="section in purposeSectionOrder" :key="section">
-                <div v-if="bindingsForSection(editor.bindings, section).length" class="ai-binding-section-header">
-                  {{ purposeSectionLabels[section] }}
-                </div>
-                <div v-for="binding in bindingsForSection(editor.bindings, section)" :key="binding.purpose" class="ai-binding-row compact-binding-row" :class="{'is-disabled': !binding.isEnabled}">
-                  <div class="binding-header">
-                    <label class="checkbox-field binding-enable-toggle">
-                      <input v-model="binding.isEnabled" type="checkbox" />
-                      <strong>{{ purposeLabel(binding.purpose) }}</strong>
-                    </label>
-                    <p class="muted binding-desc">{{ purposeDescription(binding.purpose) }}</p>
-                  </div>
-
-                  <div class="binding-controls">
-                    <label class="form-field">
-                      <span style="font-size: 0.8rem;">Model</span>
-                      <select v-model="binding.configuredModelId" :disabled="!binding.isEnabled" class="form-input-sm">
-                        <option value="">Select a model</option>
-                        <option v-for="model in modelsForPurpose(binding.purpose)" :key="model.localId" :value="model.localId">
-                          {{ model.remoteModelId || model.displayName || 'Unnamed model' }}
-                        </option>
-                      </select>
-                    </label>
-
-                    <label class="form-field">
-                      <span style="font-size: 0.8rem;">Protocol</span>
-                      <select v-model="binding.protocolMode" :disabled="!binding.isEnabled" class="form-input-sm">
-                        <option v-for="option in protocolOptions(binding.purpose)" :key="option.value" :value="option.value">
-                          {{ option.label }}
-                        </option>
-                      </select>
-                    </label>
-                  </div>
-                </div>
-              </template>
-            </div>
+          <div class="ai-subsection ai-purposes-hint">
+            <p class="muted">
+              Models are assigned to product purposes and review passes from the <strong>Purposes</strong> and
+              <strong>Review passes</strong> sections — through named logical models, no longer per connection.
+            </p>
           </div>
 
           <div v-if="editor.mode === 'edit' && selectedProfile" class="ai-subsection">
@@ -395,29 +389,48 @@
           </div>
         </div>
       </div>
+      </ModalDialog>
 
-      <!-- The ordered review-pass list edits the same client, so it sits at the bottom of the config
-           content — below the provider list / purpose bindings — where a provider's configured models
-           already exist to bind passes to. -->
-      <div v-if="clientDetailVm" class="ai-review-passes-section">
-        <ClientReviewPassesEditor
-          :model-value="clientDetailVm.editedReviewPasses.value"
-          :connections="profiles"
-          @update:model-value="onReviewPassesUpdate"
-        />
-        <div class="ai-review-passes-actions">
-          <button
-            class="btn-primary btn-sm"
-            type="button"
-            data-testid="review-passes-save"
-            :disabled="!clientDetailVm.isAdvancedSettingsButtonEnabled()"
-            @click="clientDetailVm.saveAdvancedSettings()"
-          >
-            Save review passes
-          </button>
-          <span v-if="clientDetailVm.saveError.value" class="error">{{ clientDetailVm.saveError.value }}</span>
-        </div>
-      </div>
+          </div>
+        </section>
+
+        <section v-show="subView === 'logical-models'" class="section-card ai-config-pane">
+          <div class="section-card-body">
+            <ClientLogicalModelsSection :client-id="clientId" :connections="profiles" />
+          </div>
+        </section>
+
+        <section v-show="subView === 'purposes'" class="section-card ai-config-pane">
+          <div class="section-card-body">
+            <ClientPurposeRolesSection :client-id="clientId" />
+          </div>
+        </section>
+
+        <section v-show="subView === 'passes'" class="section-card ai-config-pane">
+          <div class="section-card-body">
+            <div v-if="clientDetailVm" class="ai-review-passes-section">
+              <ClientReviewPassesEditor
+                :model-value="clientDetailVm.editedReviewPasses.value"
+                :connections="profiles"
+                :logical-models="effectiveLogicalModels"
+                @update:model-value="onReviewPassesUpdate"
+              />
+              <div class="ai-review-passes-actions">
+                <button
+                  class="btn-primary btn-sm"
+                  type="button"
+                  data-testid="review-passes-save"
+                  :disabled="!clientDetailVm.isAdvancedSettingsButtonEnabled()"
+                  @click="clientDetailVm.saveAdvancedSettings()"
+                >
+                  Save review passes
+                </button>
+                <span v-if="clientDetailVm.saveError.value" class="error">{{ clientDetailVm.saveError.value }}</span>
+              </div>
+            </div>
+            <p v-else class="muted">Review passes are configured from the client detail view.</p>
+          </div>
+        </section>
     </div>
 
     <ConfirmDialog
@@ -430,43 +443,77 @@
 </template>
 
 <script setup lang="ts">
-import { inject } from 'vue'
+import { inject, onMounted, ref, watch } from 'vue'
 import ConfirmDialog from '@/components/dialogs/ConfirmDialog.vue'
+import ModalDialog from '@/components/dialogs/ModalDialog.vue'
 import ClientReviewPassesEditor from './ClientReviewPassesEditor.vue'
+import ClientLogicalModelsSection from './ClientLogicalModelsSection.vue'
+import ClientPurposeRolesSection from './ClientPurposeRolesSection.vue'
+import { listEffectiveForClient, type LogicalModelResponse } from '@/services/logicalModelsService'
 import { ClientDetailVmKey, type ReviewPassEntry } from '@/features/clients/view-models/useClientDetailViewModel'
 import {
   authModeLabel,
   authOptionsForProvider,
   enabledBindings,
-  protocolOptionLabels,
-  protocolOptions,
   providerLabel,
   providerOptions,
-  purposeDescription,
   purposeLabel,
-  purposeOptions,
-  purposeSectionLabels,
-  purposeSectionOrder,
   verificationChipClass,
   verificationLabel,
-  type PurposeSection,
 } from './aiConnectionsFormatters'
 import { useClientAiConnectionsTab } from './useClientAiConnectionsTab'
 
-const props = defineProps<{
-  clientId: string
-}>()
+const props = withDefaults(
+  defineProps<{
+    clientId: string
+    // Whether the AI Providers tab is the active client tab. The subnavigation teleports into the client
+    // sidebar only while active, so it never appears in another tab's sidebar.
+    active?: boolean
+  }>(),
+  { active: false },
+)
+
+// exit: the user left the AI area via the subnav's back link, so the parent restores the client's own navigation.
+// update:isDetailOpen: this tab owns the client sidebar while active (its subnav teleports into the shared target),
+// the same upward signal the SCM-provider and webhook tabs emit — so the parent hides its default navigation without
+// having to know which tab is active.
+const emit = defineEmits<{ exit: []; 'update:isDetailOpen': [value: boolean] }>()
+
+// Mirror the active state up as the sidebar-ownership signal (immediate so the initial state is correct on mount).
+watch(() => props.active, (value) => emit('update:isDetailOpen', value), { immediate: true })
 
 // The ordered review-pass list is owned by the shared client-detail view-model (persisted via the
 // client PATCH). It is optional so this tab still mounts standalone; the editor renders only when the
 // parent detail view provides the view-model.
 const clientDetailVm = inject(ClientDetailVmKey, null)
 
+// The AI configuration surface is split into a left subnavigation whose views follow the dependency
+// pipeline: connections define credentials + models, logical models name roles over them, and purposes
+// and passes consume those roles.
+type AiConfigView = 'connections' | 'logical-models' | 'purposes' | 'passes'
+const subView = ref<AiConfigView>('connections')
+
 const onReviewPassesUpdate = (passes: ReviewPassEntry[]) => {
   if (clientDetailVm) {
     clientDetailVm.editedReviewPasses.value = passes
   }
 }
+
+// The pass editor offers the client's logical models (its overrides plus the inherited tenant catalog) as the
+// primary per-pass model source. Fetch them once for this client; a failure just leaves the picker empty, so
+// every pass falls back to a raw connection + model.
+const effectiveLogicalModels = ref<LogicalModelResponse[]>([])
+
+const loadEffectiveLogicalModels = async () => {
+  try {
+    effectiveLogicalModels.value = await listEffectiveForClient(props.clientId)
+  } catch {
+    effectiveLogicalModels.value = []
+  }
+}
+
+onMounted(loadEffectiveLogicalModels)
+watch(() => props.clientId, loadEffectiveLogicalModels)
 
 const {
   profiles,
@@ -484,7 +531,6 @@ const {
   editor,
   showListView,
   selectedProfile,
-  modelsForPurpose,
   refreshProfiles,
   resetEditor,
   openCreateEditor,
@@ -501,16 +547,24 @@ const {
   confirmDelete,
   handleDelete,
 } = useClientAiConnectionsTab(props)
-
-// Group the purpose-binding rows by section so the editor list stays readable as purposes grow.
-const purposeSectionByValue: Record<string, PurposeSection> = Object.fromEntries(
-  purposeOptions.map((option) => [option.value, option.section]),
-)
-const bindingsForSection = <T extends { purpose: string }>(bindings: T[], section: PurposeSection): T[] =>
-  bindings.filter((binding) => purposeSectionByValue[binding.purpose] === section)
 </script>
 
 <style scoped>
+/* The subnavigation is teleported into the client sidebar; give its back link the same spacing the
+   SCM-provider detail uses so the swapped menu reads consistently. */
+.ai-config-back {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  background: none;
+  border: none;
+  padding: 0;
+  margin-bottom: 1.5rem;
+  cursor: pointer;
+  text-align: left;
+  color: var(--color-text-muted);
+}
+
 .ai-connections-header {
   align-items: flex-start;
   gap: 1rem;

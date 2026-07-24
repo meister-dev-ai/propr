@@ -29,7 +29,6 @@ import type { EditableBinding, EditableModel } from './aiConnectionsForm.types'
 import {
   makeBindingDefaults,
   parseMapText,
-  purposeLabel,
   serializeMap,
   verificationLabel,
 } from './aiConnectionsFormatters'
@@ -69,7 +68,7 @@ export function useClientAiConnectionsTab(props: { clientId: string }) {
     bindings: [] as EditableBinding[],
   })
 
-  const showListView = computed(() => profiles.value.length > 0 && viewMode.value === 'list')
+  const showListView = computed(() => viewMode.value === 'list')
   const selectedProfile = computed(() => profiles.value.find((profile) => profile.id === editor.profileId) ?? null)
 
   const modelsForPurpose = (purpose: AiPurpose) => {
@@ -80,14 +79,11 @@ export function useClientAiConnectionsTab(props: { clientId: string }) {
     loading.value = true
     loadError.value = ''
     try {
-      const loadedProfiles = await listAiConnections(props.clientId)
-      profiles.value = loadedProfiles
+      profiles.value = await listAiConnections(props.clientId)
 
-      if (loadedProfiles.length === 0)
-      {
-        viewMode.value = 'detail'
-      }
-      else if (viewMode.value !== 'detail')
+      // Always land on the list (even when empty — it shows an empty state), never jump straight into the
+      // create form. Stay in the editor only if the user was mid-edit when the refresh happened.
+      if (viewMode.value !== 'detail')
       {
         viewMode.value = 'list'
       }
@@ -110,7 +106,9 @@ export function useClientAiConnectionsTab(props: { clientId: string }) {
     editor.defaultHeadersText = ''
     editor.defaultQueryParamsText = ''
     editor.models = []
-    editor.bindings = makeBindingDefaults()
+    // Purpose bindings are retired from this form (purposes are assigned through the logical-model purpose
+    // map), so a new connection starts with them all disabled.
+    editor.bindings = makeBindingDefaults().map((binding) => ({ ...binding, isEnabled: false }))
     saveError.value = ''
     discoveryMessage.value = ''
     advancedSettingsOpen.value = false
@@ -370,12 +368,8 @@ export function useClientAiConnectionsTab(props: { clientId: string }) {
       }
     }
 
-    for (const binding of editor.bindings) {
-      if (binding.isEnabled && !binding.configuredModelId) {
-        return `${purposeLabel(binding.purpose)} requires a selected model.`
-      }
-    }
-
+    // Purpose bindings are no longer configured on the connection form (they moved to the logical-model
+    // purpose map), so they are not validated here.
     return ''
   }
 

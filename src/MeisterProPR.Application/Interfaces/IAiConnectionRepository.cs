@@ -12,6 +12,9 @@ public interface IAiConnectionRepository
     /// <summary>Returns all AI connection profiles for the given client.</summary>
     Task<IReadOnlyList<AiConnectionDto>> GetByClientAsync(Guid clientId, CancellationToken ct = default);
 
+    /// <summary>Returns all tenant-scoped AI connection profiles for the given tenant (inherited by its clients).</summary>
+    Task<IReadOnlyList<AiConnectionDto>> GetByTenantAsync(Guid tenantId, CancellationToken ct = default);
+
     /// <summary>Returns the active AI connection profile for the given client, or null if none is active.</summary>
     Task<AiConnectionDto?> GetActiveForClientAsync(Guid clientId, CancellationToken ct = default);
 
@@ -20,6 +23,9 @@ public interface IAiConnectionRepository
 
     /// <summary>Adds a new AI connection profile. Returns the created DTO.</summary>
     Task<AiConnectionDto> AddAsync(Guid clientId, AiConnectionWriteRequestDto request, CancellationToken ct = default);
+
+    /// <summary>Adds a new tenant-scoped AI connection profile (inherited by the tenant's clients). Returns the created DTO.</summary>
+    Task<AiConnectionDto> AddTenantAsync(Guid tenantId, AiConnectionWriteRequestDto request, CancellationToken ct = default);
 
     /// <summary>Replaces the persisted content of an existing AI connection profile.</summary>
     Task<bool> UpdateAsync(Guid connectionId, AiConnectionWriteRequestDto request, CancellationToken ct = default);

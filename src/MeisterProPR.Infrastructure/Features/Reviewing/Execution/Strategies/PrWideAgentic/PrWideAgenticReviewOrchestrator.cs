@@ -143,7 +143,8 @@ public sealed partial class PrWideAgenticReviewOrchestrator(
                 null,
                 AiConnectionModelCategory.HighEffort,
                 modelId,
-                ct);
+                ct,
+                logicalModelName: prWideContext.LogicalModelName);
 
             return (true, CloneContext(prWideContext, protocolId, prWideContext.ProtocolRecorder));
         }
@@ -279,7 +280,8 @@ public sealed partial class PrWideAgenticReviewOrchestrator(
                     null,
                     AiConnectionModelCategory.HighEffort,
                     runtime.Model.RemoteModelId,
-                    ct);
+                    ct,
+                    logicalModelName: runtime.LogicalModelName);
                 passContext = CloneContext(passContext, protocolId, passContext.ProtocolRecorder);
                 ownsProtocolPass = true;
             }
@@ -1965,6 +1967,7 @@ public sealed partial class PrWideAgenticReviewOrchestrator(
             PromptOverrides = source.PromptOverrides,
             TierChatClient = source.TierChatClient,
             ModelId = source.ModelId,
+            LogicalModelName = source.LogicalModelName,
             DefaultReviewChatClient = source.DefaultReviewChatClient,
             DefaultReviewModelId = source.DefaultReviewModelId,
             RuntimeCapabilities = source.RuntimeCapabilities,

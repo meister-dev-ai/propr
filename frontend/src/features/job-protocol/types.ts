@@ -59,6 +59,7 @@ export interface ProtocolInheritance {
 export interface TokenBreakdownEntry {
     connectionCategory: number | string | null
     modelId: string | null
+    logicalModelName?: string | null
     totalInputTokens: number
     totalOutputTokens: number
     totalCachedInputTokens?: number | null

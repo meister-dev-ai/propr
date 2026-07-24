@@ -32,6 +32,9 @@ public sealed class MeisterProPRDbContext(DbContextOptions<MeisterProPRDbContext
     /// <summary>Ordered per-client review-pass list entries.</summary>
     public DbSet<ClientReviewPassRecord> ClientReviewPasses => this.Set<ClientReviewPassRecord>();
 
+    /// <summary>Per-client mappings from an internal AI purpose to a named logical model.</summary>
+    public DbSet<ClientPurposeLogicalModelRecord> ClientPurposeLogicalModels => this.Set<ClientPurposeLogicalModelRecord>();
+
     /// <summary>Review jobs table.</summary>
     public DbSet<ReviewJob> ReviewJobs => this.Set<ReviewJob>();
 
@@ -104,6 +107,12 @@ public sealed class MeisterProPRDbContext(DbContextOptions<MeisterProPRDbContext
 
     /// <summary>Latest verification snapshots for provider-neutral AI connection profiles.</summary>
     public DbSet<AiVerificationSnapshotRecord> AiVerificationSnapshots => this.Set<AiVerificationSnapshotRecord>();
+
+    /// <summary>Tenant-catalog logical models (named model roles mapped to a connection + configured model).</summary>
+    public DbSet<LogicalModelRecord> LogicalModels => this.Set<LogicalModelRecord>();
+
+    /// <summary>Per-client overrides of logical models (shadow the tenant-catalog entry of the same name).</summary>
+    public DbSet<LogicalModelOverrideRecord> LogicalModelOverrides => this.Set<LogicalModelOverrideRecord>();
 
     /// <summary>Repository-scope filters for crawl configurations.</summary>
     public DbSet<CrawlRepoFilterRecord> CrawlRepoFilters => this.Set<CrawlRepoFilterRecord>();

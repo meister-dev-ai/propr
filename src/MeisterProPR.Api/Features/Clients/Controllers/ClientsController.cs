@@ -43,7 +43,8 @@ public sealed class ClientsController(
             client.EnableMultiPassUnion,
             client.IncludeLinkedItemsInContext,
             client.ReviewPassesOrEmpty
-                .Select(pass => new ReviewPassEntry(pass.Ordinal, pass.ConfiguredModelId, pass.Lens, pass.Scope, pass.Shadow, pass.ReasoningEffort))
+                .Select(pass => new ReviewPassEntry(
+                    pass.Ordinal, pass.ConfiguredModelId, pass.Lens, pass.Scope, pass.Shadow, pass.ReasoningEffort, pass.LogicalModelName))
                 .ToList(),
             client.BaselineReasoningEffort,
             client.TenantId,
@@ -80,6 +81,7 @@ public sealed class ClientsController(
         Guid clientId,
         IReadOnlyList<ReviewPassEntry>? reviewPasses,
         IAiConnectionRepository aiConnectionRepository,
+        ILogicalModelCatalogRepository logicalModelCatalog,
         CancellationToken ct)
     {
         if (reviewPasses is not { Count: > 0 })
@@ -87,8 +89,25 @@ public sealed class ClientsController(
             return null;
         }
 
+        HashSet<string>? validRoleNames = null;
         foreach (var pass in reviewPasses)
         {
+            // A name-based pass must reference a logical model configured for this client (a per-client override or a
+            // tenant-catalog entry). Legacy passes must reference a chat-capable configured model on the client.
+            if (!string.IsNullOrWhiteSpace(pass.LogicalModelName))
+            {
+                validRoleNames ??= await this.LoadClientRoleNamesAsync(clientId, logicalModelCatalog, ct);
+                if (!validRoleNames.Contains(pass.LogicalModelName))
+                {
+                    this.ModelState.AddModelError(
+                        nameof(PatchClientRequest.ReviewPasses),
+                        $"Review pass logical model '{pass.LogicalModelName}' is not configured for this client.");
+                    return this.ValidationProblem();
+                }
+
+                continue;
+            }
+
             var binding = await aiConnectionRepository.GetModelBindingAsync(clientId, pass.ConfiguredModelId, ct);
             if (binding is null)
             {
@@ -100,6 +119,18 @@ public sealed class ClientsController(
         }
 
         return null;
+    }
+
+    private async Task<HashSet<string>> LoadClientRoleNamesAsync(
+        Guid clientId,
+        ILogicalModelCatalogRepository logicalModelCatalog,
+        CancellationToken ct)
+    {
+        var overrides = await logicalModelCatalog.GetClientOverridesAsync(clientId, ct);
+        var tenantEntries = await logicalModelCatalog.GetTenantEntriesForClientAsync(clientId, ct);
+        return overrides.Select(entry => entry.Name)
+            .Concat(tenantEntries.Select(entry => entry.Name))
+            .ToHashSet(StringComparer.Ordinal);
     }
 
     /// <summary>
@@ -310,6 +341,7 @@ public sealed class ClientsController(
         [FromBody] PatchClientRequest request,
         [FromServices] IValidator<PatchClientRequest> validator,
         [FromServices] IAiConnectionRepository aiConnectionRepository,
+        [FromServices] ILogicalModelCatalogRepository logicalModelCatalog,
         CancellationToken ct = default)
     {
         var auth = this.RequireClientAccess(clientId, ClientRole.ClientAdministrator);
@@ -324,7 +356,7 @@ public sealed class ClientsController(
             return validation;
         }
 
-        var reviewPassValidation = await this.ValidateReviewPassModelsAsync(clientId, request.ReviewPasses, aiConnectionRepository, ct);
+        var reviewPassValidation = await this.ValidateReviewPassModelsAsync(clientId, request.ReviewPasses, aiConnectionRepository, logicalModelCatalog, ct);
         if (reviewPassValidation is not null)
         {
             return reviewPassValidation;
@@ -356,7 +388,8 @@ public sealed class ClientsController(
             request.EnableMultiPassUnion,
             request.IncludeLinkedItemsInContext,
             request.ReviewPasses?
-                .Select(pass => new ReviewPassDto(pass.Ordinal, pass.ConfiguredModelId, pass.Lens, pass.Scope, pass.Shadow, pass.ReasoningEffort))
+                .Select(pass => new ReviewPassDto(
+                    pass.Ordinal, pass.ConfiguredModelId, pass.Lens, pass.Scope, pass.Shadow, pass.ReasoningEffort, pass.LogicalModelName))
                 .ToList(),
             request.BaselineReasoningEffort,
             request.BudgetConfig,
@@ -401,8 +434,14 @@ public sealed record ClientResponse(
 /// </param>
 /// <param name="Shadow">Whether this pass runs in shadow mode. Additive metadata the runtime does not act on yet.</param>
 /// <param name="ReasoningEffort">
-///     Reasoning effort this pass asks the model to spend. <see cref="ReviewReasoningEffort.None" /> (default) sends no
-///     effort level (current behavior); low/medium/high enable reasoning at the corresponding level.
+///     Reasoning effort this pass asks the model to spend, for a legacy <paramref name="ConfiguredModelId" /> pass.
+///     <see cref="ReviewReasoningEffort.None" /> (default) sends no effort level; low/medium/high enable reasoning.
+///     Ignored for a <paramref name="LogicalModelName" /> pass — its effort comes from the logical model.
+/// </param>
+/// <param name="LogicalModelName">
+///     The named logical model this pass runs on (its connection, model, reasoning effort, and protocol come from the
+///     resolved role). When set, it takes precedence and <paramref name="ConfiguredModelId" /> is ignored. A pass
+///     should set exactly one of <paramref name="LogicalModelName" /> or <paramref name="ConfiguredModelId" />.
 /// </param>
 public sealed record ReviewPassEntry(
     int Ordinal,
@@ -410,7 +449,8 @@ public sealed record ReviewPassEntry(
     string? Lens = null,
     string? Scope = null,
     bool Shadow = false,
-    ReviewReasoningEffort ReasoningEffort = ReviewReasoningEffort.None);
+    ReviewReasoningEffort ReasoningEffort = ReviewReasoningEffort.None,
+    string? LogicalModelName = null);
 
 /// <summary>Crawl configuration response.</summary>
 public sealed record CrawlConfigResponse(

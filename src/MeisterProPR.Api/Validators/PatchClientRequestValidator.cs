@@ -49,9 +49,10 @@ public sealed class PatchClientRequestValidator : AbstractValidator<PatchClientR
         this.RuleFor(r => r.ReviewPasses)
             .Must(BeAValidReviewPassList)
             .WithMessage(
-                "ReviewPasses must contain at most 4 entries, each with a non-empty configuredModelId, an optional "
-                + "recognized lens, an optional recognized scope, a recognized reasoning effort, a distinct "
-                + "(configuredModelId, lens, scope, shadow) tuple, and unique, contiguous ordinals starting at 0.")
+                "ReviewPasses must contain at most 4 entries, each selecting exactly one of a non-empty "
+                + "configuredModelId or a non-empty logicalModelName, an optional recognized lens, an optional "
+                + "recognized scope, a recognized reasoning effort, a distinct (model, logicalModelName, lens, scope, "
+                + "shadow) tuple, and unique, contiguous ordinals starting at 0.")
             .When(r => r.ReviewPasses is not null);
 
         this.RuleFor(r => r.BudgetConfig)
@@ -120,7 +121,14 @@ public sealed class PatchClientRequestValidator : AbstractValidator<PatchClientR
             return false;
         }
 
-        if (passes.Any(pass => pass.ConfiguredModelId == Guid.Empty))
+        // Each pass selects exactly one model source: a non-empty configuredModelId (legacy) OR a non-empty
+        // logicalModelName (the named role) — never both, never neither.
+        if (passes.Any(pass =>
+            {
+                var hasModelId = pass.ConfiguredModelId != Guid.Empty;
+                var hasLogicalModel = !string.IsNullOrWhiteSpace(pass.LogicalModelName);
+                return hasModelId == hasLogicalModel;
+            }))
         {
             return false;
         }
@@ -147,7 +155,7 @@ public sealed class PatchClientRequestValidator : AbstractValidator<PatchClientR
         // and shadow flag twice is redundant resampling, which the ordered pass list exists to avoid. The same model
         // under a different lens/scope/shadow (e.g. a plain resample pass plus a security-lens pass on that model) is
         // allowed.
-        if (passes.Select(pass => (pass.ConfiguredModelId, pass.Lens, pass.Scope, pass.Shadow)).Distinct().Count() != passes.Count)
+        if (passes.Select(pass => (pass.ConfiguredModelId, pass.LogicalModelName, pass.Lens, pass.Scope, pass.Shadow)).Distinct().Count() != passes.Count)
         {
             return false;
         }

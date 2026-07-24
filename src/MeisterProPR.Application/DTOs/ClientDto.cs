@@ -63,4 +63,5 @@ public sealed record ReviewPassDto(
     string? Lens = null,
     string? Scope = null,
     bool Shadow = false,
-    ReviewReasoningEffort ReasoningEffort = ReviewReasoningEffort.None);
+    ReviewReasoningEffort ReasoningEffort = ReviewReasoningEffort.None,
+    string? LogicalModelName = null);

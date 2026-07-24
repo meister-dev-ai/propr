@@ -24,9 +24,13 @@ internal sealed class ClientReviewPassEntityTypeConfiguration : IEntityTypeConfi
             .HasColumnName("ordinal")
             .IsRequired();
 
+        // Nullable now: a pass binds EITHER a concrete configured model (legacy) OR a named logical model.
         builder.Property(pass => pass.ConfiguredModelId)
-            .HasColumnName("configured_model_id")
-            .IsRequired();
+            .HasColumnName("configured_model_id");
+
+        builder.Property(pass => pass.LogicalModelName)
+            .HasColumnName("logical_model_name")
+            .HasMaxLength(100);
 
         // Optional specialist lens (nullable = plain resample pass). Bounded to the short lens vocabulary.
         builder.Property(pass => pass.Lens)

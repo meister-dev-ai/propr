@@ -161,6 +161,14 @@ namespace MeisterProPR.Infrastructure.Migrations
                         .HasColumnType("bigint")
                         .HasColumnName("input_tokens");
 
+                    b.Property<string>("LogicalModelName")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)")
+                        .HasDefaultValue("")
+                        .HasColumnName("logical_model_name");
+
                     b.Property<string>("ModelId")
                         .IsRequired()
                         .HasMaxLength(256)
@@ -179,7 +187,7 @@ namespace MeisterProPR.Infrastructure.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("ClientId", "ModelId", "Date")
+                    b.HasIndex("ClientId", "ModelId", "LogicalModelName", "Date")
                         .IsUnique()
                         .HasDatabaseName("ix_client_token_usage_samples_unique");
 
@@ -1404,6 +1412,11 @@ namespace MeisterProPR.Infrastructure.Migrations
                         .HasColumnType("character varying(2048)")
                         .HasColumnName("label");
 
+                    b.Property<string>("LogicalModelName")
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)")
+                        .HasColumnName("logical_model_name");
+
                     b.Property<string>("ModelId")
                         .HasMaxLength(256)
                         .HasColumnType("character varying(256)")
@@ -1761,7 +1774,7 @@ namespace MeisterProPR.Infrastructure.Migrations
                         .HasColumnType("character varying(1000)")
                         .HasColumnName("base_url");
 
-                    b.Property<Guid>("ClientId")
+                    b.Property<Guid?>("ClientId")
                         .HasColumnType("uuid")
                         .HasColumnName("client_id");
 
@@ -1808,6 +1821,10 @@ namespace MeisterProPR.Infrastructure.Migrations
                         .HasColumnType("character varying(50)")
                         .HasColumnName("provider_kind");
 
+                    b.Property<Guid?>("TenantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("tenant_id");
+
                     b.Property<DateTimeOffset>("UpdatedAt")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("updated_at");
@@ -1822,6 +1839,10 @@ namespace MeisterProPR.Infrastructure.Migrations
                     b.HasIndex("ClientId", "DisplayName")
                         .IsUnique()
                         .HasDatabaseName("ix_ai_connection_profiles_client_id_display_name");
+
+                    b.HasIndex("TenantId", "DisplayName")
+                        .IsUnique()
+                        .HasDatabaseName("ix_ai_connection_profiles_tenant_id_display_name");
 
                     b.ToTable("ai_connection_profiles", (string)null);
                 });
@@ -2052,6 +2073,35 @@ namespace MeisterProPR.Infrastructure.Migrations
                     b.ToTable("app_users", (string)null);
                 });
 
+            modelBuilder.Entity("MeisterProPR.Infrastructure.Data.Models.ClientPurposeLogicalModelRecord", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<Guid>("ClientId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("client_id");
+
+                    b.Property<string>("LogicalModelName")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("logical_model_name");
+
+                    b.Property<int>("Purpose")
+                        .HasColumnType("integer")
+                        .HasColumnName("purpose");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ClientId", "Purpose")
+                        .IsUnique()
+                        .HasDatabaseName("ix_client_purpose_logical_models_client_purpose");
+
+                    b.ToTable("client_purpose_logical_models", (string)null);
+                });
+
             modelBuilder.Entity("MeisterProPR.Infrastructure.Data.Models.ClientRecord", b =>
                 {
                     b.Property<Guid>("Id")
@@ -2180,7 +2230,7 @@ namespace MeisterProPR.Infrastructure.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("client_id");
 
-                    b.Property<Guid>("ConfiguredModelId")
+                    b.Property<Guid?>("ConfiguredModelId")
                         .HasColumnType("uuid")
                         .HasColumnName("configured_model_id");
 
@@ -2188,6 +2238,11 @@ namespace MeisterProPR.Infrastructure.Migrations
                         .HasMaxLength(64)
                         .HasColumnType("character varying(64)")
                         .HasColumnName("lens");
+
+                    b.Property<string>("LogicalModelName")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("logical_model_name");
 
                     b.Property<int>("Ordinal")
                         .HasColumnType("integer")
@@ -2707,6 +2762,112 @@ namespace MeisterProPR.Infrastructure.Migrations
                     b.HasKey("Id");
 
                     b.ToTable("installation_edition", (string)null);
+                });
+
+            modelBuilder.Entity("MeisterProPR.Infrastructure.Data.Models.LogicalModelOverrideRecord", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<int>("Capability")
+                        .HasColumnType("integer")
+                        .HasColumnName("capability");
+
+                    b.Property<Guid>("ClientId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("client_id");
+
+                    b.Property<Guid>("ConfiguredModelId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("configured_model_id");
+
+                    b.Property<Guid>("ConnectionId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("connection_id");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("name");
+
+                    b.Property<int>("ProtocolMode")
+                        .HasColumnType("integer")
+                        .HasColumnName("protocol_mode");
+
+                    b.Property<int>("ReasoningEffort")
+                        .HasColumnType("integer")
+                        .HasColumnName("reasoning_effort");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ClientId", "Name")
+                        .IsUnique()
+                        .HasDatabaseName("ix_ai_logical_model_overrides_client_name");
+
+                    b.ToTable("ai_logical_model_overrides", (string)null);
+                });
+
+            modelBuilder.Entity("MeisterProPR.Infrastructure.Data.Models.LogicalModelRecord", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<int>("Capability")
+                        .HasColumnType("integer")
+                        .HasColumnName("capability");
+
+                    b.Property<Guid>("ConfiguredModelId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("configured_model_id");
+
+                    b.Property<Guid>("ConnectionId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("connection_id");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("name");
+
+                    b.Property<int>("ProtocolMode")
+                        .HasColumnType("integer")
+                        .HasColumnName("protocol_mode");
+
+                    b.Property<int>("ReasoningEffort")
+                        .HasColumnType("integer")
+                        .HasColumnName("reasoning_effort");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("tenant_id");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("TenantId", "Name")
+                        .IsUnique()
+                        .HasDatabaseName("ix_ai_logical_models_tenant_name");
+
+                    b.ToTable("ai_logical_models", (string)null);
                 });
 
             modelBuilder.Entity("MeisterProPR.Infrastructure.Data.Models.PremiumCapabilityOverrideRecord", b =>
@@ -3633,8 +3794,12 @@ namespace MeisterProPR.Infrastructure.Migrations
                     b.HasOne("MeisterProPR.Infrastructure.Data.Models.ClientRecord", "Client")
                         .WithMany()
                         .HasForeignKey("ClientId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
+                        .OnDelete(DeleteBehavior.Cascade);
+
+                    b.HasOne("MeisterProPR.Infrastructure.Data.Models.TenantRecord", null)
+                        .WithMany()
+                        .HasForeignKey("TenantId")
+                        .OnDelete(DeleteBehavior.Cascade);
 
                     b.Navigation("Client");
                 });
@@ -3680,6 +3845,17 @@ namespace MeisterProPR.Infrastructure.Migrations
                     b.Navigation("ConnectionProfile");
                 });
 
+            modelBuilder.Entity("MeisterProPR.Infrastructure.Data.Models.ClientPurposeLogicalModelRecord", b =>
+                {
+                    b.HasOne("MeisterProPR.Infrastructure.Data.Models.ClientRecord", "Client")
+                        .WithMany("PurposeLogicalModels")
+                        .HasForeignKey("ClientId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Client");
+                });
+
             modelBuilder.Entity("MeisterProPR.Infrastructure.Data.Models.ClientRecord", b =>
                 {
                     b.HasOne("MeisterProPR.Infrastructure.Data.Models.TenantRecord", "Tenant")
@@ -3702,8 +3878,7 @@ namespace MeisterProPR.Infrastructure.Migrations
                     b.HasOne("MeisterProPR.Infrastructure.Data.Models.AiConfiguredModelRecord", null)
                         .WithMany()
                         .HasForeignKey("ConfiguredModelId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
+                        .OnDelete(DeleteBehavior.Cascade);
 
                     b.Navigation("Client");
                 });
@@ -4072,6 +4247,8 @@ namespace MeisterProPR.Infrastructure.Migrations
                     b.Navigation("CrawlConfigurations");
 
                     b.Navigation("ProviderConnectionAuditEntries");
+
+                    b.Navigation("PurposeLogicalModels");
 
                     b.Navigation("ReviewPasses");
 

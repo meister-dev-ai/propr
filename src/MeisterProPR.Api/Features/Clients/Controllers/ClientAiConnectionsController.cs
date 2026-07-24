@@ -23,13 +23,6 @@ public sealed partial class ClientAiConnectionsController(
 
     private static readonly StringComparer ModelNameComparer = StringComparer.OrdinalIgnoreCase;
 
-    private static readonly AiPurpose[] RequiredPurposes =
-    [
-        AiPurpose.ReviewDefault,
-        AiPurpose.MemoryReconsideration,
-        AiPurpose.EmbeddingDefault,
-    ];
-
     [LoggerMessage(Level = LogLevel.Information, Message = "AI connection profile {ConnectionId} created for client {ClientId}")]
     private static partial void LogConnectionCreated(ILogger logger, Guid connectionId, Guid clientId);
 
@@ -256,23 +249,10 @@ public sealed partial class ClientAiConnectionsController(
             return this.ValidationProblem();
         }
 
+        // Verification reflects connectivity and configured-model reachability only. Whether the product's
+        // purposes are satisfied is a client-level concern resolved through logical models and the purpose map,
+        // not a per-connection binding requirement.
         var verification = await driver.VerifyAsync(ToProbeOptions(existing), ct);
-
-        if (verification.Status == AiVerificationStatus.Verified)
-        {
-            var bindingFailure = this.ValidateRequiredBindings(existing);
-            if (bindingFailure is not null)
-            {
-                verification = new AiVerificationResultDto(
-                    AiVerificationStatus.Failed,
-                    AiVerificationFailureCategory.CapabilityMismatch,
-                    bindingFailure,
-                    "Complete the Review Default, Memory Reconsideration, and Embedding Default bindings and ensure each selected model supports the bound workload.",
-                    DateTimeOffset.UtcNow,
-                    verification.Warnings,
-                    verification.DriverMetadata);
-            }
-        }
 
         await aiConnections.SaveVerificationAsync(connectionId, verification, ct);
         LogConnectionVerified(logger, connectionId, clientId, verification.Status);
@@ -315,76 +295,6 @@ public sealed partial class ClientAiConnectionsController(
             connection.Secret,
             connection.DefaultHeaders,
             connection.DefaultQueryParams);
-    }
-
-    private string? ValidateRequiredBindings(AiConnectionDto connection)
-    {
-        foreach (var purpose in RequiredPurposes)
-        {
-            var error = ValidateRequiredBinding(connection, purpose);
-            if (error is not null)
-            {
-                return error;
-            }
-        }
-
-        return null;
-    }
-
-    private static string? ValidateRequiredBinding(AiConnectionDto connection, AiPurpose purpose)
-    {
-        var binding = FindBinding(connection, purpose);
-        if (binding is null)
-        {
-            return $"Required binding '{purpose}' is missing or disabled.";
-        }
-
-        var model = connection.ConfiguredModels.FirstOrDefault(candidate => candidate.Id == binding.ConfiguredModelId)
-                    ?? connection.ConfiguredModels.FirstOrDefault(candidate =>
-                        string.Equals(candidate.RemoteModelId, binding.RemoteModelId, StringComparison.OrdinalIgnoreCase));
-        if (model is null)
-        {
-            return $"Required binding '{purpose}' references an unknown configured model.";
-        }
-
-        if (purpose == AiPurpose.EmbeddingDefault)
-        {
-            if (!model.SupportsEmbedding || string.IsNullOrWhiteSpace(model.TokenizerName) || !model.EmbeddingDimensions.HasValue)
-            {
-                return $"Binding '{purpose}' must target a model with embedding capability metadata.";
-            }
-
-            return binding.ProtocolMode is not AiProtocolMode.Auto and not AiProtocolMode.Embeddings
-                ? $"Binding '{purpose}' must use the embeddings protocol or automatic mode."
-                : null;
-        }
-
-        if (!model.SupportsChat)
-        {
-            return $"Binding '{purpose}' must target a chat-capable model.";
-        }
-
-        return binding.ProtocolMode != AiProtocolMode.Auto && !model.SupportedProtocolModes.Contains(binding.ProtocolMode)
-            ? $"Binding '{purpose}' uses protocol '{binding.ProtocolMode}' which is not supported by model '{model.RemoteModelId}'."
-            : null;
-    }
-
-    private static AiPurposeBindingDto? FindBinding(AiConnectionDto connection, AiPurpose purpose)
-    {
-        var binding = connection.PurposeBindings.FirstOrDefault(candidate => candidate.Purpose == purpose && candidate.IsEnabled);
-
-        if (binding is not null || !UsesReviewDefaultFallback(purpose))
-        {
-            return binding;
-        }
-
-        return connection.PurposeBindings.FirstOrDefault(candidate =>
-            candidate.Purpose == AiPurpose.ReviewDefault && candidate.IsEnabled);
-    }
-
-    private static bool UsesReviewDefaultFallback(AiPurpose purpose)
-    {
-        return purpose is AiPurpose.ProRVPrefilter or AiPurpose.ReviewLowEffort or AiPurpose.ReviewMediumEffort or AiPurpose.ReviewHighEffort;
     }
 
     private AiConnectionWriteRequestDto? TryBuildWriteRequest(CreateAiConnectionRequest request)

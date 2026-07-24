@@ -136,6 +136,10 @@ public sealed class ClientsControllerReviewerTests(ClientsControllerReviewerTest
                 ReplaceService(services, Substitute.For<IAssignedReviewDiscoveryService>());
                 services.AddSingleton(Substitute.For<IClientRegistry>());
 
+                // PatchClient resolves the logical-model catalog to validate name-based review passes; these auth
+                // tests send none, so a substitute is enough to satisfy the endpoint's dependency.
+                services.AddSingleton(Substitute.For<MeisterProPR.Application.Interfaces.ILogicalModelCatalogRepository>());
+
                 var userRepo = Substitute.For<IUserRepository>();
                 var clientAdminUser = new AppUser
                 {

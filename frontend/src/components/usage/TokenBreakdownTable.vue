@@ -3,12 +3,13 @@
 
 <template>
   <div v-if="normalizedBreakdown.length > 0" class="token-breakdown">
-    <h4 class="breakdown-title">Token Breakdown by Tier and Model</h4>
-    <p class="breakdown-caption">Each row shows the routing tier and the exact model used for that portion of the job.</p>
+    <h4 class="breakdown-title">Token Breakdown by Tier, Logical Model and Model</h4>
+    <p class="breakdown-caption">Each row shows the routing tier, the logical model, and the exact end model used for that portion of the job.</p>
     <table class="breakdown-table">
       <thead>
         <tr>
           <th>Tier</th>
+          <th>Logical Model</th>
           <th>Model</th>
           <th class="num-col">Input Tokens</th>
           <th class="num-col">Cached Input</th>
@@ -21,6 +22,7 @@
       <tbody>
         <tr v-for="(entry, idx) in normalizedBreakdown" :key="idx">
           <td><span class="tier-chip" :class="entry.tierClass">{{ entry.tierLabel }}</span></td>
+          <td>{{ entry.logicalModelLabel }}</td>
           <td class="monospace-value">{{ entry.modelLabel }}</td>
           <td class="num-col">{{ formatTokens(entry.inputTokens) }}</td>
           <td class="num-col">{{ formatTokens(entry.cachedInputTokens) }}</td>
@@ -32,7 +34,7 @@
       </tbody>
       <tfoot v-if="normalizedBreakdown.length > 1">
         <tr class="totals-row">
-          <td colspan="2">Total</td>
+          <td colspan="3">Total</td>
           <td class="num-col">{{ formatTokens(sumInput) }}</td>
           <td class="num-col">{{ formatTokens(sumCachedInput) }}</td>
           <td class="num-col">{{ formatTokens(sumEffectiveInput) }}</td>
@@ -59,6 +61,7 @@ interface TokenBreakdownEntry {
   tier?: string | null
   modelId?: string | null
   aiModel?: string | null
+  logicalModelName?: string | null
   totalInputTokens?: number | null
   totalOutputTokens?: number | null
   totalCachedInputTokens?: number | null
@@ -72,6 +75,7 @@ interface TokenBreakdownEntry {
 interface NormalizedBreakdownEntry {
   tierLabel: string
   tierClass: string
+  logicalModelLabel: string
   modelLabel: string
   inputTokens: number
   cachedInputTokens: number
@@ -161,6 +165,7 @@ const normalizedBreakdown = computed<NormalizedBreakdownEntry[]>(() =>
     return {
       tierLabel: tierLabel(entry),
       tierClass: tierClass(entry),
+      logicalModelLabel: entry.logicalModelName?.trim() ? entry.logicalModelName : '—',
       modelLabel: formatModel(entry),
       inputTokens,
       cachedInputTokens,

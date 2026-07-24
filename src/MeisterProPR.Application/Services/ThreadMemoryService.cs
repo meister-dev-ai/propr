@@ -728,6 +728,7 @@ public sealed partial class ThreadMemoryService(
             await this.RecordReconsiderationProtocolIfNeededAsync(
                 protocolId,
                 resolved.Value.ModelId,
+                resolved.Value.LogicalModelName,
                 systemMsg,
                 userMsg,
                 text,
@@ -759,7 +760,7 @@ public sealed partial class ThreadMemoryService(
                 clientId,
                 AiPurpose.MemoryReconsideration,
                 ct);
-            return new ResolvedChatClient(runtime.ChatClient, runtime.Model.RemoteModelId);
+            return new ResolvedChatClient(runtime.ChatClient, runtime.Model.RemoteModelId, runtime.LogicalModelName);
         }
 
         if (aiConnectionRepository is null || aiChatClientFactory is null)
@@ -803,6 +804,7 @@ public sealed partial class ThreadMemoryService(
     private async Task RecordReconsiderationProtocolIfNeededAsync(
         Guid? protocolId,
         string effectiveModelId,
+        string? logicalModelName,
         string systemMsg,
         string userMsg,
         string text,
@@ -840,10 +842,11 @@ public sealed partial class ThreadMemoryService(
             ct,
             usage.CachedInputTokens,
             usage.CacheWriteTokens,
-            usage.ReasoningTokens);
+            usage.ReasoningTokens,
+            logicalModelName);
     }
 
-    private readonly record struct ResolvedChatClient(IChatClient ChatClient, string ModelId);
+    private readonly record struct ResolvedChatClient(IChatClient ChatClient, string ModelId, string? LogicalModelName = null);
 
     private static string BuildReconsiderationSystemPrompt()
     {

@@ -47,7 +47,8 @@ internal sealed partial class FileByFileReviewOrchestrator(
     IEnumerable<IReviewInvariantFactProvider>? reviewInvariantFactProviders = null,
     IReviewClaimExtractor? reviewClaimExtractor = null,
     ISummaryReconciliationService? summaryReconciliationService = null,
-    Func<IPrWideCandidateGenerator?>? prWideCandidateGeneratorFactory = null) : IFileByFileReviewOrchestrator
+    Func<IPrWideCandidateGenerator?>? prWideCandidateGeneratorFactory = null,
+    ILogicalModelResolver? logicalModelResolver = null) : IFileByFileReviewOrchestrator
 {
     private readonly AiReviewOptions _opts = options.Value;
 
@@ -72,7 +73,8 @@ internal sealed partial class FileByFileReviewOrchestrator(
         IReviewPipeline<PerFileReviewContext>? perFilePipeline = null,
         IReviewPipelineProfileProvider? pipelineProfileProvider = null,
         IProRVPrefilter? proRvPrefilter = null,
-        Func<IPrWideCandidateGenerator?>? prWideCandidateGeneratorFactory = null)
+        Func<IPrWideCandidateGenerator?>? prWideCandidateGeneratorFactory = null,
+        ILogicalModelResolver? logicalModelResolver = null)
         : this(
             protocolRecorder,
             jobRepository,
@@ -100,7 +102,8 @@ internal sealed partial class FileByFileReviewOrchestrator(
                 reviewInvariantFactProviders,
                 new LocalReviewVerificationExecutor(reviewClaimExtractor, reviewFindingVerifier, protocolRecorder),
                 pipelineProfileProvider,
-                proRvPrefilter),
+                proRvPrefilter,
+                logicalModelResolver: logicalModelResolver),
             null,
             null,
             null,
@@ -113,7 +116,8 @@ internal sealed partial class FileByFileReviewOrchestrator(
             reviewInvariantFactProviders,
             reviewClaimExtractor,
             summaryReconciliationService,
-            prWideCandidateGeneratorFactory)
+            prWideCandidateGeneratorFactory,
+            logicalModelResolver)
     {
     }
 
@@ -201,9 +205,22 @@ internal sealed partial class FileByFileReviewOrchestrator(
         foreach (var (pass, ordinal) in prWidePasses)
         {
             IResolvedAiChatRuntime runtime;
+            ReviewReasoningEffort effort;
             try
             {
-                runtime = await aiRuntimeResolver.ResolveChatRuntimeForModelAsync(job.ClientId, pass.ConfiguredModelId, ct);
+                // A pass that names a logical model resolves through the catalog (effort comes from the role);
+                // legacy passes bind a concrete model and carry their own per-pass effort.
+                if (!string.IsNullOrEmpty(pass.LogicalModelName) && logicalModelResolver is not null)
+                {
+                    var resolvedRole = await logicalModelResolver.ResolveChatRuntimeAsync(job.ClientId, pass.LogicalModelName, ct: ct);
+                    runtime = resolvedRole.Runtime;
+                    effort = resolvedRole.ReasoningEffort;
+                }
+                else
+                {
+                    runtime = await aiRuntimeResolver.ResolveChatRuntimeForModelAsync(job.ClientId, pass.ConfiguredModelId, ct);
+                    effort = pass.ReasoningEffort;
+                }
             }
             catch (OperationCanceledException)
             {
@@ -217,7 +234,7 @@ internal sealed partial class FileByFileReviewOrchestrator(
             }
 
             // The per-file baseline is pass 1, so a job-level entry numbers as its list ordinal plus two.
-            var candidates = await generator.GenerateCandidatesAsync(job, pr, baseContext, runtime, budget, ordinal + 2, pass.Shadow, pass.ReasoningEffort, ct);
+            var candidates = await generator.GenerateCandidatesAsync(job, pr, baseContext, runtime, budget, ordinal + 2, pass.Shadow, effort, ct);
 
             // A shadow entry still runs and records its full generation trace plus a shadow-completed event (both
             // inside the generator), but its candidates are never threaded into synthesis, so it never publishes.

@@ -14,6 +14,7 @@ namespace MeisterProPR.Application.DTOs;
 /// <param name="CacheWriteTokens">Cache-write tokens.</param>
 /// <param name="ReasoningTokens">Reasoning tokens.</param>
 /// <param name="EstimatedCostUsd">Accumulated estimated USD cost for this (model, day); null when no priced contribution was recorded.</param>
+/// <param name="LogicalModelName">The logical-model role the tokens were spent under, or the empty string for raw-model / non-logical-model usage.</param>
 public sealed record ClientTokenUsageSampleDto(
     string ModelId,
     DateOnly Date,
@@ -22,7 +23,8 @@ public sealed record ClientTokenUsageSampleDto(
     long CachedInputTokens = 0,
     long CacheWriteTokens = 0,
     long ReasoningTokens = 0,
-    decimal? EstimatedCostUsd = null);
+    decimal? EstimatedCostUsd = null,
+    string LogicalModelName = "");
 
 /// <summary>
 ///     Response DTO for <c>GET /admin/clients/{clientId}/token-usage</c>.

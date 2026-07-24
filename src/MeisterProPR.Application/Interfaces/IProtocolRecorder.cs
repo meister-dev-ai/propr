@@ -29,7 +29,11 @@ public interface IProtocolRecorder
     /// <param name="modelId">The effective AI model deployment name used for this pass. Null for legacy callers.</param>
     /// <param name="passKind">The kind of review pass (baseline vs augmentation). Null when not meaningful (e.g. synthesis).</param>
     /// <param name="reason">Human-readable reason this pass ran. Null for the baseline pass.</param>
-    /// <param name="ct">Cancellation token.</param>
+    /// <param name="logicalModelName">
+    ///     The logical-model role that resolved this pass's runtime, captured at the time. Null when the pass ran on a
+    ///     raw connection+model or is not logical-model backed. Flows into the per-job token breakdown and the daily
+    ///     usage aggregate so usage can be sliced by logical model.
+    /// </param>
     /// <returns>The new protocol record's <see cref="Guid" />.</returns>
     Task<Guid> BeginAsync(
         Guid jobId,
@@ -40,7 +44,8 @@ public interface IProtocolRecorder
         string? modelId = null,
         CancellationToken ct = default,
         ReviewPassKind? passKind = null,
-        string? reason = null);
+        string? reason = null,
+        string? logicalModelName = null);
 
     /// <summary>
     ///     Records a single AI call event. Never throws.
@@ -184,7 +189,8 @@ public interface IProtocolRecorder
         CancellationToken ct = default,
         long cachedInputTokens = 0,
         long cacheWriteTokens = 0,
-        long reasoningTokens = 0);
+        long reasoningTokens = 0,
+        string? logicalModelName = null);
 
     /// <summary>
     ///     Records a memory system operation event. Never throws.
@@ -310,6 +316,18 @@ public interface IProtocolRecorder
     ///     Records ProRV prefilter stage lifecycle and outcome events on the existing protocol path. Never throws.
     /// </summary>
     Task RecordProRvEventAsync(
+        Guid protocolId,
+        string eventName,
+        string? details,
+        string? output,
+        string? error,
+        CancellationToken ct = default);
+
+    /// <summary>
+    ///     Records a logical-model resolution event on the existing protocol path — which role was resolved and which
+    ///     scope layer (client override vs tenant catalog) resolved it. Never throws.
+    /// </summary>
+    Task RecordLogicalModelResolutionEventAsync(
         Guid protocolId,
         string eventName,
         string? details,

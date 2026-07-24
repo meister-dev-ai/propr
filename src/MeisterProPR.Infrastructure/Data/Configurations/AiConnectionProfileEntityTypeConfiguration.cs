@@ -16,7 +16,10 @@ internal sealed class AiConnectionProfileEntityTypeConfiguration : IEntityTypeCo
         builder.HasKey(x => x.Id);
         builder.Property(x => x.Id).HasColumnName("id").ValueGeneratedNever();
 
-        builder.Property(x => x.ClientId).HasColumnName("client_id").IsRequired();
+        // A connection is scoped to exactly one owner: a client (client_id) or a tenant (tenant_id). Tenant-scoped
+        // connections are inherited by the tenant's clients and referenced by tenant-catalog logical models.
+        builder.Property(x => x.ClientId).HasColumnName("client_id");
+        builder.Property(x => x.TenantId).HasColumnName("tenant_id");
         builder.Property(x => x.DisplayName).HasColumnName("display_name").HasMaxLength(200).IsRequired();
         builder.Property(x => x.ProviderKind).HasColumnName("provider_kind").HasMaxLength(50).IsRequired();
         builder.Property(x => x.BaseUrl).HasColumnName("base_url").HasMaxLength(1000).IsRequired();
@@ -45,6 +48,11 @@ internal sealed class AiConnectionProfileEntityTypeConfiguration : IEntityTypeCo
             .HasForeignKey(x => x.ClientId)
             .OnDelete(DeleteBehavior.Cascade);
 
+        builder.HasOne<TenantRecord>()
+            .WithMany()
+            .HasForeignKey(x => x.TenantId)
+            .OnDelete(DeleteBehavior.Cascade);
+
         builder.HasMany(x => x.ConfiguredModels)
             .WithOne(x => x.ConnectionProfile)
             .HasForeignKey(x => x.ConnectionProfileId)
@@ -62,6 +70,10 @@ internal sealed class AiConnectionProfileEntityTypeConfiguration : IEntityTypeCo
 
         builder.HasIndex(x => new { x.ClientId, x.DisplayName })
             .HasDatabaseName("ix_ai_connection_profiles_client_id_display_name")
+            .IsUnique();
+
+        builder.HasIndex(x => new { x.TenantId, x.DisplayName })
+            .HasDatabaseName("ix_ai_connection_profiles_tenant_id_display_name")
             .IsUnique();
 
         builder.HasIndex(x => x.ClientId)

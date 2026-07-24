@@ -3210,6 +3210,332 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/clients/{clientId}/logical-models": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * The logical models effective for this client — the client's overrides plus the tenant-catalog entries an
+         *     override does not shadow — for the pass and purpose editors' pickers.
+         */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    clientId: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["LogicalModelResponse"][];
+                        "application/json": components["schemas"]["LogicalModelResponse"][];
+                        "text/json": components["schemas"]["LogicalModelResponse"][];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/clients/{clientId}/logical-models/overrides": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The client's own override logical models (not the inherited tenant catalog). */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    clientId: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["LogicalModelResponse"][];
+                        "application/json": components["schemas"]["LogicalModelResponse"][];
+                        "text/json": components["schemas"]["LogicalModelResponse"][];
+                    };
+                };
+            };
+        };
+        put?: never;
+        /** Creates a per-client override logical model. */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    clientId: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: {
+                content: {
+                    "application/json": components["schemas"]["LogicalModelWriteRequest"];
+                    "text/json": components["schemas"]["LogicalModelWriteRequest"];
+                    "application/*+json": components["schemas"]["LogicalModelWriteRequest"];
+                };
+            };
+            responses: {
+                /** @description Created */
+                201: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["LogicalModelResponse"];
+                        "application/json": components["schemas"]["LogicalModelResponse"];
+                        "text/json": components["schemas"]["LogicalModelResponse"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/clients/{clientId}/logical-models/overrides/{name}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Updates a per-client override's mapping (connection, model, reasoning, protocol). 404 if absent. */
+        put: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    clientId: string;
+                    name: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: {
+                content: {
+                    "application/json": components["schemas"]["LogicalModelWriteRequest"];
+                    "text/json": components["schemas"]["LogicalModelWriteRequest"];
+                    "application/*+json": components["schemas"]["LogicalModelWriteRequest"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        post?: never;
+        /** Deletes a per-client override. 404 if it does not exist. */
+        delete: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    clientId: string;
+                    name: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/clients/{clientId}/logical-models/overrides/{name}/rename": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Renames a per-client override. 404 if the old name is absent, 409 if the new name is taken. */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    clientId: string;
+                    name: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: {
+                content: {
+                    "application/json": components["schemas"]["RenameLogicalModelRequest"];
+                    "text/json": components["schemas"]["RenameLogicalModelRequest"];
+                    "application/*+json": components["schemas"]["RenameLogicalModelRequest"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/clients/{clientId}/logical-models/purposes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The client's purpose → logical-model map. */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    clientId: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["PurposeRoleResponse"][];
+                        "application/json": components["schemas"]["PurposeRoleResponse"][];
+                        "text/json": components["schemas"]["PurposeRoleResponse"][];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/clients/{clientId}/logical-models/purposes/{purpose}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Maps an internal AI purpose to a logical model for this client. */
+        put: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    clientId: string;
+                    /** @description Product-owned AI purposes that resolve to configured models. */
+                    purpose: components["schemas"]["AiPurpose"];
+                };
+                cookie?: never;
+            };
+            requestBody?: {
+                content: {
+                    "application/json": components["schemas"]["SetPurposeRoleRequest"];
+                    "text/json": components["schemas"]["SetPurposeRoleRequest"];
+                    "application/*+json": components["schemas"]["SetPurposeRoleRequest"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        post?: never;
+        /** Removes a purpose mapping (the purpose then resolves through the client's AI purpose bindings again). */
+        delete: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    clientId: string;
+                    /** @description Product-owned AI purposes that resolve to configured models. */
+                    purpose: components["schemas"]["AiPurpose"];
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/clients/{clientId}/provider-connections": {
         parameters: {
             query?: never;
@@ -8996,6 +9322,187 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/tenants/{tenantId}/ai-connections": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Lists the tenant's connection profiles (with their configured models). */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    tenantId: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["AiConnectionDto"][];
+                        "application/json": components["schemas"]["AiConnectionDto"][];
+                        "text/json": components["schemas"]["AiConnectionDto"][];
+                    };
+                };
+            };
+        };
+        put?: never;
+        /** Creates a tenant-scoped connection profile. */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    tenantId: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: {
+                content: {
+                    "application/json": components["schemas"]["CreateAiConnectionRequest"];
+                    "text/json": components["schemas"]["CreateAiConnectionRequest"];
+                    "application/*+json": components["schemas"]["CreateAiConnectionRequest"];
+                };
+            };
+            responses: {
+                /** @description Created */
+                201: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["AiConnectionDto"];
+                        "application/json": components["schemas"]["AiConnectionDto"];
+                        "text/json": components["schemas"]["AiConnectionDto"];
+                    };
+                };
+                /** @description Bad Request */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/tenants/{tenantId}/ai-connections/{connectionId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Deletes a tenant connection profile. 404 if it is not this tenant's. */
+        delete: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    tenantId: string;
+                    connectionId: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description No Content */
+                204: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Not Found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+            };
+        };
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/tenants/{tenantId}/ai-connections/{connectionId}/verify": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Verifies a tenant connection against its provider. 404 if it is not this tenant's. */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    tenantId: string;
+                    connectionId: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["AiVerificationResultDto"];
+                        "application/json": components["schemas"]["AiVerificationResultDto"];
+                        "text/json": components["schemas"]["AiVerificationResultDto"];
+                    };
+                };
+                /** @description Not Found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/auth/tenants/{tenantSlug}/providers": {
         parameters: {
             query?: never;
@@ -9389,6 +9896,183 @@ export interface paths {
         put?: never;
         post?: never;
         delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/tenants/{tenantId}/logical-models": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The tenant-catalog logical models for this tenant. */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    tenantId: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["LogicalModelResponse"][];
+                        "application/json": components["schemas"]["LogicalModelResponse"][];
+                        "text/json": components["schemas"]["LogicalModelResponse"][];
+                    };
+                };
+            };
+        };
+        put?: never;
+        /** Creates a tenant-catalog logical model. 400 for the system tenant, 409 for a duplicate name. */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    tenantId: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: {
+                content: {
+                    "application/json": components["schemas"]["LogicalModelWriteRequest"];
+                    "text/json": components["schemas"]["LogicalModelWriteRequest"];
+                    "application/*+json": components["schemas"]["LogicalModelWriteRequest"];
+                };
+            };
+            responses: {
+                /** @description Created */
+                201: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["LogicalModelResponse"];
+                        "application/json": components["schemas"]["LogicalModelResponse"];
+                        "text/json": components["schemas"]["LogicalModelResponse"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/tenants/{tenantId}/logical-models/{name}/rename": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Renames a tenant-catalog entry. 404 if the old name is absent, 409 if the new name is taken. */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    tenantId: string;
+                    name: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: {
+                content: {
+                    "application/json": components["schemas"]["RenameLogicalModelRequest"];
+                    "text/json": components["schemas"]["RenameLogicalModelRequest"];
+                    "application/*+json": components["schemas"]["RenameLogicalModelRequest"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/tenants/{tenantId}/logical-models/{name}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Updates a tenant-catalog entry's mapping (connection, model, reasoning, protocol). 404 if absent. */
+        put: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    tenantId: string;
+                    name: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: {
+                content: {
+                    "application/json": components["schemas"]["LogicalModelWriteRequest"];
+                    "text/json": components["schemas"]["LogicalModelWriteRequest"];
+                    "application/*+json": components["schemas"]["LogicalModelWriteRequest"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        post?: never;
+        /** Deletes a tenant-catalog entry. 404 if it does not exist. */
+        delete: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    tenantId: string;
+                    name: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
         options?: never;
         head?: never;
         patch?: never;
@@ -11423,9 +12107,9 @@ export interface components {
             id?: string;
             /**
              * Format: uuid
-             * @description Owning client ID.
+             * @description Owning client ID for a client-scoped connection; null for a tenant-scoped one.
              */
-            clientId?: string;
+            clientId?: string | null;
             /** @description Human-readable display name. */
             displayName?: string | null;
             providerKind?: components["schemas"]["AiProviderKind"];
@@ -11458,6 +12142,11 @@ export interface components {
             defaultQueryParams?: {
                 [key: string]: string;
             } | null;
+            /**
+             * Format: uuid
+             * @description Owning tenant ID for a tenant-scoped connection (inherited by the tenant's clients); null for a client-scoped one.
+             */
+            tenantId?: string | null;
         };
         /**
          * @description Model category tag for an `AiConnection`.
@@ -12023,6 +12712,8 @@ export interface components {
              * @description Accumulated estimated USD cost for this (model, day); null when no priced contribution was recorded.
              */
             estimatedCostUsd?: number | null;
+            /** @description The logical-model role the tokens were spent under, or the empty string for raw-model / non-logical-model usage. */
+            logicalModelName?: string | null;
         };
         /**
          * @description The native review surface used by a provider.
@@ -12361,6 +13052,31 @@ export interface components {
             /** Format: date-time */
             activatedAt?: string | null;
             capabilities?: components["schemas"]["PremiumCapabilityDto"][] | null;
+        };
+        /** @description One logical model as returned to the client, tagged by the scope it came from (client override or tenant). */
+        LogicalModelResponse: {
+            /** Format: uuid */
+            id?: string;
+            name?: string | null;
+            capability?: components["schemas"]["AiOperationKind"];
+            /** Format: uuid */
+            connectionId?: string;
+            /** Format: uuid */
+            configuredModelId?: string;
+            reasoningEffort?: components["schemas"]["ReviewReasoningEffort"];
+            protocolMode?: components["schemas"]["AiProtocolMode"];
+            scope?: string | null;
+        };
+        /** @description Create/update payload for a logical model (the name is the business key within its scope). */
+        LogicalModelWriteRequest: {
+            name?: string | null;
+            capability?: components["schemas"]["AiOperationKind"];
+            /** Format: uuid */
+            connectionId?: string;
+            /** Format: uuid */
+            configuredModelId?: string;
+            reasoningEffort?: components["schemas"]["ReviewReasoningEffort"];
+            protocolMode?: components["schemas"]["AiProtocolMode"];
         };
         /** @description Login request payload. */
         LoginRequest: {
@@ -13367,6 +14083,11 @@ export interface components {
             connections?: components["schemas"]["ProviderConnectionOperationalStatusDto"][] | null;
             providerFamilies?: components["schemas"]["ProviderFamilyOperationalStatusDto"][] | null;
         };
+        /** @description One purpose → logical-model mapping row. */
+        PurposeRoleResponse: {
+            purpose?: components["schemas"]["AiPurpose"];
+            logicalModelName?: string | null;
+        };
         /** @description Request body for setting a client's default review profile. */
         PutClientReviewProfileRequest: {
             defaultReviewPipelineProfileId?: string | null;
@@ -13374,6 +14095,10 @@ export interface components {
         /** @description Refresh token request payload. */
         RefreshRequest: {
             refreshToken?: string | null;
+        };
+        /** @description Rename payload. */
+        RenameLogicalModelRequest: {
+            newName?: string | null;
         };
         /** @description Resolved reviewer-trigger identity candidate returned by provider onboarding APIs. */
         ResolvedReviewerIdentityResponse: {
@@ -13704,6 +14429,12 @@ export interface components {
             /** @description Whether this pass runs in shadow mode. Additive metadata the runtime does not act on yet. */
             shadow?: boolean;
             reasoningEffort?: components["schemas"]["ReviewReasoningEffort"];
+            /**
+             * @description The named logical model this pass runs on (its connection, model, reasoning effort, and protocol come from the
+             *     resolved role). When set, it takes precedence and ConfiguredModelId is ignored. A pass
+             *     should set exactly one of LogicalModelName or ConfiguredModelId.
+             */
+            logicalModelName?: string | null;
         };
         /** @description One selectable review profile entry. */
         ReviewProfileCatalogItemResponse: {
@@ -13806,6 +14537,10 @@ export interface components {
             login?: string | null;
             displayName?: string | null;
             isBot: boolean;
+        };
+        /** @description Payload to map a purpose to a logical model. */
+        SetPurposeRoleRequest: {
+            logicalModelName?: string | null;
         };
         /** @description Enable/disable request for a user. */
         SetUserActiveRequest: {
@@ -14153,6 +14888,8 @@ export interface components {
             estimatedCostUsd?: number | null;
             /** @description True when EstimatedCostUsd rests on a fallback rate, a missing rate, or estimated token counts. */
             costIsApproximate?: boolean;
+            /** @description The logical-model role that produced these tokens, captured at the time; null for raw-model / non-logical-model passes (and rows written before this dimension existed). */
+            logicalModelName?: string | null;
         };
         /** @description Identifies a pull request to unblock. */
         UnblockPullRequestRequest: {

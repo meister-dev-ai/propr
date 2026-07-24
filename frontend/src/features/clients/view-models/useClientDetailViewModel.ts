@@ -87,6 +87,7 @@ export interface ClientDetailViewModel {
   clientReviewProfile: Ref<ClientReviewProfileDto | null>
   isProviderDetailOpen: Ref<boolean>
   isWebhookDetailOpen: Ref<boolean>
+  isAiDetailOpen: Ref<boolean>
   canManageClient: ComputedRef<boolean>
   canViewClient: ComputedRef<boolean>
   availableTabs: ComputedRef<DetailTab[]>
@@ -273,6 +274,9 @@ export function useClientDetailViewModel(options: UseClientDetailViewModelOption
 
   const isProviderDetailOpen = ref(false)
   const isWebhookDetailOpen = ref(false)
+  // True while the AI Providers tab owns the client sidebar; the tab emits it (see ClientAiConnectionsTab), so the
+  // detail view hides its default navigation without checking which tab is active.
+  const isAiDetailOpen = ref(false)
   const client = ref<ClientDetailDto | null>(null)
   const loading = ref(false)
   const notFound = ref(false)
@@ -682,6 +686,7 @@ export function useClientDetailViewModel(options: UseClientDetailViewModelOption
     clientReviewProfile,
     isProviderDetailOpen,
     isWebhookDetailOpen,
+    isAiDetailOpen,
     canManageClient,
     canViewClient,
     availableTabs,

@@ -35,6 +35,7 @@ function getJobsBaseUrl(): string {
 export interface TokenBreakdownEntry {
   connectionCategory: number   // AiConnectionModelCategory enum value
   modelId: string
+  logicalModelName?: string | null
   totalInputTokens: number
   totalOutputTokens: number
   estimatedCostUsd?: number | null

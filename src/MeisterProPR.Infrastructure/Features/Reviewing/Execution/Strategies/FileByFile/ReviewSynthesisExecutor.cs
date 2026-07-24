@@ -107,7 +107,7 @@ internal sealed class ReviewSynthesisExecutor(
 
         logger.LogInformation("Starting synthesis for job {JobId}", job.Id);
 
-        var protocolId = await this.BeginSynthesisProtocolAsync(job, synthesisRuntime.ModelId, ct);
+        var protocolId = await this.BeginSynthesisProtocolAsync(job, synthesisRuntime.ModelId, synthesisRuntime.LogicalModelName, ct);
 
         var synthesisOutcome = await this.RunSynthesisCoreAsync(
             job,
@@ -274,6 +274,7 @@ internal sealed class ReviewSynthesisExecutor(
     {
         AiConnectionDto? synthTierDto = null;
         string? synthesisModelId = null;
+        string? synthesisLogicalModelName = null;
 
         if (aiRuntimeResolver is not null)
         {
@@ -285,10 +286,12 @@ internal sealed class ReviewSynthesisExecutor(
                     ct);
                 effectiveClient = synthesisRuntime.ChatClient;
                 synthesisModelId = synthesisRuntime.Model.RemoteModelId;
+                synthesisLogicalModelName = synthesisRuntime.LogicalModelName;
             }
             catch
             {
                 synthesisModelId = null;
+                synthesisLogicalModelName = null;
             }
         }
         else if (aiConnectionRepository is not null && aiClientFactory is not null)
@@ -307,13 +310,14 @@ internal sealed class ReviewSynthesisExecutor(
                               ?? job.AiModel
                               ?? options.ModelId;
 
-        return new SynthesisRuntimeSelection(effectiveClient, synthesisModelId);
+        return new SynthesisRuntimeSelection(effectiveClient, synthesisModelId, synthesisLogicalModelName);
     }
 
 
     private async Task<Guid?> BeginSynthesisProtocolAsync(
         ReviewJob job,
         string? synthesisModelId,
+        string? synthesisLogicalModelName,
         CancellationToken ct)
     {
         try
@@ -325,7 +329,8 @@ internal sealed class ReviewSynthesisExecutor(
                 null,
                 AiConnectionModelCategory.HighEffort,
                 synthesisModelId,
-                ct);
+                ct,
+                logicalModelName: synthesisLogicalModelName);
         }
         catch (Exception ex)
         {
@@ -677,7 +682,7 @@ internal sealed class ReviewSynthesisExecutor(
                """;
     }
 
-    private sealed record SynthesisRuntimeSelection(IChatClient ChatClient, string? ModelId);
+    private sealed record SynthesisRuntimeSelection(IChatClient ChatClient, string? ModelId, string? LogicalModelName);
 
     private sealed record SynthesisExecutionOutcome(string FinalSummary, IReadOnlyList<CandidateReviewFinding> SynthesizedFindings);
 }

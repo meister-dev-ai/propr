@@ -91,7 +91,9 @@ public sealed class FileReviewerMultiPassUnionTests
             });
     }
 
-    private FileReviewer CreateReviewer(IAiRuntimeResolver? aiRuntimeResolver = null)
+    private FileReviewer CreateReviewer(
+        IAiRuntimeResolver? aiRuntimeResolver = null,
+        ILogicalModelResolver? logicalModelResolver = null)
     {
         this._aiCore
             .ReviewAsync(Arg.Any<PullRequest>(), Arg.Any<ReviewSystemContext>(), Arg.Any<CancellationToken>())
@@ -124,7 +126,8 @@ public sealed class FileReviewerMultiPassUnionTests
             null,
             null,
             null,
-            null);
+            null,
+            logicalModelResolver: logicalModelResolver);
     }
 
     // Minimal chat-capable configured-model DTO carrying the RemoteModelId the review core selects on.
@@ -418,6 +421,34 @@ public sealed class FileReviewerMultiPassUnionTests
         await this._recorder.Received(1).RecordReviewStrategyEventAsync(
             Arg.Any<Guid>(), ReviewProtocolEventNames.MultiPassUnionCompleted,
             Arg.Any<string?>(), Arg.Any<string?>(), Arg.Any<string?>(), Arg.Any<CancellationToken>());
+    }
+
+    // A name-based pass resolves through the logical-model catalog — the runtime + effort come from the
+    // resolved role, not from a configured-model id on the pass.
+    [Fact]
+    public async Task Production_NameBasedPass_ResolvesViaLogicalModelCatalog()
+    {
+        var passRuntime = RuntimeForModel("logical-deep");
+        var logicalResolver = Substitute.For<ILogicalModelResolver>();
+        logicalResolver
+            .ResolveChatRuntimeAsync(Arg.Any<Guid>(), "deep", Arg.Any<IProtocolRecorder?>(), Arg.Any<Guid?>(), Arg.Any<CancellationToken>())
+            .Returns(new ResolvedLogicalModelChatRuntime(passRuntime, "deep", LogicalModelLayer.TenantCatalog, ReviewReasoningEffort.High));
+
+        var reviewer = this.CreateReviewer(logicalModelResolver: logicalResolver);
+        var file = FileForTier(FileComplexityTier.Medium);
+        var (job, pr) = Fixture(file);
+
+        await reviewer.ReviewAsync(
+            job, pr, file, 1, 1,
+            ProductionContextWithPasses("gpt-5.3-codex", new ReviewPassSpec(Guid.Empty, LogicalModelName: "deep")),
+            null, Substitute.For<IChatClient>(), CancellationToken.None);
+
+        // Baseline (tier) + one name-based pass resolved via the catalog.
+        Assert.Equal(2, this._observedModelIds.Count);
+        Assert.Equal("gpt-5.3-codex", this._observedModelIds[0]);
+        Assert.Equal("logical-deep", this._observedModelIds[1]);
+        await logicalResolver.Received(1)
+            .ResolveChatRuntimeAsync(Arg.Any<Guid>(), "deep", Arg.Any<IProtocolRecorder?>(), Arg.Any<Guid?>(), Arg.Any<CancellationToken>());
     }
 
     [Fact]

@@ -8,7 +8,7 @@ namespace MeisterProPR.Application.DTOs;
 
 /// <summary>Data transfer object for a provider-neutral AI connection profile.</summary>
 /// <param name="Id">Unique identifier.</param>
-/// <param name="ClientId">Owning client ID.</param>
+/// <param name="ClientId">Owning client ID for a client-scoped connection; null for a tenant-scoped one.</param>
 /// <param name="DisplayName">Human-readable display name.</param>
 /// <param name="ProviderKind">Provider family.</param>
 /// <param name="BaseUrl">Exact configured provider base URL.</param>
@@ -23,10 +23,11 @@ namespace MeisterProPR.Application.DTOs;
 /// <param name="DefaultHeaders">Optional default headers appended by the driver.</param>
 /// <param name="DefaultQueryParams">Optional default query parameters appended by the driver.</param>
 /// <param name="Secret">Protected secret material for internal use only; never serialized to JSON.</param>
+/// <param name="TenantId">Owning tenant ID for a tenant-scoped connection (inherited by the tenant's clients); null for a client-scoped one.</param>
 [method: JsonConstructor]
 public sealed record AiConnectionDto(
     Guid Id,
-    Guid ClientId,
+    Guid? ClientId,
     string DisplayName,
     AiProviderKind ProviderKind,
     string BaseUrl,
@@ -40,7 +41,8 @@ public sealed record AiConnectionDto(
     DateTimeOffset UpdatedAt,
     IReadOnlyDictionary<string, string>? DefaultHeaders = null,
     IReadOnlyDictionary<string, string>? DefaultQueryParams = null,
-    [property: JsonIgnore] string? Secret = null)
+    [property: JsonIgnore] string? Secret = null,
+    Guid? TenantId = null)
 {
     /// <summary>Returns the effective model identifier bound to a specific purpose.</summary>
     public string? GetBoundModelId(AiPurpose purpose)

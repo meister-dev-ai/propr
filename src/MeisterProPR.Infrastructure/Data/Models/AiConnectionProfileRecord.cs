@@ -10,7 +10,11 @@ public sealed class AiConnectionProfileRecord
 {
     public Guid Id { get; set; }
 
-    public Guid ClientId { get; set; }
+    /// <summary>Owning client for a client-scoped connection; null for a tenant-scoped connection.</summary>
+    public Guid? ClientId { get; set; }
+
+    /// <summary>Owning tenant for a tenant-scoped connection (inherited by the tenant's clients); null for a client-scoped one.</summary>
+    public Guid? TenantId { get; set; }
 
     public string DisplayName { get; set; } = string.Empty;
 

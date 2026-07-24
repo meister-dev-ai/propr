@@ -99,6 +99,7 @@ public sealed partial class ReviewOrchestrationService(
                 reviewerContext.ConfiguredTriggerReviewer,
                 resolvedReviewRuntime.Value.ChatClient,
                 resolvedReviewRuntime.Value.Capabilities,
+                resolvedReviewRuntime.Value.LogicalModelName,
                 ct);
         }
         catch (BudgetHardCapReachedException ex)
@@ -203,6 +204,7 @@ public sealed partial class ReviewOrchestrationService(
         ReviewerIdentity? reviewer,
         IChatClient overrideChatClient,
         AgentReviewRuntimeCapabilities runtimeCapabilities,
+        string? defaultReviewLogicalModelName,
         CancellationToken ct)
     {
         LogReviewStarted(logger, job.Id, job.PullRequestId);
@@ -278,6 +280,7 @@ public sealed partial class ReviewOrchestrationService(
             resumeJob,
             overrideChatClient,
             runtimeCapabilities,
+            defaultReviewLogicalModelName,
             workspacePreparation,
             ct);
 
@@ -701,7 +704,8 @@ public sealed partial class ReviewOrchestrationService(
     }
 
     // T070: Resolve per-client AI connection — returns null when not configured (caller sets job failed).
-    private async Task<(IChatClient ChatClient, AgentReviewRuntimeCapabilities Capabilities)?> ResolveAiConnectionAsync(ReviewJob job, CancellationToken ct)
+    private async Task<(IChatClient ChatClient, AgentReviewRuntimeCapabilities Capabilities, string? LogicalModelName)?> ResolveAiConnectionAsync(
+        ReviewJob job, CancellationToken ct)
     {
         if (aiRuntimeResolver is not null)
         {
@@ -710,7 +714,7 @@ public sealed partial class ReviewOrchestrationService(
                 var runtime = await aiRuntimeResolver.ResolveChatRuntimeAsync(job.ClientId, AiPurpose.ReviewDefault, ct);
                 job.SetAiConfig(runtime.Connection.Id, runtime.Model.RemoteModelId, job.ReviewTemperature);
                 await jobs.UpdateAiConfigAsync(job.Id, runtime.Connection.Id, runtime.Model.RemoteModelId, ct, job.ReviewTemperature);
-                return (runtime.ChatClient, runtime.Capabilities);
+                return (runtime.ChatClient, runtime.Capabilities, runtime.LogicalModelName);
             }
             catch (Exception ex)
             {
@@ -745,7 +749,8 @@ public sealed partial class ReviewOrchestrationService(
         var client = aiChatClientFactory.CreateClient(activeConnection.BaseUrl, activeConnection.Secret);
         job.SetAiConfig(activeConnection.Id, effectiveModelId, job.ReviewTemperature);
         await jobs.UpdateAiConfigAsync(job.Id, activeConnection.Id, effectiveModelId, ct, job.ReviewTemperature);
-        return (client, new AgentReviewRuntimeCapabilities(false, false, false, false));
+        // Legacy (non-logical-model) resolution path — no logical model in play.
+        return (client, new AgentReviewRuntimeCapabilities(false, false, false, false), null);
     }
 
     // Load scan state — returns the scan, whether a new revision exists, the reusable carry-forward baseline
@@ -998,6 +1003,7 @@ public sealed partial class ReviewOrchestrationService(
         ReviewJob? resumeJob,
         IChatClient chatClient,
         AgentReviewRuntimeCapabilities runtimeCapabilities,
+        string? defaultReviewLogicalModelName,
         ReviewRepositoryWorkspacePreparationResult preparedWorkspace,
         CancellationToken ct)
     {
@@ -1071,6 +1077,7 @@ public sealed partial class ReviewOrchestrationService(
         {
             DefaultReviewChatClient = chatClient,
             DefaultReviewModelId = job.AiModel,
+            LogicalModelName = defaultReviewLogicalModelName,
             RuntimeCapabilities = runtimeCapabilities,
             EnableEvidenceBackedVerification = enableEvidenceBackedVerification,
             EnableLanguageRobustScreening = enableLanguageRobustScreening,

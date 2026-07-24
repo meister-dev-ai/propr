@@ -4,6 +4,7 @@
 export interface ClientTokenUsageSample {
   connectionCategory?: number
   modelId: string
+  logicalModelName?: string
   date: string // ISO date string YYYY-MM-DD
   inputTokens: number
   outputTokens: number
@@ -11,6 +12,16 @@ export interface ClientTokenUsageSample {
   cacheWriteTokens?: number
   reasoningTokens?: number
   estimatedCostUsd?: number | null
+}
+
+/** One row of review token usage rolled up per logical model; empty name means raw / non-logical-model usage. */
+export interface ReviewLogicalModelUsageRow {
+  logicalModelName: string
+  inputTokens: number
+  outputTokens: number
+  cachedInputTokens: number
+  reasoningTokens: number
+  estimatedCostUsd: number | null
 }
 
 export interface ClientTokenUsageResponse {

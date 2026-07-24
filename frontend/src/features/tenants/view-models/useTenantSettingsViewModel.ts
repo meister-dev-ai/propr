@@ -15,6 +15,7 @@ import {
   createTenantSsoProvider,
   deleteTenantSsoProvider,
   listTenantSsoProviders,
+  updateTenantSsoProvider,
   type TenantSsoProviderDto,
   type TenantSsoProviderInput,
 } from '@/services/tenantSsoProvidersService'
@@ -48,6 +49,7 @@ export interface TenantSettingsViewModel {
   isLoading: ComputedRef<boolean>
   loadSettings: () => Promise<void>
   createProvider: (request: TenantSsoProviderInput) => Promise<void>
+  updateProvider: (providerId: string, request: TenantSsoProviderInput) => Promise<void>
   removeProvider: (providerId: string) => Promise<void>
 }
 
@@ -56,6 +58,7 @@ export interface TenantSettingsService {
   getAuthOptions: typeof getAuthOptions
   listTenantSsoProviders: typeof listTenantSsoProviders
   createTenantSsoProvider: typeof createTenantSsoProvider
+  updateTenantSsoProvider: typeof updateTenantSsoProvider
   deleteTenantSsoProvider: typeof deleteTenantSsoProvider
 }
 
@@ -76,6 +79,7 @@ export function useTenantSettingsViewModel(options: UseTenantSettingsViewModelOp
   const getAuthOptionsFn = options.tenantSettingsService?.getAuthOptions ?? getAuthOptions
   const listTenantSsoProvidersFn = options.tenantSettingsService?.listTenantSsoProviders ?? listTenantSsoProviders
   const createTenantSsoProviderFn = options.tenantSettingsService?.createTenantSsoProvider ?? createTenantSsoProvider
+  const updateTenantSsoProviderFn = options.tenantSettingsService?.updateTenantSsoProvider ?? updateTenantSsoProvider
   const deleteTenantSsoProviderFn = options.tenantSettingsService?.deleteTenantSsoProvider ?? deleteTenantSsoProvider
   const autoLoad = options.autoLoad ?? true
 
@@ -211,6 +215,37 @@ export function useTenantSettingsViewModel(options: UseTenantSettingsViewModelOp
     }
   }
 
+  async function updateProvider(providerId: string, request: TenantSsoProviderInput): Promise<void> {
+    if (!isTenantSsoAvailable.value) {
+      return
+    }
+
+    creatingProvider.value = true
+    providerError.value = ''
+    state.value = saving({ tenant: tenant.value, providers: providers.value }, 'Saving tenant provider...')
+
+    try {
+      const updated = await updateTenantSsoProviderFn(tenantId, providerId, request)
+      providers.value = providers.value.map((provider) => (provider.id === providerId ? updated : provider))
+      state.value = success({ tenant: tenant.value, providers: providers.value }, 'Tenant provider updated.')
+      notify('Tenant provider updated.')
+    } catch (err) {
+      if (err instanceof UnauthorizedError) {
+        await router.push({ name: 'login' })
+        return
+      }
+      if (err instanceof TenantPremiumFeatureUnavailableError) {
+        ssoUnavailableOverrideMessage.value = err.message
+        providers.value = []
+      } else {
+        providerError.value = err instanceof ApiRequestError ? err.message : 'Failed to update tenant provider.'
+        state.value = errorState(providerError.value)
+      }
+    } finally {
+      creatingProvider.value = false
+    }
+  }
+
   async function removeProvider(providerId: string): Promise<void> {
     if (!isTenantSsoAvailable.value) {
       return
@@ -262,6 +297,7 @@ export function useTenantSettingsViewModel(options: UseTenantSettingsViewModelOp
     isLoading,
     loadSettings,
     createProvider,
+    updateProvider,
     removeProvider,
   }
 }

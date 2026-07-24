@@ -28,7 +28,8 @@ public sealed class InMemoryProtocolRecorder(
         string? modelId = null,
         CancellationToken ct = default,
         ReviewPassKind? passKind = null,
-        string? reason = null)
+        string? reason = null,
+        string? logicalModelName = null)
     {
         var job = jobs.GetById(jobId) ?? throw new InvalidOperationException($"Review job {jobId} was not found.");
         var protocol = new ReviewJobProtocol
@@ -41,6 +42,7 @@ public sealed class InMemoryProtocolRecorder(
             StartedAt = DateTimeOffset.UtcNow,
             AiConnectionCategory = connectionCategory,
             ModelId = modelId,
+            LogicalModelName = logicalModelName,
             PassKind = passKind?.ToString(),
             Reason = reason,
         };
@@ -235,6 +237,7 @@ public sealed class InMemoryProtocolRecorder(
         {
             var category = protocol.AiConnectionCategory ?? AiConnectionModelCategory.Default;
             var modelId = protocol.ModelId ?? "(default)";
+            var logicalModelName = protocol.LogicalModelName;
             job.AccumulateTierTokens(
                 category,
                 modelId,
@@ -242,8 +245,9 @@ public sealed class InMemoryProtocolRecorder(
                 totalOutputTokens,
                 totalCachedInputTokens ?? 0,
                 totalCacheWriteTokens ?? 0,
-                totalReasoningTokens ?? 0);
-            await this.ApplyTierCostAsync(job, category, modelId, ct);
+                totalReasoningTokens ?? 0,
+                logicalModelName);
+            await this.ApplyTierCostAsync(job, category, modelId, ct, logicalModelName);
         }
     }
 
@@ -256,7 +260,8 @@ public sealed class InMemoryProtocolRecorder(
         CancellationToken ct = default,
         long cachedInputTokens = 0,
         long cacheWriteTokens = 0,
-        long reasoningTokens = 0)
+        long reasoningTokens = 0,
+        string? logicalModelName = null)
     {
         var protocol = this.FindProtocol(protocolId);
         if (protocol is null)
@@ -286,6 +291,8 @@ public sealed class InMemoryProtocolRecorder(
         {
             var category = connectionCategory ?? AiConnectionModelCategory.Default;
             var effectiveModelId = modelId ?? protocol.ModelId ?? "(default)";
+            // Prefer the caller's logical model; fall back to the pass's when the caller reused the pass runtime.
+            var effectiveLogicalModelName = logicalModelName ?? protocol.LogicalModelName;
             job.AccumulateTierTokens(
                 category,
                 effectiveModelId,
@@ -293,8 +300,9 @@ public sealed class InMemoryProtocolRecorder(
                 outputTokens,
                 cachedInputTokens,
                 cacheWriteTokens,
-                reasoningTokens);
-            await this.ApplyTierCostAsync(job, category, effectiveModelId, ct);
+                reasoningTokens,
+                effectiveLogicalModelName);
+            await this.ApplyTierCostAsync(job, category, effectiveModelId, ct, effectiveLogicalModelName);
         }
     }
 
@@ -307,7 +315,8 @@ public sealed class InMemoryProtocolRecorder(
         ReviewJob job,
         AiConnectionModelCategory category,
         string modelId,
-        CancellationToken ct)
+        CancellationToken ct,
+        string? logicalModelName = null)
     {
         if (pricingResolver is null)
         {
@@ -321,7 +330,8 @@ public sealed class InMemoryProtocolRecorder(
 
             var entry = job.TokenBreakdown.FirstOrDefault(candidate =>
                 candidate.ConnectionCategory == category &&
-                string.Equals(candidate.ModelId, modelId, StringComparison.Ordinal));
+                string.Equals(candidate.ModelId, modelId, StringComparison.Ordinal) &&
+                string.Equals(candidate.LogicalModelName, logicalModelName, StringComparison.Ordinal));
 
             if (entry is not null)
             {
@@ -333,7 +343,7 @@ public sealed class InMemoryProtocolRecorder(
                         entry.TotalCacheWriteTokens,
                         entry.TotalReasoningTokens),
                     pricing);
-                job.SetTierCost(category, modelId, cost.Usd, cost.IsApproximate);
+                job.SetTierCost(category, modelId, cost.Usd, cost.IsApproximate, logicalModelName);
             }
         }
         catch (Exception)
@@ -428,6 +438,17 @@ public sealed class InMemoryProtocolRecorder(
     }
 
     public Task RecordProRvEventAsync(
+        Guid protocolId,
+        string eventName,
+        string? details,
+        string? output,
+        string? error,
+        CancellationToken ct = default)
+    {
+        return this.RecordEventAsync(protocolId, ProtocolEventKind.Operational, eventName, details, output, error);
+    }
+
+    public Task RecordLogicalModelResolutionEventAsync(
         Guid protocolId,
         string eventName,
         string? details,

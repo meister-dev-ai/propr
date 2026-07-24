@@ -171,11 +171,12 @@ public sealed class DbClientRegistry(
             .Where(pass => pass.ClientId == clientId)
             .OrderBy(pass => pass.Ordinal)
             .Select(pass => new ReviewPassSpec(
-                pass.ConfiguredModelId,
+                pass.ConfiguredModelId ?? Guid.Empty,
                 pass.Lens,
                 pass.Scope,
                 pass.Shadow,
-                pass.ReasoningEffort ?? ReviewReasoningEffort.None))
+                pass.ReasoningEffort ?? ReviewReasoningEffort.None,
+                pass.LogicalModelName))
             .ToListAsync(ct);
     }
 

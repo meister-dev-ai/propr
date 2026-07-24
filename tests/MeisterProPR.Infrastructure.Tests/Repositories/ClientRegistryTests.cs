@@ -392,6 +392,53 @@ public sealed class ClientRegistryTests(PostgresContainerFixture fixture) : IAsy
         Assert.All(passes, pass => Assert.Null(pass.Lens));
     }
 
+    // A name-based pass row (no configured_model_id) surfaces its LogicalModelName through the registry so
+    // the runtime resolves it via the logical-model catalog.
+    [Fact]
+    public async Task GetReviewPassesAsync_CarriesLogicalModelName_ForNameBasedPass()
+    {
+        var client = await this.SeedClientAsync();
+        this._dbContext.ClientReviewPasses.Add(
+            new ClientReviewPassRecord
+            {
+                Id = Guid.NewGuid(),
+                ClientId = client.Id,
+                Ordinal = 0,
+                ConfiguredModelId = null,
+                LogicalModelName = "deep",
+            });
+        await this._dbContext.SaveChangesAsync();
+
+        var pass = Assert.Single(await this._registry.GetReviewPassesAsync(client.Id, CancellationToken.None));
+        Assert.Equal("deep", pass.LogicalModelName);
+        Assert.Equal(Guid.Empty, pass.ConfiguredModelId);
+    }
+
+    // A name-based pass patched through the admin service persists with no configured-model id
+    // and reads back carrying the logical-model name on both the client DTO and the registry spec.
+    [Fact]
+    public async Task ReviewPasses_NameBasedPass_PersistsAndReadsBack()
+    {
+        var client = await this.SeedClientAsync();
+        var adminService = new ClientAdminService(this._dbContext);
+
+        var updated = await adminService.PatchAsync(
+            client.Id,
+            null,
+            null,
+            reviewPasses: new List<ReviewPassDto> { new(0, Guid.Empty, LogicalModelName: "deep") },
+            ct: CancellationToken.None);
+
+        Assert.NotNull(updated);
+        var dto = Assert.Single(updated!.ReviewPassesOrEmpty);
+        Assert.Equal("deep", dto.LogicalModelName);
+        Assert.Equal(Guid.Empty, dto.ConfiguredModelId);
+
+        var pass = Assert.Single(await this._registry.GetReviewPassesAsync(client.Id, CancellationToken.None));
+        Assert.Equal("deep", pass.LogicalModelName);
+        Assert.Equal(Guid.Empty, pass.ConfiguredModelId);
+    }
+
     [Fact]
     public async Task ReviewPasses_PatchPersistsLens_AndGetEchoesIt()
     {

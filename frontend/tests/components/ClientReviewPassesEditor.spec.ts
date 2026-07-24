@@ -38,18 +38,28 @@ function lastEmit(wrapper: ReturnType<typeof mountEditor>): ReviewPassEntry[] | 
   return events ? (events[events.length - 1][0] as ReviewPassEntry[]) : undefined
 }
 
-async function addPass(wrapper: ReturnType<typeof mountEditor>) {
+// The add/edit form lives in a modal now: adding a pass means opening it, filling the fields, and saving.
+async function openAddModal(wrapper: ReturnType<typeof mountEditor>) {
   await wrapper.find('[data-testid="review-passes-add"]').trigger('click')
 }
 
-async function selectPass(
+async function openEditModal(wrapper: ReturnType<typeof mountEditor>, rowIndex: number) {
+  await wrapper.findAll('[data-testid="review-pass-edit"]')[rowIndex].trigger('click')
+}
+
+async function addRawPass(
   wrapper: ReturnType<typeof mountEditor>,
-  rowIndex: number,
   connectionId: string,
   modelId: string,
+  opts: { shadow?: boolean } = {},
 ) {
-  await wrapper.findAll('[data-testid="review-pass-connection"]')[rowIndex].setValue(connectionId)
-  await wrapper.findAll('[data-testid="review-pass-model"]')[rowIndex].setValue(modelId)
+  await openAddModal(wrapper)
+  if (opts.shadow) {
+    await wrapper.find('[data-testid="review-pass-shadow"]').setValue(true)
+  }
+  await wrapper.find('[data-testid="review-pass-connection"]').setValue(connectionId)
+  await wrapper.find('[data-testid="review-pass-model"]').setValue(modelId)
+  await wrapper.find('[data-testid="review-pass-save"]').trigger('click')
 }
 
 describe('ClientReviewPassesEditor', () => {
@@ -60,34 +70,45 @@ describe('ClientReviewPassesEditor', () => {
     expect(wrapper.text()).toContain('degrades to a single baseline pass')
   })
 
-  it('hydrates rows from the model value and pre-selects the owning connection', () => {
+  it('hydrates rows from the model value and shows the model in the table + edit modal', async () => {
     const wrapper = mountEditor([{ ordinal: 0, configuredModelId: 'model-b1' }])
 
     const rows = wrapper.findAll('[data-testid="review-pass-row"]')
     expect(rows).toHaveLength(1)
-    expect((rows[0].find('[data-testid="review-pass-connection"]').element as HTMLSelectElement).value).toBe('conn-b')
-    expect((rows[0].find('[data-testid="review-pass-model"]').element as HTMLSelectElement).value).toBe('model-b1')
+    // The read-only row shows the resolved model's display name.
+    expect(rows[0].text()).toContain('B1 Chat')
+
+    // Editing pre-selects the owning connection + model in the modal.
+    await openEditModal(wrapper, 0)
+    expect((wrapper.find('[data-testid="review-pass-connection"]').element as HTMLSelectElement).value).toBe('conn-b')
+    expect((wrapper.find('[data-testid="review-pass-model"]').element as HTMLSelectElement).value).toBe('model-b1')
   })
 
-  it('adds a pass and emits a contiguous list once a model is chosen', async () => {
+  it('adds a pass via the modal and emits only after saving a chosen model', async () => {
     const wrapper = mountEditor([])
 
-    await addPass(wrapper)
-    expect(wrapper.findAll('[data-testid="review-pass-row"]')).toHaveLength(1)
-    // A blank row is not yet a persisted pass.
-    expect(lastEmit(wrapper)).toEqual([])
+    await openAddModal(wrapper)
+    // Opening the modal neither creates a row nor emits.
+    expect(wrapper.findAll('[data-testid="review-pass-row"]')).toHaveLength(0)
+    expect(lastEmit(wrapper)).toBeUndefined()
+    // Save is disabled until a model source is chosen.
+    expect(wrapper.find('[data-testid="review-pass-save"]').attributes('disabled')).toBeDefined()
 
-    await selectPass(wrapper, 0, 'conn-a', 'model-a1')
+    await wrapper.find('[data-testid="review-pass-connection"]').setValue('conn-a')
+    await wrapper.find('[data-testid="review-pass-model"]').setValue('model-a1')
+    await wrapper.find('[data-testid="review-pass-save"]').trigger('click')
+
+    expect(wrapper.findAll('[data-testid="review-pass-row"]')).toHaveLength(1)
     expect(lastEmit(wrapper)).toEqual([{ ordinal: 0, configuredModelId: 'model-a1', lens: null, scope: null, shadow: false, reasoningEffort: 'none' }])
   })
 
   it('only lists chat models for the chosen connection', async () => {
     const wrapper = mountEditor([])
-    await addPass(wrapper)
-    await wrapper.findAll('[data-testid="review-pass-connection"]')[0].setValue('conn-a')
+    await openAddModal(wrapper)
+    await wrapper.find('[data-testid="review-pass-connection"]').setValue('conn-a')
 
     const modelOptionValues = wrapper
-      .findAll('[data-testid="review-pass-model"]')[0]
+      .find('[data-testid="review-pass-model"]')
       .findAll('option')
       .map((option) => (option.element as HTMLOptionElement).value)
 
@@ -98,10 +119,8 @@ describe('ClientReviewPassesEditor', () => {
   it('emits contiguous ordinals for multiple passes', async () => {
     const wrapper = mountEditor([])
 
-    await addPass(wrapper)
-    await selectPass(wrapper, 0, 'conn-a', 'model-a1')
-    await addPass(wrapper)
-    await selectPass(wrapper, 1, 'conn-b', 'model-b1')
+    await addRawPass(wrapper, 'conn-a', 'model-a1')
+    await addRawPass(wrapper, 'conn-b', 'model-b1')
 
     expect(lastEmit(wrapper)).toEqual([
       { ordinal: 0, configuredModelId: 'model-a1', lens: null, scope: null, shadow: false, reasoningEffort: 'none' },
@@ -140,17 +159,15 @@ describe('ClientReviewPassesEditor', () => {
       props: { modelValue: [{ ordinal: 0, configuredModelId: 'model-b1' }], connections: [] as AiConnectionDto[] },
     })
 
-    const rows = wrapper.findAll('[data-testid="review-pass-row"]')
-    expect(rows).toHaveLength(1)
-    // With no connections loaded yet the owning connection cannot be resolved.
-    expect((rows[0].find('[data-testid="review-pass-connection"]').element as HTMLSelectElement).value).toBe('')
+    expect(wrapper.findAll('[data-testid="review-pass-row"]')).toHaveLength(1)
 
-    // Connections arrive; the row must back-fill its owning connection without dropping the model.
+    // Connections arrive; the row must back-fill its owning connection without dropping the model, so editing
+    // opens with the connection resolved.
     await wrapper.setProps({ connections })
+    await openEditModal(wrapper, 0)
 
-    const hydratedRows = wrapper.findAll('[data-testid="review-pass-row"]')
-    expect((hydratedRows[0].find('[data-testid="review-pass-connection"]').element as HTMLSelectElement).value).toBe('conn-b')
-    expect((hydratedRows[0].find('[data-testid="review-pass-model"]').element as HTMLSelectElement).value).toBe('model-b1')
+    expect((wrapper.find('[data-testid="review-pass-connection"]').element as HTMLSelectElement).value).toBe('conn-b')
+    expect((wrapper.find('[data-testid="review-pass-model"]').element as HTMLSelectElement).value).toBe('model-b1')
   })
 
   it('flags a row whose model is no longer available and does not re-persist the dead id', () => {
@@ -158,37 +175,40 @@ describe('ClientReviewPassesEditor', () => {
     const wrapper = mountEditor([{ ordinal: 0, configuredModelId: 'model-gone' }])
 
     const row = wrapper.findAll('[data-testid="review-pass-row"]')[0]
-    // The dead-id row is surfaced (kept visible) as a half-configured row with a reselect warning.
+    // The dead-id row is surfaced (kept visible) with a reselect warning.
     expect(row.find('[data-testid="review-pass-unavailable"]').exists()).toBe(true)
-    expect((row.find('[data-testid="review-pass-connection"]').element as HTMLSelectElement).value).toBe('')
 
     // The dead id is never emitted back, so a stale save cannot silently re-persist it.
     expect(lastEmit(wrapper)).not.toBeDefined()
   })
 
-  it('does not flag an in-progress row (connection chosen, model not yet picked)', async () => {
+  it('keeps save disabled until a model source is chosen', async () => {
     const wrapper = mountEditor([])
-    await addPass(wrapper)
-    await wrapper.findAll('[data-testid="review-pass-connection"]')[0].setValue('conn-a')
+    await openAddModal(wrapper)
 
-    const row = wrapper.findAll('[data-testid="review-pass-row"]')[0]
-    expect(row.find('[data-testid="review-pass-unavailable"]').exists()).toBe(false)
-    // A half-configured row is kept visible but not emitted as a pass.
-    expect(lastEmit(wrapper)).toEqual([])
+    expect(wrapper.find('[data-testid="review-pass-save"]').attributes('disabled')).toBeDefined()
+
+    await wrapper.find('[data-testid="review-pass-connection"]').setValue('conn-a')
+    await wrapper.find('[data-testid="review-pass-model"]').setValue('model-a1')
+
+    expect(wrapper.find('[data-testid="review-pass-save"]').attributes('disabled')).toBeUndefined()
   })
 
   it('enforces a maximum of four passes', async () => {
     const wrapper = mountEditor([])
 
-    for (let index = 0; index < 4; index += 1) {
-      await addPass(wrapper)
-    }
+    // Four distinct passes: the two chat models under the default tuple, then again as shadow passes (a
+    // distinct (model, lens, scope, shadow) tuple), so each save is a valid non-duplicate pass.
+    await addRawPass(wrapper, 'conn-a', 'model-a1')
+    await addRawPass(wrapper, 'conn-b', 'model-b1')
+    await addRawPass(wrapper, 'conn-a', 'model-a1', { shadow: true })
+    await addRawPass(wrapper, 'conn-b', 'model-b1', { shadow: true })
 
     expect(wrapper.findAll('[data-testid="review-pass-row"]')).toHaveLength(4)
     expect(wrapper.find('[data-testid="review-passes-add"]').attributes('disabled')).toBeDefined()
 
-    // A further add attempt is a no-op.
-    await addPass(wrapper)
+    // A further add attempt is a no-op (the button is disabled and openAdd guards on the max).
+    await openAddModal(wrapper)
     expect(wrapper.findAll('[data-testid="review-pass-row"]')).toHaveLength(4)
   })
 })

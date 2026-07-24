@@ -122,5 +122,7 @@ public sealed class ClientRecord
     /// <summary>Ordered per-client review-pass list; each entry runs one additional multi-pass union pass.</summary>
     public ICollection<ClientReviewPassRecord> ReviewPasses { get; set; } = [];
 
+    public ICollection<ClientPurposeLogicalModelRecord> PurposeLogicalModels { get; set; } = [];
+
     public ICollection<CrawlConfigurationRecord> CrawlConfigurations { get; set; } = [];
 }

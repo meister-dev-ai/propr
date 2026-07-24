@@ -26,4 +26,11 @@ public interface IResolvedAiChatRuntime
 
     /// <summary>Gets runtime capabilities relevant to session-aware review execution.</summary>
     AgentReviewRuntimeCapabilities Capabilities { get; }
+
+    /// <summary>
+    ///     Gets the logical-model role this runtime was resolved from, or <see langword="null" /> when it was resolved
+    ///     directly from a purpose binding / raw model (no logical model in play). Recorded with usage so token spend
+    ///     can be attributed to the logical model that produced it.
+    /// </summary>
+    string? LogicalModelName { get; }
 }

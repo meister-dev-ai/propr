@@ -28,4 +28,11 @@ public interface IResolvedAiEmbeddingRuntime
 
     /// <summary>Gets the resolved embedding vector width.</summary>
     int Dimensions { get; }
+
+    /// <summary>
+    ///     Gets the logical-model role this runtime was resolved from, or <see langword="null" /> when resolved
+    ///     directly from a purpose binding / raw model. Recorded with usage so token spend can be attributed to the
+    ///     logical model that produced it.
+    /// </summary>
+    string? LogicalModelName { get; }
 }

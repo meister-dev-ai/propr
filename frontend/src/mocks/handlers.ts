@@ -1367,6 +1367,11 @@ let aiConnectionsByClient: Record<string, any[]> = {
       displayName: 'Azure OpenAI Prod',
       endpointUrl: 'https://acme-prod.openai.azure.com/',
       models: ['gpt-4o', 'gpt-4o-mini'],
+      configuredModels: [
+        { id: 'm-gpt4o', displayName: 'GPT-4o', remoteModelId: 'gpt-4o', supportsChat: true, supportsEmbedding: false },
+        { id: 'm-gpt4o-mini', displayName: 'GPT-4o mini', remoteModelId: 'gpt-4o-mini', supportsChat: true, supportsEmbedding: false },
+        { id: 'm-embed3', displayName: 'text-embedding-3-large', remoteModelId: 'text-embedding-3-large', supportsChat: false, supportsEmbedding: true },
+      ],
       isActive: true,
       activeModel: 'gpt-4o',
       modelCategory: null,
@@ -1837,6 +1842,86 @@ let memoryActivityLog = [
 // Blocked pull requests, keyed by clientId. Populated/cleared via the blocked-prs handlers below.
 const mockBlockedPrsByClient: Record<string, any[]> = {}
 
+// ---- Logical models ----
+// These stores are id-agnostic: the handlers return the same representative dataset regardless of which
+// client/tenant the UI navigates to, so the editors always have data to render in the mock UI.
+
+// The connections a tenant admin may reference (across the tenant's clients), each with its models' capabilities.
+// Tenant-scoped connections (AiConnectionDto shape) — defined at the tenant, inherited by its clients.
+let mockTenantConnections: any[] = [
+  {
+    id: 'tc-azure',
+    tenantId: 'tenant-1',
+    clientId: null,
+    displayName: 'Tenant Azure OpenAI',
+    providerKind: 'azureOpenAi',
+    baseUrl: 'https://tenant-shared.openai.azure.com/',
+    authMode: 'apiKey',
+    discoveryMode: 'manualOnly',
+    isActive: false,
+    configuredModels: [
+      { id: 'tc-gpt4o', displayName: 'GPT-4o', remoteModelId: 'gpt-4o', supportsChat: true, supportsEmbedding: false },
+      { id: 'tc-gpt4o-mini', displayName: 'GPT-4o mini', remoteModelId: 'gpt-4o-mini', supportsChat: true, supportsEmbedding: false },
+      { id: 'tc-embed3', displayName: 'text-embedding-3-large', remoteModelId: 'text-embedding-3-large', supportsChat: false, supportsEmbedding: true },
+    ],
+    purposeBindings: [],
+    verification: { status: 'verified', summary: 'Verified against the provider catalog.' },
+    createdAt: new Date(Date.now() - 86400000 * 3).toISOString(),
+    updatedAt: new Date(Date.now() - 3600000).toISOString(),
+  },
+]
+
+// The tenant-catalog logical models a tenant's clients inherit — each points at a tenant connection above.
+let mockTenantLogicalModels = [
+  { id: 'lm-deep', name: 'deep-review', capability: 'chat', connectionId: 'tc-azure', configuredModelId: 'tc-gpt4o', reasoningEffort: 'high', protocolMode: 'auto', scope: 'tenant' },
+  { id: 'lm-fast', name: 'fast-triage', capability: 'chat', connectionId: 'tc-azure', configuredModelId: 'tc-gpt4o-mini', reasoningEffort: 'low', protocolMode: 'auto', scope: 'tenant' },
+  { id: 'lm-embed', name: 'embed-default', capability: 'embedding', connectionId: 'tc-azure', configuredModelId: 'tc-embed3', reasoningEffort: 'none', protocolMode: 'embeddings', scope: 'tenant' },
+]
+
+// A per-client override that shadows the tenant "deep-review" with a different reasoning effort.
+let mockClientLogicalOverrides = [
+  { id: 'ov-deep', name: 'deep-review', capability: 'chat', connectionId: 'ai-1', configuredModelId: 'm-gpt4o', reasoningEffort: 'medium', protocolMode: 'auto', scope: 'client' },
+]
+
+// The client's purpose → logical-model map.
+let mockClientPurposeRoles: Record<string, string> = {
+  reviewTriage: 'fast-triage',
+  embeddingDefault: 'embed-default',
+}
+
+// The client's effective logical models: its overrides plus the tenant-catalog entries an override does not shadow.
+function effectiveLogicalModels(): unknown[] {
+  const overrideNames = new Set(mockClientLogicalOverrides.map((entry) => entry.name))
+  return [
+    ...mockClientLogicalOverrides,
+    ...mockTenantLogicalModels.filter((entry) => !overrideNames.has(entry.name)),
+  ]
+}
+
+function logicalModelFromBody(body: any, scope: string): any {
+  return {
+    id: `lm-${Math.random().toString(36).slice(2, 10)}`,
+    name: body.name,
+    capability: body.capability ?? 'chat',
+    connectionId: body.connectionId ?? '',
+    configuredModelId: body.configuredModelId ?? '',
+    reasoningEffort: body.reasoningEffort ?? 'none',
+    protocolMode: body.protocolMode ?? 'auto',
+    scope,
+  }
+}
+
+// The mapping fields an update PUT changes on an existing entry (its id/name/scope are preserved).
+function updatedMapping(entry: any, body: any): any {
+  return {
+    capability: body.capability ?? entry.capability,
+    connectionId: body.connectionId ?? entry.connectionId,
+    configuredModelId: body.configuredModelId ?? entry.configuredModelId,
+    reasoningEffort: body.reasoningEffort ?? entry.reasoningEffort,
+    protocolMode: body.protocolMode ?? entry.protocolMode,
+  }
+}
+
 export const handlers = [
   http.get(`${base}/auth/options`, async () => {
     return HttpResponse.json({
@@ -2099,6 +2184,47 @@ export const handlers = [
 
     mockTenantSsoProviders[tenantId] = [...(mockTenantSsoProviders[tenantId] ?? []), created]
     return HttpResponse.json(created, { status: 201 })
+  }),
+
+  http.put(`${base}/admin/tenants/:tenantId/sso-providers/:providerId`, async ({ params, request }) => {
+    await delay(240)
+    const tenantId = String(params.tenantId)
+    const providerId = String(params.providerId)
+    const tenant = getMockTenantById(tenantId)
+    if (!tenant) {
+      return new HttpResponse(null, { status: 404 })
+    }
+
+    if (!mockSsoCapabilityAvailable) {
+      return createPremiumFeatureUnavailableResponse()
+    }
+
+    const existing = (mockTenantSsoProviders[tenantId] ?? []).find((provider) => provider.id === providerId)
+    if (!existing) {
+      return new HttpResponse(null, { status: 404 })
+    }
+
+    const body = await request.json() as any
+    const updated = {
+      ...existing,
+      displayName: body.displayName ?? existing.displayName,
+      providerKind: body.providerKind ?? existing.providerKind,
+      protocolKind: body.protocolKind ?? existing.protocolKind,
+      issuerOrAuthorityUrl: body.issuerOrAuthorityUrl ?? null,
+      clientId: body.clientId ?? existing.clientId,
+      // A blank secret keeps the stored one; a new secret marks it configured.
+      secretConfigured: body.clientSecret ? true : existing.secretConfigured,
+      scopes: body.scopes ?? existing.scopes,
+      allowedEmailDomains: body.allowedEmailDomains ?? existing.allowedEmailDomains,
+      isEnabled: body.isEnabled ?? existing.isEnabled,
+      autoCreateUsers: body.autoCreateUsers ?? existing.autoCreateUsers,
+      updatedAt: new Date().toISOString(),
+    }
+
+    mockTenantSsoProviders[tenantId] = (mockTenantSsoProviders[tenantId] ?? []).map((provider) =>
+      provider.id === providerId ? updated : provider,
+    )
+    return HttpResponse.json(updated)
   }),
 
   http.delete(`${base}/admin/tenants/:tenantId/sso-providers/:providerId`, async ({ params }) => {
@@ -2580,6 +2706,160 @@ export const handlers = [
     const connections = aiConnectionsByClient[clientId] ?? []
     aiConnectionsByClient[clientId] = connections.filter((connection) => connection.id !== connectionId)
     return new HttpResponse(null, { status: 204 })
+  }),
+
+  // ---- Logical models: per-client overrides + effective list ----
+
+  http.get(`${base}/clients/:clientId/logical-models`, async () => {
+    await delay(150)
+    return HttpResponse.json(effectiveLogicalModels())
+  }),
+
+  http.get(`${base}/clients/:clientId/logical-models/overrides`, async () => {
+    await delay(150)
+    return HttpResponse.json(mockClientLogicalOverrides)
+  }),
+
+  http.post(`${base}/clients/:clientId/logical-models/overrides`, async ({ request }) => {
+    await delay(250)
+    const created = logicalModelFromBody(await request.json(), 'client')
+    mockClientLogicalOverrides = [...mockClientLogicalOverrides, created]
+    return HttpResponse.json(created, { status: 201 })
+  }),
+
+  http.put(`${base}/clients/:clientId/logical-models/overrides/:name`, async ({ params, request }) => {
+    await delay(200)
+    const name = String(params.name)
+    const body = await request.json() as any
+    mockClientLogicalOverrides = mockClientLogicalOverrides.map((entry) =>
+      entry.name === name ? { ...entry, ...updatedMapping(entry, body) } : entry,
+    )
+    return new HttpResponse(null, { status: 204 })
+  }),
+
+  http.delete(`${base}/clients/:clientId/logical-models/overrides/:name`, async ({ params }) => {
+    await delay(200)
+    const name = String(params.name)
+    mockClientLogicalOverrides = mockClientLogicalOverrides.filter((entry) => entry.name !== name)
+    return new HttpResponse(null, { status: 204 })
+  }),
+
+  // ---- Logical models: per-client purpose map ----
+
+  http.get(`${base}/clients/:clientId/logical-models/purposes`, async () => {
+    await delay(150)
+    return HttpResponse.json(
+      Object.entries(mockClientPurposeRoles).map(([purpose, logicalModelName]) => ({ purpose, logicalModelName })),
+    )
+  }),
+
+  http.put(`${base}/clients/:clientId/logical-models/purposes/:purpose`, async ({ params, request }) => {
+    await delay(200)
+    const purpose = String(params.purpose)
+    const body = await request.json() as any
+    mockClientPurposeRoles = { ...mockClientPurposeRoles, [purpose]: body.logicalModelName }
+    return new HttpResponse(null, { status: 204 })
+  }),
+
+  http.delete(`${base}/clients/:clientId/logical-models/purposes/:purpose`, async ({ params }) => {
+    await delay(200)
+    const purpose = String(params.purpose)
+    const { [purpose]: _removed, ...rest } = mockClientPurposeRoles
+    mockClientPurposeRoles = rest
+    return new HttpResponse(null, { status: 204 })
+  }),
+
+  // ---- Logical models: tenant catalog + tenant connections ----
+
+  http.get(`${base}/tenants/:tenantId/logical-models`, async () => {
+    await delay(150)
+    return HttpResponse.json(mockTenantLogicalModels)
+  }),
+
+  http.post(`${base}/tenants/:tenantId/logical-models`, async ({ request }) => {
+    await delay(250)
+    const created = logicalModelFromBody(await request.json(), 'tenant')
+    mockTenantLogicalModels = [...mockTenantLogicalModels, created]
+    return HttpResponse.json(created, { status: 201 })
+  }),
+
+  http.put(`${base}/tenants/:tenantId/logical-models/:name`, async ({ params, request }) => {
+    await delay(200)
+    const name = String(params.name)
+    const body = await request.json() as any
+    mockTenantLogicalModels = mockTenantLogicalModels.map((entry) =>
+      entry.name === name ? { ...entry, ...updatedMapping(entry, body) } : entry,
+    )
+    return new HttpResponse(null, { status: 204 })
+  }),
+
+  http.post(`${base}/tenants/:tenantId/logical-models/:name/rename`, async ({ params, request }) => {
+    await delay(200)
+    const name = String(params.name)
+    const body = await request.json() as any
+    mockTenantLogicalModels = mockTenantLogicalModels.map((entry) =>
+      entry.name === name ? { ...entry, name: body.newName } : entry,
+    )
+    return new HttpResponse(null, { status: 204 })
+  }),
+
+  http.delete(`${base}/tenants/:tenantId/logical-models/:name`, async ({ params }) => {
+    await delay(200)
+    const name = String(params.name)
+    mockTenantLogicalModels = mockTenantLogicalModels.filter((entry) => entry.name !== name)
+    return new HttpResponse(null, { status: 204 })
+  }),
+
+  http.get(`${base}/tenants/:tenantId/ai-connections`, async () => {
+    await delay(150)
+    return HttpResponse.json(mockTenantConnections)
+  }),
+
+  http.post(`${base}/tenants/:tenantId/ai-connections`, async ({ params, request }) => {
+    await delay(300)
+    const body = await request.json() as any
+    const created = {
+      id: `tc-${Math.random().toString(36).slice(2, 10)}`,
+      tenantId: String(params.tenantId),
+      clientId: null,
+      displayName: body.displayName ?? 'New tenant connection',
+      providerKind: body.providerKind ?? 'openAi',
+      baseUrl: body.baseUrl ?? '',
+      authMode: body.auth?.mode ?? 'apiKey',
+      discoveryMode: body.discoveryMode ?? 'manualOnly',
+      isActive: false,
+      configuredModels: (body.configuredModels ?? []).map((model: any) => ({
+        id: `tcm-${Math.random().toString(36).slice(2, 10)}`,
+        displayName: model.displayName || model.remoteModelId,
+        remoteModelId: model.remoteModelId,
+        supportsChat: !(model.operationKinds ?? ['chat']).includes('embedding'),
+        supportsEmbedding: (model.operationKinds ?? []).includes('embedding'),
+      })),
+      purposeBindings: [],
+      verification: { status: 'unverified', summary: null },
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    }
+    mockTenantConnections = [created, ...mockTenantConnections]
+    return HttpResponse.json(created, { status: 201 })
+  }),
+
+  http.delete(`${base}/tenants/:tenantId/ai-connections/:connectionId`, async ({ params }) => {
+    await delay(200)
+    const connectionId = String(params.connectionId)
+    mockTenantConnections = mockTenantConnections.filter((connection) => connection.id !== connectionId)
+    return new HttpResponse(null, { status: 204 })
+  }),
+
+  http.post(`${base}/tenants/:tenantId/ai-connections/:connectionId/verify`, async ({ params }) => {
+    await delay(300)
+    const connectionId = String(params.connectionId)
+    mockTenantConnections = mockTenantConnections.map((connection) =>
+      connection.id === connectionId
+        ? { ...connection, verification: { status: 'verified', summary: 'Verified against the provider catalog.' } }
+        : connection,
+    )
+    return HttpResponse.json({ status: 'verified', summary: 'Verified against the provider catalog.' })
   }),
 
   http.get(`${base}/admin/providers`, async () => {

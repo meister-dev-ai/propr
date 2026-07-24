@@ -121,6 +121,14 @@ public sealed class ReviewSystemContext
     public string? ModelId { get; set; }
 
     /// <summary>
+    ///     The logical-model role backing this stage's default review runtime (the role the default-review purpose
+    ///     resolved to), or <see langword="null" /> when the runtime was resolved from a raw model / purpose binding.
+    ///     Recorded with usage so token spend from context-driven passes (e.g. the PR-wide review) is attributed to
+    ///     the logical model rather than showing as raw usage.
+    /// </summary>
+    public string? LogicalModelName { get; set; }
+
+    /// <summary>
     ///     The context-window size (in tokens) of the resolved model for this review stage, used to
     ///     budget and trim the prompt before each provider call. <see langword="null" /> when the model
     ///     has no configured context window; a conservative built-in default is applied in that case.

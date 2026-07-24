@@ -423,43 +423,8 @@ try
         return;
     }
 
-    // Apply migrations, secret backfill, and startup recovery when a database is configured.
-    if (hasDatabaseConnectionString)
-    {
-        using var scope = app.Services.CreateScope();
-        var db = scope.ServiceProvider.GetRequiredService<MeisterProPRDbContext>();
-
-        // Apply any pending migrations automatically on startup
-        await db.Database.MigrateAsync();
-
-        var systemTenantBootstrapService = scope.ServiceProvider.GetService<SystemTenantBootstrapService>();
-        if (systemTenantBootstrapService is not null)
-        {
-            await systemTenantBootstrapService.SeedAsync();
-        }
-
-        var secretBackfillService = scope.ServiceProvider.GetRequiredService<SecretBackfillService>();
-        await secretBackfillService.BackfillAsync();
-
-        // Startup recovery: transition stale Processing jobs (e.g., from a crash) back to Pending
-        var jobRepo = scope.ServiceProvider.GetRequiredService<IJobRepository>();
-        var staleJobs = await jobRepo.GetProcessingJobsAsync();
-        foreach (var job in staleJobs)
-        {
-            await jobRepo.TryTransitionAsync(job.Id, JobStatus.Processing, JobStatus.Pending);
-            Log.Warning(
-                "Startup recovery: job {JobId} for PR#{PrId} was stale (Processing); reset to Pending",
-                job.Id,
-                job.PullRequestId);
-        }
-
-        // Seed bootstrap admin user if none exists
-        var bootstrapService = scope.ServiceProvider.GetService<AdminBootstrapService>();
-        if (bootstrapService is not null)
-        {
-            await bootstrapService.SeedAsync();
-        }
-    }
+    // Apply migrations, secret/logical-model backfills, startup recovery, and seeding when a database is configured.
+    await app.ApplyStartupMaintenanceAsync(hasDatabaseConnectionString);
 
     app.UseForwardedHeaders();
 

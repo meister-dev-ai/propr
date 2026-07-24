@@ -16,4 +16,8 @@ public sealed record ResolvedAiChatRuntime(
     AiConfiguredModelDto Model,
     AiPurposeBindingDto Binding,
     IChatClient ChatClient,
-    AgentReviewRuntimeCapabilities Capabilities) : IResolvedAiChatRuntime;
+    AgentReviewRuntimeCapabilities Capabilities) : IResolvedAiChatRuntime
+{
+    /// <inheritdoc />
+    public string? LogicalModelName { get; init; }
+}

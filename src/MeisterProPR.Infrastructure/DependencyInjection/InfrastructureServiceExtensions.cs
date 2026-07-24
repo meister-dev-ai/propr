@@ -91,6 +91,10 @@ public static class InfrastructureServiceExtensions
 
         services.AddSingleton<ISecretProtectionCodec, SecretProtectionCodec>();
         services.AddScoped<IAiRuntimeResolver, AiRuntimeResolver>();
+        services.AddScoped<IAiRuntimeFactory, AiRuntimeFactory>();
+        // ILogicalModelResolver is registered in the Clients module, alongside its ILogicalModelCatalogRepository
+        // dependency (both gated on a database connection) — not here, so infrastructure-support-only compositions
+        // (e.g. the ProCursor remote-mode host) validate without the persistence layer present.
 
         // ADO operational services are composed behind provider-local registration.
         if (includeProviderOperationalServices)

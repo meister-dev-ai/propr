@@ -39,7 +39,8 @@ internal sealed partial class FileReviewer(
     LocalReviewVerificationExecutor? localReviewVerificationExecutor,
     IReviewPipelineProfileProvider? pipelineProfileProvider,
     IProRVPrefilter? proRvPrefilter = null,
-    IReviewComplexityClassifier? complexityClassifier = null)
+    IReviewComplexityClassifier? complexityClassifier = null,
+    ILogicalModelResolver? logicalModelResolver = null)
 {
     // Stage id recorded on the ProRV-lens applicability screen's protocol events.
     private const string ProRvLensStageId = "file-by-file.prorv-lens";
@@ -123,10 +124,10 @@ internal sealed partial class FileReviewer(
 
         var tierPurpose = GetTierPurpose(tier);
 
-        var (tierClient, tierModelId, tierCapabilities, tierMaxContextTokens, tierTokenizerName) =
+        var (tierClient, tierModelId, tierCapabilities, tierMaxContextTokens, tierTokenizerName, tierLogicalModelName) =
             await this.ResolveTierClientAsync(job, tierCategory, tierPurpose, ct);
 
-        var protocolId = await this.BeginNewProtocolAsync(job, file, fileResult, tierCategory, tierModelId, ct);
+        var protocolId = await this.BeginNewProtocolAsync(job, file, fileResult, tierCategory, tierModelId, tierLogicalModelName, ct);
 
         ReviewSystemContext? fileContext = null;
 
@@ -412,6 +413,7 @@ internal sealed partial class FileReviewer(
                     plannedPass.MaxContextTokens,
                     plannedPass.TokenizerName,
                     plannedPass.ReasoningEffort,
+                    plannedPass.LogicalModelName,
                     inputs.Ct));
 
             unionComments.AddRange(StampUnionOrigin(passResult.Comments, plannedPass.PassIndex, plannedPass.Lens, plannedPass.Shadow));
@@ -550,13 +552,14 @@ internal sealed partial class FileReviewer(
                 continue;
             }
 
-            var runtime = await this.TryResolvePassRuntimeAsync(inputs.Job, inputs.File.Path, pass.ConfiguredModelId, passIndex, inputs.Ct);
-            if (runtime is null)
+            var resolved = await this.TryResolvePassRuntimeAsync(inputs.Job, inputs.File.Path, pass, passIndex, inputs.Ct);
+            if (resolved is null)
             {
                 await this.RecordMultiPassUnionPassSkippedAsync(inputs.ProtocolId, inputs.File.Path, passIndex, pass.ConfiguredModelId, inputs.Tier, inputs.Ct);
             }
             else
             {
+                var (runtime, effort) = resolved.Value;
                 passes.Add(
                     new PlannedResamplePass(
                         passIndex,
@@ -568,7 +571,8 @@ internal sealed partial class FileReviewer(
                         pass.Shadow,
                         runtime.Model.MaxContextTokens,
                         runtime.Model.TokenizerName,
-                        pass.ReasoningEffort));
+                        effort,
+                        runtime.LogicalModelName));
             }
 
             passIndex++;
@@ -628,6 +632,7 @@ internal sealed partial class FileReviewer(
             inputs.PassModelId,
             $"multi-pass union {inputs.PassArm.Label} pass #{inputs.PassIndex}",
             ReviewPassKind.MultiPassUnion,
+            inputs.PassLogicalModelName,
             inputs.Ct);
 
         // A transient result row keeps this pass from overwriting the persisted per-file result; only its
@@ -796,23 +801,53 @@ internal sealed partial class FileReviewer(
     // Resolves the runtime for one production resample pass from its configured model id (connection implied).
     // Returns null when the model cannot be resolved (deleted/unresolved model, or no resolver) so the caller skips
     // that pass rather than resampling the tier model.
-    private async Task<IResolvedAiChatRuntime?> TryResolvePassRuntimeAsync(
+    private async Task<(IResolvedAiChatRuntime Runtime, ReviewReasoningEffort Effort)?> TryResolvePassRuntimeAsync(
         ReviewJob job,
         string filePath,
-        Guid configuredModelId,
+        ReviewPassSpec pass,
         int passIndex,
         CancellationToken ct)
     {
+        // A pass that names a logical model resolves through the logical-model catalog — its connection, model,
+        // reasoning effort, and protocol come from the resolved role. Legacy passes bind a concrete configured model
+        // and carry their own per-pass effort.
+        if (!string.IsNullOrEmpty(pass.LogicalModelName))
+        {
+            if (logicalModelResolver is null)
+            {
+                LogMultiPassUnionPassModelUnresolved(logger, job.Id, filePath, Guid.Empty, passIndex, null);
+                return null;
+            }
+
+            try
+            {
+                var resolved = await logicalModelResolver
+                    .ResolveChatRuntimeAsync(job.ClientId, pass.LogicalModelName, ct: ct)
+                    .ConfigureAwait(false);
+                return (resolved.Runtime, resolved.ReasoningEffort);
+            }
+            catch (OperationCanceledException)
+            {
+                throw;
+            }
+            catch (Exception ex)
+            {
+                LogMultiPassUnionPassModelUnresolved(logger, job.Id, filePath, Guid.Empty, passIndex, ex);
+                return null;
+            }
+        }
+
         if (aiRuntimeResolver is null)
         {
-            LogMultiPassUnionPassModelUnresolved(logger, job.Id, filePath, configuredModelId, passIndex, null);
+            LogMultiPassUnionPassModelUnresolved(logger, job.Id, filePath, pass.ConfiguredModelId, passIndex, null);
             return null;
         }
 
         try
         {
-            return await aiRuntimeResolver.ResolveChatRuntimeForModelAsync(job.ClientId, configuredModelId, ct)
+            var runtime = await aiRuntimeResolver.ResolveChatRuntimeForModelAsync(job.ClientId, pass.ConfiguredModelId, ct)
                 .ConfigureAwait(false);
+            return (runtime, pass.ReasoningEffort);
         }
         catch (OperationCanceledException)
         {
@@ -820,7 +855,7 @@ internal sealed partial class FileReviewer(
         }
         catch (Exception ex)
         {
-            LogMultiPassUnionPassModelUnresolved(logger, job.Id, filePath, configuredModelId, passIndex, ex);
+            LogMultiPassUnionPassModelUnresolved(logger, job.Id, filePath, pass.ConfiguredModelId, passIndex, ex);
             return null;
         }
     }
@@ -1347,6 +1382,7 @@ internal sealed partial class FileReviewer(
         string? tierModelId,
         string? reason,
         ReviewPassKind displayPassKind,
+        string? logicalModelName,
         CancellationToken ct)
     {
         try
@@ -1360,7 +1396,8 @@ internal sealed partial class FileReviewer(
                 tierModelId,
                 ct,
                 displayPassKind,
-                reason);
+                reason,
+                logicalModelName);
         }
         catch (Exception ex)
         {
@@ -1405,6 +1442,7 @@ internal sealed partial class FileReviewer(
         ReviewFileResult fileResult,
         AiConnectionModelCategory tierCategory,
         string? tierModelId,
+        string? tierLogicalModelName,
         CancellationToken ct)
     {
         try
@@ -1417,7 +1455,8 @@ internal sealed partial class FileReviewer(
                 tierCategory,
                 tierModelId,
                 ct,
-                ReviewPassKind.Baseline);
+                ReviewPassKind.Baseline,
+                logicalModelName: tierLogicalModelName);
         }
         catch (Exception ex)
         {
@@ -1476,7 +1515,7 @@ internal sealed partial class FileReviewer(
     }
 
     private async Task<(IChatClient? tierClient, string? tierModelId, AgentReviewRuntimeCapabilities? tierCapabilities, int? tierMaxContextTokens, string?
-        tierTokenizerName)> ResolveTierClientAsync(
+        tierTokenizerName, string? tierLogicalModelName)> ResolveTierClientAsync(
         ReviewJob job,
         AiConnectionModelCategory tierCategory,
         AiPurpose tierPurpose,
@@ -1487,6 +1526,7 @@ internal sealed partial class FileReviewer(
         AgentReviewRuntimeCapabilities? tierCapabilities = null;
         int? tierMaxContextTokens = null;
         string? tierTokenizerName = null;
+        string? tierLogicalModelName = null;
 
         if (aiRuntimeResolver is not null)
         {
@@ -1498,6 +1538,7 @@ internal sealed partial class FileReviewer(
                 tierCapabilities = tierRuntime.Capabilities;
                 tierMaxContextTokens = tierRuntime.Model.MaxContextTokens;
                 tierTokenizerName = tierRuntime.Model.TokenizerName;
+                tierLogicalModelName = tierRuntime.LogicalModelName;
             }
             catch
             {
@@ -1506,6 +1547,7 @@ internal sealed partial class FileReviewer(
                 tierCapabilities = null;
                 tierMaxContextTokens = null;
                 tierTokenizerName = null;
+                tierLogicalModelName = null;
             }
         }
         else if (aiConnectionRepository is not null && aiClientFactory is not null)
@@ -1526,7 +1568,7 @@ internal sealed partial class FileReviewer(
             }
         }
 
-        return (tierClient, tierModelId, tierCapabilities, tierMaxContextTokens, tierTokenizerName);
+        return (tierClient, tierModelId, tierCapabilities, tierMaxContextTokens, tierTokenizerName, tierLogicalModelName);
     }
 
     private static IReadOnlyList<PrCommentThread> FilterThreadsForFile(
@@ -1625,7 +1667,8 @@ internal sealed partial class FileReviewer(
         bool Shadow = false,
         int? MaxContextTokens = null,
         string? TokenizerName = null,
-        ReviewReasoningEffort ReasoningEffort = ReviewReasoningEffort.None);
+        ReviewReasoningEffort ReasoningEffort = ReviewReasoningEffort.None,
+        string? LogicalModelName = null);
 
     private sealed record MultiPassUnionCompletion(
         Guid? ProtocolId,
@@ -1677,5 +1720,6 @@ internal sealed partial class FileReviewer(
         int? PassMaxContextTokens,
         string? PassTokenizerName,
         ReviewReasoningEffort PassReasoningEffort,
+        string? PassLogicalModelName,
         CancellationToken Ct);
 }

@@ -15,7 +15,18 @@ public sealed class ClientReviewPassRecord
     public Guid Id { get; set; }
     public Guid ClientId { get; set; }
     public int Ordinal { get; set; }
-    public Guid ConfiguredModelId { get; set; }
+
+    /// <summary>
+    ///     The concrete configured model that runs the pass, for not-yet-migrated rows. <see langword="null" /> when the
+    ///     pass instead names a <see cref="LogicalModelName" /> (the named role). Exactly one of the two is set.
+    /// </summary>
+    public Guid? ConfiguredModelId { get; set; }
+
+    /// <summary>
+    ///     The named logical model that runs the pass (connection, model, reasoning effort, and protocol come from it).
+    ///     <see langword="null" /> for legacy rows that still bind a concrete <see cref="ConfiguredModelId" />.
+    /// </summary>
+    public string? LogicalModelName { get; set; }
 
     /// <summary>
     ///     Optional lens for this pass. <see langword="null" /> is an ordinary resample pass; a known lens value

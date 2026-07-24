@@ -48,12 +48,14 @@ public sealed partial class ClientTokenUsageController(
             return roleCheck;
         }
 
-        if (!DateOnly.TryParse(from, CultureInfo.InvariantCulture, out var fromDate))
+        // Exact-format parse so the accepted input matches the advertised YYYY-MM-DD contract (TryParse with a culture
+        // still accepts other invariant date spellings, which is more permissive than the documented format).
+        if (!DateOnly.TryParseExact(from, "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.None, out var fromDate))
         {
             return this.BadRequest(new { error = "Query parameter 'from' is required and must be a valid date (YYYY-MM-DD)." });
         }
 
-        if (!DateOnly.TryParse(to, CultureInfo.InvariantCulture, out var toDate))
+        if (!DateOnly.TryParseExact(to, "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.None, out var toDate))
         {
             return this.BadRequest(new { error = "Query parameter 'to' is required and must be a valid date (YYYY-MM-DD)." });
         }
@@ -74,7 +76,8 @@ public sealed partial class ClientTokenUsageController(
                 s.CachedInputTokens,
                 s.CacheWriteTokens,
                 s.ReasoningTokens,
-                s.EstimatedCostUsd))
+                s.EstimatedCostUsd,
+                s.LogicalModelName))
             .ToList();
 
         var totalEstimatedCostUsd = sampleDtos.Any(s => s.EstimatedCostUsd.HasValue)

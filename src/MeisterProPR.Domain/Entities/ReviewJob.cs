@@ -352,11 +352,13 @@ public sealed class ReviewJob
         long outputTokens,
         long cachedInputTokens = 0,
         long cacheWriteTokens = 0,
-        long reasoningTokens = 0)
+        long reasoningTokens = 0,
+        string? logicalModelName = null)
     {
         var existing = this.TokenBreakdown.Find(e =>
             e.ConnectionCategory == category &&
-            string.Equals(e.ModelId, modelId, StringComparison.Ordinal));
+            string.Equals(e.ModelId, modelId, StringComparison.Ordinal) &&
+            string.Equals(e.LogicalModelName, logicalModelName, StringComparison.Ordinal));
 
         if (existing is not null)
         {
@@ -381,7 +383,8 @@ public sealed class ReviewJob
                     outputTokens,
                     cachedInputTokens,
                     cacheWriteTokens,
-                    reasoningTokens));
+                    reasoningTokens,
+                    LogicalModelName: logicalModelName));
         }
 
         this.AccumulateTokens(inputTokens, outputTokens, cachedInputTokens, cacheWriteTokens, reasoningTokens);
@@ -402,11 +405,13 @@ public sealed class ReviewJob
         AiConnectionModelCategory category,
         string modelId,
         decimal? estimatedCostUsd,
-        bool costIsApproximate)
+        bool costIsApproximate,
+        string? logicalModelName = null)
     {
         var index = this.TokenBreakdown.FindIndex(e =>
             e.ConnectionCategory == category &&
-            string.Equals(e.ModelId, modelId, StringComparison.Ordinal));
+            string.Equals(e.ModelId, modelId, StringComparison.Ordinal) &&
+            string.Equals(e.LogicalModelName, logicalModelName, StringComparison.Ordinal));
 
         if (index >= 0)
         {

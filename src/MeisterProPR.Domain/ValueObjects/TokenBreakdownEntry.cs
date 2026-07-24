@@ -19,6 +19,7 @@ namespace MeisterProPR.Domain.ValueObjects;
 /// <param name="TotalReasoningTokens">Accumulated reasoning tokens (a portion of <paramref name="TotalOutputTokens" />).</param>
 /// <param name="EstimatedCostUsd">Estimated USD cost for this tier/model computed from its cumulative token totals; <see langword="null" /> when the model has no configured pricing.</param>
 /// <param name="CostIsApproximate">True when <paramref name="EstimatedCostUsd" /> rests on a fallback rate, a missing rate, or estimated token counts.</param>
+/// <param name="LogicalModelName">The logical-model role that produced these tokens, captured at the time; <see langword="null" /> for raw-model / non-logical-model passes (and rows written before this dimension existed).</param>
 public sealed record TokenBreakdownEntry(
     AiConnectionModelCategory ConnectionCategory,
     string ModelId,
@@ -28,4 +29,5 @@ public sealed record TokenBreakdownEntry(
     long TotalCacheWriteTokens = 0,
     long TotalReasoningTokens = 0,
     decimal? EstimatedCostUsd = null,
-    bool CostIsApproximate = false);
+    bool CostIsApproximate = false,
+    string? LogicalModelName = null);

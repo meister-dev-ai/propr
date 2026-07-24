@@ -6,9 +6,12 @@
   <section class="section-card tenant-provider-list">
     <div class="section-card-header">
       <div>
-        <h3>Tenant Providers</h3>
-        <p class="section-subtitle">Manage the external providers available to users in this tenant.</p>
+        <h3>SSO providers</h3>
+        <p class="section-subtitle">Single sign-on identity providers users can authenticate with for this tenant.</p>
       </div>
+      <button class="btn-secondary btn-sm" type="button" data-testid="provider-add" @click="$emit('add')">
+        <i class="fi fi-rr-plus"></i> Add SSO provider
+      </button>
     </div>
 
     <div class="section-card-body">
@@ -28,6 +31,14 @@
             </span>
             <button
               class="btn-secondary btn-sm"
+              data-testid="provider-edit"
+              :disabled="busyProviderId === provider.id"
+              @click="$emit('edit', provider)"
+            >
+              Edit
+            </button>
+            <button
+              class="btn-danger btn-sm"
               :disabled="busyProviderId === provider.id"
               @click="$emit('delete', provider.id)"
             >
@@ -49,6 +60,8 @@ defineProps<{
 }>()
 
 defineEmits<{
+  (e: 'add'): void
+  (e: 'edit', provider: TenantSsoProviderDto): void
   (e: 'delete', providerId: string): void
 }>()
 </script>

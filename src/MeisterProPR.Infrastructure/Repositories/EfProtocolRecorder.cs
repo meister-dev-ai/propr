@@ -38,7 +38,8 @@ public sealed class EfProtocolRecorder(
         string? modelId = null,
         CancellationToken ct = default,
         ReviewPassKind? passKind = null,
-        string? reason = null)
+        string? reason = null,
+        string? logicalModelName = null)
     {
         await using var db = await contextFactory.CreateDbContextAsync(ct);
         var protocol = new ReviewJobProtocol
@@ -51,6 +52,7 @@ public sealed class EfProtocolRecorder(
             StartedAt = DateTimeOffset.UtcNow,
             AiConnectionCategory = connectionCategory,
             ModelId = modelId,
+            LogicalModelName = logicalModelName,
             PassKind = passKind?.ToString(),
             Reason = reason,
         };
@@ -271,6 +273,7 @@ public sealed class EfProtocolRecorder(
                 // Always accumulate into breakdown, using Default category if none specified
                 var category = protocol.AiConnectionCategory ?? AiConnectionModelCategory.Default;
                 var modelId = protocol.ModelId ?? "(default)";
+                var logicalModelName = protocol.LogicalModelName;
                 var cachedInputTokens = totalCachedInputTokens ?? 0;
                 var cacheWriteTokens = totalCacheWriteTokens ?? 0;
                 var reasoningTokens = totalReasoningTokens ?? 0;
@@ -281,7 +284,8 @@ public sealed class EfProtocolRecorder(
                     totalOutputTokens,
                     cachedInputTokens,
                     cacheWriteTokens,
-                    reasoningTokens);
+                    reasoningTokens,
+                    logicalModelName);
 
                 await db.SaveChangesAsync(ct);
 
@@ -296,7 +300,8 @@ public sealed class EfProtocolRecorder(
                     cachedInputTokens,
                     cacheWriteTokens,
                     reasoningTokens,
-                    ct);
+                    ct,
+                    logicalModelName);
 
                 // Upsert daily token usage aggregate for the client owning this job.
                 if (totalInputTokens > 0
@@ -316,7 +321,8 @@ public sealed class EfProtocolRecorder(
                         cachedInputTokens,
                         cacheWriteTokens,
                         reasoningTokens,
-                        passCostDelta);
+                        passCostDelta,
+                        logicalModelName ?? string.Empty);
                 }
             }
         }
@@ -336,7 +342,8 @@ public sealed class EfProtocolRecorder(
         CancellationToken ct = default,
         long cachedInputTokens = 0,
         long cacheWriteTokens = 0,
-        long reasoningTokens = 0)
+        long reasoningTokens = 0,
+        string? logicalModelName = null)
     {
         try
         {
@@ -372,6 +379,9 @@ public sealed class EfProtocolRecorder(
                 // Always accumulate into breakdown, using provided category or Default if none
                 var category = connectionCategory ?? AiConnectionModelCategory.Default;
                 var effectiveModelId = modelId ?? "(default)";
+                // Prefer the caller's logical model (an out-of-loop call may use a different role than the pass);
+                // fall back to the pass's role when the caller reused the pass runtime and didn't specify one.
+                var effectiveLogicalModelName = logicalModelName ?? protocol.LogicalModelName;
                 job.AccumulateTierTokens(
                     category,
                     effectiveModelId,
@@ -379,7 +389,8 @@ public sealed class EfProtocolRecorder(
                     outputTokens,
                     cachedInputTokens,
                     cacheWriteTokens,
-                    reasoningTokens);
+                    reasoningTokens,
+                    effectiveLogicalModelName);
 
                 await db.SaveChangesAsync(ct);
 
@@ -394,7 +405,8 @@ public sealed class EfProtocolRecorder(
                     cachedInputTokens,
                     cacheWriteTokens,
                     reasoningTokens,
-                    ct);
+                    ct,
+                    effectiveLogicalModelName);
             }
         }
         catch (Exception ex)
@@ -419,7 +431,8 @@ public sealed class EfProtocolRecorder(
         long passCachedInputTokens,
         long passCacheWriteTokens,
         long passReasoningTokens,
-        CancellationToken ct)
+        CancellationToken ct,
+        string? logicalModelName = null)
     {
         if (pricingResolver is null)
         {
@@ -428,12 +441,14 @@ public sealed class EfProtocolRecorder(
 
         try
         {
+            // Pricing is per physical model; the logical-model name only selects which breakdown entry to price.
             var pricing = await pricingResolver.ResolveAsync(job.AiConnectionId ?? Guid.Empty, category, modelId, ct)
                           ?? new ModelPricing(null, null);
 
             var tierEntry = job.TokenBreakdown.FirstOrDefault(entry =>
                 entry.ConnectionCategory == category &&
-                string.Equals(entry.ModelId, modelId, StringComparison.Ordinal));
+                string.Equals(entry.ModelId, modelId, StringComparison.Ordinal) &&
+                string.Equals(entry.LogicalModelName, logicalModelName, StringComparison.Ordinal));
 
             if (tierEntry is not null)
             {
@@ -445,7 +460,7 @@ public sealed class EfProtocolRecorder(
                         tierEntry.TotalCacheWriteTokens,
                         tierEntry.TotalReasoningTokens),
                     pricing);
-                job.SetTierCost(category, modelId, cumulative.Usd, cumulative.IsApproximate);
+                job.SetTierCost(category, modelId, cumulative.Usd, cumulative.IsApproximate, logicalModelName);
                 await db.SaveChangesAsync(ct);
             }
 
@@ -569,6 +584,18 @@ public sealed class EfProtocolRecorder(
         CancellationToken ct = default)
     {
         await this.RecordEventAsync(protocolId, ProtocolEventKind.Operational, eventName, details, output, error, ct, "prorv-prefilter");
+    }
+
+    /// <inheritdoc />
+    public async Task RecordLogicalModelResolutionEventAsync(
+        Guid protocolId,
+        string eventName,
+        string? details,
+        string? output,
+        string? error,
+        CancellationToken ct = default)
+    {
+        await this.RecordEventAsync(protocolId, ProtocolEventKind.Operational, eventName, details, output, error, ct, "logical-model-resolution");
     }
 
     private async Task RecordEventAsync(

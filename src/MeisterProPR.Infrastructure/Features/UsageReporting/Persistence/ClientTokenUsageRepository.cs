@@ -30,8 +30,12 @@ public sealed class ClientTokenUsageRepository(MeisterProPRDbContext db) : IClie
         long cachedInputTokens = 0,
         long cacheWriteTokens = 0,
         long reasoningTokens = 0,
-        decimal? estimatedCostUsd = null)
+        decimal? estimatedCostUsd = null,
+        string logicalModelName = "")
     {
+        // The aggregate key is non-null in logical_model_name (empty for raw usage) so ON CONFLICT matches every row.
+        logicalModelName ??= string.Empty;
+
         if (db.Database.ProviderName?.Contains("Npgsql", StringComparison.OrdinalIgnoreCase) == true)
         {
             // PostgreSQL: atomic upsert via ON CONFLICT DO UPDATE — no read-modify-write race.
@@ -41,9 +45,9 @@ public sealed class ClientTokenUsageRepository(MeisterProPRDbContext db) : IClie
             await db.Database.ExecuteSqlRawAsync(
                 """
                 INSERT INTO client_token_usage_samples
-                    (id, client_id, model_id, date, input_tokens, output_tokens, cached_input_tokens, cache_write_tokens, reasoning_tokens, estimated_cost_usd)
-                VALUES (gen_random_uuid(), {0}, {1}, {2}, {3}, {4}, {5}, {6}, {7}, @estimated_cost_usd)
-                ON CONFLICT (client_id, model_id, date)
+                    (id, client_id, model_id, logical_model_name, date, input_tokens, output_tokens, cached_input_tokens, cache_write_tokens, reasoning_tokens, estimated_cost_usd)
+                VALUES (gen_random_uuid(), {0}, {1}, {2}, {3}, {4}, {5}, {6}, {7}, {8}, @estimated_cost_usd)
+                ON CONFLICT (client_id, model_id, logical_model_name, date)
                 DO UPDATE SET
                     input_tokens        = client_token_usage_samples.input_tokens        + EXCLUDED.input_tokens,
                     output_tokens       = client_token_usage_samples.output_tokens       + EXCLUDED.output_tokens,
@@ -57,6 +61,7 @@ public sealed class ClientTokenUsageRepository(MeisterProPRDbContext db) : IClie
                 """,
                 clientId,
                 modelId,
+                logicalModelName,
                 date,
                 inputTokens,
                 outputTokens,
@@ -73,7 +78,7 @@ public sealed class ClientTokenUsageRepository(MeisterProPRDbContext db) : IClie
             // InMemory fallback: read-modify-write (acceptable for tests only).
             var existing = await db.ClientTokenUsageSamples
                 .FirstOrDefaultAsync(
-                    s => s.ClientId == clientId && s.ModelId == modelId && s.Date == date,
+                    s => s.ClientId == clientId && s.ModelId == modelId && s.LogicalModelName == logicalModelName && s.Date == date,
                     ct);
 
             if (existing is null)
@@ -84,6 +89,7 @@ public sealed class ClientTokenUsageRepository(MeisterProPRDbContext db) : IClie
                         Id = Guid.NewGuid(),
                         ClientId = clientId,
                         ModelId = modelId,
+                        LogicalModelName = logicalModelName,
                         Date = date,
                         InputTokens = inputTokens,
                         OutputTokens = outputTokens,

@@ -91,6 +91,14 @@ public sealed class ReviewJobProtocol
     public string? ModelId { get; set; }
 
     /// <summary>
+    ///     The name of the logical model that resolved this pass's runtime, captured at the time of the call.
+    ///     <see langword="null" /> when the pass ran on a raw connection+model or the call is not logical-model backed
+    ///     (e.g. posting, or legacy records). Denormalized on purpose: a logical model can later be renamed or
+    ///     re-pointed, and historical usage statistics must reflect the role as it was when the tokens were spent.
+    /// </summary>
+    public string? LogicalModelName { get; set; }
+
+    /// <summary>
     ///     The kind of review pass this protocol represents — the <c>ReviewPassKind</c> name
     ///     (e.g. <c>"Baseline"</c>, <c>"MultiPassUnion"</c>). <see langword="null" /> for legacy
     ///     records and passes with no meaningful kind (e.g. synthesis, which the UI derives from <see cref="Label" />).

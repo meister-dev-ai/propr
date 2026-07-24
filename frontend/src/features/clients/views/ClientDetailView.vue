@@ -8,7 +8,7 @@
             <AppNavDrawer>
             <div id="provider-sidebar-target"></div>
 
-            <div v-show="!isProviderDetailOpen && !isWebhookDetailOpen" class="default-sidebar-content">
+            <div v-show="!isProviderDetailOpen && !isWebhookDetailOpen && !isAiDetailOpen" class="default-sidebar-content">
                 <RouterLink class="back-link" :to="{ name: 'clients' }" style="margin-bottom: 0">
                     <i class="fi fi-rr-arrow-left"></i> Back to clients
                 </RouterLink>
@@ -153,7 +153,8 @@
 
                 <!-- Tab: AI Connections -->
                 <div v-if="canManageClient" v-show="activeTab === 'ai'">
-                    <ClientAiConnectionsTab :client-id="client.id" />
+                    <ClientAiConnectionsTab :client-id="client.id" :active="activeTab === 'ai'"
+                        @update:isDetailOpen="isAiDetailOpen = $event" @exit="activeTab = 'config'" />
                 </div>
 
                 <!-- Tab: Budget -->
@@ -192,6 +193,7 @@ provide(ClientDetailVmKey, vm);
 const {
     isProviderDetailOpen,
     isWebhookDetailOpen,
+    isAiDetailOpen,
     client,
     loading,
     notFound,

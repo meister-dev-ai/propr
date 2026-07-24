@@ -103,8 +103,9 @@ describe('ClientAiConnectionsTab', () => {
     await wrapper.find('.ai-profile-card').trigger('click')
     await flushPromises()
 
+    // The editor now opens in a modal overlay rather than swapping the panel inline.
     expect(wrapper.text()).toContain('Edit AI Provider')
-    expect(wrapper.text()).toContain('Back to list')
+    expect(wrapper.find('.ai-editor-card').exists()).toBe(true)
   })
 
   it('keeps advanced request overrides collapsed until explicitly opened', async () => {
@@ -139,13 +140,17 @@ describe('ClientAiConnectionsTab', () => {
     expect((wrapper.vm as unknown as { advancedSettingsOpen: boolean }).advancedSettingsOpen).toBe(true)
   })
 
-  it('creates a provider-neutral AI profile with chat and embedding purpose bindings', async () => {
+  it('creates a provider-neutral AI profile with its configured models', async () => {
     const randomIds = ['chat-local', 'embed-local']
     vi.spyOn(globalThis.crypto, 'randomUUID').mockImplementation(() => (randomIds.shift() ?? 'fallback-local') as `${string}-${string}-${string}-${string}-${string}`)
     mockListAiConnections.mockResolvedValue([])
 
     const { default: ClientAiConnectionsTab } = await import('@/features/clients/components/ClientAiConnectionsTab.vue')
     const wrapper = mount(ClientAiConnectionsTab, { props: { clientId: 'client-1' } })
+    await flushPromises()
+
+    // With no connections the view shows the list's empty state; open the create form via Add Profile.
+    await wrapper.findAll('button').find((button) => button.text() === 'Add Profile')!.trigger('click')
     await flushPromises()
 
     await wrapper.find('[data-testid="ai-display-name"]').setValue('Unified OpenAI Stack')
@@ -195,77 +200,57 @@ describe('ClientAiConnectionsTab', () => {
     await modelRows[1].findAll('button').find(b => b.text() === 'Done')?.trigger('click')
     await flushPromises()
 
-    const bindingRows = wrapper.findAll('.ai-binding-row')
-    expect(bindingRows).toHaveLength(9)
-
-    // Rows render grouped by section (generation, support, memory) in purposeOptions order.
-    // Indices 4 (proRvPrefilter), 5 (reviewTriage), and 6 (reviewVerification) default to disabled,
-    // so leave them unset; the embedding binding is the last row (index 8).
-    for (const [index, row] of bindingRows.entries()) {
-      const selects = row.findAll('select')
-      if (index === 4 || index === 5 || index === 6) {
-        continue
-      }
-
-      await selects[0].setValue(index === 8 ? 'embed-local' : 'chat-local')
-    }
+    // Purpose bindings are no longer configured on the connection form — they moved to the logical-model
+    // purpose map — so the form has no binding rows and creating a profile submits the connection with its
+    // configured models (the meaningful payload).
+    expect(wrapper.findAll('.ai-binding-row')).toHaveLength(0)
 
     const saveButton = wrapper.findAll('button').find((button) => button.text().includes('Create Profile'))
     expect(saveButton).toBeDefined()
     await saveButton!.trigger('click')
     await flushPromises()
 
-    expect(mockCreateAiConnection).toHaveBeenCalledWith('client-1', {
-      displayName: 'Unified OpenAI Stack',
-      providerKind: 'openAi',
-      baseUrl: 'https://api.openai.com/v1',
-      auth: {
-        mode: 'apiKey',
-        apiKey: 'secret-key',
-      },
-      discoveryMode: 'providerCatalog',
-      defaultHeaders: undefined,
-      defaultQueryParams: undefined,
-      configuredModels: [
-        {
-          id: undefined,
-          remoteModelId: 'gpt-4.1-mini',
-          displayName: 'GPT-4.1 Mini',
-          operationKinds: ['chat'],
-          supportedProtocolModes: ['auto', 'responses', 'chatCompletions'],
-          tokenizerName: undefined,
-          maxInputTokens: undefined,
-          embeddingDimensions: undefined,
-          supportsStructuredOutput: true,
-          supportsToolUse: true,
-          source: 'manual',
+    expect(mockCreateAiConnection).toHaveBeenCalledWith(
+      'client-1',
+      expect.objectContaining({
+        displayName: 'Unified OpenAI Stack',
+        providerKind: 'openAi',
+        baseUrl: 'https://api.openai.com/v1',
+        auth: {
+          mode: 'apiKey',
+          apiKey: 'secret-key',
         },
-        {
-          id: undefined,
-          remoteModelId: 'text-embedding-3-large',
-          displayName: 'Text Embedding 3 Large',
-          operationKinds: ['embedding'],
-          supportedProtocolModes: ['auto', 'embeddings'],
-          tokenizerName: 'cl100k_base',
-          maxInputTokens: 8192,
-          embeddingDimensions: 3072,
-          supportsStructuredOutput: false,
-          supportsToolUse: false,
-          source: 'manual',
-        },
-      ],
-      purposeBindings: [
-        { id: undefined, purpose: 'reviewDefault', configuredModelId: undefined, remoteModelId: 'gpt-4.1-mini', protocolMode: 'auto', isEnabled: true },
-        { id: undefined, purpose: 'reviewLowEffort', configuredModelId: undefined, remoteModelId: 'gpt-4.1-mini', protocolMode: 'auto', isEnabled: true },
-        { id: undefined, purpose: 'reviewMediumEffort', configuredModelId: undefined, remoteModelId: 'gpt-4.1-mini', protocolMode: 'auto', isEnabled: true },
-        { id: undefined, purpose: 'reviewHighEffort', configuredModelId: undefined, remoteModelId: 'gpt-4.1-mini', protocolMode: 'auto', isEnabled: true },
-        { id: undefined, purpose: 'proRvPrefilter', configuredModelId: undefined, remoteModelId: undefined, protocolMode: 'auto', isEnabled: false },
-        { id: undefined, purpose: 'reviewTriage', configuredModelId: undefined, remoteModelId: undefined, protocolMode: 'auto', isEnabled: false },
-        { id: undefined, purpose: 'reviewVerification', configuredModelId: undefined, remoteModelId: undefined, protocolMode: 'auto', isEnabled: false },
-        { id: undefined, purpose: 'memoryReconsideration', configuredModelId: undefined, remoteModelId: 'gpt-4.1-mini', protocolMode: 'auto', isEnabled: true },
-        { id: undefined, purpose: 'embeddingDefault', configuredModelId: undefined, remoteModelId: 'text-embedding-3-large', protocolMode: 'embeddings', isEnabled: true },
-      ],
-    })
+        discoveryMode: 'providerCatalog',
+        configuredModels: [
+          {
+            id: undefined,
+            remoteModelId: 'gpt-4.1-mini',
+            displayName: 'GPT-4.1 Mini',
+            operationKinds: ['chat'],
+            supportedProtocolModes: ['auto', 'responses', 'chatCompletions'],
+            tokenizerName: undefined,
+            maxInputTokens: undefined,
+            embeddingDimensions: undefined,
+            supportsStructuredOutput: true,
+            supportsToolUse: true,
+            source: 'manual',
+          },
+          {
+            id: undefined,
+            remoteModelId: 'text-embedding-3-large',
+            displayName: 'Text Embedding 3 Large',
+            operationKinds: ['embedding'],
+            supportedProtocolModes: ['auto', 'embeddings'],
+            tokenizerName: 'cl100k_base',
+            maxInputTokens: 8192,
+            embeddingDimensions: 3072,
+            supportsStructuredOutput: false,
+            supportsToolUse: false,
+            source: 'manual',
+          },
+        ],
+      }),
+    )
   })
 
   it('verifies and activates an existing profile without sending a model body', async () => {

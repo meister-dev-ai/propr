@@ -39,6 +39,7 @@ public sealed class PrWideCandidateGeneratorTests
                 Arg.Any<string?>(),
                 Arg.Any<CancellationToken>(),
                 Arg.Any<ReviewPassKind?>(),
+                Arg.Any<string?>(),
                 Arg.Any<string?>())
             .Returns(prWideProtocolId);
 
@@ -84,6 +85,7 @@ public sealed class PrWideCandidateGeneratorTests
             "prwide-model",
             Arg.Any<CancellationToken>(),
             Arg.Any<ReviewPassKind?>(),
+            Arg.Any<string?>(),
             Arg.Any<string?>());
         await recorder.Received(1).SetCompletedAsync(
             prWideProtocolId,
@@ -115,6 +117,7 @@ public sealed class PrWideCandidateGeneratorTests
                 Arg.Any<string?>(),
                 Arg.Any<CancellationToken>(),
                 Arg.Any<ReviewPassKind?>(),
+                Arg.Any<string?>(),
                 Arg.Any<string?>())
             .Returns(Guid.NewGuid());
 
@@ -164,6 +167,7 @@ public sealed class PrWideCandidateGeneratorTests
                 Arg.Any<string?>(),
                 Arg.Any<CancellationToken>(),
                 Arg.Any<ReviewPassKind?>(),
+                Arg.Any<string?>(),
                 Arg.Any<string?>())
             .Returns(prWideProtocolId);
 

@@ -6,6 +6,7 @@ const getTenantMock = vi.fn()
 const getAuthOptionsMock = vi.fn()
 const listTenantSsoProvidersMock = vi.fn()
 const createTenantSsoProviderMock = vi.fn()
+const updateTenantSsoProviderMock = vi.fn()
 const deleteTenantSsoProviderMock = vi.fn()
 const notifyMock = vi.fn()
 const ssoCapabilityRef = ref({ isAvailable: true, message: null as string | null })
@@ -37,6 +38,7 @@ vi.mock('@/services/authOptionsService', () => ({
 vi.mock('@/services/tenantSsoProvidersService', () => ({
   listTenantSsoProviders: listTenantSsoProvidersMock,
   createTenantSsoProvider: createTenantSsoProviderMock,
+  updateTenantSsoProvider: updateTenantSsoProviderMock,
   deleteTenantSsoProvider: deleteTenantSsoProviderMock,
 }))
 
@@ -131,6 +133,9 @@ describe('TenantSettingsView', () => {
     const wrapper = await mountView()
     await flushPromises()
 
+    await wrapper.get('[data-testid="provider-add"]').trigger('click')
+    await flushPromises()
+
     const redirectUri = wrapper.get('[data-testid="tenant-provider-redirect-uri"]')
     expect((redirectUri.element as HTMLInputElement).value).toBe('https://propr.example.test/api/auth/external/callback/acme')
   })
@@ -154,6 +159,9 @@ describe('TenantSettingsView', () => {
     })
 
     const wrapper = await mountView()
+    await flushPromises()
+
+    await wrapper.get('[data-testid="provider-add"]').trigger('click')
     await flushPromises()
 
     await wrapper.get('[data-testid="provider-display-name"]').setValue('Acme Google')
@@ -183,6 +191,48 @@ describe('TenantSettingsView', () => {
     )
     expect(wrapper.text()).toContain('Acme Google')
     expect(notifyMock).toHaveBeenCalledWith('Tenant provider created.')
+  })
+
+  it('edits an existing provider from the settings screen, prefilled and saved via update', async () => {
+    updateTenantSsoProviderMock.mockResolvedValue({
+      id: 'provider-1',
+      tenantId: 'tenant-1',
+      displayName: 'Acme Entra (renamed)',
+      providerKind: 'EntraId',
+      protocolKind: 'Oidc',
+      issuerOrAuthorityUrl: 'https://login.microsoftonline.com/common/v2.0',
+      clientId: 'acme-client-id',
+      secretConfigured: true,
+      scopes: ['openid', 'profile', 'email'],
+      allowedEmailDomains: ['acme.test'],
+      isEnabled: true,
+      autoCreateUsers: true,
+      createdAt: '2026-04-24T12:00:00Z',
+      updatedAt: '2026-04-24T13:00:00Z',
+    })
+
+    const wrapper = await mountView()
+    await flushPromises()
+
+    await wrapper.get('[data-testid="provider-edit"]').trigger('click')
+    await flushPromises()
+
+    // The form is prefilled from the provider being edited (the secret stays blank).
+    const displayName = wrapper.get('[data-testid="provider-display-name"]')
+    expect((displayName.element as HTMLInputElement).value).toBe('Acme Entra')
+
+    await displayName.setValue('Acme Entra (renamed)')
+    await wrapper.get('[data-testid="provider-submit"]').trigger('submit')
+    await flushPromises()
+
+    expect(updateTenantSsoProviderMock).toHaveBeenCalledWith(
+      'tenant-1',
+      'provider-1',
+      expect.objectContaining({ displayName: 'Acme Entra (renamed)' }),
+    )
+    expect(createTenantSsoProviderMock).not.toHaveBeenCalled()
+    expect(wrapper.text()).toContain('Acme Entra (renamed)')
+    expect(notifyMock).toHaveBeenCalledWith('Tenant provider updated.')
   })
 
   it('keeps tenant policy editing available while hiding provider management when SSO is unavailable', async () => {

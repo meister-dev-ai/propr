@@ -46,6 +46,11 @@ internal sealed class ReviewJobProtocolConfiguration : IEntityTypeConfiguration<
             .HasMaxLength(256)
             .IsRequired(false);
 
+        builder.Property(p => p.LogicalModelName)
+            .HasColumnName("logical_model_name")
+            .HasMaxLength(256)
+            .IsRequired(false);
+
         builder.Property(p => p.PassKind)
             .HasColumnName("pass_kind")
             .HasMaxLength(64)

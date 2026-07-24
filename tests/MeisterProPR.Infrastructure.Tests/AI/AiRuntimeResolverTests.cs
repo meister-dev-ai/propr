@@ -112,4 +112,80 @@ public sealed class AiRuntimeResolverTests
         Assert.Contains("No active AI binding is configured", exception.Message, StringComparison.Ordinal);
         await repository.DidNotReceive().GetActiveForClientAsync(ClientId, Arg.Any<CancellationToken>());
     }
+
+    // A purpose mapped to a logical model resolves through the catalog, bypassing the purpose-binding path.
+    [Fact]
+    public async Task ResolveChatRuntimeAsync_MappedPurpose_ResolvesViaLogicalModel()
+    {
+        var repository = Substitute.For<IAiConnectionRepository>();
+        var providerRegistry = Substitute.For<IAiProviderDriverRegistry>();
+        var logicalResolver = Substitute.For<ILogicalModelResolver>();
+        var catalog = Substitute.For<ILogicalModelCatalogRepository>();
+        var runtime = Substitute.For<IResolvedAiChatRuntime>();
+        catalog.GetPurposeRoleAsync(ClientId, AiPurpose.ReviewTriage, Arg.Any<CancellationToken>()).Returns("triage-role");
+        logicalResolver
+            .ResolveChatRuntimeAsync(ClientId, "triage-role", Arg.Any<IProtocolRecorder?>(), Arg.Any<Guid?>(), Arg.Any<CancellationToken>())
+            .Returns(new ResolvedLogicalModelChatRuntime(runtime, "triage-role", LogicalModelLayer.ClientOverride, ReviewReasoningEffort.Medium));
+
+        var resolver = new AiRuntimeResolver(repository, providerRegistry, null, logicalResolver, catalog);
+
+        var result = await resolver.ResolveChatRuntimeAsync(ClientId, AiPurpose.ReviewTriage, CancellationToken.None);
+
+        Assert.Same(runtime, result);
+        await repository.DidNotReceive().GetActiveBindingForPurposeAsync(Arg.Any<Guid>(), Arg.Any<AiPurpose>(), Arg.Any<CancellationToken>());
+    }
+
+    // An embedding purpose mapped to a logical model resolves through the catalog.
+    [Fact]
+    public async Task ResolveEmbeddingRuntimeAsync_MappedPurpose_ResolvesViaLogicalModel()
+    {
+        var repository = Substitute.For<IAiConnectionRepository>();
+        var providerRegistry = Substitute.For<IAiProviderDriverRegistry>();
+        var logicalResolver = Substitute.For<ILogicalModelResolver>();
+        var catalog = Substitute.For<ILogicalModelCatalogRepository>();
+        var runtime = Substitute.For<IResolvedAiEmbeddingRuntime>();
+        catalog.GetPurposeRoleAsync(ClientId, AiPurpose.EmbeddingDefault, Arg.Any<CancellationToken>()).Returns("embed-role");
+        logicalResolver
+            .ResolveEmbeddingRuntimeAsync(
+                ClientId, "embed-role", Arg.Any<int?>(), Arg.Any<IProtocolRecorder?>(), Arg.Any<Guid?>(), Arg.Any<CancellationToken>())
+            .Returns(new ResolvedLogicalModelEmbeddingRuntime(runtime, "embed-role", LogicalModelLayer.TenantCatalog));
+
+        var resolver = new AiRuntimeResolver(repository, providerRegistry, null, logicalResolver, catalog);
+
+        var result = await resolver.ResolveEmbeddingRuntimeAsync(ClientId, AiPurpose.EmbeddingDefault, 1536, CancellationToken.None);
+
+        Assert.Same(runtime, result);
+        await repository.DidNotReceive().GetActiveBindingForPurposeAsync(Arg.Any<Guid>(), Arg.Any<AiPurpose>(), Arg.Any<CancellationToken>());
+    }
+
+    // With the logical-model layer available but the purpose unmapped, resolution uses the existing
+    // purpose-binding path unchanged (no regression).
+    [Fact]
+    public async Task ResolveChatRuntimeAsync_UnmappedPurposeWithLayerPresent_UsesBindingPath()
+    {
+        var repository = Substitute.For<IAiConnectionRepository>();
+        var providerRegistry = Substitute.For<IAiProviderDriverRegistry>();
+        var driver = Substitute.For<IAiProviderDriver>();
+        var chatClient = Substitute.For<IChatClient>();
+        var logicalResolver = Substitute.For<ILogicalModelResolver>();
+        var catalog = Substitute.For<ILogicalModelCatalogRepository>();
+        var model = AiConnectionTestFactory.CreateChatModel("gpt-4.1");
+        var binding = AiConnectionTestFactory.CreateBinding(AiPurpose.ReviewDefault, model);
+        var connection = AiConnectionTestFactory.CreateConnection(ClientId, [model], [binding]);
+        catalog.GetPurposeRoleAsync(ClientId, AiPurpose.ReviewDefault, Arg.Any<CancellationToken>()).Returns((string?)null);
+        repository.GetActiveBindingForPurposeAsync(ClientId, AiPurpose.ReviewDefault, Arg.Any<CancellationToken>())
+            .Returns(new AiResolvedPurposeBindingDto(connection, model, binding));
+        providerRegistry.GetRequired(connection.ProviderKind).Returns(driver);
+        driver.CreateChatClient(connection, model, binding).Returns(chatClient);
+        driver.GetChatRuntimeCapabilities(connection, model, binding)
+            .Returns(new AgentReviewRuntimeCapabilities(true, true, true, true));
+
+        var resolver = new AiRuntimeResolver(repository, providerRegistry, null, logicalResolver, catalog);
+
+        var runtime = await resolver.ResolveChatRuntimeAsync(ClientId, AiPurpose.ReviewDefault, CancellationToken.None);
+
+        Assert.Same(chatClient, runtime.ChatClient);
+        await logicalResolver.DidNotReceive().ResolveChatRuntimeAsync(
+            Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<IProtocolRecorder?>(), Arg.Any<Guid?>(), Arg.Any<CancellationToken>());
+    }
 }

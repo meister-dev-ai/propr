@@ -16,4 +16,8 @@ public sealed record ResolvedAiEmbeddingRuntime(
     AiPurposeBindingDto Binding,
     IEmbeddingGenerator<string, Embedding<float>> Generator,
     string TokenizerName,
-    int Dimensions) : IResolvedAiEmbeddingRuntime;
+    int Dimensions) : IResolvedAiEmbeddingRuntime
+{
+    /// <inheritdoc />
+    public string? LogicalModelName { get; init; }
+}

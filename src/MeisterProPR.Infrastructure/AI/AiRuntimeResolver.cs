@@ -20,13 +20,24 @@ namespace MeisterProPR.Infrastructure.AI;
 public sealed class AiRuntimeResolver(
     IAiConnectionRepository aiConnectionRepository,
     IAiProviderDriverRegistry providerDriverRegistry,
-    IBudgetScopeAccessor? budgetScopeAccessor = null) : IAiRuntimeResolver
+    IBudgetScopeAccessor? budgetScopeAccessor = null,
+    ILogicalModelResolver? logicalModelResolver = null,
+    ILogicalModelCatalogRepository? logicalModelCatalog = null) : IAiRuntimeResolver
 {
     public async Task<IResolvedAiChatRuntime> ResolveChatRuntimeAsync(
         Guid clientId,
         AiPurpose purpose,
         CancellationToken ct = default)
     {
+        // When the purpose is mapped to a logical model, resolve through the catalog (connection, model, and
+        // protocol come from the role). Otherwise fall back to the client's active AI purpose bindings.
+        var roleName = await this.TryGetPurposeRoleAsync(clientId, purpose, ct);
+        if (roleName is not null)
+        {
+            var resolvedRole = await logicalModelResolver!.ResolveChatRuntimeAsync(clientId, roleName, ct: ct);
+            return resolvedRole.Runtime;
+        }
+
         var resolved = await aiConnectionRepository.GetActiveBindingForPurposeAsync(clientId, purpose, ct)
                        ?? throw new InvalidOperationException($"No active AI binding is configured for purpose '{purpose}'.");
 
@@ -66,6 +77,14 @@ public sealed class AiRuntimeResolver(
         int? expectedDimensions = null,
         CancellationToken ct = default)
     {
+        // Prefer a mapped logical model (the resolver enforces embedding capability + dimension match).
+        var roleName = await this.TryGetPurposeRoleAsync(clientId, purpose, ct);
+        if (roleName is not null)
+        {
+            var resolvedRole = await logicalModelResolver!.ResolveEmbeddingRuntimeAsync(clientId, roleName, expectedDimensions, ct: ct);
+            return resolvedRole.Runtime;
+        }
+
         var resolved = await aiConnectionRepository.GetActiveBindingForPurposeAsync(clientId, purpose, ct)
                        ?? throw new InvalidOperationException($"No active AI binding is configured for purpose '{purpose}'.");
 
@@ -99,6 +118,20 @@ public sealed class AiRuntimeResolver(
             this.WrapEmbeddingGenerator(generator, resolved.Model),
             resolved.Model.TokenizerName,
             resolved.Model.EmbeddingDimensions.Value);
+    }
+
+    // Returns the logical-model role mapped to the purpose for this client, or null when the logical-model layer is
+    // unavailable (e.g. a resolver-less host) or the purpose is unmapped — in which case the caller uses the legacy
+    // purpose-binding path.
+    private async Task<string?> TryGetPurposeRoleAsync(Guid clientId, AiPurpose purpose, CancellationToken ct)
+    {
+        if (logicalModelResolver is null || logicalModelCatalog is null)
+        {
+            return null;
+        }
+
+        var roleName = await logicalModelCatalog.GetPurposeRoleAsync(clientId, purpose, ct);
+        return string.IsNullOrEmpty(roleName) ? null : roleName;
     }
 
     private static ModelPricing ToPricing(AiConfiguredModelDto model)
