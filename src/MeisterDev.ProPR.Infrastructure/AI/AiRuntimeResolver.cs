@@ -2,6 +2,7 @@
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 // This file implements commercial-only functionality. A commercial license is required to activate or use that functionality.
 
+using MeisterDev.ProPR.Application.AI;
 using MeisterDev.ProPR.Application.DTOs;
 using MeisterDev.ProPR.Application.Features.Budgeting;
 using MeisterDev.ProPR.Application.Interfaces;
@@ -48,7 +49,7 @@ public sealed class AiRuntimeResolver(
 
         var driver = providerDriverRegistry.GetRequired(resolved.Connection.ProviderKind);
         var client = driver.CreateChatClient(resolved.Connection, resolved.Model, resolved.Binding);
-        var capabilities = driver.GetChatRuntimeCapabilities(resolved.Connection, resolved.Model, resolved.Binding);
+        var capabilities = driver.GetChatRuntimeCapabilities(resolved.Connection, resolved.Model, resolved.Binding).ToReviewCapabilities();
         return new ResolvedAiChatRuntime(resolved.Connection, resolved.Model, resolved.Binding, this.WrapChatClient(client, resolved.Model), capabilities);
     }
 
@@ -67,7 +68,7 @@ public sealed class AiRuntimeResolver(
 
         var driver = providerDriverRegistry.GetRequired(resolved.Connection.ProviderKind);
         var client = driver.CreateChatClient(resolved.Connection, resolved.Model, resolved.Binding);
-        var capabilities = driver.GetChatRuntimeCapabilities(resolved.Connection, resolved.Model, resolved.Binding);
+        var capabilities = driver.GetChatRuntimeCapabilities(resolved.Connection, resolved.Model, resolved.Binding).ToReviewCapabilities();
         return new ResolvedAiChatRuntime(resolved.Connection, resolved.Model, resolved.Binding, this.WrapChatClient(client, resolved.Model), capabilities);
     }
 

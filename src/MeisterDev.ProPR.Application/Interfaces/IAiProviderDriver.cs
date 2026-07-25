@@ -40,7 +40,7 @@ public interface IAiProviderDriver
         AiPurposeBindingDto binding);
 
     /// <summary>Gets session-related chat runtime capabilities for one resolved model binding.</summary>
-    AgentReviewRuntimeCapabilities GetChatRuntimeCapabilities(
+    ProviderRuntimeCapabilities GetChatRuntimeCapabilities(
         AiConnectionDto connection,
         AiConfiguredModelDto model,
         AiPurposeBindingDto binding);

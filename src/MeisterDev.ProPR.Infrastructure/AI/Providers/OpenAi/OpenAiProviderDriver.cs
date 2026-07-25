@@ -91,14 +91,14 @@ public sealed class OpenAiProviderDriver(
         return chatClient.AsIChatClient();
     }
 
-    public AgentReviewRuntimeCapabilities GetChatRuntimeCapabilities(
+    public ProviderRuntimeCapabilities GetChatRuntimeCapabilities(
         AiConnectionDto connection,
         AiConfiguredModelDto model,
         AiPurposeBindingDto binding)
     {
         _ = connection;
         var usesResponses = UsesResponsesApi(binding, model);
-        return new AgentReviewRuntimeCapabilities(
+        return new ProviderRuntimeCapabilities(
             usesResponses,
             usesResponses,
             usesResponses,

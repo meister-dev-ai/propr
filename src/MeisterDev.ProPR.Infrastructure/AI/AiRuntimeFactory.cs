@@ -2,6 +2,7 @@
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 // This file implements commercial-only functionality. A commercial license is required to activate or use that functionality.
 
+using MeisterDev.ProPR.Application.AI;
 using MeisterDev.ProPR.Application.DTOs;
 using MeisterDev.ProPR.Application.Features.Budgeting;
 using MeisterDev.ProPR.Application.Interfaces;
@@ -28,7 +29,7 @@ public sealed class AiRuntimeFactory(
     {
         var driver = providerDriverRegistry.GetRequired(connection.ProviderKind);
         var client = driver.CreateChatClient(connection, model, binding);
-        var capabilities = driver.GetChatRuntimeCapabilities(connection, model, binding);
+        var capabilities = driver.GetChatRuntimeCapabilities(connection, model, binding).ToReviewCapabilities();
         return new ResolvedAiChatRuntime(connection, model, binding, this.WrapChatClient(client, model), capabilities)
         {
             LogicalModelName = logicalModelName,

@@ -2,6 +2,7 @@
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
 using System.Net;
+using MeisterDev.Ai.Providers.Contracts;
 using MeisterDev.Ai.Providers.Enums;
 using MeisterDev.ProPR.Application.Features.Reviewing.Execution.Models;
 using MeisterDev.ProPR.Domain.Enums;
@@ -36,7 +37,7 @@ public sealed class ProviderRuntimeCapabilityTests
         var capabilities = driver.GetChatRuntimeCapabilities(connection, model, binding);
 
         Assert.Equal(
-            new AgentReviewRuntimeCapabilities(
+            new ProviderRuntimeCapabilities(
                 supportsProviderManagedSessions,
                 supportsManagedRemoteConversation,
                 supportsBackgroundResponses,
@@ -78,7 +79,7 @@ public sealed class ProviderRuntimeCapabilityTests
         var capabilities = driver.GetChatRuntimeCapabilities(connection, model, binding);
 
         Assert.Equal(
-            new AgentReviewRuntimeCapabilities(
+            new ProviderRuntimeCapabilities(
                 supportsProviderManagedSessions,
                 supportsManagedRemoteConversation,
                 supportsBackgroundResponses,
@@ -106,7 +107,7 @@ public sealed class ProviderRuntimeCapabilityTests
 
         var capabilities = driver.GetChatRuntimeCapabilities(connection, model, binding);
 
-        Assert.Equal(new AgentReviewRuntimeCapabilities(false, false, false, false), capabilities);
+        Assert.Equal(new ProviderRuntimeCapabilities(false, false, false, false), capabilities);
     }
 
     private static IHttpClientFactory CreateHttpClientFactory()

@@ -1,6 +1,7 @@
 // Copyright (c) Andreas Rain.
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
+using MeisterDev.Ai.Providers.Contracts;
 using MeisterDev.ProPR.Application.DTOs;
 using MeisterDev.ProPR.Application.Features.Reviewing.Execution.Models;
 using MeisterDev.ProPR.Application.Interfaces;
@@ -32,7 +33,7 @@ public sealed class AiRuntimeResolverTests
         providerRegistry.GetRequired(connection.ProviderKind).Returns(driver);
         driver.CreateChatClient(connection, model, binding).Returns(chatClient);
         driver.GetChatRuntimeCapabilities(connection, model, binding)
-            .Returns(new AgentReviewRuntimeCapabilities(true, true, true, true));
+            .Returns(new ProviderRuntimeCapabilities(true, true, true, true));
 
         var resolver = new AiRuntimeResolver(repository, providerRegistry);
 
@@ -62,7 +63,7 @@ public sealed class AiRuntimeResolverTests
         providerRegistry.GetRequired(connection.ProviderKind).Returns(driver);
         driver.CreateChatClient(connection, model, binding).Returns(chatClient);
         driver.GetChatRuntimeCapabilities(connection, model, binding)
-            .Returns(new AgentReviewRuntimeCapabilities(true, true, true, true));
+            .Returns(new ProviderRuntimeCapabilities(true, true, true, true));
 
         var resolver = new AiRuntimeResolver(repository, providerRegistry);
 
@@ -178,7 +179,7 @@ public sealed class AiRuntimeResolverTests
         providerRegistry.GetRequired(connection.ProviderKind).Returns(driver);
         driver.CreateChatClient(connection, model, binding).Returns(chatClient);
         driver.GetChatRuntimeCapabilities(connection, model, binding)
-            .Returns(new AgentReviewRuntimeCapabilities(true, true, true, true));
+            .Returns(new ProviderRuntimeCapabilities(true, true, true, true));
 
         var resolver = new AiRuntimeResolver(repository, providerRegistry, null, logicalResolver, catalog);
 

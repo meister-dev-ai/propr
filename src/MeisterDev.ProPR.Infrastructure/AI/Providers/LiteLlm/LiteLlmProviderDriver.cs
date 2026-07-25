@@ -46,7 +46,7 @@ public sealed class LiteLlmProviderDriver(
         return this._innerDriver.CreateChatClient(connection with { ProviderKind = AiProviderKind.LiteLlm }, model, binding);
     }
 
-    public AgentReviewRuntimeCapabilities GetChatRuntimeCapabilities(
+    public ProviderRuntimeCapabilities GetChatRuntimeCapabilities(
         AiConnectionDto connection,
         AiConfiguredModelDto model,
         AiPurposeBindingDto binding)
@@ -55,7 +55,7 @@ public sealed class LiteLlmProviderDriver(
         _ = model;
         _ = binding;
 
-        return new AgentReviewRuntimeCapabilities(
+        return new ProviderRuntimeCapabilities(
             false,
             false,
             false,

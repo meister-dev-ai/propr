@@ -11,7 +11,10 @@ namespace MeisterDev.Ai.Providers.Usage;
 /// <param name="InputTokens">Total prompt/input tokens the provider reported; already includes any cached-input tokens.</param>
 /// <param name="OutputTokens">Total completion/output tokens the provider reported; includes reasoning tokens.</param>
 /// <param name="CachedInputTokens">Portion of <see cref="InputTokens" /> served from the provider prompt cache.</param>
-/// <param name="CacheWriteTokens">Tokens written to the provider prompt cache (cache-creation); zero for providers without a separate cache-write charge.</param>
+/// <param name="CacheWriteTokens">
+///     Tokens written to the provider prompt cache (cache-creation); zero for providers without a separate
+///     cache-write charge.
+/// </param>
 /// <param name="ReasoningTokens">Portion of <see cref="OutputTokens" /> spent on model reasoning.</param>
 /// <param name="IsEstimated">True when the response carried no usage payload, so the counts are placeholder zeros rather than measured values.</param>
 public sealed record ProviderTokenUsage(

@@ -97,7 +97,7 @@ public sealed class AzureOpenAiProviderDriver : IAiProviderDriver
             : client.GetResponsesClient().AsIChatClient();
     }
 
-    public AgentReviewRuntimeCapabilities GetChatRuntimeCapabilities(
+    public ProviderRuntimeCapabilities GetChatRuntimeCapabilities(
         AiConnectionDto connection,
         AiConfiguredModelDto model,
         AiPurposeBindingDto binding)
@@ -106,7 +106,7 @@ public sealed class AzureOpenAiProviderDriver : IAiProviderDriver
         _ = model;
 
         var usesResponses = binding.ProtocolMode != AiProtocolMode.ChatCompletions;
-        return new AgentReviewRuntimeCapabilities(
+        return new ProviderRuntimeCapabilities(
             usesResponses,
             usesResponses,
             usesResponses,
