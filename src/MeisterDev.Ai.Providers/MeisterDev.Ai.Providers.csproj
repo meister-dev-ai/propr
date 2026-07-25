@@ -18,6 +18,14 @@
         commercial-only notice. Those two rules are what keep it separable from the product that hosts it.
         Dependencies are limited to Microsoft.Extensions.AI and the provider SDKs behind it.
     -->
+    <!--
+        The catalog snapshot is embedded rather than fetched, so the application populates its model catalog
+        without ever egressing to the snapshot host. Attribution for it lives in NOTICE at the repository root.
+    -->
+    <ItemGroup>
+        <EmbeddedResource Include="Catalog\Snapshot\models.dev.json"/>
+    </ItemGroup>
+
     <ItemGroup>
         <PackageReference Include="Azure.AI.OpenAI" Version="2.9.0-beta.1"/>
         <PackageReference Include="Azure.Identity" Version="1.19.0"/>

@@ -1,0 +1,41 @@
+# Third-Party Notices
+
+Meister DEV ProPR is licensed under the Elastic License 2.0 (see `LICENSE`). This file records third-party
+material that is **redistributed as part of this repository or its build output**, together with the notices
+those licences require us to carry.
+
+It does not list ordinary package dependencies, which are acquired at build time and carry their own notices
+through the package manager. It lists only material we vendor.
+
+---
+
+## models.dev — bundled AI model catalog snapshot
+
+**File:** `src/MeisterDev.Ai.Providers/Catalog/Snapshot/models.dev.json`
+**Upstream:** https://models.dev (https://github.com/sst/models.dev)
+**Licence:** MIT
+
+This file is a snapshot of the models.dev open database of AI model specifications, trimmed to the providers
+ProPR can reach and embedded so the model catalog is populated without the application making any network
+request of its own. It is data only; no models.dev code is included.
+
+The MIT licence requires its copyright and permission notice to travel with substantial portions of the
+material, so it is reproduced in full:
+
+```
+MIT License
+
+Copyright (c) 2025 models.dev
+
+Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated
+documentation files (the "Software"), to deal in the Software without restriction, including without limitation
+the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and
+to permit persons to whom the Software is furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all copies or substantial portions of
+the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS," without any guarantees whatsoever, whether stated or implied, covering
+merchantability, fitness for purpose, or non-infringement. The authors accept no responsibility for claims,
+harm, or other responsibility arising from agreement breaches or other matters connected to the code.
+```
