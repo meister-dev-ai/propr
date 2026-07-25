@@ -13,7 +13,14 @@ namespace MeisterDev.Ai.Providers.Contracts;
 /// <param name="Id">Host-side identifier for the configured model, carried through for correlation.</param>
 /// <param name="RemoteModelId">Model identifier as the provider knows it.</param>
 /// <param name="SupportedProtocolModes">Protocol modes this model can serve.</param>
+/// <param name="ReasoningContentField">
+///     Field this model requires echoed back on assistant turns to preserve its chain of thought (DeepSeek-style
+///     <c>reasoning_content</c>), or <see langword="null" /> when it has no such requirement. Carried here because
+///     the descriptor is the only channel by which host-held model metadata reaches the library, so a normalizing
+///     stage can act on the quirk without any model being named in code.
+/// </param>
 public sealed record ProviderModelDescriptor(
     Guid Id,
     string RemoteModelId,
-    IReadOnlyList<AiProtocolMode> SupportedProtocolModes);
+    IReadOnlyList<AiProtocolMode> SupportedProtocolModes,
+    string? ReasoningContentField = null);

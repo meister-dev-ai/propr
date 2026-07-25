@@ -18750,6 +18750,21 @@
             "format": "double",
             "nullable": true
           },
+          "cacheWriteCostPer1MUsd": {
+            "type": "number",
+            "format": "double",
+            "nullable": true
+          },
+          "supportsReasoning": {
+            "type": "boolean"
+          },
+          "supportsPromptCaching": {
+            "type": "boolean"
+          },
+          "reasoningContentField": {
+            "type": "string",
+            "nullable": true
+          },
           "supportsChat": {
             "type": "boolean",
             "description": "Returns true when the model supports chat workloads.",

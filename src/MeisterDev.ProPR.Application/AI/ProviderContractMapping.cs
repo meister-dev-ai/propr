@@ -50,7 +50,11 @@ public static class ProviderContractMapping
     {
         ArgumentNullException.ThrowIfNull(model);
 
-        return new ProviderModelDescriptor(model.Id, model.RemoteModelId, model.SupportedProtocolModes);
+        return new ProviderModelDescriptor(
+            model.Id,
+            model.RemoteModelId,
+            model.SupportedProtocolModes,
+            model.ReasoningContentField);
     }
 
     /// <summary>Adopts a driver's verification outcome as the product's own snapshot.</summary>

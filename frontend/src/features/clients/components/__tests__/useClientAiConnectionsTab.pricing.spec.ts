@@ -64,6 +64,10 @@ function chatModel(costs: Pick<EditableModel, 'inputCostPer1MUsd' | 'outputCostP
     embeddingDimensions: '',
     supportsStructuredOutput: true,
     supportsToolUse: true,
+    cacheWriteCostPer1MUsd: '',
+    supportsReasoning: false,
+    supportsPromptCaching: false,
+    reasoningContentField: '',
     ...costs,
   }
 }

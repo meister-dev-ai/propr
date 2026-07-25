@@ -20,6 +20,11 @@ export type EditableModel = {
   inputCostPer1MUsd: string
   outputCostPer1MUsd: string
   cachedInputCostPer1MUsd: string
+  cacheWriteCostPer1MUsd: string
+  supportsReasoning: boolean
+  supportsPromptCaching: boolean
+  /** Field this model needs echoed back to preserve its chain of thought; empty when it has no such requirement. */
+  reasoningContentField: string
 }
 
 export type EditableBinding = {

@@ -175,6 +175,12 @@ export const applyCatalogEntryToModel = (model: EditableModel, entry: AiModelCat
   model.inputCostPer1MUsd = numberToField(entry.inputCostPer1MUsd, model.inputCostPer1MUsd)
   model.outputCostPer1MUsd = numberToField(entry.outputCostPer1MUsd, model.outputCostPer1MUsd)
   model.cachedInputCostPer1MUsd = numberToField(entry.cachedInputCostPer1MUsd, model.cachedInputCostPer1MUsd)
+  model.cacheWriteCostPer1MUsd = numberToField(entry.cacheWriteCostPer1MUsd, model.cacheWriteCostPer1MUsd)
+  model.supportsReasoning = entry.supportsReasoning ?? model.supportsReasoning
+  model.supportsPromptCaching = entry.supportsPromptCaching ?? model.supportsPromptCaching
+  // The quirk the normalizing stage acts on. A model that does not declare one must not keep a stale value from
+  // whatever was previously selected.
+  model.reasoningContentField = entry.reasoningContentField ?? ''
 }
 
 /** A value the catalog does not state leaves the existing entry alone: unknown is not zero. */

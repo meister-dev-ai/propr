@@ -136,6 +136,10 @@ describe('applyCatalogEntryToModel', () => {
     inputCostPer1MUsd: '',
     outputCostPer1MUsd: '',
     cachedInputCostPer1MUsd: '',
+    cacheWriteCostPer1MUsd: '',
+    supportsReasoning: false,
+    supportsPromptCaching: false,
+    reasoningContentField: '',
   })
 
   it('fills the fields the catalog states', () => {

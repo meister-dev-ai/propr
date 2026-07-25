@@ -148,6 +148,10 @@ export function useClientAiConnectionsTab(props: { clientId: string }) {
       inputCostPer1MUsd: model.inputCostPer1MUsd == null ? '' : String(model.inputCostPer1MUsd),
       outputCostPer1MUsd: model.outputCostPer1MUsd == null ? '' : String(model.outputCostPer1MUsd),
       cachedInputCostPer1MUsd: model.cachedInputCostPer1MUsd == null ? '' : String(model.cachedInputCostPer1MUsd),
+      cacheWriteCostPer1MUsd: model.cacheWriteCostPer1MUsd == null ? '' : String(model.cacheWriteCostPer1MUsd),
+      supportsReasoning: model.supportsReasoning ?? false,
+      supportsPromptCaching: model.supportsPromptCaching ?? false,
+      reasoningContentField: model.reasoningContentField ?? '',
     }))
     const modelLookup = new Map<string, string>()
     for (const model of editor.models) {
@@ -212,6 +216,10 @@ export function useClientAiConnectionsTab(props: { clientId: string }) {
       inputCostPer1MUsd: '',
       outputCostPer1MUsd: '',
       cachedInputCostPer1MUsd: '',
+      cacheWriteCostPer1MUsd: '',
+      supportsReasoning: false,
+      supportsPromptCaching: false,
+      reasoningContentField: '',
     })
     editingModelId.value = newModelId
   }
@@ -260,6 +268,10 @@ export function useClientAiConnectionsTab(props: { clientId: string }) {
     inputCostPer1MUsd: discovered.inputCostPer1MUsd == null ? '' : String(discovered.inputCostPer1MUsd),
     outputCostPer1MUsd: discovered.outputCostPer1MUsd == null ? '' : String(discovered.outputCostPer1MUsd),
     cachedInputCostPer1MUsd: discovered.cachedInputCostPer1MUsd == null ? '' : String(discovered.cachedInputCostPer1MUsd),
+    cacheWriteCostPer1MUsd: discovered.cacheWriteCostPer1MUsd == null ? '' : String(discovered.cacheWriteCostPer1MUsd),
+    supportsReasoning: discovered.supportsReasoning ?? false,
+    supportsPromptCaching: discovered.supportsPromptCaching ?? false,
+    reasoningContentField: discovered.reasoningContentField ?? '',
   })
 
   const mergeDiscoveredModels = (discoveredModels: AiConfiguredModelDto[]) => {
@@ -325,6 +337,10 @@ export function useClientAiConnectionsTab(props: { clientId: string }) {
       inputCostPer1MUsd: model.inputCostPer1MUsd ? Number(model.inputCostPer1MUsd) : undefined,
       outputCostPer1MUsd: model.outputCostPer1MUsd ? Number(model.outputCostPer1MUsd) : undefined,
       cachedInputCostPer1MUsd: model.cachedInputCostPer1MUsd ? Number(model.cachedInputCostPer1MUsd) : undefined,
+      cacheWriteCostPer1MUsd: model.cacheWriteCostPer1MUsd ? Number(model.cacheWriteCostPer1MUsd) : undefined,
+      supportsReasoning: model.supportsReasoning,
+      supportsPromptCaching: model.supportsPromptCaching,
+      reasoningContentField: model.reasoningContentField.trim() || undefined,
       source: 'manual',
     }))
   }

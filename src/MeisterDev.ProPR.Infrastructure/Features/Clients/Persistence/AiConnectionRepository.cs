@@ -554,7 +554,11 @@ public sealed class AiConnectionRepository(
             record.InputCostPer1MUsd,
             record.OutputCostPer1MUsd,
             record.MaxContextTokens,
-            record.CachedInputCostPer1MUsd);
+            record.CachedInputCostPer1MUsd,
+            record.CacheWriteCostPer1MUsd,
+            record.SupportsReasoning,
+            record.SupportsPromptCaching,
+            record.ReasoningContentField);
     }
 
     private static AiPurposeBindingDto ToBindingDto(AiPurposeBindingRecord record, AiConfiguredModelRecord model)
@@ -642,6 +646,12 @@ public sealed class AiConnectionRepository(
                     InputCostPer1MUsd = model.InputCostPer1MUsd,
                     OutputCostPer1MUsd = model.OutputCostPer1MUsd,
                     CachedInputCostPer1MUsd = model.CachedInputCostPer1MUsd,
+                    CacheWriteCostPer1MUsd = model.CacheWriteCostPer1MUsd,
+                    SupportsReasoning = model.SupportsReasoning,
+                    SupportsPromptCaching = model.SupportsPromptCaching,
+                    ReasoningContentField = string.IsNullOrWhiteSpace(model.ReasoningContentField)
+                        ? null
+                        : model.ReasoningContentField.Trim(),
                 };
             })
             .ToList();
@@ -828,7 +838,11 @@ public sealed class AiConnectionRepository(
                 existing.LastSeenAt != model.LastSeenAt ||
                 existing.InputCostPer1MUsd != model.InputCostPer1MUsd ||
                 existing.OutputCostPer1MUsd != model.OutputCostPer1MUsd ||
-                existing.CachedInputCostPer1MUsd != model.CachedInputCostPer1MUsd)
+                existing.CachedInputCostPer1MUsd != model.CachedInputCostPer1MUsd
+                || existing.CacheWriteCostPer1MUsd != model.CacheWriteCostPer1MUsd
+                || existing.SupportsReasoning != model.SupportsReasoning
+                || existing.SupportsPromptCaching != model.SupportsPromptCaching
+                || existing.ReasoningContentField != model.ReasoningContentField)
             {
                 return false;
             }

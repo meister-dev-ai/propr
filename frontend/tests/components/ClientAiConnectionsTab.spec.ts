@@ -233,6 +233,8 @@ describe('ClientAiConnectionsTab', () => {
             embeddingDimensions: undefined,
             supportsStructuredOutput: true,
             supportsToolUse: true,
+            supportsReasoning: false,
+            supportsPromptCaching: false,
             source: 'manual',
           },
           {
@@ -246,6 +248,8 @@ describe('ClientAiConnectionsTab', () => {
             embeddingDimensions: 3072,
             supportsStructuredOutput: false,
             supportsToolUse: false,
+            supportsReasoning: false,
+            supportsPromptCaching: false,
             source: 'manual',
           },
         ],
