@@ -1,6 +1,9 @@
 // Copyright (c) Andreas Rain.
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
+using MeisterDev.Ai.Providers.Contracts;
+using MeisterDev.Ai.Providers.Enums;
+using MeisterDev.Ai.Providers.Resilience;
 using MeisterDev.ProPR.Api.Telemetry;
 using MeisterDev.ProPR.Api.Workers;
 using MeisterDev.ProPR.Application.Features.Budgeting;
@@ -348,6 +351,66 @@ public class ReviewJobWorkerTests
 
         // Worker should still be running despite the exception
         Assert.True(worker.IsRunning);
+
+        cts.Cancel();
+        await worker.StopAsync(CancellationToken.None);
+    }
+
+    // Fault isolation is only half the job: the worker surviving is useless if the job it failed says nothing an
+    // operator can act on. A provider failure carries the profile, the model and what to try next, and that is
+    // what has to reach the recorded failure reason.
+    [Fact]
+    public async Task Worker_WhenProviderCallFails_RecordsACauseThatNamesTheProfile()
+    {
+        var repo = Substitute.For<IReviewJobExecutionStore>();
+        var job = CreateJob(911);
+        var jobFailed = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        string? recordedReason = null;
+        repo.GetPendingJobs().Returns(new[] { job });
+        repo.GetStuckProcessingJobsAsync(Arg.Any<TimeSpan>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<IReadOnlyList<ReviewJob>>([]));
+        repo.TryTransitionAsync(job.Id, JobStatus.Pending, JobStatus.Processing, Arg.Any<CancellationToken>())
+            .Returns(true);
+        repo.SetFailedAsync(job.Id, Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns(call =>
+            {
+                recordedReason = call.ArgAt<string>(1);
+                jobFailed.TrySetResult();
+                return Task.CompletedTask;
+            });
+
+        var processor = Substitute.For<IReviewJobProcessor>();
+        processor.ProcessAsync(Arg.Any<ReviewJob>(), Arg.Any<CancellationToken>())
+            .Returns(_ => Task.FromException(
+                new ProviderCallFailedException(
+                    new ProviderCallTarget(AiProviderKind.OpenAiCompatible, "deepseek-reasoner", "Primary DeepSeek"),
+                    ProviderFailureVerdict.Permanent("The provider rejected the credential (HTTP 401).", 401),
+                    1,
+                    "Check the configured API key or credential source.")));
+
+        var scopeFactory = Substitute.For<IServiceScopeFactory>();
+        var scope = Substitute.For<IServiceScope>();
+        var sp = Substitute.For<IServiceProvider>();
+        scopeFactory.CreateScope().Returns(scope);
+        scope.ServiceProvider.Returns(sp);
+        sp.GetService(typeof(IReviewJobExecutionStore)).Returns(repo);
+        sp.GetService(typeof(IReviewJobProcessor)).Returns(processor);
+
+        var worker = new ReviewJobWorker(
+            scopeFactory,
+            CreateWorkerOptions(),
+            CreateMetrics(),
+            CreateCancellationRegistry(),
+            Substitute.For<ILogger<ReviewJobWorker>>());
+        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(4));
+
+        _ = worker.StartAsync(cts.Token);
+        await jobFailed.Task.WaitAsync(TimeSpan.FromSeconds(1));
+
+        Assert.True(worker.IsRunning);
+        Assert.NotNull(recordedReason);
+        Assert.Contains("Primary DeepSeek", recordedReason, StringComparison.Ordinal);
+        Assert.Contains("API key", recordedReason, StringComparison.Ordinal);
 
         cts.Cancel();
         await worker.StopAsync(CancellationToken.None);

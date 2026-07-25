@@ -2,25 +2,34 @@
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 // This file implements commercial-only functionality. A commercial license is required to activate or use that functionality.
 
+using MeisterDev.Ai.Providers.Contracts;
+using MeisterDev.Ai.Providers.Resilience;
 using MeisterDev.Ai.Providers.Runtime;
 using MeisterDev.ProPR.Application.AI;
 using MeisterDev.ProPR.Application.DTOs;
 using MeisterDev.ProPR.Application.Features.Budgeting;
 using MeisterDev.ProPR.Application.Interfaces;
+using MeisterDev.ProPR.Application.Options;
 using MeisterDev.ProPR.Domain.ValueObjects;
 using MeisterDev.Ai.Providers.Drivers;
 using Microsoft.Extensions.AI;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 
 namespace MeisterDev.ProPR.Infrastructure.AI;
 
 /// <summary>
-///     Default <see cref="IAiRuntimeFactory" />. Builds runtimes via the provider driver registry and, when a budget
-///     scope accessor is available, wraps the chat client / embedding generator so every model call is metered and
-///     gated against the active review job's USD hard cap — mirroring <see cref="AiRuntimeResolver" />'s construction.
+///     Default <see cref="IAiRuntimeFactory" />. Builds runtimes via the provider driver registry and wraps the
+///     chat client in the provider pipeline's fixed stage order: transient failures are retried for every provider,
+///     and — when a budget scope accessor is available — every model call is metered and gated against the active
+///     review job's USD hard cap.
 /// </summary>
 public sealed class AiRuntimeFactory(
     IAiProviderDriverRegistry providerDriverRegistry,
-    IBudgetScopeAccessor? budgetScopeAccessor = null) : IAiRuntimeFactory
+    IBudgetScopeAccessor? budgetScopeAccessor = null,
+    IOptions<AiReviewOptions>? aiOptions = null,
+    ILogger<AiRuntimeFactory>? logger = null,
+    TimeProvider? timeProvider = null) : IAiRuntimeFactory
 {
     public IResolvedAiChatRuntime CreateChatRuntime(
         AiConnectionDto connection,
@@ -34,7 +43,7 @@ public sealed class AiRuntimeFactory(
             connection.ToProviderEndpoint(),
             model.ToProviderModel(),
             binding.ProtocolMode).ToReviewCapabilities();
-        return new ResolvedAiChatRuntime(connection, model, binding, this.WrapChatClient(client, connection, model), capabilities)
+        return new ResolvedAiChatRuntime(connection, model, binding, this.WrapChatClient(client, driver, connection, model), capabilities)
         {
             LogicalModelName = logicalModelName,
         };
@@ -54,7 +63,7 @@ public sealed class AiRuntimeFactory(
             connection,
             model,
             binding,
-            this.WrapEmbeddingGenerator(generator, model),
+            this.WrapEmbeddingGenerator(generator, driver, connection, model),
             tokenizerName,
             dimensions)
         {
@@ -67,26 +76,67 @@ public sealed class AiRuntimeFactory(
         return new ModelPricing(model.InputCostPer1MUsd, model.OutputCostPer1MUsd, model.CachedInputCostPer1MUsd);
     }
 
-    // The provider pipeline fixes the order of the per-call stages; the budget stage is contributed from here
-    // because the library has no notion of cost. A host with no budget scope simply contributes no stage.
-    private IChatClient WrapChatClient(IChatClient client, AiConnectionDto connection, AiConfiguredModelDto model)
+    // Retries count attempts, while the option counts retries on top of the first call, so the first attempt is
+    // added back here. The option was written for 429s specifically; it now governs every transient class,
+    // because "how many times may a call be repeated" is one decision regardless of which failure provoked it.
+    private ProviderRetryPolicy RetryPolicy()
     {
-        if (budgetScopeAccessor is null)
+        var options = aiOptions?.Value;
+        if (options is null)
         {
-            return client;
+            return ProviderRetryPolicy.Default;
         }
 
-        var pipeline = new ProviderRuntimePipeline([new BudgetEnforcingChatClientDecorator(budgetScopeAccessor, _ => ToPricing(model))]);
-
-        return pipeline.Compose(client, connection.ToProviderEndpoint(), model.ToProviderModel());
+        return new ProviderRetryPolicy
+        {
+            MaxAttempts = options.MaxRateLimitRetries + 1,
+            BaseDelay = TimeSpan.FromSeconds(2),
+            MaxDelay = TimeSpan.FromSeconds(options.MaxBackoffSeconds),
+        };
     }
 
-    private IEmbeddingGenerator<string, Embedding<float>> WrapEmbeddingGenerator(
-        IEmbeddingGenerator<string, Embedding<float>> generator,
+    // The provider pipeline fixes the order of the per-call stages. Retry is contributed for every provider
+    // because a review that dies on one throttled call is not shippable behaviour; the budget stage is
+    // contributed from here because the library has no notion of cost, and a host with no budget scope
+    // contributes no stage at all.
+    private IChatClient WrapChatClient(
+        IChatClient client,
+        IAiProviderDriver driver,
+        AiConnectionDto connection,
         AiConfiguredModelDto model)
     {
-        return budgetScopeAccessor is null
+        var decorators = new List<IProviderChatClientDecorator>
+        {
+            new ProviderRetryChatClientDecorator(driver, this.RetryPolicy(), connection.DisplayName, timeProvider, logger),
+        };
+
+        if (budgetScopeAccessor is not null)
+        {
+            decorators.Add(new BudgetEnforcingChatClientDecorator(budgetScopeAccessor, _ => ToPricing(model)));
+        }
+
+        return new ProviderRuntimePipeline(decorators)
+            .Compose(client, connection.ToProviderEndpoint(), model.ToProviderModel());
+    }
+
+    // The embedding path has no decorator pipeline to order, but it faces the same provider quotas, so it gets
+    // the same retry behaviour — wrapped innermost-first so metering counts one attempt at a time.
+    private IEmbeddingGenerator<string, Embedding<float>> WrapEmbeddingGenerator(
+        IEmbeddingGenerator<string, Embedding<float>> generator,
+        IAiProviderDriver driver,
+        AiConnectionDto connection,
+        AiConfiguredModelDto model)
+    {
+        var metered = budgetScopeAccessor is null
             ? generator
             : new BudgetEnforcingEmbeddingGenerator(generator, budgetScopeAccessor, ToPricing(model));
+
+        return new ProviderRetryEmbeddingGenerator(
+            metered,
+            this.RetryPolicy(),
+            driver.ClassifyRuntimeFailure,
+            new ProviderCallTarget(connection.ProviderKind, model.RemoteModelId, connection.DisplayName),
+            timeProvider,
+            logger);
     }
 }

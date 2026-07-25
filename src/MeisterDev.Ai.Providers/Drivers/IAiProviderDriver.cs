@@ -3,6 +3,7 @@
 
 using MeisterDev.Ai.Providers.Contracts;
 using MeisterDev.Ai.Providers.Enums;
+using MeisterDev.Ai.Providers.Resilience;
 using Microsoft.Extensions.AI;
 
 namespace MeisterDev.Ai.Providers.Drivers;
@@ -49,4 +50,21 @@ public interface IAiProviderDriver
         ProviderModelDescriptor model,
         AiProtocolMode protocolMode,
         int dimensions);
+
+    /// <summary>
+    ///     Decides whether a failed call is worth repeating. This is the driver's own judgement because only the
+    ///     driver knows how its transport signals throttling — a provider SDK that reports a rate limit as its own
+    ///     exception type rather than an HTTP status can only be understood here.
+    /// </summary>
+    /// <remarks>
+    ///     The default reads the HTTP status, or the absence of a response, and is right for anything speaking
+    ///     HTTP with conventional status codes. Override it to recognise SDK-specific signals first, then defer to
+    ///     <see cref="DriverFailureMapper.ClassifyRuntimeFailure" /> for the rest; a driver that classifies
+    ///     everything itself will get the common cases subtly wrong.
+    /// </remarks>
+    /// <param name="exception">The exception the call threw.</param>
+    ProviderFailureVerdict ClassifyRuntimeFailure(Exception exception)
+    {
+        return DriverFailureMapper.ClassifyRuntimeFailure(exception);
+    }
 }
