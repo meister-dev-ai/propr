@@ -136,6 +136,54 @@ public sealed class LogicalModelCapabilityValidatorTests
         await this.Sut().ValidateAsync(Entry("embed", AiOperationKind.Embedding, connection.Id, modelId));
     }
 
+    // A model requiring its reasoning echoed back would fail part-way through a multi-turn review, because the
+    // client library does not put that field on an assistant turn. Refusing at configuration time is the only
+    // honest answer until the transport can carry it.
+    [Fact]
+    public async Task ChatRole_OnAModelRequiringReasoningEchoedBack_Throws()
+    {
+        var modelId = Guid.NewGuid();
+        var model = AiConnectionTestFactory.CreateChatModel("deepseek-reasoner", modelId) with
+        {
+            ReasoningContentField = "reasoning_content",
+        };
+        var connection = AiConnectionTestFactory.CreateConnection(ClientId, [model]);
+        this._connections.GetByIdAsync(connection.Id, Arg.Any<CancellationToken>()).Returns(connection);
+
+        var ex = await Assert.ThrowsAsync<LogicalModelReferenceInvalidException>(() =>
+            this.Sut().ValidateAsync(Entry("deep", AiOperationKind.Chat, connection.Id, modelId)));
+
+        Assert.Contains("reasoning_content", ex.Message, StringComparison.Ordinal);
+        // The message must name a way forward, not just refuse.
+        Assert.Contains("LiteLLM", ex.Message, StringComparison.Ordinal);
+    }
+
+    // An embedding role never runs the multi-turn loop, so the same model is not refused there.
+    [Fact]
+    public async Task EmbeddingRole_OnAModelRequiringReasoningEchoedBack_IsAllowed()
+    {
+        var modelId = Guid.NewGuid();
+        var model = AiConnectionTestFactory.CreateEmbeddingModel("embed-x", 1536, modelId) with
+        {
+            ReasoningContentField = "reasoning_content",
+        };
+        var connection = AiConnectionTestFactory.CreateConnection(ClientId, [model]);
+        this._connections.GetByIdAsync(connection.Id, Arg.Any<CancellationToken>()).Returns(connection);
+
+        await this.Sut().ValidateAsync(Entry("embed", AiOperationKind.Embedding, connection.Id, modelId));
+    }
+
+    [Fact]
+    public async Task ChatRole_OnAModelWithoutThatRequirement_IsUnaffected()
+    {
+        var modelId = Guid.NewGuid();
+        var model = AiConnectionTestFactory.CreateChatModel("gpt-x", modelId);
+        var connection = AiConnectionTestFactory.CreateConnection(ClientId, [model]);
+        this._connections.GetByIdAsync(connection.Id, Arg.Any<CancellationToken>()).Returns(connection);
+
+        await this.Sut().ValidateAsync(Entry("deep", AiOperationKind.Chat, connection.Id, modelId));
+    }
+
     private static LogicalModelDto Entry(string name, AiOperationKind capability, Guid connectionId, Guid modelId)
     {
         return new LogicalModelDto(
