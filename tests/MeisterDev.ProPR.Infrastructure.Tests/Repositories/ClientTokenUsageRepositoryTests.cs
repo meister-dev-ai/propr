@@ -187,4 +187,57 @@ public sealed class ClientTokenUsageRepositoryTests(PostgresContainerFixture fix
         Assert.Contains(samples, s => s.ModelId == model1 && s.InputTokens == 100);
         Assert.Contains(samples, s => s.ModelId == model2 && s.InputTokens == 200);
     }
+
+    // The same model reached through two providers is two bills at two prices. Merging them would make spend
+    // unattributable to the provider that caused it, which is the whole point of recording the provider.
+    [Fact]
+    public async Task UpsertAsync_CreatesNewRow_WhenSameModelOnADifferentProvider()
+    {
+        var date = DateOnly.FromDateTime(DateTime.UtcNow);
+        const string modelId = "gpt-4o";
+
+        await this._repo.UpsertAsync(this._clientId, modelId, date, 100, 50, default, providerKind: "OpenAi");
+        await this._repo.UpsertAsync(this._clientId, modelId, date, 200, 75, default, providerKind: "LiteLlm");
+
+        var samples = await this._dbContext.ClientTokenUsageSamples
+            .Where(s => s.ClientId == this._clientId && s.ModelId == modelId && s.Date == date)
+            .ToListAsync();
+
+        Assert.Equal(2, samples.Count);
+        Assert.Contains(samples, s => s.ProviderKind == "OpenAi" && s.InputTokens == 100);
+        Assert.Contains(samples, s => s.ProviderKind == "LiteLlm" && s.InputTokens == 200);
+    }
+
+    [Fact]
+    public async Task UpsertAsync_AccumulatesWithinOneProvider()
+    {
+        var date = DateOnly.FromDateTime(DateTime.UtcNow);
+        const string modelId = "gpt-4o";
+
+        await this._repo.UpsertAsync(this._clientId, modelId, date, 100, 50, default, providerKind: "AzureOpenAi");
+        await this._repo.UpsertAsync(this._clientId, modelId, date, 200, 75, default, providerKind: "AzureOpenAi");
+
+        var sample = await this._dbContext.ClientTokenUsageSamples
+            .SingleAsync(s => s.ClientId == this._clientId && s.ModelId == modelId && s.Date == date);
+
+        Assert.Equal("AzureOpenAi", sample.ProviderKind);
+        Assert.Equal(300, sample.InputTokens);
+    }
+
+    // Usage recorded before the provider was captured, or against a profile that has since been deleted, still
+    // has to land. It is attributed to nothing rather than dropped or blocked.
+    [Fact]
+    public async Task UpsertAsync_WithNoProvider_StillRecordsUnattributedUsage()
+    {
+        var date = DateOnly.FromDateTime(DateTime.UtcNow);
+        const string modelId = "mystery-model";
+
+        await this._repo.UpsertAsync(this._clientId, modelId, date, 100, 50, default);
+
+        var sample = await this._dbContext.ClientTokenUsageSamples
+            .SingleAsync(s => s.ClientId == this._clientId && s.ModelId == modelId && s.Date == date);
+
+        Assert.Equal(string.Empty, sample.ProviderKind);
+        Assert.Equal(100, sample.InputTokens);
+    }
 }

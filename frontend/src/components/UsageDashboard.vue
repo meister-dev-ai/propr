@@ -88,13 +88,14 @@
           <div class="chart-card-header">
             <div>
               <h4>Trend</h4>
-              <p>Daily token consumption, one curve per {{ reviewGroupBy === 'logicalModel' ? 'logical model' : 'end model' }}.</p>
+              <p>Daily token consumption, one curve per {{ reviewGroupByLabel }}.</p>
             </div>
             <div class="chart-groupby">
               <label for="review-groupby">Group by</label>
               <select id="review-groupby" v-model="reviewGroupBy">
                 <option value="logicalModel">Logical model</option>
                 <option value="model">End model</option>
+                <option value="provider">Provider</option>
               </select>
             </div>
           </div>
@@ -326,6 +327,7 @@ const {
   hasReviewSamples,
   reviewUsageByLogicalModel,
   reviewGroupBy,
+  reviewGroupByLabel,
   proCursorTotalTokens,
   proCursorEstimatedCost,
   proCursorEstimatedEvents,

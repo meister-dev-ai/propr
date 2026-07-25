@@ -322,7 +322,8 @@ public sealed class EfProtocolRecorder(
                         cacheWriteTokens,
                         reasoningTokens,
                         passCostDelta,
-                        logicalModelName ?? string.Empty);
+                        logicalModelName ?? string.Empty,
+                        await ResolveProviderKindAsync(db, job.AiConnectionId, ct));
                 }
             }
         }
@@ -413,6 +414,31 @@ public sealed class EfProtocolRecorder(
         {
             logger.LogWarning(ex, "Failed to add tokens for protocol {ProtocolId}", protocolId);
         }
+    }
+
+    /// <summary>
+    ///     Reads the provider family behind the job's connection profile so the daily usage row can be attributed
+    ///     to it. Returns the empty string when there is no connection or it has since been deleted: an
+    ///     unattributed row is still worth keeping, and refusing to record usage over a missing profile would lose
+    ///     the tokens entirely.
+    /// </summary>
+    private static async Task<string> ResolveProviderKindAsync(
+        MeisterProPRDbContext db,
+        Guid? connectionId,
+        CancellationToken ct)
+    {
+        if (connectionId is null || connectionId == Guid.Empty)
+        {
+            return string.Empty;
+        }
+
+        var providerKind = await db.AiConnectionProfiles
+            .AsNoTracking()
+            .Where(profile => profile.Id == connectionId)
+            .Select(profile => profile.ProviderKind)
+            .FirstOrDefaultAsync(ct);
+
+        return providerKind ?? string.Empty;
     }
 
     /// <summary>

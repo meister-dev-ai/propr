@@ -20464,6 +20464,11 @@
             "type": "string",
             "description": "The logical-model role the tokens were spent under, or the empty string for raw-model / non-logical-model usage.",
             "nullable": true
+          },
+          "providerKind": {
+            "type": "string",
+            "description": "The provider family the tokens were spent against, or the empty string when it could not be determined.",
+            "nullable": true
           }
         },
         "additionalProperties": false,

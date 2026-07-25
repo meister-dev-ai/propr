@@ -26,6 +26,15 @@ public sealed class ClientTokenUsageSample
     /// </summary>
     public string LogicalModelName { get; set; } = string.Empty;
 
+    /// <summary>
+    ///     The provider family the tokens were spent against, captured at the time; the empty string when the
+    ///     provider could not be determined. Part of the aggregate key, because the same model id reached through
+    ///     two providers is two different bills — a gateway and a direct connection to the same model would
+    ///     otherwise merge into one indistinguishable row. Non-null (empty rather than null) so the unique index
+    ///     and PostgreSQL <c>ON CONFLICT</c> upsert behave normally.
+    /// </summary>
+    public string ProviderKind { get; set; } = string.Empty;
+
     /// <summary>The UTC date on which tokens were consumed.</summary>
     public DateOnly Date { get; set; }
 

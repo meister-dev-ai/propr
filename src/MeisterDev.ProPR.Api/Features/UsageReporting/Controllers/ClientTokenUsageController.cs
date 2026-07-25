@@ -77,7 +77,8 @@ public sealed partial class ClientTokenUsageController(
                 s.CacheWriteTokens,
                 s.ReasoningTokens,
                 s.EstimatedCostUsd,
-                s.LogicalModelName))
+                s.LogicalModelName,
+                s.ProviderKind))
             .ToList();
 
         var totalEstimatedCostUsd = sampleDtos.Any(s => s.EstimatedCostUsd.HasValue)

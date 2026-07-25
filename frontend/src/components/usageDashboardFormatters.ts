@@ -88,11 +88,24 @@ export function getInclusiveDayCount(from: string, to: string): number {
 }
 
 /** Which dimension the review usage chart plots one curve per. */
-export type ReviewChartGroupBy = 'logicalModel' | 'model'
+export type ReviewChartGroupBy = 'logicalModel' | 'model' | 'provider'
+
+/** How each grouping dimension is described in the chart's caption. */
+export const REVIEW_GROUP_BY_LABELS: Record<ReviewChartGroupBy, string> = {
+  logicalModel: 'logical model',
+  model: 'end model',
+  provider: 'provider',
+}
 
 export function getReviewSeriesKey(sample: ClientTokenUsageSample, groupBy: ReviewChartGroupBy): string {
   if (groupBy === 'logicalModel') {
     return sample.logicalModelName?.trim() ? sample.logicalModelName : '(raw model)'
+  }
+
+  // Usage recorded before the provider was captured, or against a profile since deleted, has no provider. It
+  // gets its own series rather than being folded into one of the named providers.
+  if (groupBy === 'provider') {
+    return sample.providerKind?.trim() ? sample.providerKind : '(unattributed)'
   }
 
   return `${sample.connectionCategory ?? 5}_${sample.modelId}`
@@ -101,6 +114,10 @@ export function getReviewSeriesKey(sample: ClientTokenUsageSample, groupBy: Revi
 export function getReviewSeriesLabel(sample: ClientTokenUsageSample, groupBy: ReviewChartGroupBy): string {
   if (groupBy === 'logicalModel') {
     return sample.logicalModelName?.trim() ? sample.logicalModelName : 'Raw model'
+  }
+
+  if (groupBy === 'provider') {
+    return sample.providerKind?.trim() ? sample.providerKind : 'Unattributed'
   }
 
   const categoryName = CATEGORY_LABELS[sample.connectionCategory ?? 5] ?? 'Unknown'

@@ -21,15 +21,16 @@ namespace MeisterDev.ProPR.Infrastructure.AI;
 /// <summary>
 ///     Default <see cref="IAiRuntimeFactory" />. Builds runtimes via the provider driver registry and wraps the
 ///     chat client in the provider pipeline's fixed stage order: transient failures are retried for every provider,
-///     and — when a budget scope accessor is available — every model call is metered and gated against the active
-///     review job's USD hard cap.
+///     every call is recorded with the provider and model it went to, and — when a budget scope accessor is
+///     available — every call is metered and gated against the active review job's USD hard cap.
 /// </summary>
 public sealed class AiRuntimeFactory(
     IAiProviderDriverRegistry providerDriverRegistry,
     IBudgetScopeAccessor? budgetScopeAccessor = null,
     IOptions<AiReviewOptions>? aiOptions = null,
     ILogger<AiRuntimeFactory>? logger = null,
-    TimeProvider? timeProvider = null) : IAiRuntimeFactory
+    TimeProvider? timeProvider = null,
+    AiProviderMetrics? metrics = null) : IAiRuntimeFactory
 {
     public IResolvedAiChatRuntime CreateChatRuntime(
         AiConnectionDto connection,
@@ -43,7 +44,8 @@ public sealed class AiRuntimeFactory(
             connection.ToProviderEndpoint(),
             model.ToProviderModel(),
             binding.ProtocolMode).ToReviewCapabilities();
-        return new ResolvedAiChatRuntime(connection, model, binding, this.WrapChatClient(client, driver, connection, model), capabilities)
+        var wrapped = this.WrapChatClient(client, driver, connection, model, logicalModelName);
+        return new ResolvedAiChatRuntime(connection, model, binding, wrapped, capabilities)
         {
             LogicalModelName = logicalModelName,
         };
@@ -107,12 +109,25 @@ public sealed class AiRuntimeFactory(
         IChatClient client,
         IAiProviderDriver driver,
         AiConnectionDto connection,
-        AiConfiguredModelDto model)
+        AiConfiguredModelDto model,
+        string? logicalModelName)
     {
         var decorators = new List<IProviderChatClientDecorator>
         {
             new ProviderRetryChatClientDecorator(driver, this.RetryPolicy(), connection.DisplayName, timeProvider, logger),
         };
+
+        if (metrics is not null)
+        {
+            decorators.Add(
+                new ProviderTelemetryChatClientDecorator(
+                    metrics,
+                    _ => ToPricing(model),
+                    connection.DisplayName,
+                    connection.ClientId,
+                    logicalModelName,
+                    logger));
+        }
 
         if (budgetScopeAccessor is not null)
         {

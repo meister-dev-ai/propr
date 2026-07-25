@@ -11,9 +11,11 @@ namespace MeisterDev.ProPR.Application.Interfaces;
 public interface IClientTokenUsageRepository
 {
     /// <summary>
-    ///     Atomically increments the token counts for the given (clientId, modelId, logicalModelName, date) aggregate
-    ///     row. Creates the row if it does not yet exist. Pass the empty string for <paramref name="logicalModelName" />
-    ///     when the usage is not attributable to a logical model (raw model / non-logical-model call).
+    ///     Atomically increments the token counts for the given
+    ///     (clientId, modelId, logicalModelName, providerKind, date) aggregate row. Creates the row if it does not
+    ///     yet exist. Pass the empty string for <paramref name="logicalModelName" /> when the usage is not
+    ///     attributable to a logical model (raw model / non-logical-model call), and for
+    ///     <paramref name="providerKind" /> when the provider behind the call could not be determined.
     /// </summary>
     Task UpsertAsync(
         Guid clientId,
@@ -26,7 +28,8 @@ public interface IClientTokenUsageRepository
         long cacheWriteTokens = 0,
         long reasoningTokens = 0,
         decimal? estimatedCostUsd = null,
-        string logicalModelName = "");
+        string logicalModelName = "",
+        string providerKind = "");
 
     /// <summary>
     ///     Returns all samples for <paramref name="clientId" /> whose date falls within the

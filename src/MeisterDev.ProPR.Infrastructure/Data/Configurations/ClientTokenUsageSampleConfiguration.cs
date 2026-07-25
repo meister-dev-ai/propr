@@ -32,6 +32,12 @@ internal sealed class ClientTokenUsageSampleConfiguration : IEntityTypeConfigura
             .IsRequired()
             .HasDefaultValue(string.Empty);
 
+        builder.Property(s => s.ProviderKind)
+            .HasColumnName("provider_kind")
+            .HasMaxLength(64)
+            .IsRequired()
+            .HasDefaultValue(string.Empty);
+
         builder.Property(s => s.Date)
             .HasColumnName("date")
             .IsRequired();
@@ -63,9 +69,10 @@ internal sealed class ClientTokenUsageSampleConfiguration : IEntityTypeConfigura
             .HasColumnName("estimated_cost_usd")
             .HasPrecision(18, 6);
 
-        // Unique index on (client_id, model_id, logical_model_name, date) — enables PostgreSQL upsert via ON CONFLICT.
-        // logical_model_name is non-null (empty for raw usage) so the conflict target matches every row.
-        builder.HasIndex(s => new { s.ClientId, s.ModelId, s.LogicalModelName, s.Date })
+        // Unique index on (client_id, model_id, logical_model_name, provider_kind, date) — enables the PostgreSQL
+        // upsert via ON CONFLICT. logical_model_name and provider_kind are non-null (empty when unattributed) so
+        // the conflict target matches every row.
+        builder.HasIndex(s => new { s.ClientId, s.ModelId, s.LogicalModelName, s.ProviderKind, s.Date })
             .IsUnique()
             .HasDatabaseName("ix_client_token_usage_samples_unique");
 

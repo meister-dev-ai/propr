@@ -15,6 +15,7 @@ namespace MeisterDev.ProPR.Application.DTOs;
 /// <param name="ReasoningTokens">Reasoning tokens.</param>
 /// <param name="EstimatedCostUsd">Accumulated estimated USD cost for this (model, day); null when no priced contribution was recorded.</param>
 /// <param name="LogicalModelName">The logical-model role the tokens were spent under, or the empty string for raw-model / non-logical-model usage.</param>
+/// <param name="ProviderKind">The provider family the tokens were spent against, or the empty string when it could not be determined.</param>
 public sealed record ClientTokenUsageSampleDto(
     string ModelId,
     DateOnly Date,
@@ -24,7 +25,8 @@ public sealed record ClientTokenUsageSampleDto(
     long CacheWriteTokens = 0,
     long ReasoningTokens = 0,
     decimal? EstimatedCostUsd = null,
-    string LogicalModelName = "");
+    string LogicalModelName = "",
+    string ProviderKind = "");
 
 /// <summary>
 ///     Response DTO for <c>GET /admin/clients/{clientId}/token-usage</c>.

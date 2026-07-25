@@ -87,6 +87,10 @@ public static class InfrastructureServiceExtensions
         }
 
         services.AddSingleton<ISecretProtectionCodec, SecretProtectionCodec>();
+
+        // One meter for the process, so the instruments are not recreated per resolved runtime. Its name matches
+        // the meter the host already exports, so no telemetry configuration has to learn about it.
+        services.AddSingleton<AiProviderMetrics>();
         services.AddScoped<IAiRuntimeResolver, AiRuntimeResolver>();
         services.AddScoped<IAiRuntimeFactory, AiRuntimeFactory>();
         // ILogicalModelResolver is registered in the Clients module, alongside its ILogicalModelCatalogRepository

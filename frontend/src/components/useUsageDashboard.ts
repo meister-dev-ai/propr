@@ -23,6 +23,7 @@ import type {
 } from '@/types/proCursorTokenUsage'
 import {
   PERIOD_PRESETS,
+  REVIEW_GROUP_BY_LABELS,
   type ReviewChartGroupBy,
   buildProCursorChartData,
   buildReviewChartData,
@@ -105,8 +106,11 @@ export function useUsageDashboard(props: { clientId: string }) {
   })
   const lastRollupCompletedLabel = computed(() => formatDateTime(proCursorUsage.value?.lastRollupCompletedAtUtc))
 
-  // Which dimension the review chart plots one curve per — logical model (the new default) or the end model.
+  // Which dimension the review chart plots one curve per — logical model (the default), the end model, or the
+  // provider it was reached through, which is the only one of the three that separates two profiles serving the
+  // same model.
   const reviewGroupBy = ref<ReviewChartGroupBy>('logicalModel')
+  const reviewGroupByLabel = computed(() => REVIEW_GROUP_BY_LABELS[reviewGroupBy.value])
   const reviewChartData = computed(() =>
     buildReviewChartData(reviewUsage.value, hasReviewSamples.value, reviewGroupBy.value),
   )
@@ -229,6 +233,7 @@ export function useUsageDashboard(props: { clientId: string }) {
     hasReviewSamples,
     reviewUsageByLogicalModel,
     reviewGroupBy,
+    reviewGroupByLabel,
     proCursorTotalTokens,
     proCursorEstimatedCost,
     proCursorEstimatedEvents,

@@ -31,10 +31,13 @@ public sealed class ClientTokenUsageRepository(MeisterProPRDbContext db) : IClie
         long cacheWriteTokens = 0,
         long reasoningTokens = 0,
         decimal? estimatedCostUsd = null,
-        string logicalModelName = "")
+        string logicalModelName = "",
+        string providerKind = "")
     {
-        // The aggregate key is non-null in logical_model_name (empty for raw usage) so ON CONFLICT matches every row.
+        // The aggregate key is non-null in logical_model_name and provider_kind (empty when unattributed) so
+        // ON CONFLICT matches every row.
         logicalModelName ??= string.Empty;
+        providerKind ??= string.Empty;
 
         if (db.Database.ProviderName?.Contains("Npgsql", StringComparison.OrdinalIgnoreCase) == true)
         {
@@ -45,9 +48,9 @@ public sealed class ClientTokenUsageRepository(MeisterProPRDbContext db) : IClie
             await db.Database.ExecuteSqlRawAsync(
                 """
                 INSERT INTO client_token_usage_samples
-                    (id, client_id, model_id, logical_model_name, date, input_tokens, output_tokens, cached_input_tokens, cache_write_tokens, reasoning_tokens, estimated_cost_usd)
-                VALUES (gen_random_uuid(), {0}, {1}, {2}, {3}, {4}, {5}, {6}, {7}, {8}, @estimated_cost_usd)
-                ON CONFLICT (client_id, model_id, logical_model_name, date)
+                    (id, client_id, model_id, logical_model_name, provider_kind, date, input_tokens, output_tokens, cached_input_tokens, cache_write_tokens, reasoning_tokens, estimated_cost_usd)
+                VALUES (gen_random_uuid(), {0}, {1}, {2}, {9}, {3}, {4}, {5}, {6}, {7}, {8}, @estimated_cost_usd)
+                ON CONFLICT (client_id, model_id, logical_model_name, provider_kind, date)
                 DO UPDATE SET
                     input_tokens        = client_token_usage_samples.input_tokens        + EXCLUDED.input_tokens,
                     output_tokens       = client_token_usage_samples.output_tokens       + EXCLUDED.output_tokens,
@@ -68,6 +71,7 @@ public sealed class ClientTokenUsageRepository(MeisterProPRDbContext db) : IClie
                 cachedInputTokens,
                 cacheWriteTokens,
                 reasoningTokens,
+                providerKind,
                 new NpgsqlParameter("estimated_cost_usd", NpgsqlDbType.Numeric)
                 {
                     Value = (object?)estimatedCostUsd ?? DBNull.Value,
@@ -78,7 +82,11 @@ public sealed class ClientTokenUsageRepository(MeisterProPRDbContext db) : IClie
             // InMemory fallback: read-modify-write (acceptable for tests only).
             var existing = await db.ClientTokenUsageSamples
                 .FirstOrDefaultAsync(
-                    s => s.ClientId == clientId && s.ModelId == modelId && s.LogicalModelName == logicalModelName && s.Date == date,
+                    s => s.ClientId == clientId
+                         && s.ModelId == modelId
+                         && s.LogicalModelName == logicalModelName
+                         && s.ProviderKind == providerKind
+                         && s.Date == date,
                     ct);
 
             if (existing is null)
@@ -90,6 +98,7 @@ public sealed class ClientTokenUsageRepository(MeisterProPRDbContext db) : IClie
                         ClientId = clientId,
                         ModelId = modelId,
                         LogicalModelName = logicalModelName,
+                        ProviderKind = providerKind,
                         Date = date,
                         InputTokens = inputTokens,
                         OutputTokens = outputTokens,

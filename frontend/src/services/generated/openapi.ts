@@ -13670,6 +13670,8 @@ export interface components {
             estimatedCostUsd?: number | null;
             /** @description The logical-model role the tokens were spent under, or the empty string for raw-model / non-logical-model usage. */
             logicalModelName?: string | null;
+            /** @description The provider family the tokens were spent against, or the empty string when it could not be determined. */
+            providerKind?: string | null;
         };
         /**
          * @description The native review surface used by a provider.

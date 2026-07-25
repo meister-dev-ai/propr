@@ -12,6 +12,8 @@ export interface ClientTokenUsageSample {
   cacheWriteTokens?: number
   reasoningTokens?: number
   estimatedCostUsd?: number | null
+  /** Provider family the tokens were spent against; empty or absent when it could not be determined. */
+  providerKind?: string
 }
 
 /** One row of review token usage rolled up per logical model; empty name means raw / non-logical-model usage. */
