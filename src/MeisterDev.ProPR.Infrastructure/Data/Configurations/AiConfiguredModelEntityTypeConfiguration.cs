@@ -42,6 +42,10 @@ internal sealed class AiConfiguredModelEntityTypeConfiguration : IEntityTypeConf
         builder.Property(x => x.InputCostPer1MUsd).HasColumnName("input_cost_per_1m_usd").HasPrecision(18, 6);
         builder.Property(x => x.OutputCostPer1MUsd).HasColumnName("output_cost_per_1m_usd").HasPrecision(18, 6);
         builder.Property(x => x.CachedInputCostPer1MUsd).HasColumnName("cached_input_cost_per_1m_usd").HasPrecision(18, 6);
+        builder.Property(x => x.CacheWriteCostPer1MUsd).HasColumnName("cache_write_cost_per_1m_usd").HasPrecision(18, 6);
+        builder.Property(x => x.SupportsReasoning).HasColumnName("supports_reasoning").IsRequired();
+        builder.Property(x => x.SupportsPromptCaching).HasColumnName("supports_prompt_caching").IsRequired();
+        builder.Property(x => x.ReasoningContentField).HasColumnName("reasoning_content_field").HasMaxLength(100);
 
         builder.HasIndex(x => new { x.ConnectionProfileId, x.RemoteModelId })
             .HasDatabaseName("ix_ai_configured_models_connection_model")

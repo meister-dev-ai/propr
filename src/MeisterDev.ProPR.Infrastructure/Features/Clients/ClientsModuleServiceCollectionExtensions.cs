@@ -1,6 +1,7 @@
 // Copyright (c) Andreas Rain.
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
+using MeisterDev.Ai.Providers.Catalog;
 using MeisterDev.ProPR.Application.Features.Clients.Services;
 using MeisterDev.ProPR.Application.Features.Clients.Support;
 using MeisterDev.ProPR.Application.Interfaces;
@@ -80,6 +81,11 @@ public static class ClientsModuleServiceCollectionExtensions
             services.AddScoped<IProviderOperationalStatusService, ProviderOperationalStatusService>();
             services.AddScoped<IAiConnectionRepository, AiConnectionRepository>();
             services.AddScoped<IAiConnectionScopeGuard, AiConnectionScopeGuard>();
+            services.AddSingleton<ICatalogSnapshotImporter, ModelsDevCatalogSnapshotImporter>();
+            // Registered here as well as by the Reviewing module: catalog import needs a clock and must not
+            // depend on another module happening to be composed first.
+            services.TryAddSingleton(TimeProvider.System);
+            services.AddScoped<IModelCatalogImportService, ModelCatalogImportService>();
             services.AddScoped<ILogicalModelCapabilityValidator, LogicalModelCapabilityValidator>();
             services.AddScoped<ILogicalModelCatalogRepository, LogicalModelCatalogRepository>();
             services.AddScoped<ILogicalModelResolver, LogicalModelResolver>();

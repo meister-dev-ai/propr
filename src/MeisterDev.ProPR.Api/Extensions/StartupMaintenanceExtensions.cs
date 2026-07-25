@@ -44,6 +44,14 @@ public static class StartupMaintenanceExtensions
         var secretBackfillService = scope.ServiceProvider.GetRequiredService<SecretBackfillService>();
         await secretBackfillService.BackfillAsync();
 
+        // Seed the bundled model catalog. Idempotent by design: entries are upserted per provider and model, and
+        // only global rows are touched, so a tenant's negotiated pricing survives every restart.
+        var catalogImport = scope.ServiceProvider.GetService<IModelCatalogImportService>();
+        if (catalogImport is not null)
+        {
+            await catalogImport.SeedFromBundledSnapshotAsync();
+        }
+
         // Idempotent migration: move legacy configured-model review passes and unmapped AI purposes onto named logical
         // models. Best effort — a failure never blocks startup, and anything not yet migrated keeps resolving via its
         // legacy configured-model id / purpose binding until a later boot succeeds.

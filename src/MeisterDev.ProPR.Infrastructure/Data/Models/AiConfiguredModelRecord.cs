@@ -42,6 +42,22 @@ public sealed class AiConfiguredModelRecord
 
     public decimal? CachedInputCostPer1MUsd { get; set; }
 
+    /// <summary>USD per million tokens written to the provider prompt cache; null when the provider does not bill cache creation.</summary>
+    public decimal? CacheWriteCostPer1MUsd { get; set; }
+
+    /// <summary>Whether the model performs, and bills for, reasoning.</summary>
+    public bool SupportsReasoning { get; set; }
+
+    /// <summary>Whether the model can serve part of a prompt from the provider cache.</summary>
+    public bool SupportsPromptCaching { get; set; }
+
+    /// <summary>
+    ///     Field this model requires echoed back on assistant turns to preserve its chain of thought
+    ///     (DeepSeek-style <c>reasoning_content</c>); null when it has no such requirement. Seeded from the
+    ///     catalog so a normalizing stage is driven by data rather than a hard-coded model list.
+    /// </summary>
+    public string? ReasoningContentField { get; set; }
+
     public AiConnectionProfileRecord? ConnectionProfile { get; set; }
 
     public ICollection<AiPurposeBindingRecord> PurposeBindings { get; set; } = [];

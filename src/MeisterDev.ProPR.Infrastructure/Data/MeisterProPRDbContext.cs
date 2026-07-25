@@ -102,6 +102,8 @@ public sealed class MeisterProPRDbContext(DbContextOptions<MeisterProPRDbContext
     /// <summary>Configured models under provider-neutral AI connection profiles.</summary>
     public DbSet<AiConfiguredModelRecord> AiConfiguredModels => this.Set<AiConfiguredModelRecord>();
 
+    public DbSet<AiModelCatalogEntryRecord> AiModelCatalogEntries => this.Set<AiModelCatalogEntryRecord>();
+
     /// <summary>AI purpose bindings under provider-neutral AI connection profiles.</summary>
     public DbSet<AiPurposeBindingRecord> AiPurposeBindings => this.Set<AiPurposeBindingRecord>();
 
