@@ -12723,6 +12723,8 @@ export interface components {
             /** Format: int64 */
             recentUsageTokens?: number | null;
             budgetConfig?: components["schemas"]["BudgetConfigDto"];
+            minimumSeverityToPost?: components["schemas"]["CommentSeverity"];
+            autoResolveSeverities?: components["schemas"]["CommentSeverity"][] | null;
         };
         /** @description Client-scoped review profile response. */
         ClientReviewProfileResponse: {
@@ -13417,6 +13419,7 @@ export interface components {
         /**
          * @description Request body for patching a client. All fields are optional; omitted fields are left unchanged.
          *     Set MeisterProPR.Api.Controllers.PatchClientRequest.CustomSystemMessage to `""` (empty string) to clear an existing value.
+         *     Set MeisterProPR.Api.Controllers.PatchClientRequest.AutoResolveSeverities to an empty array to clear the auto-resolve set.
          */
         PatchClientRequest: {
             isActive?: boolean | null;
@@ -13431,6 +13434,8 @@ export interface components {
             reviewPasses?: components["schemas"]["ReviewPassEntry"][] | null;
             baselineReasoningEffort?: components["schemas"]["ReviewReasoningEffort"];
             budgetConfig?: components["schemas"]["BudgetConfigDto"];
+            minimumSeverityToPost?: components["schemas"]["CommentSeverity"];
+            autoResolveSeverities?: components["schemas"]["CommentSeverity"][] | null;
         };
         /** @description Patch payload for one premium capability override. */
         PatchPremiumCapabilityOverrideRequest: {

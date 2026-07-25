@@ -75,6 +75,21 @@ public sealed class ClientRecord
     public bool IncludeLinkedItemsInContext { get; set; } = true;
 
     /// <summary>
+    ///     Minimum severity a review finding must have for its comment to be published to the SCM provider.
+    ///     Findings ranked below this threshold are retained in the persisted review result but not posted.
+    ///     Rank, high to low: Error, Warning, Suggestion, Info. Defaults to
+    ///     <see cref="Domain.Enums.CommentSeverity.Info" /> so every finding is published (current behavior).
+    /// </summary>
+    public CommentSeverity MinimumSeverityToPost { get; set; } = CommentSeverity.Info;
+
+    /// <summary>
+    ///     Severities whose published comments are posted already resolved, each carrying an explanatory note.
+    ///     Empty by default so nothing is auto-resolved. Applied after the minimum-severity filter, so a finding
+    ///     below <see cref="MinimumSeverityToPost" /> is never auto-resolved because it is never published.
+    /// </summary>
+    public IReadOnlyList<CommentSeverity> AutoResolveSeverities { get; set; } = [];
+
+    /// <summary>
     ///     Optional soft USD cap on this client's month-to-date review spend. When month-to-date spend reaches it,
     ///     new review jobs are held rather than started (running jobs finish). Null means no limit.
     /// </summary>

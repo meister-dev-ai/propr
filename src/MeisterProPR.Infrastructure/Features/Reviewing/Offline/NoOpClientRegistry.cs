@@ -64,6 +64,16 @@ public sealed class NoOpClientRegistry : IClientRegistry
         return Task.FromResult(true);
     }
 
+    public Task<CommentSeverity> GetMinimumSeverityToPostAsync(Guid clientId, CancellationToken ct = default)
+    {
+        return Task.FromResult(CommentSeverity.Info);
+    }
+
+    public Task<IReadOnlyList<CommentSeverity>> GetAutoResolveSeveritiesAsync(Guid clientId, CancellationToken ct = default)
+    {
+        return Task.FromResult<IReadOnlyList<CommentSeverity>>([]);
+    }
+
     public Task<IReadOnlyList<ReviewPassSpec>> GetReviewPassesAsync(Guid clientId, CancellationToken ct = default)
     {
         return Task.FromResult<IReadOnlyList<ReviewPassSpec>>([]);

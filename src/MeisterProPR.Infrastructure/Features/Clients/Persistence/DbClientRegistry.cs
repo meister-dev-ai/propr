@@ -165,6 +165,28 @@ public sealed class DbClientRegistry(
     }
 
     /// <inheritdoc />
+    public async Task<CommentSeverity> GetMinimumSeverityToPostAsync(Guid clientId, CancellationToken ct = default)
+    {
+        // A missing client yields default(CommentSeverity) == Info, i.e. publish everything.
+        return await dbContext.Clients
+            .Where(c => c.Id == clientId)
+            .Select(c => c.MinimumSeverityToPost)
+            .FirstOrDefaultAsync(ct);
+    }
+
+    /// <inheritdoc />
+    public async Task<IReadOnlyList<CommentSeverity>> GetAutoResolveSeveritiesAsync(
+        Guid clientId,
+        CancellationToken ct = default)
+    {
+        return await dbContext.Clients
+                   .Where(c => c.Id == clientId)
+                   .Select(c => c.AutoResolveSeverities)
+                   .FirstOrDefaultAsync(ct)
+               ?? [];
+    }
+
+    /// <inheritdoc />
     public async Task<IReadOnlyList<ReviewPassSpec>> GetReviewPassesAsync(Guid clientId, CancellationToken ct = default)
     {
         return await dbContext.ClientReviewPasses

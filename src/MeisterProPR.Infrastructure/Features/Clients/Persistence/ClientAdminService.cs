@@ -75,6 +75,8 @@ public sealed class ClientAdminService(
         IReadOnlyList<ReviewPassDto>? reviewPasses = null,
         ReviewReasoningEffort? baselineReasoningEffort = null,
         BudgetConfigDto? budgetConfig = null,
+        CommentSeverity? minimumSeverityToPost = null,
+        IReadOnlyList<CommentSeverity>? autoResolveSeverities = null,
         CancellationToken ct = default)
     {
         var isCommunityEdition = await this.IsCommunityEditionAsync(ct);
@@ -103,9 +105,11 @@ public sealed class ClientAdminService(
             enableLanguageRobustScreening,
             enableMultiPassUnion,
             includeLinkedItemsInContext,
-            baselineReasoningEffort);
+            baselineReasoningEffort,
+            minimumSeverityToPost);
         ReplaceReviewPassesIfProvided(client, reviewPasses);
         ReplaceBudgetCapsIfProvided(client, budgetConfig);
+        ReplaceAutoResolveSeveritiesIfProvided(client, autoResolveSeverities);
 
         await dbContext.SaveChangesAsync(ct);
         return await this.GetByIdAsync(clientId, ct);
@@ -123,11 +127,13 @@ public sealed class ClientAdminService(
         bool? enableLanguageRobustScreening,
         bool? enableMultiPassUnion,
         bool? includeLinkedItemsInContext,
-        ReviewReasoningEffort? baselineReasoningEffort)
+        ReviewReasoningEffort? baselineReasoningEffort,
+        CommentSeverity? minimumSeverityToPost)
     {
         ApplyIfHasValue(isActive, value => client.IsActive = value);
         ApplyIfNotNull(displayName, value => client.DisplayName = value);
         ApplyIfHasValue(commentResolutionBehavior, value => client.CommentResolutionBehavior = value);
+        ApplyIfHasValue(minimumSeverityToPost, value => client.MinimumSeverityToPost = value);
 
         if (customSystemMessage is not null)
         {
@@ -198,6 +204,19 @@ public sealed class ClientAdminService(
         client.PullRequestBudgetHardCapUsd = budgetConfig.PullRequestHardCapUsd;
         client.IncrementBudgetSoftCapUsd = budgetConfig.IncrementSoftCapUsd;
         client.IncrementBudgetHardCapUsd = budgetConfig.IncrementHardCapUsd;
+    }
+
+    private static void ReplaceAutoResolveSeveritiesIfProvided(
+        ClientRecord client,
+        IReadOnlyList<CommentSeverity>? autoResolveSeverities)
+    {
+        if (autoResolveSeverities is null)
+        {
+            return;
+        }
+
+        // Wholesale replace: an empty list clears the set. Persistence normalizes (distinct, ranked) on write.
+        client.AutoResolveSeverities = autoResolveSeverities;
     }
 
     private static void ApplyIfHasValue<T>(T? value, Action<T> apply) where T : struct
@@ -423,7 +442,9 @@ public sealed class ClientAdminService(
                 client.PullRequestBudgetSoftCapUsd,
                 client.PullRequestBudgetHardCapUsd,
                 client.IncrementBudgetSoftCapUsd,
-                client.IncrementBudgetHardCapUsd));
+                client.IncrementBudgetHardCapUsd),
+            client.MinimumSeverityToPost,
+            client.AutoResolveSeverities);
     }
 
     private async Task<bool> IsCommunityEditionAsync(CancellationToken ct)

@@ -64,6 +64,12 @@ public sealed partial class ReviewOrchestrationService(
     private const string LocalWorkspaceFailedEventName = "local_workspace_failed";
     private const string LocalWorkspaceFallbackAppliedEventName = "local_workspace_fallback_applied";
 
+    // Provider-neutral resolved-thread status token used across the SCM adapters.
+    private const string ResolvedThreadStatus = "fixed";
+
+    // Reply left on a freshly posted thread that the client's post configuration marks for auto-resolution.
+    private const string AutoResolvedNote = "Auto-resolved by ProPR post configuration.";
+
     private readonly AiReviewOptions _opts = options.Value;
 
     /// <summary>Processes the given review job end-to-end.</summary>
@@ -611,6 +617,13 @@ public sealed partial class ReviewOrchestrationService(
         try
         {
             var publicationResult = this.PrepareResultForPublication(job, pr, result);
+
+            // The minimum-severity filter governs SCM PUBLICATION only. The persisted result below keeps every
+            // finding, so a suppressed low-severity finding is still visible in the review record ("no comment
+            // posted" is not "no review").
+            var minimumSeverityToPost = await clientRegistry.GetMinimumSeverityToPostAsync(job.ClientId, ct);
+            var publishResult = FilterCommentsByMinimumSeverity(publicationResult, minimumSeverityToPost);
+
             var scmCommentPostingEnabled = await clientRegistry.GetScmCommentPostingEnabledAsync(job.ClientId, ct);
             var publicationIdentity = ResolvePublicationIdentity(job, pr);
             var diagnostics = ReviewCommentPostingDiagnosticsDto.Empty(
@@ -631,10 +644,12 @@ public sealed partial class ReviewOrchestrationService(
                         job.ClientId,
                         job.CodeReviewReference,
                         publicationRevision,
-                        publicationResult,
+                        publishResult,
                         publicationIdentity,
                         ct,
                         publicationContext);
+
+                await this.AutoResolvePostedThreadsAsync(job, publishResult, diagnostics, ct);
             }
 
             await jobs.SetResultAsync(job.Id, publicationResult, ct);
@@ -1475,6 +1490,128 @@ public sealed partial class ReviewOrchestrationService(
                 failure.Error,
                 ct);
         }
+    }
+
+    // Returns the subset of the result whose comments meet the client's minimum severity to post. The persisted
+    // review result is NOT filtered — only what is handed to the SCM publication adapter.
+    private static ReviewResult FilterCommentsByMinimumSeverity(ReviewResult result, CommentSeverity minimumSeverity)
+    {
+        // Info is the lowest rank, so an Info threshold posts everything — return the result untouched.
+        if (minimumSeverity == CommentSeverity.Info || result.Comments.Count == 0)
+        {
+            return result;
+        }
+
+        var postable = result.Comments
+            .Where(comment => comment.Severity.MeetsMinimum(minimumSeverity))
+            .ToList();
+
+        return postable.Count == result.Comments.Count
+            ? result
+            : result with { Comments = postable.AsReadOnly() };
+    }
+
+    // For each thread just posted whose finding severity the client marked for auto-resolution, posts an explanatory
+    // reply and resolves the thread. Provider-neutral and best-effort: a provider without resolution support, a thread
+    // whose id/anchor the adapter did not surface, or a single failed resolve never fails the review job.
+    private async Task AutoResolvePostedThreadsAsync(
+        ReviewJob job,
+        ReviewResult publishResult,
+        ReviewCommentPostingDiagnosticsDto diagnostics,
+        CancellationToken ct)
+    {
+        if (diagnostics.PostedComments.Count == 0)
+        {
+            return;
+        }
+
+        var autoResolveSeverities = await clientRegistry.GetAutoResolveSeveritiesAsync(job.ClientId, ct);
+        if (autoResolveSeverities is not { Count: > 0 })
+        {
+            return;
+        }
+
+        var autoResolveSet = autoResolveSeverities.ToHashSet();
+
+        // Anchor (file, line) -> the severities of every finding published there. A posted thread is auto-resolved
+        // only when EVERY finding at its anchor is in the configured set, so a higher-severity finding that shares a
+        // line is never resolved by mistake. Keyed case-insensitively on the path, matching how paths are compared
+        // elsewhere in the review pipeline.
+        var severitiesByAnchor = publishResult.Comments
+            .Where(comment => !string.IsNullOrWhiteSpace(comment.FilePath) && comment.LineNumber.HasValue)
+            .GroupBy(comment => BuildAnchorKey(comment.FilePath!, comment.LineNumber!.Value), StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(
+                group => group.Key,
+                group => group.Select(comment => comment.Severity).ToHashSet(),
+                StringComparer.OrdinalIgnoreCase);
+
+        IReviewThreadReplyPublisher replyPublisher;
+        IReviewThreadStatusWriter statusWriter;
+        try
+        {
+            replyPublisher = providerRegistry.GetReviewThreadReplyPublisher(job.Provider);
+            statusWriter = providerRegistry.GetReviewThreadStatusWriter(job.Provider);
+        }
+        catch (Exception ex)
+        {
+            // The client configured auto-resolve but this provider has no thread-resolution adapter (only Azure
+            // DevOps registers one today). Log so the no-op is visible, then degrade without failing the job.
+            LogAutoResolveUnsupported(logger, job.Provider, job.Id, ex);
+            return;
+        }
+
+        var resolvedThreadIds = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var posted in diagnostics.PostedComments)
+        {
+            if (string.IsNullOrWhiteSpace(posted.ProviderThreadId)
+                || string.IsNullOrWhiteSpace(posted.FilePath)
+                || posted.Line is not > 0)
+            {
+                continue;
+            }
+
+            // A single created thread can surface more than one comment ref (all sharing its thread id); resolve
+            // each thread at most once so the note and status update are not posted repeatedly.
+            if (!resolvedThreadIds.Add(posted.ProviderThreadId))
+            {
+                continue;
+            }
+
+            if (!severitiesByAnchor.TryGetValue(BuildAnchorKey(posted.FilePath, posted.Line.Value), out var severities)
+                || !severities.All(autoResolveSet.Contains))
+            {
+                continue;
+            }
+
+            var thread = new ReviewThreadRef(
+                job.CodeReviewReference,
+                posted.ProviderThreadId,
+                posted.FilePath,
+                posted.Line,
+                isReviewerOwned: true);
+
+            try
+            {
+                // Resolve FIRST, then post the note. If the status update fails, the thread is left active with no
+                // reply — never an active thread carrying a note that (falsely) claims it was auto-resolved.
+                await statusWriter.UpdateThreadStatusAsync(job.ClientId, thread, ResolvedThreadStatus, ct);
+                await replyPublisher.ReplyAsync(job.ClientId, thread, AutoResolvedNote, ct);
+            }
+            catch (Exception ex)
+            {
+                // Never fail the job because a single thread could not be auto-resolved.
+                LogAutoResolveThreadFailed(logger, posted.ProviderThreadId, job.Id, ex);
+            }
+        }
+    }
+
+    // Canonical case-insensitive key for a comment's (file, line) anchor, so a posted thread ref matches the
+    // published findings at the same location regardless of path casing.
+    private static string BuildAnchorKey(string filePath, int line)
+    {
+        // Null separator can never appear in a file path, so a path ending in a space or digits can never
+        // collide with the line number.
+        return $"{NormalizeReviewPath(filePath)}\u0000{line.ToString(CultureInfo.InvariantCulture)}";
     }
 
     private ReviewResult PrepareResultForPublication(ReviewJob job, PullRequest pr, ReviewResult result)

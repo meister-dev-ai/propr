@@ -175,6 +175,8 @@
             </div>
         </div>
 
+        <ClientPostConfigSection />
+
         <!-- Danger Zone -->
         <div class="danger-zone-card">
             <div class="danger-zone-info">
@@ -196,6 +198,7 @@
 <script lang="ts" setup>
 import { inject } from "vue";
 import ClientOverview from "@/features/clients/components/ClientOverview.vue";
+import ClientPostConfigSection from "@/features/clients/components/ClientPostConfigSection.vue";
 import ConfirmDialog from "@/components/dialogs/ConfirmDialog.vue";
 import { ClientDetailVmKey } from "@/features/clients/view-models/useClientDetailViewModel";
 

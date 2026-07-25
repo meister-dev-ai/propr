@@ -18953,6 +18953,16 @@
           },
           "budgetConfig": {
             "$ref": "#/components/schemas/BudgetConfigDto"
+          },
+          "minimumSeverityToPost": {
+            "$ref": "#/components/schemas/CommentSeverity"
+          },
+          "autoResolveSeverities": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CommentSeverity"
+            },
+            "nullable": true
           }
         },
         "additionalProperties": false,
@@ -20692,10 +20702,20 @@
           },
           "budgetConfig": {
             "$ref": "#/components/schemas/BudgetConfigDto"
+          },
+          "minimumSeverityToPost": {
+            "$ref": "#/components/schemas/CommentSeverity"
+          },
+          "autoResolveSeverities": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CommentSeverity"
+            },
+            "nullable": true
           }
         },
         "additionalProperties": false,
-        "description": "Request body for patching a client. All fields are optional; omitted fields are left unchanged.\nSet MeisterProPR.Api.Controllers.PatchClientRequest.CustomSystemMessage to `\"\"` (empty string) to clear an existing value."
+        "description": "Request body for patching a client. All fields are optional; omitted fields are left unchanged.\nSet MeisterProPR.Api.Controllers.PatchClientRequest.CustomSystemMessage to `\"\"` (empty string) to clear an existing value.\nSet MeisterProPR.Api.Controllers.PatchClientRequest.AutoResolveSeverities to an empty array to clear the auto-resolve set."
       },
       "PatchPremiumCapabilityOverrideRequest": {
         "type": "object",

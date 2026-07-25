@@ -46,6 +46,16 @@ public sealed class PatchClientRequestValidator : AbstractValidator<PatchClientR
             .WithMessage("BaselineReasoningEffort must be one of none, low, medium, high.")
             .When(r => r.BaselineReasoningEffort.HasValue);
 
+        this.RuleFor(r => r.MinimumSeverityToPost)
+            .Must(severity => Enum.IsDefined(severity!.Value))
+            .WithMessage("MinimumSeverityToPost must be one of info, warning, error, suggestion.")
+            .When(r => r.MinimumSeverityToPost.HasValue);
+
+        this.RuleFor(r => r.AutoResolveSeverities)
+            .Must(severities => severities!.All(severity => Enum.IsDefined(severity)))
+            .WithMessage("AutoResolveSeverities must contain only info, warning, error, or suggestion values.")
+            .When(r => r.AutoResolveSeverities is not null);
+
         this.RuleFor(r => r.ReviewPasses)
             .Must(BeAValidReviewPassList)
             .WithMessage(

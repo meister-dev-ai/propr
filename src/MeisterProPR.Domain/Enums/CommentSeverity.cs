@@ -8,15 +8,19 @@ namespace MeisterProPR.Domain.Enums;
 /// </summary>
 public enum CommentSeverity
 {
+    // Persisted by numeric value in the clients.minimum_severity_to_post column — keep these values explicit and do
+    // NOT reorder or renumber, or stored thresholds would silently remap. The post-threshold ordering is defined by
+    // CommentSeverityRanking, deliberately independent of these numeric values.
+
     /// <summary>Informational comment.</summary>
-    Info,
+    Info = 0,
 
     /// <summary>Potential issue that should be reviewed.</summary>
-    Warning,
+    Warning = 1,
 
     /// <summary>Definite error.</summary>
-    Error,
+    Error = 2,
 
     /// <summary>Suggestion for improvement.</summary>
-    Suggestion,
+    Suggestion = 3,
 }

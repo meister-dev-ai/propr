@@ -59,6 +59,13 @@ public interface IClientAdminService
     ///     that individual limit (the per-field "omit means unchanged" convention cannot express clearing a single
     ///     nullable cap).
     /// </param>
+    /// <param name="minimumSeverityToPost">
+    ///     When non-null, sets the minimum severity a finding must have for its comment to be posted to the SCM provider.
+    /// </param>
+    /// <param name="autoResolveSeverities">
+    ///     When non-null, replaces the set of severities whose comments are posted already resolved (an empty list
+    ///     clears it).
+    /// </param>
     /// <param name="ct">Cancellation token.</param>
     Task<ClientDto?> PatchAsync(
         Guid clientId,
@@ -75,6 +82,8 @@ public interface IClientAdminService
         IReadOnlyList<ReviewPassDto>? reviewPasses = null,
         ReviewReasoningEffort? baselineReasoningEffort = null,
         BudgetConfigDto? budgetConfig = null,
+        CommentSeverity? minimumSeverityToPost = null,
+        IReadOnlyList<CommentSeverity>? autoResolveSeverities = null,
         CancellationToken ct = default);
 
     /// <summary>

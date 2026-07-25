@@ -27,6 +27,7 @@ export type DetailTab = (typeof detailTabs)[number]
 export type ReviewPassEntry = components['schemas']['ReviewPassEntry']
 export type ReviewReasoningEffort = components['schemas']['ReviewReasoningEffort']
 export type BudgetConfig = components['schemas']['BudgetConfigDto']
+export type CommentSeverity = components['schemas']['CommentSeverity']
 
 export interface ClientDetailDto {
   id: string
@@ -43,6 +44,8 @@ export interface ClientDetailDto {
   reviewPasses?: ReviewPassEntry[] | null
   baselineReasoningEffort?: ReviewReasoningEffort | null
   budgetConfig?: BudgetConfig | null
+  minimumSeverityToPost?: CommentSeverity | null
+  autoResolveSeverities?: CommentSeverity[] | null
 }
 
 export interface ReviewProfileCatalogItemDto {
@@ -77,6 +80,8 @@ export interface ClientDetailViewModel {
   editedEnableLanguageRobustScreening: Ref<boolean>
   editedReviewPasses: Ref<ReviewPassEntry[]>
   editedBaselineReasoningEffort: Ref<ReviewReasoningEffort>
+  editedMinimumSeverityToPost: Ref<CommentSeverity>
+  editedAutoResolveSeverities: Ref<CommentSeverity[]>
   editedMonthlyBudgetSoftCapUsd: Ref<string>
   editedMonthlyBudgetHardCapUsd: Ref<string>
   editedPullRequestBudgetSoftCapUsd: Ref<string>
@@ -103,9 +108,11 @@ export interface ClientDetailViewModel {
   saveAdvancedSettings: () => Promise<void>
   saveReviewProfile: () => Promise<void>
   saveBudgetConfig: () => Promise<void>
+  savePostConfiguration: () => Promise<void>
   isAdvancedSettingsButtonEnabled: () => boolean
   isBudgetButtonEnabled: () => boolean
   isReviewProfileButtonEnabled: () => boolean
+  isPostConfigButtonEnabled: () => boolean
   handleDelete: () => Promise<void>
   handleOverviewNavigate: (tab: string) => void
 }
@@ -259,6 +266,21 @@ export function reviewPassesEqual(left: ReviewPassEntry[], right: ReviewPassEntr
   )
 }
 
+/** Two severity sets are equal when they contain the same severities regardless of order (and ignoring duplicates). */
+export function severitySetsEqual(left: CommentSeverity[], right: CommentSeverity[]): boolean {
+  const leftSet = new Set(left)
+  const rightSet = new Set(right)
+  if (leftSet.size !== rightSet.size) {
+    return false
+  }
+  for (const severity of leftSet) {
+    if (!rightSet.has(severity)) {
+      return false
+    }
+  }
+  return true
+}
+
 export function useClientDetailViewModel(options: UseClientDetailViewModelOptions = {}): ClientDetailViewModel {
   const router = useRouter()
   const route = useRoute()
@@ -293,6 +315,8 @@ export function useClientDetailViewModel(options: UseClientDetailViewModelOption
   const editedEnableLanguageRobustScreening = ref(false)
   const editedReviewPasses = ref<ReviewPassEntry[]>([])
   const editedBaselineReasoningEffort = ref<ReviewReasoningEffort>('none')
+  const editedMinimumSeverityToPost = ref<CommentSeverity>('info')
+  const editedAutoResolveSeverities = ref<CommentSeverity[]>([])
   const editedMonthlyBudgetSoftCapUsd = ref('')
   const editedMonthlyBudgetHardCapUsd = ref('')
   const editedPullRequestBudgetSoftCapUsd = ref('')
@@ -353,6 +377,8 @@ export function useClientDetailViewModel(options: UseClientDetailViewModelOption
     editedEnableLanguageRobustScreening.value = Boolean(nextClient.enableLanguageRobustScreening)
     editedReviewPasses.value = normalizeReviewPasses(nextClient.reviewPasses)
     editedBaselineReasoningEffort.value = nextClient.baselineReasoningEffort ?? 'none'
+    editedMinimumSeverityToPost.value = nextClient.minimumSeverityToPost ?? 'info'
+    editedAutoResolveSeverities.value = [...(nextClient.autoResolveSeverities ?? [])]
     editedMonthlyBudgetSoftCapUsd.value = capToInput(nextClient.budgetConfig?.monthlySoftCapUsd)
     editedMonthlyBudgetHardCapUsd.value = capToInput(nextClient.budgetConfig?.monthlyHardCapUsd)
     editedPullRequestBudgetSoftCapUsd.value = capToInput(nextClient.budgetConfig?.pullRequestSoftCapUsd)
@@ -583,6 +609,29 @@ export function useClientDetailViewModel(options: UseClientDetailViewModelOption
     }
   }
 
+  async function savePostConfiguration() {
+    if (!canManageClient.value || !client.value) return
+    saving.value = true
+    saveError.value = ''
+    try {
+      // Both post-configuration fields are patched together: minimum-severity threshold and the auto-resolve
+      // severity set (an empty array clears the set).
+      const result = await patchClientFn(clientId, {
+        minimumSeverityToPost: editedMinimumSeverityToPost.value,
+        autoResolveSeverities: editedAutoResolveSeverities.value,
+      })
+      if (isFailedPatch(result)) {
+        saveError.value = extractValidationMessage(result.error, 'Failed to save post configuration.')
+        return
+      }
+      applyClient(result.data as ClientDetailDto | null | undefined)
+    } catch {
+      saveError.value = 'Failed to save post configuration.'
+    } finally {
+      saving.value = false
+    }
+  }
+
   async function saveReviewProfile() {
     if (!canManageClient.value || !client.value) return
     saving.value = true
@@ -647,6 +696,17 @@ export function useClientDetailViewModel(options: UseClientDetailViewModelOption
     )
   }
 
+  function isPostConfigButtonEnabled(): boolean {
+    return (
+      !saving.value &&
+      client.value !== null &&
+      (
+        editedMinimumSeverityToPost.value !== (client.value.minimumSeverityToPost ?? 'info') ||
+        !severitySetsEqual(editedAutoResolveSeverities.value, client.value.autoResolveSeverities ?? [])
+      )
+    )
+  }
+
   async function handleDelete() {
     if (!canManageClient.value) return
     try {
@@ -676,6 +736,8 @@ export function useClientDetailViewModel(options: UseClientDetailViewModelOption
     editedEnableLanguageRobustScreening,
     editedReviewPasses,
     editedBaselineReasoningEffort,
+    editedMinimumSeverityToPost,
+    editedAutoResolveSeverities,
     editedMonthlyBudgetSoftCapUsd,
     editedMonthlyBudgetHardCapUsd,
     editedPullRequestBudgetSoftCapUsd,
@@ -702,9 +764,11 @@ export function useClientDetailViewModel(options: UseClientDetailViewModelOption
     saveAdvancedSettings,
     saveReviewProfile,
     saveBudgetConfig,
+    savePostConfiguration,
     isAdvancedSettingsButtonEnabled,
     isBudgetButtonEnabled,
     isReviewProfileButtonEnabled,
+    isPostConfigButtonEnabled,
     handleDelete,
     handleOverviewNavigate,
   }

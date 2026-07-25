@@ -28,13 +28,18 @@ public sealed record ClientDto(
     Guid? TenantId = null,
     string? TenantSlug = null,
     string? TenantDisplayName = null,
-    BudgetConfigDto? BudgetConfig = null)
+    BudgetConfigDto? BudgetConfig = null,
+    CommentSeverity MinimumSeverityToPost = CommentSeverity.Info,
+    IReadOnlyList<CommentSeverity>? AutoResolveSeverities = null)
 {
     /// <summary>The ordered review-pass list, or an empty list when none are configured.</summary>
     public IReadOnlyList<ReviewPassDto> ReviewPassesOrEmpty => this.ReviewPasses ?? [];
 
     /// <summary>The client's budget caps, or an all-null (uncapped) config when none are stored.</summary>
     public BudgetConfigDto BudgetConfigOrEmpty => this.BudgetConfig ?? new BudgetConfigDto();
+
+    /// <summary>The severities posted already resolved, or an empty list when none are configured.</summary>
+    public IReadOnlyList<CommentSeverity> AutoResolveSeveritiesOrEmpty => this.AutoResolveSeverities ?? [];
 }
 
 /// <summary>

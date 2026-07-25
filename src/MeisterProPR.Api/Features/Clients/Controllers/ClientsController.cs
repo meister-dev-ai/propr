@@ -53,7 +53,9 @@ public sealed class ClientsController(
             client.DefaultReviewPipelineProfileId,
             client.DefaultReviewPipelineProfileUpdatedAtUtc,
             recentUsageTokens,
-            client.BudgetConfigOrEmpty);
+            client.BudgetConfigOrEmpty,
+            client.MinimumSeverityToPost,
+            client.AutoResolveSeveritiesOrEmpty);
     }
 
     private IActionResult? ValidateRequest(ValidationResult result)
@@ -393,6 +395,8 @@ public sealed class ClientsController(
                 .ToList(),
             request.BaselineReasoningEffort,
             request.BudgetConfig,
+            request.MinimumSeverityToPost,
+            request.AutoResolveSeverities,
             ct);
         return client is null ? this.NotFound() : this.Ok(ToClientResponse(client));
     }
@@ -419,7 +423,9 @@ public sealed record ClientResponse(
     string? DefaultReviewPipelineProfileId,
     DateTimeOffset? DefaultReviewPipelineProfileUpdatedAtUtc,
     long? RecentUsageTokens = null,
-    BudgetConfigDto? BudgetConfig = null);
+    BudgetConfigDto? BudgetConfig = null,
+    CommentSeverity MinimumSeverityToPost = CommentSeverity.Info,
+    IReadOnlyList<CommentSeverity>? AutoResolveSeverities = null);
 
 /// <summary>One entry in a client's ordered review-pass list: an additional multi-pass union pass bound to a model.</summary>
 /// <param name="Ordinal">Zero-based position of this pass after the implicit tier baseline pass.</param>
@@ -483,6 +489,7 @@ public sealed record CreateClientRequest(string DisplayName, [property: JsonRequ
 /// <summary>
 ///     Request body for patching a client. All fields are optional; omitted fields are left unchanged.
 ///     Set <see cref="CustomSystemMessage" /> to <c>""</c> (empty string) to clear an existing value.
+///     Set <see cref="AutoResolveSeverities" /> to an empty array to clear the auto-resolve set.
 /// </summary>
 public sealed record PatchClientRequest(
     bool? IsActive = null,
@@ -496,4 +503,6 @@ public sealed record PatchClientRequest(
     bool? IncludeLinkedItemsInContext = null,
     IReadOnlyList<ReviewPassEntry>? ReviewPasses = null,
     ReviewReasoningEffort? BaselineReasoningEffort = null,
-    BudgetConfigDto? BudgetConfig = null);
+    BudgetConfigDto? BudgetConfig = null,
+    CommentSeverity? MinimumSeverityToPost = null,
+    IReadOnlyList<CommentSeverity>? AutoResolveSeverities = null);
