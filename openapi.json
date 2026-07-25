@@ -18143,7 +18143,8 @@
         "enum": [
           "azureOpenAi",
           "openAi",
-          "liteLlm"
+          "liteLlm",
+          "openAiCompatible"
         ],
         "type": "string",
         "description": "Supported AI provider families."

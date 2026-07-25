@@ -350,7 +350,10 @@ try
     builder.Services.AddSwaggerGen(options =>
     {
         options.SwaggerDoc("v1", new OpenApiInfo { Title = "Meister DEV ProPR API", Version = "v1" });
-        foreach (var xmlFile in Directory.GetFiles(AppContext.BaseDirectory, "MeisterDev.ProPR.*.xml"))
+        // Matches every first-party assembly, not just MeisterDev.ProPR.*, so types contributed by the
+        // extracted provider library keep their documentation in the emitted contract. A narrower glob drops
+        // those descriptions silently: the schema still generates, it just loses its prose.
+        foreach (var xmlFile in Directory.GetFiles(AppContext.BaseDirectory, "MeisterDev.*.xml"))
         {
             options.IncludeXmlComments(xmlFile);
         }

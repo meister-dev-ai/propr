@@ -18,6 +18,7 @@ export const providerOptions: Array<{ value: AiProviderKind; label: string }> = 
   { value: 'azureOpenAi', label: 'Azure OpenAI / AI Foundry' },
   { value: 'openAi', label: 'OpenAI (non-Azure)' },
   { value: 'liteLlm', label: 'LiteLLM' },
+  { value: 'openAiCompatible', label: 'OpenAI-compatible (custom base URL)' },
 ]
 
 // Sections group the purpose rows in the editor so the flat list stays readable as purposes grow.

@@ -16,4 +16,13 @@ public enum AiProviderKind
 
     /// <summary>LiteLLM OpenAI-compatible gateways.</summary>
     LiteLlm = 2,
+
+    /// <summary>
+    ///     Any OpenAI-compatible endpoint reached at an operator-supplied base URL: a vendor's own API
+    ///     (DeepSeek, Alibaba Qwen, Moonshot Kimi, MiniMax, xAI, Mistral, Groq, Together, Fireworks), an
+    ///     aggregator such as OpenRouter, or a self-hosted server such as Ollama or vLLM. Kept distinct from
+    ///     <see cref="LiteLlm" /> so config, telemetry, and per-provider usage keys can tell a proxy apart from
+    ///     a direct endpoint even though both speak the same protocol.
+    /// </summary>
+    OpenAiCompatible = 3,
 }

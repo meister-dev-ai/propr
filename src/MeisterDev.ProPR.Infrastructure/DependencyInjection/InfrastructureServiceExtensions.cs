@@ -7,12 +7,12 @@ using System.Globalization;
 using Azure.AI.OpenAI;
 using Azure.Core;
 using Azure.Identity;
+using MeisterDev.Ai.Providers.Drivers;
 using MeisterDev.Ai.Providers.Egress;
 using MeisterDev.ProPR.Application.Interfaces;
 using MeisterDev.ProPR.Application.Options;
 using MeisterDev.ProPR.Infrastructure.AI;
 using MeisterDev.Ai.Providers.Transport;
-using MeisterDev.Ai.Providers.Drivers;
 using MeisterDev.ProPR.Infrastructure.Data;
 using MeisterDev.ProPR.Infrastructure.Features.Providers.AzureDevOps.DependencyInjection;
 using MeisterDev.ProPR.Infrastructure.Options;
@@ -181,6 +181,11 @@ public static class InfrastructureServiceExtensions
             allowPrivateEgress,
             allowInsecureScheme: isDevelopment));
         services.AddSingleton<IAiProviderDriver>(serviceProvider => new LiteLlmProviderDriver(
+            serviceProvider.GetRequiredService<OpenAiCompatibleTransport>(),
+            serviceProvider.GetRequiredService<IHttpClientFactory>(),
+            allowPrivateEgress,
+            allowInsecureScheme: isDevelopment));
+        services.AddSingleton<IAiProviderDriver>(serviceProvider => new OpenAiCompatibleProviderDriver(
             serviceProvider.GetRequiredService<OpenAiCompatibleTransport>(),
             serviceProvider.GetRequiredService<IHttpClientFactory>(),
             allowPrivateEgress,

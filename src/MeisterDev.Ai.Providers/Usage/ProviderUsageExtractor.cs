@@ -29,6 +29,7 @@ public static class ProviderUsageExtractor
             [AiProviderKind.AzureOpenAi] = [],
             [AiProviderKind.OpenAi] = [],
             [AiProviderKind.LiteLlm] = [],
+            [AiProviderKind.OpenAiCompatible] = [],
         };
 
     /// <summary>Cache-write keys tried when the provider kind is unknown or has no dedicated entry.</summary>

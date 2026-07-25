@@ -12282,7 +12282,7 @@ export interface components {
          * @description Supported AI provider families.
          * @enum {string}
          */
-        AiProviderKind: "azureOpenAi" | "openAi" | "liteLlm";
+        AiProviderKind: "azureOpenAi" | "openAi" | "liteLlm" | "openAiCompatible";
         /**
          * @description Product-owned AI purposes that resolve to configured models.
          * @enum {string}
