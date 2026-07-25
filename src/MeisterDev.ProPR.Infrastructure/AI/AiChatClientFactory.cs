@@ -5,6 +5,7 @@ using System.ClientModel;
 using System.ClientModel.Primitives;
 using Azure.AI.OpenAI;
 using Azure.Identity;
+using MeisterDev.Ai.Providers.Egress;
 using MeisterDev.Ai.Providers.Enums;
 using MeisterDev.ProPR.Application.Interfaces;
 using Microsoft.Extensions.AI;

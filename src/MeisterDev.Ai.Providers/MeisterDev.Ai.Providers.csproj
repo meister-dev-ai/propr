@@ -15,5 +15,8 @@
         commercial-only notice. Those two rules are what keep it separable from the product that hosts it.
         Dependencies are limited to Microsoft.Extensions.AI and the provider SDKs behind it.
     -->
+    <ItemGroup>
+        <PackageReference Include="Microsoft.Extensions.AI.Abstractions" Version="10.5.1"/>
+    </ItemGroup>
 
 </Project>

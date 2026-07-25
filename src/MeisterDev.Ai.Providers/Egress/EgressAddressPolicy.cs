@@ -4,7 +4,7 @@
 using System.Net;
 using System.Net.Sockets;
 
-namespace MeisterDev.ProPR.Application.Networking;
+namespace MeisterDev.Ai.Providers.Egress;
 
 /// <summary>
 ///     Classifies IP addresses (and literal-IP hosts) that server-side outbound requests must not reach —

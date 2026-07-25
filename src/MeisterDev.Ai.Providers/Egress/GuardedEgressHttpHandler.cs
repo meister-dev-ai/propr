@@ -3,9 +3,9 @@
 
 using System.Net;
 using System.Net.Sockets;
-using MeisterDev.ProPR.Application.Networking;
 
-namespace MeisterDev.ProPR.Infrastructure.Net;
+
+namespace MeisterDev.Ai.Providers.Egress;
 
 /// <summary>
 ///     Builds a <see cref="SocketsHttpHandler" /> that refuses to connect to blocked egress addresses.

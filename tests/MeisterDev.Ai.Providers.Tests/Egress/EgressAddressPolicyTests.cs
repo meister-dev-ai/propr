@@ -2,9 +2,9 @@
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
 using System.Net;
-using MeisterDev.ProPR.Application.Networking;
+using MeisterDev.Ai.Providers.Egress;
 
-namespace MeisterDev.ProPR.Application.Tests.Networking;
+namespace MeisterDev.Ai.Providers.Tests.Egress;
 
 public sealed class EgressAddressPolicyTests
 {

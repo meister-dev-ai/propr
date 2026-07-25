@@ -4,11 +4,12 @@
 using System.Collections.Generic;
 using System.Linq;
 using System.Net.Http;
+using MeisterDev.Ai.Providers.Contracts;
+using MeisterDev.Ai.Providers.Egress;
 using MeisterDev.Ai.Providers.Enums;
 using MeisterDev.ProPR.Application.DTOs;
 using MeisterDev.ProPR.Application.Interfaces;
 using MeisterDev.ProPR.Infrastructure.DependencyInjection;
-using MeisterDev.ProPR.Infrastructure.Net;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.FileProviders;

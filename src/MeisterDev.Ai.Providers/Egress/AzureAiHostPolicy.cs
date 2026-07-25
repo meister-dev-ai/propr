@@ -1,7 +1,7 @@
 // Copyright (c) Andreas Rain.
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
-namespace MeisterDev.ProPR.Infrastructure.AI;
+namespace MeisterDev.Ai.Providers.Egress;
 
 /// <summary>
 ///     Identifies Microsoft-controlled Azure AI hostnames. Azure OpenAI / Azure AI Foundry endpoints — including

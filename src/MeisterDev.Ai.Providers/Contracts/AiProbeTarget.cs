@@ -3,7 +3,7 @@
 
 using MeisterDev.Ai.Providers.Enums;
 
-namespace MeisterDev.ProPR.Application.DTOs;
+namespace MeisterDev.Ai.Providers.Contracts;
 
 /// <summary>
 ///     Provider-neutral description of a probe/verify target, passed to <c>IAiProviderDriver.ValidateProbeTarget</c>
