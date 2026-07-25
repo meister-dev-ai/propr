@@ -85,7 +85,10 @@ public sealed class UserPatsControllerTests(UserPatsControllerTests.UserPatsApiF
         using (var scope = factory.Services.CreateScope())
         {
             var db = scope.ServiceProvider.GetRequiredService<MeisterProPRDbContext>();
-            // Seed only a revoked PAT
+            // The API factory is a class fixture, so its database is shared with the sibling tests and a
+            // preceding one may already have seeded an active PAT for this user. Clear the user's PATs first
+            // so "the user has only a revoked PAT" holds regardless of the order tests run in.
+            db.UserPats.RemoveRange(db.UserPats.Where(pat => pat.UserId == userId));
             db.UserPats.Add(
                 new UserPatRecord
                 {
