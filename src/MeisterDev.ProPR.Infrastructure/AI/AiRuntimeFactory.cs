@@ -2,6 +2,7 @@
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 // This file implements commercial-only functionality. A commercial license is required to activate or use that functionality.
 
+using MeisterDev.Ai.Providers.Runtime;
 using MeisterDev.ProPR.Application.AI;
 using MeisterDev.ProPR.Application.DTOs;
 using MeisterDev.ProPR.Application.Features.Budgeting;
@@ -33,7 +34,7 @@ public sealed class AiRuntimeFactory(
             connection.ToProviderEndpoint(),
             model.ToProviderModel(),
             binding.ProtocolMode).ToReviewCapabilities();
-        return new ResolvedAiChatRuntime(connection, model, binding, this.WrapChatClient(client, model), capabilities)
+        return new ResolvedAiChatRuntime(connection, model, binding, this.WrapChatClient(client, connection, model), capabilities)
         {
             LogicalModelName = logicalModelName,
         };
@@ -66,11 +67,18 @@ public sealed class AiRuntimeFactory(
         return new ModelPricing(model.InputCostPer1MUsd, model.OutputCostPer1MUsd, model.CachedInputCostPer1MUsd);
     }
 
-    private IChatClient WrapChatClient(IChatClient client, AiConfiguredModelDto model)
+    // The provider pipeline fixes the order of the per-call stages; the budget stage is contributed from here
+    // because the library has no notion of cost. A host with no budget scope simply contributes no stage.
+    private IChatClient WrapChatClient(IChatClient client, AiConnectionDto connection, AiConfiguredModelDto model)
     {
-        return budgetScopeAccessor is null
-            ? client
-            : new BudgetEnforcingChatClient(client, budgetScopeAccessor, ToPricing(model));
+        if (budgetScopeAccessor is null)
+        {
+            return client;
+        }
+
+        var pipeline = new ProviderRuntimePipeline([new BudgetEnforcingChatClientDecorator(budgetScopeAccessor, _ => ToPricing(model))]);
+
+        return pipeline.Compose(client, connection.ToProviderEndpoint(), model.ToProviderModel());
     }
 
     private IEmbeddingGenerator<string, Embedding<float>> WrapEmbeddingGenerator(

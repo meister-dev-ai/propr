@@ -158,8 +158,19 @@ the product consumes as an adapter. It is deliberately organisation-scoped rathe
 and two rules keep it separable: it takes **no** project reference on any `MeisterDev.ProPR.*` project,
 and no file in it carries the commercial-only notice. Both are asserted by
 `MeisterDev.Ai.Providers.Tests`, because either is easy to break with one convenient using directive.
-The library owns the provider, protocol, and auth enums; the host maps its own types onto the library's
-contract at the boundary rather than the library reaching into the host's domain.
+The library owns the provider, protocol, and auth enums, the driver seam and its registry, the drivers, the
+OpenAI-compatible transport, the egress policies, and provider usage extraction. The host maps its own types
+onto the library's contract at the boundary (`ProviderContractMapping`) rather than the library reaching into
+the host's domain.
+
+Runtimes are built in exactly one place, `IAiRuntimeFactory`. `AiRuntimeResolver` decides *which* connection,
+model, and protocol a purpose maps to and then hands off, so any behaviour added to model calls cannot miss a
+resolution path. Per-call behaviour attaches as a decorator at a fixed stage — outermost first:
+**retry → observability → budget → normalization → driver**. The order is behavioural, not stylistic: retry
+outermost means each attempt traverses the meter exactly once, and normalization innermost means it shapes
+retried attempts too. A decorator declares its stage and the pipeline places it, so registration order cannot
+reorder the chain. Budget enforcement is contributed by the product, because the library has no notion of cost
+or entitlement.
 
 ## Reading Order
 

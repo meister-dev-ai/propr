@@ -1,6 +1,5 @@
 // Copyright (c) Andreas Rain.
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
-// This file implements commercial-only functionality. A commercial license is required to activate or use that functionality.
 
 using MeisterDev.ProPR.Application.AI;
 using MeisterDev.ProPR.Application.DTOs;
@@ -14,14 +13,14 @@ using Microsoft.Extensions.AI;
 namespace MeisterDev.ProPR.Infrastructure.AI;
 
 /// <summary>
-///     Resolves provider-neutral AI runtimes for chat and embedding purposes. When a budget scope accessor is
-///     available, the resolved chat client and embedding generator are wrapped so every model call is metered and
-///     gated against the active review job's USD hard cap.
+///     Resolves provider-neutral AI runtimes for chat and embedding purposes: it decides WHICH connection, model,
+///     and protocol a purpose maps to, then hands that to <see cref="IAiRuntimeFactory" /> to build. Constructing a
+///     runtime -- resolving the driver and composing the per-call decorators around it -- happens only there, so a
+///     behaviour added to model calls cannot miss this path.
 /// </summary>
 public sealed class AiRuntimeResolver(
     IAiConnectionRepository aiConnectionRepository,
-    IAiProviderDriverRegistry providerDriverRegistry,
-    IBudgetScopeAccessor? budgetScopeAccessor = null,
+    IAiRuntimeFactory runtimeFactory,
     ILogicalModelResolver? logicalModelResolver = null,
     ILogicalModelCatalogRepository? logicalModelCatalog = null) : IAiRuntimeResolver
 {
@@ -47,13 +46,7 @@ public sealed class AiRuntimeResolver(
             throw new InvalidOperationException($"The configured model '{resolved.Model.RemoteModelId}' does not support chat workloads.");
         }
 
-        var driver = providerDriverRegistry.GetRequired(resolved.Connection.ProviderKind);
-        var client = driver.CreateChatClient(resolved.Connection.ToProviderEndpoint(), resolved.Model.ToProviderModel(), resolved.Binding.ProtocolMode);
-        var capabilities = driver.GetChatRuntimeCapabilities(
-            resolved.Connection.ToProviderEndpoint(),
-            resolved.Model.ToProviderModel(),
-            resolved.Binding.ProtocolMode).ToReviewCapabilities();
-        return new ResolvedAiChatRuntime(resolved.Connection, resolved.Model, resolved.Binding, this.WrapChatClient(client, resolved.Model), capabilities);
+        return runtimeFactory.CreateChatRuntime(resolved.Connection, resolved.Model, resolved.Binding);
     }
 
     public async Task<IResolvedAiChatRuntime> ResolveChatRuntimeForModelAsync(
@@ -69,13 +62,7 @@ public sealed class AiRuntimeResolver(
             throw new InvalidOperationException($"The configured model '{resolved.Model.RemoteModelId}' does not support chat workloads.");
         }
 
-        var driver = providerDriverRegistry.GetRequired(resolved.Connection.ProviderKind);
-        var client = driver.CreateChatClient(resolved.Connection.ToProviderEndpoint(), resolved.Model.ToProviderModel(), resolved.Binding.ProtocolMode);
-        var capabilities = driver.GetChatRuntimeCapabilities(
-            resolved.Connection.ToProviderEndpoint(),
-            resolved.Model.ToProviderModel(),
-            resolved.Binding.ProtocolMode).ToReviewCapabilities();
-        return new ResolvedAiChatRuntime(resolved.Connection, resolved.Model, resolved.Binding, this.WrapChatClient(client, resolved.Model), capabilities);
+        return runtimeFactory.CreateChatRuntime(resolved.Connection, resolved.Model, resolved.Binding);
     }
 
     public async Task<IResolvedAiEmbeddingRuntime> ResolveEmbeddingRuntimeAsync(
@@ -111,18 +98,10 @@ public sealed class AiRuntimeResolver(
                 $"The configured embedding model '{resolved.Model.RemoteModelId}' returns {resolved.Model.EmbeddingDimensions.Value} dimensions, but {expectedDimensions.Value} are required.");
         }
 
-        var driver = providerDriverRegistry.GetRequired(resolved.Connection.ProviderKind);
-        var generator = driver.CreateEmbeddingGenerator(
-            resolved.Connection.ToProviderEndpoint(),
-            resolved.Model.ToProviderModel(),
-            resolved.Binding.ProtocolMode,
-            resolved.Model.EmbeddingDimensions.Value);
-
-        return new ResolvedAiEmbeddingRuntime(
+        return runtimeFactory.CreateEmbeddingRuntime(
             resolved.Connection,
             resolved.Model,
             resolved.Binding,
-            this.WrapEmbeddingGenerator(generator, resolved.Model),
             resolved.Model.TokenizerName,
             resolved.Model.EmbeddingDimensions.Value);
     }
@@ -139,26 +118,5 @@ public sealed class AiRuntimeResolver(
 
         var roleName = await logicalModelCatalog.GetPurposeRoleAsync(clientId, purpose, ct);
         return string.IsNullOrEmpty(roleName) ? null : roleName;
-    }
-
-    private static ModelPricing ToPricing(AiConfiguredModelDto model)
-    {
-        return new ModelPricing(model.InputCostPer1MUsd, model.OutputCostPer1MUsd, model.CachedInputCostPer1MUsd);
-    }
-
-    private IChatClient WrapChatClient(IChatClient client, AiConfiguredModelDto model)
-    {
-        return budgetScopeAccessor is null
-            ? client
-            : new BudgetEnforcingChatClient(client, budgetScopeAccessor, ToPricing(model));
-    }
-
-    private IEmbeddingGenerator<string, Embedding<float>> WrapEmbeddingGenerator(
-        IEmbeddingGenerator<string, Embedding<float>> generator,
-        AiConfiguredModelDto model)
-    {
-        return budgetScopeAccessor is null
-            ? generator
-            : new BudgetEnforcingEmbeddingGenerator(generator, budgetScopeAccessor, ToPricing(model));
     }
 }
