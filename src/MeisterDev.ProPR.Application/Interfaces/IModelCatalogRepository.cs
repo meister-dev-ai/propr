@@ -27,4 +27,26 @@ public interface IModelCatalogRepository
     /// <summary>Returns the distinct providers the catalog describes, for a browse-by-provider surface.</summary>
     /// <param name="ct">Cancellation token.</param>
     Task<IReadOnlyList<(string ProviderId, string ProviderName, int ModelCount)>> GetProvidersAsync(CancellationToken ct = default);
+
+    /// <summary>Returns a tenant's own override rows, which is what its editor lists and edits.</summary>
+    /// <param name="tenantId">Tenant whose overrides are read.</param>
+    /// <param name="ct">Cancellation token.</param>
+    Task<IReadOnlyList<AiModelCatalogOverrideDto>> GetTenantOverridesAsync(Guid tenantId, CancellationToken ct = default);
+
+    /// <summary>
+    ///     Records or replaces a tenant's override for one model. A null price means inherit, so clearing a field
+    ///     is how a tenant returns to list pricing for it.
+    /// </summary>
+    /// <param name="tenantId">Tenant the override belongs to.</param>
+    /// <param name="override">The override to store.</param>
+    /// <param name="ct">Cancellation token.</param>
+    Task UpsertTenantOverrideAsync(Guid tenantId, AiModelCatalogOverrideDto @override, CancellationToken ct = default);
+
+    /// <summary>Removes a tenant's override for one model, returning it to the global snapshot's values.</summary>
+    /// <param name="tenantId">Tenant the override belongs to.</param>
+    /// <param name="providerId">Catalog provider identifier.</param>
+    /// <param name="remoteModelId">Model identifier as the provider knows it.</param>
+    /// <param name="ct">Cancellation token.</param>
+    /// <returns>True when an override was removed; false when none existed.</returns>
+    Task<bool> DeleteTenantOverrideAsync(Guid tenantId, string providerId, string remoteModelId, CancellationToken ct = default);
 }

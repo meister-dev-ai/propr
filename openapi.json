@@ -640,6 +640,117 @@
         }
       }
     },
+    "/admin/model-catalog/snapshot": {
+      "post": {
+        "tags": [
+          "AdminModelCatalog"
+        ],
+        "summary": "Imports an uploaded catalog snapshot, replacing the global entries it describes.",
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "snapshot": {
+                    "type": "string",
+                    "description": "The snapshot file, in the format the configured importer understands.",
+                    "format": "binary"
+                  }
+                }
+              },
+              "encoding": {
+                "snapshot": {
+                  "style": "form"
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The import completed, reporting how many global entries were written.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ModelCatalogImportResponse"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ModelCatalogImportResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ModelCatalogImportResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "No file was supplied, or its content could not be read as a snapshot.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "The caller is not authenticated.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The caller is not a platform administrator.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/admin/providers": {
       "get": {
         "tags": [
@@ -4986,6 +5097,196 @@
         "responses": {
           "200": {
             "description": "OK"
+          }
+        }
+      }
+    },
+    "/clients/{clientId}/model-catalog/providers": {
+      "get": {
+        "tags": [
+          "ClientModelCatalog"
+        ],
+        "summary": "Lists the catalog providers available to pick from.",
+        "parameters": [
+          {
+            "name": "clientId",
+            "in": "path",
+            "description": "Client whose catalog is browsed.",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The providers the catalog describes.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ModelCatalogProviderResponse"
+                  }
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ModelCatalogProviderResponse"
+                  }
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ModelCatalogProviderResponse"
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "The caller is not authenticated.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The caller does not administer this client.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/clients/{clientId}/model-catalog/models": {
+      "get": {
+        "tags": [
+          "ClientModelCatalog"
+        ],
+        "summary": "Lists the catalog models available to the client, with tenant overrides applied.",
+        "parameters": [
+          {
+            "name": "clientId",
+            "in": "path",
+            "description": "Client whose catalog is browsed.",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "providerId",
+            "in": "query",
+            "description": "Restrict to a single catalog provider, or omit for all of them.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The effective catalog entries for this client.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/AiModelCatalogEntryDto"
+                  }
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/AiModelCatalogEntryDto"
+                  }
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/AiModelCatalogEntryDto"
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "The caller is not authenticated.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The caller does not administer this client.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
           }
         }
       }
@@ -15749,6 +16050,303 @@
         }
       }
     },
+    "/tenants/{tenantId}/model-catalog/overrides": {
+      "get": {
+        "tags": [
+          "TenantModelCatalog"
+        ],
+        "summary": "Lists the tenant's overrides.",
+        "parameters": [
+          {
+            "name": "tenantId",
+            "in": "path",
+            "description": "Tenant whose overrides are listed.",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The tenant's overrides.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/AiModelCatalogOverrideDto"
+                  }
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/AiModelCatalogOverrideDto"
+                  }
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/AiModelCatalogOverrideDto"
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "The caller is not authenticated.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The caller does not administer this tenant.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "TenantModelCatalog"
+        ],
+        "summary": "Records or replaces the tenant's override for one model. A price left empty is inherited rather than\ntreated as zero, so clearing every field returns the model to the snapshot's pricing.",
+        "parameters": [
+          {
+            "name": "tenantId",
+            "in": "path",
+            "description": "Tenant the override belongs to.",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "description": "The override to store.",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AiModelCatalogOverrideDto"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AiModelCatalogOverrideDto"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/AiModelCatalogOverrideDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "204": {
+            "description": "The override was stored."
+          },
+          "400": {
+            "description": "The request did not identify a provider and model.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "The caller is not authenticated.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The caller does not administer this tenant.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/tenants/{tenantId}/model-catalog/overrides/{providerId}/{remoteModelId}": {
+      "delete": {
+        "tags": [
+          "TenantModelCatalog"
+        ],
+        "summary": "Removes the tenant's override for one model, returning it to the snapshot's values.",
+        "parameters": [
+          {
+            "name": "tenantId",
+            "in": "path",
+            "description": "Tenant the override belongs to.",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "providerId",
+            "in": "path",
+            "description": "Catalog provider identifier.",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "remoteModelId",
+            "in": "path",
+            "description": "Model identifier as the provider knows it.",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "The override was removed."
+          },
+          "401": {
+            "description": "The caller is not authenticated.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The caller does not administer this tenant.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No override existed for that model.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/admin/tenants": {
       "get": {
         "tags": [
@@ -18092,6 +18690,163 @@
         ],
         "type": "string",
         "description": "Controls whether operators rely on provider discovery or manual model entry."
+      },
+      "AiModelCatalogEntryDto": {
+        "type": "object",
+        "properties": {
+          "providerId": {
+            "type": "string",
+            "description": "Catalog-source identifier for the provider offering the model.",
+            "nullable": true
+          },
+          "providerName": {
+            "type": "string",
+            "description": "Human-readable provider name.",
+            "nullable": true
+          },
+          "remoteModelId": {
+            "type": "string",
+            "description": "Model identifier as the provider knows it.",
+            "nullable": true
+          },
+          "displayName": {
+            "type": "string",
+            "description": "Human-readable model name.",
+            "nullable": true
+          },
+          "family": {
+            "type": "string",
+            "description": "Model family, when known.",
+            "nullable": true
+          },
+          "supportsToolUse": {
+            "type": "boolean",
+            "description": "Whether the model supports tool or function calling."
+          },
+          "supportsStructuredOutput": {
+            "type": "boolean",
+            "description": "Whether the model accepts a response schema."
+          },
+          "supportsReasoning": {
+            "type": "boolean",
+            "description": "Whether the model performs, and bills for, reasoning."
+          },
+          "supportsPromptCaching": {
+            "type": "boolean",
+            "description": "Whether the model can serve part of a prompt from the provider cache."
+          },
+          "reasoningContentField": {
+            "type": "string",
+            "description": "Field the model needs echoed back to preserve its chain of thought; null when it has none.",
+            "nullable": true
+          },
+          "maxContextTokens": {
+            "type": "integer",
+            "description": "Total context window in tokens.",
+            "format": "int32",
+            "nullable": true
+          },
+          "maxOutputTokens": {
+            "type": "integer",
+            "description": "Maximum output tokens.",
+            "format": "int32",
+            "nullable": true
+          },
+          "inputCostPer1MUsd": {
+            "type": "number",
+            "description": "Effective USD per million input tokens.",
+            "format": "double",
+            "nullable": true
+          },
+          "outputCostPer1MUsd": {
+            "type": "number",
+            "description": "Effective USD per million output tokens.",
+            "format": "double",
+            "nullable": true
+          },
+          "cachedInputCostPer1MUsd": {
+            "type": "number",
+            "description": "Effective USD per million cache-read input tokens.",
+            "format": "double",
+            "nullable": true
+          },
+          "cacheWriteCostPer1MUsd": {
+            "type": "number",
+            "description": "Effective USD per million cache-write tokens.",
+            "format": "double",
+            "nullable": true
+          },
+          "openWeights": {
+            "type": "boolean",
+            "description": "Whether the model's weights are openly available."
+          },
+          "releaseDate": {
+            "type": "string",
+            "description": "Release date, when known.",
+            "format": "date",
+            "nullable": true
+          },
+          "pricingLayer": {
+            "$ref": "#/components/schemas/AiModelCatalogLayer"
+          }
+        },
+        "additionalProperties": false,
+        "description": "A catalog entry as it applies to one client, after the scope layers have been resolved."
+      },
+      "AiModelCatalogLayer": {
+        "enum": [
+          "global",
+          "tenantOverride",
+          "clientOverride"
+        ],
+        "type": "string",
+        "description": "Which scope layer supplied a resolved catalog value."
+      },
+      "AiModelCatalogOverrideDto": {
+        "type": "object",
+        "properties": {
+          "providerId": {
+            "type": "string",
+            "description": "Catalog provider identifier the override applies to.",
+            "nullable": true
+          },
+          "remoteModelId": {
+            "type": "string",
+            "description": "Model identifier as the provider knows it.",
+            "nullable": true
+          },
+          "displayName": {
+            "type": "string",
+            "description": "Replacement display name, or null to keep the snapshot's.",
+            "nullable": true
+          },
+          "inputCostPer1MUsd": {
+            "type": "number",
+            "description": "Negotiated USD per million input tokens, or null to inherit.",
+            "format": "double",
+            "nullable": true
+          },
+          "outputCostPer1MUsd": {
+            "type": "number",
+            "description": "Negotiated USD per million output tokens, or null to inherit.",
+            "format": "double",
+            "nullable": true
+          },
+          "cachedInputCostPer1MUsd": {
+            "type": "number",
+            "description": "Negotiated USD per million cache-read tokens, or null to inherit.",
+            "format": "double",
+            "nullable": true
+          },
+          "cacheWriteCostPer1MUsd": {
+            "type": "number",
+            "description": "Negotiated USD per million cache-write tokens, or null to inherit.",
+            "format": "double",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false,
+        "description": "A tenant's override of catalog values for one model. Only pricing and the display name are overridable,\nbecause those are what can genuinely differ for a customer; a model's capabilities are facts about the\nmodel and always come from the snapshot."
       },
       "AiModelDiscoveryResultDto": {
         "type": "object",
@@ -20464,6 +21219,40 @@
         ],
         "type": "string",
         "description": "Discriminator that indicates how a `ThreadMemoryRecord` was created."
+      },
+      "ModelCatalogImportResponse": {
+        "type": "object",
+        "properties": {
+          "entriesWritten": {
+            "type": "integer",
+            "description": "How many global catalog entries were written or updated.",
+            "format": "int32"
+          }
+        },
+        "additionalProperties": false,
+        "description": "Outcome of a catalog snapshot import."
+      },
+      "ModelCatalogProviderResponse": {
+        "type": "object",
+        "properties": {
+          "providerId": {
+            "type": "string",
+            "description": "Catalog provider identifier.",
+            "nullable": true
+          },
+          "providerName": {
+            "type": "string",
+            "description": "Human-readable provider name.",
+            "nullable": true
+          },
+          "modelCount": {
+            "type": "integer",
+            "description": "How many models the catalog lists for it.",
+            "format": "int32"
+          }
+        },
+        "additionalProperties": false,
+        "description": "One provider the catalog describes."
       },
       "PatchAdminCrawlConfigRequest": {
         "type": "object",
@@ -24928,6 +25717,9 @@
       "name": "AdminLicensing"
     },
     {
+      "name": "AdminModelCatalog"
+    },
+    {
       "name": "AdminProviders"
     },
     {
@@ -24959,6 +25751,9 @@
     },
     {
       "name": "ClientLogicalModels"
+    },
+    {
+      "name": "ClientModelCatalog"
     },
     {
       "name": "ClientProviderConnections"
@@ -25037,6 +25832,9 @@
     },
     {
       "name": "TenantMemberships"
+    },
+    {
+      "name": "TenantModelCatalog"
     },
     {
       "name": "Tenants"

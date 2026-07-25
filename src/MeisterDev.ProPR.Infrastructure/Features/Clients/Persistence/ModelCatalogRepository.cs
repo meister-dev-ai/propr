@@ -26,7 +26,7 @@ namespace MeisterDev.ProPR.Infrastructure.Repositories;
 ///         scoped row stands alone and supplies its own capabilities.
 ///     </para>
 /// </remarks>
-public sealed class ModelCatalogRepository(MeisterProPRDbContext db) : IModelCatalogRepository
+public sealed class ModelCatalogRepository(MeisterProPRDbContext db, TimeProvider timeProvider) : IModelCatalogRepository
 {
     /// <inheritdoc />
     public async Task<IReadOnlyList<AiModelCatalogEntryDto>> GetEffectiveForClientAsync(
@@ -81,6 +81,103 @@ public sealed class ModelCatalogRepository(MeisterProPRDbContext db) : IModelCat
         return grouped
             .Select(group => (group.ProviderId, group.ProviderName, group.ModelCount))
             .ToList();
+    }
+
+    /// <inheritdoc />
+    public async Task<IReadOnlyList<AiModelCatalogOverrideDto>> GetTenantOverridesAsync(
+        Guid tenantId,
+        CancellationToken ct = default)
+    {
+        var rows = await db.AiModelCatalogEntries
+            .AsNoTracking()
+            .Where(row => row.TenantId == tenantId)
+            .OrderBy(row => row.ProviderId)
+            .ThenBy(row => row.RemoteModelId)
+            .ToListAsync(ct)
+            .ConfigureAwait(false);
+
+        return rows
+            .Select(row => new AiModelCatalogOverrideDto(
+                row.ProviderId,
+                row.RemoteModelId,
+                row.DisplayName,
+                row.InputCostPer1MUsd,
+                row.OutputCostPer1MUsd,
+                row.CachedInputCostPer1MUsd,
+                row.CacheWriteCostPer1MUsd))
+            .ToList();
+    }
+
+    /// <inheritdoc />
+    public async Task UpsertTenantOverrideAsync(
+        Guid tenantId,
+        AiModelCatalogOverrideDto @override,
+        CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(@override);
+
+        var row = await db.AiModelCatalogEntries
+            .FirstOrDefaultAsync(
+                candidate => candidate.TenantId == tenantId
+                             && candidate.ProviderId == @override.ProviderId
+                             && candidate.RemoteModelId == @override.RemoteModelId,
+                ct)
+            .ConfigureAwait(false);
+
+        if (row is null)
+        {
+            // The override inherits identity from the global row it shadows, so a tenant naming a price for a
+            // model it has not otherwise configured does not need to restate the model.
+            var global = await db.AiModelCatalogEntries
+                .AsNoTracking()
+                .FirstOrDefaultAsync(
+                    candidate => candidate.TenantId == null
+                                 && candidate.ClientId == null
+                                 && candidate.ProviderId == @override.ProviderId
+                                 && candidate.RemoteModelId == @override.RemoteModelId,
+                    ct)
+                .ConfigureAwait(false);
+
+            row = new AiModelCatalogEntryRecord
+            {
+                Id = Guid.NewGuid(),
+                TenantId = tenantId,
+                ProviderId = @override.ProviderId,
+                RemoteModelId = @override.RemoteModelId,
+                ProviderName = global?.ProviderName ?? @override.ProviderId,
+                SourceFormat = "operator",
+            };
+            db.AiModelCatalogEntries.Add(row);
+        }
+
+        row.DisplayName = @override.DisplayName ?? row.DisplayName;
+        if (string.IsNullOrWhiteSpace(row.DisplayName))
+        {
+            row.DisplayName = @override.RemoteModelId;
+        }
+
+        row.InputCostPer1MUsd = @override.InputCostPer1MUsd;
+        row.OutputCostPer1MUsd = @override.OutputCostPer1MUsd;
+        row.CachedInputCostPer1MUsd = @override.CachedInputCostPer1MUsd;
+        row.CacheWriteCostPer1MUsd = @override.CacheWriteCostPer1MUsd;
+        row.ImportedAt = timeProvider.GetUtcNow();
+
+        await db.SaveChangesAsync(ct).ConfigureAwait(false);
+    }
+
+    /// <inheritdoc />
+    public async Task<bool> DeleteTenantOverrideAsync(
+        Guid tenantId,
+        string providerId,
+        string remoteModelId,
+        CancellationToken ct = default)
+    {
+        var removed = await db.AiModelCatalogEntries
+            .Where(row => row.TenantId == tenantId && row.ProviderId == providerId && row.RemoteModelId == remoteModelId)
+            .ExecuteDeleteAsync(ct)
+            .ConfigureAwait(false);
+
+        return removed > 0;
     }
 
     private static AiModelCatalogEntryDto? Resolve(

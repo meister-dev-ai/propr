@@ -441,6 +441,87 @@ export interface paths {
         };
         trace?: never;
     };
+    "/admin/model-catalog/snapshot": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Imports an uploaded catalog snapshot, replacing the global entries it describes. */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: {
+                content: {
+                    "multipart/form-data": {
+                        /**
+                         * Format: binary
+                         * @description The snapshot file, in the format the configured importer understands.
+                         */
+                        snapshot?: string;
+                    };
+                };
+            };
+            responses: {
+                /** @description The import completed, reporting how many global entries were written. */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ModelCatalogImportResponse"];
+                        "application/json": components["schemas"]["ModelCatalogImportResponse"];
+                        "text/json": components["schemas"]["ModelCatalogImportResponse"];
+                    };
+                };
+                /** @description No file was supplied, or its content could not be read as a snapshot. */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description The caller is not authenticated. */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description The caller is not a platform administrator. */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/admin/providers": {
         parameters: {
             query?: never;
@@ -3631,6 +3712,135 @@ export interface paths {
                 };
             };
         };
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/clients/{clientId}/model-catalog/providers": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Lists the catalog providers available to pick from. */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    /** @description Client whose catalog is browsed. */
+                    clientId: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description The providers the catalog describes. */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ModelCatalogProviderResponse"][];
+                        "application/json": components["schemas"]["ModelCatalogProviderResponse"][];
+                        "text/json": components["schemas"]["ModelCatalogProviderResponse"][];
+                    };
+                };
+                /** @description The caller is not authenticated. */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description The caller does not administer this client. */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/clients/{clientId}/model-catalog/models": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Lists the catalog models available to the client, with tenant overrides applied. */
+        get: {
+            parameters: {
+                query?: {
+                    /** @description Restrict to a single catalog provider, or omit for all of them. */
+                    providerId?: string;
+                };
+                header?: never;
+                path: {
+                    /** @description Client whose catalog is browsed. */
+                    clientId: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description The effective catalog entries for this client. */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["AiModelCatalogEntryDto"][];
+                        "application/json": components["schemas"]["AiModelCatalogEntryDto"][];
+                        "text/json": components["schemas"]["AiModelCatalogEntryDto"][];
+                    };
+                };
+                /** @description The caller is not authenticated. */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description The caller does not administer this client. */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
         options?: never;
         head?: never;
         patch?: never;
@@ -10800,6 +11010,207 @@ export interface paths {
         };
         trace?: never;
     };
+    "/tenants/{tenantId}/model-catalog/overrides": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Lists the tenant's overrides. */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    /** @description Tenant whose overrides are listed. */
+                    tenantId: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description The tenant's overrides. */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["AiModelCatalogOverrideDto"][];
+                        "application/json": components["schemas"]["AiModelCatalogOverrideDto"][];
+                        "text/json": components["schemas"]["AiModelCatalogOverrideDto"][];
+                    };
+                };
+                /** @description The caller is not authenticated. */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description The caller does not administer this tenant. */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+            };
+        };
+        /**
+         * Records or replaces the tenant's override for one model. A price left empty is inherited rather than
+         *     treated as zero, so clearing every field returns the model to the snapshot's pricing.
+         */
+        put: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    /** @description Tenant the override belongs to. */
+                    tenantId: string;
+                };
+                cookie?: never;
+            };
+            /** @description The override to store. */
+            requestBody?: {
+                content: {
+                    "application/json": components["schemas"]["AiModelCatalogOverrideDto"];
+                    "text/json": components["schemas"]["AiModelCatalogOverrideDto"];
+                    "application/*+json": components["schemas"]["AiModelCatalogOverrideDto"];
+                };
+            };
+            responses: {
+                /** @description The override was stored. */
+                204: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description The request did not identify a provider and model. */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description The caller is not authenticated. */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description The caller does not administer this tenant. */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+            };
+        };
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/tenants/{tenantId}/model-catalog/overrides/{providerId}/{remoteModelId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Removes the tenant's override for one model, returning it to the snapshot's values. */
+        delete: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    /** @description Tenant the override belongs to. */
+                    tenantId: string;
+                    /** @description Catalog provider identifier. */
+                    providerId: string;
+                    /** @description Model identifier as the provider knows it. */
+                    remoteModelId: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description The override was removed. */
+                204: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description The caller is not authenticated. */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description The caller does not administer this tenant. */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description No override existed for that model. */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+            };
+        };
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/admin/tenants": {
         parameters: {
             query?: never;
@@ -12261,6 +12672,105 @@ export interface components {
          * @enum {string}
          */
         AiDiscoveryMode: "providerCatalog" | "manualOnly";
+        /** @description A catalog entry as it applies to one client, after the scope layers have been resolved. */
+        AiModelCatalogEntryDto: {
+            /** @description Catalog-source identifier for the provider offering the model. */
+            providerId?: string | null;
+            /** @description Human-readable provider name. */
+            providerName?: string | null;
+            /** @description Model identifier as the provider knows it. */
+            remoteModelId?: string | null;
+            /** @description Human-readable model name. */
+            displayName?: string | null;
+            /** @description Model family, when known. */
+            family?: string | null;
+            /** @description Whether the model supports tool or function calling. */
+            supportsToolUse?: boolean;
+            /** @description Whether the model accepts a response schema. */
+            supportsStructuredOutput?: boolean;
+            /** @description Whether the model performs, and bills for, reasoning. */
+            supportsReasoning?: boolean;
+            /** @description Whether the model can serve part of a prompt from the provider cache. */
+            supportsPromptCaching?: boolean;
+            /** @description Field the model needs echoed back to preserve its chain of thought; null when it has none. */
+            reasoningContentField?: string | null;
+            /**
+             * Format: int32
+             * @description Total context window in tokens.
+             */
+            maxContextTokens?: number | null;
+            /**
+             * Format: int32
+             * @description Maximum output tokens.
+             */
+            maxOutputTokens?: number | null;
+            /**
+             * Format: double
+             * @description Effective USD per million input tokens.
+             */
+            inputCostPer1MUsd?: number | null;
+            /**
+             * Format: double
+             * @description Effective USD per million output tokens.
+             */
+            outputCostPer1MUsd?: number | null;
+            /**
+             * Format: double
+             * @description Effective USD per million cache-read input tokens.
+             */
+            cachedInputCostPer1MUsd?: number | null;
+            /**
+             * Format: double
+             * @description Effective USD per million cache-write tokens.
+             */
+            cacheWriteCostPer1MUsd?: number | null;
+            /** @description Whether the model's weights are openly available. */
+            openWeights?: boolean;
+            /**
+             * Format: date
+             * @description Release date, when known.
+             */
+            releaseDate?: string | null;
+            pricingLayer?: components["schemas"]["AiModelCatalogLayer"];
+        };
+        /**
+         * @description Which scope layer supplied a resolved catalog value.
+         * @enum {string}
+         */
+        AiModelCatalogLayer: "global" | "tenantOverride" | "clientOverride";
+        /**
+         * @description A tenant's override of catalog values for one model. Only pricing and the display name are overridable,
+         *     because those are what can genuinely differ for a customer; a model's capabilities are facts about the
+         *     model and always come from the snapshot.
+         */
+        AiModelCatalogOverrideDto: {
+            /** @description Catalog provider identifier the override applies to. */
+            providerId?: string | null;
+            /** @description Model identifier as the provider knows it. */
+            remoteModelId?: string | null;
+            /** @description Replacement display name, or null to keep the snapshot's. */
+            displayName?: string | null;
+            /**
+             * Format: double
+             * @description Negotiated USD per million input tokens, or null to inherit.
+             */
+            inputCostPer1MUsd?: number | null;
+            /**
+             * Format: double
+             * @description Negotiated USD per million output tokens, or null to inherit.
+             */
+            outputCostPer1MUsd?: number | null;
+            /**
+             * Format: double
+             * @description Negotiated USD per million cache-read tokens, or null to inherit.
+             */
+            cachedInputCostPer1MUsd?: number | null;
+            /**
+             * Format: double
+             * @description Negotiated USD per million cache-write tokens, or null to inherit.
+             */
+            cacheWriteCostPer1MUsd?: number | null;
+        };
         /** @description Normalized model discovery payload returned by provider drivers. */
         AiModelDiscoveryResultDto: {
             discoveryStatus?: string | null;
@@ -13340,6 +13850,26 @@ export interface components {
          * @enum {string}
          */
         MemorySource: "threadResolved" | "adminDismissed";
+        /** @description Outcome of a catalog snapshot import. */
+        ModelCatalogImportResponse: {
+            /**
+             * Format: int32
+             * @description How many global catalog entries were written or updated.
+             */
+            entriesWritten?: number;
+        };
+        /** @description One provider the catalog describes. */
+        ModelCatalogProviderResponse: {
+            /** @description Catalog provider identifier. */
+            providerId?: string | null;
+            /** @description Human-readable provider name. */
+            providerName?: string | null;
+            /**
+             * Format: int32
+             * @description How many models the catalog lists for it.
+             */
+            modelCount?: number;
+        };
         /**
          * @description Request body for patching an admin-managed crawl configuration.
          *     Omit a field to leave it unchanged. Set `reviewTemperature` to null to clear the override.

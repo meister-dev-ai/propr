@@ -187,7 +187,7 @@ public sealed class ModelCatalogRepositoryTests(PostgresContainerFixture fixture
         Assert.Equal(2, provider.ModelCount);
     }
 
-    private ModelCatalogRepository Sut() => new(this._dbContext);
+    private ModelCatalogRepository Sut() => new(this._dbContext, TimeProvider.System);
 
     private async Task Seed(params AiModelCatalogEntryRecord[] rows)
     {
