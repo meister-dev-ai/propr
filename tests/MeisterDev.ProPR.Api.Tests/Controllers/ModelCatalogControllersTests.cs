@@ -4,6 +4,7 @@
 using System.Text;
 using MeisterDev.ProPR.Api.Features.Clients.Controllers;
 using MeisterDev.ProPR.Application.DTOs;
+using MeisterDev.ProPR.Application.Exceptions;
 using MeisterDev.ProPR.Application.Interfaces;
 using MeisterDev.ProPR.Domain.Enums;
 using Microsoft.AspNetCore.Http;
@@ -97,6 +98,45 @@ public sealed class ModelCatalogControllersTests
 
         Assert.IsType<ObjectResult>(result);
         await catalog.DidNotReceiveWithAnyArgs().UpsertTenantOverrideAsync(default, default!, default);
+    }
+
+    [Fact]
+    public async Task DefineModel_StoresTheDefinitionForTheTenantInTheRoute()
+    {
+        var catalog = Substitute.For<IModelCatalogRepository>();
+        var request = new AiModelCatalogDefinitionDto("deepseek", "my-finetune", SupportsToolUse: true);
+
+        var result = await TenantController(catalog, tenantAdmin: true).DefineModel(TenantId, request);
+
+        Assert.IsType<NoContentResult>(result);
+        await catalog.Received(1).UpsertTenantModelDefinitionAsync(TenantId, request, Arg.Any<CancellationToken>());
+    }
+
+    // The repository refuses a model the snapshot already describes; that has to surface as a validation problem
+    // naming the right instrument, not as a server fault.
+    [Fact]
+    public async Task DefineModel_ReportsACatalogConflictAsAValidationProblem()
+    {
+        var catalog = Substitute.For<IModelCatalogRepository>();
+        catalog.UpsertTenantModelDefinitionAsync(Arg.Any<Guid>(), Arg.Any<AiModelCatalogDefinitionDto>(), Arg.Any<CancellationToken>())
+            .Returns<Task>(_ => throw new ModelCatalogDefinitionConflictException("deepseek", "deepseek-chat"));
+
+        var result = await TenantController(catalog, tenantAdmin: true)
+            .DefineModel(TenantId, new AiModelCatalogDefinitionDto("deepseek", "deepseek-chat"));
+
+        Assert.IsType<ObjectResult>(result);
+    }
+
+    [Fact]
+    public async Task DefineModel_RequiresTenantAdministrator()
+    {
+        var catalog = Substitute.For<IModelCatalogRepository>();
+
+        var result = await TenantController(catalog, tenantAdmin: false)
+            .DefineModel(TenantId, new AiModelCatalogDefinitionDto("p", "m"));
+
+        Assert.IsNotType<NoContentResult>(result);
+        await catalog.DidNotReceiveWithAnyArgs().UpsertTenantModelDefinitionAsync(default, default!, default);
     }
 
     [Fact]

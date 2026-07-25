@@ -56,6 +56,22 @@ public interface IModelCatalogRepository
     /// <param name="ct">Cancellation token.</param>
     Task UpsertTenantOverrideAsync(Guid tenantId, AiModelCatalogOverrideDto @override, CancellationToken ct = default);
 
+    /// <summary>
+    ///     Defines a model the snapshot does not describe, scoped to one tenant, so a private fine-tune, a release
+    ///     newer than the bundled catalog, or a self-hosted model becomes selectable and budgeted.
+    /// </summary>
+    /// <param name="tenantId">Tenant the definition belongs to.</param>
+    /// <param name="definition">The model's own facts, since there is no snapshot entry to inherit them from.</param>
+    /// <param name="ct">Cancellation token.</param>
+    /// <exception cref="Exceptions.ModelCatalogDefinitionConflictException">
+    ///     The catalog already describes this model, so its capabilities would come from the snapshot and the
+    ///     definition's own values would be ignored. A pricing override is the right instrument instead.
+    /// </exception>
+    Task UpsertTenantModelDefinitionAsync(
+        Guid tenantId,
+        AiModelCatalogDefinitionDto definition,
+        CancellationToken ct = default);
+
     /// <summary>Removes a tenant's override for one model, returning it to the global snapshot's values.</summary>
     /// <param name="tenantId">Tenant the override belongs to.</param>
     /// <param name="providerId">Catalog provider identifier.</param>

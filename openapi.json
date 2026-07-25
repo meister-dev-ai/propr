@@ -16147,6 +16147,109 @@
             }
           }
         }
+      },
+      "put": {
+        "tags": [
+          "TenantModelCatalog"
+        ],
+        "summary": "Defines a model the catalog does not describe, so a private fine-tune, a release newer than the bundled\nsnapshot, or a self-hosted model becomes selectable and budgeted immediately.",
+        "parameters": [
+          {
+            "name": "tenantId",
+            "in": "path",
+            "description": "Tenant the definition belongs to.",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "description": "The model's own facts, since there is no snapshot entry to inherit them from.",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AiModelCatalogDefinitionDto"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AiModelCatalogDefinitionDto"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/AiModelCatalogDefinitionDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "204": {
+            "description": "The model was defined."
+          },
+          "400": {
+            "description": "The request was incomplete, priced negatively, or named a model the catalog already describes.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "The caller is not authenticated.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The caller does not administer this tenant.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
       }
     },
     "/tenants/{tenantId}/model-catalog/providers": {
@@ -18880,6 +18983,90 @@
         ],
         "type": "string",
         "description": "Controls whether operators rely on provider discovery or manual model entry."
+      },
+      "AiModelCatalogDefinitionDto": {
+        "type": "object",
+        "properties": {
+          "providerId": {
+            "type": "string",
+            "description": "Catalog provider the model is reached through.",
+            "nullable": true
+          },
+          "remoteModelId": {
+            "type": "string",
+            "description": "Model identifier as the provider knows it.",
+            "nullable": true
+          },
+          "displayName": {
+            "type": "string",
+            "description": "Human-readable name; falls back to the identifier when empty.",
+            "nullable": true
+          },
+          "family": {
+            "type": "string",
+            "description": "Optional family label.",
+            "nullable": true
+          },
+          "supportsToolUse": {
+            "type": "boolean",
+            "description": "Whether the model supports tool or function calling."
+          },
+          "supportsStructuredOutput": {
+            "type": "boolean",
+            "description": "Whether the model accepts a response schema."
+          },
+          "supportsReasoning": {
+            "type": "boolean",
+            "description": "Whether the model performs, and bills for, reasoning."
+          },
+          "supportsPromptCaching": {
+            "type": "boolean",
+            "description": "Whether the model can serve part of a prompt from a provider cache."
+          },
+          "reasoningContentField": {
+            "type": "string",
+            "description": "Field the model needs echoed back to preserve its chain of thought, when it has such a requirement.",
+            "nullable": true
+          },
+          "maxContextTokens": {
+            "type": "integer",
+            "description": "Total context window in tokens.",
+            "format": "int32",
+            "nullable": true
+          },
+          "maxOutputTokens": {
+            "type": "integer",
+            "description": "Maximum output tokens.",
+            "format": "int32",
+            "nullable": true
+          },
+          "inputCostPer1MUsd": {
+            "type": "number",
+            "description": "USD per million input tokens.",
+            "format": "double",
+            "nullable": true
+          },
+          "outputCostPer1MUsd": {
+            "type": "number",
+            "description": "USD per million output tokens.",
+            "format": "double",
+            "nullable": true
+          },
+          "cachedInputCostPer1MUsd": {
+            "type": "number",
+            "description": "USD per million cache-read input tokens.",
+            "format": "double",
+            "nullable": true
+          },
+          "cacheWriteCostPer1MUsd": {
+            "type": "number",
+            "description": "USD per million cache-write tokens.",
+            "format": "double",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false,
+        "description": "A model an operator defines themselves, for something the snapshot does not describe: a private\nfine-tune, a release newer than the bundled catalog, or a self-hosted model."
       },
       "AiModelCatalogEntryDto": {
         "type": "object",

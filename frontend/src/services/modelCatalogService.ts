@@ -8,11 +8,12 @@
  */
 
 import { getActiveRuntime } from '@/app/runtime/runtimeContext'
-import { authedFetch, createAdminClient } from '@/services/api'
+import { authedFetch, createAdminClient, getApiErrorMessage } from '@/services/api'
 import type { components } from '@/services/generated/openapi'
 
 export type AiModelCatalogEntryDto = components['schemas']['AiModelCatalogEntryDto']
 export type AiModelCatalogOverrideDto = components['schemas']['AiModelCatalogOverrideDto']
+export type AiModelCatalogDefinitionDto = components['schemas']['AiModelCatalogDefinitionDto']
 export type AiModelCatalogLayer = components['schemas']['AiModelCatalogLayer']
 export type ModelCatalogProviderResponse = components['schemas']['ModelCatalogProviderResponse']
 
@@ -114,6 +115,25 @@ export async function upsertTenantOverride(
   })
   if (error) {
     throw new Error('Failed to save the model override.')
+  }
+}
+
+/**
+ * Defines a model the catalog does not list, so a private fine-tune, a newer release, or a self-hosted model
+ * becomes selectable and budgeted. Refused when the catalog already describes the model, since its capabilities
+ * would then come from the snapshot and these values would be ignored — a pricing override is the instrument for
+ * that case.
+ */
+export async function defineTenantModel(
+  tenantId: string,
+  body: AiModelCatalogDefinitionDto,
+): Promise<void> {
+  const { error } = await createAdminClient().PUT('/tenants/{tenantId}/model-catalog/models', {
+    params: { path: { tenantId } },
+    body,
+  })
+  if (error) {
+    throw new Error(getApiErrorMessage(error, 'The model could not be defined.'))
   }
 }
 

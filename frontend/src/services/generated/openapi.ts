@@ -11071,7 +11071,71 @@ export interface paths {
                 };
             };
         };
-        put?: never;
+        /**
+         * Defines a model the catalog does not describe, so a private fine-tune, a release newer than the bundled
+         *     snapshot, or a self-hosted model becomes selectable and budgeted immediately.
+         */
+        put: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    /** @description Tenant the definition belongs to. */
+                    tenantId: string;
+                };
+                cookie?: never;
+            };
+            /** @description The model's own facts, since there is no snapshot entry to inherit them from. */
+            requestBody?: {
+                content: {
+                    "application/json": components["schemas"]["AiModelCatalogDefinitionDto"];
+                    "text/json": components["schemas"]["AiModelCatalogDefinitionDto"];
+                    "application/*+json": components["schemas"]["AiModelCatalogDefinitionDto"];
+                };
+            };
+            responses: {
+                /** @description The model was defined. */
+                204: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description The request was incomplete, priced negatively, or named a model the catalog already describes. */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description The caller is not authenticated. */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description The caller does not administer this tenant. */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+            };
+        };
         post?: never;
         delete?: never;
         options?: never;
@@ -12804,6 +12868,60 @@ export interface components {
          * @enum {string}
          */
         AiDiscoveryMode: "providerCatalog" | "manualOnly";
+        /**
+         * @description A model an operator defines themselves, for something the snapshot does not describe: a private
+         *     fine-tune, a release newer than the bundled catalog, or a self-hosted model.
+         */
+        AiModelCatalogDefinitionDto: {
+            /** @description Catalog provider the model is reached through. */
+            providerId?: string | null;
+            /** @description Model identifier as the provider knows it. */
+            remoteModelId?: string | null;
+            /** @description Human-readable name; falls back to the identifier when empty. */
+            displayName?: string | null;
+            /** @description Optional family label. */
+            family?: string | null;
+            /** @description Whether the model supports tool or function calling. */
+            supportsToolUse?: boolean;
+            /** @description Whether the model accepts a response schema. */
+            supportsStructuredOutput?: boolean;
+            /** @description Whether the model performs, and bills for, reasoning. */
+            supportsReasoning?: boolean;
+            /** @description Whether the model can serve part of a prompt from a provider cache. */
+            supportsPromptCaching?: boolean;
+            /** @description Field the model needs echoed back to preserve its chain of thought, when it has such a requirement. */
+            reasoningContentField?: string | null;
+            /**
+             * Format: int32
+             * @description Total context window in tokens.
+             */
+            maxContextTokens?: number | null;
+            /**
+             * Format: int32
+             * @description Maximum output tokens.
+             */
+            maxOutputTokens?: number | null;
+            /**
+             * Format: double
+             * @description USD per million input tokens.
+             */
+            inputCostPer1MUsd?: number | null;
+            /**
+             * Format: double
+             * @description USD per million output tokens.
+             */
+            outputCostPer1MUsd?: number | null;
+            /**
+             * Format: double
+             * @description USD per million cache-read input tokens.
+             */
+            cachedInputCostPer1MUsd?: number | null;
+            /**
+             * Format: double
+             * @description USD per million cache-write tokens.
+             */
+            cacheWriteCostPer1MUsd?: number | null;
+        };
         /** @description A catalog entry as it applies to one client, after the scope layers have been resolved. */
         AiModelCatalogEntryDto: {
             /** @description Catalog-source identifier for the provider offering the model. */

@@ -2,6 +2,7 @@
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
 using MeisterDev.ProPR.Application.DTOs;
+using MeisterDev.ProPR.Application.Exceptions;
 using MeisterDev.ProPR.Application.Interfaces;
 using MeisterDev.ProPR.Infrastructure.Data;
 using MeisterDev.ProPR.Infrastructure.Data.Models;
@@ -189,6 +190,69 @@ public sealed class ModelCatalogRepository(MeisterProPRDbContext db, TimeProvide
         row.OutputCostPer1MUsd = @override.OutputCostPer1MUsd;
         row.CachedInputCostPer1MUsd = @override.CachedInputCostPer1MUsd;
         row.CacheWriteCostPer1MUsd = @override.CacheWriteCostPer1MUsd;
+        row.ImportedAt = timeProvider.GetUtcNow();
+
+        await db.SaveChangesAsync(ct).ConfigureAwait(false);
+    }
+
+    /// <inheritdoc />
+    public async Task UpsertTenantModelDefinitionAsync(
+        Guid tenantId,
+        AiModelCatalogDefinitionDto definition,
+        CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(definition);
+
+        // A model the snapshot already describes takes its capabilities from the snapshot, so accepting a
+        // definition for it would quietly discard the capability values the operator just entered.
+        var describedGlobally = await db.AiModelCatalogEntries
+            .AsNoTracking()
+            .AnyAsync(
+                row => row.TenantId == null
+                       && row.ClientId == null
+                       && row.ProviderId == definition.ProviderId
+                       && row.RemoteModelId == definition.RemoteModelId,
+                ct)
+            .ConfigureAwait(false);
+
+        if (describedGlobally)
+        {
+            throw new ModelCatalogDefinitionConflictException(definition.ProviderId, definition.RemoteModelId);
+        }
+
+        var row = await db.AiModelCatalogEntries
+            .FirstOrDefaultAsync(
+                candidate => candidate.TenantId == tenantId
+                             && candidate.ProviderId == definition.ProviderId
+                             && candidate.RemoteModelId == definition.RemoteModelId,
+                ct)
+            .ConfigureAwait(false);
+
+        if (row is null)
+        {
+            row = new AiModelCatalogEntryRecord { Id = Guid.NewGuid(), TenantId = tenantId };
+            db.AiModelCatalogEntries.Add(row);
+        }
+
+        row.ProviderId = definition.ProviderId;
+        row.RemoteModelId = definition.RemoteModelId;
+        row.ProviderName = definition.ProviderId;
+        row.DisplayName = string.IsNullOrWhiteSpace(definition.DisplayName)
+            ? definition.RemoteModelId
+            : definition.DisplayName;
+        row.Family = definition.Family;
+        row.SupportsToolUse = definition.SupportsToolUse;
+        row.SupportsStructuredOutput = definition.SupportsStructuredOutput;
+        row.SupportsReasoning = definition.SupportsReasoning;
+        row.SupportsPromptCaching = definition.SupportsPromptCaching;
+        row.ReasoningContentField = definition.ReasoningContentField;
+        row.MaxContextTokens = definition.MaxContextTokens;
+        row.MaxOutputTokens = definition.MaxOutputTokens;
+        row.InputCostPer1MUsd = definition.InputCostPer1MUsd;
+        row.OutputCostPer1MUsd = definition.OutputCostPer1MUsd;
+        row.CachedInputCostPer1MUsd = definition.CachedInputCostPer1MUsd;
+        row.CacheWriteCostPer1MUsd = definition.CacheWriteCostPer1MUsd;
+        row.SourceFormat = "operator";
         row.ImportedAt = timeProvider.GetUtcNow();
 
         await db.SaveChangesAsync(ct).ConfigureAwait(false);

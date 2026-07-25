@@ -2,6 +2,7 @@
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
 using MeisterDev.ProPR.Application.DTOs;
+using MeisterDev.ProPR.Application.Exceptions;
 using MeisterDev.ProPR.Infrastructure.Data;
 using MeisterDev.ProPR.Infrastructure.Data.Models;
 using MeisterDev.ProPR.Infrastructure.Repositories;
@@ -185,6 +186,73 @@ public sealed class ModelCatalogRepositoryTests(PostgresContainerFixture fixture
 
         // Two global models; the override is a scoped view of one of them, not a third model.
         Assert.Equal(2, provider.ModelCount);
+    }
+
+    // An operator-defined model is the answer to a model the snapshot has never heard of, so it must become
+    // selectable with the facts the operator supplied.
+    [Fact]
+    public async Task ADefinedModelIsResolvableWithItsOwnFacts()
+    {
+        await this.Sut().UpsertTenantModelDefinitionAsync(
+            this._tenantId,
+            new AiModelCatalogDefinitionDto(
+                this._providerId,
+                "private-finetune",
+                DisplayName: "Private Finetune",
+                SupportsToolUse: true,
+                SupportsReasoning: true,
+                ReasoningContentField: "reasoning_content",
+                MaxContextTokens: 32_000,
+                InputCostPer1MUsd: 7m));
+
+        var entry = Assert.Single(await this.Sut().GetEffectiveForClientAsync(this._clientA, this._providerId));
+        Assert.Equal("private-finetune", entry.RemoteModelId);
+        Assert.Equal("Private Finetune", entry.DisplayName);
+        Assert.True(entry.SupportsToolUse);
+        Assert.True(entry.SupportsReasoning);
+        Assert.Equal("reasoning_content", entry.ReasoningContentField);
+        Assert.Equal(32_000, entry.MaxContextTokens);
+        Assert.Equal(7m, entry.InputCostPer1MUsd);
+    }
+
+    [Fact]
+    public async Task ADefinedModelIsInvisibleToAnotherTenant()
+    {
+        await this.Sut().UpsertTenantModelDefinitionAsync(
+            this._tenantId,
+            new AiModelCatalogDefinitionDto(this._providerId, "private-finetune", InputCostPer1MUsd: 7m));
+
+        Assert.Empty(await this.Sut().GetEffectiveForClientAsync(this._otherClient, this._providerId));
+    }
+
+    // Defining a model the snapshot already describes would silently discard the capabilities just entered,
+    // because the snapshot supplies them. Refusing says so instead.
+    [Fact]
+    public async Task DefiningAModelTheSnapshotAlreadyDescribes_IsRefused()
+    {
+        await this.Seed(Global(input: 10m));
+
+        var exception = await Assert.ThrowsAsync<ModelCatalogDefinitionConflictException>(() => this.Sut().UpsertTenantModelDefinitionAsync(
+            this._tenantId,
+            new AiModelCatalogDefinitionDto(this._providerId, "test-model", SupportsToolUse: true)));
+
+        Assert.Contains("pricing override", exception.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task RedefiningAModelUpdatesItInPlace()
+    {
+        var sut = this.Sut();
+        await sut.UpsertTenantModelDefinitionAsync(
+            this._tenantId,
+            new AiModelCatalogDefinitionDto(this._providerId, "private-finetune", MaxContextTokens: 8_000));
+
+        await sut.UpsertTenantModelDefinitionAsync(
+            this._tenantId,
+            new AiModelCatalogDefinitionDto(this._providerId, "private-finetune", MaxContextTokens: 64_000));
+
+        var entry = Assert.Single(await sut.GetEffectiveForClientAsync(this._clientA, this._providerId));
+        Assert.Equal(64_000, entry.MaxContextTokens);
     }
 
     private ModelCatalogRepository Sut() => new(this._dbContext, TimeProvider.System);

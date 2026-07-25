@@ -9,6 +9,7 @@ const listTenantProviders = vi.fn()
 const listTenantModels = vi.fn()
 const upsertTenantOverride = vi.fn()
 const deleteTenantOverride = vi.fn()
+const defineTenantModel = vi.fn()
 
 vi.mock('@/services/modelCatalogService', () => ({
   listTenantOverrides: (...a: unknown[]) => listTenantOverrides(...a),
@@ -16,6 +17,7 @@ vi.mock('@/services/modelCatalogService', () => ({
   listTenantModels: (...a: unknown[]) => listTenantModels(...a),
   upsertTenantOverride: (...a: unknown[]) => upsertTenantOverride(...a),
   deleteTenantOverride: (...a: unknown[]) => deleteTenantOverride(...a),
+  defineTenantModel: (...a: unknown[]) => defineTenantModel(...a),
 }))
 
 const override = (o: Partial<AiModelCatalogOverrideDto> = {}): AiModelCatalogOverrideDto =>
@@ -34,7 +36,14 @@ const section = () => mount(TenantModelCatalogSection, { props: { tenantId: 't1'
 
 describe('TenantModelCatalogSection', () => {
   beforeEach(() => {
-    for (const fn of [listTenantOverrides, listTenantProviders, listTenantModels, upsertTenantOverride, deleteTenantOverride]) {
+    for (const fn of [
+      listTenantOverrides,
+      listTenantProviders,
+      listTenantModels,
+      upsertTenantOverride,
+      deleteTenantOverride,
+      defineTenantModel,
+    ]) {
       fn.mockReset()
     }
     listTenantOverrides.mockResolvedValue([])
@@ -44,6 +53,7 @@ describe('TenantModelCatalogSection', () => {
     ])
     upsertTenantOverride.mockResolvedValue(undefined)
     deleteTenantOverride.mockResolvedValue(undefined)
+    defineTenantModel.mockResolvedValue(undefined)
   })
 
   it('says every model is at list price when there are no overrides', async () => {
@@ -126,6 +136,61 @@ describe('TenantModelCatalogSection', () => {
     await flushPromises()
 
     expect(deleteTenantOverride).toHaveBeenCalledWith('t1', 'deepseek', 'deepseek-reasoner')
+  })
+
+  // A model the catalog has never described is the case #144 exists for: a private fine-tune, a newer release,
+  // or a self-hosted model.
+  it('defines a model the catalog does not list', async () => {
+    const wrapper = section()
+    await flushPromises()
+
+    await wrapper.get('[data-testid="define-model-open"]').trigger('click')
+    await wrapper.get('[data-testid="define-provider"]').setValue('deepseek')
+    await wrapper.get('[data-testid="define-model-id"]').setValue('my-finetune-v2')
+    await wrapper.get('[data-testid="define-input-cost"]').setValue('1.5')
+    await wrapper.get('[data-testid="define-save"]').trigger('submit')
+    await flushPromises()
+
+    expect(defineTenantModel).toHaveBeenCalledWith(
+      't1',
+      expect.objectContaining({
+        providerId: 'deepseek',
+        remoteModelId: 'my-finetune-v2',
+        inputCostPer1MUsd: 1.5,
+        // An unstated value stays absent rather than becoming zero.
+        outputCostPer1MUsd: undefined,
+      }),
+    )
+  })
+
+  it('requires a provider and model id before defining', async () => {
+    const wrapper = section()
+    await flushPromises()
+
+    await wrapper.get('[data-testid="define-model-open"]').trigger('click')
+    await wrapper.get('[data-testid="define-save"]').trigger('submit')
+    await flushPromises()
+
+    expect(defineTenantModel).not.toHaveBeenCalled()
+    expect(wrapper.get('[data-testid="tenant-catalog-error"]').text()).toContain('required')
+  })
+
+  // The server refuses a model the catalog already lists and names the right instrument, so that message must
+  // reach the operator rather than being replaced by a generic failure.
+  it('surfaces the servers reason when the catalog already describes the model', async () => {
+    defineTenantModel.mockRejectedValue(
+      new Error("The catalog already describes 'x'. Record a pricing override for it instead."),
+    )
+    const wrapper = section()
+    await flushPromises()
+
+    await wrapper.get('[data-testid="define-model-open"]').trigger('click')
+    await wrapper.get('[data-testid="define-provider"]').setValue('deepseek')
+    await wrapper.get('[data-testid="define-model-id"]').setValue('deepseek-chat')
+    await wrapper.get('[data-testid="define-save"]').trigger('submit')
+    await flushPromises()
+
+    expect(wrapper.get('[data-testid="tenant-catalog-error"]').text()).toContain('pricing override')
   })
 
   it('reports a load failure', async () => {

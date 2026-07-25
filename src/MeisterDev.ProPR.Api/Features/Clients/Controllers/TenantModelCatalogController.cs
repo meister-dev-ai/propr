@@ -3,6 +3,7 @@
 
 using MeisterDev.ProPR.Api.Extensions;
 using MeisterDev.ProPR.Application.DTOs;
+using MeisterDev.ProPR.Application.Exceptions;
 using MeisterDev.ProPR.Application.Interfaces;
 using MeisterDev.ProPR.Domain.Enums;
 using Microsoft.AspNetCore.Mvc;
@@ -138,6 +139,65 @@ public sealed class TenantModelCatalogController(IModelCatalogRepository catalog
         }
 
         await catalog.UpsertTenantOverrideAsync(tenantId, request, ct);
+        return this.NoContent();
+    }
+
+    /// <summary>
+    ///     Defines a model the catalog does not describe, so a private fine-tune, a release newer than the bundled
+    ///     snapshot, or a self-hosted model becomes selectable and budgeted immediately.
+    /// </summary>
+    /// <param name="tenantId">Tenant the definition belongs to.</param>
+    /// <param name="request">The model's own facts, since there is no snapshot entry to inherit them from.</param>
+    /// <param name="ct">Cancellation token.</param>
+    /// <response code="204">The model was defined.</response>
+    /// <response code="400">The request was incomplete, priced negatively, or named a model the catalog already describes.</response>
+    /// <response code="401">The caller is not authenticated.</response>
+    /// <response code="403">The caller does not administer this tenant.</response>
+    [HttpPut("/tenants/{tenantId:guid}/model-catalog/models")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    public async Task<IActionResult> DefineModel(
+        Guid tenantId,
+        [FromBody] AiModelCatalogDefinitionDto request,
+        CancellationToken ct = default)
+    {
+        var auth = AuthHelpers.RequireTenantRole(this.HttpContext, tenantId, TenantRole.TenantAdministrator);
+        if (auth is not null)
+        {
+            return auth;
+        }
+
+        if (request is null
+            || string.IsNullOrWhiteSpace(request.ProviderId)
+            || string.IsNullOrWhiteSpace(request.RemoteModelId))
+        {
+            this.ModelState.AddModelError("providerId", "A provider id and a remote model id are required.");
+            return this.ValidationProblem();
+        }
+
+        if (Negative(request.InputCostPer1MUsd)
+            || Negative(request.OutputCostPer1MUsd)
+            || Negative(request.CachedInputCostPer1MUsd)
+            || Negative(request.CacheWriteCostPer1MUsd))
+        {
+            this.ModelState.AddModelError("cost", "A price cannot be negative.");
+            return this.ValidationProblem();
+        }
+
+        try
+        {
+            await catalog.UpsertTenantModelDefinitionAsync(tenantId, request, ct);
+        }
+        catch (ModelCatalogDefinitionConflictException exception)
+        {
+            // Not a server fault: the operator asked for the wrong instrument, and the message says which one
+            // to use instead.
+            this.ModelState.AddModelError("remoteModelId", exception.Message);
+            return this.ValidationProblem();
+        }
+
         return this.NoContent();
     }
 

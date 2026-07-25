@@ -12,8 +12,10 @@ import { computed, onMounted, ref, watch } from 'vue'
 
 import ModelCatalogPicker from '@/features/clients/components/ModelCatalogPicker.vue'
 import {
+  type AiModelCatalogDefinitionDto,
   type AiModelCatalogEntryDto,
   type AiModelCatalogOverrideDto,
+  defineTenantModel,
   deleteTenantOverride,
   listTenantModels,
   listTenantOverrides,
@@ -43,7 +45,20 @@ interface DraftOverride {
   cacheWriteCostPer1MUsd: PriceValue
 }
 
+interface DraftDefinition {
+  providerId: string
+  remoteModelId: string
+  displayName: string
+  maxContextTokens: PriceValue
+  supportsToolUse: boolean
+  supportsStructuredOutput: boolean
+  supportsReasoning: boolean
+  inputCostPer1MUsd: PriceValue
+  outputCostPer1MUsd: PriceValue
+}
+
 const overrides = ref<AiModelCatalogOverrideDto[]>([])
+const definition = ref<DraftDefinition | null>(null)
 const loading = ref(false)
 const saving = ref(false)
 const errorMessage = ref('')
@@ -56,7 +71,7 @@ const priceLabels: Array<{ field: PriceFields; label: string }> = [
   { field: 'cacheWriteCostPer1MUsd', label: 'Cache write $/M' },
 ]
 
-const isEditing = computed(() => draft.value !== null)
+const isEditing = computed(() => draft.value !== null || definition.value !== null)
 
 async function load(): Promise<void> {
   loading.value = true
@@ -128,6 +143,58 @@ async function save(): Promise<void> {
     await load()
   } catch {
     errorMessage.value = 'The override could not be saved.'
+  } finally {
+    saving.value = false
+  }
+}
+
+/** Opens the define form for a model the catalog does not list. */
+function startDefinition(): void {
+  definition.value = {
+    providerId: '',
+    remoteModelId: '',
+    displayName: '',
+    maxContextTokens: '',
+    supportsToolUse: false,
+    supportsStructuredOutput: false,
+    supportsReasoning: false,
+    inputCostPer1MUsd: '',
+    outputCostPer1MUsd: '',
+  }
+}
+
+async function saveDefinition(): Promise<void> {
+  if (!definition.value) {
+    return
+  }
+
+  const draftDefinition = definition.value
+  if (!draftDefinition.providerId.trim() || !draftDefinition.remoteModelId.trim()) {
+    errorMessage.value = 'A provider and a model id are required.'
+    return
+  }
+
+  saving.value = true
+  errorMessage.value = ''
+  try {
+    const body: AiModelCatalogDefinitionDto = {
+      providerId: draftDefinition.providerId.trim(),
+      remoteModelId: draftDefinition.remoteModelId.trim(),
+      displayName: draftDefinition.displayName.trim() || undefined,
+      supportsToolUse: draftDefinition.supportsToolUse,
+      supportsStructuredOutput: draftDefinition.supportsStructuredOutput,
+      supportsReasoning: draftDefinition.supportsReasoning,
+      maxContextTokens: fieldToNumber(draftDefinition.maxContextTokens),
+      inputCostPer1MUsd: fieldToNumber(draftDefinition.inputCostPer1MUsd),
+      outputCostPer1MUsd: fieldToNumber(draftDefinition.outputCostPer1MUsd),
+    }
+    await defineTenantModel(props.tenantId, body)
+    definition.value = null
+    await load()
+  } catch (error) {
+    // The server refuses a model the catalog already lists and names the instrument to use instead, so its
+    // message is more useful than a generic failure.
+    errorMessage.value = error instanceof Error ? error.message : 'The model could not be defined.'
   } finally {
     saving.value = false
   }
@@ -218,9 +285,69 @@ function priceCell(value: number | null | undefined): string {
         :load-models="(providerId) => listTenantModels(props.tenantId, providerId)"
         @pick="startFromCatalog"
       />
+      <button class="btn-secondary btn-xs" data-testid="define-model-open" @click.prevent="startDefinition">
+        Define a model the catalog does not list…
+      </button>
     </div>
 
-    <form v-else class="override-form" data-testid="tenant-override-form" @submit.prevent="save">
+    <form
+      v-else-if="definition"
+      class="override-form"
+      data-testid="define-model-form"
+      @submit.prevent="saveDefinition"
+    >
+      <p class="muted">
+        For a model the catalog has never described: a private fine-tune, a release newer than the snapshot, or a
+        self-hosted model. It becomes selectable and budgeted for this tenant's clients immediately.
+      </p>
+
+      <div class="ai-form-grid ai-form-grid-compact">
+        <label class="form-field">
+          <span>Provider</span>
+          <input v-model="definition.providerId" data-testid="define-provider" type="text" placeholder="deepseek" />
+        </label>
+
+        <label class="form-field">
+          <span>Model id</span>
+          <input v-model="definition.remoteModelId" data-testid="define-model-id" type="text" placeholder="my-finetune-v2" />
+        </label>
+
+        <label class="form-field">
+          <span>Display name</span>
+          <input v-model="definition.displayName" type="text" placeholder="Defaults to the model id" />
+        </label>
+
+        <label class="form-field">
+          <span>Context window</span>
+          <input v-model="definition.maxContextTokens" type="number" min="1" step="1" placeholder="unknown" />
+        </label>
+
+        <label class="form-field">
+          <span>Input $/M</span>
+          <input v-model="definition.inputCostPer1MUsd" data-testid="define-input-cost" type="number" min="0" step="any" placeholder="unknown" />
+        </label>
+
+        <label class="form-field">
+          <span>Output $/M</span>
+          <input v-model="definition.outputCostPer1MUsd" type="number" min="0" step="any" placeholder="unknown" />
+        </label>
+      </div>
+
+      <div class="define-capabilities">
+        <label><input v-model="definition.supportsToolUse" type="checkbox" /> Tool calling</label>
+        <label><input v-model="definition.supportsStructuredOutput" type="checkbox" /> Structured output</label>
+        <label><input v-model="definition.supportsReasoning" type="checkbox" /> Reasoning</label>
+      </div>
+
+      <div class="override-form-actions">
+        <button class="btn-primary btn-sm" type="submit" :disabled="saving" data-testid="define-save">
+          {{ saving ? 'Saving…' : 'Define model' }}
+        </button>
+        <button class="btn-secondary btn-sm" type="button" @click="definition = null">Cancel</button>
+      </div>
+    </form>
+
+    <form v-else-if="draft" class="override-form" data-testid="tenant-override-form" @submit.prevent="save">
       <div class="override-identity muted">
         {{ draft?.providerId }} · {{ draft?.remoteModelId }}
       </div>
@@ -274,6 +401,14 @@ function priceCell(value: number | null | undefined): string {
 .override-identity {
   font-size: 0.85rem;
   margin-block-end: 0.5rem;
+}
+
+.define-capabilities {
+  display: flex;
+  gap: 1rem;
+  flex-wrap: wrap;
+  margin-block-start: 0.5rem;
+  font-size: 0.9rem;
 }
 
 .override-form-actions {
