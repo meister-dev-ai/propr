@@ -2,12 +2,13 @@
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
 using MeisterDev.Ai.Providers.Contracts;
+using MeisterDev.ProPR.Application.AI;
 using MeisterDev.ProPR.Application.DTOs;
 using MeisterDev.ProPR.Application.Features.Reviewing.Execution.Models;
 using MeisterDev.ProPR.Application.Interfaces;
 using MeisterDev.ProPR.Domain.Enums;
 using MeisterDev.ProPR.Infrastructure.AI;
-using MeisterDev.ProPR.Infrastructure.AI.Providers;
+using MeisterDev.Ai.Providers.Drivers;
 using Microsoft.Extensions.AI;
 using NSubstitute;
 
@@ -31,8 +32,8 @@ public sealed class AiRuntimeResolverTests
         repository.GetActiveBindingForPurposeAsync(ClientId, AiPurpose.ReviewDefault, Arg.Any<CancellationToken>())
             .Returns(new AiResolvedPurposeBindingDto(connection, model, binding));
         providerRegistry.GetRequired(connection.ProviderKind).Returns(driver);
-        driver.CreateChatClient(connection, model, binding).Returns(chatClient);
-        driver.GetChatRuntimeCapabilities(connection, model, binding)
+        driver.CreateChatClient(connection.ToProviderEndpoint(), model.ToProviderModel(), binding.ProtocolMode).Returns(chatClient);
+        driver.GetChatRuntimeCapabilities(connection.ToProviderEndpoint(), model.ToProviderModel(), binding.ProtocolMode)
             .Returns(new ProviderRuntimeCapabilities(true, true, true, true));
 
         var resolver = new AiRuntimeResolver(repository, providerRegistry);
@@ -61,8 +62,8 @@ public sealed class AiRuntimeResolverTests
         repository.GetModelBindingAsync(ClientId, model.Id, Arg.Any<CancellationToken>())
             .Returns(new AiResolvedPurposeBindingDto(connection, model, binding));
         providerRegistry.GetRequired(connection.ProviderKind).Returns(driver);
-        driver.CreateChatClient(connection, model, binding).Returns(chatClient);
-        driver.GetChatRuntimeCapabilities(connection, model, binding)
+        driver.CreateChatClient(connection.ToProviderEndpoint(), model.ToProviderModel(), binding.ProtocolMode).Returns(chatClient);
+        driver.GetChatRuntimeCapabilities(connection.ToProviderEndpoint(), model.ToProviderModel(), binding.ProtocolMode)
             .Returns(new ProviderRuntimeCapabilities(true, true, true, true));
 
         var resolver = new AiRuntimeResolver(repository, providerRegistry);
@@ -177,8 +178,8 @@ public sealed class AiRuntimeResolverTests
         repository.GetActiveBindingForPurposeAsync(ClientId, AiPurpose.ReviewDefault, Arg.Any<CancellationToken>())
             .Returns(new AiResolvedPurposeBindingDto(connection, model, binding));
         providerRegistry.GetRequired(connection.ProviderKind).Returns(driver);
-        driver.CreateChatClient(connection, model, binding).Returns(chatClient);
-        driver.GetChatRuntimeCapabilities(connection, model, binding)
+        driver.CreateChatClient(connection.ToProviderEndpoint(), model.ToProviderModel(), binding.ProtocolMode).Returns(chatClient);
+        driver.GetChatRuntimeCapabilities(connection.ToProviderEndpoint(), model.ToProviderModel(), binding.ProtocolMode)
             .Returns(new ProviderRuntimeCapabilities(true, true, true, true));
 
         var resolver = new AiRuntimeResolver(repository, providerRegistry, null, logicalResolver, catalog);

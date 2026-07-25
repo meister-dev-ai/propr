@@ -7,7 +7,7 @@ using MeisterDev.ProPR.Application.DTOs;
 using MeisterDev.ProPR.Application.Exceptions;
 using MeisterDev.ProPR.Application.Interfaces;
 using MeisterDev.ProPR.Domain.Enums;
-using MeisterDev.ProPR.Infrastructure.AI.Providers;
+using MeisterDev.Ai.Providers.Drivers;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using NSubstitute;

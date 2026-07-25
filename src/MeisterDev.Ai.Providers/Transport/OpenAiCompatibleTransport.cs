@@ -3,9 +3,9 @@
 
 using System.Net;
 using System.Text.Json;
-using MeisterDev.ProPR.Application.DTOs;
+using MeisterDev.Ai.Providers.Contracts;
 
-namespace MeisterDev.ProPR.Infrastructure.AI.OpenAiCompatible;
+namespace MeisterDev.Ai.Providers.Transport;
 
 /// <summary>
 ///     Executes OpenAI-compatible admin operations over HTTP.
@@ -15,10 +15,10 @@ public sealed class OpenAiCompatibleTransport(
     OpenAiCompatibleRequestFactory requestFactory)
 {
     public async Task<(HttpStatusCode StatusCode, IReadOnlyList<string> Models, string? ErrorMessage)> DiscoverModelsAsync(
-        AiConnectionProbeOptionsDto options,
+        ProviderEndpoint endpoint,
         CancellationToken ct = default)
     {
-        using var request = requestFactory.CreateModelsRequest(options);
+        using var request = requestFactory.CreateModelsRequest(endpoint);
         using var response = await httpClientFactory.CreateClient("AiProviderAdmin").SendAsync(request, ct);
         var payload = await response.Content.ReadAsStringAsync(ct);
 

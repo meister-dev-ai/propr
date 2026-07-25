@@ -5,10 +5,11 @@ using System.Text.Json.Serialization;
 using MeisterDev.Ai.Providers.Contracts;
 using MeisterDev.Ai.Providers.Enums;
 using MeisterDev.ProPR.Api.Extensions;
+using MeisterDev.ProPR.Application.AI;
 using MeisterDev.ProPR.Application.DTOs;
 using MeisterDev.ProPR.Application.Interfaces;
 using MeisterDev.ProPR.Domain.Enums;
-using MeisterDev.ProPR.Infrastructure.AI.Providers;
+using MeisterDev.Ai.Providers.Drivers;
 using Microsoft.AspNetCore.Mvc;
 
 namespace MeisterDev.ProPR.Api.Controllers;
@@ -254,7 +255,7 @@ public sealed partial class ClientAiConnectionsController(
         // Verification reflects connectivity and configured-model reachability only. Whether the product's
         // purposes are satisfied is a client-level concern resolved through logical models and the purpose map,
         // not a per-connection binding requirement.
-        var verification = await driver.VerifyAsync(ToProbeOptions(existing), ct);
+        var verification = (await driver.VerifyAsync(existing.ToProviderEndpoint(), ct)).ToDto();
 
         await aiConnections.SaveVerificationAsync(connectionId, verification, ct);
         LogConnectionVerified(logger, connectionId, clientId, verification.Status);
@@ -285,7 +286,7 @@ public sealed partial class ClientAiConnectionsController(
         }
 
         var driver = providerDrivers.GetRequired(request.ProviderKind);
-        return this.Ok(await driver.DiscoverModelsAsync(probeOptions, ct));
+        return this.Ok((await driver.DiscoverModelsAsync(probeOptions.ToProviderEndpoint(), ct)).ToDto(DateTimeOffset.UtcNow));
     }
 
     private static AiConnectionProbeOptionsDto ToProbeOptions(AiConnectionDto connection)

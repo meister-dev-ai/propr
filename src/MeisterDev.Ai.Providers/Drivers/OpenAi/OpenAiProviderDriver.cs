@@ -6,17 +6,13 @@ using System.ClientModel.Primitives;
 using MeisterDev.Ai.Providers.Contracts;
 using MeisterDev.Ai.Providers.Egress;
 using MeisterDev.Ai.Providers.Enums;
-using MeisterDev.ProPR.Application.DTOs;
-using MeisterDev.ProPR.Application.Features.Reviewing.Execution.Models;
-using MeisterDev.ProPR.Application.Interfaces;
-using MeisterDev.ProPR.Infrastructure.AI.OpenAiCompatible;
-using MeisterDev.ProPR.Infrastructure.AI.Providers.AzureOpenAi;
+using MeisterDev.Ai.Providers.Transport;
 using Microsoft.Extensions.AI;
 using OpenAI;
 using OpenAI.Chat;
 using OpenAI.Embeddings;
 
-namespace MeisterDev.ProPR.Infrastructure.AI.Providers.OpenAi;
+namespace MeisterDev.Ai.Providers.Drivers;
 
 /// <summary>
 ///     OpenAI-hosted provider driver.
@@ -36,33 +32,32 @@ public sealed class OpenAiProviderDriver(
         return AiProbeTargetValidation.ForOpenAiCompatible(target, allowPrivateEgress, allowInsecureScheme, rejectAzureHosts: true);
     }
 
-    public async Task<AiModelDiscoveryResultDto> DiscoverModelsAsync(
-        AiConnectionProbeOptionsDto options,
+    public async Task<ProviderModelDiscoveryResult> DiscoverModelsAsync(
+        ProviderEndpoint endpoint,
         CancellationToken ct = default)
     {
-        var result = await transport.DiscoverModelsAsync(options, ct);
+        var result = await transport.DiscoverModelsAsync(endpoint, ct);
         if ((int)result.StatusCode >= 400)
         {
-            return new AiModelDiscoveryResultDto(
+            return new ProviderModelDiscoveryResult(
                 "failed",
                 true,
                 [result.ErrorMessage ?? $"Provider discovery failed with status {(int)result.StatusCode}."],
                 []);
         }
 
-        var now = DateTimeOffset.UtcNow;
-        return new AiModelDiscoveryResultDto(
+        return new ProviderModelDiscoveryResult(
             "succeeded",
             true,
             result.Models.Count == 0 ? ["No models were discovered from the provider. Manual model entry remains available."] : [],
-            result.Models.Select(modelId => AzureOpenAiProviderDriver.GuessModelCapabilities(modelId, now)).ToList().AsReadOnly());
+            result.Models.Select(modelId => AzureOpenAiProviderDriver.GuessModelCapabilities(modelId)).ToList().AsReadOnly());
     }
 
-    public async Task<AiVerificationResultDto> VerifyAsync(
-        AiConnectionProbeOptionsDto options,
+    public async Task<ProviderVerificationResult> VerifyAsync(
+        ProviderEndpoint endpoint,
         CancellationToken ct = default)
     {
-        var result = await transport.DiscoverModelsAsync(options, ct);
+        var result = await transport.DiscoverModelsAsync(endpoint, ct);
         if ((int)result.StatusCode >= 400)
         {
             return DriverFailureMapper.Failed(result.StatusCode, result.ErrorMessage);
@@ -71,34 +66,34 @@ public sealed class OpenAiProviderDriver(
         List<string> warnings = result.Models.Count == 0
             ? ["No models were discovered from the provider. Manual model entry remains available."]
             : [];
-        return DriverFailureMapper.Verified($"Verified OpenAI connectivity for '{options.BaseUrl}'.", warnings);
+        return DriverFailureMapper.Verified($"Verified OpenAI connectivity for '{endpoint.BaseUrl}'.", warnings);
     }
 
     public IChatClient CreateChatClient(
-        AiConnectionDto connection,
-        AiConfiguredModelDto model,
-        AiPurposeBindingDto binding)
+        ProviderEndpoint endpoint,
+        ProviderModelDescriptor model,
+        AiProtocolMode protocolMode)
     {
-        var options = CreateClientOptions(connection.BaseUrl);
-        var credential = new ApiKeyCredential(connection.Secret ?? string.Empty);
+        var clientOptions = this.CreateClientOptions(endpoint.BaseUrl);
+        var credential = new ApiKeyCredential(endpoint.Secret ?? string.Empty);
 
-        if (UsesResponsesApi(binding, model))
+        if (UsesResponsesApi(protocolMode, model))
         {
-            var client = new OpenAIClient(credential, options);
+            var client = new OpenAIClient(credential, clientOptions);
             return client.GetResponsesClient().AsIChatClient(model.RemoteModelId);
         }
 
-        var chatClient = new ChatClient(model.RemoteModelId, credential, options);
+        var chatClient = new ChatClient(model.RemoteModelId, credential, clientOptions);
         return chatClient.AsIChatClient();
     }
 
     public ProviderRuntimeCapabilities GetChatRuntimeCapabilities(
-        AiConnectionDto connection,
-        AiConfiguredModelDto model,
-        AiPurposeBindingDto binding)
+        ProviderEndpoint endpoint,
+        ProviderModelDescriptor model,
+        AiProtocolMode protocolMode)
     {
-        _ = connection;
-        var usesResponses = UsesResponsesApi(binding, model);
+        _ = endpoint;
+        var usesResponses = UsesResponsesApi(protocolMode, model);
         return new ProviderRuntimeCapabilities(
             usesResponses,
             usesResponses,
@@ -107,17 +102,17 @@ public sealed class OpenAiProviderDriver(
     }
 
     public IEmbeddingGenerator<string, Embedding<float>> CreateEmbeddingGenerator(
-        AiConnectionDto connection,
-        AiConfiguredModelDto model,
-        AiPurposeBindingDto binding,
+        ProviderEndpoint endpoint,
+        ProviderModelDescriptor model,
+        AiProtocolMode protocolMode,
         int dimensions)
     {
-        _ = binding;
+        _ = protocolMode;
         _ = dimensions;
 
-        var options = CreateClientOptions(connection.BaseUrl);
-        var credential = new ApiKeyCredential(connection.Secret ?? string.Empty);
-        var client = new EmbeddingClient(model.RemoteModelId, credential, options);
+        var clientOptions = this.CreateClientOptions(endpoint.BaseUrl);
+        var credential = new ApiKeyCredential(endpoint.Secret ?? string.Empty);
+        var client = new EmbeddingClient(model.RemoteModelId, credential, clientOptions);
         return client.AsIEmbeddingGenerator();
     }
 
@@ -132,10 +127,10 @@ public sealed class OpenAiProviderDriver(
         };
     }
 
-    private static bool UsesResponsesApi(AiPurposeBindingDto binding, AiConfiguredModelDto model)
+    private static bool UsesResponsesApi(AiProtocolMode protocolMode, ProviderModelDescriptor model)
     {
-        return binding.ProtocolMode == AiProtocolMode.Responses
-               || (binding.ProtocolMode == AiProtocolMode.Auto
+        return protocolMode == AiProtocolMode.Responses
+               || (protocolMode == AiProtocolMode.Auto
                    && model.SupportedProtocolModes.Contains(AiProtocolMode.Responses));
     }
 }

@@ -8,7 +8,7 @@ using MeisterDev.ProPR.Application.Features.Budgeting;
 using MeisterDev.ProPR.Application.Interfaces;
 using MeisterDev.ProPR.Domain.Enums;
 using MeisterDev.ProPR.Domain.ValueObjects;
-using MeisterDev.ProPR.Infrastructure.AI.Providers;
+using MeisterDev.Ai.Providers.Drivers;
 using Microsoft.Extensions.AI;
 
 namespace MeisterDev.ProPR.Infrastructure.AI;
@@ -48,8 +48,11 @@ public sealed class AiRuntimeResolver(
         }
 
         var driver = providerDriverRegistry.GetRequired(resolved.Connection.ProviderKind);
-        var client = driver.CreateChatClient(resolved.Connection, resolved.Model, resolved.Binding);
-        var capabilities = driver.GetChatRuntimeCapabilities(resolved.Connection, resolved.Model, resolved.Binding).ToReviewCapabilities();
+        var client = driver.CreateChatClient(resolved.Connection.ToProviderEndpoint(), resolved.Model.ToProviderModel(), resolved.Binding.ProtocolMode);
+        var capabilities = driver.GetChatRuntimeCapabilities(
+            resolved.Connection.ToProviderEndpoint(),
+            resolved.Model.ToProviderModel(),
+            resolved.Binding.ProtocolMode).ToReviewCapabilities();
         return new ResolvedAiChatRuntime(resolved.Connection, resolved.Model, resolved.Binding, this.WrapChatClient(client, resolved.Model), capabilities);
     }
 
@@ -67,8 +70,11 @@ public sealed class AiRuntimeResolver(
         }
 
         var driver = providerDriverRegistry.GetRequired(resolved.Connection.ProviderKind);
-        var client = driver.CreateChatClient(resolved.Connection, resolved.Model, resolved.Binding);
-        var capabilities = driver.GetChatRuntimeCapabilities(resolved.Connection, resolved.Model, resolved.Binding).ToReviewCapabilities();
+        var client = driver.CreateChatClient(resolved.Connection.ToProviderEndpoint(), resolved.Model.ToProviderModel(), resolved.Binding.ProtocolMode);
+        var capabilities = driver.GetChatRuntimeCapabilities(
+            resolved.Connection.ToProviderEndpoint(),
+            resolved.Model.ToProviderModel(),
+            resolved.Binding.ProtocolMode).ToReviewCapabilities();
         return new ResolvedAiChatRuntime(resolved.Connection, resolved.Model, resolved.Binding, this.WrapChatClient(client, resolved.Model), capabilities);
     }
 
@@ -107,9 +113,9 @@ public sealed class AiRuntimeResolver(
 
         var driver = providerDriverRegistry.GetRequired(resolved.Connection.ProviderKind);
         var generator = driver.CreateEmbeddingGenerator(
-            resolved.Connection,
-            resolved.Model,
-            resolved.Binding,
+            resolved.Connection.ToProviderEndpoint(),
+            resolved.Model.ToProviderModel(),
+            resolved.Binding.ProtocolMode,
             resolved.Model.EmbeddingDimensions.Value);
 
         return new ResolvedAiEmbeddingRuntime(

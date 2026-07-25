@@ -1,7 +1,7 @@
 // Copyright (c) Andreas Rain.
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
-namespace MeisterDev.ProPR.Domain.Enums;
+namespace MeisterDev.Ai.Providers.Enums;
 
 /// <summary>
 ///     Supported AI operation categories.

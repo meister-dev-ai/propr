@@ -4,14 +4,10 @@
 using MeisterDev.Ai.Providers.Contracts;
 using MeisterDev.Ai.Providers.Egress;
 using MeisterDev.Ai.Providers.Enums;
-using MeisterDev.ProPR.Application.DTOs;
-using MeisterDev.ProPR.Application.Features.Reviewing.Execution.Models;
-using MeisterDev.ProPR.Application.Interfaces;
-using MeisterDev.ProPR.Infrastructure.AI.OpenAiCompatible;
-using MeisterDev.ProPR.Infrastructure.AI.Providers.OpenAi;
+using MeisterDev.Ai.Providers.Transport;
 using Microsoft.Extensions.AI;
 
-namespace MeisterDev.ProPR.Infrastructure.AI.Providers.LiteLlm;
+namespace MeisterDev.Ai.Providers.Drivers;
 
 /// <summary>
 ///     LiteLLM OpenAI-compatible provider driver.
@@ -32,29 +28,29 @@ public sealed class LiteLlmProviderDriver(
         return AiProbeTargetValidation.ForOpenAiCompatible(target, allowPrivateEgress, allowInsecureScheme, rejectAzureHosts: false);
     }
 
-    public Task<AiModelDiscoveryResultDto> DiscoverModelsAsync(AiConnectionProbeOptionsDto options, CancellationToken ct = default)
+    public Task<ProviderModelDiscoveryResult> DiscoverModelsAsync(ProviderEndpoint endpoint, CancellationToken ct = default)
     {
-        return this._innerDriver.DiscoverModelsAsync(options with { ProviderKind = AiProviderKind.LiteLlm }, ct);
+        return this._innerDriver.DiscoverModelsAsync(endpoint with { ProviderKind = AiProviderKind.LiteLlm }, ct);
     }
 
-    public Task<AiVerificationResultDto> VerifyAsync(AiConnectionProbeOptionsDto options, CancellationToken ct = default)
+    public Task<ProviderVerificationResult> VerifyAsync(ProviderEndpoint endpoint, CancellationToken ct = default)
     {
-        return this._innerDriver.VerifyAsync(options with { ProviderKind = AiProviderKind.LiteLlm }, ct);
+        return this._innerDriver.VerifyAsync(endpoint with { ProviderKind = AiProviderKind.LiteLlm }, ct);
     }
 
-    public IChatClient CreateChatClient(AiConnectionDto connection, AiConfiguredModelDto model, AiPurposeBindingDto binding)
+    public IChatClient CreateChatClient(ProviderEndpoint endpoint, ProviderModelDescriptor model, AiProtocolMode protocolMode)
     {
-        return this._innerDriver.CreateChatClient(connection with { ProviderKind = AiProviderKind.LiteLlm }, model, binding);
+        return this._innerDriver.CreateChatClient(endpoint with { ProviderKind = AiProviderKind.LiteLlm }, model, protocolMode);
     }
 
     public ProviderRuntimeCapabilities GetChatRuntimeCapabilities(
-        AiConnectionDto connection,
-        AiConfiguredModelDto model,
-        AiPurposeBindingDto binding)
+        ProviderEndpoint endpoint,
+        ProviderModelDescriptor model,
+        AiProtocolMode protocolMode)
     {
-        _ = connection;
+        _ = endpoint;
         _ = model;
-        _ = binding;
+        _ = protocolMode;
 
         return new ProviderRuntimeCapabilities(
             false,
@@ -64,11 +60,11 @@ public sealed class LiteLlmProviderDriver(
     }
 
     public IEmbeddingGenerator<string, Embedding<float>> CreateEmbeddingGenerator(
-        AiConnectionDto connection,
-        AiConfiguredModelDto model,
-        AiPurposeBindingDto binding,
+        ProviderEndpoint endpoint,
+        ProviderModelDescriptor model,
+        AiProtocolMode protocolMode,
         int dimensions)
     {
-        return this._innerDriver.CreateEmbeddingGenerator(connection with { ProviderKind = AiProviderKind.LiteLlm }, model, binding, dimensions);
+        return this._innerDriver.CreateEmbeddingGenerator(endpoint with { ProviderKind = AiProviderKind.LiteLlm }, model, protocolMode, dimensions);
     }
 }

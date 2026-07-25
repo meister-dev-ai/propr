@@ -4,12 +4,11 @@
 using System.Net;
 using MeisterDev.Ai.Providers.Contracts;
 using MeisterDev.Ai.Providers.Enums;
+using MeisterDev.ProPR.Application.AI;
 using MeisterDev.ProPR.Application.Features.Reviewing.Execution.Models;
 using MeisterDev.ProPR.Domain.Enums;
-using MeisterDev.ProPR.Infrastructure.AI.OpenAiCompatible;
-using MeisterDev.ProPR.Infrastructure.AI.Providers.AzureOpenAi;
-using MeisterDev.ProPR.Infrastructure.AI.Providers.LiteLlm;
-using MeisterDev.ProPR.Infrastructure.AI.Providers.OpenAi;
+using MeisterDev.Ai.Providers.Transport;
+using MeisterDev.Ai.Providers.Drivers;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace MeisterDev.ProPR.Infrastructure.Tests.AI;
@@ -34,7 +33,7 @@ public sealed class ProviderRuntimeCapabilityTests
         var binding = AiConnectionTestFactory.CreateBinding(AiPurpose.ReviewDefault, model, protocolMode);
         var connection = AiConnectionTestFactory.CreateConnection(Guid.NewGuid(), [model], [binding]);
 
-        var capabilities = driver.GetChatRuntimeCapabilities(connection, model, binding);
+        var capabilities = driver.GetChatRuntimeCapabilities(connection.ToProviderEndpoint(), model.ToProviderModel(), binding.ProtocolMode);
 
         Assert.Equal(
             new ProviderRuntimeCapabilities(
@@ -76,7 +75,7 @@ public sealed class ProviderRuntimeCapabilityTests
                 ProviderKind = AiProviderKind.OpenAi,
             };
 
-        var capabilities = driver.GetChatRuntimeCapabilities(connection, model, binding);
+        var capabilities = driver.GetChatRuntimeCapabilities(connection.ToProviderEndpoint(), model.ToProviderModel(), binding.ProtocolMode);
 
         Assert.Equal(
             new ProviderRuntimeCapabilities(
@@ -105,7 +104,7 @@ public sealed class ProviderRuntimeCapabilityTests
             ProviderKind = AiProviderKind.LiteLlm,
         };
 
-        var capabilities = driver.GetChatRuntimeCapabilities(connection, model, binding);
+        var capabilities = driver.GetChatRuntimeCapabilities(connection.ToProviderEndpoint(), model.ToProviderModel(), binding.ProtocolMode);
 
         Assert.Equal(new ProviderRuntimeCapabilities(false, false, false, false), capabilities);
     }

@@ -3,19 +3,19 @@
 
 using System.ClientModel;
 using System.Net;
-using MeisterDev.ProPR.Application.DTOs;
-using MeisterDev.ProPR.Domain.Enums;
+using MeisterDev.Ai.Providers.Contracts;
+using MeisterDev.Ai.Providers.Enums;
 
-namespace MeisterDev.ProPR.Infrastructure.AI.Providers;
+namespace MeisterDev.Ai.Providers.Drivers;
 
 /// <summary>
 ///     Maps provider exceptions and HTTP results into normalized verification diagnostics.
 /// </summary>
 public static class DriverFailureMapper
 {
-    public static AiVerificationResultDto Verified(string summary, IReadOnlyList<string>? warnings = null)
+    public static ProviderVerificationResult Verified(string summary, IReadOnlyList<string>? warnings = null)
     {
-        return new AiVerificationResultDto(
+        return new ProviderVerificationResult(
             AiVerificationStatus.Verified,
             null,
             summary,
@@ -24,9 +24,9 @@ public static class DriverFailureMapper
             warnings ?? []);
     }
 
-    public static AiVerificationResultDto Failed(HttpStatusCode statusCode, string? detail = null)
+    public static ProviderVerificationResult Failed(HttpStatusCode statusCode, string? detail = null)
     {
-        return new AiVerificationResultDto(
+        return new ProviderVerificationResult(
             AiVerificationStatus.Failed,
             MapFailureCategory(statusCode),
             detail ?? $"Provider request failed with status {(int)statusCode}.",
@@ -39,18 +39,18 @@ public static class DriverFailureMapper
             });
     }
 
-    public static AiVerificationResultDto Failed(ClientResultException exception)
+    public static ProviderVerificationResult Failed(ClientResultException exception)
     {
         return Failed((HttpStatusCode)exception.Status, exception.Message);
     }
 
-    public static AiVerificationResultDto Failed(Exception exception)
+    public static ProviderVerificationResult Failed(Exception exception)
     {
         var category = exception is HttpRequestException
             ? AiVerificationFailureCategory.EndpointReachability
             : AiVerificationFailureCategory.Unknown;
 
-        return new AiVerificationResultDto(
+        return new ProviderVerificationResult(
             AiVerificationStatus.Failed,
             category,
             exception.Message,

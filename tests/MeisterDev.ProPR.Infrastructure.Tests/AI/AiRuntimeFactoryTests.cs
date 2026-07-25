@@ -3,12 +3,13 @@
 
 using MeisterDev.Ai.Providers.Contracts;
 using MeisterDev.Ai.Providers.Enums;
+using MeisterDev.ProPR.Application.AI;
 using MeisterDev.ProPR.Application.Features.Budgeting;
 using MeisterDev.ProPR.Application.Features.Reviewing.Execution.Models;
 using MeisterDev.ProPR.Application.Interfaces;
 using MeisterDev.ProPR.Domain.Enums;
 using MeisterDev.ProPR.Infrastructure.AI;
-using MeisterDev.ProPR.Infrastructure.AI.Providers;
+using MeisterDev.Ai.Providers.Drivers;
 using Microsoft.Extensions.AI;
 using NSubstitute;
 
@@ -57,7 +58,7 @@ public sealed class AiRuntimeFactoryTests
         var binding = AiConnectionTestFactory.CreateBinding(AiPurpose.EmbeddingDefault, model, AiProtocolMode.Embeddings);
         var connection = AiConnectionTestFactory.CreateConnection(ClientId, [model], [binding]);
         registry.GetRequired(connection.ProviderKind).Returns(driver);
-        driver.CreateEmbeddingGenerator(connection, model, binding, 1536).Returns(generator);
+        driver.CreateEmbeddingGenerator(connection.ToProviderEndpoint(), model.ToProviderModel(), binding.ProtocolMode, 1536).Returns(generator);
 
         var factory = new AiRuntimeFactory(registry);
         var runtime = factory.CreateEmbeddingRuntime(connection, model, binding, "cl100k_base", 1536);
@@ -78,8 +79,8 @@ public sealed class AiRuntimeFactoryTests
         var binding = AiConnectionTestFactory.CreateBinding(AiPurpose.ReviewDefault, model);
         var connection = AiConnectionTestFactory.CreateConnection(ClientId, [model], [binding]);
         registry.GetRequired(connection.ProviderKind).Returns(driver);
-        driver.CreateChatClient(connection, model, binding).Returns(chatClient);
-        driver.GetChatRuntimeCapabilities(connection, model, binding)
+        driver.CreateChatClient(connection.ToProviderEndpoint(), model.ToProviderModel(), binding.ProtocolMode).Returns(chatClient);
+        driver.GetChatRuntimeCapabilities(connection.ToProviderEndpoint(), model.ToProviderModel(), binding.ProtocolMode)
             .Returns(new ProviderRuntimeCapabilities(true, true, true, true));
         return (registry, driver, chatClient, connection, model, binding);
     }

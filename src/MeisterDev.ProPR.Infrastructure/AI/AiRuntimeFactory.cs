@@ -7,7 +7,7 @@ using MeisterDev.ProPR.Application.DTOs;
 using MeisterDev.ProPR.Application.Features.Budgeting;
 using MeisterDev.ProPR.Application.Interfaces;
 using MeisterDev.ProPR.Domain.ValueObjects;
-using MeisterDev.ProPR.Infrastructure.AI.Providers;
+using MeisterDev.Ai.Providers.Drivers;
 using Microsoft.Extensions.AI;
 
 namespace MeisterDev.ProPR.Infrastructure.AI;
@@ -28,8 +28,11 @@ public sealed class AiRuntimeFactory(
         string? logicalModelName = null)
     {
         var driver = providerDriverRegistry.GetRequired(connection.ProviderKind);
-        var client = driver.CreateChatClient(connection, model, binding);
-        var capabilities = driver.GetChatRuntimeCapabilities(connection, model, binding).ToReviewCapabilities();
+        var client = driver.CreateChatClient(connection.ToProviderEndpoint(), model.ToProviderModel(), binding.ProtocolMode);
+        var capabilities = driver.GetChatRuntimeCapabilities(
+            connection.ToProviderEndpoint(),
+            model.ToProviderModel(),
+            binding.ProtocolMode).ToReviewCapabilities();
         return new ResolvedAiChatRuntime(connection, model, binding, this.WrapChatClient(client, model), capabilities)
         {
             LogicalModelName = logicalModelName,
@@ -45,7 +48,7 @@ public sealed class AiRuntimeFactory(
         string? logicalModelName = null)
     {
         var driver = providerDriverRegistry.GetRequired(connection.ProviderKind);
-        var generator = driver.CreateEmbeddingGenerator(connection, model, binding, dimensions);
+        var generator = driver.CreateEmbeddingGenerator(connection.ToProviderEndpoint(), model.ToProviderModel(), binding.ProtocolMode, dimensions);
         return new ResolvedAiEmbeddingRuntime(
             connection,
             model,

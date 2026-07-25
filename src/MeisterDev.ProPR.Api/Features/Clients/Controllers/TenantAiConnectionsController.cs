@@ -5,10 +5,11 @@
 using MeisterDev.Ai.Providers.Contracts;
 using MeisterDev.Ai.Providers.Enums;
 using MeisterDev.ProPR.Api.Extensions;
+using MeisterDev.ProPR.Application.AI;
 using MeisterDev.ProPR.Application.DTOs;
 using MeisterDev.ProPR.Application.Interfaces;
 using MeisterDev.ProPR.Domain.Enums;
-using MeisterDev.ProPR.Infrastructure.AI.Providers;
+using MeisterDev.Ai.Providers.Drivers;
 using Microsoft.AspNetCore.Mvc;
 
 namespace MeisterDev.ProPR.Api.Controllers;
@@ -102,15 +103,9 @@ public sealed class TenantAiConnectionsController(
         }
 
         var driver = providerDrivers.GetRequired(existing.ProviderKind);
-        var verification = await driver.VerifyAsync(
-            new AiConnectionProbeOptionsDto(
-                existing.ProviderKind,
-                existing.BaseUrl,
-                existing.AuthMode,
-                existing.Secret,
-                existing.DefaultHeaders,
-                existing.DefaultQueryParams),
-            ct);
+        var verification = (await driver.VerifyAsync(
+            existing.ToProviderEndpoint(),
+            ct)).ToDto();
         await connections.SaveVerificationAsync(connectionId, verification, ct);
         return this.Ok(verification);
     }

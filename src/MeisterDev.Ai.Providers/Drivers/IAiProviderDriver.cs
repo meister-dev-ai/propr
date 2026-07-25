@@ -3,11 +3,9 @@
 
 using MeisterDev.Ai.Providers.Contracts;
 using MeisterDev.Ai.Providers.Enums;
-using MeisterDev.ProPR.Application.DTOs;
-using MeisterDev.ProPR.Application.Features.Reviewing.Execution.Models;
 using Microsoft.Extensions.AI;
 
-namespace MeisterDev.ProPR.Application.Interfaces;
+namespace MeisterDev.Ai.Providers.Drivers;
 
 /// <summary>
 ///     Provider-specific driver for discovery, verification, and runtime creation.
@@ -24,31 +22,31 @@ public interface IAiProviderDriver
     string? ValidateProbeTarget(AiProbeTarget target);
 
     /// <summary>Discovers provider models using the supplied connection settings.</summary>
-    Task<AiModelDiscoveryResultDto> DiscoverModelsAsync(
-        AiConnectionProbeOptionsDto options,
+    Task<ProviderModelDiscoveryResult> DiscoverModelsAsync(
+        ProviderEndpoint endpoint,
         CancellationToken ct = default);
 
     /// <summary>Verifies the provider connection using the supplied settings.</summary>
-    Task<AiVerificationResultDto> VerifyAsync(
-        AiConnectionProbeOptionsDto options,
+    Task<ProviderVerificationResult> VerifyAsync(
+        ProviderEndpoint endpoint,
         CancellationToken ct = default);
 
     /// <summary>Creates a chat client for one resolved model binding.</summary>
     IChatClient CreateChatClient(
-        AiConnectionDto connection,
-        AiConfiguredModelDto model,
-        AiPurposeBindingDto binding);
+        ProviderEndpoint endpoint,
+        ProviderModelDescriptor model,
+        AiProtocolMode protocolMode);
 
     /// <summary>Gets session-related chat runtime capabilities for one resolved model binding.</summary>
     ProviderRuntimeCapabilities GetChatRuntimeCapabilities(
-        AiConnectionDto connection,
-        AiConfiguredModelDto model,
-        AiPurposeBindingDto binding);
+        ProviderEndpoint endpoint,
+        ProviderModelDescriptor model,
+        AiProtocolMode protocolMode);
 
     /// <summary>Creates an embedding generator for one resolved model binding.</summary>
     IEmbeddingGenerator<string, Embedding<float>> CreateEmbeddingGenerator(
-        AiConnectionDto connection,
-        AiConfiguredModelDto model,
-        AiPurposeBindingDto binding,
+        ProviderEndpoint endpoint,
+        ProviderModelDescriptor model,
+        AiProtocolMode protocolMode,
         int dimensions);
 }

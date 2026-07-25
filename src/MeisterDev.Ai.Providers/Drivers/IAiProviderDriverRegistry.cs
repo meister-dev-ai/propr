@@ -2,9 +2,8 @@
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
 using MeisterDev.Ai.Providers.Enums;
-using MeisterDev.ProPR.Application.Interfaces;
 
-namespace MeisterDev.ProPR.Infrastructure.AI.Providers;
+namespace MeisterDev.Ai.Providers.Drivers;
 
 /// <summary>
 ///     Registry for provider-specific AI drivers.

@@ -2,26 +2,26 @@
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
 using System.Net.Http.Headers;
-using MeisterDev.ProPR.Application.DTOs;
+using MeisterDev.Ai.Providers.Contracts;
 
-namespace MeisterDev.ProPR.Infrastructure.AI.OpenAiCompatible;
+namespace MeisterDev.Ai.Providers.Transport;
 
 /// <summary>
 ///     Builds HTTP requests for OpenAI-compatible admin operations.
 /// </summary>
 public sealed class OpenAiCompatibleRequestFactory
 {
-    public HttpRequestMessage CreateModelsRequest(AiConnectionProbeOptionsDto options)
+    public HttpRequestMessage CreateModelsRequest(ProviderEndpoint endpoint)
     {
-        var uri = BuildRelativeUri(options.BaseUrl, "models", options.DefaultQueryParams);
+        var uri = BuildRelativeUri(endpoint.BaseUrl, "models", endpoint.DefaultQueryParams);
         var request = new HttpRequestMessage(HttpMethod.Get, uri);
 
-        if (!string.IsNullOrWhiteSpace(options.Secret))
+        if (!string.IsNullOrWhiteSpace(endpoint.Secret))
         {
-            request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", options.Secret);
+            request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", endpoint.Secret);
         }
 
-        foreach (var header in options.DefaultHeaders ?? new Dictionary<string, string>())
+        foreach (var header in endpoint.DefaultHeaders ?? new Dictionary<string, string>())
         {
             request.Headers.TryAddWithoutValidation(header.Key, header.Value);
         }

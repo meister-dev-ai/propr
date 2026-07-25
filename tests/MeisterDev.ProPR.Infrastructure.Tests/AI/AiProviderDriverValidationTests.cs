@@ -4,10 +4,8 @@
 using MeisterDev.Ai.Providers.Contracts;
 using MeisterDev.Ai.Providers.Enums;
 using MeisterDev.ProPR.Application.DTOs;
-using MeisterDev.ProPR.Infrastructure.AI.OpenAiCompatible;
-using MeisterDev.ProPR.Infrastructure.AI.Providers.AzureOpenAi;
-using MeisterDev.ProPR.Infrastructure.AI.Providers.LiteLlm;
-using MeisterDev.ProPR.Infrastructure.AI.Providers.OpenAi;
+using MeisterDev.Ai.Providers.Transport;
+using MeisterDev.Ai.Providers.Drivers;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace MeisterDev.ProPR.Infrastructure.Tests.AI;
