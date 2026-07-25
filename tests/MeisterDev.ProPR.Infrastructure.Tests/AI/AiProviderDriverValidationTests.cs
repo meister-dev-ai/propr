@@ -3,7 +3,6 @@
 
 using MeisterDev.Ai.Providers.Contracts;
 using MeisterDev.Ai.Providers.Enums;
-using MeisterDev.ProPR.Application.DTOs;
 using MeisterDev.Ai.Providers.Transport;
 using MeisterDev.Ai.Providers.Drivers;
 using Microsoft.Extensions.DependencyInjection;

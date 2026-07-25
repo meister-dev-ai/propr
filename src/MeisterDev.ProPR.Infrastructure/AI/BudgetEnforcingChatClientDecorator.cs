@@ -4,7 +4,6 @@
 
 using MeisterDev.Ai.Providers.Contracts;
 using MeisterDev.Ai.Providers.Runtime;
-using MeisterDev.ProPR.Application.DTOs;
 using MeisterDev.ProPR.Application.Features.Budgeting;
 using MeisterDev.ProPR.Domain.ValueObjects;
 using Microsoft.Extensions.AI;

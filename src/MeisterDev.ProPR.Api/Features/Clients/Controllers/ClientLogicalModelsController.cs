@@ -3,6 +3,7 @@
 
 using MeisterDev.Ai.Providers.Enums;
 using MeisterDev.ProPR.Api.Extensions;
+using MeisterDev.ProPR.Application.AI;
 using MeisterDev.ProPR.Application.DTOs;
 using MeisterDev.ProPR.Application.Exceptions;
 using MeisterDev.ProPR.Application.Interfaces;

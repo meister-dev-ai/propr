@@ -7,7 +7,6 @@ using Azure.Identity;
 using MeisterDev.Ai.Providers.Contracts;
 using MeisterDev.Ai.Providers.Egress;
 using MeisterDev.Ai.Providers.Enums;
-using MeisterDev.Ai.Providers.Transport;
 using Microsoft.Extensions.AI;
 
 namespace MeisterDev.Ai.Providers.Drivers;

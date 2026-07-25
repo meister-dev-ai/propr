@@ -7,11 +7,11 @@ using MeisterDev.Ai.Providers.Enums;
 namespace MeisterDev.Ai.Providers.Egress;
 
 /// <summary>
-///     Shared base-URL / SSRF-egress / auth-shape validation used by the AI provider drivers. Keeping it here
+///     Shared base-URL / SSRF-egress / auth-shape validation used by the AI provider drivers.
 ///     (Infrastructure) rather than in the controller means provider-specific rules live behind the
 ///     <c>IAiProviderDriver</c> seam, not in the API layer.
 /// </summary>
-public static class AiProbeTargetValidation
+internal static class AiProbeTargetValidation
 {
     /// <summary>Validates an OpenAI-compatible target (plain OpenAI or LiteLLM).</summary>
     /// <param name="target">The probe target.</param>
