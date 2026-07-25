@@ -1,8 +1,8 @@
 // Copyright (c) Andreas Rain.
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
+using MeisterDev.Ai.Providers.Enums;
 using MeisterDev.ProPR.Application.DTOs;
-using MeisterDev.ProPR.Domain.Enums;
 using MeisterDev.ProPR.Infrastructure.AI.OpenAiCompatible;
 using MeisterDev.ProPR.Infrastructure.AI.Providers.AzureOpenAi;
 using MeisterDev.ProPR.Infrastructure.AI.Providers.LiteLlm;

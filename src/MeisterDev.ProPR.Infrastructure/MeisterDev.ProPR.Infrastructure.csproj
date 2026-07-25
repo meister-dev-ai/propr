@@ -1,6 +1,7 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
     <ItemGroup>
+        <ProjectReference Include="..\MeisterDev.Ai.Providers\MeisterDev.Ai.Providers.csproj"/>
         <ProjectReference Include="..\MeisterDev.ProPR.Domain\MeisterDev.ProPR.Domain.csproj"/>
         <ProjectReference Include="..\MeisterDev.ProPR.Application\MeisterDev.ProPR.Application.csproj"/>
         <ProjectReference Include="..\MeisterDev.ProPR.ProCursor.Contracts\MeisterDev.ProPR.ProCursor.Contracts.csproj"/>

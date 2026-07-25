@@ -2,6 +2,7 @@
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
 using System.Text.Json.Serialization;
+using MeisterDev.Ai.Providers.Enums;
 using MeisterDev.ProPR.Api.Extensions;
 using MeisterDev.ProPR.Application.DTOs;
 using MeisterDev.ProPR.Application.Interfaces;

@@ -3,10 +3,10 @@
 
 using System.ClientModel;
 using System.ClientModel.Primitives;
+using MeisterDev.Ai.Providers.Enums;
 using MeisterDev.ProPR.Application.DTOs;
 using MeisterDev.ProPR.Application.Features.Reviewing.Execution.Models;
 using MeisterDev.ProPR.Application.Interfaces;
-using MeisterDev.ProPR.Domain.Enums;
 using MeisterDev.ProPR.Infrastructure.AI.OpenAiCompatible;
 using MeisterDev.ProPR.Infrastructure.AI.Providers.AzureOpenAi;
 using Microsoft.Extensions.AI;

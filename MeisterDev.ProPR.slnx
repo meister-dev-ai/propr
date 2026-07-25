@@ -1,5 +1,6 @@
 <Solution>
     <Folder Name="/src/">
+        <Project Path="src/MeisterDev.Ai.Providers/MeisterDev.Ai.Providers.csproj" />
         <Project Path="src/MeisterDev.ProPR.Api/MeisterDev.ProPR.Api.csproj" />
         <Project Path="src/MeisterDev.ProPR.Application/MeisterDev.ProPR.Application.csproj" />
         <Project Path="src/MeisterDev.ProPR.Domain/MeisterDev.ProPR.Domain.csproj" />
@@ -14,6 +15,7 @@
         <Project Path="src/MeisterDev.ProPR.CodeAnalysis.Roslyn/MeisterDev.ProPR.CodeAnalysis.Roslyn.csproj" />
     </Folder>
     <Folder Name="/tests/">
+        <Project Path="tests/MeisterDev.Ai.Providers.Tests/MeisterDev.Ai.Providers.Tests.csproj" />
         <Project Path="tests/MeisterDev.ProPR.Api.Tests/MeisterDev.ProPR.Api.Tests.csproj" />
         <Project Path="tests/MeisterDev.ProPR.Application.Tests/MeisterDev.ProPR.Application.Tests.csproj" />
         <Project Path="tests/MeisterDev.ProPR.Domain.Tests/MeisterDev.ProPR.Domain.Tests.csproj" />

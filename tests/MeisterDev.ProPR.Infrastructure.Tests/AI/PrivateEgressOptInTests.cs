@@ -4,9 +4,9 @@
 using System.Collections.Generic;
 using System.Linq;
 using System.Net.Http;
+using MeisterDev.Ai.Providers.Enums;
 using MeisterDev.ProPR.Application.DTOs;
 using MeisterDev.ProPR.Application.Interfaces;
-using MeisterDev.ProPR.Domain.Enums;
 using MeisterDev.ProPR.Infrastructure.DependencyInjection;
 using MeisterDev.ProPR.Infrastructure.Net;
 using Microsoft.Extensions.Configuration;

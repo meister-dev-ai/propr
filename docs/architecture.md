@@ -153,6 +153,14 @@ Compile-time ownership is enforced through the dedicated `MeisterDev.ProPR.ProCu
 assembly for shared wire contracts and broker abstractions. Targeted ProCursor validation uses the
 ProCursor service project and its dedicated service tests directly rather than a separate solution.
 
+The "talk to a model provider" concern is owned by `MeisterDev.Ai.Providers`, a self-contained library
+the product consumes as an adapter. It is deliberately organisation-scoped rather than product-scoped,
+and two rules keep it separable: it takes **no** project reference on any `MeisterDev.ProPR.*` project,
+and no file in it carries the commercial-only notice. Both are asserted by
+`MeisterDev.Ai.Providers.Tests`, because either is easy to break with one convenient using directive.
+The library owns the provider, protocol, and auth enums; the host maps its own types onto the library's
+contract at the boundary rather than the library reaching into the host's domain.
+
 ## Reading Order
 
 If you are new to the codebase, read these documents in this order:

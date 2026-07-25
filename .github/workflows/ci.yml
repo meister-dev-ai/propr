@@ -126,6 +126,9 @@ jobs:
       - name: Restore dependencies
         run: dotnet restore MeisterDev.ProPR.slnx
 
+      - name: Run AI provider library tests
+        run: dotnet test tests/MeisterDev.Ai.Providers.Tests/MeisterDev.Ai.Providers.Tests.csproj --no-restore --configuration Release --verbosity normal
+
       - name: Run domain tests
         run: dotnet test tests/MeisterDev.ProPR.Domain.Tests/MeisterDev.ProPR.Domain.Tests.csproj --no-restore --configuration Release --verbosity normal
 
