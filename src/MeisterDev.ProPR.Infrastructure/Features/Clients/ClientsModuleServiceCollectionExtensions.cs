@@ -86,6 +86,7 @@ public static class ClientsModuleServiceCollectionExtensions
             // depend on another module happening to be composed first.
             services.TryAddSingleton(TimeProvider.System);
             services.AddScoped<IModelCatalogImportService, ModelCatalogImportService>();
+            services.AddScoped<IModelCatalogRepository, ModelCatalogRepository>();
             services.AddScoped<ILogicalModelCapabilityValidator, LogicalModelCapabilityValidator>();
             services.AddScoped<ILogicalModelCatalogRepository, LogicalModelCatalogRepository>();
             services.AddScoped<ILogicalModelResolver, LogicalModelResolver>();

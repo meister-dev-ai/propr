@@ -2,7 +2,6 @@
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
 using MeisterDev.Ai.Providers.Enums;
-using MeisterDev.Ai.Providers.Usage;
 using Microsoft.Extensions.AI;
 
 namespace MeisterDev.Ai.Providers.Usage;
