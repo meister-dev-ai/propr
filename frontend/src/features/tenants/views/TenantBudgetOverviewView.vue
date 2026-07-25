@@ -210,7 +210,9 @@ onMounted(() => {
 
 .overview-row {
     display: grid;
-    grid-template-columns: minmax(8rem, 1.5fr) minmax(6rem, 2fr) minmax(7rem, auto) 3.5rem auto;
+    /* The actions column keeps a floor wide enough for the reset marker, so a marked row does not shift the
+       meter and amount columns out of line with the rows around it. */
+    grid-template-columns: minmax(8rem, 1.5fr) minmax(6rem, 2fr) minmax(7rem, auto) 3.5rem minmax(13rem, auto);
     align-items: center;
     gap: 1rem;
     padding: 0.7rem 0;
