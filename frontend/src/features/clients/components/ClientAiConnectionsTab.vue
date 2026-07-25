@@ -266,6 +266,8 @@
                     </div>
                   </div>
 
+                  <ModelCatalogPicker :client-id="clientId" @pick="(entry) => applyCatalogEntryToModel(model, entry)" />
+
                   <div class="ai-form-grid ai-form-grid-compact">
                     <label class="form-field">
                       <span>Remote Model ID</span>
@@ -449,9 +451,12 @@ import ModalDialog from '@/components/dialogs/ModalDialog.vue'
 import ClientReviewPassesEditor from './ClientReviewPassesEditor.vue'
 import ClientLogicalModelsSection from './ClientLogicalModelsSection.vue'
 import ClientPurposeRolesSection from './ClientPurposeRolesSection.vue'
+import ModelCatalogPicker from './ModelCatalogPicker.vue'
+
 import { listEffectiveForClient, type LogicalModelResponse } from '@/services/logicalModelsService'
 import { ClientDetailVmKey, type ReviewPassEntry } from '@/features/clients/view-models/useClientDetailViewModel'
 import {
+  applyCatalogEntryToModel,
   authModeLabel,
   authOptionsForProvider,
   enabledBindings,

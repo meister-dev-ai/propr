@@ -1,0 +1,72 @@
+// Copyright (c) Andreas Rain.
+// Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
+
+/**
+ * Typed wrappers for the model-catalog endpoints. Browsing requires the client-administrator role, override
+ * maintenance the tenant-administrator role, and snapshot import a platform administrator — all enforced
+ * server-side, since an import writes the global rows every tenant reads.
+ */
+
+import { createAdminClient } from '@/services/api'
+import type { components } from '@/services/generated/openapi'
+
+export type AiModelCatalogEntryDto = components['schemas']['AiModelCatalogEntryDto']
+export type AiModelCatalogOverrideDto = components['schemas']['AiModelCatalogOverrideDto']
+export type AiModelCatalogLayer = components['schemas']['AiModelCatalogLayer']
+export type ModelCatalogProviderResponse = components['schemas']['ModelCatalogProviderResponse']
+
+/** The catalog providers available to browse. */
+export async function listProviders(clientId: string): Promise<ModelCatalogProviderResponse[]> {
+  const { data } = await createAdminClient().GET('/clients/{clientId}/model-catalog/providers', {
+    params: { path: { clientId } },
+  })
+  return (data as ModelCatalogProviderResponse[]) ?? []
+}
+
+/**
+ * Catalog models for a client with tenant overrides already applied. Each entry reports which layer supplied
+ * its pricing, so a negotiated rate can be labelled rather than shown as a bare number.
+ */
+export async function listModels(clientId: string, providerId?: string): Promise<AiModelCatalogEntryDto[]> {
+  const { data } = await createAdminClient().GET('/clients/{clientId}/model-catalog/models', {
+    params: { path: { clientId }, query: providerId ? { providerId } : {} },
+  })
+  return (data as AiModelCatalogEntryDto[]) ?? []
+}
+
+/** A tenant's own catalog overrides. */
+export async function listTenantOverrides(tenantId: string): Promise<AiModelCatalogOverrideDto[]> {
+  const { data } = await createAdminClient().GET('/tenants/{tenantId}/model-catalog/overrides', {
+    params: { path: { tenantId } },
+  })
+  return (data as AiModelCatalogOverrideDto[]) ?? []
+}
+
+/** Records or replaces a tenant override. A price left undefined is inherited, not treated as zero. */
+export async function upsertTenantOverride(
+  tenantId: string,
+  body: AiModelCatalogOverrideDto,
+): Promise<void> {
+  const { error } = await createAdminClient().PUT('/tenants/{tenantId}/model-catalog/overrides', {
+    params: { path: { tenantId } },
+    body,
+  })
+  if (error) {
+    throw new Error('Failed to save the model override.')
+  }
+}
+
+/** Removes a tenant override, returning the model to the snapshot's pricing. */
+export async function deleteTenantOverride(
+  tenantId: string,
+  providerId: string,
+  remoteModelId: string,
+): Promise<void> {
+  const { error } = await createAdminClient().DELETE(
+    '/tenants/{tenantId}/model-catalog/overrides/{providerId}/{remoteModelId}',
+    { params: { path: { tenantId, providerId, remoteModelId } } },
+  )
+  if (error) {
+    throw new Error('Failed to remove the model override.')
+  }
+}

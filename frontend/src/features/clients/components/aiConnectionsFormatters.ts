@@ -9,7 +9,8 @@ import type {
   AiPurpose,
   AiVerificationStatus,
 } from '@/services/aiConnectionsService'
-import type { EditableBinding } from './aiConnectionsForm.types'
+import type { EditableBinding, EditableModel } from './aiConnectionsForm.types'
+import type { AiModelCatalogEntryDto } from '@/services/modelCatalogService'
 
 // Static option tables and pure label/parse helpers for the AI-connections form.
 // Extracted from ClientAiConnectionsTab.vue so the component holds only state.
@@ -156,3 +157,26 @@ export const serializeMap = (map: Record<string, string> | null | undefined) =>
   Object.entries(map ?? {})
     .map(([key, value]) => `${key}=${value}`)
     .join('\n')
+
+/**
+ * Copies a catalog entry's facts onto a model form. Kept as a pure function so the mapping is testable and so
+ * the picker never writes the form itself: the configured model stays the authority for what is actually used,
+ * and an operator remains free to correct anything the catalog supplied.
+ *
+ * Only fields the form already has are filled. The workload is left alone, because the catalog source states no
+ * chat-versus-embedding discriminator and guessing one would be worse than leaving the operator's choice.
+ */
+export const applyCatalogEntryToModel = (model: EditableModel, entry: AiModelCatalogEntryDto): void => {
+  model.remoteModelId = entry.remoteModelId ?? model.remoteModelId
+  model.displayName = entry.displayName ?? model.displayName
+  model.supportsToolUse = entry.supportsToolUse ?? model.supportsToolUse
+  model.supportsStructuredOutput = entry.supportsStructuredOutput ?? model.supportsStructuredOutput
+  model.maxContextTokens = numberToField(entry.maxContextTokens, model.maxContextTokens)
+  model.inputCostPer1MUsd = numberToField(entry.inputCostPer1MUsd, model.inputCostPer1MUsd)
+  model.outputCostPer1MUsd = numberToField(entry.outputCostPer1MUsd, model.outputCostPer1MUsd)
+  model.cachedInputCostPer1MUsd = numberToField(entry.cachedInputCostPer1MUsd, model.cachedInputCostPer1MUsd)
+}
+
+/** A value the catalog does not state leaves the existing entry alone: unknown is not zero. */
+const numberToField = (value: number | null | undefined, current: string): string =>
+  typeof value === 'number' ? String(value) : current
