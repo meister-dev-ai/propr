@@ -7,7 +7,8 @@
  * server-side, since an import writes the global rows every tenant reads.
  */
 
-import { createAdminClient } from '@/services/api'
+import { getActiveRuntime } from '@/app/runtime/runtimeContext'
+import { authedFetch, createAdminClient } from '@/services/api'
 import type { components } from '@/services/generated/openapi'
 
 export type AiModelCatalogEntryDto = components['schemas']['AiModelCatalogEntryDto']
@@ -54,6 +55,44 @@ export async function listTenantModels(
     params: { path: { tenantId }, query: providerId ? { providerId } : {} },
   })
   return (data as AiModelCatalogEntryDto[]) ?? []
+}
+
+export type ModelCatalogImportResponse = components['schemas']['ModelCatalogImportResponse']
+
+/**
+ * Uploads a catalog snapshot, replacing the global entries it describes. Platform-admin only: the import writes
+ * the rows every tenant reads. Sent as multipart form data, which the generated JSON client does not cover, so
+ * this one goes through the shared authenticated fetch instead.
+ */
+export async function importSnapshot(snapshot: File): Promise<ModelCatalogImportResponse> {
+  const body = new FormData()
+  body.append('snapshot', snapshot)
+
+  const response = await authedFetch(`${getActiveRuntime().apiBaseUrl}/admin/model-catalog/snapshot`, {
+    method: 'POST',
+    body,
+  })
+
+  if (!response.ok) {
+    throw new Error(await readProblemDetail(response))
+  }
+
+  return (await response.json()) as ModelCatalogImportResponse
+}
+
+/** Surfaces the server's stated cause, so a malformed upload is actionable rather than merely rejected. */
+async function readProblemDetail(response: Response): Promise<string> {
+  try {
+    const problem = (await response.json()) as {
+      errors?: Record<string, string[]>
+      detail?: string
+      title?: string
+    }
+    const firstError = problem.errors ? Object.values(problem.errors).flat()[0] : undefined
+    return firstError ?? problem.detail ?? problem.title ?? 'The snapshot could not be imported.'
+  } catch {
+    return 'The snapshot could not be imported.'
+  }
 }
 
 /** A tenant's own catalog overrides. */

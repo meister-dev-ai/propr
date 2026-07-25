@@ -70,11 +70,14 @@
         </div>
       </section>
     </div>
+
+    <ModelCatalogSnapshotSection />
   </div>
 </template>
 
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
+import ModelCatalogSnapshotSection from '@/features/provider-settings/components/ModelCatalogSnapshotSection.vue'
 import { useNotification } from '@/composables/useNotification'
 import {
   formatProviderFamily,
