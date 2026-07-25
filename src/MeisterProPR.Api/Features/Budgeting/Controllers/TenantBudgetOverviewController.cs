@@ -34,7 +34,7 @@ public sealed partial class TenantBudgetOverviewController(
     /// <summary>Returns current-period spend against budget for every client in the tenant.</summary>
     /// <param name="tenantId">Tenant identifier.</param>
     /// <param name="ct">Cancellation token.</param>
-    /// <response code="200">Per-client spend, configured caps, and projected period spend for the current period.</response>
+    /// <response code="200">Per-client spend, the caps in force this period (configured plus any manual-reset allowance), and projected period spend.</response>
     /// <response code="401">Missing or invalid credentials.</response>
     /// <response code="403">Caller is not an administrator of this tenant.</response>
     /// <response code="409">The Budgeting capability is not licensed for this installation.</response>

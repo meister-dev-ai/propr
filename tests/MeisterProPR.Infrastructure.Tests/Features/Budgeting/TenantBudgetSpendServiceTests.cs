@@ -3,6 +3,7 @@
 
 using MeisterProPR.Application.DTOs;
 using MeisterProPR.Application.Interfaces;
+using MeisterProPR.Domain.Entities;
 using MeisterProPR.Infrastructure.Features.Budgeting;
 using NSubstitute;
 using Xunit;
@@ -20,8 +21,19 @@ public sealed class TenantBudgetSpendServiceTests
     private readonly IClientAdminService _clientAdmin = Substitute.For<IClientAdminService>();
     private readonly IClientTokenUsageRepository _usageRepository = Substitute.For<IClientTokenUsageRepository>();
 
+    private readonly IBudgetSpendResetRepository _resetRepository = Substitute.For<IBudgetSpendResetRepository>();
+
     private TenantBudgetSpendService CreateService(DateTimeOffset now) =>
-        new(this._clientAdmin, this._usageRepository, new FixedTimeProvider(now));
+        new(this._clientAdmin, this._usageRepository, this._resetRepository, new FixedTimeProvider(now));
+
+    private void GivenResets(params BudgetSpendReset[] resets) =>
+        this._resetRepository
+            .GetForClientsInRangeAsync(
+                Arg.Any<IReadOnlyCollection<Guid>>(),
+                Arg.Any<DateOnly>(),
+                Arg.Any<DateOnly>(),
+                Arg.Any<CancellationToken>())
+            .Returns(resets);
 
     [Fact]
     public async Task GetSpendAsync_SumsCaps_AggregatesCurrentSpend_AndZeroFillsTheTrend()
@@ -69,6 +81,36 @@ public sealed class TenantBudgetSpendServiceTests
         Assert.Null(result.MonthlySoftCapUsd);
         Assert.Null(result.MonthlyHardCapUsd);
         Assert.Equal(0m, result.SpentToDateUsd);
+    }
+
+    [Fact]
+    public async Task GetSpendAsync_SumsTheCapsInForce_AndCountsThePeriodsResets()
+    {
+        var acme = MakeClient("Acme", TenantId, soft: 80m, hard: 100m);
+        var globex = MakeClient("Globex", TenantId, soft: 40m, hard: 50m);
+        this._clientAdmin.GetAllAsync(Arg.Any<CancellationToken>()).Returns(new List<ClientDto> { acme, globex });
+        this._usageRepository
+            .GetMonthlyCostForClientsAsync(Arg.Any<IReadOnlyCollection<Guid>>(), Arg.Any<DateOnly>(), Arg.Any<DateOnly>(), Arg.Any<CancellationToken>())
+            .Returns(new Dictionary<(int, int), decimal> { [(2026, 7)] = 100m });
+        // Acme was reset once this period: +80 soft / +100 hard.
+        this.GivenResets(
+            new BudgetSpendReset
+            {
+                Id = Guid.NewGuid(),
+                ClientId = acme.Id,
+                PeriodStart = new DateOnly(2026, 7, 1),
+                TopUpSoftCapUsd = 80m,
+                TopUpHardCapUsd = 100m,
+                PerformedAt = new DateTime(2026, 7, 15, 9, 14, 0, DateTimeKind.Utc),
+            });
+
+        var service = this.CreateService(new DateTimeOffset(2026, 7, 15, 0, 0, 0, TimeSpan.Zero));
+        var spend = await service.GetSpendAsync(TenantId, monthsBack: 2);
+
+        // 160 (Acme, topped up) + 40 (Globex) soft; 200 + 50 hard.
+        Assert.Equal(200m, spend.MonthlySoftCapUsd);
+        Assert.Equal(250m, spend.MonthlyHardCapUsd);
+        Assert.Equal(1, spend.ResetCount);
     }
 
     private static ClientDto MakeClient(string name, Guid tenantId, decimal? soft, decimal? hard) =>

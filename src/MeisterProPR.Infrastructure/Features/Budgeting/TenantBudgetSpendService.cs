@@ -4,19 +4,22 @@
 
 using MeisterProPR.Application.DTOs;
 using MeisterProPR.Application.Features.Budgeting;
+using MeisterProPR.Application.Features.Budgeting.Models;
 using MeisterProPR.Application.Interfaces;
 using MeisterProPR.Domain.Services;
 
 namespace MeisterProPR.Infrastructure.Features.Budgeting;
 
 /// <summary>
-///     Composes a tenant's aggregate spend from its clients' configured caps and a single per-month cost rollup
-///     across those clients, projecting the current-period aggregate with <see cref="BudgetForecastCalculator" />.
-///     The caps reported are the sum of the clients' monthly caps (a reference total, since budgets are per client).
+///     Composes a tenant's aggregate spend from the caps in force for its clients (manual-reset allowance included)
+///     and a single per-month cost rollup across those clients, projecting the current-period aggregate with
+///     <see cref="BudgetForecastCalculator" />. The caps reported are the sum of the clients' monthly caps (a
+///     reference total, since budgets are per client).
 /// </summary>
 public sealed class TenantBudgetSpendService(
     IClientAdminService clientAdminService,
     IClientTokenUsageRepository usageRepository,
+    IBudgetSpendResetRepository resetRepository,
     TimeProvider timeProvider) : ITenantBudgetSpendService
 {
     private const int MinHistoryMonths = 1;
@@ -37,16 +40,42 @@ public sealed class TenantBudgetSpendService(
             .ToList();
         var clientIds = clients.Select(client => client.Id).ToList();
 
-        var softCaps = clients
-            .Select(client => client.BudgetConfigOrEmpty.MonthlySoftCapUsd)
-            .Where(cap => cap is not null)
-            .Select(cap => cap!.Value)
-            .ToList();
-        var hardCaps = clients
-            .Select(client => client.BudgetConfigOrEmpty.MonthlyHardCapUsd)
-            .Where(cap => cap is not null)
-            .Select(cap => cap!.Value)
-            .ToList();
+        // Every month's manual resets for every client in one query, so each month in the trend can be summed
+        // against the ceilings that were in force for it rather than against today's.
+        var resetsInRange = await resetRepository
+            .GetForClientsInRangeAsync(clientIds, firstMonthStart, currentMonthStart, ct)
+            .ConfigureAwait(false);
+        var topUpByClientMonth = resetsInRange
+            .GroupBy(reset => (reset.ClientId, reset.PeriodStart))
+            .ToDictionary(group => group.Key, group => MonthlyBudgetTopUp.SumTopUps(group.ToList()));
+
+        // Sums the caps in force across the tenant's clients for one month; null when no client caps that scope.
+        (decimal? Soft, decimal? Hard) SumCapsFor(DateOnly monthStart)
+        {
+            decimal softTotal = 0m, hardTotal = 0m;
+            bool anySoft = false, anyHard = false;
+            foreach (var client in clients)
+            {
+                var topUp = topUpByClientMonth.TryGetValue((client.Id, monthStart), out var found)
+                    ? found
+                    : MonthlyCapTopUp.None;
+                var caps = client.BudgetConfigOrEmpty;
+
+                if (MonthlyBudgetTopUp.ApplyTo(caps.MonthlySoftCapUsd, topUp.SoftUsd) is { } soft)
+                {
+                    softTotal += soft;
+                    anySoft = true;
+                }
+
+                if (MonthlyBudgetTopUp.ApplyTo(caps.MonthlyHardCapUsd, topUp.HardUsd) is { } hard)
+                {
+                    hardTotal += hard;
+                    anyHard = true;
+                }
+            }
+
+            return (anySoft ? softTotal : null, anyHard ? hardTotal : null);
+        }
 
         var costByMonth = await usageRepository
             .GetMonthlyCostForClientsAsync(clientIds, firstMonthStart, today, ct)
@@ -57,10 +86,21 @@ public sealed class TenantBudgetSpendService(
         {
             var monthStart = firstMonthStart.AddMonths(offset);
             costByMonth.TryGetValue((monthStart.Year, monthStart.Month), out var spent);
-            months.Add(new TenantSpendMonthDto(monthStart.Year, monthStart.Month, monthStart, spent));
+            var (monthSoft, monthHard) = SumCapsFor(monthStart);
+            months.Add(
+                new TenantSpendMonthDto(
+                    monthStart.Year,
+                    monthStart.Month,
+                    monthStart,
+                    spent,
+                    monthSoft,
+                    monthHard,
+                    resetsInRange.Count(reset => reset.PeriodStart == monthStart)));
         }
 
         costByMonth.TryGetValue((today.Year, today.Month), out var spentToDate);
+        var (currentSoft, currentHard) = SumCapsFor(currentMonthStart);
+        var resetsThisPeriod = resetsInRange.Where(reset => reset.PeriodStart == currentMonthStart).ToList();
 
         return new TenantSpendDto(
             tenantId,
@@ -68,9 +108,11 @@ public sealed class TenantBudgetSpendService(
             periodEnd,
             today,
             spentToDate,
-            softCaps.Count > 0 ? softCaps.Sum() : null,
-            hardCaps.Count > 0 ? hardCaps.Sum() : null,
+            currentSoft,
+            currentHard,
             BudgetForecastCalculator.ProjectPeriodSpend(spentToDate, today.Day, daysInPeriod),
-            months);
+            months,
+            resetsThisPeriod.Count,
+            resetsThisPeriod.Count == 0 ? null : resetsThisPeriod.Max(reset => reset.PerformedAt));
     }
 }

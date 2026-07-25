@@ -3,6 +3,7 @@
 
 using MeisterProPR.Application.DTOs;
 using MeisterProPR.Application.Interfaces;
+using MeisterProPR.Domain.Entities;
 using MeisterProPR.Domain.Enums;
 using MeisterProPR.Infrastructure.Features.Budgeting;
 using NSubstitute;
@@ -21,8 +22,19 @@ public sealed class TenantBudgetOverviewServiceTests
     private readonly IClientAdminService _clientAdmin = Substitute.For<IClientAdminService>();
     private readonly IClientTokenUsageRepository _usageRepository = Substitute.For<IClientTokenUsageRepository>();
 
+    private readonly IBudgetSpendResetRepository _resetRepository = Substitute.For<IBudgetSpendResetRepository>();
+
     private TenantBudgetOverviewService CreateService(DateTimeOffset now) =>
-        new(this._clientAdmin, this._usageRepository, new FixedTimeProvider(now));
+        new(this._clientAdmin, this._usageRepository, this._resetRepository, new FixedTimeProvider(now));
+
+    private void GivenResets(params BudgetSpendReset[] resets) =>
+        this._resetRepository
+            .GetForClientsInRangeAsync(
+                Arg.Any<IReadOnlyCollection<Guid>>(),
+                Arg.Any<DateOnly>(),
+                Arg.Any<DateOnly>(),
+                Arg.Any<CancellationToken>())
+            .Returns(resets);
 
     [Fact]
     public async Task GetOverviewAsync_FiltersToTenant_JoinsSpend_AndOrdersBySpendDescending()
@@ -73,6 +85,43 @@ public sealed class TenantBudgetOverviewServiceTests
         var result = await service.GetOverviewAsync(TenantId);
 
         Assert.Equal(0m, Assert.Single(result.Clients).SpentToDateUsd);
+    }
+
+    [Fact]
+    public async Task GetOverviewAsync_ReportsTheCapsInForce_IncludingAllowanceGrantedByAReset()
+    {
+        var acme = Guid.NewGuid();
+        var globex = Guid.NewGuid();
+        this._clientAdmin.GetAllAsync(Arg.Any<CancellationToken>()).Returns(
+            new List<ClientDto>
+            {
+                MakeClient(acme, "Acme", TenantId, soft: 80m, hard: 100m),
+                MakeClient(globex, "Globex", TenantId, soft: 40m, hard: 50m),
+            });
+        // Only Acme was reset this period.
+        this.GivenResets(
+            new BudgetSpendReset
+            {
+                Id = Guid.NewGuid(),
+                ClientId = acme,
+                PeriodStart = new DateOnly(2026, 7, 1),
+                TopUpSoftCapUsd = 80m,
+                TopUpHardCapUsd = 100m,
+                PerformedAt = new DateTime(2026, 7, 15, 9, 14, 0, DateTimeKind.Utc),
+            });
+
+        var service = this.CreateService(new DateTimeOffset(2026, 7, 15, 0, 0, 0, TimeSpan.Zero));
+        var overview = await service.GetOverviewAsync(TenantId);
+
+        var acmeRow = overview.Clients.Single(row => row.ClientId == acme);
+        Assert.Equal(160m, acmeRow.MonthlySoftCapUsd);
+        Assert.Equal(200m, acmeRow.MonthlyHardCapUsd);
+        Assert.Equal(1, acmeRow.ResetCount);
+
+        var globexRow = overview.Clients.Single(row => row.ClientId == globex);
+        Assert.Equal(40m, globexRow.MonthlySoftCapUsd);
+        Assert.Equal(50m, globexRow.MonthlyHardCapUsd);
+        Assert.Equal(0, globexRow.ResetCount);
     }
 
     private static ClientDto MakeClient(Guid id, string name, Guid tenantId, decimal? soft, decimal? hard) =>

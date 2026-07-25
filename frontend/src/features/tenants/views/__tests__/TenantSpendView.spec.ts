@@ -93,4 +93,41 @@ describe('TenantSpendView', () => {
     expect(wrapper.text()).toContain('Budgeting requires a commercial license.')
     expect(getTenantBudgetSpendMock).not.toHaveBeenCalled()
   })
+
+  it('marks a period that was manually reset and stamps the latest reset in UTC', async () => {
+    capabilityAvailable = true
+    getTenantBudgetSpendMock.mockResolvedValue({
+      data: { ...spend(), resetCount: 2, lastResetAt: '2026-07-15T09:14:00Z' },
+    })
+
+    const wrapper = mountView()
+    await flushPromises()
+
+    expect(wrapper.find('[data-testid="reset-marker"]').text()).toContain('Reset ×2')
+    const note = wrapper.find('[data-testid="reset-note"]').text()
+    expect(note).toContain('manually reset 2 times')
+    expect(note).toContain('UTC')
+    expect(note).toContain('2026')
+  })
+
+  it('shows no reset marker for a period that was never reset', async () => {
+    capabilityAvailable = true
+    getTenantBudgetSpendMock.mockResolvedValue({ data: spend() })
+
+    const wrapper = mountView()
+    await flushPromises()
+
+    expect(wrapper.find('[data-testid="reset-marker"]').exists()).toBe(false)
+    expect(wrapper.find('[data-testid="reset-note"]').exists()).toBe(false)
+  })
+
+  it('offers no reset action, because the tenant page is an aggregate', async () => {
+    capabilityAvailable = true
+    getTenantBudgetSpendMock.mockResolvedValue({ data: { ...spend(), resetCount: 1 } })
+
+    const wrapper = mountView()
+    await flushPromises()
+
+    expect(wrapper.find('[data-testid="reset-spend-button"]').exists()).toBe(false)
+  })
 })

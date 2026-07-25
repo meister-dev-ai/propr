@@ -4212,7 +4212,7 @@
         ],
         "responses": {
           "200": {
-            "description": "Period spend, the currently configured caps, and (current month only) the projected period spend.",
+            "description": "Period spend, the caps in force for the period (configured plus any manual-reset allowance), and (current month only) the projected period spend.",
             "content": {
               "text/plain": {
                 "schema": {
@@ -4384,6 +4384,148 @@
           },
           "403": {
             "description": "Caller lacks access to the client.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "The Budgeting capability is not licensed for this installation.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/admin/clients/{clientId}/budget/reset": {
+      "post": {
+        "tags": [
+          "ClientBudgetConsumption"
+        ],
+        "summary": "Grants the client's current monthly period a fresh allowance on top of what it has already consumed. Spend\nto date is preserved; the period's effective cap becomes the cap in force before the reset plus the\nconfigured cap. The reset is recorded with its actor for audit.",
+        "parameters": [
+          {
+            "name": "clientId",
+            "in": "path",
+            "description": "Client identifier.",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The recorded reset, including the effective caps before and after it.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/BudgetSpendResetDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BudgetSpendResetDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BudgetSpendResetDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The client has no monthly budget cap configured, so there is no ceiling to raise.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid credentials.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Caller lacks access to the client.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No such client.",
             "content": {
               "text/plain": {
                 "schema": {
@@ -14149,7 +14291,7 @@
         ],
         "responses": {
           "200": {
-            "description": "Per-client spend, configured caps, and projected period spend for the current period.",
+            "description": "Per-client spend, the caps in force this period (configured plus any manual-reset allowance), and projected period spend.",
             "content": {
               "text/plain": {
                 "schema": {
@@ -18438,6 +18580,23 @@
           "spendIsApproximate": {
             "type": "boolean",
             "description": "True when some usage in the month lacked pricing, so the total is a lower bound."
+          },
+          "effectiveSoftCapUsd": {
+            "type": "number",
+            "description": "The soft cap in force for that month — the currently configured cap plus the allowance manual resets granted\nin that month — or null when unset (no limit).",
+            "format": "double",
+            "nullable": true
+          },
+          "effectiveHardCapUsd": {
+            "type": "number",
+            "description": "The hard cap in force for that month, composed like EffectiveSoftCapUsd.",
+            "format": "double",
+            "nullable": true
+          },
+          "resetCount": {
+            "type": "integer",
+            "description": "How many manual spend resets the month received.",
+            "format": "int32"
           }
         },
         "additionalProperties": false,
@@ -18451,6 +18610,75 @@
         ],
         "type": "string",
         "description": "The granularity at which a USD budget cap is enforced."
+      },
+      "BudgetSpendResetDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "The reset identifier.",
+            "format": "uuid"
+          },
+          "periodStart": {
+            "type": "string",
+            "description": "Inclusive first day of the monthly period the reset applies to (UTC).",
+            "format": "date"
+          },
+          "topUpSoftCapUsd": {
+            "type": "number",
+            "description": "The monthly soft-cap allowance granted, or null when no soft cap was configured.",
+            "format": "double",
+            "nullable": true
+          },
+          "topUpHardCapUsd": {
+            "type": "number",
+            "description": "The monthly hard-cap allowance granted, or null when no hard cap was configured.",
+            "format": "double",
+            "nullable": true
+          },
+          "effectiveSoftCapBeforeUsd": {
+            "type": "number",
+            "description": "The period's effective soft cap immediately before the reset.",
+            "format": "double",
+            "nullable": true
+          },
+          "effectiveSoftCapAfterUsd": {
+            "type": "number",
+            "description": "The period's effective soft cap immediately after the reset.",
+            "format": "double",
+            "nullable": true
+          },
+          "effectiveHardCapBeforeUsd": {
+            "type": "number",
+            "description": "The period's effective hard cap immediately before the reset.",
+            "format": "double",
+            "nullable": true
+          },
+          "effectiveHardCapAfterUsd": {
+            "type": "number",
+            "description": "The period's effective hard cap immediately after the reset.",
+            "format": "double",
+            "nullable": true
+          },
+          "actorUserId": {
+            "type": "string",
+            "description": "The administrator who performed the reset, or null when unresolved.",
+            "format": "uuid",
+            "nullable": true
+          },
+          "actorUsername": {
+            "type": "string",
+            "description": "The administrator's username when it could be resolved, otherwise null.",
+            "nullable": true
+          },
+          "performedAt": {
+            "type": "string",
+            "description": "When the reset was performed (UTC).",
+            "format": "date-time"
+          }
+        },
+        "additionalProperties": false,
+        "description": "One manual spend reset an administrator performed on a client's monthly period: the extra allowance it\ngranted and the audit record of who granted it and what the period's ceiling was before and after. The\nrecorded caps describe the moment of the reset and do not change if the configured cap is edited later."
       },
       "BudgetStatusDto": {
         "type": "object",
@@ -18566,13 +18794,13 @@
           },
           "monthlySoftCapUsd": {
             "type": "number",
-            "description": "The configured monthly soft cap, or null when unset (no limit).",
+            "description": "The monthly soft cap in force for the period — the configured cap plus any allowance manual resets granted in\nit — or null when unset (no limit).",
             "format": "double",
             "nullable": true
           },
           "monthlyHardCapUsd": {
             "type": "number",
-            "description": "The configured monthly hard cap, or null when unset (no limit).",
+            "description": "The monthly hard cap in force for the period, composed like MonthlySoftCapUsd.",
             "format": "double",
             "nullable": true
           },
@@ -18588,6 +18816,26 @@
               "$ref": "#/components/schemas/BudgetDailySpendDto"
             },
             "description": "Per-day estimated spend across the period, ordered by date ascending.",
+            "nullable": true
+          },
+          "resets": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/BudgetSpendResetDto"
+            },
+            "description": "The manual spend resets performed in this period, oldest first. Empty for a period that was never reset.",
+            "nullable": true
+          },
+          "configuredSoftCapUsd": {
+            "type": "number",
+            "description": "The soft cap as configured on the client, before any reset allowance. Reported so a caller can show what a\nfurther reset would grant; enforcement uses MonthlySoftCapUsd.",
+            "format": "double",
+            "nullable": true
+          },
+          "configuredHardCapUsd": {
+            "type": "number",
+            "description": "The hard cap as configured on the client, before any reset allowance.",
+            "format": "double",
             "nullable": true
           }
         },
@@ -23652,13 +23900,13 @@
           },
           "monthlySoftCapUsd": {
             "type": "number",
-            "description": "The configured monthly soft cap, or null when unset (no limit).",
+            "description": "The monthly soft cap in force this period — the configured cap plus any allowance manual resets granted in it —\nor null when unset (no limit).",
             "format": "double",
             "nullable": true
           },
           "monthlyHardCapUsd": {
             "type": "number",
-            "description": "The configured monthly hard cap, or null when unset (no limit).",
+            "description": "The monthly hard cap in force this period, composed like MonthlySoftCapUsd.",
             "format": "double",
             "nullable": true
           },
@@ -23667,6 +23915,11 @@
             "description": "The projected full-period spend on the current run-rate.",
             "format": "double",
             "nullable": true
+          },
+          "resetCount": {
+            "type": "integer",
+            "description": "How many manual spend resets the client received this period.",
+            "format": "int32"
           }
         },
         "additionalProperties": false,
@@ -23921,13 +24174,13 @@
           },
           "monthlySoftCapUsd": {
             "type": "number",
-            "description": "Sum of the tenant's clients' monthly soft caps, or null when none are configured.",
+            "description": "Sum of the caps in force for the tenant's clients this period (each client's configured soft cap plus any\nallowance its manual resets granted), or null when none are configured.",
             "format": "double",
             "nullable": true
           },
           "monthlyHardCapUsd": {
             "type": "number",
-            "description": "Sum of the tenant's clients' monthly hard caps, or null when none are configured.",
+            "description": "Sum of the tenant's clients' hard caps in force this period, composed like MonthlySoftCapUsd.",
             "format": "double",
             "nullable": true
           },
@@ -23943,6 +24196,17 @@
               "$ref": "#/components/schemas/TenantSpendMonthDto"
             },
             "description": "Per-month aggregate spend over the trailing window, oldest first.",
+            "nullable": true
+          },
+          "resetCount": {
+            "type": "integer",
+            "description": "How many manual spend resets the tenant's clients received this period, in total.",
+            "format": "int32"
+          },
+          "lastResetAt": {
+            "type": "string",
+            "description": "When the most recent manual spend reset in this period was performed (UTC), or null when none.",
+            "format": "date-time",
             "nullable": true
           }
         },
@@ -23971,6 +24235,23 @@
             "type": "number",
             "description": "Aggregate estimated USD spent across the tenant's clients that month (month-to-date for the current month).",
             "format": "double"
+          },
+          "effectiveSoftCapUsd": {
+            "type": "number",
+            "description": "Sum of the soft caps in force for that month — each client's configured cap plus the allowance its resets\ngranted in that month — or null when no client capped that scope.",
+            "format": "double",
+            "nullable": true
+          },
+          "effectiveHardCapUsd": {
+            "type": "number",
+            "description": "Sum of the hard caps in force for that month, composed like EffectiveSoftCapUsd.",
+            "format": "double",
+            "nullable": true
+          },
+          "resetCount": {
+            "type": "integer",
+            "description": "How many manual spend resets the tenant's clients received that month, in total.",
+            "format": "int32"
           }
         },
         "additionalProperties": false,

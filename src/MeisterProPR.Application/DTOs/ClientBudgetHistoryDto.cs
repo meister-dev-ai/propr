@@ -12,12 +12,23 @@ namespace MeisterProPR.Application.DTOs;
 ///     months). Unpriced usage is omitted, not coerced to zero.
 /// </param>
 /// <param name="SpendIsApproximate">True when some usage in the month lacked pricing, so the total is a lower bound.</param>
+/// <param name="EffectiveSoftCapUsd">
+///     The soft cap in force for that month — the currently configured cap plus the allowance manual resets granted
+///     in that month — or null when unset (no limit).
+/// </param>
+/// <param name="EffectiveHardCapUsd">
+///     The hard cap in force for that month, composed like <paramref name="EffectiveSoftCapUsd" />.
+/// </param>
+/// <param name="ResetCount">How many manual spend resets the month received.</param>
 public sealed record BudgetMonthSpendDto(
     int Year,
     int Month,
     DateOnly PeriodStart,
     decimal SpentUsd,
-    bool SpendIsApproximate);
+    bool SpendIsApproximate,
+    decimal? EffectiveSoftCapUsd = null,
+    decimal? EffectiveHardCapUsd = null,
+    int ResetCount = 0);
 
 /// <summary>
 ///     Response DTO for <c>GET /admin/clients/{clientId}/budget/history</c>: the client's estimated USD spend per

@@ -8,11 +8,20 @@ namespace MeisterProPR.Application.DTOs;
 /// <param name="Month">The calendar month (1-12).</param>
 /// <param name="PeriodStart">Inclusive first day of the month (UTC).</param>
 /// <param name="SpentUsd">Aggregate estimated USD spent across the tenant's clients that month (month-to-date for the current month).</param>
+/// <param name="EffectiveSoftCapUsd">
+///     Sum of the soft caps in force for that month — each client's configured cap plus the allowance its resets
+///     granted in that month — or null when no client capped that scope.
+/// </param>
+/// <param name="EffectiveHardCapUsd">Sum of the hard caps in force for that month, composed like <paramref name="EffectiveSoftCapUsd" />.</param>
+/// <param name="ResetCount">How many manual spend resets the tenant's clients received that month, in total.</param>
 public sealed record TenantSpendMonthDto(
     int Year,
     int Month,
     DateOnly PeriodStart,
-    decimal SpentUsd);
+    decimal SpentUsd,
+    decimal? EffectiveSoftCapUsd = null,
+    decimal? EffectiveHardCapUsd = null,
+    int ResetCount = 0);
 
 /// <summary>
 ///     Response DTO for <c>GET /admin/tenants/{tenantId}/budget/spend</c>: the tenant's aggregate USD spend for the
@@ -25,10 +34,17 @@ public sealed record TenantSpendMonthDto(
 /// <param name="PeriodEnd">Inclusive last day of the current monthly period (UTC).</param>
 /// <param name="AsOf">The UTC date spend was computed as of.</param>
 /// <param name="SpentToDateUsd">Aggregate estimated USD spent across the tenant's clients this period to date.</param>
-/// <param name="MonthlySoftCapUsd">Sum of the tenant's clients' monthly soft caps, or null when none are configured.</param>
-/// <param name="MonthlyHardCapUsd">Sum of the tenant's clients' monthly hard caps, or null when none are configured.</param>
+/// <param name="MonthlySoftCapUsd">
+///     Sum of the caps in force for the tenant's clients this period (each client's configured soft cap plus any
+///     allowance its manual resets granted), or null when none are configured.
+/// </param>
+/// <param name="MonthlyHardCapUsd">
+///     Sum of the tenant's clients' hard caps in force this period, composed like <paramref name="MonthlySoftCapUsd" />.
+/// </param>
 /// <param name="ProjectedPeriodSpendUsd">The projected full-period aggregate spend on the current run-rate.</param>
 /// <param name="Months">Per-month aggregate spend over the trailing window, oldest first.</param>
+/// <param name="ResetCount">How many manual spend resets the tenant's clients received this period, in total.</param>
+/// <param name="LastResetAt">When the most recent manual spend reset in this period was performed (UTC), or null when none.</param>
 public sealed record TenantSpendDto(
     Guid TenantId,
     DateOnly PeriodStart,
@@ -38,4 +54,6 @@ public sealed record TenantSpendDto(
     decimal? MonthlySoftCapUsd,
     decimal? MonthlyHardCapUsd,
     decimal? ProjectedPeriodSpendUsd,
-    IReadOnlyList<TenantSpendMonthDto> Months);
+    IReadOnlyList<TenantSpendMonthDto> Months,
+    int ResetCount = 0,
+    DateTime? LastResetAt = null);

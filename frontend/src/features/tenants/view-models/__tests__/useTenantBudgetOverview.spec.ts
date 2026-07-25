@@ -64,4 +64,79 @@ describe('useTenantBudgetOverview', () => {
     expect(vm.overview.value).toBeNull()
     expect(vm.error.value).not.toBe('')
   })
+
+  it('carries each row reset count and meters against the cap in force', async () => {
+    const data = overview()
+    data.clients = [
+      {
+        clientId: 'a',
+        displayName: 'Acme',
+        spentToDateUsd: 95,
+        monthlySoftCapUsd: 160,
+        monthlyHardCapUsd: 200,
+        projectedPeriodSpendUsd: 190,
+        resetCount: 1,
+      },
+    ]
+    const vm = useTenantBudgetOverview('t1', { loader: async () => ({ data }) })
+
+    await vm.loadOverview()
+
+    const row = vm.rows.value[0]
+    expect(row.resetCount).toBe(1)
+    // 95 of the topped-up 200 → still ok, not the 95% it would be against the configured 100.
+    expect(row.meterCapUsd).toBe(200)
+    expect(row.meterPercent).toBe(47.5)
+    expect(row.status).toBe('ok')
+  })
+
+  it('defaults the reset count to zero when the payload omits it', async () => {
+    const vm = useTenantBudgetOverview('t1', { loader: async () => ({ data: overview() }) })
+
+    await vm.loadOverview()
+
+    expect(vm.rows.value.every((row) => row.resetCount === 0)).toBe(true)
+  })
+
+  it('reloads the overview after resetting one client', async () => {
+    let loads = 0
+    const resetClients: string[] = []
+    const vm = useTenantBudgetOverview('t1', {
+      loader: async () => {
+        loads += 1
+        return { data: overview() }
+      },
+      resetAction: async (clientId) => {
+        resetClients.push(clientId)
+        return { data: { id: 'r1', periodStart: '2026-07-01' } }
+      },
+    })
+
+    await vm.loadOverview()
+    const ok = await vm.resetClientSpend('b')
+
+    expect(ok).toBe(true)
+    // Only the named client is reset — the tenant view is an entry point, not a bulk action.
+    expect(resetClients).toEqual(['b'])
+    expect(loads).toBe(2)
+    expect(vm.resettingClientId.value).toBeNull()
+  })
+
+  it('surfaces an error and does not reload when a client reset fails', async () => {
+    let loads = 0
+    const vm = useTenantBudgetOverview('t1', {
+      loader: async () => {
+        loads += 1
+        return { data: overview() }
+      },
+      resetAction: async () => ({ error: 'boom' }),
+    })
+
+    await vm.loadOverview()
+    const ok = await vm.resetClientSpend('b')
+
+    expect(ok).toBe(false)
+    expect(loads).toBe(1)
+    expect(vm.resetError.value).not.toBe('')
+  })
 })

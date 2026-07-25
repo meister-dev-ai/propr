@@ -5,19 +5,21 @@
 using MeisterProPR.Application.DTOs;
 using MeisterProPR.Application.Features.Budgeting;
 using MeisterProPR.Application.Interfaces;
+using MeisterProPR.Domain.Entities;
 using MeisterProPR.Domain.Services;
 
 namespace MeisterProPR.Infrastructure.Features.Budgeting;
 
 /// <summary>
-///     Composes a tenant-wide budget overview from the tenant's clients (with their configured caps) and a single
-///     per-client cost rollup for the current calendar month, projecting each client's full-period spend with
-///     <see cref="BudgetForecastCalculator" />. Rows are ordered by spend-to-date descending so the highest
-///     spenders surface first.
+///     Composes a tenant-wide budget overview from the tenant's clients (with the caps in force for the current
+///     period, manual-reset allowance included) and a single per-client cost rollup for the current calendar month,
+///     projecting each client's full-period spend with <see cref="BudgetForecastCalculator" />. Rows are ordered by
+///     spend-to-date descending so the highest spenders surface first.
 /// </summary>
 public sealed class TenantBudgetOverviewService(
     IClientAdminService clientAdminService,
     IClientTokenUsageRepository usageRepository,
+    IBudgetSpendResetRepository resetRepository,
     TimeProvider timeProvider) : ITenantBudgetOverviewService
 {
     /// <inheritdoc />
@@ -37,18 +39,30 @@ public sealed class TenantBudgetOverviewService(
             .GetCostByClientAndDateRangeAsync(periodStart, today, ct)
             .ConfigureAwait(false);
 
+        // Likewise one query for this period's manual resets across the tenant's clients.
+        var clientIds = clients.Select(client => client.Id).ToList();
+        var resetsByClient = (await resetRepository
+                .GetForClientsInRangeAsync(clientIds, periodStart, periodStart, ct)
+                .ConfigureAwait(false))
+            .GroupBy(reset => reset.ClientId)
+            .ToDictionary(group => group.Key, group => group.ToList());
+
         var rows = clients
             .Select(client =>
             {
                 var caps = client.BudgetConfigOrEmpty;
                 var spentToDate = costByClient.TryGetValue(client.Id, out var spent) ? spent : 0m;
+                IReadOnlyList<BudgetSpendReset> resets =
+                    resetsByClient.TryGetValue(client.Id, out var found) ? found : [];
+                var topUp = MonthlyBudgetTopUp.SumTopUps(resets);
                 return new TenantBudgetOverviewClientDto(
                     client.Id,
                     client.DisplayName,
                     spentToDate,
-                    caps.MonthlySoftCapUsd,
-                    caps.MonthlyHardCapUsd,
-                    BudgetForecastCalculator.ProjectPeriodSpend(spentToDate, today.Day, daysInPeriod));
+                    MonthlyBudgetTopUp.ApplyTo(caps.MonthlySoftCapUsd, topUp.SoftUsd),
+                    MonthlyBudgetTopUp.ApplyTo(caps.MonthlyHardCapUsd, topUp.HardUsd),
+                    BudgetForecastCalculator.ProjectPeriodSpend(spentToDate, today.Day, daysInPeriod),
+                    resets.Count);
             })
             .OrderByDescending(row => row.SpentToDateUsd)
             .ThenBy(row => row.DisplayName, StringComparer.OrdinalIgnoreCase)

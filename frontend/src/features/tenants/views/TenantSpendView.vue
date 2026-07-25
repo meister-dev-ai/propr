@@ -34,6 +34,18 @@
                     <p class="period-line">
                         Period {{ formatDate(vm.spend.value.periodStart) }} – {{ formatDate(vm.spend.value.periodEnd) }}
                         · as of {{ formatDate(vm.spend.value.asOf) }}
+                        <span v-if="vm.hasResets.value" class="reset-chip" data-testid="reset-marker">
+                            <i class="fi fi-rr-refresh"></i>
+                            Reset ×{{ vm.resetCount.value }}
+                        </span>
+                    </p>
+                    <p v-if="vm.hasResets.value" class="reset-note" data-testid="reset-note">
+                        <i class="fi fi-rr-info"></i>
+                        This period was manually reset {{ vm.resetCount.value }}
+                        {{ vm.resetCount.value === 1 ? 'time' : 'times' }}<template
+                            v-if="lastResetLabel">, most recently {{ lastResetLabel }}</template>;
+                        the summed caps shown include the granted allowance.
+                        Reset a client from its Spend tab or the Budget Overview.
                     </p>
 
                     <div class="spend-summary">
@@ -129,6 +141,25 @@ function capLabel(value: number | null | undefined): string {
     return value == null ? 'No limit' : formatUsd(value)
 }
 
+/** The most recent reset in the period, stamped in UTC so the audit trail reads the same everywhere. */
+const lastResetLabel = computed(() => {
+    const value = vm.lastResetAt.value
+    if (!value) {
+        return ''
+    }
+    const date = new Date(value)
+    return Number.isNaN(date.valueOf())
+        ? ''
+        : `${date.toLocaleString(undefined, {
+            year: 'numeric',
+            month: 'short',
+            day: 'numeric',
+            hour: '2-digit',
+            minute: '2-digit',
+            timeZone: 'UTC',
+        })} UTC`
+})
+
 function formatDate(value: string | null | undefined): string {
     if (!value) {
         return ''
@@ -147,6 +178,25 @@ onMounted(() => {
 </script>
 
 <style scoped>
+.reset-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    margin-left: 0.5rem;
+    padding: 0.15rem 0.6rem;
+    border: 1px solid var(--color-warning);
+    border-radius: var(--radius-pill);
+    color: var(--color-warning);
+    font-size: 0.75rem;
+    white-space: nowrap;
+}
+
+.reset-note {
+    margin-bottom: 1rem;
+    color: var(--color-text-muted);
+    font-size: 0.85rem;
+}
+
 .period-line {
     color: var(--color-text-muted);
     font-size: 0.9rem;

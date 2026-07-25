@@ -20,12 +20,25 @@ public sealed record BudgetDailySpendDto(DateOnly Date, decimal SpentUsd);
 /// <param name="AsOf">The UTC date the spend was computed as of.</param>
 /// <param name="SpentToDateUsd">Estimated USD spent in the period up to and including <paramref name="AsOf" />.</param>
 /// <param name="SpendIsApproximate">True when some usage in the period lacked pricing, so the total is a lower bound.</param>
-/// <param name="MonthlySoftCapUsd">The configured monthly soft cap, or null when unset (no limit).</param>
-/// <param name="MonthlyHardCapUsd">The configured monthly hard cap, or null when unset (no limit).</param>
+/// <param name="MonthlySoftCapUsd">
+///     The monthly soft cap in force for the period — the configured cap plus any allowance manual resets granted in
+///     it — or null when unset (no limit).
+/// </param>
+/// <param name="MonthlyHardCapUsd">
+///     The monthly hard cap in force for the period, composed like <paramref name="MonthlySoftCapUsd" />.
+/// </param>
 /// <param name="ProjectedPeriodSpendUsd">
 ///     The projected full-period spend on the current run-rate, or null when it cannot be projected (no elapsed days).
 /// </param>
 /// <param name="DailySpend">Per-day estimated spend across the period, ordered by date ascending.</param>
+/// <param name="Resets">
+///     The manual spend resets performed in this period, oldest first. Empty for a period that was never reset.
+/// </param>
+/// <param name="ConfiguredSoftCapUsd">
+///     The soft cap as configured on the client, before any reset allowance. Reported so a caller can show what a
+///     further reset would grant; enforcement uses <paramref name="MonthlySoftCapUsd" />.
+/// </param>
+/// <param name="ConfiguredHardCapUsd">The hard cap as configured on the client, before any reset allowance.</param>
 public sealed record ClientBudgetConsumptionDto(
     Guid ClientId,
     DateOnly PeriodStart,
@@ -37,4 +50,7 @@ public sealed record ClientBudgetConsumptionDto(
     decimal? MonthlySoftCapUsd,
     decimal? MonthlyHardCapUsd,
     decimal? ProjectedPeriodSpendUsd,
-    IReadOnlyList<BudgetDailySpendDto> DailySpend);
+    IReadOnlyList<BudgetDailySpendDto> DailySpend,
+    IReadOnlyList<BudgetSpendResetDto> Resets,
+    decimal? ConfiguredSoftCapUsd = null,
+    decimal? ConfiguredHardCapUsd = null);

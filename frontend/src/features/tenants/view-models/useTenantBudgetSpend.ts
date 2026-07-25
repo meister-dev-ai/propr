@@ -28,33 +28,40 @@ const HARD_CAP_COLOR = '#ef4444'
 const MONTH_LABELS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
 
 /** Appends flat soft/hard cap reference-line datasets (when configured) across a chart of the given length. */
-function appendCapLines(
+/**
+ * Appends cap reference lines from per-point values, so a month whose clients received a manual reset steps up
+ * instead of stretching today's raised ceiling back across months it was never in force for.
+ */
+function appendCapSeries(
   datasets: ChartData<'line'>['datasets'],
-  length: number,
-  softCapUsd: number | null | undefined,
-  hardCapUsd: number | null | undefined,
+  softCaps: (number | null)[],
+  hardCaps: (number | null)[],
 ): void {
-  if (softCapUsd != null) {
+  if (softCaps.some((value) => value != null)) {
     datasets.push({
       label: 'Soft cap',
-      data: Array.from({ length }, () => softCapUsd),
+      data: softCaps,
       borderColor: SOFT_CAP_COLOR,
       borderDash: [3, 3],
       fill: false,
       pointRadius: 0,
       tension: 0,
+      spanGaps: true,
+      stepped: true,
     })
   }
 
-  if (hardCapUsd != null) {
+  if (hardCaps.some((value) => value != null)) {
     datasets.push({
       label: 'Hard cap',
-      data: Array.from({ length }, () => hardCapUsd),
+      data: hardCaps,
       borderColor: HARD_CAP_COLOR,
       borderDash: [3, 3],
       fill: false,
       pointRadius: 0,
       tension: 0,
+      spanGaps: true,
+      stepped: true,
     })
   }
 }
@@ -73,6 +80,13 @@ export function useTenantBudgetSpend(tenantId: string, options: UseTenantBudgetS
   const projectedPeriodSpendUsd = computed(() => spend.value?.projectedPeriodSpendUsd ?? null)
 
   const hasBudget = computed(() => softCapUsd.value != null || hardCapUsd.value != null)
+
+  // Manual spend resets this period across the tenant's clients. The summed caps above already include their
+  // allowance, so this exists to explain a raised total rather than to adjust it.
+  const resetCount = computed(() => spend.value?.resetCount ?? 0)
+  const hasResets = computed(() => resetCount.value > 0)
+  const lastResetAt = computed(() => spend.value?.lastResetAt ?? null)
+
   const isOverSoftCap = computed(() => softCapUsd.value != null && spentToDateUsd.value >= softCapUsd.value)
   const isOverHardCap = computed(() => hardCapUsd.value != null && spentToDateUsd.value >= hardCapUsd.value)
   const projectedToExceedSoftCap = computed(
@@ -125,7 +139,11 @@ export function useTenantBudgetSpend(tenantId: string, options: UseTenantBudgetS
       },
     ]
 
-    appendCapLines(datasets, months.length, softCapUsd.value, hardCapUsd.value)
+    appendCapSeries(
+      datasets,
+      months.map((m) => m.effectiveSoftCapUsd ?? softCapUsd.value),
+      months.map((m) => m.effectiveHardCapUsd ?? hardCapUsd.value),
+    )
     return { labels, datasets }
   })
 
@@ -178,6 +196,9 @@ export function useTenantBudgetSpend(tenantId: string, options: UseTenantBudgetS
     hardCapUsd,
     projectedPeriodSpendUsd,
     hasBudget,
+    resetCount,
+    hasResets,
+    lastResetAt,
     isOverSoftCap,
     isOverHardCap,
     projectedToExceedSoftCap,

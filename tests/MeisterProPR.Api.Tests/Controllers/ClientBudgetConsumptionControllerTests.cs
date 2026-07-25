@@ -139,6 +139,118 @@ public sealed class ClientBudgetConsumptionControllerTests(ClientBudgetConsumpti
         Assert.Equal(HttpStatusCode.Conflict, response.StatusCode);
     }
 
+    [Fact]
+    public async Task ResetSpend_WithoutCredentials_Returns401()
+    {
+        var http = factory.CreateClient();
+        using var request = new HttpRequestMessage(HttpMethod.Post, $"/admin/clients/{factory.ClientId}/budget/reset");
+
+        var response = await http.SendAsync(request);
+
+        Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task ResetSpend_WhenApplied_ReturnsTheRecordedResetWithItsBeforeAndAfterCaps()
+    {
+        factory.BudgetingAvailable = true;
+        factory.ResetOutcome = BudgetSpendResetOutcome.Applied;
+        var http = factory.CreateClient();
+        using var request = new HttpRequestMessage(HttpMethod.Post, $"/admin/clients/{factory.ClientId}/budget/reset");
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", factory.GenerateAdminToken());
+
+        var response = await http.SendAsync(request);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var body = JsonDocument.Parse(await response.Content.ReadAsStringAsync()).RootElement;
+        Assert.Equal(100m, body.GetProperty("effectiveHardCapBeforeUsd").GetDecimal());
+        Assert.Equal(200m, body.GetProperty("effectiveHardCapAfterUsd").GetDecimal());
+        Assert.Equal(100m, body.GetProperty("topUpHardCapUsd").GetDecimal());
+    }
+
+    [Fact]
+    public async Task ResetSpend_PassesTheAuthenticatedAdministratorAsTheActor()
+    {
+        factory.BudgetingAvailable = true;
+        factory.ResetOutcome = BudgetSpendResetOutcome.Applied;
+        var http = factory.CreateClient();
+        using var request = new HttpRequestMessage(HttpMethod.Post, $"/admin/clients/{factory.ClientId}/budget/reset");
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", factory.GenerateAdminToken());
+
+        await http.SendAsync(request);
+
+        await factory.Reset.Received().ResetAsync(
+            factory.ClientId,
+            Arg.Is<Guid?>(actor => actor != null && actor != Guid.Empty),
+            Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task ResetSpend_WhenNoCapIsConfigured_Returns400()
+    {
+        factory.BudgetingAvailable = true;
+        factory.ResetOutcome = BudgetSpendResetOutcome.NoMonthlyCapConfigured;
+        var http = factory.CreateClient();
+        using var request = new HttpRequestMessage(HttpMethod.Post, $"/admin/clients/{factory.ClientId}/budget/reset");
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", factory.GenerateAdminToken());
+
+        var response = await http.SendAsync(request);
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task ResetSpend_WhenTheClientIsUnknown_Returns404()
+    {
+        factory.BudgetingAvailable = true;
+        factory.ResetOutcome = BudgetSpendResetOutcome.ClientNotFound;
+        var http = factory.CreateClient();
+        using var request = new HttpRequestMessage(HttpMethod.Post, $"/admin/clients/{factory.ClientId}/budget/reset");
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", factory.GenerateAdminToken());
+
+        var response = await http.SendAsync(request);
+
+        Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task ResetSpend_WhenNotLicensed_ReturnsPremiumUnavailableAndGrantsNothing()
+    {
+        factory.BudgetingAvailable = false;
+        factory.Reset.ClearReceivedCalls();
+        var http = factory.CreateClient();
+        using var request = new HttpRequestMessage(HttpMethod.Post, $"/admin/clients/{factory.ClientId}/budget/reset");
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", factory.GenerateAdminToken());
+
+        var response = await http.SendAsync(request);
+
+        Assert.Equal(HttpStatusCode.Conflict, response.StatusCode);
+        var body = JsonDocument.Parse(await response.Content.ReadAsStringAsync()).RootElement;
+        Assert.Equal("premium_feature_unavailable", body.GetProperty("error").GetString());
+        // The gate must run before the grant, not merely shape the response after it.
+        await factory.Reset.DidNotReceive().ResetAsync(
+            Arg.Any<Guid>(),
+            Arg.Any<Guid?>(),
+            Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task ResetSpend_WithoutCredentials_GrantsNothing()
+    {
+        factory.BudgetingAvailable = true;
+        factory.Reset.ClearReceivedCalls();
+        var http = factory.CreateClient();
+        using var request = new HttpRequestMessage(HttpMethod.Post, $"/admin/clients/{factory.ClientId}/budget/reset");
+
+        var response = await http.SendAsync(request);
+
+        Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+        await factory.Reset.DidNotReceive().ResetAsync(
+            Arg.Any<Guid>(),
+            Arg.Any<Guid?>(),
+            Arg.Any<CancellationToken>());
+    }
+
     public sealed class BudgetApiFactory : WebApplicationFactory<Program>
     {
         private const string TestJwtSecret = "test-budget-consumption-jwt-32ch";
@@ -150,6 +262,12 @@ public sealed class ClientBudgetConsumptionControllerTests(ClientBudgetConsumpti
 
         /// <summary>The substituted consumption service, exposed so tests can assert on the arguments it received.</summary>
         public IClientBudgetConsumptionService Consumption { get; } = Substitute.For<IClientBudgetConsumptionService>();
+
+        /// <summary>The substituted reset service, exposed so tests can assert on the arguments it received.</summary>
+        public IClientBudgetResetService Reset { get; } = Substitute.For<IClientBudgetResetService>();
+
+        /// <summary>Steers what the substituted reset service reports, so the controller's mapping can be tested.</summary>
+        public BudgetSpendResetOutcome ResetOutcome { get; set; } = BudgetSpendResetOutcome.Applied;
 
         /// <summary>Toggles whether the substituted licensing service reports the Budgeting capability as available.</summary>
         public bool BudgetingAvailable { get; set; } = true;
@@ -185,7 +303,8 @@ public sealed class ClientBudgetConsumptionControllerTests(ClientBudgetConsumpti
                 80m,
                 100m,
                 88m,
-                [new BudgetDailySpendDto(new DateOnly(2026, 7, 15), 42m)]);
+                [new BudgetDailySpendDto(new DateOnly(2026, 7, 15), 42m)],
+                []);
 
         private ClientBudgetHistoryDto SampleHistory() =>
             new(
@@ -193,9 +312,29 @@ public sealed class ClientBudgetConsumptionControllerTests(ClientBudgetConsumpti
                 80m,
                 100m,
                 [
-                    new BudgetMonthSpendDto(2026, 6, new DateOnly(2026, 6, 1), 55m, false),
-                    new BudgetMonthSpendDto(2026, 7, new DateOnly(2026, 7, 1), 42m, false),
+                    new BudgetMonthSpendDto(2026, 6, new DateOnly(2026, 6, 1), 55m, false, 80m, 100m),
+                    new BudgetMonthSpendDto(2026, 7, new DateOnly(2026, 7, 1), 42m, false, 160m, 200m, 1),
                 ]);
+
+        private BudgetSpendResetResult SampleResetResult() =>
+            this.ResetOutcome is BudgetSpendResetOutcome.Applied
+                ? new BudgetSpendResetResult(
+                    BudgetSpendResetOutcome.Applied,
+                    new BudgetSpendReset
+                    {
+                        Id = Guid.NewGuid(),
+                        ClientId = this.ClientId,
+                        PeriodStart = new DateOnly(2026, 7, 1),
+                        TopUpSoftCapUsd = 80m,
+                        TopUpHardCapUsd = 100m,
+                        EffectiveSoftCapBeforeUsd = 80m,
+                        EffectiveSoftCapAfterUsd = 160m,
+                        EffectiveHardCapBeforeUsd = 100m,
+                        EffectiveHardCapAfterUsd = 200m,
+                        ActorUserId = Guid.NewGuid(),
+                        PerformedAt = new DateTime(2026, 7, 15, 9, 14, 0, DateTimeKind.Utc),
+                    })
+                : new BudgetSpendResetResult(this.ResetOutcome, null);
 
         protected override void ConfigureWebHost(IWebHostBuilder builder)
         {
@@ -227,6 +366,11 @@ public sealed class ClientBudgetConsumptionControllerTests(ClientBudgetConsumpti
                 this.Consumption.GetHistoryAsync(this.ClientId, Arg.Any<int>(), Arg.Any<CancellationToken>())
                     .Returns(_ => Task.FromResult(this.SampleHistory()));
                 services.AddScoped(_ => this.Consumption);
+
+                // Substitute the reset service the same way, so the endpoint's status mapping is what gets tested.
+                this.Reset.ResetAsync(this.ClientId, Arg.Any<Guid?>(), Arg.Any<CancellationToken>())
+                    .Returns(_ => Task.FromResult(this.SampleResetResult()));
+                services.AddScoped(_ => this.Reset);
 
                 // Substitute licensing so availability is controllable per test via BudgetingAvailable.
                 var licensing = Substitute.For<ILicensingCapabilityService>();

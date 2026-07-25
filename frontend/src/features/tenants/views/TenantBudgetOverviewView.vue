@@ -48,6 +48,8 @@
                         </label>
                     </div>
 
+                    <p v-if="vm.resetError.value" class="error">{{ vm.resetError.value }}</p>
+
                     <p v-if="vm.rows.value.length === 0" class="muted-hint">
                         {{ (vm.overview.value.clients?.length ?? 0) === 0 ? 'No clients in this tenant yet.' : 'No clients match your filter.' }}
                     </p>
@@ -68,21 +70,40 @@
                             <span class="overview-util" :class="`is-${row.status}`">
                                 {{ row.hasBudget ? `${Math.round(row.meterPercent)}%` : '—' }}
                             </span>
+                            <div class="overview-actions">
+                                <span v-if="row.resetCount > 0" class="reset-chip" data-testid="reset-marker">
+                                    <i class="fi fi-rr-refresh"></i>
+                                    Reset ×{{ row.resetCount }}
+                                </span>
+                                <button v-if="row.hasBudget" class="btn-secondary btn-sm" type="button"
+                                    data-testid="reset-spend-button"
+                                    :disabled="vm.resettingClientId.value !== null"
+                                    @click="askReset(row)">
+                                    {{ vm.resettingClientId.value === row.clientId ? 'Resetting…' : 'Reset spend' }}
+                                </button>
+                            </div>
                         </li>
                     </ul>
                 </template>
             </div>
         </section>
+
+        <ConfirmDialog :open="pendingReset !== null" :message="resetConfirmMessage" @confirm="onConfirmReset"
+            @cancel="pendingReset = null" />
     </div>
 </template>
 
 <script lang="ts" setup>
-import { computed, onMounted } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { RouterLink, useRoute } from 'vue-router'
+import ConfirmDialog from '@/components/dialogs/ConfirmDialog.vue'
 import { formatUsd } from '@/components/usageDashboardFormatters'
 import { useSession } from '@/composables/useSession'
 import BudgetMeter from '@/features/clients/components/BudgetMeter.vue'
-import { useTenantBudgetOverview } from '@/features/tenants/view-models/useTenantBudgetOverview'
+import {
+    useTenantBudgetOverview,
+    type OverviewRow,
+} from '@/features/tenants/view-models/useTenantBudgetOverview'
 
 const route = useRoute()
 const tenantId = String(route.params.tenantId ?? '')
@@ -92,6 +113,35 @@ const isBudgetingAvailable = computed(() => isCapabilityAvailable('budgeting'))
 const budgetingUpgradeMessage = computed(() => getCapability('budgeting')?.message ?? '')
 
 const vm = useTenantBudgetOverview(tenantId)
+
+const pendingReset = ref<OverviewRow | null>(null)
+
+/**
+ * The grant equals the client's configured monthly cap, which this aggregate row does not carry, so the prompt names
+ * the client and the ceiling in force rather than inventing a figure.
+ */
+const resetConfirmMessage = computed(() => {
+    const row = pendingReset.value
+    if (row === null) {
+        return ''
+    }
+    const cap = row.meterCapUsd
+    return `Grant ${row.displayName} a fresh allowance equal to its configured monthly cap? `
+        + (cap === null ? '' : `The effective cap rises above the current ${formatUsd(cap)}. `)
+        + `Spend to date (${formatUsd(row.spentToDateUsd)}) is preserved.`
+})
+
+function askReset(row: OverviewRow): void {
+    pendingReset.value = row
+}
+
+async function onConfirmReset(): Promise<void> {
+    const row = pendingReset.value
+    pendingReset.value = null
+    if (row !== null) {
+        await vm.resetClientSpend(row.clientId)
+    }
+}
 
 function formatDate(value: string | null | undefined): string {
     if (!value) {
@@ -160,11 +210,30 @@ onMounted(() => {
 
 .overview-row {
     display: grid;
-    grid-template-columns: minmax(8rem, 1.5fr) minmax(6rem, 2fr) minmax(7rem, auto) 3.5rem;
+    grid-template-columns: minmax(8rem, 1.5fr) minmax(6rem, 2fr) minmax(7rem, auto) 3.5rem auto;
     align-items: center;
     gap: 1rem;
     padding: 0.7rem 0;
     border-bottom: 1px solid var(--color-border);
+}
+
+.overview-actions {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 0.5rem;
+}
+
+.reset-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    padding: 0.15rem 0.6rem;
+    border: 1px solid var(--color-warning);
+    border-radius: var(--radius-pill);
+    color: var(--color-warning);
+    font-size: 0.75rem;
+    white-space: nowrap;
 }
 
 .overview-client {

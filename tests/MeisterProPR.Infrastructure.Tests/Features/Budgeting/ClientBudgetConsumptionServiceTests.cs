@@ -22,13 +22,39 @@ public sealed class ClientBudgetConsumptionServiceTests
     private readonly IBudgetCapsProvider _capsProvider = Substitute.For<IBudgetCapsProvider>();
     private readonly IClientTokenUsageRepository _usageRepository = Substitute.For<IClientTokenUsageRepository>();
 
+    private readonly IBudgetSpendResetRepository _resetRepository = Substitute.For<IBudgetSpendResetRepository>();
+    private readonly IUserRepository _userRepository = Substitute.For<IUserRepository>();
+
     private ClientBudgetConsumptionService CreateService(DateTimeOffset now)
     {
-        return new ClientBudgetConsumptionService(this._capsProvider, this._usageRepository, new FixedTimeProvider(now));
+        return new ClientBudgetConsumptionService(
+            this._capsProvider,
+            this._usageRepository,
+            this._resetRepository,
+            this._userRepository,
+            new FixedTimeProvider(now));
     }
 
-    private void GivenCaps(BudgetCaps caps) =>
+    /// <summary>Stubs every cap read the service can make, so a test's caps hold whichever period it asks about.</summary>
+    private void GivenCaps(BudgetCaps caps)
+    {
         this._capsProvider.GetCapsAsync(ClientId, Arg.Any<CancellationToken>()).Returns(caps);
+        this._capsProvider.GetConfiguredCapsAsync(ClientId, Arg.Any<CancellationToken>()).Returns(caps);
+    }
+
+    private void GivenResets(params BudgetSpendReset[] resets)
+    {
+        this._resetRepository
+            .GetByClientAndPeriodAsync(ClientId, Arg.Any<DateOnly>(), Arg.Any<CancellationToken>())
+            .Returns(resets);
+        this._resetRepository
+            .GetForClientsInRangeAsync(
+                Arg.Any<IReadOnlyCollection<Guid>>(),
+                Arg.Any<DateOnly>(),
+                Arg.Any<DateOnly>(),
+                Arg.Any<CancellationToken>())
+            .Returns(resets);
+    }
 
     private void GivenSamples(params ClientTokenUsageSample[] samples) =>
         this._usageRepository
@@ -168,6 +194,114 @@ public sealed class ClientBudgetConsumptionServiceTests
         Assert.Equal((2026, 6, 0m), (history.Months[1].Year, history.Months[1].Month, history.Months[1].SpentUsd));
         Assert.Equal((2026, 7, 8m), (history.Months[2].Year, history.Months[2].Month, history.Months[2].SpentUsd));
     }
+
+    [Fact]
+    public async Task GetConsumptionAsync_ComposesCapsFromTheRequestedPeriodsResets_NotTheCurrentOnes()
+    {
+        this.GivenCaps(new BudgetCaps(80m, 100m, null, null, null, null));
+        this.GivenResets(ResetRow(new DateOnly(2026, 6, 1), Guid.NewGuid()));
+
+        var service = this.CreateService(new DateTimeOffset(2026, 7, 15, 0, 0, 0, TimeSpan.Zero));
+        await service.GetConsumptionAsync(ClientId, 2026, 6);
+
+        // The resets asked for are June's, because June is the period under report.
+        await this._resetRepository.Received().GetByClientAndPeriodAsync(
+            ClientId,
+            new DateOnly(2026, 6, 1),
+            Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task GetConsumptionAsync_ReportsBothTheCapInForceAndTheConfiguredBaseline()
+    {
+        this.GivenCaps(new BudgetCaps(80m, 100m, null, null, null, null));
+        this.GivenResets(ResetRow(new DateOnly(2026, 7, 1), Guid.NewGuid()));
+
+        var service = this.CreateService(new DateTimeOffset(2026, 7, 15, 0, 0, 0, TimeSpan.Zero));
+        var result = await service.GetConsumptionAsync(ClientId);
+
+        // The meter reads against the cumulative cap; the configured pair says what a further reset would grant.
+        Assert.Equal(160m, result.MonthlySoftCapUsd);
+        Assert.Equal(200m, result.MonthlyHardCapUsd);
+        Assert.Equal(80m, result.ConfiguredSoftCapUsd);
+        Assert.Equal(100m, result.ConfiguredHardCapUsd);
+    }
+
+    [Fact]
+    public async Task GetConsumptionAsync_ReportsThePeriodsResetsWithTheActorsName()
+    {
+        this.GivenCaps(new BudgetCaps(80m, 100m, null, null, null, null));
+        var actor = Guid.NewGuid();
+        this.GivenResets(ResetRow(new DateOnly(2026, 7, 1), actor));
+        this._userRepository.GetByIdAsync(actor, Arg.Any<CancellationToken>()).Returns(new AppUser { Id = actor, Username = "saen" });
+
+        var service = this.CreateService(new DateTimeOffset(2026, 7, 15, 0, 0, 0, TimeSpan.Zero));
+        var result = await service.GetConsumptionAsync(ClientId);
+
+        var reset = Assert.Single(result.Resets);
+        Assert.Equal("saen", reset.ActorUsername);
+        Assert.Equal(actor, reset.ActorUserId);
+        Assert.Equal(100m, reset.EffectiveHardCapBeforeUsd);
+        Assert.Equal(200m, reset.EffectiveHardCapAfterUsd);
+        // The meter reads against the cumulative cap the provider resolved.
+        Assert.Equal(200m, result.MonthlyHardCapUsd);
+    }
+
+    [Fact]
+    public async Task GetConsumptionAsync_ReportsNoResets_ForAPeriodThatWasNeverReset()
+    {
+        this.GivenCaps(new BudgetCaps(80m, 100m, null, null, null, null));
+        this.GivenResets();
+
+        var service = this.CreateService(new DateTimeOffset(2026, 7, 15, 0, 0, 0, TimeSpan.Zero));
+        var result = await service.GetConsumptionAsync(ClientId);
+
+        Assert.Empty(result.Resets);
+    }
+
+    [Fact]
+    public async Task GetHistoryAsync_RaisesOnlyTheCapOfTheMonthThatWasReset()
+    {
+        // The configured caps are the baseline; only July received an extra $100/$100 allowance. The current-period
+        // caps are stubbed HIGHER so this fails if the history ever composes from them instead of the baseline.
+        this.GivenCaps(new BudgetCaps(80m, 100m, null, null, null, null));
+        this._capsProvider
+            .GetCapsAsync(ClientId, Arg.Any<CancellationToken>())
+            .Returns(new BudgetCaps(999m, 999m, null, null, null, null));
+        this.GivenResets(ResetRow(new DateOnly(2026, 7, 1), Guid.NewGuid()));
+
+        var service = this.CreateService(new DateTimeOffset(2026, 7, 15, 0, 0, 0, TimeSpan.Zero));
+        var history = await service.GetHistoryAsync(ClientId, monthsBack: 3);
+
+        // The window queried is the one charted: May through the current month, not some wider range.
+        await this._resetRepository.Received().GetForClientsInRangeAsync(
+            Arg.Is<IReadOnlyCollection<Guid>>(ids => ids.Single() == ClientId),
+            new DateOnly(2026, 5, 1),
+            new DateOnly(2026, 7, 1),
+            Arg.Any<CancellationToken>());
+        // The top-level pair stays the configured baseline.
+        Assert.Equal(100m, history.MonthlyHardCapUsd);
+        Assert.Equal(100m, history.Months[1].EffectiveHardCapUsd);
+        Assert.Equal(0, history.Months[1].ResetCount);
+        Assert.Equal(200m, history.Months[2].EffectiveHardCapUsd);
+        Assert.Equal(160m, history.Months[2].EffectiveSoftCapUsd);
+        Assert.Equal(1, history.Months[2].ResetCount);
+    }
+
+    private static BudgetSpendReset ResetRow(DateOnly periodStart, Guid actorUserId) => new()
+    {
+        Id = Guid.NewGuid(),
+        ClientId = ClientId,
+        PeriodStart = periodStart,
+        TopUpSoftCapUsd = 80m,
+        TopUpHardCapUsd = 100m,
+        EffectiveSoftCapBeforeUsd = 80m,
+        EffectiveSoftCapAfterUsd = 160m,
+        EffectiveHardCapBeforeUsd = 100m,
+        EffectiveHardCapAfterUsd = 200m,
+        ActorUserId = actorUserId,
+        PerformedAt = new DateTime(2026, 7, 15, 9, 14, 0, DateTimeKind.Utc),
+    };
 
     private static ClientTokenUsageSample Sample(DateOnly date, decimal? costUsd, string modelId = "gpt-4o") =>
         new()

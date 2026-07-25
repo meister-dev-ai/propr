@@ -8,9 +8,15 @@ import {
   type TenantBudgetOverview,
   type TenantBudgetOverviewClient,
 } from '@/services/tenantBudgetOverviewService'
+import { resetClientBudgetSpend, type BudgetSpendReset } from '@/services/budgetConsumptionService'
 
 export interface TenantBudgetOverviewLoadResult {
   data?: TenantBudgetOverview | null
+  error?: unknown
+}
+
+export interface TenantSpendResetResult {
+  data?: BudgetSpendReset | null
   error?: unknown
 }
 
@@ -27,11 +33,15 @@ export interface OverviewRow {
   meterCapUsd: number | null
   meterPercent: number
   status: 'ok' | 'warning' | 'danger'
+  /** Manual spend resets this client received in the current period; the caps above already include their allowance. */
+  resetCount: number
 }
 
 export interface UseTenantBudgetOverviewOptions {
   /** Overridable loader for tests; defaults to the live tenant-overview endpoint. */
   loader?: (tenantId: string) => Promise<TenantBudgetOverviewLoadResult>
+  /** Overridable per-client reset action for tests; defaults to the live budget-reset endpoint. */
+  resetAction?: (clientId: string) => Promise<TenantSpendResetResult>
 }
 
 function toRow(client: TenantBudgetOverviewClient): OverviewRow {
@@ -59,17 +69,21 @@ function toRow(client: TenantBudgetOverviewClient): OverviewRow {
     meterCapUsd: meterCap,
     meterPercent,
     status,
+    resetCount: client.resetCount ?? 0,
   }
 }
 
 export function useTenantBudgetOverview(tenantId: string, options: UseTenantBudgetOverviewOptions = {}) {
   const load = options.loader ?? getTenantBudgetOverview
+  const resetFn = options.resetAction ?? resetClientBudgetSpend
 
   const overview = ref<TenantBudgetOverview | null>(null)
   const loading = ref(false)
   const error = ref('')
   const search = ref('')
   const sortBy = ref<OverviewSortKey>('spend')
+  const resettingClientId = ref<string | null>(null)
+  const resetError = ref('')
 
   const allRows = computed<OverviewRow[]>(() => (overview.value?.clients ?? []).map(toRow))
 
@@ -106,6 +120,38 @@ export function useTenantBudgetOverview(tenantId: string, options: UseTenantBudg
     }
   }
 
+  /**
+   * Grants one client's current period a fresh allowance, then reloads the overview so its row shows the raised cap
+   * and the reset marker. Resets stay per client — the tenant view is an entry point, not a bulk action.
+   */
+  async function resetClientSpend(clientId: string): Promise<boolean> {
+    if (!clientId) {
+      resetError.value = 'That client row is missing an identifier, so it cannot be reset.'
+      return false
+    }
+
+    if (resettingClientId.value !== null) {
+      return false
+    }
+
+    resettingClientId.value = clientId
+    resetError.value = ''
+    try {
+      const { data, error: actionError } = await resetFn(clientId)
+      if (actionError || !data) {
+        resetError.value = 'Failed to reset the spend for that client. Please try again.'
+        return false
+      }
+      await loadOverview()
+      return true
+    } catch {
+      resetError.value = 'Failed to reset the spend for that client. Please try again.'
+      return false
+    } finally {
+      resettingClientId.value = null
+    }
+  }
+
   return {
     overview,
     loading,
@@ -114,5 +160,8 @@ export function useTenantBudgetOverview(tenantId: string, options: UseTenantBudg
     sortBy,
     rows,
     loadOverview,
+    resettingClientId,
+    resetError,
+    resetClientSpend,
   }
 }

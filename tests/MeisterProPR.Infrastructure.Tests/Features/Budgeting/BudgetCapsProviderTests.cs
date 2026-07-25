@@ -3,6 +3,7 @@
 
 using MeisterProPR.Application.Features.Licensing.Models;
 using MeisterProPR.Application.Features.Licensing.Ports;
+using MeisterProPR.Domain.Entities;
 using MeisterProPR.Infrastructure.Data;
 using MeisterProPR.Infrastructure.Data.Models;
 using MeisterProPR.Infrastructure.Features.Budgeting;
@@ -16,14 +17,21 @@ namespace MeisterProPR.Infrastructure.Tests.Features.Budgeting;
 
 /// <summary>
 ///     Integration tests for <see cref="BudgetCapsProvider" /> against a real PostgreSQL instance, covering the
-///     Budgeting license gate.
+///     Budgeting license gate and the manual-reset allowance folded into the monthly caps.
 /// </summary>
 [Collection("PostgresIntegration")]
 public sealed class BudgetCapsProviderTests(PostgresContainerFixture fixture) : IAsyncLifetime
 {
+    /// <summary>
+    ///     A fixed "now" shared by the provider and the fixtures, so a run that straddles a UTC month boundary
+    ///     cannot flip which period a reset belongs to.
+    /// </summary>
+    private static readonly DateTimeOffset Now = new(2026, 7, 15, 9, 14, 0, TimeSpan.Zero);
+
     private Guid _clientId;
     private MeisterProPRDbContext _dbContext = null!;
     private TestDbContextFactory _factory = null!;
+    private BudgetSpendResetRepository _resetRepository = null!;
 
     public async Task InitializeAsync()
     {
@@ -34,6 +42,7 @@ public sealed class BudgetCapsProviderTests(PostgresContainerFixture fixture) : 
             .Options;
         this._dbContext = new MeisterProPRDbContext(options);
         this._factory = new TestDbContextFactory(options);
+        this._resetRepository = new BudgetSpendResetRepository(this._factory);
 
         this._clientId = Guid.NewGuid();
         this._dbContext.Clients.Add(
@@ -56,6 +65,7 @@ public sealed class BudgetCapsProviderTests(PostgresContainerFixture fixture) : 
             return;
         }
 
+        await this._dbContext.BudgetSpendResets.Where(r => r.ClientId == this._clientId).ExecuteDeleteAsync();
         await this._dbContext.Clients.Where(c => c.Id == this._clientId).ExecuteDeleteAsync();
         await this._dbContext.DisposeAsync();
     }
@@ -65,7 +75,7 @@ public sealed class BudgetCapsProviderTests(PostgresContainerFixture fixture) : 
     {
         var licensing = Substitute.For<ILicensingCapabilityService>();
         licensing.IsEnabledAsync(PremiumCapabilityKey.Budgeting, Arg.Any<CancellationToken>()).Returns(true);
-        var provider = new BudgetCapsProvider(this._factory, licensing);
+        var provider = this.CreateProvider(licensing);
 
         var caps = await provider.GetCapsAsync(this._clientId);
 
@@ -78,7 +88,7 @@ public sealed class BudgetCapsProviderTests(PostgresContainerFixture fixture) : 
     {
         var licensing = Substitute.For<ILicensingCapabilityService>();
         licensing.IsEnabledAsync(PremiumCapabilityKey.Budgeting, Arg.Any<CancellationToken>()).Returns(false);
-        var provider = new BudgetCapsProvider(this._factory, licensing);
+        var provider = this.CreateProvider(licensing);
 
         var caps = await provider.GetCapsAsync(this._clientId);
 
@@ -89,10 +99,68 @@ public sealed class BudgetCapsProviderTests(PostgresContainerFixture fixture) : 
     [Fact]
     public async Task GetCapsAsync_ReadsConfiguredCaps_WhenNoLicensingServiceIsRegistered()
     {
-        var provider = new BudgetCapsProvider(this._factory);
+        var provider = this.CreateProvider();
 
         var caps = await provider.GetCapsAsync(this._clientId);
 
         Assert.Equal(100m, caps.MonthlyHardCapUsd);
+    }
+
+    [Fact]
+    public async Task GetCapsAsync_AddsTheAllowanceGrantedByAResetInTheCurrentPeriod()
+    {
+        await this.GrantResetAsync(Now.UtcDateTime, topUpHardUsd: 100m);
+        var provider = this.CreateProvider();
+
+        var caps = await provider.GetCapsAsync(this._clientId);
+
+        Assert.Equal(200m, caps.MonthlyHardCapUsd);
+    }
+
+    [Fact]
+    public async Task GetCapsAsync_IgnoresAnAllowanceGrantedInAnotherPeriod()
+    {
+        await this.GrantResetAsync(Now.UtcDateTime.AddMonths(-1), topUpHardUsd: 100m);
+        var provider = this.CreateProvider();
+
+        var caps = await provider.GetCapsAsync(this._clientId);
+
+        Assert.Equal(100m, caps.MonthlyHardCapUsd);
+    }
+
+    [Fact]
+    public async Task GetConfiguredCapsAsync_ExcludesAnyGrantedAllowance()
+    {
+        await this.GrantResetAsync(Now.UtcDateTime, topUpHardUsd: 100m);
+        var provider = this.CreateProvider();
+
+        var caps = await provider.GetConfiguredCapsAsync(this._clientId);
+
+        Assert.Equal(100m, caps.MonthlyHardCapUsd);
+    }
+
+    private BudgetCapsProvider CreateProvider(ILicensingCapabilityService? licensing = null) =>
+        new(this._factory, this._resetRepository, new FixedTimeProvider(Now), licensing);
+
+    private async Task GrantResetAsync(DateTime performedAt, decimal topUpHardUsd)
+    {
+        var utc = performedAt.ToUniversalTime();
+        await this._resetRepository.AddAsync(
+            new BudgetSpendReset
+            {
+                Id = Guid.NewGuid(),
+                ClientId = this._clientId,
+                PeriodStart = new DateOnly(utc.Year, utc.Month, 1),
+                TopUpHardCapUsd = topUpHardUsd,
+                EffectiveHardCapBeforeUsd = 100m,
+                EffectiveHardCapAfterUsd = 100m + topUpHardUsd,
+                PerformedAt = utc,
+            },
+            CancellationToken.None);
+    }
+
+    private sealed class FixedTimeProvider(DateTimeOffset now) : TimeProvider
+    {
+        public override DateTimeOffset GetUtcNow() => now;
     }
 }

@@ -7,6 +7,8 @@ import type { ChartData } from 'chart.js'
 import {
   getClientBudgetConsumption,
   getClientBudgetHistory,
+  resetClientBudgetSpend,
+  type BudgetSpendReset,
   type ClientBudgetConsumption,
   type ClientBudgetHistory,
 } from '@/services/budgetConsumptionService'
@@ -21,11 +23,18 @@ export interface SpendHistoryLoadResult {
   error?: unknown
 }
 
+export interface SpendResetResult {
+  data?: BudgetSpendReset | null
+  error?: unknown
+}
+
 export interface UseClientSpendConsumptionOptions {
   /** Overridable single-period loader for tests; defaults to the live budget-consumption endpoint. */
   loader?: (clientId: string, period?: string) => Promise<SpendConsumptionLoadResult>
   /** Overridable history loader for tests; defaults to the live budget-history endpoint. */
   historyLoader?: (clientId: string, months: number) => Promise<SpendHistoryLoadResult>
+  /** Overridable reset action for tests; defaults to the live budget-reset endpoint. */
+  resetAction?: (clientId: string) => Promise<SpendResetResult>
   /** Trailing months of history to request (default 12). */
   monthsBack?: number
 }
@@ -64,27 +73,47 @@ function appendCapLines(
   softCapUsd: number | null | undefined,
   hardCapUsd: number | null | undefined,
 ): void {
-  if (softCapUsd != null) {
+  appendCapSeries(
+    datasets,
+    softCapUsd == null ? null : Array.from({ length }, () => softCapUsd),
+    hardCapUsd == null ? null : Array.from({ length }, () => hardCapUsd),
+  )
+}
+
+/**
+ * Appends cap reference lines from explicit per-point values, so a cap that changed across the window (a month that
+ * received a manual reset) renders as a step rather than one flat line.
+ */
+function appendCapSeries(
+  datasets: ChartData<'line'>['datasets'],
+  softCaps: (number | null)[] | null,
+  hardCaps: (number | null)[] | null,
+): void {
+  if (softCaps?.some((value) => value != null)) {
     datasets.push({
       label: 'Soft cap',
-      data: Array.from({ length }, () => softCapUsd),
+      data: softCaps,
       borderColor: SOFT_CAP_COLOR,
       borderDash: [3, 3],
       fill: false,
       pointRadius: 0,
       tension: 0,
+      spanGaps: true,
+      stepped: true,
     })
   }
 
-  if (hardCapUsd != null) {
+  if (hardCaps?.some((value) => value != null)) {
     datasets.push({
       label: 'Hard cap',
-      data: Array.from({ length }, () => hardCapUsd),
+      data: hardCaps,
       borderColor: HARD_CAP_COLOR,
       borderDash: [3, 3],
       fill: false,
       pointRadius: 0,
       tension: 0,
+      spanGaps: true,
+      stepped: true,
     })
   }
 }
@@ -95,6 +124,7 @@ export function useClientSpendConsumption(
 ) {
   const load = options.loader ?? getClientBudgetConsumption
   const loadHistoryFn = options.historyLoader ?? getClientBudgetHistory
+  const resetFn = options.resetAction ?? resetClientBudgetSpend
   const monthsBack = options.monthsBack ?? 12
 
   const consumption = ref<ClientBudgetConsumption | null>(null)
@@ -104,6 +134,9 @@ export function useClientSpendConsumption(
   const history = ref<ClientBudgetHistory | null>(null)
   const historyLoading = ref(false)
   const historyError = ref('')
+
+  const resetting = ref(false)
+  const resetError = ref('')
 
   // Period selection. Initialised to the current UTC month; the picker walks backwards from here and can never
   // advance past the current month.
@@ -136,6 +169,14 @@ export function useClientSpendConsumption(
   const spendIsApproximate = computed(() => consumption.value?.spendIsApproximate === true)
 
   const hasBudget = computed(() => softCapUsd.value != null || hardCapUsd.value != null)
+
+  // Manual spend resets recorded for the selected period. The caps above already include their allowance, so these
+  // exist to explain the raised ceiling rather than to adjust it.
+  const resets = computed<BudgetSpendReset[]>(() => consumption.value?.resets ?? [])
+  const resetCount = computed(() => resets.value.length)
+  const hasResets = computed(() => resetCount.value > 0)
+  /** A reset grants allowance to the period in progress, so it is offered on the current period only. */
+  const canReset = computed(() => isCurrentPeriod.value && hasBudget.value)
   const isOverSoftCap = computed(() => softCapUsd.value != null && spentToDateUsd.value >= softCapUsd.value)
   const isOverHardCap = computed(() => hardCapUsd.value != null && spentToDateUsd.value >= hardCapUsd.value)
   const projectedToExceedSoftCap = computed(
@@ -147,6 +188,15 @@ export function useClientSpendConsumption(
 
   /** The cap the progress meter fills toward: the hard cap when set, otherwise the soft cap. */
   const meterCapUsd = computed(() => hardCapUsd.value ?? softCapUsd.value)
+  /**
+   * The same scope as {@link meterCapUsd} but as configured, before any reset allowance — what a further reset would
+   * grant. Kept separate so nothing has to divide the cap in force to guess it.
+   */
+  const configuredMeterCapUsd = computed(() =>
+    hardCapUsd.value != null
+      ? (consumption.value?.configuredHardCapUsd ?? null)
+      : (consumption.value?.configuredSoftCapUsd ?? null),
+  )
   const meterPercent = computed(() => {
     const cap = meterCapUsd.value
     if (cap == null || cap <= 0) {
@@ -249,7 +299,12 @@ export function useClientSpendConsumption(
       },
     ]
 
-    appendCapLines(datasets, months.length, history.value?.monthlySoftCapUsd, history.value?.monthlyHardCapUsd)
+    // Each month carries the cap that was in force for it, so a reset month steps up instead of flattening the line.
+    appendCapSeries(
+      datasets,
+      months.map((m) => m.effectiveSoftCapUsd ?? history.value?.monthlySoftCapUsd ?? null),
+      months.map((m) => m.effectiveHardCapUsd ?? history.value?.monthlyHardCapUsd ?? null),
+    )
     return { labels, datasets }
   })
 
@@ -310,7 +365,48 @@ export function useClientSpendConsumption(
     }
   }
 
+  /**
+   * Grants the current period a fresh allowance, then reloads both views so the meter, the period marker and the
+   * history chart all read against the raised cap.
+   */
+  async function performReset(): Promise<boolean> {
+    if (!canReset.value || resetting.value) {
+      return false
+    }
+
+    // The server always resets the month IT considers current. A tab left open across a UTC month boundary still
+    // believes the old month is current, so re-read the clock and refuse rather than grant an unseen period.
+    const nowUtc = new Date()
+    if (nowUtc.getUTCFullYear() !== selectedYear.value || nowUtc.getUTCMonth() + 1 !== selectedMonth.value) {
+      resetError.value = 'The current month has changed since this page was opened. Reload before resetting.'
+      return false
+    }
+
+    resetting.value = true
+    resetError.value = ''
+    try {
+      const { data, error: actionError } = await resetFn(clientId)
+      if (actionError || !data) {
+        resetError.value = 'Failed to reset the spend for this period. Please try again.'
+        return false
+      }
+      await Promise.all([loadConsumption(), loadHistory()])
+      return true
+    } catch {
+      resetError.value = 'Failed to reset the spend for this period. Please try again.'
+      return false
+    } finally {
+      resetting.value = false
+    }
+  }
+
+  /** A reset failure belongs to the period it was attempted on, so it must not follow the picker to another month. */
+  function clearResetError(): void {
+    resetError.value = ''
+  }
+
   async function goToPreviousMonth(): Promise<void> {
+    clearResetError()
     if (selectedMonth.value === 1) {
       selectedMonth.value = 12
       selectedYear.value -= 1
@@ -324,6 +420,7 @@ export function useClientSpendConsumption(
     if (!canGoToNextMonth.value) {
       return
     }
+    clearResetError()
     if (selectedMonth.value === 12) {
       selectedMonth.value = 1
       selectedYear.value += 1
@@ -337,6 +434,7 @@ export function useClientSpendConsumption(
     if (isCurrentPeriod.value) {
       return
     }
+    clearResetError()
     selectedYear.value = currentYear
     selectedMonth.value = currentMonth
     await loadConsumption()
@@ -365,11 +463,19 @@ export function useClientSpendConsumption(
     projectedPeriodSpendUsd,
     spendIsApproximate,
     hasBudget,
+    resets,
+    resetCount,
+    hasResets,
+    canReset,
+    resetting,
+    resetError,
+    performReset,
     isOverSoftCap,
     isOverHardCap,
     projectedToExceedSoftCap,
     projectedToExceedHardCap,
     meterCapUsd,
+    configuredMeterCapUsd,
     meterPercent,
     remainingUsd,
     status,

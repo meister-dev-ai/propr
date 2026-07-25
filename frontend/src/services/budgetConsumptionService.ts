@@ -9,6 +9,7 @@ export type ClientBudgetConsumption = components['schemas']['ClientBudgetConsump
 export type BudgetDailySpend = components['schemas']['BudgetDailySpendDto']
 export type ClientBudgetHistory = components['schemas']['ClientBudgetHistoryDto']
 export type BudgetMonthSpend = components['schemas']['BudgetMonthSpendDto']
+export type BudgetSpendReset = components['schemas']['BudgetSpendResetDto']
 
 /**
  * Fetches the client's spend against its monthly budget for a period, with a trajectory projection.
@@ -28,5 +29,16 @@ export async function getClientBudgetConsumption(clientId: string, period?: stri
 export async function getClientBudgetHistory(clientId: string, months = 12) {
   return createAdminClient().GET('/admin/clients/{clientId}/budget/history', {
     params: { path: { clientId }, query: { months } },
+  })
+}
+
+/**
+ * Grants the client's current monthly period a fresh allowance on top of what it has already consumed.
+ * Spend to date is preserved; the period's effective cap rises by the configured cap.
+ * Backed by the licensed `POST /admin/clients/{clientId}/budget/reset` endpoint.
+ */
+export async function resetClientBudgetSpend(clientId: string) {
+  return createAdminClient().POST('/admin/clients/{clientId}/budget/reset', {
+    params: { path: { clientId } },
   })
 }

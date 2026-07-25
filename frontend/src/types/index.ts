@@ -3068,7 +3068,7 @@ export interface paths {
             };
             requestBody?: never;
             responses: {
-                /** @description Period spend, the currently configured caps, and (current month only) the projected period spend. */
+                /** @description Period spend, the caps in force for the period (configured plus any manual-reset allowance), and (current month only) the projected period spend. */
                 200: {
                     headers: {
                         [name: string]: unknown;
@@ -3204,6 +3204,106 @@ export interface paths {
         };
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/clients/{clientId}/budget/reset": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Grants the client's current monthly period a fresh allowance on top of what it has already consumed. Spend
+         *     to date is preserved; the period's effective cap becomes the cap in force before the reset plus the
+         *     configured cap. The reset is recorded with its actor for audit.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    /** @description Client identifier. */
+                    clientId: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description The recorded reset, including the effective caps before and after it. */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["BudgetSpendResetDto"];
+                        "application/json": components["schemas"]["BudgetSpendResetDto"];
+                        "text/json": components["schemas"]["BudgetSpendResetDto"];
+                    };
+                };
+                /** @description The client has no monthly budget cap configured, so there is no ceiling to raise. */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Missing or invalid credentials. */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Caller lacks access to the client. */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description No such client. */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description The Budgeting capability is not licensed for this installation. */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+            };
+        };
         delete?: never;
         options?: never;
         head?: never;
@@ -9770,7 +9870,7 @@ export interface paths {
             };
             requestBody?: never;
             responses: {
-                /** @description Per-client spend, configured caps, and projected period spend for the current period. */
+                /** @description Per-client spend, the caps in force this period (configured plus any manual-reset allowance), and projected period spend. */
                 200: {
                     headers: {
                         [name: string]: unknown;
@@ -12388,12 +12488,87 @@ export interface components {
             spentUsd?: number;
             /** @description True when some usage in the month lacked pricing, so the total is a lower bound. */
             spendIsApproximate?: boolean;
+            /**
+             * Format: double
+             * @description The soft cap in force for that month — the currently configured cap plus the allowance manual resets granted
+             *     in that month — or null when unset (no limit).
+             */
+            effectiveSoftCapUsd?: number | null;
+            /**
+             * Format: double
+             * @description The hard cap in force for that month, composed like EffectiveSoftCapUsd.
+             */
+            effectiveHardCapUsd?: number | null;
+            /**
+             * Format: int32
+             * @description How many manual spend resets the month received.
+             */
+            resetCount?: number;
         };
         /**
          * @description The granularity at which a USD budget cap is enforced.
          * @enum {string}
          */
         BudgetScopeKind: "clientMonthly" | "pullRequest" | "increment";
+        /**
+         * @description One manual spend reset an administrator performed on a client's monthly period: the extra allowance it
+         *     granted and the audit record of who granted it and what the period's ceiling was before and after. The
+         *     recorded caps describe the moment of the reset and do not change if the configured cap is edited later.
+         */
+        BudgetSpendResetDto: {
+            /**
+             * Format: uuid
+             * @description The reset identifier.
+             */
+            id?: string;
+            /**
+             * Format: date
+             * @description Inclusive first day of the monthly period the reset applies to (UTC).
+             */
+            periodStart?: string;
+            /**
+             * Format: double
+             * @description The monthly soft-cap allowance granted, or null when no soft cap was configured.
+             */
+            topUpSoftCapUsd?: number | null;
+            /**
+             * Format: double
+             * @description The monthly hard-cap allowance granted, or null when no hard cap was configured.
+             */
+            topUpHardCapUsd?: number | null;
+            /**
+             * Format: double
+             * @description The period's effective soft cap immediately before the reset.
+             */
+            effectiveSoftCapBeforeUsd?: number | null;
+            /**
+             * Format: double
+             * @description The period's effective soft cap immediately after the reset.
+             */
+            effectiveSoftCapAfterUsd?: number | null;
+            /**
+             * Format: double
+             * @description The period's effective hard cap immediately before the reset.
+             */
+            effectiveHardCapBeforeUsd?: number | null;
+            /**
+             * Format: double
+             * @description The period's effective hard cap immediately after the reset.
+             */
+            effectiveHardCapAfterUsd?: number | null;
+            /**
+             * Format: uuid
+             * @description The administrator who performed the reset, or null when unresolved.
+             */
+            actorUserId?: string | null;
+            /** @description The administrator's username when it could be resolved, otherwise null. */
+            actorUsername?: string | null;
+            /**
+             * Format: date-time
+             * @description When the reset was performed (UTC).
+             */
+            performedAt?: string;
+        };
         /**
          * @description Why a budget held or stopped a review: the binding scope, whether the soft or hard cap was reached, the
          *     USD threshold, and the scope spend that reached it. Null when no budget blocked the job.
@@ -12466,12 +12641,13 @@ export interface components {
             spendIsApproximate?: boolean;
             /**
              * Format: double
-             * @description The configured monthly soft cap, or null when unset (no limit).
+             * @description The monthly soft cap in force for the period — the configured cap plus any allowance manual resets granted in
+             *     it — or null when unset (no limit).
              */
             monthlySoftCapUsd?: number | null;
             /**
              * Format: double
-             * @description The configured monthly hard cap, or null when unset (no limit).
+             * @description The monthly hard cap in force for the period, composed like MonthlySoftCapUsd.
              */
             monthlyHardCapUsd?: number | null;
             /**
@@ -12481,6 +12657,19 @@ export interface components {
             projectedPeriodSpendUsd?: number | null;
             /** @description Per-day estimated spend across the period, ordered by date ascending. */
             dailySpend?: components["schemas"]["BudgetDailySpendDto"][] | null;
+            /** @description The manual spend resets performed in this period, oldest first. Empty for a period that was never reset. */
+            resets?: components["schemas"]["BudgetSpendResetDto"][] | null;
+            /**
+             * Format: double
+             * @description The soft cap as configured on the client, before any reset allowance. Reported so a caller can show what a
+             *     further reset would grant; enforcement uses MonthlySoftCapUsd.
+             */
+            configuredSoftCapUsd?: number | null;
+            /**
+             * Format: double
+             * @description The hard cap as configured on the client, before any reset allowance.
+             */
+            configuredHardCapUsd?: number | null;
         };
         /**
          * @description Response DTO for `GET /admin/clients/{clientId}/budget/history`: the client's estimated USD spend per
@@ -14579,12 +14768,13 @@ export interface components {
             spentToDateUsd?: number;
             /**
              * Format: double
-             * @description The configured monthly soft cap, or null when unset (no limit).
+             * @description The monthly soft cap in force this period — the configured cap plus any allowance manual resets granted in it —
+             *     or null when unset (no limit).
              */
             monthlySoftCapUsd?: number | null;
             /**
              * Format: double
-             * @description The configured monthly hard cap, or null when unset (no limit).
+             * @description The monthly hard cap in force this period, composed like MonthlySoftCapUsd.
              */
             monthlyHardCapUsd?: number | null;
             /**
@@ -14592,6 +14782,11 @@ export interface components {
              * @description The projected full-period spend on the current run-rate.
              */
             projectedPeriodSpendUsd?: number | null;
+            /**
+             * Format: int32
+             * @description How many manual spend resets the client received this period.
+             */
+            resetCount?: number;
         };
         /**
          * @description Response DTO for `GET /admin/tenants/{tenantId}/budget/overview`: current-period spend against budget
@@ -14726,12 +14921,13 @@ export interface components {
             spentToDateUsd?: number;
             /**
              * Format: double
-             * @description Sum of the tenant's clients' monthly soft caps, or null when none are configured.
+             * @description Sum of the caps in force for the tenant's clients this period (each client's configured soft cap plus any
+             *     allowance its manual resets granted), or null when none are configured.
              */
             monthlySoftCapUsd?: number | null;
             /**
              * Format: double
-             * @description Sum of the tenant's clients' monthly hard caps, or null when none are configured.
+             * @description Sum of the tenant's clients' hard caps in force this period, composed like MonthlySoftCapUsd.
              */
             monthlyHardCapUsd?: number | null;
             /**
@@ -14741,6 +14937,16 @@ export interface components {
             projectedPeriodSpendUsd?: number | null;
             /** @description Per-month aggregate spend over the trailing window, oldest first. */
             months?: components["schemas"]["TenantSpendMonthDto"][] | null;
+            /**
+             * Format: int32
+             * @description How many manual spend resets the tenant's clients received this period, in total.
+             */
+            resetCount?: number;
+            /**
+             * Format: date-time
+             * @description When the most recent manual spend reset in this period was performed (UTC), or null when none.
+             */
+            lastResetAt?: string | null;
         };
         /** @description Aggregated USD spend for a single calendar month across a tenant. */
         TenantSpendMonthDto: {
@@ -14764,6 +14970,22 @@ export interface components {
              * @description Aggregate estimated USD spent across the tenant's clients that month (month-to-date for the current month).
              */
             spentUsd?: number;
+            /**
+             * Format: double
+             * @description Sum of the soft caps in force for that month — each client's configured cap plus the allowance its resets
+             *     granted in that month — or null when no client capped that scope.
+             */
+            effectiveSoftCapUsd?: number | null;
+            /**
+             * Format: double
+             * @description Sum of the hard caps in force for that month, composed like EffectiveSoftCapUsd.
+             */
+            effectiveHardCapUsd?: number | null;
+            /**
+             * Format: int32
+             * @description How many manual spend resets the tenant's clients received that month, in total.
+             */
+            resetCount?: number;
         };
         /** @description Tenant-owned external sign-in provider metadata returned by admin APIs. */
         TenantSsoProviderDto: {

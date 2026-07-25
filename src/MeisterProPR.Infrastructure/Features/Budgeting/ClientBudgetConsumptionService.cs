@@ -11,15 +11,18 @@ using MeisterProPR.Domain.Services;
 namespace MeisterProPR.Infrastructure.Features.Budgeting;
 
 /// <summary>
-///     Composes a client's monthly budget consumption from the configured caps
-///     (<see cref="IBudgetCapsProvider" />) and the per-client daily usage samples, and projects the full-period
-///     spend with <see cref="BudgetForecastCalculator" />. A period is the calendar month (UTC), so the total resets
-///     at the month boundary — the same period the guardrail phase enforces against. All spend sums are null-aware:
-///     unpriced usage is omitted from the total and flags the result approximate.
+///     Composes a client's monthly budget consumption from the caps in force for the period
+///     (<see cref="IBudgetCapsProvider" />, so any manual-reset allowance is included) and the per-client daily usage
+///     samples, and projects the full-period spend with <see cref="BudgetForecastCalculator" />. A period is the
+///     calendar month (UTC), so the total resets at the month boundary — the same period the guardrail phase enforces
+///     against. All spend sums are null-aware: unpriced usage is omitted from the total and flags the result
+///     approximate.
 /// </summary>
 public sealed class ClientBudgetConsumptionService(
     IBudgetCapsProvider capsProvider,
     IClientTokenUsageRepository usageRepository,
+    IBudgetSpendResetRepository resetRepository,
+    IUserRepository userRepository,
     TimeProvider timeProvider) : IClientBudgetConsumptionService
 {
     private const int MinHistoryMonths = 1;
@@ -32,13 +35,18 @@ public sealed class ClientBudgetConsumptionService(
         int? month = null,
         CancellationToken ct = default)
     {
-        var caps = await capsProvider.GetCapsAsync(clientId, ct).ConfigureAwait(false);
-
         var today = DateOnly.FromDateTime(timeProvider.GetUtcNow().UtcDateTime);
         var targetYear = year ?? today.Year;
         var targetMonth = month ?? today.Month;
 
         var periodStart = new DateOnly(targetYear, targetMonth, 1);
+        // The period's own resets compose its caps, so a past month reports the allowance that month actually
+        // received rather than the current month's. They are loaded once and reused for the audit list below.
+        var configured = await capsProvider.GetConfiguredCapsAsync(clientId, ct).ConfigureAwait(false);
+        var periodResets = await resetRepository
+            .GetByClientAndPeriodAsync(clientId, periodStart, ct)
+            .ConfigureAwait(false);
+        var caps = MonthlyBudgetTopUp.Apply(configured, MonthlyBudgetTopUp.SumTopUps(periodResets));
         var daysInPeriod = DateTime.DaysInMonth(targetYear, targetMonth);
         var periodEnd = new DateOnly(targetYear, targetMonth, daysInPeriod);
         // The last representable month (9999-12) has no next-month date; clamp so an out-of-range future period
@@ -73,6 +81,8 @@ public sealed class ClientBudgetConsumptionService(
             ? BudgetForecastCalculator.ProjectPeriodSpend(spentToDate, today.Day, daysInPeriod)
             : null;
 
+        var resets = await this.DescribeResetsAsync(periodResets, ct).ConfigureAwait(false);
+
         return new ClientBudgetConsumptionDto(
             clientId,
             periodStart,
@@ -84,13 +94,54 @@ public sealed class ClientBudgetConsumptionService(
             caps.MonthlySoftCapUsd,
             caps.MonthlyHardCapUsd,
             projectedPeriodSpend,
-            dailySpend);
+            dailySpend,
+            resets,
+            configured.MonthlySoftCapUsd,
+            configured.MonthlyHardCapUsd);
+    }
+
+    /// <summary>
+    ///     Describes the period's resets for the wire, naming their actors. Usernames are resolved once per distinct
+    ///     administrator (a handful at most in one period), not once per row.
+    /// </summary>
+    private async Task<IReadOnlyList<BudgetSpendResetDto>> DescribeResetsAsync(
+        IReadOnlyList<BudgetSpendReset> resets,
+        CancellationToken ct)
+    {
+        if (resets.Count == 0)
+        {
+            return [];
+        }
+
+        var actorNames = new Dictionary<Guid, string?>();
+        foreach (var actorId in resets.Select(reset => reset.ActorUserId).OfType<Guid>().Distinct())
+        {
+            var actor = await userRepository.GetByIdAsync(actorId, ct).ConfigureAwait(false);
+            actorNames[actorId] = actor?.Username;
+        }
+
+        return resets
+            .Select(reset => new BudgetSpendResetDto(
+                reset.Id,
+                reset.PeriodStart,
+                reset.TopUpSoftCapUsd,
+                reset.TopUpHardCapUsd,
+                reset.EffectiveSoftCapBeforeUsd,
+                reset.EffectiveSoftCapAfterUsd,
+                reset.EffectiveHardCapBeforeUsd,
+                reset.EffectiveHardCapAfterUsd,
+                reset.ActorUserId,
+                reset.ActorUserId is { } id && actorNames.TryGetValue(id, out var name) ? name : null,
+                reset.PerformedAt))
+            .ToList();
     }
 
     /// <inheritdoc />
     public async Task<ClientBudgetHistoryDto> GetHistoryAsync(Guid clientId, int monthsBack, CancellationToken ct = default)
     {
-        var caps = await capsProvider.GetCapsAsync(clientId, ct).ConfigureAwait(false);
+        // The configured caps are the common baseline across the window; each month then adds the allowance its own
+        // resets granted, so a month that was reset shows a higher ceiling than one that was not.
+        var caps = await capsProvider.GetConfiguredCapsAsync(clientId, ct).ConfigureAwait(false);
 
         var today = DateOnly.FromDateTime(timeProvider.GetUtcNow().UtcDateTime);
         var currentMonthStart = new DateOnly(today.Year, today.Month, 1);
@@ -109,12 +160,31 @@ public sealed class ClientBudgetConsumptionService(
                     Spent: group.Where(sample => sample.EstimatedCostUsd.HasValue).Sum(sample => sample.EstimatedCostUsd!.Value),
                     Approximate: group.Any(sample => !sample.EstimatedCostUsd.HasValue)));
 
+        var resetsByMonth = (await resetRepository
+                .GetForClientsInRangeAsync([clientId], firstMonthStart, currentMonthStart, ct)
+                .ConfigureAwait(false))
+            .GroupBy(reset => reset.PeriodStart)
+            .ToDictionary(group => group.Key, group => group.ToList());
+
         var months = new List<BudgetMonthSpendDto>(clampedMonths);
         for (var offset = 0; offset < clampedMonths; offset++)
         {
             var monthStart = firstMonthStart.AddMonths(offset);
             byMonth.TryGetValue((monthStart.Year, monthStart.Month), out var bucket);
-            months.Add(new BudgetMonthSpendDto(monthStart.Year, monthStart.Month, monthStart, bucket.Spent, bucket.Approximate));
+
+            IReadOnlyList<BudgetSpendReset> monthResets =
+                resetsByMonth.TryGetValue(monthStart, out var found) ? found : [];
+            var topUp = MonthlyBudgetTopUp.SumTopUps(monthResets);
+            months.Add(
+                new BudgetMonthSpendDto(
+                    monthStart.Year,
+                    monthStart.Month,
+                    monthStart,
+                    bucket.Spent,
+                    bucket.Approximate,
+                    MonthlyBudgetTopUp.ApplyTo(caps.MonthlySoftCapUsd, topUp.SoftUsd),
+                    MonthlyBudgetTopUp.ApplyTo(caps.MonthlyHardCapUsd, topUp.HardUsd),
+                    monthResets.Count));
         }
 
         return new ClientBudgetHistoryDto(clientId, caps.MonthlySoftCapUsd, caps.MonthlyHardCapUsd, months);

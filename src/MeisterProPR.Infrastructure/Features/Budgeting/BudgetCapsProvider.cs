@@ -6,21 +6,44 @@ using MeisterProPR.Application.Features.Budgeting;
 using MeisterProPR.Application.Features.Budgeting.Models;
 using MeisterProPR.Application.Features.Licensing.Models;
 using MeisterProPR.Application.Features.Licensing.Ports;
+using MeisterProPR.Application.Interfaces;
 using MeisterProPR.Infrastructure.Data;
 using Microsoft.EntityFrameworkCore;
 
 namespace MeisterProPR.Infrastructure.Features.Budgeting;
 
 /// <summary>
-///     Reads a client's configured USD budget caps from its persisted record. Budgeting is a licensed
-///     capability, so when it is not enabled the caps are reported as uncapped and nothing is enforced.
+///     Reads a client's configured USD budget caps from its persisted record and raises the monthly caps by the
+///     allowance any manual spend resets granted in the period. Budgeting is a licensed capability, so when it is not
+///     enabled the caps are reported as uncapped and nothing is enforced.
 /// </summary>
 public sealed class BudgetCapsProvider(
     IDbContextFactory<MeisterProPRDbContext> contextFactory,
+    IBudgetSpendResetRepository resetRepository,
+    TimeProvider timeProvider,
     ILicensingCapabilityService? licensingCapabilityService = null) : IBudgetCapsProvider
 {
     /// <inheritdoc />
     public async Task<BudgetCaps> GetCapsAsync(Guid clientId, CancellationToken ct = default)
+    {
+        var configured = await this.GetConfiguredCapsAsync(clientId, ct).ConfigureAwait(false);
+
+        // An uncapped monthly scope cannot be topped up, so an opted-out client costs no reset lookup on the
+        // per-review hot path.
+        if (configured.MonthlySoftCapUsd is null && configured.MonthlyHardCapUsd is null)
+        {
+            return configured;
+        }
+
+        var today = DateOnly.FromDateTime(timeProvider.GetUtcNow().UtcDateTime);
+        var resets = await resetRepository
+            .GetByClientAndPeriodAsync(clientId, new DateOnly(today.Year, today.Month, 1), ct)
+            .ConfigureAwait(false);
+        return MonthlyBudgetTopUp.Apply(configured, MonthlyBudgetTopUp.SumTopUps(resets));
+    }
+
+    /// <inheritdoc />
+    public async Task<BudgetCaps> GetConfiguredCapsAsync(Guid clientId, CancellationToken ct = default)
     {
         if (licensingCapabilityService is not null
             && !await licensingCapabilityService.IsEnabledAsync(PremiumCapabilityKey.Budgeting, ct).ConfigureAwait(false))

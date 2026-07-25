@@ -7,10 +7,15 @@ import TenantBudgetOverviewView from '@/features/tenants/views/TenantBudgetOverv
 import type { TenantBudgetOverview } from '@/services/tenantBudgetOverviewService'
 
 const getTenantBudgetOverviewMock = vi.fn()
+const resetClientBudgetSpendMock = vi.fn()
 let capabilityAvailable = true
 
 vi.mock('@/services/tenantBudgetOverviewService', () => ({
   getTenantBudgetOverview: (tenantId: string) => getTenantBudgetOverviewMock(tenantId),
+}))
+
+vi.mock('@/services/budgetConsumptionService', () => ({
+  resetClientBudgetSpend: (clientId: string) => resetClientBudgetSpendMock(clientId),
 }))
 
 vi.mock('@/composables/useSession', () => ({
@@ -68,5 +73,73 @@ describe('TenantBudgetOverviewView', () => {
 
     expect(wrapper.text()).toContain('Budgeting requires a commercial license.')
     expect(getTenantBudgetOverviewMock).not.toHaveBeenCalled()
+  })
+
+  it('resets one client from its row after confirmation, then reloads', async () => {
+    capabilityAvailable = true
+    getTenantBudgetOverviewMock.mockClear()
+    getTenantBudgetOverviewMock.mockResolvedValue({ data: overview() })
+    resetClientBudgetSpendMock.mockClear()
+    resetClientBudgetSpendMock.mockResolvedValue({ data: { id: 'r1', periodStart: '2026-07-01' } })
+
+    const wrapper = mountView()
+    await flushPromises()
+
+    // Globex sorts first (highest spend), so its row action targets that client.
+    await wrapper.findAll('[data-testid="reset-spend-button"]')[0].trigger('click')
+    const dialog = wrapper.find('.confirm-dialog')
+    expect(dialog.text()).toContain('Globex')
+    expect(resetClientBudgetSpendMock).not.toHaveBeenCalled()
+
+    await dialog.find('.btn-danger').trigger('click')
+    await flushPromises()
+
+    expect(resetClientBudgetSpendMock).toHaveBeenCalledWith('b')
+    expect(getTenantBudgetOverviewMock).toHaveBeenCalledTimes(2)
+  })
+
+  it('marks a row that was reset this period', async () => {
+    capabilityAvailable = true
+    const data = overview()
+    data.clients = [
+      {
+        clientId: 'a',
+        displayName: 'Acme',
+        spentToDateUsd: 95,
+        monthlySoftCapUsd: 160,
+        monthlyHardCapUsd: 200,
+        projectedPeriodSpendUsd: 190,
+        resetCount: 2,
+      },
+    ]
+    getTenantBudgetOverviewMock.mockResolvedValue({ data })
+
+    const wrapper = mountView()
+    await flushPromises()
+
+    expect(wrapper.find('[data-testid="reset-marker"]').text()).toContain('Reset ×2')
+    // The row quotes the cap in force, not the configured baseline.
+    expect(wrapper.find('.overview-amount').text()).toContain('$200.00')
+  })
+
+  it('offers no reset action for a client without a budget', async () => {
+    capabilityAvailable = true
+    const data = overview()
+    data.clients = [
+      {
+        clientId: 'c',
+        displayName: 'Umbrella',
+        spentToDateUsd: 20,
+        monthlySoftCapUsd: null,
+        monthlyHardCapUsd: null,
+        projectedPeriodSpendUsd: 40,
+      },
+    ]
+    getTenantBudgetOverviewMock.mockResolvedValue({ data })
+
+    const wrapper = mountView()
+    await flushPromises()
+
+    expect(wrapper.find('[data-testid="reset-spend-button"]').exists()).toBe(false)
   })
 })

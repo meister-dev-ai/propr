@@ -20,6 +20,7 @@ namespace MeisterProPR.Api.Controllers;
 [Route("admin/clients/{clientId:guid}/budget")]
 public sealed partial class ClientBudgetConsumptionController(
     IClientBudgetConsumptionService consumptionService,
+    IClientBudgetResetService resetService,
     ILogger<ClientBudgetConsumptionController> logger,
     ILicensingCapabilityService? licensingCapabilityService = null) : ControllerBase
 {
@@ -31,11 +32,19 @@ public sealed partial class ClientBudgetConsumptionController(
     [LoggerMessage(Level = LogLevel.Information, Message = "Budget history queried for client {ClientId}")]
     private static partial void LogBudgetHistoryQueried(ILogger logger, Guid clientId);
 
+    [LoggerMessage(
+        Level = LogLevel.Information,
+        Message = "Manual spend reset applied for client {ClientId} in period {PeriodStart} by actor {ActorUserId}")]
+    private static partial void LogSpendResetApplied(ILogger logger, Guid clientId, DateOnly periodStart, Guid? actorUserId);
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "Manual spend reset refused for client {ClientId}: {Outcome}")]
+    private static partial void LogSpendResetRefused(ILogger logger, Guid clientId, BudgetSpendResetOutcome outcome);
+
     /// <summary>Returns the client's monthly budget consumption and forecast for a period (the current month by default).</summary>
     /// <param name="clientId">Client identifier.</param>
     /// <param name="period">Optional target month as <c>YYYY-MM</c>; omit for the current month. A past month returns full-month actuals without a forecast.</param>
     /// <param name="ct">Cancellation token.</param>
-    /// <response code="200">Period spend, the currently configured caps, and (current month only) the projected period spend.</response>
+    /// <response code="200">Period spend, the caps in force for the period (configured plus any manual-reset allowance), and (current month only) the projected period spend.</response>
     /// <response code="400">The period parameter is not a valid YYYY-MM month.</response>
     /// <response code="401">Missing or invalid credentials.</response>
     /// <response code="403">Caller lacks access to the client.</response>
@@ -96,6 +105,75 @@ public sealed partial class ClientBudgetConsumptionController(
         var history = await consumptionService.GetHistoryAsync(clientId, months ?? DefaultHistoryMonths, ct);
         LogBudgetHistoryQueried(logger, clientId);
         return this.Ok(history);
+    }
+
+    /// <summary>
+    ///     Grants the client's current monthly period a fresh allowance on top of what it has already consumed. Spend
+    ///     to date is preserved; the period's effective cap becomes the cap in force before the reset plus the
+    ///     configured cap. The reset is recorded with its actor for audit.
+    /// </summary>
+    /// <param name="clientId">Client identifier.</param>
+    /// <param name="ct">Cancellation token.</param>
+    /// <response code="200">The recorded reset, including the effective caps before and after it.</response>
+    /// <response code="400">The client has no monthly budget cap configured, so there is no ceiling to raise.</response>
+    /// <response code="401">Missing or invalid credentials.</response>
+    /// <response code="403">Caller lacks access to the client.</response>
+    /// <response code="404">No such client.</response>
+    /// <response code="409">The Budgeting capability is not licensed for this installation.</response>
+    [HttpPost("reset")]
+    [ProducesResponseType(typeof(BudgetSpendResetDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status409Conflict)]
+    public async Task<IActionResult> ResetSpend(Guid clientId, CancellationToken ct = default)
+    {
+        var access = await this.CheckBudgetAccessAsync(clientId, ct);
+        if (access is not null)
+        {
+            return access;
+        }
+
+        // A reset raises what a client may spend, so it is only recorded against a named administrator. An
+        // unresolvable caller would leave an audit row nobody can be held to.
+        if (AuthHelpers.GetUserId(this.HttpContext) is not { } actorUserId)
+        {
+            return this.Unauthorized(new { error = "The acting administrator could not be identified." });
+        }
+
+        var result = await resetService.ResetAsync(clientId, actorUserId, ct);
+
+        if (result.Outcome is not BudgetSpendResetOutcome.Applied || result.Reset is null)
+        {
+            LogSpendResetRefused(logger, clientId, result.Outcome);
+            return result.Outcome switch
+            {
+                BudgetSpendResetOutcome.ClientNotFound => this.NotFound(),
+                BudgetSpendResetOutcome.NoMonthlyCapConfigured => this.BadRequest(
+                    new
+                    {
+                        error = "The client has no monthly budget cap configured, so there is no allowance to top up.",
+                    }),
+                _ => this.BadRequest(new { error = "The spend reset could not be applied." }),
+            };
+        }
+
+        var reset = result.Reset;
+        LogSpendResetApplied(logger, clientId, reset.PeriodStart, reset.ActorUserId);
+        return this.Ok(
+            new BudgetSpendResetDto(
+                reset.Id,
+                reset.PeriodStart,
+                reset.TopUpSoftCapUsd,
+                reset.TopUpHardCapUsd,
+                reset.EffectiveSoftCapBeforeUsd,
+                reset.EffectiveSoftCapAfterUsd,
+                reset.EffectiveHardCapBeforeUsd,
+                reset.EffectiveHardCapAfterUsd,
+                reset.ActorUserId,
+                ActorUsername: null,
+                reset.PerformedAt));
     }
 
     /// <summary>Client-admin role check plus the Budgeting license gate; returns a blocking result or null when allowed.</summary>

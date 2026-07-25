@@ -24,6 +24,45 @@ function spend(overrides: Partial<TenantSpend> = {}): TenantSpend {
 }
 
 describe('useTenantBudgetSpend', () => {
+  it('steps the trend cap lines so past months keep the ceiling they actually had', async () => {
+    const vm = useTenantBudgetSpend('t1', {
+      loader: async () => ({
+        data: spend({
+          monthlySoftCapUsd: 220,
+          monthlyHardCapUsd: 250,
+          resetCount: 1,
+          months: [
+            {
+              year: 2026,
+              month: 6,
+              periodStart: '2026-06-01',
+              spentUsd: 100,
+              effectiveSoftCapUsd: 120,
+              effectiveHardCapUsd: 150,
+              resetCount: 0,
+            },
+            {
+              year: 2026,
+              month: 7,
+              periodStart: '2026-07-01',
+              spentUsd: 90,
+              effectiveSoftCapUsd: 220,
+              effectiveHardCapUsd: 250,
+              resetCount: 1,
+            },
+          ],
+        }),
+      }),
+    })
+
+    await vm.loadSpend()
+
+    const chart = vm.trendChartData.value
+    // June keeps 120/150; only July carries the granted allowance.
+    expect(chart.datasets.find((set) => set.label === 'Soft cap')?.data).toEqual([120, 220])
+    expect(chart.datasets.find((set) => set.label === 'Hard cap')?.data).toEqual([150, 250])
+  })
+
   it('loads and derives the aggregate meter and projection state', async () => {
     const vm = useTenantBudgetSpend('t1', { loader: async () => ({ data: spend() }) })
     await vm.loadSpend()

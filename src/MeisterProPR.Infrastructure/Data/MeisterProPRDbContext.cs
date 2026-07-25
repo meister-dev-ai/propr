@@ -183,6 +183,9 @@ public sealed class MeisterProPRDbContext(DbContextOptions<MeisterProPRDbContext
     /// <summary>Budget cap-reached transitions, the queryable contract for a notification/alerting capability.</summary>
     public DbSet<BudgetEvent> BudgetEvents => this.Set<BudgetEvent>();
 
+    /// <summary>Manual spend resets: each row grants a period extra allowance and records who granted it.</summary>
+    public DbSet<BudgetSpendReset> BudgetSpendResets => this.Set<BudgetSpendReset>();
+
     /// <inheritdoc />
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {

@@ -7,16 +7,23 @@ namespace MeisterProPR.Application.DTOs;
 /// <param name="ClientId">The client identifier.</param>
 /// <param name="DisplayName">The client's display name.</param>
 /// <param name="SpentToDateUsd">Estimated USD spent this period to date (unpriced usage omitted).</param>
-/// <param name="MonthlySoftCapUsd">The configured monthly soft cap, or null when unset (no limit).</param>
-/// <param name="MonthlyHardCapUsd">The configured monthly hard cap, or null when unset (no limit).</param>
+/// <param name="MonthlySoftCapUsd">
+///     The monthly soft cap in force this period — the configured cap plus any allowance manual resets granted in it —
+///     or null when unset (no limit).
+/// </param>
+/// <param name="MonthlyHardCapUsd">
+///     The monthly hard cap in force this period, composed like <paramref name="MonthlySoftCapUsd" />.
+/// </param>
 /// <param name="ProjectedPeriodSpendUsd">The projected full-period spend on the current run-rate.</param>
+/// <param name="ResetCount">How many manual spend resets the client received this period.</param>
 public sealed record TenantBudgetOverviewClientDto(
     Guid ClientId,
     string DisplayName,
     decimal SpentToDateUsd,
     decimal? MonthlySoftCapUsd,
     decimal? MonthlyHardCapUsd,
-    decimal? ProjectedPeriodSpendUsd);
+    decimal? ProjectedPeriodSpendUsd,
+    int ResetCount = 0);
 
 /// <summary>
 ///     Response DTO for <c>GET /admin/tenants/{tenantId}/budget/overview</c>: current-period spend against budget

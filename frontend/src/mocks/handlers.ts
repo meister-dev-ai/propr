@@ -353,6 +353,87 @@ function budgetCapsForClient(clientId: string) {
   return { monthlySoftCapUsd: noBudget ? null : 80, monthlyHardCapUsd: noBudget ? null : 100 }
 }
 
+interface MockSpendReset {
+  id: string
+  periodStart: string
+  topUpSoftCapUsd: number | null
+  topUpHardCapUsd: number | null
+  effectiveSoftCapBeforeUsd: number | null
+  effectiveSoftCapAfterUsd: number | null
+  effectiveHardCapBeforeUsd: number | null
+  effectiveHardCapAfterUsd: number | null
+  actorUserId: string | null
+  actorUsername: string | null
+  performedAt: string
+}
+
+// Manual spend resets granted during a mock session, keyed by `clientId|YYYY-MM`. Mutable so the UI can be driven
+// end-to-end: granting one raises the effective caps every budget payload reports, as the real store does.
+const mockSpendResets = new Map<string, MockSpendReset[]>()
+
+function resetKey(clientId: string, year: number, month: number): string {
+  return `${clientId}|${year}-${pad2(month)}`
+}
+
+function mockResetsFor(clientId: string, year: number, month: number): MockSpendReset[] {
+  return mockSpendResets.get(resetKey(clientId, year, month)) ?? []
+}
+
+/** Totals a period's granted allowance, mirroring the server-side cumulative rule. */
+function mockTopUpFor(clientId: string, year: number, month: number) {
+  return mockResetsFor(clientId, year, month).reduce(
+    (total, reset) => ({
+      soft: total.soft + (reset.topUpSoftCapUsd ?? 0),
+      hard: total.hard + (reset.topUpHardCapUsd ?? 0),
+    }),
+    { soft: 0, hard: 0 },
+  )
+}
+
+/** An unset cap stays unset — "no limit" cannot be topped up. */
+function applyMockTopUp(configuredCap: number | null, topUpUsd: number): number | null {
+  return configuredCap === null ? null : configuredCap + topUpUsd
+}
+
+/** Sums two client caps for a tenant total, treating "uncapped" as absent rather than zero. */
+function addCap(running: number | null, next: number | null): number | null {
+  return next === null ? running : (running ?? 0) + next
+}
+
+/** Grants the client's current period a fresh allowance equal to its configured caps. */
+function grantMockSpendReset(clientId: string): MockSpendReset | null {
+  const configured = budgetCapsForClient(clientId)
+  // Mirrors the server: a cap of zero is configured but grants nothing, so it is refused like an absent cap.
+  if (!configured.monthlySoftCapUsd && !configured.monthlyHardCapUsd) {
+    return null
+  }
+
+  const now = new Date()
+  const year = now.getUTCFullYear()
+  const month = now.getUTCMonth() + 1
+  const before = mockTopUpFor(clientId, year, month)
+  const softBefore = applyMockTopUp(configured.monthlySoftCapUsd, before.soft)
+  const hardBefore = applyMockTopUp(configured.monthlyHardCapUsd, before.hard)
+
+  const reset: MockSpendReset = {
+    id: `reset-${clientId}-${mockResetsFor(clientId, year, month).length + 1}`,
+    periodStart: `${year}-${pad2(month)}-01`,
+    topUpSoftCapUsd: configured.monthlySoftCapUsd,
+    topUpHardCapUsd: configured.monthlyHardCapUsd,
+    effectiveSoftCapBeforeUsd: softBefore,
+    effectiveSoftCapAfterUsd: softBefore === null ? null : softBefore + (configured.monthlySoftCapUsd ?? 0),
+    effectiveHardCapBeforeUsd: hardBefore,
+    effectiveHardCapAfterUsd: hardBefore === null ? null : hardBefore + (configured.monthlyHardCapUsd ?? 0),
+    actorUserId: 'mock-admin',
+    actorUsername: 'saen',
+    performedAt: now.toISOString(),
+  }
+
+  const key = resetKey(clientId, year, month)
+  mockSpendResets.set(key, [...(mockSpendResets.get(key) ?? []), reset])
+  return reset
+}
+
 // Builds a representative budget-consumption payload for a period (the current month by default). Dates track the
 // real calendar so the picker + forecast read sensibly on any day; a past month returns full-month actuals with no
 // forecast.
@@ -375,7 +456,13 @@ function buildMockBudgetConsumption(clientId: string, period?: string | null) {
   const monthLabel = pad2(month)
   const isCurrent = year === currentYear && month === currentMonth
   const isPast = year < currentYear || (year === currentYear && month < currentMonth)
-  const { monthlySoftCapUsd, monthlyHardCapUsd } = budgetCapsForClient(clientId)
+  const { monthlySoftCapUsd: configuredSoftCapUsd, monthlyHardCapUsd: configuredHardCapUsd } =
+    budgetCapsForClient(clientId)
+  // The caps reported are the ones in force for THIS period: configured plus whatever its resets granted.
+  const periodResets = mockResetsFor(clientId, year, month)
+  const topUp = mockTopUpFor(clientId, year, month)
+  const monthlySoftCapUsd = applyMockTopUp(configuredSoftCapUsd, topUp.soft)
+  const monthlyHardCapUsd = applyMockTopUp(configuredHardCapUsd, topUp.hard)
   const noBudget = clientId === '3'
 
   const elapsedDays = isCurrent ? now.getUTCDate() : isPast ? daysInMonth : 0
@@ -414,6 +501,9 @@ function buildMockBudgetConsumption(clientId: string, period?: string | null) {
       ? Math.round(((spentToDateUsd / Math.max(elapsedDays, 1)) * daysInMonth) * 100) / 100
       : null,
     dailySpend,
+    resets: periodResets,
+    configuredSoftCapUsd,
+    configuredHardCapUsd,
   }
 }
 
@@ -433,7 +523,18 @@ function buildMockBudgetHistory(clientId: string, months = 12) {
     const spentUsd = isCurrent
       ? Math.round((fullMonth * (now.getUTCDate() / daysInMonth)) * 100) / 100
       : fullMonth
-    entries.push({ year, month, periodStart: `${year}-${pad2(month)}-01`, spentUsd, spendIsApproximate: false })
+    const topUp = mockTopUpFor(clientId, year, month)
+    entries.push({
+      year,
+      month,
+      periodStart: `${year}-${pad2(month)}-01`,
+      spentUsd,
+      spendIsApproximate: false,
+      // Each month carries the cap that was in force for it, so a reset month steps up in the trend chart.
+      effectiveSoftCapUsd: applyMockTopUp(monthlySoftCapUsd, topUp.soft),
+      effectiveHardCapUsd: applyMockTopUp(monthlyHardCapUsd, topUp.hard),
+      resetCount: mockResetsFor(clientId, year, month).length,
+    })
   }
   return { clientId, monthlySoftCapUsd, monthlyHardCapUsd, months: entries }
 }
@@ -456,6 +557,7 @@ function buildMockTenantBudgetOverview(tenantId: string) {
         monthlySoftCapUsd: consumption.monthlySoftCapUsd,
         monthlyHardCapUsd: consumption.monthlyHardCapUsd,
         projectedPeriodSpendUsd: consumption.projectedPeriodSpendUsd,
+        resetCount: mockResetsFor(id, year, month).length,
       }
     })
     .sort((a, b) => b.spentToDateUsd - a.spentToDateUsd)
@@ -485,10 +587,26 @@ function buildMockTenantSpend(tenantId: string, months = 12) {
   let hardCap = 0
   let anySoft = false
   let anyHard = false
-  const trend = new Map<string, { year: number; month: number; periodStart: string; spentUsd: number }>()
+  const trend = new Map<string, {
+    year: number
+    month: number
+    periodStart: string
+    spentUsd: number
+    effectiveSoftCapUsd: number | null
+    effectiveHardCapUsd: number | null
+    resetCount: number
+  }>()
 
+  let resetCount = 0
   for (const id of clientIds) {
-    const caps = budgetCapsForClient(id)
+    // Sum the caps in force this period, so a client's granted allowance is visible in the tenant total.
+    const configured = budgetCapsForClient(id)
+    const topUp = mockTopUpFor(id, year, month)
+    const caps = {
+      monthlySoftCapUsd: applyMockTopUp(configured.monthlySoftCapUsd, topUp.soft),
+      monthlyHardCapUsd: applyMockTopUp(configured.monthlyHardCapUsd, topUp.hard),
+    }
+    resetCount += mockResetsFor(id, year, month).length
     if (caps.monthlySoftCapUsd != null) {
       softCap += caps.monthlySoftCapUsd
       anySoft = true
@@ -500,16 +618,36 @@ function buildMockTenantSpend(tenantId: string, months = 12) {
 
     for (const m of buildMockBudgetHistory(id, clamped).months) {
       const key = `${m.year}-${pad2(m.month)}`
+      // Each month sums the caps in force for THAT month, so past months are not drawn against today's ceiling.
+      const monthTopUp = mockTopUpFor(id, m.year, m.month)
+      const monthSoft = applyMockTopUp(configured.monthlySoftCapUsd, monthTopUp.soft)
+      const monthHard = applyMockTopUp(configured.monthlyHardCapUsd, monthTopUp.hard)
+      const monthResets = mockResetsFor(id, m.year, m.month).length
       const existing = trend.get(key)
       if (existing) {
         existing.spentUsd = Math.round((existing.spentUsd + m.spentUsd) * 100) / 100
+        existing.effectiveSoftCapUsd = addCap(existing.effectiveSoftCapUsd, monthSoft)
+        existing.effectiveHardCapUsd = addCap(existing.effectiveHardCapUsd, monthHard)
+        existing.resetCount += monthResets
       } else {
-        trend.set(key, { year: m.year, month: m.month, periodStart: m.periodStart, spentUsd: m.spentUsd })
+        trend.set(key, {
+          year: m.year,
+          month: m.month,
+          periodStart: m.periodStart,
+          spentUsd: m.spentUsd,
+          effectiveSoftCapUsd: monthSoft,
+          effectiveHardCapUsd: monthHard,
+          resetCount: monthResets,
+        })
       }
     }
   }
 
   const spentToDateUsd = trend.get(`${year}-${pad2(month)}`)?.spentUsd ?? 0
+  const currentResets = clientIds.flatMap((id) => mockResetsFor(id, year, month))
+  const lastResetAt = currentResets.length === 0
+    ? null
+    : currentResets.map((reset) => reset.performedAt).sort().at(-1) ?? null
   const projectedPeriodSpendUsd = Math.round(((spentToDateUsd / Math.max(day, 1)) * daysInMonth) * 100) / 100
 
   return {
@@ -522,6 +660,8 @@ function buildMockTenantSpend(tenantId: string, months = 12) {
     monthlyHardCapUsd: anyHard ? Math.round(hardCap * 100) / 100 : null,
     projectedPeriodSpendUsd,
     months: [...trend.values()].sort((a, b) => a.year - b.year || a.month - b.month),
+    resetCount,
+    lastResetAt: lastResetAt,
   }
 }
 
@@ -2296,6 +2436,18 @@ export const handlers = [
     await delay(300)
     const period = new URL(request.url).searchParams.get('period')
     return HttpResponse.json(buildMockBudgetConsumption(String(params.clientId), period))
+  }),
+
+  http.post(`${base}/admin/clients/:clientId/budget/reset`, async ({ params }) => {
+    await delay(300)
+    const reset = grantMockSpendReset(String(params.clientId))
+    // An uncapped client has no ceiling to raise, which the real endpoint reports as a 400.
+    return reset === null
+      ? HttpResponse.json(
+        { error: 'The client has no monthly budget cap configured, so there is no allowance to top up.' },
+        { status: 400 },
+      )
+      : HttpResponse.json(reset)
   }),
 
   http.get(`${base}/admin/clients/:clientId/budget/history`, async ({ params, request }) => {
