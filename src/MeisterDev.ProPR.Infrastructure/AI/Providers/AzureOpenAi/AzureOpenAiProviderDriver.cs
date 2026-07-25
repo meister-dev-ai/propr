@@ -5,6 +5,7 @@ using System.ClientModel;
 using Azure.AI.OpenAI;
 using Azure.Identity;
 using MeisterDev.Ai.Providers.Contracts;
+using MeisterDev.Ai.Providers.Egress;
 using MeisterDev.Ai.Providers.Enums;
 using MeisterDev.ProPR.Application.DTOs;
 using MeisterDev.ProPR.Application.Features.Reviewing.Execution.Models;

@@ -2,18 +2,16 @@
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
 using MeisterDev.Ai.Providers.Contracts;
-using MeisterDev.Ai.Providers.Egress;
 using MeisterDev.Ai.Providers.Enums;
-using MeisterDev.ProPR.Application.DTOs;
 
-namespace MeisterDev.ProPR.Infrastructure.AI.Providers;
+namespace MeisterDev.Ai.Providers.Egress;
 
 /// <summary>
 ///     Shared base-URL / SSRF-egress / auth-shape validation used by the AI provider drivers. Keeping it here
 ///     (Infrastructure) rather than in the controller means provider-specific rules live behind the
 ///     <c>IAiProviderDriver</c> seam, not in the API layer.
 /// </summary>
-internal static class AiProbeTargetValidation
+public static class AiProbeTargetValidation
 {
     /// <summary>Validates an OpenAI-compatible target (plain OpenAI or LiteLLM).</summary>
     /// <param name="target">The probe target.</param>
