@@ -11,7 +11,13 @@ namespace MeisterDev.ProPR.Domain.ValueObjects;
 /// <param name="InputCostPer1MUsd">USD price per one million non-cached input tokens; <see langword="null" /> when unknown.</param>
 /// <param name="OutputCostPer1MUsd">USD price per one million output tokens (output already includes reasoning); <see langword="null" /> when unknown.</param>
 /// <param name="CachedInputCostPer1MUsd">USD price per one million cached (cache-read) input tokens; <see langword="null" /> to fall back to <paramref name="InputCostPer1MUsd" />.</param>
+/// <param name="CacheWriteCostPer1MUsd">
+///     USD price per one million tokens written to the provider prompt cache; <see langword="null" /> to fall
+///     back to <paramref name="InputCostPer1MUsd" />. Providers that bill cache creation charge a premium over
+///     plain input — writing at the input rate understates the bill rather than merely approximating it.
+/// </param>
 public sealed record ModelPricing(
     decimal? InputCostPer1MUsd,
     decimal? OutputCostPer1MUsd,
-    decimal? CachedInputCostPer1MUsd = null);
+    decimal? CachedInputCostPer1MUsd = null,
+    decimal? CacheWriteCostPer1MUsd = null);

@@ -3,6 +3,7 @@
 // This file implements commercial-only functionality. A commercial license is required to activate or use that functionality.
 
 using System.Runtime.CompilerServices;
+using MeisterDev.Ai.Providers.Enums;
 using MeisterDev.ProPR.Application.AI;
 using MeisterDev.ProPR.Application.Features.Budgeting;
 using MeisterDev.ProPR.Domain.Services;
@@ -21,7 +22,8 @@ namespace MeisterDev.ProPR.Infrastructure.AI;
 public sealed class BudgetEnforcingChatClient(
     IChatClient innerClient,
     IBudgetScopeAccessor budgetScopeAccessor,
-    ModelPricing pricing) : DelegatingChatClient(innerClient)
+    ModelPricing pricing,
+    AiProviderKind? providerKind = null) : DelegatingChatClient(innerClient)
 {
     /// <inheritdoc />
     public override async Task<ChatResponse> GetResponseAsync(
@@ -34,7 +36,7 @@ public sealed class BudgetEnforcingChatClient(
 
         var response = await base.GetResponseAsync(messages, options, cancellationToken).ConfigureAwait(false);
 
-        scope?.RecordCall(this.Price(AiTokenUsageExtractor.FromResponse(response)));
+        scope?.RecordCall(this.Price(AiTokenUsageExtractor.FromResponse(response, providerKind)));
         return response;
     }
 
@@ -63,7 +65,7 @@ public sealed class BudgetEnforcingChatClient(
 
         if (scope is not null && usage is not null)
         {
-            scope.RecordCall(this.Price(AiTokenUsageExtractor.FromUsage(usage)));
+            scope.RecordCall(this.Price(AiTokenUsageExtractor.FromUsage(usage, providerKind)));
         }
     }
 

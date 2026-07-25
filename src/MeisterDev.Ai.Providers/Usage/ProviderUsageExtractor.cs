@@ -8,32 +8,47 @@ namespace MeisterDev.Ai.Providers.Usage;
 
 /// <summary>
 ///     Extracts a normalized <see cref="ProviderTokenUsage" /> from a Microsoft.Extensions.AI response.
-///     Input, output, cache-read and reasoning counts are read from the native <see cref="UsageDetails" />
-///     properties — the OpenAI adapter populates <see cref="UsageDetails.CachedInputTokenCount" /> and
-///     <see cref="UsageDetails.ReasoningTokenCount" /> on both the Chat-Completions and Responses API paths.
-///     Cache-write (cache-creation) tokens are read from <see cref="UsageDetails.AdditionalCounts" /> via a
-///     per-provider key map; no current OpenAI-family provider reports them, so the map is the extension seam
-///     for future providers (for example Anthropic <c>cache_creation_input_tokens</c>).
 /// </summary>
+/// <remarks>
+///     <para>
+///         The client library's own <see cref="UsageDetails" /> properties are read first, because a provider
+///         adapter that normalized a counter has already done this job better than a key lookup could. Where a
+///         property is absent — cache-write has none at all, and reasoning is missing for providers whose
+///         adapter does not map it — the counter is recovered from
+///         <see cref="UsageDetails.AdditionalCounts" /> by name.
+///     </para>
+///     <para>
+///         Those names are held per provider, which is the seam a new provider extends. Passing no provider kind
+///         does not fall back to nothing: the union of every name any known provider uses is tried instead. That
+///         matters because most callers extract usage without knowing which provider produced the response, and
+///         a counter silently read as zero would understate a bill rather than fail visibly. The names are
+///         provider-specific enough that the union cannot confuse two providers' counters.
+///     </para>
+/// </remarks>
 public static class ProviderUsageExtractor
 {
     /// <summary>
-    ///     Per-provider <see cref="UsageDetails.AdditionalCounts" /> keys that carry cache-write tokens.
-    ///     Empty for every current provider family (Azure/OpenAI/LiteLLM do not report cache-write);
-    ///     populate an entry when a provider that bills cache creation is added.
+    ///     Counter names each provider family is known to report in <see cref="UsageDetails.AdditionalCounts" />.
+    ///     A family with nothing to add leaves its set empty and is served by <see cref="AnyProviderKeys" />; a
+    ///     new provider adds its own entry here rather than anywhere in the review loop.
     /// </summary>
-    private static readonly IReadOnlyDictionary<AiProviderKind, string[]> CacheWriteKeysByProvider =
-        new Dictionary<AiProviderKind, string[]>
+    private static readonly IReadOnlyDictionary<AiProviderKind, UsageKeySet> KeysByProvider =
+        new Dictionary<AiProviderKind, UsageKeySet>
         {
-            [AiProviderKind.AzureOpenAi] = [],
-            [AiProviderKind.OpenAi] = [],
-            [AiProviderKind.LiteLlm] = [],
-            [AiProviderKind.OpenAiCompatible] = [],
+            [AiProviderKind.AzureOpenAi] = UsageKeySet.None,
+            [AiProviderKind.OpenAi] = UsageKeySet.None,
+            [AiProviderKind.LiteLlm] = UsageKeySet.None,
+            [AiProviderKind.OpenAiCompatible] = UsageKeySet.None,
         };
 
-    /// <summary>Cache-write keys tried when the provider kind is unknown or has no dedicated entry.</summary>
-    private static readonly string[] DefaultCacheWriteKeys =
-        ["cache_creation_input_tokens", "InputTokenDetails.CacheCreationTokenCount"];
+    /// <summary>
+    ///     Every counter name any known provider uses, tried when the provider is unknown or its own set does not
+    ///     carry the counter being looked for.
+    /// </summary>
+    private static readonly UsageKeySet AnyProviderKeys = new(
+        CacheWrite: ["cache_creation_input_tokens", "InputTokenDetails.CacheCreationTokenCount"],
+        CachedInput: ["cached_tokens", "cache_read_input_tokens", "prompt_tokens_details.cached_tokens", "InputTokenDetails.CachedTokenCount"],
+        Reasoning: ["reasoning_tokens", "completion_tokens_details.reasoning_tokens", "OutputTokenDetails.ReasoningTokenCount"]);
 
     /// <summary>
     ///     Builds a normalized usage record from a chat response. A response with no usage payload yields
@@ -41,7 +56,7 @@ public static class ProviderUsageExtractor
     ///     measured zero.
     /// </summary>
     /// <param name="response">The AI chat response; may be <see langword="null" />.</param>
-    /// <param name="providerKind">The provider family used to pick cache-write keys; <see langword="null" /> selects the default keys.</param>
+    /// <param name="providerKind">The provider family whose counter names to prefer; <see langword="null" /> tries every known name.</param>
     public static ProviderTokenUsage FromResponse(ChatResponse? response, AiProviderKind? providerKind = null)
         => FromUsage(response?.Usage, providerKind);
 
@@ -49,7 +64,7 @@ public static class ProviderUsageExtractor
     ///     Builds a normalized usage record from a raw <see cref="UsageDetails" /> payload (chat or embedding).
     /// </summary>
     /// <param name="usage">The provider usage payload; may be <see langword="null" />.</param>
-    /// <param name="providerKind">The provider family used to pick cache-write keys; <see langword="null" /> selects the default keys.</param>
+    /// <param name="providerKind">The provider family whose counter names to prefer; <see langword="null" /> tries every known name.</param>
     public static ProviderTokenUsage FromUsage(UsageDetails? usage, AiProviderKind? providerKind = null)
     {
         if (usage is null)
@@ -57,16 +72,25 @@ public static class ProviderUsageExtractor
             return ProviderTokenUsage.Missing;
         }
 
+        var keys = providerKind is { } kind && KeysByProvider.TryGetValue(kind, out var mapped)
+            ? mapped
+            : UsageKeySet.None;
+
         var input = usage.InputTokenCount ?? 0;
         var output = usage.OutputTokenCount ?? 0;
-        var cachedInput = usage.CachedInputTokenCount ?? 0;
-        var reasoning = usage.ReasoningTokenCount ?? 0;
-        var cacheWrite = ReadCacheWriteTokens(usage, providerKind);
+
+        // A null property means the adapter did not map the counter, which is where the name lookup earns its
+        // keep. A property that is present and zero is a measured zero and is left alone.
+        var cachedInput = usage.CachedInputTokenCount
+                          ?? ReadCount(usage, keys.CachedInput, AnyProviderKeys.CachedInput);
+        var reasoning = usage.ReasoningTokenCount
+                        ?? ReadCount(usage, keys.Reasoning, AnyProviderKeys.Reasoning);
+        var cacheWrite = ReadCount(usage, keys.CacheWrite, AnyProviderKeys.CacheWrite);
 
         return new ProviderTokenUsage(input, output, cachedInput, cacheWrite, reasoning);
     }
 
-    private static long ReadCacheWriteTokens(UsageDetails usage, AiProviderKind? providerKind)
+    private static long ReadCount(UsageDetails usage, string[] preferred, string[] fallback)
     {
         var counts = usage.AdditionalCounts;
         if (counts is null || counts.Count == 0)
@@ -74,13 +98,15 @@ public static class ProviderUsageExtractor
             return 0;
         }
 
-        var keys = providerKind is { } kind
-                   && CacheWriteKeysByProvider.TryGetValue(kind, out var mapped)
-                   && mapped.Length > 0
-            ? mapped
-            : DefaultCacheWriteKeys;
+        foreach (var key in preferred)
+        {
+            if (counts.TryGetValue(key, out var preferredValue))
+            {
+                return preferredValue;
+            }
+        }
 
-        foreach (var key in keys)
+        foreach (var key in fallback)
         {
             if (counts.TryGetValue(key, out var value))
             {
@@ -89,5 +115,12 @@ public static class ProviderUsageExtractor
         }
 
         return 0;
+    }
+
+    /// <summary>The counter names one provider family reports, by the counter each name carries.</summary>
+    private sealed record UsageKeySet(string[] CacheWrite, string[] CachedInput, string[] Reasoning)
+    {
+        /// <summary>A family that reports nothing beyond what the client library already maps.</summary>
+        public static UsageKeySet None { get; } = new([], [], []);
     }
 }

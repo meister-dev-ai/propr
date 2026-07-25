@@ -75,7 +75,8 @@ public sealed class EfModelPricingResolver(IDbContextFactory<MeisterProPRDbConte
         return new ModelPricing(
             match.InputCostPer1MUsd,
             match.OutputCostPer1MUsd,
-            match.CachedInputCostPer1MUsd);
+            match.CachedInputCostPer1MUsd,
+            match.CacheWriteCostPer1MUsd);
     }
 
     private static AiPurpose MapCategoryToPurpose(AiConnectionModelCategory category)

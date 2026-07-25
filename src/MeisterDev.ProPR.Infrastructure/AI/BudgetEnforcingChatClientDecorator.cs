@@ -27,8 +27,10 @@ public sealed class BudgetEnforcingChatClientDecorator(
 
     public IChatClient Decorate(IChatClient inner, ProviderEndpoint endpoint, ProviderModelDescriptor model)
     {
-        _ = endpoint;
+        ArgumentNullException.ThrowIfNull(endpoint);
 
-        return new BudgetEnforcingChatClient(inner, budgetScopeAccessor, pricingFor(model));
+        // The provider family is passed on so usage extraction can prefer that provider's counter names: a
+        // cache-write counter read as zero would understate the spend a cap is enforced against.
+        return new BudgetEnforcingChatClient(inner, budgetScopeAccessor, pricingFor(model), endpoint.ProviderKind);
     }
 }

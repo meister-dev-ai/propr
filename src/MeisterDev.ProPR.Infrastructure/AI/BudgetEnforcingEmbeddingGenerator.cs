@@ -2,6 +2,7 @@
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 // This file implements commercial-only functionality. A commercial license is required to activate or use that functionality.
 
+using MeisterDev.Ai.Providers.Enums;
 using MeisterDev.ProPR.Application.AI;
 using MeisterDev.ProPR.Application.Features.Budgeting;
 using MeisterDev.ProPR.Domain.Services;
@@ -19,7 +20,8 @@ namespace MeisterDev.ProPR.Infrastructure.AI;
 public sealed class BudgetEnforcingEmbeddingGenerator(
     IEmbeddingGenerator<string, Embedding<float>> innerGenerator,
     IBudgetScopeAccessor budgetScopeAccessor,
-    ModelPricing pricing) : DelegatingEmbeddingGenerator<string, Embedding<float>>(innerGenerator)
+    ModelPricing pricing,
+    AiProviderKind? providerKind = null) : DelegatingEmbeddingGenerator<string, Embedding<float>>(innerGenerator)
 {
     /// <inheritdoc />
     public override async Task<GeneratedEmbeddings<Embedding<float>>> GenerateAsync(
@@ -34,7 +36,7 @@ public sealed class BudgetEnforcingEmbeddingGenerator(
 
         if (scope is not null)
         {
-            var usage = AiTokenUsageExtractor.FromUsage(result.Usage);
+            var usage = AiTokenUsageExtractor.FromUsage(result.Usage, providerKind);
             scope.RecordCall(AiCostCalculator.Calculate(usage, pricing).Usd);
         }
 

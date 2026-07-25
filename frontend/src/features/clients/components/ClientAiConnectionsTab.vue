@@ -329,6 +329,11 @@
                       <span>Cached Input Cost / 1M (USD)</span>
                       <input v-model="model.cachedInputCostPer1MUsd" type="number" min="0" step="0.000001" placeholder="e.g. 1.25 (optional)" />
                     </label>
+
+                    <label v-if="model.kind === 'chat'" class="form-field">
+                      <span>Cache Write Cost / 1M (USD)</span>
+                      <input v-model="model.cacheWriteCostPer1MUsd" type="number" min="0" step="0.000001" placeholder="e.g. 3.75 (optional)" />
+                    </label>
                   </div>
 
                   <div v-if="model.kind === 'chat'" class="ai-model-toggles">

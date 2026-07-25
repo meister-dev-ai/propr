@@ -7,8 +7,8 @@ namespace MeisterDev.ProPR.Domain.Services;
 
 /// <summary>
 ///     Pure conversion of a normalized token usage into a USD cost estimate given per-model pricing.
-///     Non-cached input, cache-write and output tokens are billed at the input/output rates; cached input
-///     is billed at the cached rate when configured, otherwise it falls back to the input rate. Output tokens
+///     Non-cached input and output tokens are billed at the input/output rates; cached input and cache-write
+///     each bill at their own rate when configured, otherwise they fall back to the input rate. Output tokens
 ///     already include reasoning, so reasoning is billed at the output rate with no separate term. All
 ///     arithmetic is decimal with no rounding.
 /// </summary>
@@ -39,15 +39,18 @@ public static class AiCostCalculator
         var inputRate = pricing.InputCostPer1MUsd ?? 0m;
         var outputRate = pricing.OutputCostPer1MUsd ?? 0m;
         var cachedRate = pricing.CachedInputCostPer1MUsd ?? inputRate;
+        var cacheWriteRate = pricing.CacheWriteCostPer1MUsd ?? inputRate;
 
         var usd = (usage.NonCachedInputTokens * inputRate / TokensPerMillion)
                   + (usage.CachedInputTokens * cachedRate / TokensPerMillion)
-                  + (usage.CacheWriteTokens * inputRate / TokensPerMillion)
+                  + (usage.CacheWriteTokens * cacheWriteRate / TokensPerMillion)
                   + (usage.OutputTokens * outputRate / TokensPerMillion);
 
+        // Cache-write only makes the estimate approximate while its own rate is unknown and the input rate is
+        // standing in for it. A model that states what cache creation costs is priced, not guessed at.
         var isApproximate = usage.IsEstimated
                             || (pricing.CachedInputCostPer1MUsd is null && usage.CachedInputTokens > 0)
-                            || usage.CacheWriteTokens > 0
+                            || (pricing.CacheWriteCostPer1MUsd is null && usage.CacheWriteTokens > 0)
                             || (pricing.InputCostPer1MUsd is null && usage.NonCachedInputTokens + usage.CachedInputTokens > 0)
                             || (pricing.OutputCostPer1MUsd is null && usage.OutputTokens > 0);
 

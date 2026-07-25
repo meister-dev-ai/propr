@@ -57,15 +57,15 @@ public sealed class ProviderUsageExtractorTests
         Assert.Equal(512, usage.CacheWriteTokens);
     }
 
-    // An empty per-provider key list does NOT suppress the default keys: the map is consulted only when it
-    // yields a non-empty list, so a provider whose entry is empty still falls back to the defaults. The map
-    // can therefore override the default keys but never disable them. Pinned because the difference only
-    // shows up once a provider must be stopped from reading a key rather than pointed at a different one.
+    // An empty per-provider key list does NOT suppress the shared names: a provider whose entry is empty still
+    // falls back to them. The map can therefore point a provider at different names but never disable reading.
+    // Pinned because the difference only shows up once a provider must be stopped from reading a name.
     [Theory]
     [InlineData(AiProviderKind.AzureOpenAi)]
     [InlineData(AiProviderKind.OpenAi)]
     [InlineData(AiProviderKind.LiteLlm)]
-    public void ProviderWithAnEmptyKeyList_StillFallsBackToTheDefaultKeys(AiProviderKind providerKind)
+    [InlineData(AiProviderKind.OpenAiCompatible)]
+    public void ProviderWithAnEmptyKeyList_StillFallsBackToTheSharedNames(AiProviderKind providerKind)
     {
         var usage = ProviderUsageExtractor.FromUsage(
             new UsageDetails
@@ -77,5 +77,67 @@ public sealed class ProviderUsageExtractorTests
             providerKind);
 
         Assert.Equal(512, usage.CacheWriteTokens);
+    }
+
+    // Most callers extract usage without knowing which provider answered. Recovering the counter anyway is the
+    // difference between an understated bill and a correct one, so the counter is found with no kind supplied.
+    [Fact]
+    public void CountersAreRecoveredEvenWhenTheProviderIsNotKnownToTheCaller()
+    {
+        var usage = ProviderUsageExtractor.FromUsage(
+            new UsageDetails
+            {
+                InputTokenCount = 200,
+                OutputTokenCount = 50,
+                AdditionalCounts = new AdditionalPropertiesDictionary<long>
+                {
+                    ["cache_read_input_tokens"] = 120,
+                    ["cache_creation_input_tokens"] = 80,
+                    ["reasoning_tokens"] = 30,
+                },
+            });
+
+        Assert.Equal(120, usage.CachedInputTokens);
+        Assert.Equal(80, usage.CacheWriteTokens);
+        Assert.Equal(30, usage.ReasoningTokens);
+    }
+
+    // A gateway that reports reasoning only under its own name would otherwise show a reasoning model spending
+    // nothing on reasoning — the counter is there, just not where the client library looks.
+    [Fact]
+    public void ReasoningIsRecoveredWhenTheAdapterDidNotMapIt()
+    {
+        var usage = ProviderUsageExtractor.FromUsage(
+            new UsageDetails
+            {
+                InputTokenCount = 10,
+                OutputTokenCount = 90,
+                AdditionalCounts = new AdditionalPropertiesDictionary<long> { ["completion_tokens_details.reasoning_tokens"] = 64 },
+            },
+            AiProviderKind.OpenAiCompatible);
+
+        Assert.Equal(64, usage.ReasoningTokens);
+    }
+
+    // A mapped counter beats a name lookup, and a mapped zero is a measured zero rather than a gap to fill in.
+    [Fact]
+    public void AMappedCounterWinsOverAnAdditionalCountOfTheSameThing()
+    {
+        var usage = ProviderUsageExtractor.FromUsage(
+            new UsageDetails
+            {
+                InputTokenCount = 100,
+                OutputTokenCount = 20,
+                CachedInputTokenCount = 0,
+                ReasoningTokenCount = 7,
+                AdditionalCounts = new AdditionalPropertiesDictionary<long>
+                {
+                    ["cached_tokens"] = 99,
+                    ["reasoning_tokens"] = 99,
+                },
+            });
+
+        Assert.Equal(0, usage.CachedInputTokens);
+        Assert.Equal(7, usage.ReasoningTokens);
     }
 }

@@ -73,7 +73,11 @@ public sealed class AiRuntimeFactory(
 
     private static ModelPricing ToPricing(AiConfiguredModelDto model)
     {
-        return new ModelPricing(model.InputCostPer1MUsd, model.OutputCostPer1MUsd, model.CachedInputCostPer1MUsd);
+        return new ModelPricing(
+            model.InputCostPer1MUsd,
+            model.OutputCostPer1MUsd,
+            model.CachedInputCostPer1MUsd,
+            model.CacheWriteCostPer1MUsd);
     }
 
     // Retries count attempts, while the option counts retries on top of the first call, so the first attempt is
@@ -129,7 +133,7 @@ public sealed class AiRuntimeFactory(
     {
         var metered = budgetScopeAccessor is null
             ? generator
-            : new BudgetEnforcingEmbeddingGenerator(generator, budgetScopeAccessor, ToPricing(model));
+            : new BudgetEnforcingEmbeddingGenerator(generator, budgetScopeAccessor, ToPricing(model), connection.ProviderKind);
 
         return new ProviderRetryEmbeddingGenerator(
             metered,
