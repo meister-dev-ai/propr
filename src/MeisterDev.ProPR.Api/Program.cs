@@ -21,6 +21,8 @@ using MeisterDev.ProPR.Api.HealthChecks;
 using MeisterDev.ProPR.Api.Telemetry;
 using MeisterDev.ProPR.Api.Validators;
 using MeisterDev.ProPR.Api.Workers;
+using MeisterDev.Ai.Providers.Contracts;
+using MeisterDev.ProPR.Application.DTOs;
 using MeisterDev.ProPR.Application.Interfaces;
 using MeisterDev.ProPR.Application.Options;
 using MeisterDev.ProPR.Domain.Entities;
@@ -482,68 +484,13 @@ finally
 
 static void ConfigureSerilog(HostBuilderContext context, IServiceProvider services, LoggerConfiguration configuration)
 {
-    static string? RedactSecret(string? value)
-    {
-        return string.IsNullOrWhiteSpace(value) ? value : "[REDACTED]";
-    }
-
     configuration
         .ReadFrom.Configuration(context.Configuration)
         .ReadFrom.Services(services)
         .Enrich.FromLogContext()
-        .Enrich.WithProperty("Application", "Meister DEV ProPR")
-        // Scrub secrets from log output: X-Ado-Token, X-User-Pat, AZURE_CLIENT_SECRET, AdoClientSecret
-        .Destructure.ByTransforming<CreateAiConnectionRequest>(request => new
-        {
-            request.DisplayName,
-            request.EndpointUrl,
-            request.Models,
-            ApiKey = RedactSecret(request.ApiKey),
-            request.ModelCapabilities,
-            request.ModelCategory,
-        })
-        .Destructure.ByTransforming<UpdateAiConnectionRequest>(request => new
-        {
-            request.DisplayName,
-            request.EndpointUrl,
-            request.Models,
-            ApiKey = RedactSecret(request.ApiKey),
-            request.ModelCapabilities,
-        })
-        .Destructure.ByTransforming<CreateClientProviderConnectionRequest>(request => new
-        {
-            request.ProviderFamily,
-            request.HostBaseUrl,
-            request.AuthenticationKind,
-            request.UserName,
-            request.OAuthTenantId,
-            request.OAuthClientId,
-            request.DisplayName,
-            Secret = RedactSecret(request.Secret),
-            request.IsActive,
-        })
-        .Destructure.ByTransforming<PatchClientProviderConnectionRequest>(request => new
-        {
-            request.HostBaseUrl,
-            request.AuthenticationKind,
-            request.UserName,
-            request.OAuthTenantId,
-            request.OAuthClientId,
-            request.DisplayName,
-            Secret = RedactSecret(request.Secret),
-            request.IsActive,
-        })
-        .Destructure.ByTransforming<DiscoverModelsRequest>(request => new
-        {
-            request.EndpointUrl,
-            ApiKey = RedactSecret(request.ApiKey),
-        })
-        .Destructure.ByTransforming<HttpRequest>(r => new
-        {
-            r.Method,
-            r.Path,
-            HasProCursorSharedKey = r.Headers.ContainsKey(ProCursorSharedKeyAuthenticationDefaults.HeaderName),
-        });
+        .Enrich.WithProperty("Application", "Meister DEV ProPR");
+
+    SecretLogRedaction.Apply(configuration);
 
     if (!context.HostingEnvironment.IsDevelopment())
     {

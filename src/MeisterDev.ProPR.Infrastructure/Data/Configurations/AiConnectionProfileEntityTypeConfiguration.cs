@@ -24,7 +24,11 @@ internal sealed class AiConnectionProfileEntityTypeConfiguration : IEntityTypeCo
         builder.Property(x => x.ProviderKind).HasColumnName("provider_kind").HasMaxLength(50).IsRequired();
         builder.Property(x => x.BaseUrl).HasColumnName("base_url").HasMaxLength(1000).IsRequired();
         builder.Property(x => x.AuthMode).HasColumnName("auth_mode").HasMaxLength(50).IsRequired();
-        builder.Property(x => x.ProtectedSecret).HasColumnName("protected_secret").HasMaxLength(4000);
+        // Sized for the largest credential a provider class is expected to bring rather than for an API key: a
+        // Google service-account JSON is a couple of kilobytes before Data-Protection wrapping inflates it, and
+        // the envelope adds its field names on top. The exact figure is not load-bearing — the point is that a
+        // native provider's credential must not fail to persist against a cap chosen for a short string.
+        builder.Property(x => x.ProtectedSecret).HasColumnName("protected_secret").HasMaxLength(16000);
         builder.Property(x => x.DefaultHeaders)
             .HasColumnName("default_headers")
             .HasColumnType("jsonb")

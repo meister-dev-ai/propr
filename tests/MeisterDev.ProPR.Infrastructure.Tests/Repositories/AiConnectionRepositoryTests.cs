@@ -1,6 +1,7 @@
 // Copyright (c) Andreas Rain.
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
+using MeisterDev.Ai.Providers.Contracts;
 using MeisterDev.Ai.Providers.Enums;
 using MeisterDev.ProPR.Application.DTOs;
 using MeisterDev.ProPR.Application.Exceptions;
@@ -933,5 +934,44 @@ public sealed class AiConnectionRepositoryTests
         Assert.Equal("secret-api-key", created.Secret);
         Assert.NotEqual("secret-api-key", record.ProtectedSecret);
         Assert.False(string.IsNullOrWhiteSpace(record.ProtectedSecret));
+    }
+
+    // The stored blob holds an envelope, so a provider whose credential is three fields rather than one needs no
+    // schema change. What a driver receives is unchanged: the single value, for a mode whose credential is one.
+    [Fact]
+    public async Task AddAsync_StoresTheCredentialAsAnEnvelopeAndReadsBackThePlainKey()
+    {
+        await using var db = CreateContext();
+        var codec = CreateCodec();
+        var repo = CreateRepository(db, codec: codec);
+
+        var created = await repo.AddAsync(Guid.NewGuid(), CreateWriteRequest(secret: "sk-envelope-check"));
+
+        var record = await db.AiConnectionProfiles.FirstAsync(profile => profile.Id == created.Id);
+        var storedInside = codec.Unprotect(record.ProtectedSecret!, "AiConnectionApiKey");
+
+        Assert.Equal("sk-envelope-check", created.Secret);
+        Assert.Contains(ProviderSecretEnvelope.ApiKeyField, storedInside, StringComparison.Ordinal);
+        Assert.Contains("\"v\":1", storedInside, StringComparison.Ordinal);
+    }
+
+    // Rows written before the envelope existed hold a bare protected string. They have to keep resolving, or
+    // adopting the envelope would quietly break every profile already configured.
+    [Fact]
+    public async Task GetAsync_StillReadsACredentialStoredBeforeTheEnvelopeExisted()
+    {
+        await using var db = CreateContext();
+        var codec = CreateCodec();
+        var repo = CreateRepository(db, codec: codec);
+        var created = await repo.AddAsync(Guid.NewGuid(), CreateWriteRequest(secret: "sk-will-be-replaced"));
+
+        // Rewrite the column the way the previous build wrote it: the raw key, protected, with no envelope.
+        var record = await db.AiConnectionProfiles.FirstAsync(profile => profile.Id == created.Id);
+        record.ProtectedSecret = codec.Protect("sk-legacy-format", "AiConnectionApiKey");
+        await db.SaveChangesAsync();
+
+        var reloaded = await repo.GetByIdAsync(created.Id);
+
+        Assert.Equal("sk-legacy-format", reloaded!.Secret);
     }
 }

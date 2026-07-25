@@ -2,6 +2,7 @@
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
 using System.Text.Json.Serialization;
+using MeisterDev.Ai.Providers.Diagnostics;
 using MeisterDev.Ai.Providers.Enums;
 using MeisterDev.ProPR.Domain.Enums;
 
@@ -57,5 +58,21 @@ public sealed record AiConnectionDto(
 
         return binding.RemoteModelId
                ?? this.ConfiguredModels.FirstOrDefault(model => model.Id == binding.ConfiguredModelId)?.RemoteModelId;
+    }
+
+    /// <summary>
+    ///     Renders the profile without its credential. <c>[JsonIgnore]</c> keeps the secret out of API responses,
+    ///     but the generated <c>ToString</c> would still print it into any log line or exception message that
+    ///     mentions the profile, which no serialization attribute can prevent.
+    /// </summary>
+    public override string ToString()
+    {
+        return $"{nameof(AiConnectionDto)} {{ Id = {this.Id}, DisplayName = {this.DisplayName}, "
+               + $"ProviderKind = {this.ProviderKind}, BaseUrl = {this.BaseUrl}, AuthMode = {this.AuthMode}, "
+               + $"ClientId = {this.ClientId}, TenantId = {this.TenantId}, IsActive = {this.IsActive}, "
+               + $"ConfiguredModels = {this.ConfiguredModels.Count}, PurposeBindings = {this.PurposeBindings.Count}, "
+               + $"DefaultHeaders = [{SecretSafeRendering.KeyNames(this.DefaultHeaders)}], "
+               + $"DefaultQueryParams = [{SecretSafeRendering.KeyNames(this.DefaultQueryParams)}], "
+               + $"Secret = {SecretSafeRendering.Elide(this.Secret)} }}";
     }
 }

@@ -1,6 +1,7 @@
 // Copyright (c) Andreas Rain.
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
+using MeisterDev.Ai.Providers.Contracts;
 using MeisterDev.Ai.Providers.Enums;
 using MeisterDev.ProPR.Application.AI;
 using MeisterDev.ProPR.Application.DTOs;
@@ -118,7 +119,7 @@ public sealed class AiConnectionRepository(
             ProviderKind = request.ProviderKind.ToString(),
             BaseUrl = request.BaseUrl,
             AuthMode = request.AuthMode.ToString(),
-            ProtectedSecret = this.ProtectSecret(request.Secret),
+            ProtectedSecret = this.ProtectSecret(request.Secret, request.AuthMode),
             DefaultHeaders = NormalizeMap(request.DefaultHeaders),
             DefaultQueryParams = NormalizeMap(request.DefaultQueryParams),
             DiscoveryMode = request.DiscoveryMode.ToString(),
@@ -151,7 +152,7 @@ public sealed class AiConnectionRepository(
             ProviderKind = request.ProviderKind.ToString(),
             BaseUrl = request.BaseUrl,
             AuthMode = request.AuthMode.ToString(),
-            ProtectedSecret = this.ProtectSecret(request.Secret),
+            ProtectedSecret = this.ProtectSecret(request.Secret, request.AuthMode),
             DefaultHeaders = NormalizeMap(request.DefaultHeaders),
             DefaultQueryParams = NormalizeMap(request.DefaultQueryParams),
             DiscoveryMode = request.DiscoveryMode.ToString(),
@@ -206,7 +207,9 @@ public sealed class AiConnectionRepository(
         record.DiscoveryMode = request.DiscoveryMode.ToString();
         record.DefaultHeaders = NormalizeMap(request.DefaultHeaders);
         record.DefaultQueryParams = NormalizeMap(request.DefaultQueryParams);
-        record.ProtectedSecret = request.Secret is null ? record.ProtectedSecret : this.ProtectSecret(request.Secret);
+        record.ProtectedSecret = request.Secret is null
+            ? record.ProtectedSecret
+            : this.ProtectSecret(request.Secret, request.AuthMode);
         record.UpdatedAt = now;
 
         record.ConfiguredModels.Clear();
@@ -474,18 +477,35 @@ public sealed class AiConnectionRepository(
         return null;
     }
 
-    private string? ProtectSecret(string? secret)
+    // A credential is stored as one Data-Protection-wrapped blob whose inside is an envelope, so the schema never
+    // learns what a given provider's credential is made of. An API key is one string today; SigV4 needs three and
+    // a Google service account is a JSON document, and those arrive with their drivers without touching either
+    // this method or the column.
+    private string? ProtectSecret(string? secret, AiAuthMode authMode)
     {
-        return string.IsNullOrWhiteSpace(secret)
-            ? secret
-            : secretProtectionCodec.Protect(secret, SecretPurpose);
+        if (string.IsNullOrWhiteSpace(secret))
+        {
+            return secret;
+        }
+
+        // A caller that already holds a multi-field envelope passes it through; anything else is the single
+        // string an API-key mode uses.
+        var envelope = ProviderSecretEnvelope.Decode(secret, authMode);
+        return secretProtectionCodec.Protect(envelope.Encode(), SecretPurpose);
     }
 
-    private string? UnprotectSecret(string? secret)
+    // Returns what a driver needs: the single value for the modes whose credential is one string, and the encoded
+    // envelope for the modes whose credential is not, which their driver decodes. Rows written before the
+    // envelope existed hold a bare string and read back unchanged.
+    private string? UnprotectSecret(string? secret, AiAuthMode authMode)
     {
-        return string.IsNullOrWhiteSpace(secret)
-            ? secret
-            : secretProtectionCodec.Unprotect(secret, SecretPurpose);
+        if (string.IsNullOrWhiteSpace(secret))
+        {
+            return secret;
+        }
+
+        var envelope = ProviderSecretEnvelope.Decode(secretProtectionCodec.Unprotect(secret, SecretPurpose), authMode);
+        return envelope.SingleValue ?? (envelope.Fields.Count == 0 ? null : envelope.Encode());
     }
 
     private async Task<TResult> WithReadDbAsync<TResult>(
@@ -532,7 +552,7 @@ public sealed class AiConnectionRepository(
             record.UpdatedAt,
             NormalizeMap(record.DefaultHeaders),
             NormalizeMap(record.DefaultQueryParams),
-            this.UnprotectSecret(record.ProtectedSecret),
+            this.UnprotectSecret(record.ProtectedSecret, Enum.Parse<AiAuthMode>(record.AuthMode, true)),
             record.TenantId);
     }
 
@@ -796,7 +816,7 @@ public sealed class AiConnectionRepository(
         }
 
         var requestedSecret = request.Secret;
-        var existingSecret = this.UnprotectSecret(record.ProtectedSecret);
+        var existingSecret = this.UnprotectSecret(record.ProtectedSecret, request.AuthMode);
         if (!string.Equals(existingSecret, requestedSecret, StringComparison.Ordinal))
         {
             return true;

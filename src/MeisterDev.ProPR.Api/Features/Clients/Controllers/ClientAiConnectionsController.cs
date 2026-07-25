@@ -3,6 +3,7 @@
 
 using System.Text.Json.Serialization;
 using MeisterDev.Ai.Providers.Contracts;
+using MeisterDev.Ai.Providers.Diagnostics;
 using MeisterDev.Ai.Providers.Enums;
 using MeisterDev.ProPR.Api.Extensions;
 using MeisterDev.ProPR.Application.AI;
@@ -721,7 +722,17 @@ public sealed partial class ClientAiConnectionsController(
 }
 
 /// <summary>Authentication settings for one AI connection profile request.</summary>
-public sealed record AiConnectionAuthRequest([property: JsonRequired] AiAuthMode Mode, string? ApiKey = null);
+public sealed record AiConnectionAuthRequest([property: JsonRequired] AiAuthMode Mode, string? ApiKey = null)
+{
+    /// <summary>
+    ///     Renders the auth settings without the key. The generated version would print it, and a request body is
+    ///     exactly the kind of object that ends up in a log line while a misconfiguration is being diagnosed.
+    /// </summary>
+    public override string ToString()
+    {
+        return $"{nameof(AiConnectionAuthRequest)} {{ Mode = {this.Mode}, ApiKey = {SecretSafeRendering.Elide(this.ApiKey)} }}";
+    }
+}
 
 /// <summary>Configured model payload item for create, update, and discovery flows.</summary>
 public sealed record AiConfiguredModelRequest(
@@ -793,6 +804,20 @@ public sealed record CreateAiConnectionRequest(
     /// <summary>Legacy compatibility alias for older logging and validation paths.</summary>
     [JsonIgnore]
     public AiConnectionModelCategory? ModelCategory => null;
+
+    /// <summary>
+    ///     Renders the request without the key. The generated version prints every property including the
+    ///     <see cref="ApiKey" /> alias, which would defeat the nested auth block's own redaction.
+    /// </summary>
+    public override string ToString()
+    {
+        return $"{nameof(CreateAiConnectionRequest)} {{ DisplayName = {this.DisplayName}, "
+               + $"ProviderKind = {this.ProviderKind}, BaseUrl = {this.BaseUrl}, DiscoveryMode = {this.DiscoveryMode}, "
+               + $"Auth = {this.Auth}, ConfiguredModels = {this.ConfiguredModels?.Count ?? 0}, "
+               + $"PurposeBindings = {this.PurposeBindings?.Count ?? 0}, "
+               + $"DefaultHeaders = [{SecretSafeRendering.KeyNames(this.DefaultHeaders)}], "
+               + $"DefaultQueryParams = [{SecretSafeRendering.KeyNames(this.DefaultQueryParams)}] }}";
+    }
 }
 
 /// <summary>Request body for updating an existing provider-neutral AI connection profile.</summary>
@@ -837,6 +862,17 @@ public sealed record UpdateAiConnectionRequest(
     /// <summary>Legacy compatibility alias for older logging and validation paths.</summary>
     [JsonIgnore]
     public AiConnectionModelCategory? ModelCategory => null;
+
+    /// <summary>Renders the request without the key; see <see cref="CreateAiConnectionRequest.ToString" />.</summary>
+    public override string ToString()
+    {
+        return $"{nameof(UpdateAiConnectionRequest)} {{ DisplayName = {this.DisplayName}, "
+               + $"ProviderKind = {this.ProviderKind}, BaseUrl = {this.BaseUrl}, DiscoveryMode = {this.DiscoveryMode}, "
+               + $"Auth = {this.Auth}, ConfiguredModels = {this.ConfiguredModels?.Count ?? 0}, "
+               + $"PurposeBindings = {this.PurposeBindings?.Count ?? 0}, "
+               + $"DefaultHeaders = [{SecretSafeRendering.KeyNames(this.DefaultHeaders)}], "
+               + $"DefaultQueryParams = [{SecretSafeRendering.KeyNames(this.DefaultQueryParams)}] }}";
+    }
 }
 
 /// <summary>Request body for model discovery against a provider without persisting a profile.</summary>
@@ -854,4 +890,12 @@ public sealed record DiscoverModelsRequest(
     /// <summary>Legacy compatibility alias for older logging and validation paths.</summary>
     [JsonIgnore]
     public string? ApiKey => this.Auth?.ApiKey;
+
+    /// <summary>Renders the request without the key; see <see cref="CreateAiConnectionRequest.ToString" />.</summary>
+    public override string ToString()
+    {
+        return $"{nameof(DiscoverModelsRequest)} {{ ProviderKind = {this.ProviderKind}, BaseUrl = {this.BaseUrl}, "
+               + $"Auth = {this.Auth}, DefaultHeaders = [{SecretSafeRendering.KeyNames(this.DefaultHeaders)}], "
+               + $"DefaultQueryParams = [{SecretSafeRendering.KeyNames(this.DefaultQueryParams)}] }}";
+    }
 }

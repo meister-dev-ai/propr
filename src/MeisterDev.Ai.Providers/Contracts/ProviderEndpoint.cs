@@ -1,6 +1,7 @@
 // Copyright (c) Andreas Rain.
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
+using MeisterDev.Ai.Providers.Diagnostics;
 using MeisterDev.Ai.Providers.Enums;
 
 namespace MeisterDev.Ai.Providers.Contracts;
@@ -22,4 +23,18 @@ public sealed record ProviderEndpoint(
     AiAuthMode AuthMode,
     string? Secret = null,
     IReadOnlyDictionary<string, string>? DefaultHeaders = null,
-    IReadOnlyDictionary<string, string>? DefaultQueryParams = null);
+    IReadOnlyDictionary<string, string>? DefaultQueryParams = null)
+{
+    /// <summary>
+    ///     Renders the endpoint without its credential. Overridden because the generated version prints every
+    ///     property, which would put the secret into the first log line or exception message that mentions the
+    ///     endpoint — and header and query values are elided for the same reason, since either can carry a key.
+    /// </summary>
+    public override string ToString()
+    {
+        return $"{nameof(ProviderEndpoint)} {{ ProviderKind = {this.ProviderKind}, BaseUrl = {this.BaseUrl}, "
+               + $"AuthMode = {this.AuthMode}, Secret = {SecretSafeRendering.Elide(this.Secret)}, "
+               + $"DefaultHeaders = [{SecretSafeRendering.KeyNames(this.DefaultHeaders)}], "
+               + $"DefaultQueryParams = [{SecretSafeRendering.KeyNames(this.DefaultQueryParams)}] }}";
+    }
+}
