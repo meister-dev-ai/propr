@@ -1,0 +1,18 @@
+// Copyright (c) Andreas Rain.
+// Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
+// This file implements commercial-only functionality. A commercial license is required to activate or use that functionality.
+
+using FluentValidation;
+using MeisterDev.ProPR.Api.Controllers;
+
+namespace MeisterDev.ProPR.Api.Features.IdentityAndAccess.Validators;
+
+/// <summary>Validates full replacement requests for tenant SSO providers.</summary>
+public sealed class UpdateTenantSsoProviderRequestValidator : AbstractValidator<UpdateTenantSsoProviderRequest>
+{
+    /// <summary>Creates the tenant SSO provider replacement validator.</summary>
+    public UpdateTenantSsoProviderRequestValidator()
+    {
+        this.Include(new CreateTenantSsoProviderRequestValidator());
+    }
+}

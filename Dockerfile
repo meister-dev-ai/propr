@@ -3,13 +3,13 @@
 FROM mcr.microsoft.com/dotnet/sdk@sha256:548d93f8a18a1acbe6cc127bc4f47281430d34a9e35c18afa80a8d6741c2adc3 AS build
 WORKDIR /source
 
-COPY MeisterProPR.slnx .
+COPY MeisterDev.ProPR.slnx .
 COPY src/ src/
 COPY tests/ tests/
 
 RUN dotnet restore
 
-RUN dotnet publish src/MeisterProPR.Api/MeisterProPR.Api.csproj \
+RUN dotnet publish src/MeisterDev.ProPR.Api/MeisterDev.ProPR.Api.csproj \
     -c Release -o /app --no-restore
 
 # Tree-sitter native prune (feature 070, research.md R5). The TreeSitter.DotNet
@@ -110,5 +110,5 @@ USER app
 EXPOSE 8080
 ENV ASPNETCORE_URLS=http://+:8080
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
-    CMD ["dotnet", "MeisterProPR.Api.dll", "--healthcheck", "http://127.0.0.1:8080/healthz"]
-ENTRYPOINT ["dotnet", "MeisterProPR.Api.dll"]
+    CMD ["dotnet", "MeisterDev.ProPR.Api.dll", "--healthcheck", "http://127.0.0.1:8080/healthz"]
+ENTRYPOINT ["dotnet", "MeisterDev.ProPR.Api.dll"]

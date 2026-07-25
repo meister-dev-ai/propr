@@ -1,0 +1,48 @@
+// Copyright (c) Andreas Rain.
+// Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
+// This file implements commercial-only functionality. A commercial license is required to activate or use that functionality.
+
+using FluentValidation;
+using MeisterDev.ProPR.Api.Controllers;
+using MeisterDev.ProPR.Domain.Enums;
+
+namespace MeisterDev.ProPR.Api.Validators;
+
+/// <summary>Validates <see cref="PatchAdminCrawlConfigRequest" /> before a crawl configuration is updated by an admin.</summary>
+public sealed class PatchAdminCrawlConfigRequestValidator : AbstractValidator<PatchAdminCrawlConfigRequest>
+{
+    /// <summary>Initializes a new instance of <see cref="PatchAdminCrawlConfigRequestValidator" />.</summary>
+    public PatchAdminCrawlConfigRequestValidator()
+    {
+        this.RuleFor(r => r.CrawlIntervalSeconds)
+            .GreaterThanOrEqualTo(10)
+            .WithMessage("CrawlIntervalSeconds must be >= 10.")
+            .When(r => r.CrawlIntervalSeconds.HasValue);
+
+        this.RuleFor(r => r.ReviewTemperature)
+            .InclusiveBetween(0.0f, 2.0f)
+            .WithMessage("ReviewTemperature must be between 0.0 and 2.0 when provided.")
+            .When(r => r.ReviewTemperature.HasValue);
+
+        this.RuleForEach(r => r.RepoFilters)
+            .ChildRules(filter =>
+            {
+                filter.RuleFor(f => f.TargetBranchPatterns)
+                    .NotNull()
+                    .WithMessage("TargetBranchPatterns is required.");
+
+                filter.RuleFor(f => f)
+                    .Must(f =>
+                        !string.IsNullOrWhiteSpace(f.RepositoryName) ||
+                        !string.IsNullOrWhiteSpace(f.DisplayName) ||
+                        (!string.IsNullOrWhiteSpace(f.CanonicalSourceRef?.Provider) &&
+                         !string.IsNullOrWhiteSpace(f.CanonicalSourceRef?.Value)))
+                    .WithMessage("Each repo filter requires a repository name, display name, or canonical source reference.");
+            });
+
+        this.RuleFor(r => r.ProCursorSourceIds)
+            .Must(ids => ids is not null && ids.Any())
+            .WithMessage("At least one ProCursor source is required when ProCursorSourceScopeMode is SelectedSources.")
+            .When(r => r.ProCursorSourceScopeMode == ProCursorSourceScopeMode.SelectedSources);
+    }
+}

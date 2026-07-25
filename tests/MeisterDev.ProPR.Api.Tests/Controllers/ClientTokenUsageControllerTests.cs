@@ -1,0 +1,287 @@
+// Copyright (c) Andreas Rain.
+// Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
+
+using System.IdentityModel.Tokens.Jwt;
+using System.Net;
+using System.Net.Http.Headers;
+using System.Security.Claims;
+using System.Text;
+using System.Text.Json;
+using MeisterDev.ProPR.Application.Interfaces;
+using MeisterDev.ProPR.Domain.Entities;
+using MeisterDev.ProPR.Domain.Enums;
+using MeisterDev.ProPR.Infrastructure.Auth;
+using MeisterDev.ProPR.Infrastructure.Data;
+using MeisterDev.ProPR.Infrastructure.Data.Models;
+using MeisterDev.ProPR.Infrastructure.Repositories;
+using Microsoft.AspNetCore.Hosting;
+using Microsoft.AspNetCore.Mvc.Testing;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Storage;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
+using Microsoft.IdentityModel.Tokens;
+using NSubstitute;
+
+namespace MeisterDev.ProPR.Api.Tests.Controllers;
+
+/// <summary>
+///     Integration tests for <see cref="MeisterDev.ProPR.Api.Controllers.ClientTokenUsageController" />.
+/// </summary>
+public sealed class ClientTokenUsageControllerTests(ClientTokenUsageControllerTests.TokenUsageApiFactory factory)
+    : IClassFixture<ClientTokenUsageControllerTests.TokenUsageApiFactory>
+{
+    // T055: GET /admin/clients/{id}/token-usage returns empty samples for a client with no jobs.
+    [Fact]
+    public async Task GetByClientAndDateRange_ReturnsEmptySamples_ForClientWithNoJobs()
+    {
+        var http = factory.CreateClient();
+        var from = DateOnly.FromDateTime(DateTime.UtcNow.AddDays(-7)).ToString("yyyy-MM-dd");
+        var to = DateOnly.FromDateTime(DateTime.UtcNow).ToString("yyyy-MM-dd");
+        using var request = new HttpRequestMessage(
+            HttpMethod.Get,
+            $"/admin/clients/{factory.ClientId}/token-usage?from={from}&to={to}");
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", factory.GenerateAdminToken());
+
+        var response = await http.SendAsync(request);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var body = JsonDocument.Parse(await response.Content.ReadAsStringAsync()).RootElement;
+        Assert.Equal(factory.ClientId.ToString(), body.GetProperty("clientId").GetString());
+        var samples = body.GetProperty("samples");
+        Assert.Equal(JsonValueKind.Array, samples.ValueKind);
+        Assert.Equal(0, samples.GetArrayLength());
+        Assert.Equal(0, body.GetProperty("totalInputTokens").GetInt64());
+        Assert.Equal(0, body.GetProperty("totalOutputTokens").GetInt64());
+    }
+
+    // T056: GET /admin/clients/{id}/token-usage returns samples grouped by model and date.
+    [Fact]
+    public async Task GetByClientAndDateRange_ReturnsSamplesGroupedByModelAndDate()
+    {
+        // Seed data directly into the DB
+        var today = DateOnly.FromDateTime(DateTime.UtcNow);
+        var yesterday = today.AddDays(-1);
+        using (var scope = factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<MeisterProPRDbContext>();
+            db.ClientTokenUsageSamples.AddRange(
+                new ClientTokenUsageSample
+                {
+                    Id = Guid.NewGuid(),
+                    ClientId = factory.ClientId,
+                    ModelId = "gpt-4o",
+                    Date = today,
+                    InputTokens = 1000,
+                    OutputTokens = 500,
+                    CachedInputTokens = 300,
+                    CacheWriteTokens = 0,
+                    ReasoningTokens = 120,
+                    EstimatedCostUsd = 0.05m,
+                },
+                new ClientTokenUsageSample
+                {
+                    Id = Guid.NewGuid(),
+                    ClientId = factory.ClientId,
+                    ModelId = "gpt-5-mini",
+                    Date = yesterday,
+                    InputTokens = 200,
+                    OutputTokens = 100,
+                    CachedInputTokens = 50,
+                    CacheWriteTokens = 0,
+                    ReasoningTokens = 20,
+                    EstimatedCostUsd = 0.01m,
+                });
+            await db.SaveChangesAsync();
+        }
+
+        var http = factory.CreateClient();
+        var from = yesterday.ToString("yyyy-MM-dd");
+        var to = today.ToString("yyyy-MM-dd");
+        using var request = new HttpRequestMessage(
+            HttpMethod.Get,
+            $"/admin/clients/{factory.ClientId}/token-usage?from={from}&to={to}");
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", factory.GenerateAdminToken());
+
+        var response = await http.SendAsync(request);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var body = JsonDocument.Parse(await response.Content.ReadAsStringAsync()).RootElement;
+
+        // Verify totals
+        Assert.Equal(1200, body.GetProperty("totalInputTokens").GetInt64());
+        Assert.Equal(600, body.GetProperty("totalOutputTokens").GetInt64());
+        Assert.Equal(350, body.GetProperty("totalCachedInputTokens").GetInt64());
+        Assert.Equal(0, body.GetProperty("totalCacheWriteTokens").GetInt64());
+        Assert.Equal(140, body.GetProperty("totalReasoningTokens").GetInt64());
+        Assert.Equal(0.06m, body.GetProperty("totalEstimatedCostUsd").GetDecimal());
+
+        // Verify samples shape
+        var samples = body.GetProperty("samples");
+        Assert.Equal(2, samples.GetArrayLength());
+
+        // Verify at least one sample has the expected shape (modelId, date, and the token counts)
+        var firstSample = samples[0];
+        Assert.True(firstSample.TryGetProperty("modelId", out _));
+        Assert.True(firstSample.TryGetProperty("date", out _));
+        Assert.True(firstSample.TryGetProperty("inputTokens", out _));
+        Assert.True(firstSample.TryGetProperty("outputTokens", out _));
+        Assert.True(firstSample.TryGetProperty("cachedInputTokens", out _));
+        Assert.True(firstSample.TryGetProperty("cacheWriteTokens", out _));
+        Assert.True(firstSample.TryGetProperty("reasoningTokens", out _));
+        Assert.True(firstSample.TryGetProperty("estimatedCostUsd", out _));
+
+        // Per-sample cost round-trips (samples ordered by date ascending: yesterday's gpt-5-mini first).
+        Assert.Equal(0.01m, samples[0].GetProperty("estimatedCostUsd").GetDecimal());
+        Assert.Equal(0.05m, samples[1].GetProperty("estimatedCostUsd").GetDecimal());
+    }
+
+    [Fact]
+    public async Task GetByClientAndDateRange_WithoutCredentials_Returns401()
+    {
+        var http = factory.CreateClient();
+        var from = DateOnly.FromDateTime(DateTime.UtcNow.AddDays(-7)).ToString("yyyy-MM-dd");
+        var to = DateOnly.FromDateTime(DateTime.UtcNow).ToString("yyyy-MM-dd");
+        using var request = new HttpRequestMessage(
+            HttpMethod.Get,
+            $"/admin/clients/{factory.ClientId}/token-usage?from={from}&to={to}");
+
+        var response = await http.SendAsync(request);
+
+        Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task GetByClientAndDateRange_ClientUserForAssignedClient_Returns200()
+    {
+        var http = factory.CreateClient();
+        var from = DateOnly.FromDateTime(DateTime.UtcNow.AddDays(-7)).ToString("yyyy-MM-dd");
+        var to = DateOnly.FromDateTime(DateTime.UtcNow).ToString("yyyy-MM-dd");
+        using var request = new HttpRequestMessage(
+            HttpMethod.Get,
+            $"/admin/clients/{factory.ClientId}/token-usage?from={from}&to={to}");
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", factory.GenerateClientUserToken());
+
+        var response = await http.SendAsync(request);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+    }
+
+    public sealed class TokenUsageApiFactory : WebApplicationFactory<Program>
+    {
+        private const string TestJwtSecret = "test-token-usage-jwt-32-chars!!x";
+
+        private readonly string _dbName = $"TestDb_TokenUsage_{Guid.NewGuid()}";
+        private readonly InMemoryDatabaseRoot _dbRoot = new();
+
+        public Guid ClientId { get; } = Guid.NewGuid();
+        public Guid ClientUserId { get; } = Guid.NewGuid();
+
+        public string GenerateAdminToken()
+        {
+            return GenerateToken(Guid.NewGuid(), AppUserRole.Admin);
+        }
+
+        public string GenerateClientUserToken()
+        {
+            return GenerateToken(this.ClientUserId, AppUserRole.User);
+        }
+
+        private static string GenerateToken(Guid userId, AppUserRole role)
+        {
+            var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(TestJwtSecret));
+            var handler = new JwtSecurityTokenHandler { MapInboundClaims = false };
+            var descriptor = new SecurityTokenDescriptor
+            {
+                Subject = new ClaimsIdentity(
+                [
+                    new Claim("sub", userId.ToString()),
+                    new Claim("global_role", role.ToString()),
+                ]),
+                Expires = DateTime.UtcNow.AddHours(1),
+                SigningCredentials = new SigningCredentials(key, SecurityAlgorithms.HmacSha256),
+                Issuer = "meisterpropr",
+                Audience = "meisterpropr",
+            };
+            return handler.WriteToken(handler.CreateToken(descriptor));
+        }
+
+        protected override void ConfigureWebHost(IWebHostBuilder builder)
+        {
+            builder.UseEnvironment("Testing");
+            builder.UseSetting("MEISTER_DISABLE_HOSTED_SERVICES", "true");
+            builder.UseSetting("AI_ENDPOINT", "https://fake.openai.azure.com/");
+            builder.UseSetting("AI_DEPLOYMENT", "gpt-4o");
+            builder.UseSetting("MEISTER_JWT_SECRET", TestJwtSecret);
+
+            var dbName = this._dbName;
+            var dbRoot = this._dbRoot;
+
+            builder.ConfigureServices(services =>
+            {
+                services.AddSingleton<IJwtTokenService, JwtTokenService>();
+
+                services.AddSingleton(Substitute.For<IPullRequestFetcher>());
+                services.AddSingleton(Substitute.For<IAdoCommentPoster>());
+                services.AddSingleton(Substitute.For<IAssignedReviewDiscoveryService>());
+                services.AddSingleton(Substitute.For<IJobRepository>());
+
+                services.AddDbContext<MeisterProPRDbContext>(opts =>
+                    opts.UseInMemoryDatabase(dbName, dbRoot));
+
+                var userRepo = Substitute.For<IUserRepository>();
+                userRepo.GetByIdWithAssignmentsAsync(this.ClientUserId, Arg.Any<CancellationToken>())
+                    .Returns(
+                        Task.FromResult<AppUser?>(
+                            new AppUser
+                            {
+                                Id = this.ClientUserId,
+                                Username = "client.user",
+                                GlobalRole = AppUserRole.User,
+                                IsActive = true,
+                                CreatedAt = DateTimeOffset.UtcNow,
+                                ClientAssignments =
+                                {
+                                    new UserClientRole
+                                    {
+                                        Id = Guid.NewGuid(),
+                                        UserId = this.ClientUserId,
+                                        ClientId = this.ClientId,
+                                        Role = ClientRole.ClientUser,
+                                        AssignedAt = DateTimeOffset.UtcNow,
+                                    },
+                                },
+                            }));
+
+                userRepo.GetByIdWithAssignmentsAsync(Arg.Is<Guid>(id => id != this.ClientUserId), Arg.Any<CancellationToken>())
+                    .Returns(Task.FromResult<AppUser?>(null));
+
+                services.AddSingleton(userRepo);
+
+                // Register the real ClientTokenUsageRepository backed by InMemory EF
+                services.AddScoped<IClientTokenUsageRepository, ClientTokenUsageRepository>();
+            });
+        }
+
+        protected override IHost CreateHost(IHostBuilder builder)
+        {
+            var host = base.CreateHost(builder);
+
+            using var scope = host.Services.CreateScope();
+
+            var db = scope.ServiceProvider.GetRequiredService<MeisterProPRDbContext>();
+
+            db.Clients.Add(
+                new ClientRecord
+                {
+                    Id = this.ClientId,
+                    DisplayName = "Token Usage Test Client",
+                    IsActive = true,
+                    CreatedAt = DateTimeOffset.UtcNow,
+                });
+            db.SaveChanges();
+
+            return host;
+        }
+    }
+}

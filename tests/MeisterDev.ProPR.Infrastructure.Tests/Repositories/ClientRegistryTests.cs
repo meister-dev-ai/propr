@@ -1,0 +1,696 @@
+// Copyright (c) Andreas Rain.
+// Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
+
+using System.Net;
+using System.Text.Json;
+using MeisterDev.ProPR.Application.DTOs;
+using MeisterDev.ProPR.Application.Interfaces;
+using MeisterDev.ProPR.Domain.Enums;
+using MeisterDev.ProPR.Domain.ValueObjects;
+using MeisterDev.ProPR.Infrastructure.Data;
+using MeisterDev.ProPR.Infrastructure.Data.Models;
+using MeisterDev.ProPR.Infrastructure.Features.IdentityAndAccess;
+using MeisterDev.ProPR.Infrastructure.Features.Providers.GitHub.Security;
+using MeisterDev.ProPR.Infrastructure.Features.Reviewing.Execution.Strategies;
+using MeisterDev.ProPR.Infrastructure.Repositories;
+using MeisterDev.ProPR.Infrastructure.Services;
+using MeisterDev.ProPR.Infrastructure.Tests.Fixtures;
+using MeisterDev.ProPR.Infrastructure.Tests.GitHub;
+using Microsoft.AspNetCore.DataProtection;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
+using NSubstitute;
+using FactAttribute = Xunit.SkippableFactAttribute;
+
+namespace MeisterDev.ProPR.Infrastructure.Tests.Repositories;
+
+/// <summary>
+///     Tests for <see cref="DbClientRegistry" /> reviewer identity lookups.
+/// </summary>
+[Collection("PostgresIntegration")]
+public sealed class ClientRegistryTests(PostgresContainerFixture fixture) : IAsyncLifetime
+{
+    private readonly List<Guid> _seededClientIds = [];
+    private ClientScmConnectionRepository _connectionRepository = null!;
+    private MeisterProPRDbContext _dbContext = null!;
+    private IHttpClientFactory _httpClientFactory = null!;
+    private DbClientRegistry _registry = null!;
+    private ClientReviewerIdentityRepository _reviewerIdentityRepository = null!;
+
+    public async Task InitializeAsync()
+    {
+        fixture.SkipIfUnavailable();
+
+        var options = new DbContextOptionsBuilder<MeisterProPRDbContext>()
+            .UseNpgsql(fixture.ConnectionString, o => o.UseVector())
+            .Options;
+        this._dbContext = new MeisterProPRDbContext(options);
+        var codec = CreateCodec();
+        this._connectionRepository = new ClientScmConnectionRepository(this._dbContext, codec);
+        this._reviewerIdentityRepository = new ClientReviewerIdentityRepository(this._dbContext);
+        this._httpClientFactory = Substitute.For<IHttpClientFactory>();
+        this._httpClientFactory.CreateClient("GitHubProvider")
+            .Returns(
+                new HttpClient(
+                    new StubHttpMessageHandler(request => Task.FromResult(
+                        request.RequestUri!.AbsoluteUri switch
+                        {
+                            "https://api.github.com/app/installations/789012" => CreateJsonResponse(
+                                new { account = new { login = "meister-dev-ai" }, app_slug = "propr-review" }),
+                            "https://api.github.com/app" => CreateJsonResponse(new { slug = "propr-review", name = "ProPR Review" }),
+                            _ => new HttpResponseMessage(HttpStatusCode.NotFound),
+                        }))));
+        this._registry = new DbClientRegistry(
+            this._dbContext,
+            this._connectionRepository,
+            this._reviewerIdentityRepository,
+            async (host, connection, ct) =>
+            {
+                var authenticationService = new GitHubAuthenticationService(this._httpClientFactory);
+                var app = await authenticationService.GetAppMetadataAsync(host, connection, ct);
+                var login = app.Slug + "[bot]";
+                return new ReviewerIdentity(host, login, login, app.DisplayName, true);
+            });
+    }
+
+    public async Task DisposeAsync()
+    {
+        if (this._dbContext is not null)
+        {
+            if (this._seededClientIds.Count > 0)
+            {
+                await this._dbContext.ClientReviewPasses
+                    .Where(pass => this._seededClientIds.Contains(pass.ClientId))
+                    .ExecuteDeleteAsync();
+                await this._dbContext.ClientReviewerIdentities
+                    .Where(identity => this._seededClientIds.Contains(identity.ClientId))
+                    .ExecuteDeleteAsync();
+                await this._dbContext.ClientScmScopes
+                    .Where(scope => this._seededClientIds.Contains(scope.ClientId))
+                    .ExecuteDeleteAsync();
+                await this._dbContext.ClientScmConnections
+                    .Where(connection => this._seededClientIds.Contains(connection.ClientId))
+                    .ExecuteDeleteAsync();
+                await this._dbContext.Clients
+                    .Where(client => this._seededClientIds.Contains(client.Id))
+                    .ExecuteDeleteAsync();
+            }
+
+            await this._dbContext.DisposeAsync();
+        }
+    }
+
+    private static ISecretProtectionCodec CreateCodec()
+    {
+        var keysDirectory = Path.Combine(Path.GetTempPath(), $"MeisterDev.ProPR.ClientRegistryTests.{Guid.NewGuid():N}");
+        Directory.CreateDirectory(keysDirectory);
+
+        var services = new ServiceCollection();
+        services.AddDataProtection()
+            .SetApplicationName("MeisterDev.ProPR.Tests")
+            .PersistKeysToFileSystem(new DirectoryInfo(keysDirectory));
+
+        var provider = services.BuildServiceProvider();
+        return new SecretProtectionCodec(provider.GetRequiredService<IDataProtectionProvider>());
+    }
+
+    [Fact]
+    public async Task GetReviewerIdentityAsync_ActiveConnectionWithConfiguredIdentity_ReturnsReviewerIdentity()
+    {
+        var client = await this.SeedClientAsync();
+        var connection = await this._connectionRepository.AddAsync(
+            client.Id,
+            ScmProvider.GitHub,
+            "https://github.com",
+            ScmAuthenticationKind.PersonalAccessToken,
+            "GitHub",
+            "ghp_test",
+            true,
+            CancellationToken.None);
+
+        Assert.NotNull(connection);
+
+        await this._reviewerIdentityRepository.UpsertAsync(
+            client.Id,
+            connection!.Id,
+            ScmProvider.GitHub,
+            "12345",
+            "meister-review-bot[bot]",
+            "Meister Review Bot",
+            true,
+            CancellationToken.None);
+
+        var result = await this._registry.GetReviewerIdentityAsync(
+            client.Id,
+            new ProviderHostRef(ScmProvider.GitHub, "https://github.com"),
+            CancellationToken.None);
+
+        Assert.NotNull(result);
+        Assert.Equal("12345", result!.ExternalUserId);
+        Assert.Equal("meister-review-bot[bot]", result.Login);
+        Assert.Equal("Meister Review Bot", result.DisplayName);
+        Assert.True(result.IsBot);
+    }
+
+    [Fact]
+    public async Task GetReviewerIdentityAsync_UnknownHost_ReturnsNull()
+    {
+        var client = await this.SeedClientAsync();
+
+        var result = await this._registry.GetReviewerIdentityAsync(
+            client.Id,
+            new ProviderHostRef(ScmProvider.GitHub, "https://github.example.com"),
+            CancellationToken.None);
+
+        Assert.Null(result);
+    }
+
+    [Fact]
+    public async Task GetReviewerIdentityAsync_ConnectionWithoutReviewerIdentity_ReturnsNull()
+    {
+        var client = await this.SeedClientAsync();
+        await this._connectionRepository.AddAsync(
+            client.Id,
+            ScmProvider.GitHub,
+            "https://github.com",
+            ScmAuthenticationKind.PersonalAccessToken,
+            "GitHub",
+            "ghp_test",
+            true,
+            CancellationToken.None);
+
+        var result = await this._registry.GetReviewerIdentityAsync(
+            client.Id,
+            new ProviderHostRef(ScmProvider.GitHub, "https://github.com"),
+            CancellationToken.None);
+
+        Assert.Null(result);
+    }
+
+    [Fact]
+    public async Task GetEffectiveReviewerIdentityAsync_GitHubAppConnectionWithoutConfiguredIdentity_ReturnsDerivedAppIdentity()
+    {
+        var client = await this.SeedClientAsync();
+        await this._connectionRepository.AddAsync(
+            client.Id,
+            ScmProvider.GitHub,
+            "https://github.com",
+            ScmAuthenticationKind.AppInstallation,
+            null,
+            null,
+            "GitHub App",
+            GitHubAppTestHelpers.CreatePrivateKeyPem(true),
+            true,
+            123456,
+            789012,
+            ct: CancellationToken.None);
+
+        var result = await this._registry.GetEffectiveReviewerIdentityAsync(
+            client.Id,
+            new ProviderHostRef(ScmProvider.GitHub, "https://github.com"),
+            CancellationToken.None);
+
+        Assert.NotNull(result);
+        Assert.Equal("propr-review[bot]", result!.Login);
+        Assert.Equal("ProPR Review", result.DisplayName);
+        Assert.True(result.IsBot);
+    }
+
+    [Fact]
+    public async Task UpsertReviewerIdentity_DoesNotMutateConnectionCredentials()
+    {
+        var client = await this.SeedClientAsync();
+        var connection = await this._connectionRepository.AddAsync(
+            client.Id,
+            ScmProvider.GitHub,
+            "https://github.com",
+            ScmAuthenticationKind.PersonalAccessToken,
+            "GitHub",
+            "ghp_secret_before",
+            true,
+            CancellationToken.None);
+
+        Assert.NotNull(connection);
+
+        var credentialBefore = await this._connectionRepository.GetOperationalConnectionAsync(
+            client.Id,
+            new ProviderHostRef(ScmProvider.GitHub, "https://github.com"),
+            CancellationToken.None);
+
+        await this._reviewerIdentityRepository.UpsertAsync(
+            client.Id,
+            connection!.Id,
+            ScmProvider.GitHub,
+            "12345",
+            "meister-review-bot[bot]",
+            "Meister Review Bot",
+            true,
+            CancellationToken.None);
+
+        var credentialAfter = await this._connectionRepository.GetOperationalConnectionAsync(
+            client.Id,
+            new ProviderHostRef(ScmProvider.GitHub, "https://github.com"),
+            CancellationToken.None);
+
+        Assert.NotNull(credentialBefore);
+        Assert.NotNull(credentialAfter);
+        Assert.Equal(connection.Id, credentialAfter!.Id);
+        Assert.Equal(credentialBefore!.Secret, credentialAfter.Secret);
+        Assert.Equal(credentialBefore.AuthenticationKind, credentialAfter.AuthenticationKind);
+        Assert.Equal(credentialBefore.OAuthClientId, credentialAfter.OAuthClientId);
+        Assert.Equal(credentialBefore.OAuthTenantId, credentialAfter.OAuthTenantId);
+        Assert.Equal(credentialBefore.GitHubAppId, credentialAfter.GitHubAppId);
+        Assert.Equal(credentialBefore.GitHubAppInstallationId, credentialAfter.GitHubAppInstallationId);
+    }
+
+    [Fact]
+    public async Task DeleteReviewerIdentity_DoesNotMutateConnectionCredentials()
+    {
+        var client = await this.SeedClientAsync();
+        var connection = await this._connectionRepository.AddAsync(
+            client.Id,
+            ScmProvider.GitHub,
+            "https://github.com",
+            ScmAuthenticationKind.PersonalAccessToken,
+            "GitHub",
+            "ghp_secret_before",
+            true,
+            CancellationToken.None);
+
+        Assert.NotNull(connection);
+
+        await this._reviewerIdentityRepository.UpsertAsync(
+            client.Id,
+            connection!.Id,
+            ScmProvider.GitHub,
+            "12345",
+            "meister-review-bot[bot]",
+            "Meister Review Bot",
+            true,
+            CancellationToken.None);
+
+        var credentialBeforeDelete = await this._connectionRepository.GetOperationalConnectionAsync(
+            client.Id,
+            new ProviderHostRef(ScmProvider.GitHub, "https://github.com"),
+            CancellationToken.None);
+
+        var deleted = await this._reviewerIdentityRepository.DeleteAsync(
+            client.Id,
+            connection.Id,
+            CancellationToken.None);
+
+        var credentialAfterDelete = await this._connectionRepository.GetOperationalConnectionAsync(
+            client.Id,
+            new ProviderHostRef(ScmProvider.GitHub, "https://github.com"),
+            CancellationToken.None);
+
+        Assert.True(deleted);
+        Assert.NotNull(credentialBeforeDelete);
+        Assert.NotNull(credentialAfterDelete);
+        Assert.Equal(connection.Id, credentialAfterDelete!.Id);
+        Assert.Equal(credentialBeforeDelete!.Secret, credentialAfterDelete.Secret);
+        Assert.Equal(credentialBeforeDelete.AuthenticationKind, credentialAfterDelete.AuthenticationKind);
+        Assert.Equal(credentialBeforeDelete.OAuthClientId, credentialAfterDelete.OAuthClientId);
+        Assert.Equal(credentialBeforeDelete.OAuthTenantId, credentialAfterDelete.OAuthTenantId);
+        Assert.Equal(credentialBeforeDelete.GitHubAppId, credentialAfterDelete.GitHubAppId);
+        Assert.Equal(credentialBeforeDelete.GitHubAppInstallationId, credentialAfterDelete.GitHubAppInstallationId);
+    }
+
+    [Fact]
+    public async Task GetScmCommentPostingEnabledAsync_ClientWithSetting_ReturnsPersistedValue()
+    {
+        var client = await this.SeedClientAsync();
+        client.ScmCommentPostingEnabled = false;
+        await this._dbContext.SaveChangesAsync();
+
+        var result = await this._registry.GetScmCommentPostingEnabledAsync(client.Id, CancellationToken.None);
+
+        Assert.False(result);
+    }
+
+    [Fact]
+    public async Task GetScmCommentPostingEnabledAsync_UnknownClient_DefaultsToTrue()
+    {
+        var result = await this._registry.GetScmCommentPostingEnabledAsync(Guid.NewGuid(), CancellationToken.None);
+
+        Assert.True(result);
+    }
+
+    [Fact]
+    public async Task GetMultiPassUnionEnabledAsync_ClientWithSetting_ReturnsPersistedValue()
+    {
+        var client = await this.SeedClientAsync();
+        client.EnableMultiPassUnion = true;
+        await this._dbContext.SaveChangesAsync();
+
+        var result = await this._registry.GetMultiPassUnionEnabledAsync(client.Id, CancellationToken.None);
+
+        Assert.True(result);
+    }
+
+    [Fact]
+    public async Task GetMultiPassUnionEnabledAsync_UnknownClient_DefaultsToFalse()
+    {
+        var result = await this._registry.GetMultiPassUnionEnabledAsync(Guid.NewGuid(), CancellationToken.None);
+
+        Assert.False(result);
+    }
+
+    [Fact]
+    public async Task GetReviewPassesAsync_UnknownClient_ReturnsEmpty()
+    {
+        var result = await this._registry.GetReviewPassesAsync(Guid.NewGuid(), CancellationToken.None);
+
+        Assert.Empty(result);
+    }
+
+    [Fact]
+    public async Task ReviewPasses_PatchPersistsOrderedListAndGetEchoesIt()
+    {
+        var client = await this.SeedClientAsync();
+        var adminService = new ClientAdminService(this._dbContext);
+        // Each pass must reference a configured model that exists (the FK to ai_configured_models is enforced).
+        var modelA = await this.SeedChatModelAsync(client.Id);
+        var modelB = await this.SeedChatModelAsync(client.Id);
+
+        // Supplied out of ordinal order; PatchAsync normalizes to a contiguous 0..n order.
+        var updated = await adminService.PatchAsync(
+            client.Id,
+            null,
+            null,
+            reviewPasses: new List<ReviewPassDto> { new(1, modelB), new(0, modelA) },
+            ct: CancellationToken.None);
+
+        Assert.NotNull(updated);
+        Assert.Equal(
+            new[] { new ReviewPassDto(0, modelA), new ReviewPassDto(1, modelB) },
+            updated!.ReviewPassesOrEmpty.ToArray());
+
+        // The registry returns the configured-model ids in ordinal order for the review pipeline.
+        var passes = await this._registry.GetReviewPassesAsync(client.Id, CancellationToken.None);
+        Assert.Equal(new[] { modelA, modelB }, passes.Select(pass => pass.ConfiguredModelId).ToArray());
+        Assert.All(passes, pass => Assert.Null(pass.Lens));
+    }
+
+    // A name-based pass row (no configured_model_id) surfaces its LogicalModelName through the registry so
+    // the runtime resolves it via the logical-model catalog.
+    [Fact]
+    public async Task GetReviewPassesAsync_CarriesLogicalModelName_ForNameBasedPass()
+    {
+        var client = await this.SeedClientAsync();
+        this._dbContext.ClientReviewPasses.Add(
+            new ClientReviewPassRecord
+            {
+                Id = Guid.NewGuid(),
+                ClientId = client.Id,
+                Ordinal = 0,
+                ConfiguredModelId = null,
+                LogicalModelName = "deep",
+            });
+        await this._dbContext.SaveChangesAsync();
+
+        var pass = Assert.Single(await this._registry.GetReviewPassesAsync(client.Id, CancellationToken.None));
+        Assert.Equal("deep", pass.LogicalModelName);
+        Assert.Equal(Guid.Empty, pass.ConfiguredModelId);
+    }
+
+    // A name-based pass patched through the admin service persists with no configured-model id
+    // and reads back carrying the logical-model name on both the client DTO and the registry spec.
+    [Fact]
+    public async Task ReviewPasses_NameBasedPass_PersistsAndReadsBack()
+    {
+        var client = await this.SeedClientAsync();
+        var adminService = new ClientAdminService(this._dbContext);
+
+        var updated = await adminService.PatchAsync(
+            client.Id,
+            null,
+            null,
+            reviewPasses: new List<ReviewPassDto> { new(0, Guid.Empty, LogicalModelName: "deep") },
+            ct: CancellationToken.None);
+
+        Assert.NotNull(updated);
+        var dto = Assert.Single(updated!.ReviewPassesOrEmpty);
+        Assert.Equal("deep", dto.LogicalModelName);
+        Assert.Equal(Guid.Empty, dto.ConfiguredModelId);
+
+        var pass = Assert.Single(await this._registry.GetReviewPassesAsync(client.Id, CancellationToken.None));
+        Assert.Equal("deep", pass.LogicalModelName);
+        Assert.Equal(Guid.Empty, pass.ConfiguredModelId);
+    }
+
+    [Fact]
+    public async Task ReviewPasses_PatchPersistsLens_AndGetEchoesIt()
+    {
+        var client = await this.SeedClientAsync();
+        var adminService = new ClientAdminService(this._dbContext);
+        var resampleModel = await this.SeedChatModelAsync(client.Id);
+        var securityModel = await this.SeedChatModelAsync(client.Id);
+
+        var updated = await adminService.PatchAsync(
+            client.Id,
+            null,
+            null,
+            reviewPasses: new List<ReviewPassDto> { new(0, resampleModel), new(1, securityModel, "security") },
+            ct: CancellationToken.None);
+
+        Assert.NotNull(updated);
+        Assert.Equal(
+            new[] { new ReviewPassDto(0, resampleModel), new ReviewPassDto(1, securityModel, "security") },
+            updated!.ReviewPassesOrEmpty.ToArray());
+
+        // The lens survives to the review-pipeline projection so a lens pass runs the specialist prompt.
+        var passes = await this._registry.GetReviewPassesAsync(client.Id, CancellationToken.None);
+        Assert.Equal(new[] { null, "security" }, passes.Select(pass => pass.Lens).ToArray());
+    }
+
+    [Fact]
+    public async Task ReviewPasses_PatchPersistsScopeAndShadow_AndGetEchoesIt()
+    {
+        var client = await this.SeedClientAsync();
+        var adminService = new ClientAdminService(this._dbContext);
+        var perFileModel = await this.SeedChatModelAsync(client.Id);
+        var prWideModel = await this.SeedChatModelAsync(client.Id);
+
+        var updated = await adminService.PatchAsync(
+            client.Id,
+            null,
+            null,
+            reviewPasses: new List<ReviewPassDto>
+            {
+                new(0, perFileModel),
+                new(1, prWideModel, Scope: "pr_wide", Shadow: true),
+            },
+            ct: CancellationToken.None);
+
+        Assert.NotNull(updated);
+        Assert.Equal(
+            new[]
+            {
+                new ReviewPassDto(0, perFileModel),
+                new ReviewPassDto(1, prWideModel, Scope: "pr_wide", Shadow: true),
+            },
+            updated!.ReviewPassesOrEmpty.ToArray());
+
+        // The scope and shadow survive to the review-pipeline projection.
+        var passes = await this._registry.GetReviewPassesAsync(client.Id, CancellationToken.None);
+        Assert.Equal(new[] { null, "pr_wide" }, passes.Select(pass => pass.Scope).ToArray());
+        Assert.Equal(new[] { false, true }, passes.Select(pass => pass.Shadow).ToArray());
+    }
+
+    [Fact]
+    public async Task ReviewPasses_PatchPersistsReasoningEffort_AndGetEchoesIt()
+    {
+        var client = await this.SeedClientAsync();
+        var adminService = new ClientAdminService(this._dbContext);
+        var defaultModel = await this.SeedChatModelAsync(client.Id);
+        var highModel = await this.SeedChatModelAsync(client.Id);
+
+        var updated = await adminService.PatchAsync(
+            client.Id,
+            null,
+            null,
+            reviewPasses: new List<ReviewPassDto>
+            {
+                new(0, defaultModel),
+                new(1, highModel, ReasoningEffort: ReviewReasoningEffort.High),
+            },
+            ct: CancellationToken.None);
+
+        Assert.NotNull(updated);
+        Assert.Equal(
+            new[]
+            {
+                new ReviewPassDto(0, defaultModel, ReasoningEffort: ReviewReasoningEffort.None),
+                new ReviewPassDto(1, highModel, ReasoningEffort: ReviewReasoningEffort.High),
+            },
+            updated!.ReviewPassesOrEmpty.ToArray());
+
+        // The effort survives to the review-pipeline projection so it reaches the outbound request. An unset
+        // per-pass effort reads back as None (the column is null in the database).
+        var passes = await this._registry.GetReviewPassesAsync(client.Id, CancellationToken.None);
+        Assert.Equal(
+            new[] { ReviewReasoningEffort.None, ReviewReasoningEffort.High },
+            passes.Select(pass => pass.ReasoningEffort).ToArray());
+    }
+
+    [Fact]
+    public async Task BaselineReasoningEffort_PatchPersists_AndRegistryEchoesIt()
+    {
+        var client = await this.SeedClientAsync();
+        var adminService = new ClientAdminService(this._dbContext);
+
+        // Default before any opt-in is None (byte-identical to today: no effort sent).
+        var initial = await this._registry.GetBaselineReasoningEffortAsync(client.Id, CancellationToken.None);
+        Assert.Equal(ReviewReasoningEffort.None, initial);
+
+        var updated = await adminService.PatchAsync(
+            client.Id,
+            null,
+            null,
+            baselineReasoningEffort: ReviewReasoningEffort.Medium,
+            ct: CancellationToken.None);
+
+        Assert.NotNull(updated);
+        Assert.Equal(ReviewReasoningEffort.Medium, updated!.BaselineReasoningEffort);
+
+        var persisted = await this._registry.GetBaselineReasoningEffortAsync(client.Id, CancellationToken.None);
+        Assert.Equal(ReviewReasoningEffort.Medium, persisted);
+    }
+
+    [Fact]
+    public async Task ReviewPasses_PatchReplacesListWholesale()
+    {
+        var client = await this.SeedClientAsync();
+        var adminService = new ClientAdminService(this._dbContext);
+        var original = await this.SeedChatModelAsync(client.Id);
+        var replacement = await this.SeedChatModelAsync(client.Id);
+
+        await adminService.PatchAsync(
+            client.Id,
+            null,
+            null,
+            reviewPasses: new List<ReviewPassDto> { new(0, original) },
+            ct: CancellationToken.None);
+
+        await adminService.PatchAsync(
+            client.Id,
+            null,
+            null,
+            reviewPasses: new List<ReviewPassDto> { new(0, replacement) },
+            ct: CancellationToken.None);
+
+        var passes = await this._registry.GetReviewPassesAsync(client.Id, CancellationToken.None);
+        Assert.Equal(new[] { replacement }, passes.Select(pass => pass.ConfiguredModelId).ToArray());
+    }
+
+    [Fact]
+    public async Task DefaultReviewPipelineProfileId_RoundTripsNullableValueAcrossPersistence()
+    {
+        var client = await this.SeedClientAsync();
+        var adminService = new ClientAdminService(this._dbContext);
+
+        client.DefaultReviewPipelineProfileId = ReviewPipelineProfileProvider.FileByFileAssertiveProfileId;
+        client.DefaultReviewPipelineProfileUpdatedAtUtc = DateTimeOffset.UtcNow;
+        await this._dbContext.SaveChangesAsync();
+
+        var persistedProfileId = await this._registry.GetDefaultReviewPipelineProfileIdAsync(client.Id, CancellationToken.None);
+        var persistedClient = await adminService.GetByIdAsync(client.Id, CancellationToken.None);
+
+        Assert.Equal(ReviewPipelineProfileProvider.FileByFileAssertiveProfileId, persistedProfileId);
+        Assert.NotNull(persistedClient);
+        Assert.Equal(ReviewPipelineProfileProvider.FileByFileAssertiveProfileId, persistedClient!.DefaultReviewPipelineProfileId);
+        Assert.NotNull(persistedClient.DefaultReviewPipelineProfileUpdatedAtUtc);
+
+        client.DefaultReviewPipelineProfileId = null;
+        client.DefaultReviewPipelineProfileUpdatedAtUtc = null;
+        await this._dbContext.SaveChangesAsync();
+
+        var clearedProfileId = await this._registry.GetDefaultReviewPipelineProfileIdAsync(client.Id, CancellationToken.None);
+        var clearedClient = await adminService.GetByIdAsync(client.Id, CancellationToken.None);
+
+        Assert.Null(clearedProfileId);
+        Assert.NotNull(clearedClient);
+        Assert.Null(clearedClient!.DefaultReviewPipelineProfileId);
+        Assert.Null(clearedClient.DefaultReviewPipelineProfileUpdatedAtUtc);
+    }
+
+    private async Task<ClientRecord> SeedClientAsync()
+    {
+        var record = new ClientRecord
+        {
+            Id = Guid.NewGuid(),
+            TenantId = TenantCatalog.SystemTenantId,
+            DisplayName = "Test Client",
+            IsActive = true,
+            CreatedAt = DateTimeOffset.UtcNow,
+        };
+        this._dbContext.Clients.Add(record);
+        await this._dbContext.SaveChangesAsync();
+        this._seededClientIds.Add(record.Id);
+        return record;
+    }
+
+    // Seeds one chat-capable configured model (on its own connection profile) for the client and returns its id,
+    // so a review-pass entry can satisfy the configured-model foreign key. Cleaned up by the client-delete cascade.
+    private async Task<Guid> SeedChatModelAsync(Guid clientId)
+    {
+        var profileId = Guid.NewGuid();
+        var modelId = Guid.NewGuid();
+        var now = DateTimeOffset.UtcNow;
+
+        this._dbContext.AiConnectionProfiles.Add(
+            new AiConnectionProfileRecord
+            {
+                Id = profileId,
+                ClientId = clientId,
+                DisplayName = $"Connection {profileId:N}",
+                ProviderKind = AiProviderKind.AzureOpenAi.ToString(),
+                BaseUrl = "https://x.openai.azure.com/",
+                AuthMode = AiAuthMode.AzureIdentity.ToString(),
+                DiscoveryMode = AiDiscoveryMode.ManualOnly.ToString(),
+                DefaultHeaders = [],
+                DefaultQueryParams = [],
+                IsActive = false,
+                CreatedAt = now,
+                UpdatedAt = now,
+                PurposeBindings = [],
+                ConfiguredModels =
+                [
+                    new AiConfiguredModelRecord
+                    {
+                        Id = modelId,
+                        ConnectionProfileId = profileId,
+                        RemoteModelId = $"gpt-4o-{modelId:N}",
+                        DisplayName = "gpt-4o",
+                        OperationKinds = [AiOperationKind.Chat.ToString()],
+                        SupportedProtocolModes = [AiProtocolMode.Auto.ToString()],
+                        SupportsStructuredOutput = true,
+                        SupportsToolUse = true,
+                        Source = AiConfiguredModelSource.Manual.ToString(),
+                    },
+                ],
+            });
+        await this._dbContext.SaveChangesAsync();
+        return modelId;
+    }
+
+    private static HttpResponseMessage CreateJsonResponse<T>(T payload)
+    {
+        return new HttpResponseMessage(HttpStatusCode.OK)
+        {
+            Content = new StringContent(JsonSerializer.Serialize(payload)),
+        };
+    }
+
+    private sealed class StubHttpMessageHandler(Func<HttpRequestMessage, Task<HttpResponseMessage>> responder)
+        : HttpMessageHandler
+    {
+        protected override Task<HttpResponseMessage> SendAsync(
+            HttpRequestMessage request,
+            CancellationToken cancellationToken)
+        {
+            return responder(request);
+        }
+    }
+}

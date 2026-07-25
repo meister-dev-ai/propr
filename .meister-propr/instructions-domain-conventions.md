@@ -1,6 +1,6 @@
 """
 description: Provider-neutral review domain conventions for ReviewJob, PullRequest, carry-forward behavior, and AI connection entities.
-when-to-use: When files change in src/MeisterProPR.Domain/, review orchestration, review persistence, provider-neutral review models, or related tests.
+when-to-use: When files change in src/MeisterDev.ProPR.Domain/, review orchestration, review persistence, provider-neutral review models, or related tests.
 """
 
 # Domain Conventions

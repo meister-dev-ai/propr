@@ -1,0 +1,67 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+    <ItemGroup>
+        <ProjectReference Include="..\MeisterDev.ProPR.Domain\MeisterDev.ProPR.Domain.csproj"/>
+        <ProjectReference Include="..\MeisterDev.ProPR.Application\MeisterDev.ProPR.Application.csproj"/>
+        <ProjectReference Include="..\MeisterDev.ProPR.ProCursor.Contracts\MeisterDev.ProPR.ProCursor.Contracts.csproj"/>
+        <ProjectReference Include="..\MeisterDev.ProPR.ProRV\MeisterDev.ProPR.ProRV.csproj"/>
+        <ProjectReference Include="..\MeisterDev.ProPR.CodeAnalysis.TreeSitter\MeisterDev.ProPR.CodeAnalysis.TreeSitter.csproj"/>
+        <ProjectReference Include="..\MeisterDev.ProPR.CodeAnalysis.Roslyn\MeisterDev.ProPR.CodeAnalysis.Roslyn.csproj"/>
+    </ItemGroup>
+
+    <ItemGroup>
+        <FrameworkReference Include="Microsoft.AspNetCore.App"/>
+    </ItemGroup>
+
+    <ItemGroup>
+        <PackageReference Include="Azure.AI.OpenAI" Version="2.9.0-beta.1"/>
+        <PackageReference Include="Azure.Identity" Version="1.19.0"/>
+        <PackageReference Include="Azure.ResourceManager.CognitiveServices" Version="1.5.2"/>
+        <PackageReference Include="BCrypt.Net-Next" Version="4.1.0"/>
+        <PackageReference Include="Microsoft.FeatureManagement" Version="4.3.0"/>
+        <PackageReference Include="Microsoft.Agents.AI" Version="1.6.2"/>
+        <PackageReference Include="Microsoft.Extensions.AI.OpenAI" Version="10.5.1"/>
+        <PackageReference Include="Pgvector.EntityFrameworkCore" Version="0.3.0"/>
+        <PackageReference Include="System.Configuration.ConfigurationManager" Version="10.0.7"/>
+        <PackageReference Include="DiffPlex" Version="1.9.0"/>
+        <PackageReference Include="Handlebars.Net" Version="2.1.6"/>
+        <PackageReference Include="Microsoft.Extensions.AI" Version="10.5.1"/>
+        <PackageReference Include="Microsoft.TeamFoundationServer.Client" Version="20.269.0-preview"/>
+        <PackageReference Include="Microsoft.VisualStudio.Services.Client" Version="20.269.0-preview"/>
+        <!-- Pin OIDC discovery / JWKS validation types (JwtSecurityTokenHandler, ConfigurationManager,
+             OpenIdConnectConfigurationRetriever) that were previously only present transitively. -->
+        <PackageReference Include="Microsoft.IdentityModel.Protocols.OpenIdConnect" Version="7.7.1"/>
+        <!-- Override System.Drawing.Common to address CVE vulnerability in v5.0.0 -->
+        <PackageReference Include="System.Drawing.Common" Version="10.0.7"/>
+        <PackageReference Include="Microsoft.EntityFrameworkCore" Version="10.0.7"/>
+        <PackageReference Include="Microsoft.EntityFrameworkCore.Relational" Version="10.0.7"/>
+        <PackageReference Include="Microsoft.CodeAnalysis.CSharp" Version="5.0.0"/>
+        <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="10.0.1"/>
+        <PackageReference Include="SharpToken" Version="2.0.6"/>
+        <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="10.0.7">
+            <PrivateAssets>all</PrivateAssets>
+        </PackageReference>
+    </ItemGroup>
+
+    <ItemGroup>
+        <InternalsVisibleTo Include="MeisterDev.ProPR.Infrastructure.Tests"/>
+        <InternalsVisibleTo Include="DynamicProxyGenAssembly2"/>
+    </ItemGroup>
+
+    <ItemGroup>
+        <Content Include="AI/Prompts/**/*">
+            <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+            <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+        </Content>
+    </ItemGroup>
+
+    <PropertyGroup>
+        <TargetFramework>net10.0</TargetFramework>
+        <ImplicitUsings>enable</ImplicitUsings>
+        <Nullable>enable</Nullable>
+        <!-- OPENAI001: OpenAIResponseClient is experimental but intentionally used for
+             the Responses API (reasoning + tool use). Revisit when the API stabilises. -->
+        <NoWarn>$(NoWarn);OPENAI001;MEAI001</NoWarn>
+    </PropertyGroup>
+
+</Project>

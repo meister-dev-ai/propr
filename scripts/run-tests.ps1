@@ -16,7 +16,7 @@ function Invoke-Quiet {
     }
 }
 
-Invoke-Quiet -Label "dotnet test" -Command { dotnet test "$RepoRoot/MeisterProPR.slnx" --verbosity quiet }
+Invoke-Quiet -Label "dotnet test" -Command { dotnet test "$RepoRoot/MeisterDev.ProPR.slnx" --verbosity quiet }
 Invoke-Quiet -Label "npm test" -Command { npm test --prefix "$RepoRoot/frontend" }
 
 if ($Failed) {

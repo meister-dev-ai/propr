@@ -161,5 +161,5 @@ All runtime secrets are stored in Key Vault and referenced by the container apps
 The backend and ProCursor apps also mount the same Azure Files-backed Data Protection key-ring share at `/app/.data-protection-keys` in this example. That shared mount is an operator convenience, not a corrected-architecture requirement: ProPR and ProCursor may use independent key-ring stores as long as each service can still decrypt the secrets it owns.
 
 If `OTLP_ENDPOINT` is supplied to the apps, the backend and ProCursor services emit traces under the
-distinct service names `MeisterProPR.Api` and `MeisterProPR.ProCursor.Service` so Azure-hosted flows
+distinct service names `MeisterDev.ProPR.Api` and `MeisterDev.ProPR.ProCursor.Service` so Azure-hosted flows
 can be correlated across the internal service boundary.

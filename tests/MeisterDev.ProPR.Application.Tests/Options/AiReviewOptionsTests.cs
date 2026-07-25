@@ -1,0 +1,33 @@
+// Copyright (c) Andreas Rain.
+// Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
+
+using MeisterDev.ProPR.Application.Options;
+
+namespace MeisterDev.ProPR.Application.Tests.Options;
+
+/// <summary>
+///     T032 — verifies default values and env-var binding names for tier iteration budgets.
+/// </summary>
+public sealed class AiReviewOptionsTests
+{
+    [Fact]
+    public void MaxIterationsLow_DefaultIs5()
+    {
+        var opts = new AiReviewOptions();
+        Assert.Equal(5, opts.MaxIterationsLow);
+    }
+
+    [Fact]
+    public void MaxIterationsMedium_DefaultIs10()
+    {
+        var opts = new AiReviewOptions();
+        Assert.Equal(10, opts.MaxIterationsMedium);
+    }
+
+    [Fact]
+    public void MaxIterationsHigh_DefaultIs20()
+    {
+        var opts = new AiReviewOptions();
+        Assert.Equal(20, opts.MaxIterationsHigh);
+    }
+}

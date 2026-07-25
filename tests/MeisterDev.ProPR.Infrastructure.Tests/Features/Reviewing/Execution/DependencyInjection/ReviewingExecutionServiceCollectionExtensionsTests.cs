@@ -1,0 +1,42 @@
+// Copyright (c) Andreas Rain.
+// Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
+
+using MeisterDev.ProPR.Application.Features.Reviewing.Execution.Models;
+using MeisterDev.ProPR.Application.Features.Reviewing.Execution.Ports;
+using MeisterDev.ProPR.Infrastructure.Features.Reviewing.Execution.DependencyInjection;
+using MeisterDev.ProPR.ProRV.Abstractions;
+using Microsoft.Extensions.DependencyInjection;
+
+namespace MeisterDev.ProPR.Infrastructure.Tests.Features.Reviewing.Execution.DependencyInjection;
+
+public sealed class ReviewingExecutionServiceCollectionExtensionsTests
+{
+    [Fact]
+    public void AddReviewingExecution_RegistersScopedReviewHelpersForScopedDependencies()
+    {
+        var services = new ServiceCollection();
+
+        services.AddReviewingExecution();
+
+        Assert.Equal(ServiceLifetime.Scoped, GetLifetime<FileReviewDispatchPlanner>(services));
+        Assert.Equal(ServiceLifetime.Scoped, GetLifetime<ReviewSynthesisExecutor>(services));
+        Assert.Equal(ServiceLifetime.Singleton, GetLifetime<QualityFilterExecutor>(services));
+        Assert.Equal(ServiceLifetime.Singleton, GetLifetime<IProRVPrefilter>(services));
+    }
+
+    [Fact]
+    public void AddReviewingExecution_RegistersPipelineProfilesAndSharedPerFileRunner()
+    {
+        var services = new ServiceCollection();
+
+        services.AddReviewingExecution();
+
+        Assert.Equal(ServiceLifetime.Singleton, GetLifetime<IReviewPipelineProfileProvider>(services));
+        Assert.Equal(ServiceLifetime.Scoped, GetLifetime<IReviewPipeline<PerFileReviewContext>>(services));
+    }
+
+    private static ServiceLifetime GetLifetime<TService>(IServiceCollection services)
+    {
+        return services.Single(descriptor => descriptor.ServiceType == typeof(TService)).Lifetime;
+    }
+}

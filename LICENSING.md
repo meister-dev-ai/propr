@@ -20,9 +20,9 @@ To regenerate it, run:
 
 **The authoritative definition of what is commercial-only lives in the code's licensing feature
 definitions — not in this document and not in the per-file header notices.** The capability keys are
-defined in `src/MeisterProPR.Application/Features/Licensing/Models/PremiumCapabilityKey.cs` and their
+defined in `src/MeisterDev.ProPR.Application/Features/Licensing/Models/PremiumCapabilityKey.cs` and their
 policy (commercial-required, default-when-commercial) in
-`src/MeisterProPR.Infrastructure/Features/Licensing/Support/StaticPremiumCapabilityCatalog.cs`; the runtime
+`src/MeisterDev.ProPR.Infrastructure/Features/Licensing/Support/StaticPremiumCapabilityCatalog.cs`; the runtime
 gate is `ILicensingCapabilityService` resolving those against the installation edition and any overrides.
 That gating is what actually governs activation and use.
 

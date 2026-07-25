@@ -64,7 +64,7 @@ $ContainerName = 'meisterpropr-nginx-dev'
 # Paths
 # ---------------------------------------------------------------------------
 $RepoRoot    = Split-Path $PSScriptRoot -Parent
-$ApiProject  = Join-Path $RepoRoot 'src\MeisterProPR.Api\MeisterProPR.Api.csproj'
+$ApiProject  = Join-Path $RepoRoot 'src\MeisterDev.ProPR.Api\MeisterDev.ProPR.Api.csproj'
 $FrontendDir  = Join-Path $RepoRoot 'frontend'
 $FrontendDist = Join-Path $FrontendDir 'dist'
 $TempDir     = Join-Path $RepoRoot '.dev-env'

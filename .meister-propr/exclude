@@ -19,4 +19,4 @@ openapi.json
 frontend/src/services/generated/**
 
 # --- ProRV Text Assets ---
-src/MeisterProPR.ProRV/Assets/*.txt
+src/MeisterDev.ProPR.ProRV/Assets/*.txt

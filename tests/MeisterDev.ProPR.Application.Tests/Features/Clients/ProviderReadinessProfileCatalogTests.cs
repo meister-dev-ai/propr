@@ -1,0 +1,44 @@
+// Copyright (c) Andreas Rain.
+// Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
+
+using MeisterDev.ProPR.Application.Features.Clients.Support;
+using MeisterDev.ProPR.Domain.Enums;
+
+namespace MeisterDev.ProPR.Application.Tests.Features.Clients;
+
+public sealed class ProviderReadinessProfileCatalogTests
+{
+    [Fact]
+    public void GetProfile_GitHubHosted_ReturnsWorkflowCompleteProfile()
+    {
+        var sut = new StaticProviderReadinessProfileCatalog();
+
+        var profile = sut.GetProfile(ScmProvider.GitHub, "https://github.com/acme/platform");
+
+        Assert.Equal("hosted", profile.HostVariant);
+        Assert.True(profile.IsWorkflowComplete);
+    }
+
+    [Fact]
+    public void GetProfile_GitHubSelfHosted_ReturnsOnboardingReadyProfile()
+    {
+        var sut = new StaticProviderReadinessProfileCatalog();
+
+        var profile = sut.GetProfile(ScmProvider.GitHub, "https://github.enterprise.example.com/acme/platform");
+
+        Assert.Equal("selfHosted", profile.HostVariant);
+        Assert.False(profile.IsWorkflowComplete);
+    }
+
+    [Fact]
+    public void GetProfile_AzureDevOpsSelfHosted_ReturnsOnboardingReadyProfile()
+    {
+        var sut = new StaticProviderReadinessProfileCatalog();
+
+        var profile = sut.GetProfile(ScmProvider.AzureDevOps, "https://ado-server.example.com/tfs/defaultcollection");
+
+        Assert.Equal("selfHosted", profile.HostVariant);
+        Assert.False(profile.IsWorkflowComplete);
+        Assert.Contains("Self-hosted Azure DevOps", profile.Notes, StringComparison.OrdinalIgnoreCase);
+    }
+}

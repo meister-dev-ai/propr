@@ -22,7 +22,7 @@ jobs:
           global-json-file: global.json
 
       - name: Restore dependencies
-        run: dotnet restore MeisterProPR.slnx
+        run: dotnet restore MeisterDev.ProPR.slnx
 
       - name: Install JetBrains cleanupcode
         # Pin the ReSharper CLI version: this is a gating step, and an unpinned tool
@@ -35,11 +35,11 @@ jobs:
         run: echo "$HOME/.dotnet/tools" >> "$GITHUB_PATH"
 
       - name: Build solution for cleanupcode
-        run: dotnet build MeisterProPR.slnx --no-restore --configuration Release
+        run: dotnet build MeisterDev.ProPR.slnx --no-restore --configuration Release
 
       - name: Run cleanupcode
         run: |
-          jb cleanupcode MeisterProPR.slnx --profile="Built-in: Reformat Code" --verbosity=INFO --no-updates
+          jb cleanupcode MeisterDev.ProPR.slnx --profile="Built-in: Reformat Code" --verbosity=INFO --no-updates
 
       - name: Verify formatting
         run: git diff --exit-code
@@ -58,10 +58,10 @@ jobs:
           global-json-file: global.json
 
       - name: Restore dependencies
-        run: dotnet restore MeisterProPR.slnx
+        run: dotnet restore MeisterDev.ProPR.slnx
 
       - name: Build
-        run: dotnet build MeisterProPR.slnx --no-restore --configuration Release
+        run: dotnet build MeisterDev.ProPR.slnx --no-restore --configuration Release
 
   architecture-gates:
     name: Architecture Gates
@@ -78,13 +78,13 @@ jobs:
           global-json-file: global.json
 
       - name: Restore dependencies
-        run: dotnet restore MeisterProPR.slnx
+        run: dotnet restore MeisterDev.ProPR.slnx
 
       - name: Run architecture dependency tests
-        run: dotnet test tests/MeisterProPR.Application.Tests/MeisterProPR.Application.Tests.csproj --no-restore --configuration Release --filter "VerticalSliceDependencyTests"
+        run: dotnet test tests/MeisterDev.ProPR.Application.Tests/MeisterDev.ProPR.Application.Tests.csproj --no-restore --configuration Release --filter "VerticalSliceDependencyTests"
 
       - name: Run startup registration safety tests
-        run: dotnet test tests/MeisterProPR.Api.Tests/MeisterProPR.Api.Tests.csproj --no-restore --configuration Release --filter "ModuleRegistrationTests|WaveRegistrationSafetyTests"
+        run: dotnet test tests/MeisterDev.ProPR.Api.Tests/MeisterDev.ProPR.Api.Tests.csproj --no-restore --configuration Release --filter "ModuleRegistrationTests|WaveRegistrationSafetyTests"
 
   reviewing-slice-gates:
     name: Reviewing Slice Gates
@@ -101,13 +101,13 @@ jobs:
           global-json-file: global.json
 
       - name: Restore dependencies
-        run: dotnet restore MeisterProPR.slnx
+        run: dotnet restore MeisterDev.ProPR.slnx
 
       - name: Run Reviewing application slice tests
-        run: dotnet test tests/MeisterProPR.Application.Tests/MeisterProPR.Application.Tests.csproj --no-restore --configuration Release --filter "ReviewingModuleTests|SubmitReviewJobHandlerTests|GetReviewJobStatusHandlerTests"
+        run: dotnet test tests/MeisterDev.ProPR.Application.Tests/MeisterDev.ProPR.Application.Tests.csproj --no-restore --configuration Release --filter "ReviewingModuleTests|SubmitReviewJobHandlerTests|GetReviewJobStatusHandlerTests"
 
       - name: Run Reviewing API slice tests
-        run: dotnet test tests/MeisterProPR.Api.Tests/MeisterProPR.Api.Tests.csproj --no-restore --configuration Release --filter "ReviewingModuleIntegrationTests|ReviewJobsControllerTests|ReviewJobIntakeIntegrationTests|JobsControllerProtocolTests|ReviewJobWorkerTests"
+        run: dotnet test tests/MeisterDev.ProPR.Api.Tests/MeisterDev.ProPR.Api.Tests.csproj --no-restore --configuration Release --filter "ReviewingModuleIntegrationTests|ReviewJobsControllerTests|ReviewJobIntakeIntegrationTests|JobsControllerProtocolTests|ReviewJobWorkerTests"
 
   test:
     name: Test
@@ -124,19 +124,19 @@ jobs:
           global-json-file: global.json
 
       - name: Restore dependencies
-        run: dotnet restore MeisterProPR.slnx
+        run: dotnet restore MeisterDev.ProPR.slnx
 
       - name: Run domain tests
-        run: dotnet test tests/MeisterProPR.Domain.Tests/MeisterProPR.Domain.Tests.csproj --no-restore --configuration Release --verbosity normal
+        run: dotnet test tests/MeisterDev.ProPR.Domain.Tests/MeisterDev.ProPR.Domain.Tests.csproj --no-restore --configuration Release --verbosity normal
 
       - name: Run application tests
-        run: dotnet test tests/MeisterProPR.Application.Tests/MeisterProPR.Application.Tests.csproj --no-restore --configuration Release --verbosity normal
+        run: dotnet test tests/MeisterDev.ProPR.Application.Tests/MeisterDev.ProPR.Application.Tests.csproj --no-restore --configuration Release --verbosity normal
 
       - name: Run infrastructure tests
-        run: dotnet test tests/MeisterProPR.Infrastructure.Tests/MeisterProPR.Infrastructure.Tests.csproj --no-restore --configuration Release --verbosity normal
+        run: dotnet test tests/MeisterDev.ProPR.Infrastructure.Tests/MeisterDev.ProPR.Infrastructure.Tests.csproj --no-restore --configuration Release --verbosity normal
 
       - name: Run API tests
-        run: dotnet test tests/MeisterProPR.Api.Tests/MeisterProPR.Api.Tests.csproj --no-restore --configuration Release --verbosity normal
+        run: dotnet test tests/MeisterDev.ProPR.Api.Tests/MeisterDev.ProPR.Api.Tests.csproj --no-restore --configuration Release --verbosity normal
 
   frontend-tests:
     name: Frontend tests

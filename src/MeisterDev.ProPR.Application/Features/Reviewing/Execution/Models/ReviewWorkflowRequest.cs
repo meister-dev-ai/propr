@@ -1,0 +1,28 @@
+// Copyright (c) Andreas Rain.
+// Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
+
+using MeisterDev.ProPR.Domain.Entities;
+using Microsoft.Extensions.AI;
+
+namespace MeisterDev.ProPR.Application.Features.Reviewing.Execution.Models;
+
+/// <summary>
+///     Offline execution request for one fixture-backed review run.
+/// </summary>
+public sealed record ReviewWorkflowRequest(
+    ReviewJob Job,
+    IChatClient ChatClient,
+    string ModelId,
+    ReviewEvaluationFixture? Fixture = null,
+    EvaluationConfiguration? Configuration = null,
+    string? PipelineProfileId = null,
+    PromptExperimentContext? PromptExperiment = null,
+    ReviewStepSkips? SkippedSteps = null)
+{
+    /// <summary>
+    ///     Effective offline-only skipped steps for this workflow request.
+    /// </summary>
+    public ReviewStepSkips EffectiveSkippedSteps => this.SkippedSteps
+                                                    ?? this.PromptExperiment?.SkippedSteps
+                                                    ?? new ReviewStepSkips();
+}

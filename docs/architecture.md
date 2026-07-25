@@ -131,8 +131,8 @@ gateway so tool-aware review omits ProCursor cleanly instead of exposing a broke
 Both hosts emit OTLP traces and Prometheus metrics for inbound ASP.NET Core requests and outbound
 `HttpClient` calls across the ProPR <-> ProCursor boundary. Structured logs redact shared-key
 configuration and request logging records only whether the service-auth header was present, never its
-value. OTLP resource identity is emitted separately for `MeisterProPR.Api` and
-`MeisterProPR.ProCursor.Service` so cross-service traces are attributable.
+value. OTLP resource identity is emitted separately for `MeisterDev.ProPR.Api` and
+`MeisterDev.ProPR.ProCursor.Service` so cross-service traces are attributable.
 
 Reviewing execution also maintains a provider-neutral local git workspace layer under the Reviewing
 module. For supported SCM providers, repository-content reads, changed-file inspection, and
@@ -149,7 +149,7 @@ ProCursor-owned operational tables through `PROCURSOR_DB_CONNECTION_STRING`.
 ProPR does not require `PROCURSOR_DB_CONNECTION_STRING` and reaches
 ProCursor-owned reporting and maintenance data only through authenticated internal ProCursor APIs.
 
-Compile-time ownership is enforced through the dedicated `MeisterProPR.ProCursor.Contracts`
+Compile-time ownership is enforced through the dedicated `MeisterDev.ProPR.ProCursor.Contracts`
 assembly for shared wire contracts and broker abstractions. Targeted ProCursor validation uses the
 ProCursor service project and its dedicated service tests directly rather than a separate solution.
 

@@ -1,0 +1,255 @@
+// Copyright (c) Andreas Rain.
+// Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
+
+using System.IdentityModel.Tokens.Jwt;
+using System.Net;
+using System.Net.Http.Headers;
+using System.Security.Claims;
+using System.Text;
+using MeisterDev.ProPR.Application.DTOs;
+using MeisterDev.ProPR.Application.Interfaces;
+using MeisterDev.ProPR.Domain.Entities;
+using MeisterDev.ProPR.Domain.Enums;
+using MeisterDev.ProPR.Domain.ValueObjects;
+using MeisterDev.ProPR.Infrastructure.Auth;
+using Microsoft.AspNetCore.Hosting;
+using Microsoft.AspNetCore.Mvc.Testing;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.IdentityModel.Tokens;
+using NSubstitute;
+
+namespace MeisterDev.ProPR.Api.Tests.Controllers;
+
+public sealed class IdentitiesControllerTests(IdentitiesControllerTests.IdentitiesApiFactory factory)
+    : IClassFixture<IdentitiesControllerTests.IdentitiesApiFactory>
+{
+    [Fact]
+    public async Task ResolveIdentity_WithoutCredentials_Returns401()
+    {
+        var http = factory.CreateClient();
+        using var request = new HttpRequestMessage(
+            HttpMethod.Get,
+            "/identities/resolve?orgUrl=https://dev.azure.com/org&displayName=Reviewer");
+
+        var response = await http.SendAsync(request);
+
+        Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task ResolveIdentity_ClientUserWithoutAdministratorRole_Returns403()
+    {
+        var http = factory.CreateClient();
+        using var request = new HttpRequestMessage(
+            HttpMethod.Get,
+            $"/identities/resolve?clientId={factory.AssignedClientId}&orgUrl=https://dev.azure.com/org&displayName=Reviewer");
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", factory.GenerateClientUserToken());
+
+        var response = await http.SendAsync(request);
+
+        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task ResolveIdentity_ClientAdministrator_Returns200()
+    {
+        var http = factory.CreateClient();
+        using var request = new HttpRequestMessage(
+            HttpMethod.Get,
+            $"/identities/resolve?clientId={factory.AssignedClientId}&orgUrl=https://dev.azure.com/org&displayName=Reviewer");
+        request.Headers.Authorization = new AuthenticationHeaderValue(
+            "Bearer",
+            factory.GenerateClientAdministratorToken());
+
+        var response = await http.SendAsync(request);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task ResolveIdentity_ClientAdministrator_ForOtherClient_Returns403()
+    {
+        var http = factory.CreateClient();
+        var otherClientId = Guid.NewGuid();
+        using var request = new HttpRequestMessage(
+            HttpMethod.Get,
+            $"/identities/resolve?clientId={otherClientId}&orgUrl=https://dev.azure.com/org&displayName=Reviewer");
+        request.Headers.Authorization = new AuthenticationHeaderValue(
+            "Bearer",
+            factory.GenerateClientAdministratorToken());
+
+        var response = await http.SendAsync(request);
+
+        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task ResolveIdentity_WithClientId_ForwardsClientIdToResolver()
+    {
+        var http = factory.CreateClient();
+        var clientId = Guid.NewGuid();
+        using var request = new HttpRequestMessage(
+            HttpMethod.Get,
+            $"/identities/resolve?clientId={clientId}&orgUrl=https://dev.azure.com/org&displayName=Reviewer");
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", factory.GenerateAdminToken());
+
+        var response = await http.SendAsync(request);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        await factory.ReviewerIdentityService.Received(1)
+            .ResolveCandidatesAsync(
+                clientId,
+                Arg.Is<ProviderHostRef>(host =>
+                    host.Provider == ScmProvider.AzureDevOps &&
+                    host.HostBaseUrl == "https://dev.azure.com"),
+                "Reviewer",
+                null,
+                Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task ResolveIdentity_Admin_Returns200()
+    {
+        var http = factory.CreateClient();
+        using var request = new HttpRequestMessage(
+            HttpMethod.Get,
+            $"/identities/resolve?clientId={factory.AssignedClientId}&orgUrl=https://dev.azure.com/org&displayName=Reviewer");
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", factory.GenerateAdminToken());
+
+        var response = await http.SendAsync(request);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+    }
+
+    public sealed class IdentitiesApiFactory : WebApplicationFactory<Program>
+    {
+        private const string TestJwtSecret = "test-identities-jwt-secret-32chars";
+
+        public IReviewerIdentityService ReviewerIdentityService { get; } = Substitute.For<IReviewerIdentityService>();
+        public IScmProviderRegistry ProviderRegistry { get; } = Substitute.For<IScmProviderRegistry>();
+
+        public Guid ClientAdministratorUserId { get; } = Guid.NewGuid();
+        public Guid ClientUserUserId { get; } = Guid.NewGuid();
+        public Guid AssignedClientId { get; } = Guid.NewGuid();
+
+        public string GenerateAdminToken()
+        {
+            return this.GenerateToken(Guid.NewGuid(), AppUserRole.Admin);
+        }
+
+        public string GenerateClientAdministratorToken()
+        {
+            return this.GenerateToken(this.ClientAdministratorUserId, AppUserRole.User);
+        }
+
+        public string GenerateClientUserToken()
+        {
+            return this.GenerateToken(this.ClientUserUserId, AppUserRole.User);
+        }
+
+        protected override void ConfigureWebHost(IWebHostBuilder builder)
+        {
+            builder.UseEnvironment("Testing");
+            builder.UseSetting("MEISTER_DISABLE_HOSTED_SERVICES", "true");
+            builder.UseSetting("AI_ENDPOINT", "https://fake.openai.azure.com/");
+            builder.UseSetting("AI_DEPLOYMENT", "gpt-4o");
+            builder.UseSetting("MEISTER_JWT_SECRET", TestJwtSecret);
+
+            var clientAdministratorUserId = this.ClientAdministratorUserId;
+            var clientUserUserId = this.ClientUserUserId;
+            var assignedClientId = this.AssignedClientId;
+
+            builder.ConfigureServices(services =>
+            {
+                services.AddSingleton<IJwtTokenService, JwtTokenService>();
+
+                ReplaceService(services, Substitute.For<IPullRequestFetcher>());
+                ReplaceService(services, Substitute.For<IAdoCommentPoster>());
+                ReplaceService(services, Substitute.For<IAssignedReviewDiscoveryService>());
+                ReplaceService(services, Substitute.For<IClientRegistry>());
+                ReplaceService(services, Substitute.For<IJobRepository>());
+                ReplaceService(services, Substitute.For<IThreadMemoryRepository>());
+                ReplaceService(services, this.ProviderRegistry);
+
+                var crawlRepo = Substitute.For<ICrawlConfigurationRepository>();
+                crawlRepo.GetAllActiveAsync(Arg.Any<CancellationToken>())
+                    .Returns(Task.FromResult<IReadOnlyList<CrawlConfigurationDto>>([]));
+                ReplaceService(services, crawlRepo);
+
+                this.ReviewerIdentityService.Provider.Returns(ScmProvider.AzureDevOps);
+                this.ReviewerIdentityService.ResolveCandidatesAsync(
+                        Arg.Any<Guid>(),
+                        Arg.Any<ProviderHostRef>(),
+                        Arg.Any<string>(),
+                        Arg.Any<Guid?>(),
+                        Arg.Any<CancellationToken>())
+                    .Returns(
+                        Task.FromResult<IReadOnlyList<ReviewerIdentity>>(
+                        [
+                            new ReviewerIdentity(
+                                new ProviderHostRef(ScmProvider.AzureDevOps, "https://dev.azure.com/org"),
+                                Guid.NewGuid().ToString("D"),
+                                "reviewer",
+                                "Reviewer",
+                                false),
+                        ]));
+                this.ProviderRegistry.GetReviewerIdentityService(ScmProvider.AzureDevOps)
+                    .Returns(this.ReviewerIdentityService);
+
+                var userRepo = Substitute.For<IUserRepository>();
+                userRepo.GetByIdWithAssignmentsAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
+                    .Returns(Task.FromResult<AppUser?>(null));
+                userRepo.GetUserClientRolesAsync(clientAdministratorUserId, Arg.Any<CancellationToken>())
+                    .Returns(
+                        Task.FromResult(
+                            new Dictionary<Guid, ClientRole>
+                            {
+                                { assignedClientId, ClientRole.ClientAdministrator },
+                            }));
+                userRepo.GetUserClientRolesAsync(clientUserUserId, Arg.Any<CancellationToken>())
+                    .Returns(
+                        Task.FromResult(
+                            new Dictionary<Guid, ClientRole>
+                            {
+                                { assignedClientId, ClientRole.ClientUser },
+                            }));
+                userRepo.GetUserClientRolesAsync(
+                        Arg.Is<Guid>(id => id != clientAdministratorUserId && id != clientUserUserId),
+                        Arg.Any<CancellationToken>())
+                    .Returns(Task.FromResult(new Dictionary<Guid, ClientRole>()));
+                ReplaceService(services, userRepo);
+            });
+        }
+
+        private string GenerateToken(Guid userId, AppUserRole globalRole)
+        {
+            var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(TestJwtSecret));
+            var handler = new JwtSecurityTokenHandler { MapInboundClaims = false };
+            var descriptor = new SecurityTokenDescriptor
+            {
+                Subject = new ClaimsIdentity(
+                [
+                    new Claim("sub", userId.ToString()),
+                    new Claim("global_role", globalRole.ToString()),
+                ]),
+                Expires = DateTime.UtcNow.AddHours(1),
+                SigningCredentials = new SigningCredentials(key, SecurityAlgorithms.HmacSha256),
+                Issuer = "meisterpropr",
+                Audience = "meisterpropr",
+            };
+            return handler.WriteToken(handler.CreateToken(descriptor));
+        }
+
+        private static void ReplaceService<T>(IServiceCollection services, T implementation)
+            where T : class
+        {
+            var descriptor = services.FirstOrDefault(candidate => candidate.ServiceType == typeof(T));
+            if (descriptor is not null)
+            {
+                services.Remove(descriptor);
+            }
+
+            services.AddSingleton(implementation);
+        }
+    }
+}

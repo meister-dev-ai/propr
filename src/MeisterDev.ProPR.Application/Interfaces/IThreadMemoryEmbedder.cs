@@ -1,0 +1,47 @@
+// Copyright (c) Andreas Rain.
+// Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
+
+using MeisterDev.ProPR.Application.DTOs;
+
+namespace MeisterDev.ProPR.Application.Interfaces;
+
+/// <summary>
+///     Generates semantic embeddings and AI-generated resolution summaries for PR review threads.
+///     Implemented in Infrastructure using <see cref="Microsoft.Extensions.AI.IEmbeddingGenerator{TInput,TEmbedding}" />
+///     and <see cref="Microsoft.Extensions.AI.IChatClient" /> — no concrete provider SDK references above Infrastructure.
+/// </summary>
+public interface IThreadMemoryEmbedder
+{
+    /// <summary>
+    ///     Generates a float vector for the given composite text using the client's embedding model.
+    /// </summary>
+    /// <param name="compositeText">Pre-built composite string combining file path, change excerpt, comments, and summary.</param>
+    /// <param name="clientId">The client whose embedding model configuration applies.</param>
+    /// <param name="ct">Cancellation token.</param>
+    /// <returns>The embedding vector as <c>float[]</c>.</returns>
+    /// <exception cref="InvalidOperationException">
+    ///     When no <c>Embedding</c>-category AI connection is configured for the client.
+    /// </exception>
+    Task<float[]> GenerateEmbeddingAsync(string compositeText, Guid clientId, CancellationToken ct = default);
+
+    /// <summary>
+    ///     Generates an AI summary describing how and why the given thread was resolved, together with a
+    ///     classification of how clearly the thread expresses an actual resolution.
+    ///     Never throws — on failure returns a placeholder summary classified
+    ///     <see cref="MeisterDev.ProPR.Domain.Enums.ResolutionClarity.Undetermined" />.
+    /// </summary>
+    /// <param name="filePath">File the thread was anchored to (null for PR-level threads).</param>
+    /// <param name="changeExcerpt">Diff excerpt relevant to the thread.</param>
+    /// <param name="commentHistory">Full comment history of the thread.</param>
+    /// <param name="clientId">The client whose active AI connection should be used for summary generation.</param>
+    /// <param name="ct">Cancellation token.</param>
+    /// <returns>
+    ///     A <see cref="ThreadResolutionSummary" /> with a non-empty summary and a resolution classification.
+    /// </returns>
+    Task<ThreadResolutionSummary> GenerateResolutionSummaryAsync(
+        string? filePath,
+        string? changeExcerpt,
+        string commentHistory,
+        Guid clientId,
+        CancellationToken ct = default);
+}

@@ -1,0 +1,27 @@
+// Copyright (c) Andreas Rain.
+// Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
+
+using MeisterDev.ProPR.Domain.Enums;
+
+namespace MeisterDev.ProPR.Infrastructure.Data.Models;
+
+/// <summary>EF persistence model for <see cref="Domain.Entities.AppUser" />.</summary>
+public sealed class AppUserRecord
+{
+    public Guid Id { get; set; }
+    public string Username { get; set; } = string.Empty;
+    public string? Email { get; set; }
+    public string? NormalizedEmail { get; set; }
+    public string? PasswordHash { get; set; }
+    public AppUserRole GlobalRole { get; set; } = AppUserRole.User;
+    public bool IsActive { get; set; } = true;
+    public DateTimeOffset CreatedAt { get; set; }
+    public int FailedLoginAttempts { get; set; }
+    public DateTimeOffset? LockoutEndAt { get; set; }
+
+    public ICollection<UserClientRoleRecord> ClientAssignments { get; set; } = [];
+    public ICollection<TenantMembershipRecord> TenantMemberships { get; set; } = [];
+    public ICollection<ExternalIdentityRecord> ExternalIdentities { get; set; } = [];
+    public ICollection<UserPatRecord> Pats { get; set; } = [];
+    public ICollection<RefreshTokenRecord> RefreshTokens { get; set; } = [];
+}

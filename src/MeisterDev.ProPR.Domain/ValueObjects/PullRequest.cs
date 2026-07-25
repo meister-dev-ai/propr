@@ -1,0 +1,80 @@
+// Copyright (c) Andreas Rain.
+// Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
+
+using MeisterDev.ProPR.Domain.Enums;
+
+namespace MeisterDev.ProPR.Domain.ValueObjects;
+
+/// <summary>
+///     Represents a pull request and the files changed within it.
+/// </summary>
+/// <param name="OrganizationUrl">Organization URL containing the repository.</param>
+/// <param name="ProjectId">Project identifier.</param>
+/// <param name="RepositoryId">Repository identifier.</param>
+/// <param name="RepositoryName">Repository display name.</param>
+/// <param name="PullRequestId">Pull request numeric id.</param>
+/// <param name="IterationId">Iteration id within the pull request.</param>
+/// <param name="Title">Title of the pull request.</param>
+/// <param name="Description">Optional description of the pull request.</param>
+/// <param name="SourceBranch">Source branch name.</param>
+/// <param name="TargetBranch">Target branch name.</param>
+/// <param name="ChangedFiles">
+///     Files to review in this pass. On a first-pass review this is all files changed in the PR.
+///     On a re-review it is the delta — only files that changed since the last reviewed iteration.
+/// </param>
+/// <param name="Status">Current status of the pull request (defaults to <see cref="PrStatus.Active" />).</param>
+/// <param name="ExistingThreads">
+///     Existing comment threads on the PR fetched before the review runs.
+///     Used to provide AI context and to avoid posting duplicate bot comments.
+///     Defaults to <c>null</c> (treated as empty — no deduplication).
+/// </param>
+/// <param name="AllChangedFileSummaries">
+///     Full manifest of every file changed in the PR since the target branch (path + change type only).
+///     Populated on re-review passes so the AI manifest section still covers the complete PR scope
+///     even though <see cref="ChangedFiles" /> holds only the delta.
+///     When <c>null</c> (first-pass fetch), <see cref="AllPrFileSummaries" /> derives it from
+///     <see cref="ChangedFiles" />.
+/// </param>
+/// <param name="AuthorizedIdentityId">
+///     Provider-authenticated identity GUID when the review host exposes one.
+///     When populated, reviewer-owned thread detection treats this identity as equivalent to the
+///     configured reviewer identity.
+/// </param>
+/// <param name="AuthorizedIdentityName">
+///     Provider-native login or display name of the authenticated connection identity used to
+///     fetch and post review correspondence. When populated, reviewer-owned thread detection
+///     also treats this identity as equivalent to the configured reviewer identity.
+/// </param>
+/// <param name="LinkedItems">
+///     Work items (Azure DevOps) or issues (GitHub, GitLab, Forgejo) linked to the pull request,
+///     discovered and bounded before the review runs so the model can judge the change against its
+///     intended direction. Defaults to <c>null</c> (treated as empty — no linked-item context).
+/// </param>
+public sealed record PullRequest(
+    string OrganizationUrl,
+    string ProjectId,
+    string RepositoryId,
+    string RepositoryName,
+    int PullRequestId,
+    int IterationId,
+    string Title,
+    string? Description,
+    string SourceBranch,
+    string TargetBranch,
+    IReadOnlyList<ChangedFile> ChangedFiles,
+    PrStatus Status = PrStatus.Active,
+    IReadOnlyList<PrCommentThread>? ExistingThreads = null,
+    IReadOnlyList<ChangedFileSummary>? AllChangedFileSummaries = null,
+    Guid? AuthorizedIdentityId = null,
+    string? AuthorizedIdentityName = null,
+    IReadOnlyList<LinkedItem>? LinkedItems = null)
+{
+    /// <summary>
+    ///     Full manifest of all files changed in the PR since the target branch (path + change type only).
+    ///     On re-review passes this covers the entire PR scope; on first-pass it mirrors
+    ///     <see cref="ChangedFiles" />.
+    /// </summary>
+    public IReadOnlyList<ChangedFileSummary> AllPrFileSummaries =>
+        this.AllChangedFileSummaries ??
+        this.ChangedFiles.Select(f => new ChangedFileSummary(f.Path, f.ChangeType)).ToList().AsReadOnly();
+}

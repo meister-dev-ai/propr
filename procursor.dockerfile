@@ -6,9 +6,9 @@ WORKDIR /source
 COPY src/ src/
 COPY tests/ tests/
 
-RUN dotnet restore src/MeisterProPR.ProCursor.Service/MeisterProPR.ProCursor.Service.csproj
+RUN dotnet restore src/MeisterDev.ProPR.ProCursor.Service/MeisterDev.ProPR.ProCursor.Service.csproj
 
-RUN dotnet publish src/MeisterProPR.ProCursor.Service/MeisterProPR.ProCursor.Service.csproj \
+RUN dotnet publish src/MeisterDev.ProPR.ProCursor.Service/MeisterDev.ProPR.ProCursor.Service.csproj \
     -c Release -o /app --no-restore
 
 RUN mkdir -p /app/.data-protection-keys
@@ -46,5 +46,5 @@ USER app
 EXPOSE 8081
 ENV ASPNETCORE_URLS=http://+:8081
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
-    CMD ["dotnet", "MeisterProPR.ProCursor.Service.dll", "--healthcheck", "http://127.0.0.1:8081/healthz"]
-ENTRYPOINT ["dotnet", "MeisterProPR.ProCursor.Service.dll"]
+    CMD ["dotnet", "MeisterDev.ProPR.ProCursor.Service.dll", "--healthcheck", "http://127.0.0.1:8081/healthz"]
+ENTRYPOINT ["dotnet", "MeisterDev.ProPR.ProCursor.Service.dll"]

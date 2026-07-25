@@ -1,0 +1,86 @@
+// Copyright (c) Andreas Rain.
+// Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
+
+using MeisterDev.ProPR.Application.DTOs;
+using MeisterDev.ProPR.Domain.Enums;
+using MeisterDev.ProPR.Domain.ValueObjects;
+
+namespace MeisterDev.ProPR.Application.Interfaces;
+
+/// <summary>Persists client-scoped SCM provider connections.</summary>
+public interface IClientScmConnectionRepository
+{
+    /// <summary>Returns all provider connections configured for the given client.</summary>
+    Task<IReadOnlyList<ClientScmConnectionDto>> GetByClientIdAsync(Guid clientId, CancellationToken ct = default);
+
+    /// <summary>
+    ///     Returns the retention settings for every provider connection across all clients. Used by the
+    ///     retention sweep to decide, per connection, whether to purge expired or disabled archive data.
+    /// </summary>
+    Task<IReadOnlyList<ClientScmConnectionRetentionDto>> GetAllForRetentionSweepAsync(CancellationToken ct = default);
+
+    /// <summary>Returns one provider connection for the given client, or <see langword="null" /> if not found.</summary>
+    Task<ClientScmConnectionDto?> GetByIdAsync(Guid clientId, Guid connectionId, CancellationToken ct = default);
+
+    /// <summary>Returns one active provider connection plus decrypted secret material for the given client host.</summary>
+    Task<ClientScmConnectionCredentialDto?> GetOperationalConnectionAsync(
+        Guid clientId,
+        ProviderHostRef host,
+        CancellationToken ct = default);
+
+    /// <summary>Returns one active provider connection plus decrypted secret material for the given client connection.</summary>
+    Task<ClientScmConnectionCredentialDto?> GetOperationalConnectionByIdAsync(
+        Guid clientId,
+        Guid connectionId,
+        CancellationToken ct = default);
+
+    /// <summary>Adds a provider connection for the given client.</summary>
+    Task<ClientScmConnectionDto?> AddAsync(
+        Guid clientId,
+        ScmProvider providerFamily,
+        string hostBaseUrl,
+        ScmAuthenticationKind authenticationKind,
+        string? oAuthTenantId,
+        string? oAuthClientId,
+        string displayName,
+        string secret,
+        bool isActive,
+        long? gitHubAppId = null,
+        long? gitHubAppInstallationId = null,
+        string? userName = null,
+        bool storeThreads = false,
+        bool storeDiffs = false,
+        int? retentionDays = null,
+        CancellationToken ct = default);
+
+    /// <summary>Updates one provider connection for the given client.</summary>
+    Task<ClientScmConnectionDto?> UpdateAsync(
+        Guid clientId,
+        Guid connectionId,
+        string hostBaseUrl,
+        ScmAuthenticationKind authenticationKind,
+        string? oAuthTenantId,
+        string? oAuthClientId,
+        string displayName,
+        string? secret,
+        bool isActive,
+        long? gitHubAppId = null,
+        long? gitHubAppInstallationId = null,
+        string? userName = null,
+        bool storeThreads = false,
+        bool storeDiffs = false,
+        int? retentionDays = null,
+        CancellationToken ct = default);
+
+    /// <summary>Updates verification state for one provider connection.</summary>
+    Task<ClientScmConnectionDto?> UpdateVerificationAsync(
+        Guid clientId,
+        Guid connectionId,
+        string verificationStatus,
+        DateTimeOffset verifiedAt,
+        string? verificationError,
+        CancellationToken ct = default);
+
+    /// <summary>Deletes one provider connection for the given client.</summary>
+    Task<bool> DeleteAsync(Guid clientId, Guid connectionId, CancellationToken ct = default);
+}

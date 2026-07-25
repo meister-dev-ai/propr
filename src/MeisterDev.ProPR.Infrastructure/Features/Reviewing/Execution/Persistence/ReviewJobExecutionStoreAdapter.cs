@@ -1,0 +1,181 @@
+// Copyright (c) Andreas Rain.
+// Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
+// This file implements commercial-only functionality. A commercial license is required to activate or use that functionality.
+
+using MeisterDev.ProPR.Application.Features.Reviewing.Execution.Ports;
+using MeisterDev.ProPR.Application.Interfaces;
+using MeisterDev.ProPR.Domain.Entities;
+using MeisterDev.ProPR.Domain.Enums;
+using MeisterDev.ProPR.Domain.ValueObjects;
+
+namespace MeisterDev.ProPR.Infrastructure.Features.Reviewing.Execution.Persistence;
+
+/// <summary>
+///     Adapts the legacy job repository onto the Reviewing execution boundary.
+/// </summary>
+public sealed class ReviewJobExecutionStoreAdapter(IJobRepository inner) : IReviewJobExecutionStore
+{
+    public ReviewJob? GetById(Guid id)
+    {
+        return inner.GetById(id);
+    }
+
+    public IReadOnlyList<ReviewJob> GetPendingJobs()
+    {
+        return inner.GetPendingJobs();
+    }
+
+    public Task<IReadOnlyList<ReviewJob>> GetStuckProcessingJobsAsync(
+        TimeSpan threshold,
+        CancellationToken ct = default)
+    {
+        return inner.GetStuckProcessingJobsAsync(threshold, ct);
+    }
+
+    public Task<int> CountProcessingJobsAsync(CancellationToken ct = default)
+    {
+        return inner.CountProcessingJobsAsync(ct);
+    }
+
+    public Task<bool> TryTransitionAsync(Guid id, JobStatus from, JobStatus to, CancellationToken ct = default)
+    {
+        return inner.TryTransitionAsync(id, from, to, ct);
+    }
+
+    public Task UpdateRetryCountAsync(Guid id, int retryCount, CancellationToken ct = default)
+    {
+        return inner.UpdateRetryCountAsync(id, retryCount, ct);
+    }
+
+    public Task SetFailedAsync(Guid id, string errorMessage, CancellationToken ct = default)
+    {
+        return inner.SetFailedAsync(id, errorMessage, ct);
+    }
+
+    public Task DeleteAsync(Guid id, CancellationToken ct = default)
+    {
+        return inner.DeleteAsync(id, ct);
+    }
+
+    public Task SetResultAsync(Guid id, ReviewResult result, CancellationToken ct = default)
+    {
+        return inner.SetResultAsync(id, result, ct);
+    }
+
+    public Task AddFileResultAsync(ReviewFileResult result, CancellationToken ct = default)
+    {
+        return inner.AddFileResultAsync(result, ct);
+    }
+
+    public Task<ReviewJob?> GetCompletedJobWithFileResultsAsync(
+        string organizationUrl,
+        string projectId,
+        string repositoryId,
+        int pullRequestId,
+        int iterationId,
+        CancellationToken ct = default)
+    {
+        return inner.GetCompletedJobWithFileResultsAsync(
+            organizationUrl,
+            projectId,
+            repositoryId,
+            pullRequestId,
+            iterationId,
+            ct);
+    }
+
+    public Task<ReviewJob?> GetCompletedJobWithFileResultsByStoredRevisionAsync(
+        string organizationUrl,
+        string projectId,
+        string repositoryId,
+        int pullRequestId,
+        string storedRevisionKey,
+        CancellationToken ct = default)
+    {
+        return inner.GetCompletedJobWithFileResultsByStoredRevisionAsync(
+            organizationUrl,
+            projectId,
+            repositoryId,
+            pullRequestId,
+            storedRevisionKey,
+            ct);
+    }
+
+    public Task<ReviewJob?> GetLatestReusableTerminalJobAsync(
+        string organizationUrl,
+        string projectId,
+        string repositoryId,
+        int pullRequestId,
+        Guid excludeJobId,
+        string currentRevisionKey,
+        CancellationToken ct = default)
+    {
+        return inner.GetLatestReusableTerminalJobAsync(
+            organizationUrl,
+            projectId,
+            repositoryId,
+            pullRequestId,
+            excludeJobId,
+            currentRevisionKey,
+            ct);
+    }
+
+    public Task<ReviewJob?> GetBestTerminalJobWithFileResultsByStoredRevisionAsync(
+        string organizationUrl,
+        string projectId,
+        string repositoryId,
+        int pullRequestId,
+        string storedRevisionKey,
+        CancellationToken ct = default)
+    {
+        return inner.GetBestTerminalJobWithFileResultsByStoredRevisionAsync(
+            organizationUrl,
+            projectId,
+            repositoryId,
+            pullRequestId,
+            storedRevisionKey,
+            ct);
+    }
+
+    public Task SetCancelledAsync(Guid id, CancellationToken ct = default)
+    {
+        return inner.SetCancelledAsync(id, ct);
+    }
+
+    public Task SetStoppedAsync(Guid id, CancellationToken ct = default)
+    {
+        return inner.SetStoppedAsync(id, ct);
+    }
+
+    public Task SetBudgetExceededAsync(
+        Guid id,
+        BudgetScopeKind scope,
+        BudgetCapKind capKind,
+        decimal thresholdUsd,
+        decimal spentUsd,
+        CancellationToken ct = default)
+    {
+        return inner.SetBudgetExceededAsync(id, scope, capKind, thresholdUsd, spentUsd, ct);
+    }
+
+    public Task SetBudgetHeldAsync(
+        Guid id,
+        BudgetScopeKind scope,
+        BudgetCapKind capKind,
+        decimal thresholdUsd,
+        decimal spentUsd,
+        CancellationToken ct = default)
+    {
+        return inner.SetBudgetHeldAsync(id, scope, capKind, thresholdUsd, spentUsd, ct);
+    }
+
+    public Task UpdateAiConfigAsync(
+        Guid id,
+        Guid? connectionId,
+        string? model,
+        CancellationToken ct = default,
+        float? reviewTemperature = null)
+    {
+        return inner.UpdateAiConfigAsync(id, connectionId, model, ct, reviewTemperature);
+    }
+}

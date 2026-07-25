@@ -1,0 +1,49 @@
+// Copyright (c) Andreas Rain.
+// Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
+
+using MeisterDev.ProPR.Application.DTOs;
+using MeisterDev.ProPR.Application.Features.Reviewing.Execution.Models;
+using MeisterDev.ProPR.Application.Interfaces;
+using MeisterDev.ProPR.Domain.Enums;
+using MeisterDev.ProPR.Domain.ValueObjects;
+using MeisterDev.ProPR.Infrastructure.Features.Providers.GitHub.Security;
+
+namespace MeisterDev.ProPR.Infrastructure.Features.Providers.GitHub.Reviewing;
+
+internal sealed class GitHubCodeReviewPublicationService : ICodeReviewPublicationService
+{
+    private readonly GitHubLifecyclePublicationService _lifecyclePublicationService;
+
+    public GitHubCodeReviewPublicationService(
+        GitHubConnectionVerifier connectionVerifier,
+        IHttpClientFactory httpClientFactory)
+        : this(new GitHubLifecyclePublicationService(connectionVerifier, httpClientFactory))
+    {
+    }
+
+    internal GitHubCodeReviewPublicationService(GitHubLifecyclePublicationService lifecyclePublicationService)
+    {
+        this._lifecyclePublicationService = lifecyclePublicationService;
+    }
+
+    public ScmProvider Provider => ScmProvider.GitHub;
+
+    public async Task<ReviewCommentPostingDiagnosticsDto> PublishReviewAsync(
+        Guid clientId,
+        CodeReviewRef review,
+        ReviewRevision revision,
+        ReviewResult result,
+        ReviewerIdentity reviewer,
+        CancellationToken ct = default,
+        ReviewPublicationContext? publicationContext = null)
+    {
+        return await this._lifecyclePublicationService.PublishReviewAsync(
+            clientId,
+            review,
+            revision,
+            result,
+            reviewer,
+            ct,
+            publicationContext);
+    }
+}

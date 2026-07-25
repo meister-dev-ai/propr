@@ -1,0 +1,132 @@
+// Copyright (c) Andreas Rain.
+// Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
+
+using MeisterDev.ProPR.Application.Features.Reviewing.Execution.Ports;
+using MeisterDev.ProPR.Application.Interfaces;
+using MeisterDev.ProPR.Domain.Enums;
+using MeisterDev.ProPR.Domain.ValueObjects;
+
+namespace MeisterDev.ProPR.Infrastructure.Features.Reviewing.Offline;
+
+/// <summary>
+///     Fixture-backed pull-request fetcher used by the offline review-evaluation harness.
+/// </summary>
+public sealed class FixturePullRequestFetcher(IReviewEvaluationFixtureAccessor fixtureAccessor) : IPullRequestFetcher
+{
+    public Task<PullRequestRef> FetchRefAsync(
+        string organizationUrl,
+        string projectId,
+        string repositoryId,
+        int pullRequestId,
+        Guid? clientId = null,
+        CancellationToken cancellationToken = default)
+    {
+        var fixture = fixtureAccessor.Fixture ?? throw new InvalidOperationException("No review evaluation fixture is active for this scope.");
+        var snapshot = fixture.PullRequestSnapshot;
+        return Task.FromResult(new PullRequestRef(snapshot.SourceBranch, snapshot.TargetBranch, PrStatus.Active));
+    }
+
+    public Task<PullRequest> FetchAsync(
+        string organizationUrl,
+        string projectId,
+        string repositoryId,
+        int pullRequestId,
+        int iterationId,
+        int? compareToIterationId = null,
+        Guid? clientId = null,
+        CancellationToken cancellationToken = default,
+        ReviewRevision? compareToReviewRevision = null,
+        IReviewRepositoryWorkspace? workspace = null)
+    {
+        var fixture = fixtureAccessor.Fixture ?? throw new InvalidOperationException("No review evaluation fixture is active for this scope.");
+        var snapshot = fixture.PullRequestSnapshot;
+
+        if (!string.Equals(repositoryId, snapshot.CodeReview.Repository.ExternalRepositoryId, StringComparison.Ordinal)
+            || pullRequestId != snapshot.CodeReview.Number)
+        {
+            throw new InvalidOperationException("The active fixture does not match the requested pull request identity.");
+        }
+
+        var pullRequest = new PullRequest(
+            organizationUrl,
+            projectId,
+            repositoryId,
+            fixture.RepositorySnapshot.RepositoryName ?? repositoryId,
+            pullRequestId,
+            iterationId,
+            snapshot.Title,
+            snapshot.Description,
+            snapshot.SourceBranch,
+            snapshot.TargetBranch,
+            snapshot.ChangedFiles
+                .Select(file => new ChangedFile(
+                    file.Path,
+                    file.ChangeType,
+                    file.FullContent,
+                    file.UnifiedDiff,
+                    file.IsBinary,
+                    file.OriginalPath))
+                .ToList()
+                .AsReadOnly(),
+            PrStatus.Active,
+            fixture.ThreadsOrEmpty
+                .Select(thread => new PrCommentThread(
+                    thread.ThreadId,
+                    thread.FilePath,
+                    thread.LineNumber,
+                    thread.Comments
+                        .Select(comment => new PrThreadComment(
+                            comment.AuthorName,
+                            comment.Content,
+                            comment.AuthorId,
+                            comment.CommentId,
+                            comment.PublishedAt))
+                        .ToList()
+                        .AsReadOnly(),
+                    thread.Status))
+                .ToList()
+                .AsReadOnly(),
+            snapshot.AllChangedFileSummaries,
+            snapshot.AuthorizedIdentityId);
+
+        return Task.FromResult(pullRequest);
+    }
+
+    public async Task<ChangedFile?> FetchFileDiffAsync(
+        string organizationUrl,
+        string projectId,
+        string repositoryId,
+        int pullRequestId,
+        int iterationId,
+        string filePath,
+        int? compareToIterationId = null,
+        Guid? clientId = null,
+        CancellationToken cancellationToken = default)
+    {
+        var pr = await this.FetchAsync(
+            organizationUrl,
+            projectId,
+            repositoryId,
+            pullRequestId,
+            iterationId,
+            compareToIterationId,
+            clientId,
+            cancellationToken);
+
+        return pr.ChangedFiles.FirstOrDefault(file =>
+            string.Equals(file.Path, filePath, StringComparison.Ordinal)
+            || string.Equals(file.OriginalPath, filePath, StringComparison.Ordinal));
+    }
+
+    public async Task<IReadOnlyList<PrCommentThread>> FetchThreadsAsync(
+        string organizationUrl,
+        string projectId,
+        string repositoryId,
+        int pullRequestId,
+        Guid? clientId = null,
+        CancellationToken cancellationToken = default)
+    {
+        var pr = await this.FetchAsync(organizationUrl, projectId, repositoryId, pullRequestId, 1, null, clientId, cancellationToken);
+        return pr.ExistingThreads ?? [];
+    }
+}

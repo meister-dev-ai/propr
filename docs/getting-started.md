@@ -92,12 +92,12 @@ If you want to run the API directly from source during development:
 git clone <repo-url>
 cd meister-propr
 
-dotnet user-secrets set "DB_CONNECTION_STRING" "Host=localhost;Database=meisterpropr;Username=postgres;Password=devpassword" --project src/MeisterProPR.Api
-dotnet user-secrets set "MEISTER_JWT_SECRET" "dev-jwt-secret-at-least-32-chars-ok!!" --project src/MeisterProPR.Api
-dotnet user-secrets set "MEISTER_BOOTSTRAP_ADMIN_USER" "admin" --project src/MeisterProPR.Api
-dotnet user-secrets set "MEISTER_BOOTSTRAP_ADMIN_PASSWORD" "AdminPass1!" --project src/MeisterProPR.Api
+dotnet user-secrets set "DB_CONNECTION_STRING" "Host=localhost;Database=meisterpropr;Username=postgres;Password=devpassword" --project src/MeisterDev.ProPR.Api
+dotnet user-secrets set "MEISTER_JWT_SECRET" "dev-jwt-secret-at-least-32-chars-ok!!" --project src/MeisterDev.ProPR.Api
+dotnet user-secrets set "MEISTER_BOOTSTRAP_ADMIN_USER" "admin" --project src/MeisterDev.ProPR.Api
+dotnet user-secrets set "MEISTER_BOOTSTRAP_ADMIN_PASSWORD" "AdminPass1!" --project src/MeisterDev.ProPR.Api
 
-ASPNETCORE_ENVIRONMENT=Development dotnet run --project src/MeisterProPR.Api
+ASPNETCORE_ENVIRONMENT=Development dotnet run --project src/MeisterDev.ProPR.Api
 ```
 
 If you want the extracted local topology from source, use:
@@ -109,8 +109,8 @@ If you want the extracted local topology from source, use:
 That script:
 
 1. Generates one per-run shared key unless `PROCURSOR_SHARED_KEY` is already set.
-2. Starts `MeisterProPR.Api` with `PROCURSOR_REMOTE_MODE=proprManagedRemote` and `PROCURSOR_SERVICE_BASE_URL` pointing at the local ProCursor host.
-3. Starts `MeisterProPR.ProCursor.Service` with `PROCURSOR_PROPR_BASE_URL` pointing back at the local API host.
+2. Starts `MeisterDev.ProPR.Api` with `PROCURSOR_REMOTE_MODE=proprManagedRemote` and `PROCURSOR_SERVICE_BASE_URL` pointing at the local ProCursor host.
+3. Starts `MeisterDev.ProPR.ProCursor.Service` with `PROCURSOR_PROPR_BASE_URL` pointing back at the local API host.
 4. Sets `PROCURSOR_DB_CONNECTION_STRING` for the ProCursor host only, defaulting it to the same value as `DB_CONNECTION_STRING` unless you override it explicitly.
 5. Reuses one local `MEISTER_DATA_PROTECTION_KEYS_PATH` directory for both services by default so protected local secrets stay readable across the split runtime. Set `RUN_LOCAL_KEYS_DIR` if you intentionally want an isolated key ring; a shared key ring is not required by the architecture.
 6. Waits for `http://localhost:8080/healthz` and `http://localhost:8081/healthz` before starting the frontend.

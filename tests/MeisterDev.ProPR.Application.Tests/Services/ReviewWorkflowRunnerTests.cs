@@ -1,0 +1,652 @@
+// Copyright (c) Andreas Rain.
+// Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
+
+using MeisterDev.ProPR.Application.Features.Reviewing.Diagnostics.Ports;
+using MeisterDev.ProPR.Application.Features.Reviewing.Diagnostics.Queries.GetReviewJobProtocol;
+using MeisterDev.ProPR.Application.Features.Reviewing.Execution.Models;
+using MeisterDev.ProPR.Application.Features.Reviewing.Execution.Ports;
+using MeisterDev.ProPR.Application.Interfaces;
+using MeisterDev.ProPR.Application.Services;
+using MeisterDev.ProPR.Application.ValueObjects;
+using MeisterDev.ProPR.Domain.Entities;
+using MeisterDev.ProPR.Domain.Enums;
+using MeisterDev.ProPR.Domain.ValueObjects;
+using Microsoft.Extensions.AI;
+using NSubstitute;
+
+namespace MeisterDev.ProPR.Application.Tests.Services;
+
+public sealed class ReviewWorkflowRunnerTests
+{
+    [Fact]
+    public async Task RunAsync_UsesReviewStrategyDispatcherForOfflineExecution()
+    {
+        var jobRepository = Substitute.For<IJobRepository>();
+        var jobs = Substitute.For<IReviewJobExecutionStore>();
+        var diagnosticsReader = Substitute.For<IReviewDiagnosticsReader>();
+        var fixtureAccessor = Substitute.For<IReviewEvaluationFixtureAccessor>();
+        var fixtureValidator = Substitute.For<IReviewEvaluationFixtureValidator>();
+        var pullRequestFetcher = Substitute.For<IPullRequestFetcher>();
+        var reviewContextToolsFactory = Substitute.For<IReviewContextToolsFactory>();
+        var instructionFetcher = Substitute.For<IRepositoryInstructionFetcher>();
+        var exclusionFetcher = Substitute.For<IRepositoryExclusionFetcher>();
+        var instructionEvaluator = Substitute.For<IRepositoryInstructionEvaluator>();
+        var fileByFileReviewOrchestrator = Substitute.For<IFileByFileReviewOrchestrator>();
+
+        var fixture = CreateFixture();
+        var job = new ReviewJob(
+            Guid.NewGuid(),
+            Guid.NewGuid(),
+            fixture.PullRequestSnapshot.CodeReview.Repository.Host.HostBaseUrl,
+            fixture.PullRequestSnapshot.CodeReview.Repository.ProjectPath,
+            fixture.PullRequestSnapshot.CodeReview.Repository.ExternalRepositoryId,
+            fixture.PullRequestSnapshot.CodeReview.Number,
+            1);
+
+        var configuration = new EvaluationConfiguration(
+            "baseline",
+            new EvaluationModelSelection(["gpt-4o"]),
+            new EvaluationOutputOptions("artifacts/run.json", "full"));
+        var request = new ReviewWorkflowRequest(job, Substitute.For<IChatClient>(), "gpt-4o", fixture, configuration);
+        var pullRequest = CreatePullRequest();
+        var reviewTools = Substitute.For<IReviewContextTools>();
+        var expectedReviewResult = new ReviewResult("strategy-dispatched", []);
+
+        jobs.GetById(job.Id).Returns(job);
+        pullRequestFetcher.FetchAsync(
+                job.OrganizationUrl,
+                job.ProjectId,
+                job.RepositoryId,
+                job.PullRequestId,
+                job.IterationId,
+                null,
+                job.ClientId,
+                Arg.Any<CancellationToken>())
+            .Returns(pullRequest);
+        reviewContextToolsFactory.Create(Arg.Any<ReviewContextToolsRequest>()).Returns(reviewTools);
+        instructionFetcher.FetchAsync(
+                job.OrganizationUrl,
+                job.ProjectId,
+                job.RepositoryId,
+                pullRequest.TargetBranch,
+                job.ClientId,
+                Arg.Any<CancellationToken>())
+            .Returns([]);
+        exclusionFetcher.FetchAsync(
+                job.OrganizationUrl,
+                job.ProjectId,
+                job.RepositoryId,
+                pullRequest.TargetBranch,
+                job.ClientId,
+                Arg.Any<CancellationToken>())
+            .Returns(ReviewExclusionRules.Default);
+        diagnosticsReader.GetJobProtocolAsync(job.Id, ct: Arg.Any<CancellationToken>())
+            .Returns(new GetReviewJobProtocolResult(job.Id, []));
+        fileByFileReviewOrchestrator.ReviewAsync(
+                job,
+                pullRequest,
+                Arg.Any<ReviewSystemContext>(),
+                Arg.Any<CancellationToken>(),
+                request.ChatClient)
+            .Returns(expectedReviewResult);
+
+        var sut = new ReviewWorkflowRunner(
+            jobRepository,
+            jobs,
+            diagnosticsReader,
+            fixtureAccessor,
+            fixtureValidator,
+            pullRequestFetcher,
+            reviewContextToolsFactory,
+            instructionFetcher,
+            exclusionFetcher,
+            instructionEvaluator,
+            fileByFileReviewOrchestrator);
+
+        var result = await sut.RunAsync(request, CancellationToken.None);
+
+        Assert.Same(expectedReviewResult, result.FinalResult);
+        await fileByFileReviewOrchestrator.Received(1).ReviewAsync(
+            job,
+            pullRequest,
+            Arg.Is<ReviewSystemContext>(context =>
+                context.ModelId == "gpt-4o"
+                && context.Temperature == null),
+            Arg.Any<CancellationToken>(),
+            request.ChatClient);
+    }
+
+    [Fact]
+    public async Task RunAsync_WhenJobHasSelectedProCursorSources_ForwardsSourceScopeToReviewTools()
+    {
+        var jobRepository = Substitute.For<IJobRepository>();
+        var jobs = Substitute.For<IReviewJobExecutionStore>();
+        var diagnosticsReader = Substitute.For<IReviewDiagnosticsReader>();
+        var fixtureAccessor = Substitute.For<IReviewEvaluationFixtureAccessor>();
+        var fixtureValidator = Substitute.For<IReviewEvaluationFixtureValidator>();
+        var pullRequestFetcher = Substitute.For<IPullRequestFetcher>();
+        var reviewContextToolsFactory = Substitute.For<IReviewContextToolsFactory>();
+        var instructionFetcher = Substitute.For<IRepositoryInstructionFetcher>();
+        var exclusionFetcher = Substitute.For<IRepositoryExclusionFetcher>();
+        var instructionEvaluator = Substitute.For<IRepositoryInstructionEvaluator>();
+        var fileByFileReviewOrchestrator = Substitute.For<IFileByFileReviewOrchestrator>();
+
+        var fixture = CreateFixture();
+        var selectedSourceId = Guid.NewGuid();
+        var job = new ReviewJob(
+            Guid.NewGuid(),
+            Guid.NewGuid(),
+            fixture.PullRequestSnapshot.CodeReview.Repository.Host.HostBaseUrl,
+            fixture.PullRequestSnapshot.CodeReview.Repository.ProjectPath,
+            fixture.PullRequestSnapshot.CodeReview.Repository.ExternalRepositoryId,
+            fixture.PullRequestSnapshot.CodeReview.Number,
+            1);
+        job.SetProviderReviewContext(fixture.PullRequestSnapshot.CodeReview);
+        job.SetProCursorSourceScope(ProCursorSourceScopeMode.SelectedSources, [selectedSourceId]);
+
+        var request = new ReviewWorkflowRequest(job, Substitute.For<IChatClient>(), "gpt-4o", fixture);
+        var pullRequest = CreatePullRequest();
+        var reviewTools = Substitute.For<IReviewContextTools>();
+
+        jobs.GetById(job.Id).Returns(job);
+        pullRequestFetcher.FetchAsync(
+                job.OrganizationUrl,
+                job.ProjectId,
+                job.RepositoryId,
+                job.PullRequestId,
+                job.IterationId,
+                null,
+                job.ClientId,
+                Arg.Any<CancellationToken>())
+            .Returns(pullRequest);
+        reviewContextToolsFactory.Create(Arg.Any<ReviewContextToolsRequest>()).Returns(reviewTools);
+        instructionFetcher.FetchAsync(
+                job.OrganizationUrl,
+                job.ProjectId,
+                job.RepositoryId,
+                pullRequest.TargetBranch,
+                job.ClientId,
+                Arg.Any<CancellationToken>())
+            .Returns([]);
+        exclusionFetcher.FetchAsync(
+                job.OrganizationUrl,
+                job.ProjectId,
+                job.RepositoryId,
+                pullRequest.TargetBranch,
+                job.ClientId,
+                Arg.Any<CancellationToken>())
+            .Returns(ReviewExclusionRules.Default);
+        diagnosticsReader.GetJobProtocolAsync(job.Id, ct: Arg.Any<CancellationToken>())
+            .Returns(new GetReviewJobProtocolResult(job.Id, []));
+        fileByFileReviewOrchestrator.ReviewAsync(
+                job,
+                pullRequest,
+                Arg.Any<ReviewSystemContext>(),
+                Arg.Any<CancellationToken>(),
+                request.ChatClient)
+            .Returns(new ReviewResult("strategy-dispatched", []));
+
+        var sut = new ReviewWorkflowRunner(
+            jobRepository,
+            jobs,
+            diagnosticsReader,
+            fixtureAccessor,
+            fixtureValidator,
+            pullRequestFetcher,
+            reviewContextToolsFactory,
+            instructionFetcher,
+            exclusionFetcher,
+            instructionEvaluator,
+            fileByFileReviewOrchestrator);
+
+        await sut.RunAsync(request, CancellationToken.None);
+
+        reviewContextToolsFactory.Received(1).Create(
+            Arg.Is<ReviewContextToolsRequest>(toolsRequest => HasSelectedKnowledgeSource(toolsRequest, job.ClientId, selectedSourceId)));
+    }
+
+    private static bool HasSelectedKnowledgeSource(ReviewContextToolsRequest request, Guid clientId, Guid sourceId)
+    {
+        return request.ClientId == clientId
+               && request.KnowledgeSourceIds is not null
+               && request.KnowledgeSourceIds.SequenceEqual(new[] { sourceId });
+    }
+
+    [Fact]
+    public async Task RunAsync_WithActiveScenario_SetsAndClearsScenarioOnAccessor()
+    {
+        var jobRepository = Substitute.For<IJobRepository>();
+        var jobs = Substitute.For<IReviewJobExecutionStore>();
+        var diagnosticsReader = Substitute.For<IReviewDiagnosticsReader>();
+        var fixtureAccessor = Substitute.For<IReviewEvaluationFixtureAccessor>();
+        var fixtureValidator = Substitute.For<IReviewEvaluationFixtureValidator>();
+        var pullRequestFetcher = Substitute.For<IPullRequestFetcher>();
+        var reviewContextToolsFactory = Substitute.For<IReviewContextToolsFactory>();
+        var instructionFetcher = Substitute.For<IRepositoryInstructionFetcher>();
+        var exclusionFetcher = Substitute.For<IRepositoryExclusionFetcher>();
+        var instructionEvaluator = Substitute.For<IRepositoryInstructionEvaluator>();
+        var fileByFileReviewOrchestrator = Substitute.For<IFileByFileReviewOrchestrator>();
+
+        var fixture = CreateFixture().WithScenario("instructions-good");
+        var job = new ReviewJob(
+            Guid.NewGuid(),
+            Guid.NewGuid(),
+            fixture.PullRequestSnapshot.CodeReview.Repository.Host.HostBaseUrl,
+            fixture.PullRequestSnapshot.CodeReview.Repository.ProjectPath,
+            fixture.PullRequestSnapshot.CodeReview.Repository.ExternalRepositoryId,
+            fixture.PullRequestSnapshot.CodeReview.Number,
+            1);
+        var request = new ReviewWorkflowRequest(job, Substitute.For<IChatClient>(), "gpt-4o", fixture);
+        var pullRequest = CreatePullRequest();
+        var reviewTools = Substitute.For<IReviewContextTools>();
+
+        jobs.GetById(job.Id).Returns(job);
+        pullRequestFetcher.FetchAsync(
+                job.OrganizationUrl,
+                job.ProjectId,
+                job.RepositoryId,
+                job.PullRequestId,
+                job.IterationId,
+                null,
+                job.ClientId,
+                Arg.Any<CancellationToken>())
+            .Returns(pullRequest);
+        reviewContextToolsFactory.Create(Arg.Any<ReviewContextToolsRequest>()).Returns(reviewTools);
+        instructionFetcher.FetchAsync(
+                job.OrganizationUrl,
+                job.ProjectId,
+                job.RepositoryId,
+                pullRequest.TargetBranch,
+                job.ClientId,
+                Arg.Any<CancellationToken>())
+            .Returns([]);
+        exclusionFetcher.FetchAsync(
+                job.OrganizationUrl,
+                job.ProjectId,
+                job.RepositoryId,
+                pullRequest.TargetBranch,
+                job.ClientId,
+                Arg.Any<CancellationToken>())
+            .Returns(ReviewExclusionRules.Default);
+        diagnosticsReader.GetJobProtocolAsync(job.Id, ct: Arg.Any<CancellationToken>())
+            .Returns(new GetReviewJobProtocolResult(job.Id, []));
+        fileByFileReviewOrchestrator.ReviewAsync(
+                job,
+                pullRequest,
+                Arg.Any<ReviewSystemContext>(),
+                Arg.Any<CancellationToken>(),
+                request.ChatClient)
+            .Returns(new ReviewResult("strategy-dispatched", []));
+
+        var sut = new ReviewWorkflowRunner(
+            jobRepository,
+            jobs,
+            diagnosticsReader,
+            fixtureAccessor,
+            fixtureValidator,
+            pullRequestFetcher,
+            reviewContextToolsFactory,
+            instructionFetcher,
+            exclusionFetcher,
+            instructionEvaluator,
+            fileByFileReviewOrchestrator);
+
+        await sut.RunAsync(request, CancellationToken.None);
+
+        Received.InOrder(() =>
+        {
+            fixtureAccessor.Fixture = fixture;
+            fixtureAccessor.ScenarioId = "instructions-good";
+            fixtureAccessor.ScenarioId = null;
+            fixtureAccessor.Fixture = null;
+        });
+    }
+
+    [Fact]
+    public async Task RunAsync_WithExplicitPipelineProfile_ForwardsProfileToDispatcher()
+    {
+        var jobRepository = Substitute.For<IJobRepository>();
+        var jobs = Substitute.For<IReviewJobExecutionStore>();
+        var diagnosticsReader = Substitute.For<IReviewDiagnosticsReader>();
+        var fixtureAccessor = Substitute.For<IReviewEvaluationFixtureAccessor>();
+        var fixtureValidator = Substitute.For<IReviewEvaluationFixtureValidator>();
+        var pullRequestFetcher = Substitute.For<IPullRequestFetcher>();
+        var reviewContextToolsFactory = Substitute.For<IReviewContextToolsFactory>();
+        var instructionFetcher = Substitute.For<IRepositoryInstructionFetcher>();
+        var exclusionFetcher = Substitute.For<IRepositoryExclusionFetcher>();
+        var instructionEvaluator = Substitute.For<IRepositoryInstructionEvaluator>();
+        var fileByFileReviewOrchestrator = Substitute.For<IFileByFileReviewOrchestrator>();
+
+        var fixture = CreateFixture();
+        var job = new ReviewJob(
+            Guid.NewGuid(),
+            Guid.NewGuid(),
+            fixture.PullRequestSnapshot.CodeReview.Repository.Host.HostBaseUrl,
+            fixture.PullRequestSnapshot.CodeReview.Repository.ProjectPath,
+            fixture.PullRequestSnapshot.CodeReview.Repository.ExternalRepositoryId,
+            fixture.PullRequestSnapshot.CodeReview.Number,
+            1);
+
+        var request = new ReviewWorkflowRequest(
+            job,
+            Substitute.For<IChatClient>(),
+            "gpt-4o",
+            fixture,
+            new EvaluationConfiguration(
+                "baseline",
+                new EvaluationModelSelection(["gpt-4o"]),
+                new EvaluationOutputOptions("artifacts/run.json", "full")),
+            "agentic-experimental");
+        var pullRequest = CreatePullRequest();
+        var reviewTools = Substitute.For<IReviewContextTools>();
+        var expectedReviewResult = new ReviewResult("strategy-dispatched", []);
+
+        jobs.GetById(job.Id).Returns(job);
+        pullRequestFetcher.FetchAsync(
+                job.OrganizationUrl,
+                job.ProjectId,
+                job.RepositoryId,
+                job.PullRequestId,
+                job.IterationId,
+                null,
+                job.ClientId,
+                Arg.Any<CancellationToken>())
+            .Returns(pullRequest);
+        reviewContextToolsFactory.Create(Arg.Any<ReviewContextToolsRequest>()).Returns(reviewTools);
+        instructionFetcher.FetchAsync(
+                job.OrganizationUrl,
+                job.ProjectId,
+                job.RepositoryId,
+                pullRequest.TargetBranch,
+                job.ClientId,
+                Arg.Any<CancellationToken>())
+            .Returns([]);
+        exclusionFetcher.FetchAsync(
+                job.OrganizationUrl,
+                job.ProjectId,
+                job.RepositoryId,
+                pullRequest.TargetBranch,
+                job.ClientId,
+                Arg.Any<CancellationToken>())
+            .Returns(ReviewExclusionRules.Default);
+        diagnosticsReader.GetJobProtocolAsync(job.Id, ct: Arg.Any<CancellationToken>())
+            .Returns(new GetReviewJobProtocolResult(job.Id, []));
+        fileByFileReviewOrchestrator.ReviewAsync(
+                job,
+                pullRequest,
+                Arg.Any<ReviewSystemContext>(),
+                Arg.Any<CancellationToken>(),
+                request.ChatClient)
+            .Returns(expectedReviewResult);
+
+        var sut = new ReviewWorkflowRunner(
+            jobRepository,
+            jobs,
+            diagnosticsReader,
+            fixtureAccessor,
+            fixtureValidator,
+            pullRequestFetcher,
+            reviewContextToolsFactory,
+            instructionFetcher,
+            exclusionFetcher,
+            instructionEvaluator,
+            fileByFileReviewOrchestrator);
+
+        var result = await sut.RunAsync(request, CancellationToken.None);
+
+        Assert.Same(expectedReviewResult, result.FinalResult);
+        await fileByFileReviewOrchestrator.Received(1).ReviewAsync(
+            job,
+            pullRequest,
+            Arg.Any<ReviewSystemContext>(),
+            Arg.Any<CancellationToken>(),
+            request.ChatClient);
+    }
+
+    [Fact]
+    public async Task RunAsync_ForwardsSkippedStepsIntoReviewSystemContext()
+    {
+        var jobRepository = Substitute.For<IJobRepository>();
+        var jobs = Substitute.For<IReviewJobExecutionStore>();
+        var diagnosticsReader = Substitute.For<IReviewDiagnosticsReader>();
+        var fixtureAccessor = Substitute.For<IReviewEvaluationFixtureAccessor>();
+        var fixtureValidator = Substitute.For<IReviewEvaluationFixtureValidator>();
+        var pullRequestFetcher = Substitute.For<IPullRequestFetcher>();
+        var reviewContextToolsFactory = Substitute.For<IReviewContextToolsFactory>();
+        var instructionFetcher = Substitute.For<IRepositoryInstructionFetcher>();
+        var exclusionFetcher = Substitute.For<IRepositoryExclusionFetcher>();
+        var instructionEvaluator = Substitute.For<IRepositoryInstructionEvaluator>();
+        var fileByFileReviewOrchestrator = Substitute.For<IFileByFileReviewOrchestrator>();
+
+        var fixture = CreateFixture();
+        var job = new ReviewJob(
+            Guid.NewGuid(),
+            Guid.NewGuid(),
+            fixture.PullRequestSnapshot.CodeReview.Repository.Host.HostBaseUrl,
+            fixture.PullRequestSnapshot.CodeReview.Repository.ProjectPath,
+            fixture.PullRequestSnapshot.CodeReview.Repository.ExternalRepositoryId,
+            fixture.PullRequestSnapshot.CodeReview.Number,
+            1);
+        var request = new ReviewWorkflowRequest(
+            job,
+            Substitute.For<IChatClient>(),
+            "gpt-4o",
+            fixture,
+            SkippedSteps: new ReviewStepSkips([FileByFileReviewStepIds.PrVerification]));
+        var pullRequest = CreatePullRequest();
+        var reviewTools = Substitute.For<IReviewContextTools>();
+
+        jobs.GetById(job.Id).Returns(job);
+        pullRequestFetcher.FetchAsync(
+                job.OrganizationUrl,
+                job.ProjectId,
+                job.RepositoryId,
+                job.PullRequestId,
+                job.IterationId,
+                null,
+                job.ClientId,
+                Arg.Any<CancellationToken>())
+            .Returns(pullRequest);
+        reviewContextToolsFactory.Create(Arg.Any<ReviewContextToolsRequest>()).Returns(reviewTools);
+        instructionFetcher.FetchAsync(
+                job.OrganizationUrl,
+                job.ProjectId,
+                job.RepositoryId,
+                pullRequest.TargetBranch,
+                job.ClientId,
+                Arg.Any<CancellationToken>())
+            .Returns([]);
+        exclusionFetcher.FetchAsync(
+                job.OrganizationUrl,
+                job.ProjectId,
+                job.RepositoryId,
+                pullRequest.TargetBranch,
+                job.ClientId,
+                Arg.Any<CancellationToken>())
+            .Returns(ReviewExclusionRules.Default);
+        diagnosticsReader.GetJobProtocolAsync(job.Id, ct: Arg.Any<CancellationToken>())
+            .Returns(new GetReviewJobProtocolResult(job.Id, []));
+        fileByFileReviewOrchestrator.ReviewAsync(
+                job,
+                pullRequest,
+                Arg.Any<ReviewSystemContext>(),
+                Arg.Any<CancellationToken>(),
+                request.ChatClient)
+            .Returns(new ReviewResult("strategy-dispatched", []));
+
+        var sut = new ReviewWorkflowRunner(
+            jobRepository,
+            jobs,
+            diagnosticsReader,
+            fixtureAccessor,
+            fixtureValidator,
+            pullRequestFetcher,
+            reviewContextToolsFactory,
+            instructionFetcher,
+            exclusionFetcher,
+            instructionEvaluator,
+            fileByFileReviewOrchestrator);
+
+        await sut.RunAsync(request, CancellationToken.None);
+
+        await fileByFileReviewOrchestrator.Received(1).ReviewAsync(
+            job,
+            pullRequest,
+            Arg.Is<ReviewSystemContext>(context => context.SkippedSteps.Contains(FileByFileReviewStepIds.PrVerification)),
+            Arg.Any<CancellationToken>(),
+            request.ChatClient);
+    }
+
+    [Fact]
+    public async Task RunAsync_CarriesBoundaryIssuesIntoWorkflowResult()
+    {
+        var jobRepository = Substitute.For<IJobRepository>();
+        var jobs = Substitute.For<IReviewJobExecutionStore>();
+        var diagnosticsReader = Substitute.For<IReviewDiagnosticsReader>();
+        var fixtureAccessor = Substitute.For<IReviewEvaluationFixtureAccessor>();
+        var fixtureValidator = Substitute.For<IReviewEvaluationFixtureValidator>();
+        var pullRequestFetcher = Substitute.For<IPullRequestFetcher>();
+        var reviewContextToolsFactory = Substitute.For<IReviewContextToolsFactory>();
+        var instructionFetcher = Substitute.For<IRepositoryInstructionFetcher>();
+        var exclusionFetcher = Substitute.For<IRepositoryExclusionFetcher>();
+        var instructionEvaluator = Substitute.For<IRepositoryInstructionEvaluator>();
+        var fileByFileReviewOrchestrator = Substitute.For<IFileByFileReviewOrchestrator>();
+        var boundaryIssue = BoundaryIssueReport.CreateDeferred(
+            "reviewing.test-boundary-issue",
+            "ReviewWorkflowRunnerTests",
+            BoundaryIssueReport.IssueTypes.OwnershipDrift,
+            "Test boundary issue used to verify workflow result passthrough.",
+            "Reviewing");
+
+        var fixture = CreateFixture();
+        var job = new ReviewJob(
+            Guid.NewGuid(),
+            Guid.NewGuid(),
+            fixture.PullRequestSnapshot.CodeReview.Repository.Host.HostBaseUrl,
+            fixture.PullRequestSnapshot.CodeReview.Repository.ProjectPath,
+            fixture.PullRequestSnapshot.CodeReview.Repository.ExternalRepositoryId,
+            fixture.PullRequestSnapshot.CodeReview.Number,
+            1);
+        var request = new ReviewWorkflowRequest(job, Substitute.For<IChatClient>(), "gpt-4o", fixture);
+        var pullRequest = CreatePullRequest();
+        var reviewTools = Substitute.For<IReviewContextTools>();
+        var expectedReviewResult = new ReviewResult("strategy-dispatched", []);
+
+        jobs.GetById(job.Id).Returns(job);
+        pullRequestFetcher.FetchAsync(
+                job.OrganizationUrl,
+                job.ProjectId,
+                job.RepositoryId,
+                job.PullRequestId,
+                job.IterationId,
+                null,
+                job.ClientId,
+                Arg.Any<CancellationToken>())
+            .Returns(pullRequest);
+        reviewContextToolsFactory.Create(Arg.Any<ReviewContextToolsRequest>()).Returns(reviewTools);
+        instructionFetcher.FetchAsync(
+                job.OrganizationUrl,
+                job.ProjectId,
+                job.RepositoryId,
+                pullRequest.TargetBranch,
+                job.ClientId,
+                Arg.Any<CancellationToken>())
+            .Returns([]);
+        exclusionFetcher.FetchAsync(
+                job.OrganizationUrl,
+                job.ProjectId,
+                job.RepositoryId,
+                pullRequest.TargetBranch,
+                job.ClientId,
+                Arg.Any<CancellationToken>())
+            .Returns(ReviewExclusionRules.Default);
+        diagnosticsReader.GetJobProtocolAsync(job.Id, ct: Arg.Any<CancellationToken>())
+            .Returns(new GetReviewJobProtocolResult(job.Id, []));
+        fileByFileReviewOrchestrator.ReviewAsync(
+                job,
+                pullRequest,
+                Arg.Any<ReviewSystemContext>(),
+                Arg.Any<CancellationToken>(),
+                request.ChatClient)
+            .Returns(expectedReviewResult);
+
+        var sut = new ReviewWorkflowRunner(
+            jobRepository,
+            jobs,
+            diagnosticsReader,
+            fixtureAccessor,
+            fixtureValidator,
+            pullRequestFetcher,
+            reviewContextToolsFactory,
+            instructionFetcher,
+            exclusionFetcher,
+            instructionEvaluator,
+            fileByFileReviewOrchestrator,
+            null,
+            [boundaryIssue]);
+
+        var result = await sut.RunAsync(request, CancellationToken.None);
+
+        Assert.NotNull(result.BoundaryIssues);
+        var issue = Assert.Single(result.BoundaryIssues);
+        Assert.Equal(boundaryIssue.IssueId, issue.IssueId);
+    }
+
+    private static ReviewEvaluationFixture CreateFixture()
+    {
+        return new ReviewEvaluationFixture(
+            "fixture-sample",
+            "1.0",
+            new FixtureProvenance("synthetic"),
+            new RepositorySnapshot(
+                "feature/offline-review",
+                "main",
+                [new RepositoryFileEntry("src/Example.cs", "public class Example {}")],
+                "sample-repository"),
+            new PullRequestSnapshot(
+                new CodeReviewRef(
+                    new RepositoryRef(
+                        new ProviderHostRef(ScmProvider.AzureDevOps, "https://dev.azure.com/example"),
+                        "sample-repository",
+                        "sample-project",
+                        "sample-project"),
+                    CodeReviewPlatformKind.PullRequest,
+                    "42",
+                    42),
+                new ReviewRevision("head-sha", "base-sha", null, null, null),
+                "Sample review",
+                "Offline review fixture",
+                "feature/offline-review",
+                "main",
+                [new FixtureChangedFile("src/Example.cs", ChangeType.Add, "+++ b/src/Example.cs", "public class Example {}")]),
+            Scenarios:
+            [
+                new FixtureScenario(
+                    "instructions-good",
+                    RepositoryOverlay: new FixtureRepositoryOverlay(
+                    [
+                        new RepositoryFileEntry(
+                            ".meister-propr/instructions-csharp.md",
+                            "Focus on correctness regressions, especially sitemap coverage."),
+                    ])),
+            ],
+            Expectations: new FixtureExpectations([], [], []),
+            ProRVPrefilterExpectations: new FixtureProRVPrefilterExpectations([]));
+    }
+
+    private static PullRequest CreatePullRequest()
+    {
+        return new PullRequest(
+            "https://dev.azure.com/example",
+            "sample-project",
+            "sample-repository",
+            "sample-repository",
+            42,
+            1,
+            "Sample review",
+            null,
+            "feature/offline-review",
+            "main",
+            [new ChangedFile("src/Example.cs", ChangeType.Add, "public class Example {}", "+++ b/src/Example.cs")]);
+    }
+}

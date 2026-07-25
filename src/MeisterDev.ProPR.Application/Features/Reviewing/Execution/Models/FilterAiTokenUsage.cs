@@ -1,0 +1,20 @@
+// Copyright (c) Andreas Rain.
+// Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
+
+using MeisterDev.ProPR.Domain.Enums;
+
+namespace MeisterDev.ProPR.Application.Features.Reviewing.Execution.Models;
+
+/// <summary>
+///     Token-accounting metadata captured when a comment relevance filter performs AI work.
+/// </summary>
+public sealed record FilterAiTokenUsage(
+    string ImplementationId,
+    string FilePath,
+    long InputTokens,
+    long OutputTokens,
+    AiConnectionModelCategory ModelCategory,
+    string? ModelId,
+    long CachedInputTokens = 0,
+    long CacheWriteTokens = 0,
+    long ReasoningTokens = 0);

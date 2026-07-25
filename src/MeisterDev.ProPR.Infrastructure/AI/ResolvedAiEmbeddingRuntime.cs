@@ -1,0 +1,23 @@
+// Copyright (c) Andreas Rain.
+// Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
+
+using MeisterDev.ProPR.Application.DTOs;
+using MeisterDev.ProPR.Application.Interfaces;
+using Microsoft.Extensions.AI;
+
+namespace MeisterDev.ProPR.Infrastructure.AI;
+
+/// <summary>
+///     Default implementation of <see cref="IResolvedAiEmbeddingRuntime" />.
+/// </summary>
+public sealed record ResolvedAiEmbeddingRuntime(
+    AiConnectionDto Connection,
+    AiConfiguredModelDto Model,
+    AiPurposeBindingDto Binding,
+    IEmbeddingGenerator<string, Embedding<float>> Generator,
+    string TokenizerName,
+    int Dimensions) : IResolvedAiEmbeddingRuntime
+{
+    /// <inheritdoc />
+    public string? LogicalModelName { get; init; }
+}

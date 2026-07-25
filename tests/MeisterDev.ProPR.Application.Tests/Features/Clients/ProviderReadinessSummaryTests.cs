@@ -1,0 +1,197 @@
+// Copyright (c) Andreas Rain.
+// Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
+
+using MeisterDev.ProPR.Application.DTOs;
+using MeisterDev.ProPR.Application.Features.Clients.Models;
+using MeisterDev.ProPR.Application.Features.Clients.Services;
+using MeisterDev.ProPR.Application.Interfaces;
+using MeisterDev.ProPR.Domain.Enums;
+using MeisterDev.ProPR.Domain.ValueObjects;
+using NSubstitute;
+
+namespace MeisterDev.ProPR.Application.Tests.Features.Clients;
+
+public sealed class ProviderReadinessSummaryTests
+{
+    [Fact]
+    public async Task GetForClientAsync_UsesLeastReadyConnectionForProviderFamilySummary()
+    {
+        var clientId = Guid.NewGuid();
+        var hostedConnectionId = Guid.NewGuid();
+        var selfHostedConnectionId = Guid.NewGuid();
+
+        var connectionRepository = Substitute.For<IClientScmConnectionRepository>();
+        connectionRepository.GetByClientIdAsync(clientId, Arg.Any<CancellationToken>())
+            .Returns(
+                Task.FromResult<IReadOnlyList<ClientScmConnectionDto>>(
+                [
+                    new ClientScmConnectionDto(
+                        hostedConnectionId,
+                        clientId,
+                        ScmProvider.GitHub,
+                        "https://github.com",
+                        ScmAuthenticationKind.PersonalAccessToken,
+                        null,
+                        null,
+                        "GitHub Cloud",
+                        true,
+                        "verified",
+                        DateTimeOffset.UtcNow,
+                        null,
+                        null,
+                        DateTimeOffset.UtcNow,
+                        DateTimeOffset.UtcNow),
+                    new ClientScmConnectionDto(
+                        selfHostedConnectionId,
+                        clientId,
+                        ScmProvider.GitHub,
+                        "https://github.enterprise.example.com",
+                        ScmAuthenticationKind.PersonalAccessToken,
+                        null,
+                        null,
+                        "GitHub Enterprise",
+                        true,
+                        "verified",
+                        DateTimeOffset.UtcNow,
+                        null,
+                        null,
+                        DateTimeOffset.UtcNow,
+                        DateTimeOffset.UtcNow),
+                ]));
+
+        var readinessEvaluator = Substitute.For<IProviderReadinessEvaluator>();
+        readinessEvaluator.EvaluateAsync(
+                clientId,
+                Arg.Is<ClientScmConnectionDto>(connection => connection.Id == hostedConnectionId),
+                Arg.Any<CancellationToken>())
+            .Returns(
+                Task.FromResult(
+                    new ProviderConnectionReadinessResult(
+                        ProviderConnectionReadinessLevel.WorkflowComplete,
+                        "hosted",
+                        "Connection meets onboarding and workflow-complete readiness criteria.",
+                        [],
+                        [new ProviderReadinessCriterionResult("workflow", "connection", "satisfied", "ready")])));
+        readinessEvaluator.EvaluateAsync(
+                clientId,
+                Arg.Is<ClientScmConnectionDto>(connection => connection.Id == selfHostedConnectionId),
+                Arg.Any<CancellationToken>())
+            .Returns(
+                Task.FromResult(
+                    new ProviderConnectionReadinessResult(
+                        ProviderConnectionReadinessLevel.OnboardingReady,
+                        "selfHosted",
+                        "Connection is verified for onboarding, but workflow-complete readiness criteria are still missing.",
+                        ["Self-hosted GitHub remains onboarding-ready."],
+                        [
+                            new ProviderReadinessCriterionResult(
+                                "workflow",
+                                "connection",
+                                "unsatisfied",
+                                "Self-hosted GitHub remains onboarding-ready."),
+                        ])));
+
+        var providerRegistry = Substitute.For<IScmProviderRegistry>();
+        providerRegistry.IsRegistered(ScmProvider.GitHub).Returns(true);
+
+        var sut = new ProviderOperationalStatusService(connectionRepository, readinessEvaluator, providerRegistry);
+
+        var result = await sut.GetForClientAsync(clientId, CancellationToken.None);
+
+        Assert.Single(result.ProviderFamilies);
+        Assert.Equal(ProviderConnectionReadinessLevel.OnboardingReady, result.ProviderFamilies[0].LeastReadyLevel);
+        Assert.Equal(1, result.ProviderFamilies[0].WorkflowCompleteCount);
+        Assert.Equal(1, result.ProviderFamilies[0].OnboardingReadyCount);
+    }
+
+    [Fact]
+    public async Task GetForClientAsync_GitHubAppConnection_PreservesLeastReadySummaryForGitHubFamily()
+    {
+        var clientId = Guid.NewGuid();
+        var appConnectionId = Guid.NewGuid();
+        var patConnectionId = Guid.NewGuid();
+
+        var connectionRepository = Substitute.For<IClientScmConnectionRepository>();
+        connectionRepository.GetByClientIdAsync(clientId, Arg.Any<CancellationToken>())
+            .Returns(
+                Task.FromResult<IReadOnlyList<ClientScmConnectionDto>>(
+                [
+                    new ClientScmConnectionDto(
+                        appConnectionId,
+                        clientId,
+                        ScmProvider.GitHub,
+                        "https://github.enterprise.example.com",
+                        ScmAuthenticationKind.AppInstallation,
+                        null,
+                        null,
+                        "GitHub App",
+                        true,
+                        "verified",
+                        DateTimeOffset.UtcNow,
+                        null,
+                        null,
+                        DateTimeOffset.UtcNow,
+                        DateTimeOffset.UtcNow,
+                        GitHubAppId: 123456,
+                        GitHubAppInstallationId: 789012),
+                    new ClientScmConnectionDto(
+                        patConnectionId,
+                        clientId,
+                        ScmProvider.GitHub,
+                        "https://github.com",
+                        ScmAuthenticationKind.PersonalAccessToken,
+                        null,
+                        null,
+                        "GitHub PAT",
+                        true,
+                        "verified",
+                        DateTimeOffset.UtcNow,
+                        null,
+                        null,
+                        DateTimeOffset.UtcNow,
+                        DateTimeOffset.UtcNow),
+                ]));
+
+        var readinessEvaluator = Substitute.For<IProviderReadinessEvaluator>();
+        readinessEvaluator.EvaluateAsync(
+                clientId,
+                Arg.Is<ClientScmConnectionDto>(connection => connection.Id == appConnectionId),
+                Arg.Any<CancellationToken>())
+            .Returns(
+                Task.FromResult(
+                    new ProviderConnectionReadinessResult(
+                        ProviderConnectionReadinessLevel.OnboardingReady,
+                        "selfHosted",
+                        "GitHub App still needs automatic workflow proof.",
+                        ["GitHub App automatic workflow proof is not yet marked workflow-complete."],
+                        [
+                            new ProviderReadinessCriterionResult(
+                                "profile.automaticWorkflow", "hostVariant", "unsatisfied",
+                                "GitHub App automatic workflow proof is not yet marked workflow-complete."),
+                        ])));
+        readinessEvaluator.EvaluateAsync(
+                clientId,
+                Arg.Is<ClientScmConnectionDto>(connection => connection.Id == patConnectionId),
+                Arg.Any<CancellationToken>())
+            .Returns(
+                Task.FromResult(
+                    new ProviderConnectionReadinessResult(
+                        ProviderConnectionReadinessLevel.WorkflowComplete,
+                        "hosted",
+                        "Connection meets onboarding and workflow-complete readiness criteria.",
+                        [],
+                        [new ProviderReadinessCriterionResult("workflow", "connection", "satisfied", "ready")])));
+
+        var providerRegistry = Substitute.For<IScmProviderRegistry>();
+        providerRegistry.IsRegistered(ScmProvider.GitHub).Returns(true);
+
+        var sut = new ProviderOperationalStatusService(connectionRepository, readinessEvaluator, providerRegistry);
+
+        var result = await sut.GetForClientAsync(clientId, CancellationToken.None);
+
+        var summary = Assert.Single(result.ProviderFamilies);
+        Assert.Equal(ProviderConnectionReadinessLevel.OnboardingReady, summary.LeastReadyLevel);
+        Assert.Equal(1, summary.WorkflowCompleteCount);
+        Assert.Equal(1, summary.OnboardingReadyCount);
+    }
+}

@@ -25,7 +25,7 @@ run_quiet() {
   rm -f "$tmp"
 }
 
-run_quiet "dotnet test" dotnet test "$REPO_ROOT/MeisterProPR.slnx" --verbosity quiet
+run_quiet "dotnet test" dotnet test "$REPO_ROOT/MeisterDev.ProPR.slnx" --verbosity quiet
 run_quiet "frontend type-check" npm run type-check --prefix "$REPO_ROOT/frontend"
 run_quiet "frontend lint:css" npm run lint:css --prefix "$REPO_ROOT/frontend"
 run_quiet "npm test" npm test --prefix "$REPO_ROOT/frontend"

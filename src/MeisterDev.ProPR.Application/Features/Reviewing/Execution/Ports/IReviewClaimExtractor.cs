@@ -1,0 +1,19 @@
+// Copyright (c) Andreas Rain.
+// Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
+
+using MeisterDev.ProPR.Application.Features.Reviewing.Execution.Models;
+
+namespace MeisterDev.ProPR.Application.Features.Reviewing.Execution.Ports;
+
+/// <summary>
+///     Extracts structured verification claims from candidate review findings.
+/// </summary>
+public interface IReviewClaimExtractor
+{
+    /// <summary>
+    ///     Extracts structured verification claims from a candidate review finding.
+    /// </summary>
+    /// <param name="finding">Candidate finding to analyze.</param>
+    /// <returns>The extracted verification claims.</returns>
+    IReadOnlyList<ClaimDescriptor> ExtractClaims(CandidateReviewFinding finding);
+}

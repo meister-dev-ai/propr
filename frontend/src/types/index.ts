@@ -9072,7 +9072,7 @@ export interface paths {
         /**
          * Manually restart a failed review job.
          * @description Failed reviews are not auto-continued (to avoid looping on deterministic failures), so a restart must be
-         *     triggered explicitly. Any user with at least MeisterProPR.Domain.Enums.ClientRole.ClientUser for the job's owning client
+         *     triggered explicitly. Any user with at least MeisterDev.ProPR.Domain.Enums.ClientRole.ClientUser for the job's owning client
          *     may restart it — administrator rights are not required.
          */
         post: {
@@ -9162,7 +9162,7 @@ export interface paths {
         /**
          * Manually restart a failed review job.
          * @description Failed reviews are not auto-continued (to avoid looping on deterministic failures), so a restart must be
-         *     triggered explicitly. Any user with at least MeisterProPR.Domain.Enums.ClientRole.ClientUser for the job's owning client
+         *     triggered explicitly. Any user with at least MeisterDev.ProPR.Domain.Enums.ClientRole.ClientUser for the job's owning client
          *     may restart it — administrator rights are not required.
          */
         post: {
@@ -9252,7 +9252,7 @@ export interface paths {
         /**
          * Manually stop a running or queued review job.
          * @description Lets a client administrator halt a review that should not run to completion (for example an
-         *     oversized or misbehaving pull request). Requires MeisterProPR.Domain.Enums.ClientRole.ClientAdministrator for
+         *     oversized or misbehaving pull request). Requires MeisterDev.ProPR.Domain.Enums.ClientRole.ClientAdministrator for
          *     the job's owning client. Stopping is terminal: it does not requeue the job. Blocking a pull request
          *     is a separate action that prevents future processing without stopping the current run.
          */
@@ -9343,7 +9343,7 @@ export interface paths {
         /**
          * Manually stop a running or queued review job.
          * @description Lets a client administrator halt a review that should not run to completion (for example an
-         *     oversized or misbehaving pull request). Requires MeisterProPR.Domain.Enums.ClientRole.ClientAdministrator for
+         *     oversized or misbehaving pull request). Requires MeisterDev.ProPR.Domain.Enums.ClientRole.ClientAdministrator for
          *     the job's owning client. Stopping is terminal: it does not requeue the job. Blocking a pull request
          *     is a separate action that prevents future processing without stopping the current run.
          */
@@ -13418,8 +13418,8 @@ export interface components {
         };
         /**
          * @description Request body for patching a client. All fields are optional; omitted fields are left unchanged.
-         *     Set MeisterProPR.Api.Controllers.PatchClientRequest.CustomSystemMessage to `""` (empty string) to clear an existing value.
-         *     Set MeisterProPR.Api.Controllers.PatchClientRequest.AutoResolveSeverities to an empty array to clear the auto-resolve set.
+         *     Set MeisterDev.ProPR.Api.Controllers.PatchClientRequest.CustomSystemMessage to `""` (empty string) to clear an existing value.
+         *     Set MeisterDev.ProPR.Api.Controllers.PatchClientRequest.AutoResolveSeverities to an empty array to clear the auto-resolve set.
          */
         PatchClientRequest: {
             isActive?: boolean | null;
@@ -13952,7 +13952,7 @@ export interface components {
             updatedAt?: string;
         };
         /**
-         * @description Scope of a MeisterProPR.Domain.Entities.PromptOverride.
+         * @description Scope of a MeisterDev.ProPR.Domain.Entities.PromptOverride.
          * @enum {string}
          */
         PromptOverrideScope: "clientScope" | "crawlConfigScope";
@@ -14060,7 +14060,7 @@ export interface components {
             phaseTimings?: components["schemas"]["ProtocolEventPhaseTimingDto"][] | null;
         };
         /**
-         * @description Discriminates the kind of event recorded in a MeisterProPR.Domain.Entities.ProtocolEvent.
+         * @description Discriminates the kind of event recorded in a MeisterDev.ProPR.Domain.Entities.ProtocolEvent.
          * @enum {string}
          */
         ProtocolEventKind: "aiCall" | "toolCall" | "memoryOperation" | "operational";
@@ -14306,7 +14306,7 @@ export interface components {
             displayName?: string | null;
             isBot?: boolean;
         };
-        /** @description A retained comment within a MeisterProPR.Application.Features.ReviewArchive.RetainedThreadDto. */
+        /** @description A retained comment within a MeisterDev.ProPR.Application.Features.ReviewArchive.RetainedThreadDto. */
         RetainedCommentDto: {
             /** @description Provider comment identifier. */
             commentId?: string | null;
@@ -14531,7 +14531,7 @@ export interface components {
             /**
              * @description The kind of review pass — the `ReviewPassKind` name (e.g. `"Baseline"`,
              *     `"MultiPassUnion"`). null for legacy rows and passes with no
-             *     meaningful kind (e.g. synthesis, which the UI derives from MeisterProPR.Application.DTOs.ReviewJobProtocolDto.Label).
+             *     meaningful kind (e.g. synthesis, which the UI derives from MeisterDev.ProPR.Application.DTOs.ReviewJobProtocolDto.Label).
              */
             passKind?: string | null;
             /** @description Human-readable reason this pass ran (e.g. an augmentation re-review). null for baseline/legacy. */
@@ -14647,7 +14647,7 @@ export interface components {
         ReviewProfileSource: "systemDefault" | "clientDefault";
         /**
          * @description How much reasoning effort a review pass asks the model to spend. Configured per pass at the client level and
-         *     applied to the outbound chat request. MeisterProPR.Domain.Enums.ReviewReasoningEffort.None is the default and leaves the request without an
+         *     applied to the outbound chat request. MeisterDev.ProPR.Domain.Enums.ReviewReasoningEffort.None is the default and leaves the request without an
          *     effort level, so the provider keeps its own default (no reasoning) — behavior and cost stay unchanged until a
          *     user opts in. The remaining levels map to the provider's low/medium/high reasoning-effort settings.
          * @enum {string}

@@ -47,8 +47,8 @@ foreach (var file in commercialFiles)
     var classification = "Commercial capability implementation";
     var notes = "Marked in-source with the commercial-only functionality notice.";
 
-    if (file is "src/MeisterProPR.Api/Features/IdentityAndAccess/Controllers/TenantAuthController.cs"
-        or "src/MeisterProPR.Infrastructure/Features/IdentityAndAccess/Persistence/TenantAuthService.cs")
+    if (file is "src/MeisterDev.ProPR.Api/Features/IdentityAndAccess/Controllers/TenantAuthController.cs"
+        or "src/MeisterDev.ProPR.Infrastructure/Features/IdentityAndAccess/Persistence/TenantAuthService.cs")
     {
         classification = "Mixed file with commercial capability implementation";
         notes = "Marked in-source and contains shared behavior alongside commercial-only functionality.";

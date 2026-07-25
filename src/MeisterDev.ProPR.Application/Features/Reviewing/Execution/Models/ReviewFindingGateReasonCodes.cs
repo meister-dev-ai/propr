@@ -1,0 +1,111 @@
+// Copyright (c) Andreas Rain.
+// Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
+
+namespace MeisterDev.ProPR.Application.Features.Reviewing.Execution.Models;
+
+/// <summary>
+///     Stable machine-readable reason codes used by deterministic final-gate decisions.
+/// </summary>
+public static class ReviewFindingGateReasonCodes
+{
+    /// <summary>
+    ///     Reason code used when the default publish path is selected.
+    /// </summary>
+    public const string DefaultPublish = "default_publish";
+
+    /// <summary>
+    ///     Reason code used when evidence fully resolves the claim.
+    /// </summary>
+    public const string EvidenceResolved = "evidence_resolved";
+
+    /// <summary>
+    ///     Reason code used when bounded verification supported the claim.
+    /// </summary>
+    public const string VerifiedBoundedClaimSupport = "verified_bounded_claim_support";
+
+    /// <summary>
+    ///     Reason code used when bounded verification did not support the claim.
+    /// </summary>
+    public const string MissingVerifiedClaimSupport = "missing_verified_claim_support";
+
+    /// <summary>
+    ///     Reason code used when required multi-file evidence is missing.
+    /// </summary>
+    public const string MissingMultiFileEvidence = "missing_multi_file_evidence";
+
+    /// <summary>
+    ///     Reason code used when a finding is too broad to publish.
+    /// </summary>
+    public const string WeakBroadFinding = "weak_broad_finding";
+
+    /// <summary>
+    ///     Reason code used when a finding is not actionable.
+    /// </summary>
+    public const string NonActionableFinding = "non_actionable_finding";
+
+    /// <summary>
+    ///     Reason code used when an invariant contradiction blocks publication.
+    /// </summary>
+    public const string InvariantContradiction = "invariant_contradiction";
+
+    /// <summary>
+    ///     Reason code used when verification completed in a degraded state.
+    /// </summary>
+    public const string VerificationDegraded = "verification_degraded";
+
+    /// <summary>
+    ///     Reason code used when an investigation-origin finding lacked explicit support.
+    /// </summary>
+    public const string InvestigationOriginMissingExplicitSupport = "investigation_origin_missing_explicit_support";
+
+    /// <summary>
+    ///     Reason code used when a degraded follow-up remained diagnostics-only.
+    /// </summary>
+    public const string DiagnosticsOnlyFollowUp = "diagnostics_only_follow_up";
+
+    /// <summary>
+    ///     Reason code used when deterministic objective verification explicitly supported a claim.
+    /// </summary>
+    public const string ObjectiveDeterministicSupport = "objective_deterministic_support";
+
+    /// <summary>
+    ///     Reason code used when repeated judgment did not agree on publication.
+    /// </summary>
+    public const string RepeatedJudgmentDisagreement = "repeated_judgment_disagreement";
+
+    /// <summary>
+    ///     Reason code attached when a finding's anchor line falls outside the pull request's changed-line
+    ///     ranges (pre-existing code). It is a label only and never changes the finding's disposition.
+    /// </summary>
+    public const string OutsideChangedLines = "outside_changed_lines";
+
+    /// <summary>
+    ///     Reason code used when a job-level PR-wide finding earns publication because the bounded PR-verifier
+    ///     recommended publication and the finding is anchored on or adjacent to a changed line.
+    /// </summary>
+    public const string PrWideAnchoredVerifiedClaim = "pr_wide_anchored_verified";
+
+    /// <summary>
+    ///     Reason code used when a verifier-approved PR-wide finding is held to summary-only because it has no
+    ///     changed-line anchor for an inline thread. Distinguishes a location shortfall from a verification one.
+    /// </summary>
+    public const string PrWideMissingChangedLineAnchor = "pr_wide_missing_changed_line_anchor";
+
+    /// <summary>
+    ///     Reason code attached to an ERROR finding whose cited source lines were read during the pass that
+    ///     produced it — the finding is grounded and publishes unchanged. Label only; never changes disposition.
+    /// </summary>
+    public const string ErrorFindingRereadVerified = "error_finding_reread_verified";
+
+    /// <summary>
+    ///     Reason code attached to an ERROR finding that was published without any read covering its cited lines.
+    ///     The finding is still posted at ERROR severity but annotated as unverified.
+    /// </summary>
+    public const string ErrorFindingRereadUnverified = "error_finding_reread_unverified";
+
+    /// <summary>
+    ///     Reason code used when an ERROR finding is discarded because a covering read proved its cited lines are
+    ///     absent from the source (read successfully but the line lies beyond the file's content).
+    /// </summary>
+    public const string ErrorFindingRereadContradicted = "error_finding_reread_contradicted";
+}

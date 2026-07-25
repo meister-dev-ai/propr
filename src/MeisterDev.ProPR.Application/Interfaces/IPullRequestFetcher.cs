@@ -1,0 +1,112 @@
+// Copyright (c) Andreas Rain.
+// Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
+
+using MeisterDev.ProPR.Application.Features.Reviewing.Execution.Ports;
+using MeisterDev.ProPR.Domain.ValueObjects;
+
+namespace MeisterDev.ProPR.Application.Interfaces;
+
+/// <summary>
+///     Interface for fetching pull request details and changed files from the source control provider.
+/// </summary>
+public interface IPullRequestFetcher
+{
+    /// <summary>
+    ///     Fetches only the branch names and status of a pull request in a single lightweight call.
+    ///     Use this to obtain the branch names needed for local workspace preparation before the
+    ///     full content fetch.
+    /// </summary>
+    Task<PullRequestRef> FetchRefAsync(
+        string organizationUrl,
+        string projectId,
+        string repositoryId,
+        int pullRequestId,
+        Guid? clientId = null,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    ///     Fetches pull request details and changed files from the source control provider.
+    /// </summary>
+    /// <param name="organizationUrl">The URL of the organization.</param>
+    /// <param name="projectId">The ID of the project.</param>
+    /// <param name="repositoryId">The ID of the repository.</param>
+    /// <param name="pullRequestId">The ID of the pull request.</param>
+    /// <param name="iterationId">The ID of the iteration.</param>
+    /// <param name="compareToIterationId">
+    ///     When provided, only files changed between this iteration and
+    ///     <paramref name="iterationId" /> are returned in <c>ChangedFiles</c>.
+    ///     The full PR file list is still available via <c>PullRequest.AllPrFileSummaries</c>.
+    ///     Pass <c>null</c> for a first-pass review where all changed files should be reviewed.
+    /// </param>
+    /// <param name="clientId">Optional client ID for credential retrieval.</param>
+    /// <param name="cancellationToken">A token to monitor for cancellation requests.</param>
+    /// <param name="compareToReviewRevision">
+    ///     Optional provider-neutral review revision used by non-Azure DevOps adapters to compute delta files.
+    ///     Pass <c>null</c> to fetch the full current pull request scope.
+    /// </param>
+    /// <param name="workspace">
+    ///     When provided, file content is read from the local git workspace instead of downloading
+    ///     it from the remote SCM API. Pass <c>null</c> to use the remote API (default behaviour).
+    /// </param>
+    /// <returns>A task that represents the asynchronous operation, containing the fetched pull request.</returns>
+    Task<PullRequest> FetchAsync(
+        string organizationUrl,
+        string projectId,
+        string repositoryId,
+        int pullRequestId,
+        int iterationId,
+        int? compareToIterationId = null,
+        Guid? clientId = null,
+        CancellationToken cancellationToken = default,
+        ReviewRevision? compareToReviewRevision = null,
+        IReviewRepositoryWorkspace? workspace = null);
+
+    /// <summary>
+    ///     Fetches the diff for a single file within a pull request, avoiding the cost of a full PR fetch.
+    ///     Returns <c>null</c> when the file is not part of the pull request's changed files.
+    /// </summary>
+    /// <param name="organizationUrl">The URL of the organization.</param>
+    /// <param name="projectId">The ID of the project.</param>
+    /// <param name="repositoryId">The ID of the repository.</param>
+    /// <param name="pullRequestId">The ID of the pull request.</param>
+    /// <param name="iterationId">The ID of the iteration.</param>
+    /// <param name="filePath">The repository-relative path of the file to fetch.</param>
+    /// <param name="compareToIterationId">
+    ///     When provided, the file is resolved against the delta between this iteration and
+    ///     <paramref name="iterationId" />.
+    /// </param>
+    /// <param name="clientId">Optional client ID for credential retrieval.</param>
+    /// <param name="cancellationToken">A token to monitor for cancellation requests.</param>
+    /// <returns>A task that represents the asynchronous operation, containing the changed file or <c>null</c>.</returns>
+    Task<ChangedFile?> FetchFileDiffAsync(
+        string organizationUrl,
+        string projectId,
+        string repositoryId,
+        int pullRequestId,
+        int iterationId,
+        string filePath,
+        int? compareToIterationId = null,
+        Guid? clientId = null,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    ///     Fetches only the pull request's comment threads, without downloading changed-file content.
+    ///     Used by the passive thread-retention observer so it does not pull whole pull-request contents on
+    ///     every crawl cycle. Provider adapters may serve this with a single thread-API call (Azure DevOps
+    ///     does); others fall back to a full fetch.
+    /// </summary>
+    /// <param name="organizationUrl">The URL of the organization.</param>
+    /// <param name="projectId">The ID of the project.</param>
+    /// <param name="repositoryId">The ID of the repository.</param>
+    /// <param name="pullRequestId">The ID of the pull request.</param>
+    /// <param name="clientId">Optional client ID for credential retrieval.</param>
+    /// <param name="cancellationToken">A token to monitor for cancellation requests.</param>
+    /// <returns>A task that represents the asynchronous operation, containing the pull request's comment threads.</returns>
+    Task<IReadOnlyList<PrCommentThread>> FetchThreadsAsync(
+        string organizationUrl,
+        string projectId,
+        string repositoryId,
+        int pullRequestId,
+        Guid? clientId = null,
+        CancellationToken cancellationToken = default);
+}

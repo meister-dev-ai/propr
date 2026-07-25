@@ -10,14 +10,14 @@ Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
 $RepoRoot = Split-Path -Parent $PSScriptRoot
-$ApiProject = Join-Path $RepoRoot 'src\MeisterProPR.Api\MeisterProPR.Api.csproj'
-$ProCursorProject = Join-Path $RepoRoot 'src\MeisterProPR.ProCursor.Service\MeisterProPR.ProCursor.Service.csproj'
-$ApiFolder = Join-Path $RepoRoot 'src\MeisterProPR.Api'
-$ProCursorFolder = Join-Path $RepoRoot 'src\MeisterProPR.ProCursor.Service'
+$ApiProject = Join-Path $RepoRoot 'src\MeisterDev.ProPR.Api\MeisterDev.ProPR.Api.csproj'
+$ProCursorProject = Join-Path $RepoRoot 'src\MeisterDev.ProPR.ProCursor.Service\MeisterDev.ProPR.ProCursor.Service.csproj'
+$ApiFolder = Join-Path $RepoRoot 'src\MeisterDev.ProPR.Api'
+$ProCursorFolder = Join-Path $RepoRoot 'src\MeisterDev.ProPR.ProCursor.Service'
 $UiFolder = Join-Path $RepoRoot 'frontend'
 $EnvFile = Join-Path $RepoRoot '.env'
-$ApiDll = Join-Path $RepoRoot 'src\MeisterProPR.Api\bin\Debug\net10.0\MeisterProPR.Api.dll'
-$ProCursorDll = Join-Path $RepoRoot 'src\MeisterProPR.ProCursor.Service\bin\Debug\net10.0\MeisterProPR.ProCursor.Service.dll'
+$ApiDll = Join-Path $RepoRoot 'src\MeisterDev.ProPR.Api\bin\Debug\net10.0\MeisterDev.ProPR.Api.dll'
+$ProCursorDll = Join-Path $RepoRoot 'src\MeisterDev.ProPR.ProCursor.Service\bin\Debug\net10.0\MeisterDev.ProPR.ProCursor.Service.dll'
 $LogDir = if ($env:RUN_LOCAL_LOG_DIR) { $env:RUN_LOCAL_LOG_DIR } else { Join-Path $RepoRoot 'logs\local' }
 $LogFile = if ($env:RUN_LOCAL_LOG_FILE) { $env:RUN_LOCAL_LOG_FILE } else { Join-Path $LogDir ("run-local-{0}.log" -f (Get-Date -Format 'yyyyMMdd-HHmmss')) }
 $runningOnWindows = $false

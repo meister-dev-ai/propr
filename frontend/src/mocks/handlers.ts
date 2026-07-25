@@ -1911,7 +1911,7 @@ let threadMemoryRecords = [
     threadId: 1024,
     repositoryId: 'meister-propr',
     pullRequestId: 450,
-    filePath: 'src/MeisterProPR.Api/Features/Reviewing/Diagnostics/Controllers/JobsController.cs',
+    filePath: 'src/MeisterDev.ProPR.Api/Features/Reviewing/Diagnostics/Controllers/JobsController.cs',
     resolutionSummary: 'The user requested to add a new endpoint for fetching job protocols. The developer implemented it by adding the `GetProtocol` method to the `JobsController`.',
     createdAt: new Date(Date.now() - 86400000 * 5).toISOString(),
     updatedAt: new Date(Date.now() - 86400000 * 5).toISOString()
@@ -1922,7 +1922,7 @@ let threadMemoryRecords = [
     threadId: 1025,
     repositoryId: 'meister-propr',
     pullRequestId: 450,
-    filePath: 'src/MeisterProPR.Core/Services/JobService.cs',
+    filePath: 'src/MeisterDev.ProPR.Core/Services/JobService.cs',
     resolutionSummary: 'Fixed a race condition in the job status update logic by implementing a distributed lock using Redis.',
     createdAt: new Date(Date.now() - 86400000 * 4).toISOString(),
     updatedAt: new Date(Date.now() - 86400000 * 4).toISOString()

@@ -114,7 +114,7 @@ services:
     volumes:
       - meisterpropr_data_protection_keys:/app/.data-protection-keys
     healthcheck:
-      test: [ "CMD", "dotnet", "MeisterProPR.Api.dll", "--healthcheck", "http://127.0.0.1:8080/healthz" ]
+      test: [ "CMD", "dotnet", "MeisterDev.ProPR.Api.dll", "--healthcheck", "http://127.0.0.1:8080/healthz" ]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -138,7 +138,7 @@ services:
     volumes:
       - meisterpropr_data_protection_keys:/app/.data-protection-keys
     healthcheck:
-      test: [ "CMD", "dotnet", "MeisterProPR.ProCursor.Service.dll", "--healthcheck", "http://127.0.0.1:8081/healthz" ]
+      test: [ "CMD", "dotnet", "MeisterDev.ProPR.ProCursor.Service.dll", "--healthcheck", "http://127.0.0.1:8081/healthz" ]
       interval: 30s
       timeout: 10s
       retries: 3

@@ -5,11 +5,11 @@ when-to-use: When C# files change under src/, especially Program.cs, module regi
 
 # Meister DEV ProPR Architecture
 
-ProPR is no longer just a simple layered Azure DevOps app. Treat it as a modular monolith control plane with provider-neutral review workflows plus an extracted `MeisterProPR.ProCursor.Service` host.
+ProPR is no longer just a simple layered Azure DevOps app. Treat it as a modular monolith control plane with provider-neutral review workflows plus an extracted `MeisterDev.ProPR.ProCursor.Service` host.
 
 ## Composition Model
 
-- `src/MeisterProPR.Api` is the control-plane host and composition root. It is expected to wire shared support plus feature module entry points such as `AddReviewingModule()`, `AddCrawlingModule()`, `AddClientsModule()`, `AddIdentityAndAccessModule()`, `AddMentionsModule()`, `AddPromptCustomizationModule()`, `AddUsageReportingModule()`, `AddLicensingModule()`, and ProCursor remote-mode support.
+- `src/MeisterDev.ProPR.Api` is the control-plane host and composition root. It is expected to wire shared support plus feature module entry points such as `AddReviewingModule()`, `AddCrawlingModule()`, `AddClientsModule()`, `AddIdentityAndAccessModule()`, `AddMentionsModule()`, `AddPromptCustomizationModule()`, `AddUsageReportingModule()`, `AddLicensingModule()`, and ProCursor remote-mode support.
 - Keep `Program.cs` focused on composition, host wiring, middleware, health checks, telemetry, and startup recovery. Do not scatter feature-internal repository/service registrations through controllers or unrelated startup code.
 - Preserve the dependency rule `Api -> Application -> Domain <- Infrastructure`. Provider-specific and persistence-specific behavior belongs behind interfaces and adapter registries, not in controllers or domain types.
 
@@ -31,9 +31,9 @@ ProPR is no longer just a simple layered Azure DevOps app. Treat it as a modular
 ## ProCursor Boundary
 
 - In the API host, `IProCursorGateway` is intentionally bound to remote or disabled implementations based on `PROCURSOR_REMOTE_MODE`.
-- The extracted `MeisterProPR.ProCursor.Service` host owns ProCursor operational persistence behind `PROCURSOR_DB_CONNECTION_STRING` and composes through `AddProCursorModule()`.
+- The extracted `MeisterDev.ProPR.ProCursor.Service` host owns ProCursor operational persistence behind `PROCURSOR_DB_CONNECTION_STRING` and composes through `AddProCursorModule()`.
 - ProPR owns client/provider/AI/ProCursor source configuration. Do not add code paths that make ProPR read or write ProCursor operational tables directly.
-- Shared contracts across the ProPR <-> ProCursor boundary live in `MeisterProPR.ProCursor.Contracts`.
+- Shared contracts across the ProPR <-> ProCursor boundary live in `MeisterDev.ProPR.ProCursor.Contracts`.
 
 ## Secret Handling
 

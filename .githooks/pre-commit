@@ -27,7 +27,7 @@ if [ -n "$STAGED_CS_FILES" ]; then
         # Run cleanup when the local JetBrains toolchain is healthy, using the same profile CI verifies
         # ("Built-in: Reformat Code") so locally-formatted files match the CI formatting check.
         # If it is installed but broken, keep build/test enforcement active.
-        if jb cleanupcode "MeisterProPR.slnx" --profile="Built-in: Reformat Code" --include="$JB_FILES"; then
+        if jb cleanupcode "MeisterDev.ProPR.slnx" --profile="Built-in: Reformat Code" --include="$JB_FILES"; then
             # Stage ONLY the files that were in our list.
             printf '%s\n' "$STAGED_CS_FILES" | xargs git add
             echo "Cleanup complete and specific files staged."
@@ -41,7 +41,7 @@ if [ -n "$STAGED_CS_FILES" ]; then
     echo "pre-commit: format check passed."
 
     echo "pre-commit: running dotnet build..."
-    if ! dotnet build ./MeisterProPR.slnx --no-restore --configuration Release --nologo -consoleLoggerParameters:NoSummary 2>&1; then
+    if ! dotnet build ./MeisterDev.ProPR.slnx --no-restore --configuration Release --nologo -consoleLoggerParameters:NoSummary 2>&1; then
         echo ""
         echo "pre-commit: FAILED -- build errors detected."
         echo "Fix the compilation errors and commit again."
@@ -51,7 +51,7 @@ if [ -n "$STAGED_CS_FILES" ]; then
     echo "pre-commit: build passed."
 
     echo "pre-commit: running dotnet test..."
-    if ! dotnet test ./MeisterProPR.slnx --no-build --no-restore --configuration Release --nologo --verbosity quiet 2>&1; then
+    if ! dotnet test ./MeisterDev.ProPR.slnx --no-build --no-restore --configuration Release --nologo --verbosity quiet 2>&1; then
         echo ""
         echo "pre-commit: FAILED -- one or more backend tests failed."
         echo "Fix the failing tests and commit again."

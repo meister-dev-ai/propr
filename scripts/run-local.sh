@@ -4,8 +4,8 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 
-ApiProject="$REPO_ROOT/src/MeisterProPR.Api/MeisterProPR.Api.csproj"
-ProCursorProject="$REPO_ROOT/src/MeisterProPR.ProCursor.Service/MeisterProPR.ProCursor.Service.csproj"
+ApiProject="$REPO_ROOT/src/MeisterDev.ProPR.Api/MeisterDev.ProPR.Api.csproj"
+ProCursorProject="$REPO_ROOT/src/MeisterDev.ProPR.ProCursor.Service/MeisterDev.ProPR.ProCursor.Service.csproj"
 UiFolder="$REPO_ROOT/frontend"
 EnvFile="$REPO_ROOT/.env"
 

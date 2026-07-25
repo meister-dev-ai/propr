@@ -1,0 +1,28 @@
+// Copyright (c) Andreas Rain.
+// Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
+
+using MeisterDev.ProPR.Infrastructure.Data;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Diagnostics.HealthChecks;
+
+namespace MeisterDev.ProPR.Api.HealthChecks;
+
+/// <summary>Health check that verifies the database is reachable.</summary>
+public sealed class DatabaseHealthCheck(MeisterProPRDbContext dbContext) : IHealthCheck
+{
+    /// <inheritdoc />
+    public async Task<HealthCheckResult> CheckHealthAsync(
+        HealthCheckContext context,
+        CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            await dbContext.Database.ExecuteSqlRawAsync("SELECT 1", cancellationToken);
+            return HealthCheckResult.Healthy("Database is reachable.");
+        }
+        catch (Exception ex)
+        {
+            return HealthCheckResult.Unhealthy("Database is unreachable.", ex);
+        }
+    }
+}

@@ -1,0 +1,53 @@
+// Copyright (c) Andreas Rain.
+// Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
+
+using MeisterDev.ProPR.Application.DTOs;
+using MeisterDev.ProPR.Application.Features.Reviewing.Execution.Models;
+using MeisterDev.ProPR.Domain.Enums;
+using Microsoft.Extensions.AI;
+
+namespace MeisterDev.ProPR.Application.Interfaces;
+
+/// <summary>
+///     Provider-specific driver for discovery, verification, and runtime creation.
+/// </summary>
+public interface IAiProviderDriver
+{
+    /// <summary>Gets the provider family handled by this driver.</summary>
+    AiProviderKind ProviderKind { get; }
+
+    /// <summary>
+    ///     Validates a probe/verify target against this provider's base-URL, SSRF-egress, and auth-shape rules.
+    ///     Returns a user-facing error message when the target is rejected, or <c>null</c> when it is acceptable.
+    /// </summary>
+    string? ValidateProbeTarget(AiProbeTarget target);
+
+    /// <summary>Discovers provider models using the supplied connection settings.</summary>
+    Task<AiModelDiscoveryResultDto> DiscoverModelsAsync(
+        AiConnectionProbeOptionsDto options,
+        CancellationToken ct = default);
+
+    /// <summary>Verifies the provider connection using the supplied settings.</summary>
+    Task<AiVerificationResultDto> VerifyAsync(
+        AiConnectionProbeOptionsDto options,
+        CancellationToken ct = default);
+
+    /// <summary>Creates a chat client for one resolved model binding.</summary>
+    IChatClient CreateChatClient(
+        AiConnectionDto connection,
+        AiConfiguredModelDto model,
+        AiPurposeBindingDto binding);
+
+    /// <summary>Gets session-related chat runtime capabilities for one resolved model binding.</summary>
+    AgentReviewRuntimeCapabilities GetChatRuntimeCapabilities(
+        AiConnectionDto connection,
+        AiConfiguredModelDto model,
+        AiPurposeBindingDto binding);
+
+    /// <summary>Creates an embedding generator for one resolved model binding.</summary>
+    IEmbeddingGenerator<string, Embedding<float>> CreateEmbeddingGenerator(
+        AiConnectionDto connection,
+        AiConfiguredModelDto model,
+        AiPurposeBindingDto binding,
+        int dimensions);
+}

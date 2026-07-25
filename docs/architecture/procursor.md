@@ -24,8 +24,8 @@ In managed remote mode, ProPR does not register `ProCursorOperationalDbContext` 
 shared-key-authenticated internal ProCursor HTTP endpoints, while the public admin surface remains on
 ProPR.
 
-Both services emit distinct OTLP service identities, `MeisterProPR.Api` and
-`MeisterProPR.ProCursor.Service`, so distributed traces can distinguish the public control plane from
+Both services emit distinct OTLP service identities, `MeisterDev.ProPR.Api` and
+`MeisterDev.ProPR.ProCursor.Service`, so distributed traces can distinguish the public control plane from
 the internal ProCursor execution host.
 
 For guided admin flows, the same gateway boundary owns save-time validation of
