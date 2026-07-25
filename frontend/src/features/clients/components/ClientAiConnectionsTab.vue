@@ -266,7 +266,11 @@
                     </div>
                   </div>
 
-                  <ModelCatalogPicker :client-id="clientId" @pick="(entry) => applyCatalogEntryToModel(model, entry)" />
+                  <ModelCatalogPicker
+                    :load-providers="() => listCatalogProviders(clientId)"
+                    :load-models="(providerId) => listCatalogModels(clientId, providerId)"
+                    @pick="(entry) => applyCatalogEntryToModel(model, entry)"
+                  />
 
                   <div class="ai-form-grid ai-form-grid-compact">
                     <label class="form-field">
@@ -452,6 +456,7 @@ import ClientReviewPassesEditor from './ClientReviewPassesEditor.vue'
 import ClientLogicalModelsSection from './ClientLogicalModelsSection.vue'
 import ClientPurposeRolesSection from './ClientPurposeRolesSection.vue'
 import ModelCatalogPicker from './ModelCatalogPicker.vue'
+import { listModels as listCatalogModels, listProviders as listCatalogProviders } from '@/services/modelCatalogService'
 
 import { listEffectiveForClient, type LogicalModelResponse } from '@/services/logicalModelsService'
 import { ClientDetailVmKey, type ReviewPassEntry } from '@/features/clients/view-models/useClientDetailViewModel'

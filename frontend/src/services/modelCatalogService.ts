@@ -34,6 +34,28 @@ export async function listModels(clientId: string, providerId?: string): Promise
   return (data as AiModelCatalogEntryDto[]) ?? []
 }
 
+/** The catalog providers a tenant administrator can browse. */
+export async function listTenantProviders(tenantId: string): Promise<ModelCatalogProviderResponse[]> {
+  const { data } = await createAdminClient().GET('/tenants/{tenantId}/model-catalog/providers', {
+    params: { path: { tenantId } },
+  })
+  return (data as ModelCatalogProviderResponse[]) ?? []
+}
+
+/**
+ * Catalog models as they apply to a tenant: global entries with that tenant's own overrides applied. A client
+ * override is excluded, since it is narrower than the scope being edited and would misreport what the tenant set.
+ */
+export async function listTenantModels(
+  tenantId: string,
+  providerId?: string,
+): Promise<AiModelCatalogEntryDto[]> {
+  const { data } = await createAdminClient().GET('/tenants/{tenantId}/model-catalog/models', {
+    params: { path: { tenantId }, query: providerId ? { providerId } : {} },
+  })
+  return (data as AiModelCatalogEntryDto[]) ?? []
+}
+
 /** A tenant's own catalog overrides. */
 export async function listTenantOverrides(tenantId: string): Promise<AiModelCatalogOverrideDto[]> {
   const { data } = await createAdminClient().GET('/tenants/{tenantId}/model-catalog/overrides', {

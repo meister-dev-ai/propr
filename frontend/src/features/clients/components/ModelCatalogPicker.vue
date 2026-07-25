@@ -10,15 +10,13 @@
 
 import { computed, ref, watch } from 'vue'
 
-import {
-  type AiModelCatalogEntryDto,
-  type ModelCatalogProviderResponse,
-  listModels,
-  listProviders,
-} from '@/services/modelCatalogService'
+import type { AiModelCatalogEntryDto, ModelCatalogProviderResponse } from '@/services/modelCatalogService'
 
 interface Props {
-  clientId: string
+  /** Loads the providers to browse. Supplied by the caller so the picker serves any scope. */
+  loadProviders: () => Promise<ModelCatalogProviderResponse[]>
+  /** Loads the models for one provider, with that scope's overrides already applied. */
+  loadModels: (providerId: string) => Promise<AiModelCatalogEntryDto[]>
 }
 
 const props = defineProps<Props>()
@@ -54,7 +52,7 @@ async function openPicker(): Promise<void> {
   loading.value = true
   errorMessage.value = ''
   try {
-    providers.value = await listProviders(props.clientId)
+    providers.value = await props.loadProviders()
     selectedProviderId.value = providers.value[0]?.providerId ?? ''
   } catch {
     errorMessage.value = 'The model catalog could not be loaded.'
@@ -72,7 +70,7 @@ watch(selectedProviderId, async (providerId) => {
   loading.value = true
   errorMessage.value = ''
   try {
-    models.value = await listModels(props.clientId, providerId)
+    models.value = await props.loadModels(providerId)
   } catch {
     errorMessage.value = 'The models for that provider could not be loaded.'
     models.value = []

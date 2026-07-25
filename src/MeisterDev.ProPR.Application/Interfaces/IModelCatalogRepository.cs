@@ -24,6 +24,20 @@ public interface IModelCatalogRepository
         string? providerId = null,
         CancellationToken ct = default);
 
+    /// <summary>
+    ///     Returns the catalog as it applies to a tenant, with that tenant's own overrides applied but no client
+    ///     override. This is what a tenant administrator browses when choosing a model to negotiate a rate for;
+    ///     without it they would have to know a provider and model identifier by heart, which is the error the
+    ///     catalog exists to remove.
+    /// </summary>
+    /// <param name="tenantId">Tenant the catalog is being resolved for.</param>
+    /// <param name="providerId">Restrict to a single catalog provider, or null for all of them.</param>
+    /// <param name="ct">Cancellation token.</param>
+    Task<IReadOnlyList<AiModelCatalogEntryDto>> GetEffectiveForTenantAsync(
+        Guid tenantId,
+        string? providerId = null,
+        CancellationToken ct = default);
+
     /// <summary>Returns the distinct providers the catalog describes, for a browse-by-provider surface.</summary>
     /// <param name="ct">Cancellation token.</param>
     Task<IReadOnlyList<(string ProviderId, string ProviderName, int ModelCount)>> GetProvidersAsync(CancellationToken ct = default);

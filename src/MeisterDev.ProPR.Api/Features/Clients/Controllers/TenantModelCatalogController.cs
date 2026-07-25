@@ -19,6 +19,59 @@ namespace MeisterDev.ProPR.Api.Features.Clients.Controllers;
 [Route("tenants/{tenantId:guid}/model-catalog/overrides")]
 public sealed class TenantModelCatalogController(IModelCatalogRepository catalog) : ControllerBase
 {
+    /// <summary>
+    ///     Lists the catalog as it applies to this tenant, so an administrator can choose a model to negotiate a
+    ///     rate for rather than having to know its provider and identifier by heart.
+    /// </summary>
+    /// <param name="tenantId">Tenant whose catalog is browsed.</param>
+    /// <param name="providerId">Restrict to a single catalog provider, or omit for all of them.</param>
+    /// <param name="ct">Cancellation token.</param>
+    /// <response code="200">The effective catalog entries for this tenant.</response>
+    /// <response code="401">The caller is not authenticated.</response>
+    /// <response code="403">The caller does not administer this tenant.</response>
+    [HttpGet("/tenants/{tenantId:guid}/model-catalog/models")]
+    [ProducesResponseType(typeof(IReadOnlyList<AiModelCatalogEntryDto>), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    public async Task<IActionResult> GetModels(
+        Guid tenantId,
+        [FromQuery] string? providerId = null,
+        CancellationToken ct = default)
+    {
+        var auth = AuthHelpers.RequireTenantRole(this.HttpContext, tenantId, TenantRole.TenantAdministrator);
+        if (auth is not null)
+        {
+            return auth;
+        }
+
+        return this.Ok(await catalog.GetEffectiveForTenantAsync(tenantId, providerId, ct));
+    }
+
+    /// <summary>Lists the catalog providers available to browse.</summary>
+    /// <param name="tenantId">Tenant whose catalog is browsed.</param>
+    /// <param name="ct">Cancellation token.</param>
+    /// <response code="200">The providers the catalog describes.</response>
+    /// <response code="401">The caller is not authenticated.</response>
+    /// <response code="403">The caller does not administer this tenant.</response>
+    [HttpGet("/tenants/{tenantId:guid}/model-catalog/providers")]
+    [ProducesResponseType(typeof(IReadOnlyList<ModelCatalogProviderResponse>), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    public async Task<IActionResult> GetProviders(Guid tenantId, CancellationToken ct = default)
+    {
+        var auth = AuthHelpers.RequireTenantRole(this.HttpContext, tenantId, TenantRole.TenantAdministrator);
+        if (auth is not null)
+        {
+            return auth;
+        }
+
+        var providers = await catalog.GetProvidersAsync(ct);
+        return this.Ok(
+            providers
+                .Select(provider => new ModelCatalogProviderResponse(provider.ProviderId, provider.ProviderName, provider.ModelCount))
+                .ToList());
+    }
+
     /// <summary>Lists the tenant's overrides.</summary>
     /// <param name="tenantId">Tenant whose overrides are listed.</param>
     /// <param name="ct">Cancellation token.</param>

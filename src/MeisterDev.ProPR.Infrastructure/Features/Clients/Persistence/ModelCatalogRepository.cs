@@ -84,6 +84,35 @@ public sealed class ModelCatalogRepository(MeisterProPRDbContext db, TimeProvide
     }
 
     /// <inheritdoc />
+    public async Task<IReadOnlyList<AiModelCatalogEntryDto>> GetEffectiveForTenantAsync(
+        Guid tenantId,
+        string? providerId = null,
+        CancellationToken ct = default)
+    {
+        // The tenant's own view: global rows plus its own overrides. A client override is deliberately excluded,
+        // since it is narrower than the scope being edited here and would misreport what the tenant has set.
+        var query = db.AiModelCatalogEntries
+            .AsNoTracking()
+            .Where(row => (row.TenantId == null && row.ClientId == null) || row.TenantId == tenantId);
+
+        if (!string.IsNullOrWhiteSpace(providerId))
+        {
+            query = query.Where(row => row.ProviderId == providerId);
+        }
+
+        var rows = await query.ToListAsync(ct).ConfigureAwait(false);
+
+        return rows
+            .GroupBy(row => (row.ProviderId, row.RemoteModelId))
+            .Select(group => Resolve(group, clientId: null, tenantId))
+            .Where(entry => entry is not null)
+            .Select(entry => entry!)
+            .OrderBy(entry => entry.ProviderId, StringComparer.Ordinal)
+            .ThenBy(entry => entry.DisplayName, StringComparer.Ordinal)
+            .ToList();
+    }
+
+    /// <inheritdoc />
     public async Task<IReadOnlyList<AiModelCatalogOverrideDto>> GetTenantOverridesAsync(
         Guid tenantId,
         CancellationToken ct = default)
@@ -180,15 +209,17 @@ public sealed class ModelCatalogRepository(MeisterProPRDbContext db, TimeProvide
         return removed > 0;
     }
 
+    // clientId is null when resolving for a tenant rather than a client: there is no client layer to apply, and
+    // saying so explicitly avoids relying on no real client ever having the empty id.
     private static AiModelCatalogEntryDto? Resolve(
         IEnumerable<AiModelCatalogEntryRecord> rows,
-        Guid clientId,
+        Guid? clientId,
         Guid? tenantId)
     {
         var candidates = rows.ToList();
         var global = candidates.Find(row => row.TenantId is null && row.ClientId is null);
         var tenantRow = tenantId is null ? null : candidates.Find(row => row.TenantId == tenantId);
-        var clientRow = candidates.Find(row => row.ClientId == clientId);
+        var clientRow = clientId is null ? null : candidates.Find(row => row.ClientId == clientId);
 
         // Capabilities come from the snapshot when there is one; an operator-defined model has only itself.
         var baseRow = global ?? tenantRow ?? clientRow;

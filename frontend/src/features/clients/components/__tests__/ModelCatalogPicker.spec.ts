@@ -6,13 +6,18 @@ import { applyCatalogEntryToModel } from '../aiConnectionsFormatters'
 import type { EditableModel } from '../aiConnectionsForm.types'
 import type { AiModelCatalogEntryDto } from '@/services/modelCatalogService'
 
+// The picker takes its loaders as props so one component serves both the client and tenant scopes; the tests
+// therefore hand it stubs directly rather than mocking a service module.
 const listProviders = vi.fn()
 const listModels = vi.fn()
 
-vi.mock('@/services/modelCatalogService', () => ({
-  listProviders: (...args: unknown[]) => listProviders(...args),
-  listModels: (...args: unknown[]) => listModels(...args),
-}))
+const picker = () =>
+  mount(ModelCatalogPicker, {
+    props: {
+      loadProviders: () => listProviders(),
+      loadModels: (providerId: string) => listModels(providerId),
+    },
+  })
 
 const entry = (overrides: Partial<AiModelCatalogEntryDto> = {}): AiModelCatalogEntryDto =>
   ({
@@ -47,7 +52,7 @@ describe('ModelCatalogPicker', () => {
   })
 
   it('loads the catalog only once the operator opens it', async () => {
-    const wrapper = mount(ModelCatalogPicker, { props: { clientId: 'c1' } })
+    const wrapper = picker()
 
     // Browsing is opt-in: an operator typing a model id by hand must not pay for a catalog fetch.
     expect(listProviders).not.toHaveBeenCalled()
@@ -55,12 +60,12 @@ describe('ModelCatalogPicker', () => {
     await wrapper.get('[data-testid="catalog-picker-open"]').trigger('click')
     await flushPromises()
 
-    expect(listProviders).toHaveBeenCalledWith('c1')
+    expect(listProviders).toHaveBeenCalled()
     expect(wrapper.find('[data-testid="catalog-list"]').exists()).toBe(true)
   })
 
   it('emits the chosen entry rather than mutating anything itself', async () => {
-    const wrapper = mount(ModelCatalogPicker, { props: { clientId: 'c1' } })
+    const wrapper = picker()
     await wrapper.get('[data-testid="catalog-picker-open"]').trigger('click')
     await flushPromises()
 
@@ -75,7 +80,7 @@ describe('ModelCatalogPicker', () => {
 
   it('filters by model id, name, or family', async () => {
     listModels.mockResolvedValue([entry(), entry({ remoteModelId: 'deepseek-chat', displayName: 'DeepSeek Chat' })])
-    const wrapper = mount(ModelCatalogPicker, { props: { clientId: 'c1' } })
+    const wrapper = picker()
     await wrapper.get('[data-testid="catalog-picker-open"]').trigger('click')
     await flushPromises()
 
@@ -86,7 +91,7 @@ describe('ModelCatalogPicker', () => {
 
   it('marks a negotiated rate as such', async () => {
     listModels.mockResolvedValue([entry({ pricingLayer: 'tenantOverride', inputCostPer1MUsd: 0.1 })])
-    const wrapper = mount(ModelCatalogPicker, { props: { clientId: 'c1' } })
+    const wrapper = picker()
     await wrapper.get('[data-testid="catalog-picker-open"]').trigger('click')
     await flushPromises()
 
@@ -97,7 +102,7 @@ describe('ModelCatalogPicker', () => {
   // message says so.
   it('reports a load failure without hiding the manual route', async () => {
     listProviders.mockRejectedValue(new Error('boom'))
-    const wrapper = mount(ModelCatalogPicker, { props: { clientId: 'c1' } })
+    const wrapper = picker()
 
     await wrapper.get('[data-testid="catalog-picker-open"]').trigger('click')
     await flushPromises()
@@ -107,7 +112,7 @@ describe('ModelCatalogPicker', () => {
 
   it('says an empty result still allows hand-entry', async () => {
     listModels.mockResolvedValue([])
-    const wrapper = mount(ModelCatalogPicker, { props: { clientId: 'c1' } })
+    const wrapper = picker()
     await wrapper.get('[data-testid="catalog-picker-open"]').trigger('click')
     await flushPromises()
 
