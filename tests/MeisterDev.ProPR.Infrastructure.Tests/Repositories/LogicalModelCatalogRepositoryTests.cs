@@ -9,6 +9,7 @@ using MeisterDev.ProPR.Infrastructure.Data;
 using MeisterDev.ProPR.Infrastructure.Data.Models;
 using MeisterDev.ProPR.Infrastructure.Features.IdentityAndAccess;
 using MeisterDev.ProPR.Infrastructure.Repositories;
+using MeisterDev.ProPR.Infrastructure.Tests.AI;
 using MeisterDev.ProPR.Infrastructure.Tests.Fixtures;
 using Microsoft.EntityFrameworkCore;
 using NSubstitute;
@@ -71,7 +72,9 @@ public sealed class LogicalModelCatalogRepositoryTests(PostgresContainerFixture 
         // so a permissive validator is substituted here.
         this._repo = new LogicalModelCatalogRepository(
             this._dbContext,
-            Substitute.For<ILogicalModelCapabilityValidator>());
+            Substitute.For<ILogicalModelCapabilityValidator>(),
+            Substitute.For<IAiConnectionRepository>(),
+            Substitute.For<IAiConnectionScopeGuard>());
     }
 
     public async Task DisposeAsync()
@@ -242,11 +245,37 @@ public sealed class LogicalModelCatalogRepositoryTests(PostgresContainerFixture 
         var rejectingValidator = Substitute.For<ILogicalModelCapabilityValidator>();
         rejectingValidator.ValidateAsync(Arg.Any<LogicalModelDto>(), Arg.Any<CancellationToken>())
             .Returns(Task.FromException(new LogicalModelReferenceInvalidException("deep", "model does not support chat")));
-        var repo = new LogicalModelCatalogRepository(this._dbContext, rejectingValidator);
+        var repo = new LogicalModelCatalogRepository(
+            this._dbContext,
+            rejectingValidator,
+            Substitute.For<IAiConnectionRepository>(),
+            Substitute.For<IAiConnectionScopeGuard>());
 
         await Assert.ThrowsAsync<LogicalModelReferenceInvalidException>(() => repo.AddTenantEntryAsync(this._tenantId, Entry("deep"), default));
 
         Assert.Empty(await this._repo.GetTenantEntriesAsync(this._tenantId, default));
+    }
+
+    // A connection is read back by id without being re-scoped, so a reference outside the owning tenant must be
+    // refused on the write path rather than only at resolution time.
+    [Fact]
+    public async Task AddTenantEntry_WhenConnectionIsOutsideTenantScope_DoesNotPersist()
+    {
+        var repo = this.RepoWithRefusingScopeGuard();
+
+        await Assert.ThrowsAsync<LogicalModelReferenceInvalidException>(() => repo.AddTenantEntryAsync(this._tenantId, Entry("deep"), default));
+
+        Assert.Empty(await this._repo.GetTenantEntriesAsync(this._tenantId, default));
+    }
+
+    [Fact]
+    public async Task AddClientOverride_WhenConnectionIsOutsideTenantScope_DoesNotPersist()
+    {
+        var repo = this.RepoWithRefusingScopeGuard();
+
+        await Assert.ThrowsAsync<LogicalModelReferenceInvalidException>(() => repo.AddClientOverrideAsync(this._clientA, Entry("fast"), default));
+
+        Assert.Empty(await this._repo.GetClientOverridesAsync(this._clientA, default));
     }
 
     // The client-override path must validate too (guards against a copy-paste divergence between the two
@@ -257,7 +286,11 @@ public sealed class LogicalModelCatalogRepositoryTests(PostgresContainerFixture 
         var rejectingValidator = Substitute.For<ILogicalModelCapabilityValidator>();
         rejectingValidator.ValidateAsync(Arg.Any<LogicalModelDto>(), Arg.Any<CancellationToken>())
             .Returns(Task.FromException(new LogicalModelReferenceInvalidException("fast", "model does not support chat")));
-        var repo = new LogicalModelCatalogRepository(this._dbContext, rejectingValidator);
+        var repo = new LogicalModelCatalogRepository(
+            this._dbContext,
+            rejectingValidator,
+            Substitute.For<IAiConnectionRepository>(),
+            Substitute.For<IAiConnectionScopeGuard>());
 
         await Assert.ThrowsAsync<LogicalModelReferenceInvalidException>(() => repo.AddClientOverrideAsync(this._clientA, Entry("fast"), default));
 
@@ -353,6 +386,25 @@ public sealed class LogicalModelCatalogRepositoryTests(PostgresContainerFixture 
             Guid.NewGuid(),
             ReviewReasoningEffort.None,
             AiProtocolMode.Auto);
+    }
+
+    // A repository whose referenced connection resolves but is refused by the scope guard, so the write paths'
+    // handling of an out-of-tenant reference can be asserted without seeding a second tenant's provider profile.
+    private LogicalModelCatalogRepository RepoWithRefusingScopeGuard()
+    {
+        var connections = Substitute.For<IAiConnectionRepository>();
+        connections.GetByIdAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
+            .Returns(AiConnectionTestFactory.CreateConnection(this._otherClient));
+
+        var scopeGuard = Substitute.For<IAiConnectionScopeGuard>();
+        scopeGuard.ValidateAsync(Arg.Any<AiConnectionDto>(), Arg.Any<Guid>(), Arg.Any<CancellationToken>())
+            .Returns("connection belongs to a different tenant and cannot be referenced.");
+
+        return new LogicalModelCatalogRepository(
+            this._dbContext,
+            Substitute.For<ILogicalModelCapabilityValidator>(),
+            connections,
+            scopeGuard);
     }
 
     private static TenantRecord NewTenant(Guid id, DateTimeOffset now)

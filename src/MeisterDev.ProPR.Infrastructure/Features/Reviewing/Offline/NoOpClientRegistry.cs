@@ -88,4 +88,9 @@ public sealed class NoOpClientRegistry : IClientRegistry
     {
         return Task.FromResult<string?>(null);
     }
+
+    public Task<Guid?> GetTenantIdAsync(Guid clientId, CancellationToken ct = default)
+    {
+        return Task.FromResult<Guid?>(null);
+    }
 }

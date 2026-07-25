@@ -1187,6 +1187,7 @@ public sealed class ClientsControllerTests(ClientsControllerTests.ClientsApiFact
                         MeisterDev.ProPR.Infrastructure.Repositories.ClientTokenUsageRepository>();
                 services.AddScoped<IClientAdoOrganizationScopeRepository, ClientAdoOrganizationScopeRepository>();
                 services.AddScoped<IAiConnectionRepository, AiConnectionRepository>();
+                services.AddScoped<IAiConnectionScopeGuard, AiConnectionScopeGuard>();
                 services.AddScoped<ILogicalModelCapabilityValidator, LogicalModelCapabilityValidator>();
                 services.AddScoped<ILogicalModelCatalogRepository, LogicalModelCatalogRepository>();
 

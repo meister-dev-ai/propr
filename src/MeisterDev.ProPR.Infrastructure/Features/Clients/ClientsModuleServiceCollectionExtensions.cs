@@ -79,6 +79,7 @@ public static class ClientsModuleServiceCollectionExtensions
             services.AddScoped<IProviderReadinessEvaluator, ProviderReadinessEvaluator>();
             services.AddScoped<IProviderOperationalStatusService, ProviderOperationalStatusService>();
             services.AddScoped<IAiConnectionRepository, AiConnectionRepository>();
+            services.AddScoped<IAiConnectionScopeGuard, AiConnectionScopeGuard>();
             services.AddScoped<ILogicalModelCapabilityValidator, LogicalModelCapabilityValidator>();
             services.AddScoped<ILogicalModelCatalogRepository, LogicalModelCatalogRepository>();
             services.AddScoped<ILogicalModelResolver, LogicalModelResolver>();

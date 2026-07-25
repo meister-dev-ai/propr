@@ -219,4 +219,13 @@ public sealed class DbClientRegistry(
             .Select(c => c.DefaultReviewPipelineProfileId)
             .FirstOrDefaultAsync(ct);
     }
+
+    /// <inheritdoc />
+    public async Task<Guid?> GetTenantIdAsync(Guid clientId, CancellationToken ct = default)
+    {
+        return await dbContext.Clients
+            .Where(c => c.Id == clientId)
+            .Select(c => (Guid?)c.TenantId)
+            .FirstOrDefaultAsync(ct);
+    }
 }

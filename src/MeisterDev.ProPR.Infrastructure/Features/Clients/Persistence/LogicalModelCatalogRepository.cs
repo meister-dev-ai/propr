@@ -19,7 +19,11 @@ namespace MeisterDev.ProPR.Infrastructure.Repositories;
 ///     tenant-catalog table (<c>ai_logical_models</c>) and a per-client override table (<c>ai_logical_model_overrides</c>),
 ///     and reads them back by scope.
 /// </summary>
-public sealed class LogicalModelCatalogRepository(MeisterProPRDbContext db, ILogicalModelCapabilityValidator validator)
+public sealed class LogicalModelCatalogRepository(
+    MeisterProPRDbContext db,
+    ILogicalModelCapabilityValidator validator,
+    IAiConnectionRepository connections,
+    IAiConnectionScopeGuard scopeGuard)
     : ILogicalModelCatalogRepository
 {
     /// <inheritdoc />
@@ -42,6 +46,7 @@ public sealed class LogicalModelCatalogRepository(MeisterProPRDbContext db, ILog
 
         // Config-time capability validation: the mapped model must exist and actually support this role's capability.
         await validator.ValidateAsync(entry, ct);
+        await this.EnsureConnectionIsInTenantScopeAsync(tenantId, entry, ct);
 
         var now = DateTimeOffset.UtcNow;
         db.LogicalModels.Add(
@@ -75,6 +80,7 @@ public sealed class LogicalModelCatalogRepository(MeisterProPRDbContext db, ILog
 
         // Config-time capability validation: the mapped model must exist and actually support this role's capability.
         await validator.ValidateAsync(entry, ct);
+        await this.EnsureConnectionIsInClientTenantScopeAsync(clientId, entry, ct);
 
         var now = DateTimeOffset.UtcNow;
         db.LogicalModelOverrides.Add(
@@ -106,6 +112,7 @@ public sealed class LogicalModelCatalogRepository(MeisterProPRDbContext db, ILog
         }
 
         await validator.ValidateAsync(entry, ct);
+        await this.EnsureConnectionIsInTenantScopeAsync(tenantId, entry, ct);
         ApplyMapping(record, entry);
         await db.SaveChangesAsync(ct);
         return true;
@@ -123,9 +130,46 @@ public sealed class LogicalModelCatalogRepository(MeisterProPRDbContext db, ILog
         }
 
         await validator.ValidateAsync(entry, ct);
+        await this.EnsureConnectionIsInClientTenantScopeAsync(clientId, entry, ct);
         ApplyMapping(record, entry);
         await db.SaveChangesAsync(ct);
         return true;
+    }
+
+    // A mapping stores an explicit connection id, and that connection is later read back by id without being
+    // re-scoped to the requesting client. The tenant boundary is therefore enforced on the write path as well, so a
+    // reference to another tenant's connection is rejected before it can be persisted rather than only at run time.
+    private async Task EnsureConnectionIsInTenantScopeAsync(Guid tenantId, LogicalModelDto entry, CancellationToken ct)
+    {
+        var connection = await connections.GetByIdAsync(entry.ConnectionId, ct);
+        if (connection is null)
+        {
+            // A missing connection is the capability validator's concern; it runs first and reports it.
+            return;
+        }
+
+        var refusal = await scopeGuard.ValidateAsync(connection, tenantId, ct);
+        if (refusal is not null)
+        {
+            throw new LogicalModelReferenceInvalidException(entry.Name, refusal);
+        }
+    }
+
+    private async Task EnsureConnectionIsInClientTenantScopeAsync(Guid clientId, LogicalModelDto entry, CancellationToken ct)
+    {
+        var tenantId = await db.Clients
+            .Where(c => c.Id == clientId)
+            .Select(c => (Guid?)c.TenantId)
+            .FirstOrDefaultAsync(ct);
+
+        if (tenantId is not { } resolved || resolved == Guid.Empty)
+        {
+            throw new LogicalModelReferenceInvalidException(
+                entry.Name,
+                $"client '{clientId}' has no resolvable tenant, so a connection reference cannot be validated.");
+        }
+
+        await this.EnsureConnectionIsInTenantScopeAsync(resolved, entry, ct);
     }
 
     // Updates the mapping fields (not the name, which is the key) on either record type.

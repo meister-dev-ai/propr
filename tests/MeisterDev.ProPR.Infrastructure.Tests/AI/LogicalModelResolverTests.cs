@@ -13,10 +13,13 @@ namespace MeisterDev.ProPR.Infrastructure.Tests.AI;
 public sealed class LogicalModelResolverTests
 {
     private static readonly Guid ClientId = Guid.Parse("aaaaaaaa-0000-0000-0000-000000000117");
+    private static readonly Guid TenantId = Guid.Parse("11111111-aaaa-0000-0000-000000000117");
 
     private readonly ILogicalModelCatalogRepository _catalog = Substitute.For<ILogicalModelCatalogRepository>();
     private readonly IAiConnectionRepository _connections = Substitute.For<IAiConnectionRepository>();
     private readonly IAiRuntimeFactory _runtimeFactory = Substitute.For<IAiRuntimeFactory>();
+    private readonly IClientRegistry _clients = Substitute.For<IClientRegistry>();
+    private readonly IAiConnectionScopeGuard _scopeGuard = Substitute.For<IAiConnectionScopeGuard>();
 
     public LogicalModelResolverTests()
     {
@@ -25,11 +28,15 @@ public sealed class LogicalModelResolverTests
             .Returns(Array.Empty<LogicalModelDto>());
         this._catalog.GetTenantEntriesForClientAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
             .Returns(Array.Empty<LogicalModelDto>());
+        // Default: the client belongs to a tenant and the referenced connection is inside it.
+        this._clients.GetTenantIdAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>()).Returns(TenantId);
+        this._scopeGuard.ValidateAsync(Arg.Any<AiConnectionDto>(), Arg.Any<Guid>(), Arg.Any<CancellationToken>())
+            .Returns((string?)null);
     }
 
     private LogicalModelResolver Sut()
     {
-        return new LogicalModelResolver(this._catalog, this._connections, this._runtimeFactory);
+        return new LogicalModelResolver(this._catalog, this._connections, this._runtimeFactory, this._clients, this._scopeGuard);
     }
 
     // AC #1: no client override → the tenant entry's connection + model + settings are used.
@@ -209,9 +216,75 @@ public sealed class LogicalModelResolverTests
         Assert.Contains(missingModelId.ToString(), ex.Message, StringComparison.Ordinal);
     }
 
+    // Connection profiles are looked up globally by id, so the tenant boundary is not implied by the lookup.
+    // A mapping pointing at a profile outside the requesting client's tenant must be refused before the runtime
+    // is built, otherwise the review would execute on another tenant's credentials and quota.
+    [Fact]
+    public async Task ResolveChat_ConnectionOutsideRequestingTenant_IsRefusedBeforeRuntimeIsCreated()
+    {
+        var modelId = Guid.NewGuid();
+        var model = AiConnectionTestFactory.CreateChatModel("deep-model", modelId);
+        var foreignConnection = AiConnectionTestFactory.CreateConnection(Guid.NewGuid(), [model]);
+        this.SetTenantEntries(ChatMapping("deep", foreignConnection.Id, modelId, ReviewReasoningEffort.None, AiProtocolMode.Auto));
+        this._connections.GetByIdAsync(foreignConnection.Id, Arg.Any<CancellationToken>()).Returns(foreignConnection);
+        this._scopeGuard.ValidateAsync(foreignConnection, TenantId, Arg.Any<CancellationToken>())
+            .Returns("connection belongs to a different tenant and cannot be referenced.");
+
+        var ex = await Assert.ThrowsAsync<LogicalModelReferenceInvalidException>(() => this.Sut().ResolveChatRuntimeAsync(ClientId, "deep"));
+
+        Assert.Equal("deep", ex.RoleName);
+        Assert.Contains("different tenant", ex.Message, StringComparison.OrdinalIgnoreCase);
+        this._runtimeFactory.DidNotReceiveWithAnyArgs().CreateChatRuntime(null!, null!, null!);
+    }
+
+    [Fact]
+    public async Task ResolveEmbedding_ConnectionOutsideRequestingTenant_IsRefusedBeforeRuntimeIsCreated()
+    {
+        var modelId = Guid.NewGuid();
+        var model = AiConnectionTestFactory.CreateEmbeddingModel("embed-model", 1536, modelId);
+        var foreignConnection = AiConnectionTestFactory.CreateConnection(Guid.NewGuid(), [model]);
+        this.SetTenantEntries(EmbeddingMapping("embed", foreignConnection.Id, modelId));
+        this._connections.GetByIdAsync(foreignConnection.Id, Arg.Any<CancellationToken>()).Returns(foreignConnection);
+        this._scopeGuard.ValidateAsync(foreignConnection, TenantId, Arg.Any<CancellationToken>())
+            .Returns("connection belongs to a different tenant and cannot be referenced.");
+
+        await Assert.ThrowsAsync<LogicalModelReferenceInvalidException>(() => this.Sut().ResolveEmbeddingRuntimeAsync(ClientId, "embed"));
+
+        this._runtimeFactory.DidNotReceiveWithAnyArgs().CreateEmbeddingRuntime(null!, null!, null!, null!, 0);
+    }
+
+    // A client with no tenant cannot have its boundary established, so the reference is refused rather than
+    // treated as unrestricted.
+    [Fact]
+    public async Task ResolveChat_RequestingClientHasNoTenant_IsRefused()
+    {
+        var modelId = Guid.NewGuid();
+        var model = AiConnectionTestFactory.CreateChatModel("deep-model", modelId);
+        var connection = AiConnectionTestFactory.CreateConnection(ClientId, [model]);
+        this.SetTenantEntries(ChatMapping("deep", connection.Id, modelId, ReviewReasoningEffort.None, AiProtocolMode.Auto));
+        this._connections.GetByIdAsync(connection.Id, Arg.Any<CancellationToken>()).Returns(connection);
+        this._clients.GetTenantIdAsync(ClientId, Arg.Any<CancellationToken>()).Returns((Guid?)null);
+
+        await Assert.ThrowsAsync<LogicalModelReferenceInvalidException>(() => this.Sut().ResolveChatRuntimeAsync(ClientId, "deep"));
+
+        this._runtimeFactory.DidNotReceiveWithAnyArgs().CreateChatRuntime(null!, null!, null!);
+    }
+
     private static LogicalModelDto ChatMapping(string name, Guid connectionId, Guid modelId, ReviewReasoningEffort effort, AiProtocolMode protocol)
     {
         return new LogicalModelDto(Guid.NewGuid(), name, AiOperationKind.Chat, connectionId, modelId, effort, protocol);
+    }
+
+    private static LogicalModelDto EmbeddingMapping(string name, Guid connectionId, Guid modelId)
+    {
+        return new LogicalModelDto(
+            Guid.NewGuid(),
+            name,
+            AiOperationKind.Embedding,
+            connectionId,
+            modelId,
+            ReviewReasoningEffort.None,
+            AiProtocolMode.Embeddings);
     }
 
     private void SetOverrides(params LogicalModelDto[] entries)

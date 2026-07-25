@@ -125,6 +125,25 @@ multiple clients.
 
 Tenant-specific controller actions must likewise validate the caller against the requested tenant. Tenant administrators can manage only their own tenant's memberships, member client access, local-login policy, and external providers. Platform administrators remain separate from tenant-local policy and keep the recovery path at `/auth/login`, even if a tenant disables local login or misconfigures all tenant-user external providers.
 
+## AI Connection Tenant Scope
+
+An AI connection profile is owned either by a tenant directly or by one of that tenant's clients.
+Logical models reference a profile by explicit id, and that profile is read back by id **without**
+being re-scoped to the requesting client, because a tenant-catalog entry has to resolve for every
+client in the tenant. The tenant boundary is therefore not implied by the lookup and is enforced
+separately, by `IAiConnectionScopeGuard`, at two points:
+
+- **Configuration time**, on the logical-model write paths, so a reference that crosses a tenant
+  boundary is rejected before it can be persisted.
+- **Resolution time**, in `LogicalModelResolver`, before a runtime is constructed and therefore
+  before the profile's credentials reach a provider driver.
+
+A profile owned by one client stays referenceable from elsewhere in its own tenant; sharing inside a
+tenant is that tenant's own business. Crossing a tenant boundary is always refused, so one tenant's
+credentials, quota, and egress path can never be used by another. When either side's owning tenant
+cannot be established — an unowned profile, or a client with no tenant — the reference is refused
+rather than treated as unrestricted.
+
 ## Downstream Credential Resolution
 
 Provider-backed SCM calls resolve credentials from the saved provider connection for the target host

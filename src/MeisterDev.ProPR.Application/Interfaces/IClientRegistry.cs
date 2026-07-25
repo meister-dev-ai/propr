@@ -127,4 +127,13 @@ public interface IClientRegistry
     ///     Returns the default review pipeline profile configured for the given client, or <see langword="null" /> if not set.
     /// </summary>
     Task<string?> GetDefaultReviewPipelineProfileIdAsync(Guid clientId, CancellationToken ct = default);
+
+    /// <summary>
+    ///     Returns the tenant owning the given client, or <see langword="null" /> when the client does not exist or
+    ///     is not assigned to a tenant. Callers enforcing a tenant boundary must treat <see langword="null" /> as
+    ///     "boundary cannot be established" and refuse, rather than as "no boundary applies".
+    /// </summary>
+    /// <param name="clientId">Client identifier.</param>
+    /// <param name="ct">Cancellation token.</param>
+    Task<Guid?> GetTenantIdAsync(Guid clientId, CancellationToken ct = default);
 }

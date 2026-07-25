@@ -13,11 +13,16 @@ namespace MeisterDev.ProPR.Infrastructure.AI;
 ///     Resolves a named logical model for a client into a runtime: role → (client override ?? tenant catalog) →
 ///     {connection, configured model, effort, protocol} → runtime. The connection is loaded by its explicit id via the
 ///     global connection lookup, so a tenant-catalog entry resolves without being re-scoped to the requesting client.
+///     Because that lookup deliberately ignores scope, the tenant boundary is re-checked explicitly through
+///     <see cref="IAiConnectionScopeGuard" /> before a runtime is built, so a mapping can never reach a connection
+///     outside the requesting client's tenant.
 /// </summary>
 public sealed class LogicalModelResolver(
     ILogicalModelCatalogRepository catalog,
     IAiConnectionRepository connections,
-    IAiRuntimeFactory runtimeFactory) : ILogicalModelResolver
+    IAiRuntimeFactory runtimeFactory,
+    IClientRegistry clients,
+    IAiConnectionScopeGuard scopeGuard) : ILogicalModelResolver
 {
     private const string ResolutionEventName = "logical_model_resolved";
 
@@ -35,7 +40,7 @@ public sealed class LogicalModelResolver(
             throw new LogicalModelCapabilityMismatchException(roleName, AiOperationKind.Chat, mapping.Capability);
         }
 
-        var (connection, model) = await this.LoadConnectionAndModelAsync(roleName, mapping, ct);
+        var (connection, model) = await this.LoadConnectionAndModelAsync(clientId, roleName, mapping, ct);
         if (!model.SupportsChat)
         {
             throw new InvalidOperationException(
@@ -64,7 +69,7 @@ public sealed class LogicalModelResolver(
             throw new LogicalModelCapabilityMismatchException(roleName, AiOperationKind.Embedding, mapping.Capability);
         }
 
-        var (connection, model) = await this.LoadConnectionAndModelAsync(roleName, mapping, ct);
+        var (connection, model) = await this.LoadConnectionAndModelAsync(clientId, roleName, mapping, ct);
         if (!model.SupportsEmbedding)
         {
             throw new InvalidOperationException($"The configured model '{model.RemoteModelId}' behind logical model '{roleName}' does not support embeddings.");
@@ -125,6 +130,7 @@ public sealed class LogicalModelResolver(
     }
 
     private async Task<(AiConnectionDto Connection, AiConfiguredModelDto Model)> LoadConnectionAndModelAsync(
+        Guid clientId,
         string roleName,
         LogicalModelDto mapping,
         CancellationToken ct)
@@ -135,11 +141,36 @@ public sealed class LogicalModelResolver(
                          ?? throw new InvalidOperationException(
                              $"Logical model '{roleName}' maps to connection '{mapping.ConnectionId}', which no longer exists.");
 
+        // The lookup above is scope-blind by design, so the tenant boundary is enforced here instead — before the
+        // connection's credentials are handed to a driver.
+        await this.EnsureConnectionIsInTenantScopeAsync(clientId, roleName, connection, ct);
+
         var model = connection.ConfiguredModels.FirstOrDefault(m => m.Id == mapping.ConfiguredModelId)
                     ?? throw new InvalidOperationException(
                         $"Logical model '{roleName}' maps to configured model '{mapping.ConfiguredModelId}', which is not present on connection '{mapping.ConnectionId}'.");
 
         return (connection, model);
+    }
+
+    private async Task EnsureConnectionIsInTenantScopeAsync(
+        Guid clientId,
+        string roleName,
+        AiConnectionDto connection,
+        CancellationToken ct)
+    {
+        var tenantId = await clients.GetTenantIdAsync(clientId, ct);
+        if (tenantId is not { } requestingTenantId || requestingTenantId == Guid.Empty)
+        {
+            throw new LogicalModelReferenceInvalidException(
+                roleName,
+                $"client '{clientId}' has no resolvable tenant, so connection '{connection.Id}' cannot be used.");
+        }
+
+        var refusal = await scopeGuard.ValidateAsync(connection, requestingTenantId, ct);
+        if (refusal is not null)
+        {
+            throw new LogicalModelReferenceInvalidException(roleName, refusal);
+        }
     }
 
     private static async Task RecordResolutionAsync(

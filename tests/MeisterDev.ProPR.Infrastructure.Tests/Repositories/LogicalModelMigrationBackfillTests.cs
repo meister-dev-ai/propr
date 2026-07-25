@@ -62,7 +62,11 @@ public sealed class LogicalModelMigrationBackfillTests(PostgresContainerFixture 
         await this._dbContext.SaveChangesAsync();
 
         this._connections = Substitute.For<IAiConnectionRepository>();
-        this._catalog = new LogicalModelCatalogRepository(this._dbContext, Substitute.For<ILogicalModelCapabilityValidator>());
+        this._catalog = new LogicalModelCatalogRepository(
+            this._dbContext,
+            Substitute.For<ILogicalModelCapabilityValidator>(),
+            this._connections,
+            Substitute.For<IAiConnectionScopeGuard>());
         this._backfill = new LogicalModelMigrationBackfill(this._dbContext, this._connections, this._catalog);
     }
 
