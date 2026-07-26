@@ -48,6 +48,12 @@ public sealed class DriverConformanceTests
                 "https://gateway.example.com/v1",
                 null),
             new DriverConformanceFixture(
+                "Anthropic",
+                () => Build((transport, factory) => new AnthropicProviderDriver(transport, factory, false, false)),
+                "https://api.anthropic.com/v1",
+                null,
+                AiAuthMode.XApiKey),
+            new DriverConformanceFixture(
                 "OpenAiCompatible",
                 () => Build((transport, factory) => new OpenAiCompatibleProviderDriver(transport, factory, false, false)),
                 "https://opencode.ai/zen/v1",

@@ -39,6 +39,39 @@ internal static class AiProbeTargetValidation
         return RequireApiKey(target);
     }
 
+    /// <summary>
+    ///     Validates an Anthropic target. The host is deliberately not pinned to Anthropic's own domain — the
+    ///     Messages protocol is also served by gateways and enterprise proxies — so what is checked is the egress
+    ///     policy and that a key is present in the header mode Anthropic reads it from.
+    /// </summary>
+    /// <param name="target">The probe target.</param>
+    /// <param name="allowPrivateEgress">When true, a private/loopback/link-local host is permitted.</param>
+    /// <param name="allowInsecureScheme">When true (Development only), a plain-http baseUrl is permitted.</param>
+    public static string? ForAnthropic(AiProbeTarget target, bool allowPrivateEgress, bool allowInsecureScheme)
+    {
+        ArgumentNullException.ThrowIfNull(target);
+
+        if (!Uri.TryCreate(target.BaseUrl, UriKind.Absolute, out var uri))
+        {
+            return "baseUrl must be an absolute URL.";
+        }
+
+        var egressError = ValidateEgress(uri, allowPrivateEgress, allowInsecureScheme);
+        if (egressError is not null)
+        {
+            return egressError;
+        }
+
+        // Anthropic rejects a bearer token and reads x-api-key, so a profile configured for bearer auth would
+        // fail on its first call. Saying so here beats a 401 an operator has to interpret.
+        if (target.AuthMode != AiAuthMode.XApiKey && target.AuthMode != AiAuthMode.ApiKey)
+        {
+            return "Anthropic authenticates with an API key sent as 'x-api-key'; choose that authentication mode.";
+        }
+
+        return target.HasApiKey ? null : "An API key is required for Anthropic.";
+    }
+
     /// <summary>Validates an Azure OpenAI target: the host is locked to Azure AI hosts (the Azure SDK bypasses the connect-time egress guard).</summary>
     /// <param name="target">The probe target.</param>
     public static string? ForAzureOpenAi(AiProbeTarget target)

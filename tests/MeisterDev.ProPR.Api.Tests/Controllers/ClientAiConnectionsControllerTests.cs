@@ -110,9 +110,10 @@ public sealed class ClientAiConnectionsControllerTests(ClientsControllerTests.Cl
         };
     }
 
-    // #148 opens the provider enum ahead of the native drivers. These two tests are what make that safe: a family
-    // this build cannot call is never offered, and is refused with a message naming what is available if someone
-    // sends it anyway. Without them, opening the enum would just move the failure to review time.
+    // The provider enum names families ahead of the drivers that serve them. These two tests are what make that
+    // safe: a family this build cannot call is never offered, and is refused with a message naming what is
+    // available if someone sends it anyway. Without them, naming a family early would just move the failure to
+    // review time. The offered set therefore grows as drivers land, and this test is where that is recorded.
     [Fact]
     public async Task PermittedProviders_OffersOnlyFamiliesThisBuildCanCall()
     {
@@ -127,7 +128,7 @@ public sealed class ClientAiConnectionsControllerTests(ClientsControllerTests.Cl
 
         Assert.Contains("azureOpenAi", offered);
         Assert.Contains("openAiCompatible", offered);
-        Assert.DoesNotContain("anthropic", offered);
+        Assert.Contains("anthropic", offered);
         Assert.DoesNotContain("awsBedrock", offered);
         Assert.DoesNotContain("googleVertex", offered);
     }
@@ -175,11 +176,11 @@ public sealed class ClientAiConnectionsControllerTests(ClientsControllerTests.Cl
         var client = this.CreateAuthorizedClient();
         var response = await client.PostAsJsonAsync(
             $"/clients/{ClientId}/ai-connections",
-            BuildCreatePayload("Native Claude", providerKind: "anthropic"));
+            BuildCreatePayload("Bedrock-hosted Claude", providerKind: "awsBedrock"));
 
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
         var body = await response.Content.ReadAsStringAsync();
-        Assert.Contains("Anthropic", body, StringComparison.Ordinal);
+        Assert.Contains("AwsBedrock", body, StringComparison.Ordinal);
         Assert.Contains("OpenAiCompatible", body, StringComparison.Ordinal);
     }
 

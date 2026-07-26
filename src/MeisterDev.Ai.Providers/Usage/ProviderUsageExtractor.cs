@@ -39,6 +39,13 @@ public static class ProviderUsageExtractor
             [AiProviderKind.OpenAi] = UsageKeySet.None,
             [AiProviderKind.LiteLlm] = UsageKeySet.None,
             [AiProviderKind.OpenAiCompatible] = UsageKeySet.None,
+
+            // Anthropic names both cache buckets itself and reports no reasoning counter — its thinking tokens
+            // are already inside the output count, so looking for one would only find another provider's name.
+            [AiProviderKind.Anthropic] = new(
+                CacheWrite: ["cache_creation_input_tokens"],
+                CachedInput: ["cache_read_input_tokens"],
+                Reasoning: []),
         };
 
     /// <summary>

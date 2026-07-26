@@ -198,6 +198,11 @@ public static class InfrastructureServiceExtensions
             serviceProvider.GetRequiredService<IHttpClientFactory>(),
             allowPrivateEgress,
             allowInsecureScheme: isDevelopment));
+        services.AddSingleton<IAiProviderDriver>(serviceProvider => new AnthropicProviderDriver(
+            serviceProvider.GetRequiredService<OpenAiCompatibleTransport>(),
+            serviceProvider.GetRequiredService<IHttpClientFactory>(),
+            allowPrivateEgress,
+            allowInsecureScheme: isDevelopment));
         services.AddSingleton<IAiProviderDriverRegistry, AiProviderRegistry>();
         services.AddSingleton<IAiChatClientFactory, AiChatClientFactory>();
 
