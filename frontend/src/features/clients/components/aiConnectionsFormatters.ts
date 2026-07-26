@@ -72,39 +72,68 @@ export const enabledBindings = (profile: AiConnectionDto) => (profile.purposeBin
  * fails with a signing error that reads like a permissions problem — so the form says which shape it wants.
  */
 export interface ProviderGuidance {
+  namePlaceholder: string
   baseUrlPlaceholder: string
   baseUrlHint: string
   credentialHint: string
+  /** A query parameter this family cannot work without, so the form can stop presenting it as optional. */
+  requiredQueryParam: string
+  queryParamPlaceholder: string
 }
 
 const defaultGuidance: ProviderGuidance = {
+  namePlaceholder: 'OpenAI (prod)',
   baseUrlPlaceholder: 'https://api.openai.com/v1',
   baseUrlHint: 'Azure-hosted endpoints, including Azure AI Foundry OpenAI endpoints, belong under Azure OpenAI / AI Foundry.',
   credentialHint: '',
+  requiredQueryParam: '',
+  queryParamPlaceholder: 'api-version=2024-10-21',
 }
 
 const guidanceByProvider: Partial<Record<AiProviderKind, ProviderGuidance>> = {
   azureOpenAi: {
+    ...defaultGuidance,
+    namePlaceholder: 'Azure OpenAI (prod)',
     baseUrlPlaceholder: 'https://your-resource.openai.azure.com/',
     baseUrlHint: 'The Azure AI resource endpoint, not a deployment URL.',
-    credentialHint: '',
+  },
+  openAiCompatible: {
+    ...defaultGuidance,
+    namePlaceholder: 'DeepSeek via opencode Zen',
+    baseUrlPlaceholder: 'https://opencode.ai/zen/v1',
+    baseUrlHint: 'Whatever serves an OpenAI-compatible /chat/completions at this URL, vendor or self-hosted.',
+  },
+  liteLlm: {
+    ...defaultGuidance,
+    namePlaceholder: 'LiteLLM gateway',
+    baseUrlPlaceholder: 'https://gateway.example.com/v1',
+    baseUrlHint: 'The gateway URL; models are named as the gateway exposes them.',
   },
   anthropic: {
+    ...defaultGuidance,
+    namePlaceholder: 'Claude (native)',
     baseUrlPlaceholder: 'https://api.anthropic.com/v1',
     baseUrlHint: 'Any host that speaks the Messages API works, including a gateway in front of it.',
     credentialHint: 'Sent as the x-api-key header, which is what Anthropic reads.',
   },
   awsBedrock: {
+    ...defaultGuidance,
+    namePlaceholder: 'Bedrock (eu-central-1)',
     baseUrlPlaceholder: 'https://bedrock-runtime.eu-central-1.amazonaws.com',
     baseUrlHint: 'The host names the region inference runs in, which is what pins where the data goes.',
     credentialHint: 'Store the access key as accessKeyId:secretAccessKey, adding :sessionToken for temporary credentials.',
+    queryParamPlaceholder: 'region=eu-central-1',
   },
   googleVertex: {
+    ...defaultGuidance,
+    namePlaceholder: 'Gemini on Vertex (europe-west4)',
     baseUrlPlaceholder: 'https://europe-west4-aiplatform.googleapis.com',
     baseUrlHint:
-      'A Vertex host names the location and needs project=<your-project> in the default query parameters. '
-      + 'For the Gemini API use https://generativelanguage.googleapis.com instead.',
+      'A Vertex host names the location it serves. For the Gemini API use '
+      + 'https://generativelanguage.googleapis.com instead.',
     credentialHint: 'Vertex takes the JSON key of a service account; the Gemini API takes a plain API key.',
+    requiredQueryParam: 'project',
+    queryParamPlaceholder: 'project=your-gcp-project',
   },
 }
 

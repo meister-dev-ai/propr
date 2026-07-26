@@ -95,13 +95,21 @@
                 <span class="summary-label">Auth Mode</span>
                 <strong>{{ authModeLabel(profile.authMode) }}</strong>
               </div>
+              <!-- The models the profile carries, not the purpose bindings it used to: purposes and passes are
+                   assigned through logical models now, so a per-profile binding list would read as "None" on
+                   every profile no matter how it is used. -->
               <div class="bindings-summary-col">
-                <span class="summary-label">Active Bindings</span>
+                <span class="summary-label">Models</span>
                 <div class="ai-binding-tags">
-                  <span v-for="binding in enabledBindings(profile)" :key="binding.id || binding.purpose" class="chip chip-sm" :title="binding.remoteModelId || 'Unassigned'">
-                    {{ purposeLabel(binding.purpose) }}
+                  <span
+                    v-for="model in (profile.configuredModels ?? [])"
+                    :key="model.id || model.remoteModelId || ''"
+                    class="chip chip-sm"
+                    :title="model.remoteModelId || ''"
+                  >
+                    {{ model.displayName || model.remoteModelId }}
                   </span>
-                  <span v-if="enabledBindings(profile).length === 0" class="muted" style="font-size: 0.8rem">None</span>
+                  <span v-if="(profile.configuredModels ?? []).length === 0" class="muted" style="font-size: 0.8rem">None configured</span>
                 </div>
               </div>
             </div>
@@ -163,7 +171,7 @@
           <div class="ai-form-grid">
             <label class="form-field">
               <span>Display Name</span>
-              <input v-model="editor.displayName" data-testid="ai-display-name" type="text" placeholder="Azure OpenAI (prod)" />
+              <input v-model="editor.displayName" data-testid="ai-display-name" type="text" :placeholder="guidance.namePlaceholder" />
             </label>
 
             <label class="form-field">
@@ -227,12 +235,16 @@
           </div>
 
           <div class="ai-subsection ai-advanced-section">
-            <details class="advanced-settings-details" :open="advancedSettingsOpen" @toggle="advancedSettingsOpen = ($event.target as HTMLDetailsElement).open">
+            <!-- Open by itself for a family that cannot work without one of these, so a required setting is
+                 never hidden behind a section labelled optional. -->
+            <details class="advanced-settings-details" :open="advancedSettingsOpen || !!guidance.requiredQueryParam" @toggle="advancedSettingsOpen = ($event.target as HTMLDetailsElement).open">
               <summary class="advanced-settings-summary">
                 <div class="summary-content">
                   <h5>Advanced Settings</h5>
-                  <p class="muted">
-                    Optional provider or gateway overrides such as fixed api-version query parameters or custom proxy headers.
+                  <p class="muted" data-testid="ai-advanced-subtitle">
+                    {{ guidance.requiredQueryParam
+                      ? `This provider needs a ${guidance.requiredQueryParam} query parameter; headers and other parameters are optional.`
+                      : 'Optional provider or gateway overrides such as fixed api-version query parameters or custom proxy headers.' }}
                   </p>
                 </div>
                 <i class="fi" :class="advancedSettingsOpen ? 'fi-rr-angle-up' : 'fi-rr-angle-down'"></i>
@@ -246,7 +258,7 @@
 
                 <label class="form-field ai-form-grid-full">
                   <span>Default Query Parameters</span>
-                  <textarea v-model="editor.defaultQueryParamsText" rows="3" placeholder="api-version=2024-10-21"></textarea>
+                  <textarea v-model="editor.defaultQueryParamsText" rows="3" :placeholder="guidance.queryParamPlaceholder"></textarea>
                 </label>
               </div>
             </details>
@@ -501,11 +513,9 @@ import {
   applyCatalogEntryToModel,
   authModeLabel,
   authOptionsForProvider,
-  enabledBindings,
   providerGuidance,
   providerLabel,
   providerOptions,
-  purposeLabel,
   verificationChipClass,
   verificationLabel,
 } from './aiConnectionsFormatters'

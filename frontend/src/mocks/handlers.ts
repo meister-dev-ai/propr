@@ -24,6 +24,10 @@ let mockTenants = [
     localLoginEnabled: true,
     createdAt: '2026-04-24T12:00:00Z',
     updatedAt: '2026-04-24T12:00:00Z',
+    // Empty means unrestricted, which is the same reading the server applies. Held here so the allow-list
+    // editor round-trips in the mock instead of appearing to save and then reverting.
+    allowedAiProviderKinds: [] as string[],
+    allowedAiEndpointHosts: [] as string[],
   },
 ]
 
@@ -1499,42 +1503,183 @@ let promptOverrides = [
   }
 ]
 
+// The wire shapes each driver speaks, as the server reports them. Kept in one place so the mock cannot drift
+// into offering a shape no driver can serve — which is the whole point of the endpoint that returns it.
+const mockDriverProtocolModes: Array<[string, string[]]> = [
+  ['azureOpenAi', ['auto', 'responses', 'chatCompletions', 'embeddings']],
+  ['openAi', ['auto', 'responses', 'chatCompletions', 'embeddings']],
+  ['liteLlm', ['auto', 'responses', 'chatCompletions', 'embeddings']],
+  ['openAiCompatible', ['auto', 'chatCompletions', 'embeddings']],
+  ['anthropic', ['auto', 'anthropicMessages']],
+  ['awsBedrock', ['auto', 'bedrockConverse', 'embeddings']],
+  ['googleVertex', ['auto', 'googleGenerateContent', 'embeddings']],
+]
+
+function mockDiscoveredModel(remoteModelId: string, displayName: string, protocolMode: string, embedding = false) {
+  return {
+    id: `discovered-${remoteModelId}`,
+    remoteModelId,
+    displayName,
+    operationKinds: [embedding ? 'embedding' : 'chat'],
+    supportedProtocolModes: ['auto', protocolMode],
+    supportsChat: !embedding,
+    supportsEmbedding: embedding,
+    supportsToolUse: !embedding,
+    supportsStructuredOutput: !embedding,
+    source: 'discovered',
+    lastSeenAt: new Date().toISOString(),
+  }
+}
+
+// What each provider's discovery returns. The native families deliberately return their own id shapes —
+// a Bedrock id is not a vendor id, and that is what an operator has to recognise in the picker.
+const mockDiscoveredModels: Record<string, any[]> = {
+  azureOpenAi: [
+    mockDiscoveredModel('gpt-4o', 'GPT-4o', 'responses'),
+    mockDiscoveredModel('text-embedding-3-large', 'text-embedding-3-large', 'embeddings', true),
+  ],
+  openAi: [mockDiscoveredModel('gpt-4o', 'GPT-4o', 'responses')],
+  liteLlm: [mockDiscoveredModel('claude-opus-4-5', 'claude-opus-4-5', 'chatCompletions')],
+  openAiCompatible: [
+    mockDiscoveredModel('deepseek-v4-flash', 'deepseek-v4-flash', 'chatCompletions'),
+    mockDiscoveredModel('kimi-k2.7-code', 'kimi-k2.7-code', 'chatCompletions'),
+  ],
+  anthropic: [
+    mockDiscoveredModel('claude-opus-4-5', 'claude-opus-4-5', 'anthropicMessages'),
+    mockDiscoveredModel('claude-sonnet-4-5', 'claude-sonnet-4-5', 'anthropicMessages'),
+  ],
+  awsBedrock: [
+    mockDiscoveredModel('anthropic.claude-opus-4-5', 'Anthropic Claude Opus 4.5', 'bedrockConverse'),
+    mockDiscoveredModel('amazon.titan-embed-text-v2:0', 'Amazon Titan Text Embeddings V2', 'embeddings', true),
+  ],
+  googleVertex: [
+    mockDiscoveredModel('gemini-3-pro', 'Gemini 3 Pro', 'googleGenerateContent'),
+    mockDiscoveredModel('text-embedding-005', 'Text Embedding 005', 'embeddings', true),
+  ],
+}
+
+// The notices a driver attaches to discovery, which are load-bearing for the two cloud families: without them an
+// operator hits an inference-profile rejection, or waits for a model list Vertex never publishes.
+const mockDiscoveryWarnings: Record<string, string[]> = {
+  awsBedrock: [
+    'Some Bedrock models can only be called through an inference profile. Where the account requires one, use the profile ID as the model ID.',
+  ],
+  googleVertex: [
+    "Vertex AI does not list its models on this endpoint; enter the model IDs to use, for example 'gemini-3-pro'.",
+  ],
+}
+
+// The catalog the picker browses. Prices are per million tokens, as the contract has them.
+const mockCatalogProviders = [
+  { providerId: 'anthropic', providerName: 'Anthropic', modelCount: 2 },
+  { providerId: 'amazon-bedrock', providerName: 'Amazon Bedrock', modelCount: 1 },
+  { providerId: 'google-vertex', providerName: 'Google Vertex AI', modelCount: 1 },
+  { providerId: 'opencode', providerName: 'opencode Zen', modelCount: 1 },
+]
+
+function mockCatalogEntry(
+  providerId: string,
+  providerName: string,
+  remoteModelId: string,
+  displayName: string,
+  inputCost: number,
+  outputCost: number,
+  extras: Record<string, unknown> = {},
+) {
+  return {
+    providerId,
+    providerName,
+    remoteModelId,
+    displayName,
+    family: providerId,
+    supportsToolUse: true,
+    supportsStructuredOutput: true,
+    supportsReasoning: true,
+    supportsPromptCaching: true,
+    maxContextTokens: 200000,
+    maxOutputTokens: 64000,
+    inputCostPer1MUsd: inputCost,
+    outputCostPer1MUsd: outputCost,
+    cachedInputCostPer1MUsd: inputCost / 10,
+    cacheWriteCostPer1MUsd: inputCost * 1.25,
+    openWeights: false,
+    releaseDate: '2026-05-01',
+    pricingLayer: 'global',
+    ...extras,
+  }
+}
+
+const mockCatalogModels = [
+  mockCatalogEntry('anthropic', 'Anthropic', 'claude-opus-4-5', 'Claude Opus 4.5', 5, 25),
+  mockCatalogEntry('anthropic', 'Anthropic', 'claude-sonnet-4-5', 'Claude Sonnet 4.5', 3, 15),
+  mockCatalogEntry('amazon-bedrock', 'Amazon Bedrock', 'anthropic.claude-opus-4-5', 'Claude Opus 4.5 (Bedrock)', 5, 25),
+  mockCatalogEntry('google-vertex', 'Google Vertex AI', 'gemini-3-pro', 'Gemini 3 Pro', 2, 12),
+  // A negotiated rate, so the picker's pricing-layer label has something to report.
+  mockCatalogEntry('opencode', 'opencode Zen', 'deepseek-v4-flash', 'DeepSeek V4 Flash', 1.74, 3.84, { pricingLayer: 'tenant' }),
+]
+
+function filterCatalogModels(request: Request) {
+  const providerId = new URL(request.url).searchParams.get('providerId')
+  return providerId ? mockCatalogModels.filter((model) => model.providerId === providerId) : mockCatalogModels
+}
+
+// Profiles as the API returns them: a provider family, a base URL and an auth mode. Fixtures written before
+// those fields existed rendered as "Unknown / Unavailable", which said nothing true about the profile.
+// Several families are represented on purpose — mixing them is the point of provider breadth, and the mock is
+// where that is visible without an account for each one.
 let aiConnectionsByClient: Record<string, any[]> = {
   '1': [
     {
       id: 'ai-1',
       clientId: '1',
       displayName: 'Azure OpenAI Prod',
-      endpointUrl: 'https://acme-prod.openai.azure.com/',
-      models: ['gpt-4o', 'gpt-4o-mini'],
-      configuredModels: [
-        { id: 'm-gpt4o', displayName: 'GPT-4o', remoteModelId: 'gpt-4o', supportsChat: true, supportsEmbedding: false },
-        { id: 'm-gpt4o-mini', displayName: 'GPT-4o mini', remoteModelId: 'gpt-4o-mini', supportsChat: true, supportsEmbedding: false },
-        { id: 'm-embed3', displayName: 'text-embedding-3-large', remoteModelId: 'text-embedding-3-large', supportsChat: false, supportsEmbedding: true },
-      ],
+      providerKind: 'azureOpenAi',
+      baseUrl: 'https://acme-prod.openai.azure.com/',
+      authMode: 'apiKey',
+      discoveryMode: 'providerCatalog',
       isActive: true,
-      activeModel: 'gpt-4o',
-      modelCategory: null,
+      configuredModels: [
+        { id: 'm-gpt4o', displayName: 'GPT-4o', remoteModelId: 'gpt-4o', supportsChat: true, supportsEmbedding: false, supportedProtocolModes: ['auto', 'responses'] },
+        { id: 'm-gpt4o-mini', displayName: 'GPT-4o mini', remoteModelId: 'gpt-4o-mini', supportsChat: true, supportsEmbedding: false, supportedProtocolModes: ['auto', 'responses'] },
+        { id: 'm-embed3', displayName: 'text-embedding-3-large', remoteModelId: 'text-embedding-3-large', supportsChat: false, supportsEmbedding: true, supportedProtocolModes: ['auto', 'embeddings'], tokenizerName: 'cl100k_base', maxInputTokens: 8192, embeddingDimensions: 3072 },
+      ],
+      purposeBindings: [],
+      verification: { status: 'verified', summary: 'Verified connectivity for the Azure AI resource.' },
       createdAt: new Date(Date.now() - 86400000 * 7).toISOString(),
       updatedAt: new Date(Date.now() - 3600000).toISOString(),
     },
     {
       id: 'ai-2',
       clientId: '1',
-      displayName: 'Embedding Pool',
-      endpointUrl: 'https://acme-embeddings.openai.azure.com/',
-      models: ['text-embedding-3-large'],
-      isActive: false,
-      activeModel: null,
-      modelCategory: 'embedding',
-      modelCapabilities: [
-        {
-          modelName: 'text-embedding-3-large',
-          tokenizerName: 'cl100k_base',
-          maxInputTokens: 8192,
-          embeddingDimensions: 3072,
-        },
+      displayName: 'Claude (native)',
+      providerKind: 'anthropic',
+      baseUrl: 'https://api.anthropic.com/v1',
+      authMode: 'apiKey',
+      discoveryMode: 'providerCatalog',
+      isActive: true,
+      configuredModels: [
+        { id: 'm-opus', displayName: 'claude-opus-4-5', remoteModelId: 'claude-opus-4-5', supportsChat: true, supportsEmbedding: false, supportedProtocolModes: ['auto', 'anthropicMessages'], supportsPromptCaching: true, supportsReasoning: true, inputCostPer1MUsd: 5, outputCostPer1MUsd: 25 },
       ],
+      purposeBindings: [],
+      verification: { status: 'verified', summary: "Verified Anthropic connectivity for 'https://api.anthropic.com/v1'." },
+      createdAt: new Date(Date.now() - 86400000 * 2).toISOString(),
+      updatedAt: new Date(Date.now() - 1800000).toISOString(),
+    },
+    {
+      id: 'ai-3',
+      clientId: '1',
+      displayName: 'Bedrock (eu-central-1)',
+      providerKind: 'awsBedrock',
+      baseUrl: 'https://bedrock-runtime.eu-central-1.amazonaws.com',
+      authMode: 'apiKey',
+      discoveryMode: 'providerCatalog',
+      isActive: false,
+      configuredModels: [
+        { id: 'm-bedrock-opus', displayName: 'Anthropic Claude Opus 4.5', remoteModelId: 'anthropic.claude-opus-4-5', supportsChat: true, supportsEmbedding: false, supportedProtocolModes: ['auto', 'bedrockConverse'] },
+        { id: 'm-titan-embed', displayName: 'Amazon Titan Text Embeddings V2', remoteModelId: 'amazon.titan-embed-text-v2:0', supportsChat: false, supportsEmbedding: true, supportedProtocolModes: ['auto', 'embeddings'], tokenizerName: 'cl100k_base', maxInputTokens: 8192, embeddingDimensions: 1024 },
+      ],
+      purposeBindings: [],
+      verification: { status: 'verified', summary: "Verified AWS Bedrock access in 'eu-central-1' (2 models)." },
       createdAt: new Date(Date.now() - 86400000 * 4).toISOString(),
       updatedAt: new Date(Date.now() - 86400000).toISOString(),
     },
@@ -2247,6 +2392,8 @@ export const handlers = [
       displayName: body.displayName ?? tenant.displayName,
       isActive: body.isActive ?? tenant.isActive,
       localLoginEnabled: body.localLoginEnabled ?? tenant.localLoginEnabled,
+      allowedAiProviderKinds: body.allowedAiProviderKinds ?? tenant.allowedAiProviderKinds ?? [],
+      allowedAiEndpointHosts: body.allowedAiEndpointHosts ?? tenant.allowedAiEndpointHosts ?? [],
       updatedAt: new Date().toISOString(),
     }
 
@@ -2270,6 +2417,9 @@ export const handlers = [
       localLoginEnabled: true,
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
+      // A new tenant starts unrestricted, the same as one that never stated a policy.
+      allowedAiProviderKinds: [] as string[],
+      allowedAiEndpointHosts: [] as string[],
     }
 
     mockTenants = [...mockTenants, created]
@@ -2760,6 +2910,86 @@ export const handlers = [
     await delay(250)
     const clientId = String(params.clientId)
     return HttpResponse.json(aiConnectionsByClient[clientId] ?? [])
+  }),
+
+  // What this client may configure: every family this build has a driver for, each flagged with whether the
+  // tenant permits it, plus the wire shapes its driver speaks. Mirrors the server, which is authoritative for
+  // all three — the UI must not offer a family it cannot call or a shape that cannot be spoken.
+  http.get(`${base}/clients/:clientId/ai-connections/permitted-providers`, async () => {
+    await delay(160)
+    const allowed = mockTenants[0]?.allowedAiProviderKinds ?? []
+
+    return HttpResponse.json({
+      isRestricted: allowed.length > 0,
+      providers: mockDriverProtocolModes.map(([providerKind, protocolModes]) => ({
+        providerKind,
+        isPermitted: allowed.length === 0 || allowed.includes(providerKind),
+        protocolModes,
+      })),
+    })
+  }),
+
+  // Probing an unsaved profile. The refusal arm is reachable so the failure path can be seen without a provider:
+  // a base URL that is not https is what every driver rejects first.
+  http.post(`${base}/clients/:clientId/ai-connections/probe`, async ({ request }) => {
+    await delay(420)
+    const body = await request.json() as any
+    const baseUrl = String(body.baseUrl ?? '')
+
+    if (!baseUrl.startsWith('https://')) {
+      return HttpResponse.json({
+        status: 'failed',
+        failureCategory: 'configuration',
+        summary: 'baseUrl must use https.',
+        actionHint: 'Correct the base URL and test again.',
+        checkedAt: new Date().toISOString(),
+        warnings: [],
+      })
+    }
+
+    return HttpResponse.json({
+      status: 'verified',
+      summary: `Verified connectivity for '${baseUrl}'.`,
+      checkedAt: new Date().toISOString(),
+      warnings: [],
+    })
+  }),
+
+  // ---- Model catalog (browse-and-pick) ----
+  // Client and tenant scopes read the same global rows; the difference is which overrides are applied, so the
+  // mock serves one dataset to both and labels the pricing layer per entry.
+  http.get(`${base}/clients/:clientId/model-catalog/providers`, async () => {
+    await delay(140)
+    return HttpResponse.json(mockCatalogProviders)
+  }),
+
+  http.get(`${base}/tenants/:tenantId/model-catalog/providers`, async () => {
+    await delay(140)
+    return HttpResponse.json(mockCatalogProviders)
+  }),
+
+  http.get(`${base}/clients/:clientId/model-catalog/models`, async ({ request }) => {
+    await delay(200)
+    return HttpResponse.json(filterCatalogModels(request))
+  }),
+
+  http.get(`${base}/tenants/:tenantId/model-catalog/models`, async ({ request }) => {
+    await delay(200)
+    return HttpResponse.json(filterCatalogModels(request))
+  }),
+
+  http.post(`${base}/clients/:clientId/ai-connections/discover-models`, async ({ request }) => {
+    await delay(500)
+    const body = await request.json() as any
+    const providerKind = String(body.providerKind ?? 'azureOpenAi')
+    const discovered = mockDiscoveredModels[providerKind] ?? mockDiscoveredModels.azureOpenAi
+
+    return HttpResponse.json({
+      discoveryStatus: 'succeeded',
+      manualEntryAllowed: true,
+      warnings: mockDiscoveryWarnings[providerKind] ?? [],
+      models: discovered,
+    })
   }),
 
   http.post(`${base}/clients/:clientId/ai-connections`, async ({ params, request }) => {

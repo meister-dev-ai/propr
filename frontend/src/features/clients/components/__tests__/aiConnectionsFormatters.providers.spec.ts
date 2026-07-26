@@ -32,6 +32,13 @@ describe('provider options', () => {
   })
 
   it('falls back to the generic guidance for a family with nothing special to say', () => {
-    expect(providerGuidance('liteLlm').baseUrlPlaceholder).toBe(providerGuidance(undefined).baseUrlPlaceholder)
+    expect(providerGuidance('openAi').baseUrlPlaceholder).toBe(providerGuidance(undefined).baseUrlPlaceholder)
+  })
+
+  it('names the parameter Vertex cannot work without, and claims none for families that need none', () => {
+    // The form uses this to stop presenting a required setting inside a section labelled optional.
+    expect(providerGuidance('googleVertex').requiredQueryParam).toBe('project')
+    expect(providerGuidance('googleVertex').queryParamPlaceholder).toContain('project=')
+    expect(providerGuidance('azureOpenAi').requiredQueryParam).toBe('')
   })
 })

@@ -345,12 +345,18 @@ export function useClientAiConnectionsTab(props: { clientId: string }) {
 
   const pluralizeModels = (count: number): string => `model${count === 1 ? '' : 's'}`
 
+  // A driver's warnings are the actionable half of a successful discovery — that a Bedrock model may only answer
+  // through an inference profile, or that Vertex publishes no model list at all. Dropping them left an operator
+  // with a count and a later rejection that explained nothing.
   const summarizeDiscovery = (response: AiModelDiscoveryResultDto, discoveredModels: AiConfiguredModelDto[]): string => {
+    const warnings = (response.warnings ?? []).filter(Boolean)
+
     if (response.discoveryStatus === 'failed') {
-      return (response.warnings ?? [])[0] ?? 'Model discovery returned no results.'
+      return warnings[0] ?? 'Model discovery returned no results.'
     }
 
-    return `Discovered ${discoveredModels.length} ${pluralizeModels(discoveredModels.length)}.`
+    const found = `Discovered ${discoveredModels.length} ${pluralizeModels(discoveredModels.length)}.`
+    return [found, ...warnings].join(' ')
   }
 
   // Probing before saving is the point: an operator can find out that a key or a base URL is wrong without first
