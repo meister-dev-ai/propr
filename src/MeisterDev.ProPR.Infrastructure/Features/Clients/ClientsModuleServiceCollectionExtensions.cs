@@ -81,6 +81,7 @@ public static class ClientsModuleServiceCollectionExtensions
             services.AddScoped<IProviderOperationalStatusService, ProviderOperationalStatusService>();
             services.AddScoped<IAiConnectionRepository, AiConnectionRepository>();
             services.AddScoped<IAiConnectionScopeGuard, AiConnectionScopeGuard>();
+            services.AddScoped<ITenantProviderPolicyProvider, TenantProviderPolicyProvider>();
             services.AddSingleton<ICatalogSnapshotImporter, ModelsDevCatalogSnapshotImporter>();
             // Registered here as well as by the Reviewing module: catalog import needs a clock and must not
             // depend on another module happening to be composed first.

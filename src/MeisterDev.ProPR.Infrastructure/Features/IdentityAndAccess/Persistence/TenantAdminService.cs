@@ -2,6 +2,7 @@
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 // This file implements commercial-only functionality. A commercial license is required to activate or use that functionality.
 
+using MeisterDev.Ai.Providers.Enums;
 using MeisterDev.ProPR.Application.DTOs;
 using MeisterDev.ProPR.Application.Features.Licensing.Models;
 using MeisterDev.ProPR.Application.Features.Licensing.Ports;
@@ -93,6 +94,7 @@ public sealed class TenantAdminService(
         string? displayName = null,
         bool? isActive = null,
         bool? localLoginEnabled = null,
+        IReadOnlyList<AiProviderKind>? allowedAiProviderKinds = null,
         CancellationToken ct = default)
     {
         var isCommunityEdition = await this.IsCommunityEditionAsync(ct);
@@ -127,13 +129,24 @@ public sealed class TenantAdminService(
             tenant.LocalLoginEnabled = localLoginEnabled.Value;
         }
 
+        if (allowedAiProviderKinds is not null)
+        {
+            // Stored as canonical enum names, de-duplicated. An empty list is a meaningful value here: it clears
+            // the policy back to unrestricted, which is how a tenant lifts a restriction it no longer wants.
+            tenant.AllowedAiProviderKinds = allowedAiProviderKinds
+                .Distinct()
+                .Select(kind => kind.ToString())
+                .ToArray();
+        }
+
         tenant.UpdatedAt = DateTimeOffset.UtcNow;
         await dbContext.SaveChangesAsync(ct);
         await this.AddAuditEntryAsync(
             tenant.Id,
             "tenant.policy.updated",
             $"Updated tenant '{tenant.DisplayName}' policy.",
-            $"displayName={tenant.DisplayName}; isActive={tenant.IsActive}; localLoginEnabled={tenant.LocalLoginEnabled}",
+            $"displayName={tenant.DisplayName}; isActive={tenant.IsActive}; localLoginEnabled={tenant.LocalLoginEnabled}; "
+            + $"allowedAiProviderKinds={(tenant.AllowedAiProviderKinds.Length == 0 ? "(unrestricted)" : string.Join(",", tenant.AllowedAiProviderKinds))}",
             ct);
 
         return ToDto(tenant);
@@ -189,7 +202,18 @@ public sealed class TenantAdminService(
             tenant.LocalLoginEnabled,
             TenantCatalog.IsEditable(tenant.Id),
             tenant.CreatedAt,
-            tenant.UpdatedAt);
+            tenant.UpdatedAt,
+            ParseAllowedProviderKinds(tenant.AllowedAiProviderKinds));
+    }
+
+    // A stored name that no longer parses is dropped rather than failing the read: a renamed provider family must
+    // not make a tenant unreadable, and the names that do parse still restrict.
+    private static IReadOnlyList<AiProviderKind> ParseAllowedProviderKinds(string[] stored)
+    {
+        return stored
+            .Select(name => Enum.TryParse<AiProviderKind>(name, true, out var kind) ? kind : (AiProviderKind?)null)
+            .OfType<AiProviderKind>()
+            .ToList();
     }
 
     private async Task<bool> IsCommunityEditionAsync(CancellationToken ct)

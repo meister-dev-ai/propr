@@ -23,6 +23,17 @@ internal sealed class TenantEntityTypeConfiguration : IEntityTypeConfiguration<T
             .HasColumnName("local_login_enabled")
             .HasDefaultValue(true)
             .IsRequired();
+        builder.Property(t => t.AllowedAiProviderKinds)
+            .HasColumnName("allowed_ai_provider_kinds")
+            .HasColumnType("jsonb")
+            .HasConversion(JsonPropertyConversions.StringArrayConverter)
+            .Metadata.SetValueComparer(JsonPropertyConversions.StringArrayComparer);
+
+        // The default has to be a valid empty JSON array rather than the CLR default: rows that predate the column
+        // are backfilled with it, and an empty string is not jsonb.
+        builder.Property(t => t.AllowedAiProviderKinds)
+            .IsRequired()
+            .HasDefaultValue(Array.Empty<string>());
         builder.Property(t => t.CreatedAt).HasColumnName("created_at").IsRequired();
         builder.Property(t => t.UpdatedAt).HasColumnName("updated_at").IsRequired();
 

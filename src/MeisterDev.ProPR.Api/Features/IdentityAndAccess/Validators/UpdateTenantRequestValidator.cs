@@ -17,8 +17,10 @@ public sealed class UpdateTenantRequestValidator : AbstractValidator<UpdateTenan
             .Must(request =>
                 request.DisplayName is not null
                 || request.IsActive.HasValue
-                || request.LocalLoginEnabled.HasValue)
+                || request.LocalLoginEnabled.HasValue
+                || request.AllowedAiProviderKinds is not null)
             .WithMessage("At least one field must be provided.");
+
 
         this.RuleFor(request => request.DisplayName)
             .NotEmpty()

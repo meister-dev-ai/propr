@@ -3,6 +3,7 @@
 // This file implements commercial-only functionality. A commercial license is required to activate or use that functionality.
 
 import { tenantApiRequest } from '@/services/tenantApiClient'
+import type { AiProviderKind } from '@/services/aiConnectionsService'
 
 export interface TenantDto {
   id: string
@@ -13,6 +14,8 @@ export interface TenantDto {
   isEditable: boolean
   createdAt: string
   updatedAt: string
+  /** Provider families this tenant's clients may use; empty or absent means unrestricted. */
+  allowedAiProviderKinds?: AiProviderKind[]
 }
 
 export interface CreateTenantRequest {
@@ -24,6 +27,8 @@ export interface UpdateTenantRequest {
   displayName?: string
   isActive?: boolean
   localLoginEnabled?: boolean
+  /** Provider families to permit; an empty array clears the restriction rather than forbidding everything. */
+  allowedAiProviderKinds?: AiProviderKind[]
 }
 
 function buildTenantsPath(): string {

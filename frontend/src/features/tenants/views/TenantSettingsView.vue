@@ -45,6 +45,7 @@
       <TenantAiConnectionsSection v-if="vm.tenant.value?.isEditable !== false" :tenant-id="vm.tenantId" />
       <TenantLogicalModelsSection v-if="vm.tenant.value?.isEditable !== false" :tenant-id="vm.tenantId" />
       <TenantModelCatalogSection v-if="vm.tenant.value?.isEditable !== false" :tenant-id="vm.tenantId" />
+      <TenantProviderAllowListSection v-if="vm.tenant.value?.isEditable !== false" :tenant-id="vm.tenantId" />
       <template v-if="vm.isTenantSsoAvailable.value">
         <TenantProviderList
           :providers="vm.providers.value"
@@ -78,6 +79,7 @@ import ModalDialog from '@/components/dialogs/ModalDialog.vue'
 import TenantAiConnectionsSection from '@/features/tenants/components/TenantAiConnectionsSection.vue'
 import TenantLogicalModelsSection from '@/features/tenants/components/TenantLogicalModelsSection.vue'
 import TenantModelCatalogSection from '@/features/tenants/components/TenantModelCatalogSection.vue'
+import TenantProviderAllowListSection from '@/features/tenants/components/TenantProviderAllowListSection.vue'
 import TenantProviderList from '@/features/tenants/components/TenantProviderList.vue'
 import TenantSsoProviderForm from '@/features/tenants/components/TenantSsoProviderForm.vue'
 import { useTenantSettingsViewModel } from '@/features/tenants/view-models/useTenantSettingsViewModel'

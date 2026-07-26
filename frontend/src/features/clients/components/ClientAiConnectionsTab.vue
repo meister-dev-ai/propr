@@ -73,6 +73,14 @@
               </div>
               <div class="ai-chip-row">
                 <span class="chip chip-sm chip-muted">{{ providerLabel(profile.providerKind) }}</span>
+                <span
+                  v-if="!isProviderPermitted(profile.providerKind)"
+                  class="chip chip-sm chip-danger"
+                  :title="`This tenant no longer permits ${providerLabel(profile.providerKind)}, so reviews using this profile are refused.`"
+                  data-testid="ai-provider-unavailable"
+                >
+                  Unavailable: provider not permitted
+                </span>
                 <span :class="['chip', 'chip-sm', profile.isActive ? 'chip-success' : 'chip-muted']">
                   {{ profile.isActive ? 'Active' : 'Inactive' }}
                 </span>
@@ -161,8 +169,11 @@
             <label class="form-field">
               <span>Provider</span>
               <select v-model="editor.providerKind" data-testid="ai-provider-kind" @change="handleProviderKindChange">
-                <option v-for="option in providerOptions" :key="option.value" :value="option.value">{{ option.label }}</option>
+                <option v-for="option in availableProviderOptions" :key="option.value" :value="option.value">{{ option.label }}</option>
               </select>
+              <small v-if="providersRestricted" class="field-hint-inline" data-testid="ai-provider-restricted-hint">
+                Your tenant permits only these provider families.
+              </small>
             </label>
 
             <label class="form-field ai-form-grid-full">
@@ -546,6 +557,9 @@ const {
   editor,
   showListView,
   selectedProfile,
+  availableProviderOptions,
+  isProviderPermitted,
+  providersRestricted,
   refreshProfiles,
   resetEditor,
   openCreateEditor,

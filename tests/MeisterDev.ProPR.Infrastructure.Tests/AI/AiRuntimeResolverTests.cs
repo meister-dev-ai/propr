@@ -1,6 +1,8 @@
 // Copyright (c) Andreas Rain.
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
+using MeisterDev.Ai.Providers.Enums;
+using MeisterDev.ProPR.Application.AI;
 using MeisterDev.ProPR.Application.DTOs;
 using MeisterDev.ProPR.Application.Interfaces;
 using MeisterDev.ProPR.Domain.Enums;
@@ -149,10 +151,58 @@ public sealed class AiRuntimeResolverTests
         return (AiConnectionTestFactory.CreateConnection(ClientId, [model], [binding]), model, binding);
     }
 
+    // Defence in depth for the allow-list: the legacy purpose-binding path consults no connection scope guard, so
+    // a profile bound before the policy changed would otherwise still run on a provider the tenant has forbidden.
+    [Fact]
+    public async Task ResolveChatRuntimeAsync_RefusesAProviderTheTenantNoLongerPermits()
+    {
+        var (connection, model, binding) = Chat("gpt-4.1");
+        this._repository.GetActiveBindingForPurposeAsync(ClientId, AiPurpose.ReviewDefault, Arg.Any<CancellationToken>())
+            .Returns(new AiResolvedPurposeBindingDto(connection, model, binding));
+        var policies = Substitute.For<ITenantProviderPolicyProvider>();
+        policies.GetForClientAsync(ClientId, Arg.Any<CancellationToken>())
+            .Returns(new TenantProviderPolicy([AiProviderKind.OpenAiCompatible]));
+
+        var exception = await Assert.ThrowsAsync<InvalidOperationException>(() => this.Sut(providerPolicies: policies)
+            .ResolveChatRuntimeAsync(ClientId, AiPurpose.ReviewDefault, CancellationToken.None));
+
+        Assert.Contains("permitted provider list", exception.Message, StringComparison.Ordinal);
+        // Refused before the runtime is built, so no credential is used.
+        this._runtimeFactory.DidNotReceive().CreateChatRuntime(
+            Arg.Any<AiConnectionDto>(),
+            Arg.Any<AiConfiguredModelDto>(),
+            Arg.Any<AiPurposeBindingDto>(),
+            Arg.Any<string?>());
+    }
+
+    [Fact]
+    public async Task ResolveChatRuntimeAsync_PermittedProviderStillResolves()
+    {
+        var (connection, model, binding) = Chat("gpt-4.1");
+        this._repository.GetActiveBindingForPurposeAsync(ClientId, AiPurpose.ReviewDefault, Arg.Any<CancellationToken>())
+            .Returns(new AiResolvedPurposeBindingDto(connection, model, binding));
+        var expected = Substitute.For<IResolvedAiChatRuntime>();
+        this._runtimeFactory.CreateChatRuntime(connection, model, binding, Arg.Any<string?>()).Returns(expected);
+        var policies = Substitute.For<ITenantProviderPolicyProvider>();
+        policies.GetForClientAsync(ClientId, Arg.Any<CancellationToken>())
+            .Returns(new TenantProviderPolicy([connection.ProviderKind]));
+
+        var runtime = await this.Sut(providerPolicies: policies)
+            .ResolveChatRuntimeAsync(ClientId, AiPurpose.ReviewDefault, CancellationToken.None);
+
+        Assert.Same(expected, runtime);
+    }
+
     private AiRuntimeResolver Sut(
         ILogicalModelResolver? logicalModelResolver = null,
-        ILogicalModelCatalogRepository? logicalModelCatalog = null)
+        ILogicalModelCatalogRepository? logicalModelCatalog = null,
+        ITenantProviderPolicyProvider? providerPolicies = null)
     {
-        return new AiRuntimeResolver(this._repository, this._runtimeFactory, logicalModelResolver, logicalModelCatalog);
+        return new AiRuntimeResolver(
+            this._repository,
+            this._runtimeFactory,
+            logicalModelResolver,
+            logicalModelCatalog,
+            providerPolicies);
     }
 }

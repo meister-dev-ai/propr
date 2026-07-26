@@ -3585,6 +3585,87 @@
         }
       }
     },
+    "/clients/{clientId}/ai-connections/permitted-providers": {
+      "get": {
+        "tags": [
+          "ClientAiConnections"
+        ],
+        "summary": "Lists the provider families this client's tenant permits, so the configuration UI can offer only those.\nAn unrestricted tenant reports every family rather than an empty list, because \"no restriction\" and\n\"nothing permitted\" would otherwise be indistinguishable to a caller.",
+        "parameters": [
+          {
+            "name": "clientId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/PermittedProvidersResponse"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PermittedProvidersResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PermittedProvidersResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/clients/{clientId}/ai-connections/{connectionId}": {
       "patch": {
         "tags": [
@@ -21918,6 +21999,25 @@
         "additionalProperties": false,
         "description": "Patch payload for one premium capability override."
       },
+      "PermittedProvidersResponse": {
+        "type": "object",
+        "properties": {
+          "providerKinds": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AiProviderKind"
+            },
+            "description": "The permitted families; every known family when unrestricted.",
+            "nullable": true
+          },
+          "isRestricted": {
+            "type": "boolean",
+            "description": "Whether the tenant has stated a policy."
+          }
+        },
+        "additionalProperties": false,
+        "description": "The provider families a client may configure, and whether that is a restriction at all."
+      },
       "PrJobSummaryDto": {
         "type": "object",
         "properties": {
@@ -25190,32 +25290,48 @@
         "properties": {
           "id": {
             "type": "string",
+            "description": "Tenant identifier.",
             "format": "uuid"
           },
           "slug": {
             "type": "string",
+            "description": "URL-safe tenant key.",
             "nullable": true
           },
           "displayName": {
             "type": "string",
+            "description": "Human-readable tenant name.",
             "nullable": true
           },
           "isActive": {
-            "type": "boolean"
+            "type": "boolean",
+            "description": "Whether the tenant is active."
           },
           "localLoginEnabled": {
-            "type": "boolean"
+            "type": "boolean",
+            "description": "Whether local (non-SSO) login is permitted."
           },
           "isEditable": {
-            "type": "boolean"
+            "type": "boolean",
+            "description": "Whether the tenant's policy may be edited at all."
           },
           "createdAt": {
             "type": "string",
+            "description": "When the tenant was created.",
             "format": "date-time"
           },
           "updatedAt": {
             "type": "string",
+            "description": "When the tenant was last updated.",
             "format": "date-time"
+          },
+          "allowedAiProviderKinds": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AiProviderKind"
+            },
+            "description": "Provider families this tenant's clients may use. Empty means unrestricted, which is what a tenant that has\nnever stated a policy looks like.",
+            "nullable": true
           }
         },
         "additionalProperties": false,
@@ -25800,14 +25916,25 @@
         "properties": {
           "displayName": {
             "type": "string",
+            "description": "New display name, or null to leave unchanged.",
             "nullable": true
           },
           "isActive": {
             "type": "boolean",
+            "description": "New active state, or null to leave unchanged.",
             "nullable": true
           },
           "localLoginEnabled": {
             "type": "boolean",
+            "description": "New local-login policy, or null to leave unchanged.",
+            "nullable": true
+          },
+          "allowedAiProviderKinds": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AiProviderKind"
+            },
+            "description": "Provider families this tenant's clients may use, or null to leave unchanged. An empty list clears the\nrestriction back to unrestricted.",
             "nullable": true
           }
         },

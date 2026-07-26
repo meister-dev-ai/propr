@@ -5,6 +5,7 @@
 using FluentValidation;
 using FluentValidation.Results;
 using MeisterDev.ProPR.Api.Extensions;
+using MeisterDev.Ai.Providers.Enums;
 using MeisterDev.ProPR.Application.DTOs;
 using MeisterDev.ProPR.Application.Interfaces;
 using MeisterDev.ProPR.Domain.Enums;
@@ -139,6 +140,7 @@ public sealed class TenantsController(ITenantAdminService tenantAdminService) : 
                 request.DisplayName,
                 request.IsActive,
                 request.LocalLoginEnabled,
+                request.AllowedAiProviderKinds,
                 ct);
 
             return updated is null ? this.NotFound() : this.Ok(updated);
@@ -169,4 +171,15 @@ public sealed class TenantsController(ITenantAdminService tenantAdminService) : 
 public sealed record CreateTenantRequest(string Slug, string DisplayName);
 
 /// <summary>Patch-tenant request payload.</summary>
-public sealed record UpdateTenantRequest(string? DisplayName, bool? IsActive, bool? LocalLoginEnabled);
+/// <param name="DisplayName">New display name, or null to leave unchanged.</param>
+/// <param name="IsActive">New active state, or null to leave unchanged.</param>
+/// <param name="LocalLoginEnabled">New local-login policy, or null to leave unchanged.</param>
+/// <param name="AllowedAiProviderKinds">
+///     Provider families this tenant's clients may use, or null to leave unchanged. An empty list clears the
+///     restriction back to unrestricted.
+/// </param>
+public sealed record UpdateTenantRequest(
+    string? DisplayName,
+    bool? IsActive,
+    bool? LocalLoginEnabled,
+    IReadOnlyList<AiProviderKind>? AllowedAiProviderKinds = null);

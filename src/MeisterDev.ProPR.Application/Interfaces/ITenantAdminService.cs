@@ -2,6 +2,7 @@
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 // This file implements commercial-only functionality. A commercial license is required to activate or use that functionality.
 
+using MeisterDev.Ai.Providers.Enums;
 using MeisterDev.ProPR.Application.DTOs;
 
 namespace MeisterDev.ProPR.Application.Interfaces;
@@ -62,6 +63,7 @@ public interface ITenantAdminService
         string? displayName = null,
         bool? isActive = null,
         bool? localLoginEnabled = null,
+        IReadOnlyList<AiProviderKind>? allowedAiProviderKinds = null,
         CancellationToken ct = default);
 
     /// <summary>

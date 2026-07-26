@@ -67,6 +67,24 @@ export async function listAiConnections(clientId: string): Promise<AiConnectionD
   return (data as AiConnectionDto[]) ?? []
 }
 
+/** The provider families this client's tenant permits, and whether that is a restriction at all. */
+export interface PermittedProvidersResponse {
+  providerKinds: AiProviderKind[]
+  isRestricted: boolean
+}
+
+export async function listPermittedProviders(clientId: string): Promise<PermittedProvidersResponse> {
+  const { data, error, response } = await createAdminClient().GET('/clients/{clientId}/ai-connections/permitted-providers', {
+    params: { path: { clientId } },
+  })
+
+  if (!response.ok) {
+    throw new Error(getErrorMessage(error, 'Failed to load the permitted providers.'))
+  }
+
+  return (data as PermittedProvidersResponse) ?? { providerKinds: [], isRestricted: false }
+}
+
 export async function createAiConnection(clientId: string, request: CreateAiConnectionRequest): Promise<AiConnectionDto> {
   const { data, error, response } = await createAdminClient().POST('/clients/{clientId}/ai-connections', {
     params: { path: { clientId } },

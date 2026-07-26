@@ -11,6 +11,13 @@ public sealed class TenantRecord
     public string DisplayName { get; set; } = string.Empty;
     public bool IsActive { get; set; } = true;
     public bool LocalLoginEnabled { get; set; } = true;
+
+    /// <summary>
+    ///     Provider families this tenant's clients may use, as <c>AiProviderKind</c> names. Empty means
+    ///     unrestricted — the only reading under which a tenant that has never set a policy keeps working.
+    /// </summary>
+    public string[] AllowedAiProviderKinds { get; set; } = [];
+
     public DateTimeOffset CreatedAt { get; set; }
     public DateTimeOffset UpdatedAt { get; set; }
 

@@ -12,7 +12,15 @@ namespace MeisterDev.ProPR.Infrastructure.Repositories;
 ///     A profile owned by one client stays referenceable from its own tenant, because sharing within a tenant is
 ///     the tenant's own business, but crossing a tenant boundary is always refused.
 /// </summary>
-public sealed class AiConnectionScopeGuard(IClientRegistry clients) : IAiConnectionScopeGuard
+/// <remarks>
+///     The tenant's provider-kind allow-list is answered here too, because it is the same question asked of the
+///     same reference — may this tenant use this profile — and the guard is already consulted both when a
+///     reference is written and before a credential is used. Answering it anywhere else would mean two places
+///     that could disagree.
+/// </remarks>
+public sealed class AiConnectionScopeGuard(
+    IClientRegistry clients,
+    ITenantProviderPolicyProvider? providerPolicies = null) : IAiConnectionScopeGuard
 {
     public async Task<string?> ValidateAsync(
         AiConnectionDto connection,
@@ -31,6 +39,15 @@ public sealed class AiConnectionScopeGuard(IClientRegistry clients) : IAiConnect
         if (owningTenantId.Value != referencingTenantId)
         {
             return $"connection '{connection.Id}' belongs to a different tenant and cannot be referenced.";
+        }
+
+        if (providerPolicies is not null)
+        {
+            var policy = await providerPolicies.GetForTenantAsync(referencingTenantId, ct).ConfigureAwait(false);
+            if (policy.DescribeRefusal(connection.ProviderKind) is { } refusal)
+            {
+                return $"connection '{connection.DisplayName}' cannot be used because {refusal}.";
+            }
         }
 
         return null;

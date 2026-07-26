@@ -1,6 +1,7 @@
 // Copyright (c) Andreas Rain.
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
+using MeisterDev.ProPR.Application.DTOs;
 using MeisterDev.ProPR.Application.Features.Budgeting;
 using MeisterDev.ProPR.Application.Interfaces;
 using MeisterDev.ProPR.Domain.Enums;
@@ -19,7 +20,8 @@ public sealed class AiRuntimeResolver(
     IAiConnectionRepository aiConnectionRepository,
     IAiRuntimeFactory runtimeFactory,
     ILogicalModelResolver? logicalModelResolver = null,
-    ILogicalModelCatalogRepository? logicalModelCatalog = null) : IAiRuntimeResolver
+    ILogicalModelCatalogRepository? logicalModelCatalog = null,
+    ITenantProviderPolicyProvider? providerPolicies = null) : IAiRuntimeResolver
 {
     public async Task<IResolvedAiChatRuntime> ResolveChatRuntimeAsync(
         Guid clientId,
@@ -43,6 +45,8 @@ public sealed class AiRuntimeResolver(
             throw new InvalidOperationException($"The configured model '{resolved.Model.RemoteModelId}' does not support chat workloads.");
         }
 
+        await this.RefuseForbiddenProviderAsync(clientId, resolved.Connection, ct);
+
         return runtimeFactory.CreateChatRuntime(resolved.Connection, resolved.Model, resolved.Binding);
     }
 
@@ -58,6 +62,8 @@ public sealed class AiRuntimeResolver(
         {
             throw new InvalidOperationException($"The configured model '{resolved.Model.RemoteModelId}' does not support chat workloads.");
         }
+
+        await this.RefuseForbiddenProviderAsync(clientId, resolved.Connection, ct);
 
         return runtimeFactory.CreateChatRuntime(resolved.Connection, resolved.Model, resolved.Binding);
     }
@@ -95,12 +101,31 @@ public sealed class AiRuntimeResolver(
                 $"The configured embedding model '{resolved.Model.RemoteModelId}' returns {resolved.Model.EmbeddingDimensions.Value} dimensions, but {expectedDimensions.Value} are required.");
         }
 
+        await this.RefuseForbiddenProviderAsync(clientId, resolved.Connection, ct);
+
         return runtimeFactory.CreateEmbeddingRuntime(
             resolved.Connection,
             resolved.Model,
             resolved.Binding,
             resolved.Model.TokenizerName,
             resolved.Model.EmbeddingDimensions.Value);
+    }
+
+    // The tenant's provider policy is enforced again here, on the legacy purpose-binding path. The logical-model
+    // path gets it from the connection scope guard; this path consults no guard, so a profile bound before the
+    // policy changed would otherwise still run. Refusing before the runtime is built means no credential is used.
+    private async Task RefuseForbiddenProviderAsync(Guid clientId, AiConnectionDto connection, CancellationToken ct)
+    {
+        if (providerPolicies is null)
+        {
+            return;
+        }
+
+        var policy = await providerPolicies.GetForClientAsync(clientId, ct);
+        if (policy.DescribeRefusal(connection.ProviderKind) is { } refusal)
+        {
+            throw new InvalidOperationException($"The AI connection '{connection.DisplayName}' cannot be used because {refusal}.");
+        }
     }
 
     // Returns the logical-model role mapped to the purpose for this client, or null when the logical-model layer is

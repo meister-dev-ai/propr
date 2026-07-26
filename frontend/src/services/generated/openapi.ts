@@ -2669,6 +2669,72 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/clients/{clientId}/ai-connections/permitted-providers": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Lists the provider families this client's tenant permits, so the configuration UI can offer only those.
+         *     An unrestricted tenant reports every family rather than an empty list, because "no restriction" and
+         *     "nothing permitted" would otherwise be indistinguishable to a caller.
+         */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    clientId: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["PermittedProvidersResponse"];
+                        "application/json": components["schemas"]["PermittedProvidersResponse"];
+                        "text/json": components["schemas"]["PermittedProvidersResponse"];
+                    };
+                };
+                /** @description Unauthorized */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Forbidden */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/clients/{clientId}/ai-connections/{connectionId}": {
         parameters: {
             query?: never;
@@ -14229,6 +14295,13 @@ export interface components {
             key?: string | null;
             overrideState?: components["schemas"]["PremiumCapabilityOverrideState"];
         };
+        /** @description The provider families a client may configure, and whether that is a restriction at all. */
+        PermittedProvidersResponse: {
+            /** @description The permitted families; every known family when unrestricted. */
+            providerKinds?: components["schemas"]["AiProviderKind"][] | null;
+            /** @description Whether the tenant has stated a policy. */
+            isRestricted?: boolean;
+        };
         /** @description Summary of a single review job within the PR view. */
         PrJobSummaryDto: {
             /** Format: uuid */
@@ -15617,17 +15690,36 @@ export interface components {
         };
         /** @description Tenant boundary data returned by administration and tenant-auth flows. */
         TenantDto: {
-            /** Format: uuid */
+            /**
+             * Format: uuid
+             * @description Tenant identifier.
+             */
             id?: string;
+            /** @description URL-safe tenant key. */
             slug?: string | null;
+            /** @description Human-readable tenant name. */
             displayName?: string | null;
+            /** @description Whether the tenant is active. */
             isActive?: boolean;
+            /** @description Whether local (non-SSO) login is permitted. */
             localLoginEnabled?: boolean;
+            /** @description Whether the tenant's policy may be edited at all. */
             isEditable?: boolean;
-            /** Format: date-time */
+            /**
+             * Format: date-time
+             * @description When the tenant was created.
+             */
             createdAt?: string;
-            /** Format: date-time */
+            /**
+             * Format: date-time
+             * @description When the tenant was last updated.
+             */
             updatedAt?: string;
+            /**
+             * @description Provider families this tenant's clients may use. Empty means unrestricted, which is what a tenant that has
+             *     never stated a policy looks like.
+             */
+            allowedAiProviderKinds?: components["schemas"]["AiProviderKind"][] | null;
         };
         /** @description Tenant-local login request payload. */
         TenantLocalLoginRequest: {
@@ -15946,9 +16038,17 @@ export interface components {
         };
         /** @description Patch-tenant request payload. */
         UpdateTenantRequest: {
+            /** @description New display name, or null to leave unchanged. */
             displayName?: string | null;
+            /** @description New active state, or null to leave unchanged. */
             isActive?: boolean | null;
+            /** @description New local-login policy, or null to leave unchanged. */
             localLoginEnabled?: boolean | null;
+            /**
+             * @description Provider families this tenant's clients may use, or null to leave unchanged. An empty list clears the
+             *     restriction back to unrestricted.
+             */
+            allowedAiProviderKinds?: components["schemas"]["AiProviderKind"][] | null;
         };
         /** @description Replace-tenant-provider request payload. */
         UpdateTenantSsoProviderRequest: {

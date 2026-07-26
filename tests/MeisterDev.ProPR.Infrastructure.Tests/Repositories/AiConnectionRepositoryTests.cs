@@ -3,6 +3,7 @@
 
 using MeisterDev.Ai.Providers.Contracts;
 using MeisterDev.Ai.Providers.Enums;
+using MeisterDev.ProPR.Application.AI;
 using MeisterDev.ProPR.Application.DTOs;
 using MeisterDev.ProPR.Application.Exceptions;
 using MeisterDev.ProPR.Application.Interfaces;
@@ -17,6 +18,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.Extensions.DependencyInjection;
+using NSubstitute;
 
 namespace MeisterDev.ProPR.Infrastructure.Tests.Repositories;
 
@@ -953,6 +955,55 @@ public sealed class AiConnectionRepositoryTests
         Assert.Equal("sk-envelope-check", created.Secret);
         Assert.Contains(ProviderSecretEnvelope.ApiKeyField, storedInside, StringComparison.Ordinal);
         Assert.Contains("\"v\":1", storedInside, StringComparison.Ordinal);
+    }
+
+    // The configuration half of the allow-list. Refusing at write time means an operator learns while looking at
+    // the form, instead of a review failing later against a provider the tenant had already forbidden.
+    [Fact]
+    public async Task AddAsync_RefusesAProviderTheTenantDoesNotPermit()
+    {
+        await using var db = CreateContext();
+        var clientId = Guid.NewGuid();
+        var policies = Substitute.For<ITenantProviderPolicyProvider>();
+        policies.GetForClientAsync(clientId, Arg.Any<CancellationToken>())
+            .Returns(new TenantProviderPolicy([AiProviderKind.OpenAiCompatible]));
+        var repo = new AiConnectionRepository(db, CreateCodec(), null, policies);
+
+        // CreateWriteRequest builds an AzureOpenAi profile, which this tenant does not permit.
+        var failure = await Assert.ThrowsAsync<ProviderKindNotPermittedException>(() => repo.AddAsync(clientId, CreateWriteRequest()));
+
+        Assert.Equal(AiProviderKind.AzureOpenAi, failure.ProviderKind);
+        Assert.Contains("OpenAiCompatible", failure.Message, StringComparison.Ordinal);
+        Assert.Empty(db.AiConnectionProfiles);
+    }
+
+    [Fact]
+    public async Task AddAsync_AllowsAProviderTheTenantPermits()
+    {
+        await using var db = CreateContext();
+        var clientId = Guid.NewGuid();
+        var policies = Substitute.For<ITenantProviderPolicyProvider>();
+        policies.GetForClientAsync(clientId, Arg.Any<CancellationToken>())
+            .Returns(new TenantProviderPolicy([AiProviderKind.AzureOpenAi]));
+        var repo = new AiConnectionRepository(db, CreateCodec(), null, policies);
+
+        var created = await repo.AddAsync(clientId, CreateWriteRequest());
+
+        Assert.Equal(AiProviderKind.AzureOpenAi, created.ProviderKind);
+    }
+
+    // A tenant that has stated no policy is unrestricted, so nothing changes for it.
+    [Fact]
+    public async Task AddAsync_WithNoStatedPolicy_IsUnaffected()
+    {
+        await using var db = CreateContext();
+        var clientId = Guid.NewGuid();
+        var policies = Substitute.For<ITenantProviderPolicyProvider>();
+        policies.GetForClientAsync(clientId, Arg.Any<CancellationToken>())
+            .Returns(TenantProviderPolicy.Unrestricted);
+        var repo = new AiConnectionRepository(db, CreateCodec(), null, policies);
+
+        Assert.NotNull(await repo.AddAsync(clientId, CreateWriteRequest()));
     }
 
     // Rows written before the envelope existed hold a bare protected string. They have to keep resolving, or

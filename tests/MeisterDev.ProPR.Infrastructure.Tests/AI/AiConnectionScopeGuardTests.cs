@@ -2,6 +2,7 @@
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
 using MeisterDev.Ai.Providers.Enums;
+using MeisterDev.ProPR.Application.AI;
 using MeisterDev.ProPR.Application.DTOs;
 using MeisterDev.ProPR.Application.Interfaces;
 using MeisterDev.ProPR.Domain.Enums;
@@ -11,8 +12,9 @@ using NSubstitute;
 namespace MeisterDev.ProPR.Infrastructure.Tests.AI;
 
 /// <summary>
-///     Tests the rule that a logical-model mapping may only reference a connection profile owned by the same
-///     tenant as the scope that references it, so one tenant's credentials can never be used by another.
+///     Tests the rules a reference to a connection profile has to satisfy: it may only cross into the tenant that
+///     owns the profile, and it may only use a provider family that tenant permits. Both live here because both
+///     are asked at the same two moments — when a reference is written and before a credential is used.
 /// </summary>
 public sealed class AiConnectionScopeGuardTests
 {
@@ -29,9 +31,13 @@ public sealed class AiConnectionScopeGuardTests
         this._clients.GetTenantIdAsync(ClientInB, Arg.Any<CancellationToken>()).Returns(TenantB);
     }
 
+    private readonly ITenantProviderPolicyProvider _policies = Substitute.For<ITenantProviderPolicyProvider>();
+
     private AiConnectionScopeGuard Sut()
     {
-        return new AiConnectionScopeGuard(this._clients);
+        this._policies.GetForTenantAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
+            .Returns(TenantProviderPolicy.Unrestricted);
+        return new AiConnectionScopeGuard(this._clients, this._policies);
     }
 
     [Fact]
@@ -91,6 +97,45 @@ public sealed class AiConnectionScopeGuardTests
         var connection = Connection(clientId: orphan);
 
         Assert.NotNull(await this.Sut().ValidateAsync(connection, TenantA));
+    }
+
+    // The runtime half of the allow-list: a profile inside the right tenant is still refused when its provider
+    // family is not on that tenant's list, and the refusal explains itself rather than reading as a scope error.
+    [Fact]
+    public async Task ConnectionWhoseProviderTheTenantForbids_IsRefused()
+    {
+        var connection = Connection(tenantId: TenantA);
+        this._policies.GetForTenantAsync(TenantA, Arg.Any<CancellationToken>())
+            .Returns(new TenantProviderPolicy([AiProviderKind.OpenAiCompatible]));
+        var guard = new AiConnectionScopeGuard(this._clients, this._policies);
+
+        var reason = await guard.ValidateAsync(connection, TenantA);
+
+        Assert.NotNull(reason);
+        Assert.Contains("AzureOpenAi", reason, StringComparison.Ordinal);
+        Assert.Contains("permitted provider list", reason, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task ConnectionWhoseProviderTheTenantPermits_IsAllowed()
+    {
+        var connection = Connection(tenantId: TenantA);
+        this._policies.GetForTenantAsync(TenantA, Arg.Any<CancellationToken>())
+            .Returns(new TenantProviderPolicy([AiProviderKind.AzureOpenAi]));
+        var guard = new AiConnectionScopeGuard(this._clients, this._policies);
+
+        Assert.Null(await guard.ValidateAsync(connection, TenantA));
+    }
+
+    // A host composed without the policy provider keeps working: the tenant boundary is still enforced, and the
+    // allow-list simply has nothing to say.
+    [Fact]
+    public async Task WithNoPolicyProvider_TheTenantBoundaryIsStillEnforced()
+    {
+        var guard = new AiConnectionScopeGuard(this._clients);
+
+        Assert.Null(await guard.ValidateAsync(Connection(tenantId: TenantA), TenantA));
+        Assert.NotNull(await guard.ValidateAsync(Connection(tenantId: TenantA), TenantB));
     }
 
     private static AiConnectionDto Connection(Guid? clientId = null, Guid? tenantId = null)

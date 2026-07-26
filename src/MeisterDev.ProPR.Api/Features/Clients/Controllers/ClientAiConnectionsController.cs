@@ -8,6 +8,7 @@ using MeisterDev.Ai.Providers.Enums;
 using MeisterDev.ProPR.Api.Extensions;
 using MeisterDev.ProPR.Application.AI;
 using MeisterDev.ProPR.Application.DTOs;
+using MeisterDev.ProPR.Application.Exceptions;
 using MeisterDev.ProPR.Application.Interfaces;
 using MeisterDev.ProPR.Domain.Enums;
 using MeisterDev.Ai.Providers.Drivers;
@@ -21,7 +22,8 @@ namespace MeisterDev.ProPR.Api.Controllers;
 public sealed partial class ClientAiConnectionsController(
     IAiConnectionRepository aiConnections,
     IAiProviderDriverRegistry providerDrivers,
-    ILogger<ClientAiConnectionsController> logger) : ControllerBase
+    ILogger<ClientAiConnectionsController> logger,
+    ITenantProviderPolicyProvider? providerPolicies = null) : ControllerBase
 {
     private const string RequestModelsPropertyName = "requestModels";
 
@@ -66,6 +68,35 @@ public sealed partial class ClientAiConnectionsController(
         return this.Ok(await aiConnections.GetByClientAsync(clientId, ct));
     }
 
+    /// <summary>
+    ///     Lists the provider families this client's tenant permits, so the configuration UI can offer only those.
+    ///     An unrestricted tenant reports every family rather than an empty list, because "no restriction" and
+    ///     "nothing permitted" would otherwise be indistinguishable to a caller.
+    /// </summary>
+    [HttpGet("permitted-providers")]
+    [ProducesResponseType(typeof(PermittedProvidersResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    public async Task<IActionResult> GetPermittedProviders(Guid clientId, CancellationToken ct = default)
+    {
+        var authResult = this.AuthorizeClientAccessAsync(clientId);
+        if (authResult is not null)
+        {
+            return authResult;
+        }
+
+        if (providerPolicies is null)
+        {
+            return this.Ok(new PermittedProvidersResponse(Enum.GetValues<AiProviderKind>(), false));
+        }
+
+        var policy = await providerPolicies.GetForClientAsync(clientId, ct);
+        return this.Ok(
+            new PermittedProvidersResponse(
+                policy.IsRestricted ? policy.AllowedKinds : Enum.GetValues<AiProviderKind>(),
+                policy.IsRestricted));
+    }
+
     /// <summary>Creates a new AI connection profile for the specified client.</summary>
     [HttpPost]
     [ProducesResponseType(typeof(AiConnectionDto), StatusCodes.Status201Created)]
@@ -89,9 +120,18 @@ public sealed partial class ClientAiConnectionsController(
             return this.ValidationProblem();
         }
 
-        var connection = await aiConnections.AddAsync(clientId, writeRequest, ct);
-        LogConnectionCreated(logger, connection.Id, clientId);
-        return this.CreatedAtAction(nameof(this.GetAiConnections), new { clientId }, connection);
+        try
+        {
+            var connection = await aiConnections.AddAsync(clientId, writeRequest, ct);
+            LogConnectionCreated(logger, connection.Id, clientId);
+            return this.CreatedAtAction(nameof(this.GetAiConnections), new { clientId }, connection);
+        }
+        catch (ProviderKindNotPermittedException ex)
+        {
+            // A tenant policy refusal is a bad request rather than a server fault: the operator can fix it by
+            // choosing a permitted provider, and the message says which ones those are.
+            return this.BadRequest(new { error = ex.Message });
+        }
     }
 
     /// <summary>Updates an existing AI connection profile for the specified client.</summary>
@@ -125,9 +165,16 @@ public sealed partial class ClientAiConnectionsController(
             return this.ValidationProblem();
         }
 
-        if (!await aiConnections.UpdateAsync(connectionId, writeRequest, ct))
+        try
         {
-            return this.NotFound();
+            if (!await aiConnections.UpdateAsync(connectionId, writeRequest, ct))
+            {
+                return this.NotFound();
+            }
+        }
+        catch (ProviderKindNotPermittedException ex)
+        {
+            return this.BadRequest(new { error = ex.Message });
         }
 
         var refreshed = await aiConnections.GetByIdAsync(connectionId, ct);
@@ -720,6 +767,11 @@ public sealed partial class ClientAiConnectionsController(
             binding.IsEnabled);
     }
 }
+
+/// <summary>The provider families a client may configure, and whether that is a restriction at all.</summary>
+/// <param name="ProviderKinds">The permitted families; every known family when unrestricted.</param>
+/// <param name="IsRestricted">Whether the tenant has stated a policy.</param>
+public sealed record PermittedProvidersResponse(IReadOnlyList<AiProviderKind> ProviderKinds, bool IsRestricted);
 
 /// <summary>Authentication settings for one AI connection profile request.</summary>
 public sealed record AiConnectionAuthRequest([property: JsonRequired] AiAuthMode Mode, string? ApiKey = null)

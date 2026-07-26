@@ -18,7 +18,8 @@ namespace MeisterDev.ProPR.Infrastructure.Repositories;
 public sealed class AiConnectionRepository(
     MeisterProPRDbContext dbContext,
     ISecretProtectionCodec secretProtectionCodec,
-    IDbContextFactory<MeisterProPRDbContext>? contextFactory = null) : IAiConnectionRepository
+    IDbContextFactory<MeisterProPRDbContext>? contextFactory = null,
+    ITenantProviderPolicyProvider? providerPolicies = null) : IAiConnectionRepository
 {
     private const string SecretPurpose = "AiConnectionApiKey";
 
@@ -106,6 +107,8 @@ public sealed class AiConnectionRepository(
         AiConnectionWriteRequestDto request,
         CancellationToken ct = default)
     {
+        await this.GuardProviderKindForClientAsync(clientId, request.ProviderKind, ct);
+
         var profileId = Guid.NewGuid();
         var now = DateTimeOffset.UtcNow;
         var configuredModels = BuildConfiguredModels(profileId, request, null);
@@ -138,6 +141,8 @@ public sealed class AiConnectionRepository(
     /// <inheritdoc />
     public async Task<AiConnectionDto> AddTenantAsync(Guid tenantId, AiConnectionWriteRequestDto request, CancellationToken ct = default)
     {
+        await this.GuardProviderKindForTenantAsync(tenantId, request.ProviderKind, ct);
+
         var profileId = Guid.NewGuid();
         var now = DateTimeOffset.UtcNow;
         var configuredModels = BuildConfiguredModels(profileId, request, null);
@@ -182,6 +187,16 @@ public sealed class AiConnectionRepository(
         if (record is null)
         {
             return false;
+        }
+
+        // An update can change the provider family, so the policy is checked here too rather than only on create.
+        if (record.TenantId is { } ownerTenantId)
+        {
+            await this.GuardProviderKindForTenantAsync(ownerTenantId, request.ProviderKind, ct);
+        }
+        else if (record.ClientId is { } ownerClientId)
+        {
+            await this.GuardProviderKindForClientAsync(ownerClientId, request.ProviderKind, ct);
         }
 
         var updatedModels = BuildConfiguredModels(record.Id, request, record.ConfiguredModels);
@@ -475,6 +490,37 @@ public sealed class AiConnectionRepository(
         }
 
         return null;
+    }
+
+    // A tenant's provider-kind policy is enforced when a profile is written as well as when one is used, so a
+    // forbidden provider cannot be configured and then discovered mid-review. The refusal names what is
+    // permitted, because an operator staring at a rejected form needs to know what to choose instead.
+    private async Task GuardProviderKindForClientAsync(Guid clientId, AiProviderKind providerKind, CancellationToken ct)
+    {
+        if (providerPolicies is null || clientId == Guid.Empty)
+        {
+            return;
+        }
+
+        Throw(await providerPolicies.GetForClientAsync(clientId, ct), providerKind);
+    }
+
+    private async Task GuardProviderKindForTenantAsync(Guid tenantId, AiProviderKind providerKind, CancellationToken ct)
+    {
+        if (providerPolicies is null || tenantId == Guid.Empty)
+        {
+            return;
+        }
+
+        Throw(await providerPolicies.GetForTenantAsync(tenantId, ct), providerKind);
+    }
+
+    private static void Throw(TenantProviderPolicy policy, AiProviderKind providerKind)
+    {
+        if (policy.DescribeRefusal(providerKind) is { } refusal)
+        {
+            throw new ProviderKindNotPermittedException(providerKind, refusal);
+        }
     }
 
     // A credential is stored as one Data-Protection-wrapped blob whose inside is an envelope, so the schema never

@@ -9,6 +9,7 @@ import {
   deleteAiConnection,
   discoverAiModels,
   listAiConnections,
+  listPermittedProviders,
   updateAiConnection,
   verifyAiConnection,
 } from '@/services/aiConnectionsService'
@@ -29,6 +30,7 @@ import type { EditableBinding, EditableModel } from './aiConnectionsForm.types'
 import {
   makeBindingDefaults,
   parseMapText,
+  providerOptions,
   serializeMap,
   verificationLabel,
 } from './aiConnectionsFormatters'
@@ -68,6 +70,19 @@ export function useClientAiConnectionsTab(props: { clientId: string }) {
     bindings: [] as EditableBinding[],
   })
 
+  // Which provider families the tenant permits. Loaded alongside the profiles so the form offers only what can
+  // actually be saved, and so a profile already configured on a now-forbidden family can be labelled rather than
+  // silently failing when someone next runs a review.
+  const permittedProviderKinds = ref<AiProviderKind[]>([])
+  const providersRestricted = ref(false)
+
+  const availableProviderOptions = computed(() =>
+    providerOptions.filter((option) => !providersRestricted.value || permittedProviderKinds.value.includes(option.value)),
+  )
+
+  const isProviderPermitted = (providerKind: AiProviderKind | undefined) =>
+    !providersRestricted.value || (providerKind !== undefined && permittedProviderKinds.value.includes(providerKind))
+
   const showListView = computed(() => viewMode.value === 'list')
   const selectedProfile = computed(() => profiles.value.find((profile) => profile.id === editor.profileId) ?? null)
 
@@ -80,6 +95,17 @@ export function useClientAiConnectionsTab(props: { clientId: string }) {
     loadError.value = ''
     try {
       profiles.value = await listAiConnections(props.clientId)
+
+      // A policy failure must not hide the profiles: the list is the more important of the two, and the server
+      // enforces the policy regardless of what this screen manages to display.
+      try {
+        const permitted = await listPermittedProviders(props.clientId)
+        permittedProviderKinds.value = permitted.providerKinds
+        providersRestricted.value = permitted.isRestricted
+      } catch {
+        permittedProviderKinds.value = []
+        providersRestricted.value = false
+      }
 
       // Always land on the list (even when empty — it shows an empty state), never jump straight into the
       // create form. Stay in the editor only if the user was mid-edit when the refresh happened.
@@ -542,6 +568,9 @@ export function useClientAiConnectionsTab(props: { clientId: string }) {
     showListView,
     selectedProfile,
     modelsForPurpose,
+    availableProviderOptions,
+    isProviderPermitted,
+    providersRestricted,
     // actions
     refreshProfiles,
     resetEditor,
