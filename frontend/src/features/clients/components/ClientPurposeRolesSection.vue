@@ -6,12 +6,19 @@
     <div class="purpose-roles-header">
       <h5>AI purposes</h5>
       <p class="muted">
-        Map an internal AI purpose to a logical model. An unmapped purpose keeps resolving through the
-        client's AI purpose bindings.
+        Map an internal AI purpose to a logical model. An unmapped purpose falls back to a legacy per-connection
+        binding, which this screen no longer creates — so on a profile configured here, leaving one unmapped means
+        the work using it fails when it runs.
       </p>
     </div>
 
     <p v-if="error" class="form-error" data-testid="purpose-roles-error">{{ error }}</p>
+
+    <!-- Review default is the purpose every review generation goes through, so an unmapped one is not a
+         preference left at its default: it is a review that will fail. -->
+    <p v-if="unmappedRequired.length > 0" class="muted purpose-roles-warning" data-testid="purpose-roles-unmapped">
+      Not mapped yet: {{ unmappedRequired.join(', ') }}. Map each to a logical model before running a review.
+    </p>
 
     <table class="purpose-roles-table" data-testid="purpose-roles-table">
       <thead>
@@ -31,7 +38,7 @@
               :value="mapped[purpose.value] ?? ''"
               @change="onChange(purpose, ($event.target as HTMLSelectElement).value)"
             >
-              <option value="">— (uses purpose binding)</option>
+              <option value="">— not mapped</option>
               <option v-for="name in optionsFor(purpose)" :key="name" :value="name">{{ name }}</option>
             </select>
           </td>
@@ -79,6 +86,16 @@ const error = ref('')
 
 const chatModelNames = computed(() => modelNames(false))
 const embeddingModelNames = computed(() => modelNames(true))
+
+// The purposes with no working fallback: every review generation goes through the default, and memory and
+// ProCursor go through the embedding one.
+const requiredPurposes: AiPurpose[] = ['reviewDefault', 'embeddingDefault']
+
+const unmappedRequired = computed(() =>
+  purposes
+    .filter(purpose => requiredPurposes.includes(purpose.value) && !mapped.value[purpose.value])
+    .map(purpose => purpose.label),
+)
 
 function modelNames(embedding: boolean): string[] {
   return effective.value
@@ -132,5 +149,9 @@ defineExpose({ load })
 /* Row/header styling comes from the global base.css table rules (matches every other admin table). */
 .purpose-roles-table {
   margin-top: 0.5rem;
+}
+
+.purpose-roles-warning {
+  color: var(--color-warning, #e0a33e);
 }
 </style>

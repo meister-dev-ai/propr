@@ -85,17 +85,26 @@
             </AppNavDrawer>
         </template>
 
+            <!-- A refresh must not take the page away once there is something on it. These states replace the
+                 tabs only while nothing has loaded yet: every tab keeps its own state (which sub-section you are
+                 on, a half-filled editor) in local component state, so unmounting them mid-session throws that
+                 away and drops you back on the first sub-section of the tab you were working in. -->
             <p v-if="notFound" class="error" style="padding-top: 1rem">
                 Client not found.
             </p>
-            <p v-else-if="loadError" class="error" style="padding-top: 1rem">
+            <p v-else-if="loadError && !client" class="error" style="padding-top: 1rem">
                 Failed to load client. Please try again.
             </p>
-            <p v-else-if="loading" class="loading" style="padding-top: 1rem">
+            <p v-else-if="loading && !client" class="loading" style="padding-top: 1rem">
                 Loading…
             </p>
 
-            <template v-else-if="client">
+            <template v-if="client && !notFound">
+                <!-- A refresh that failed after the page was already up: reported without taking the work away. -->
+                <p v-if="loadError" class="error" data-testid="client-refresh-error">
+                    The client could not be refreshed, so what you see may be out of date.
+                </p>
+
                 <!-- Tab: Configuration -->
                 <div v-if="canManageClient" v-show="activeTab === 'config'">
                     <ClientSystemTab />

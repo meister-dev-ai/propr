@@ -171,14 +171,29 @@ const canCreate = computed(
 )
 
 // Resolve the stored connection/model ids to display names via the client's connections. A tenant-inherited
-// entry may point at a connection this client does not own, in which case we fall back to a dash.
+// entry points at a tenant connection this client does not own, so it is named as such rather than dashed out:
+// a dash reads as "bound to nothing", when in fact it is bound to something this table cannot see.
+const tenantManaged = 'Tenant-managed'
+
 function connectionName(connectionId: string | null | undefined): string {
-  return props.connections.find(connection => connection.id === connectionId)?.displayName || '—'
+  if (!connectionId) {
+    return '—'
+  }
+
+  return props.connections.find(connection => connection.id === connectionId)?.displayName ?? tenantManaged
 }
 
 function modelName(connectionId: string | null | undefined, modelId: string | null | undefined): string {
+  if (!connectionId || !modelId) {
+    return '—'
+  }
+
   const connection = props.connections.find(candidate => candidate.id === connectionId)
-  const model = connection?.configuredModels?.find(candidate => candidate.id === modelId)
+  if (connection === undefined) {
+    return tenantManaged
+  }
+
+  const model = connection.configuredModels?.find(candidate => candidate.id === modelId)
   return model?.displayName || model?.remoteModelId || '—'
 }
 

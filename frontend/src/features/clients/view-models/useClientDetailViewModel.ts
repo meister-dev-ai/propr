@@ -559,6 +559,11 @@ export function useClientDetailViewModel(options: UseClientDetailViewModelOption
     }
   }
 
+  // One save serves the System tab's advanced settings and the AI tab's review-pass list, so the message names
+  // neither: it used to say "review publication setting", which was wrong on both screens and sent whoever hit
+  // it looking at the SCM-posting toggle.
+  const advancedSettingsSaveFailed = 'Failed to save the client settings.'
+
   async function saveAdvancedSettings() {
     if (!canManageClient.value || !client.value) return
     saving.value = true
@@ -585,12 +590,15 @@ export function useClientDetailViewModel(options: UseClientDetailViewModelOption
       if (isFailedPatch(result)) {
         // Surface the server's validation message (e.g. a duplicate configured-model rejection) so the user
         // sees why the save was refused instead of a blank page.
-        saveError.value = extractValidationMessage(result.error, 'Failed to save review publication setting.')
+        saveError.value = extractValidationMessage(result.error, advancedSettingsSaveFailed)
         return
       }
       applyClient(result.data as ClientDetailDto | null | undefined)
-    } catch {
-      saveError.value = 'Failed to save review publication setting.'
+    } catch (error) {
+      // This path is reached before any server answer — a network failure, or a bug on the way to the request.
+      // It used to be swallowed whole, so the only evidence was a message naming the wrong setting.
+      console.error('Saving the client settings failed before the request completed.', error)
+      saveError.value = advancedSettingsSaveFailed
     } finally {
       saving.value = false
     }

@@ -317,8 +317,14 @@ function getEffectiveReviewProfile(clientId: string) {
   }
 }
 
+// Fields a PATCH set on a client, kept so a saved review-pass list or toggle is still there after a reload.
+// Without this the mock accepted a save and answered the next GET as though it had never happened, which looks
+// exactly like the bug where saving review passes left the list empty.
+const patchedClientFields: Record<string, Record<string, unknown>> = {}
+
 function buildMockClient(id: string, displayName = `Mocked Client ${id}`, overrides: Record<string, unknown> = {}) {
   const storedProfile = clientReviewProfiles[id]?.defaultReviewPipelineProfileId ?? null
+  overrides = { ...(patchedClientFields[id] ?? {}), ...overrides }
   return {
     id,
     displayName,
@@ -2579,6 +2585,7 @@ export const handlers = [
     await delay(300)
     const id = String(params.id)
     const body = await request.json() as any
+    patchedClientFields[id] = { ...(patchedClientFields[id] ?? {}), ...body }
     return HttpResponse.json(buildMockClient(id, body.displayName ?? `Mocked Client ${id}`, body))
   }),
 
