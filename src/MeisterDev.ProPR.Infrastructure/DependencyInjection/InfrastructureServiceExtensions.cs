@@ -203,6 +203,11 @@ public static class InfrastructureServiceExtensions
             serviceProvider.GetRequiredService<IHttpClientFactory>(),
             allowPrivateEgress,
             allowInsecureScheme: isDevelopment));
+        services.AddSingleton<IBedrockClientFactory, BedrockClientFactory>();
+        services.AddSingleton<IAiProviderDriver>(serviceProvider => new BedrockProviderDriver(
+            serviceProvider.GetRequiredService<IBedrockClientFactory>(),
+            allowPrivateEgress,
+            allowInsecureScheme: isDevelopment));
         services.AddSingleton<IAiProviderDriverRegistry, AiProviderRegistry>();
         services.AddSingleton<IAiChatClientFactory, AiChatClientFactory>();
 

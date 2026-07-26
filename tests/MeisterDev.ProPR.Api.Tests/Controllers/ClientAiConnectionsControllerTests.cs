@@ -129,7 +129,7 @@ public sealed class ClientAiConnectionsControllerTests(ClientsControllerTests.Cl
         Assert.Contains("azureOpenAi", offered);
         Assert.Contains("openAiCompatible", offered);
         Assert.Contains("anthropic", offered);
-        Assert.DoesNotContain("awsBedrock", offered);
+        Assert.Contains("awsBedrock", offered);
         Assert.DoesNotContain("googleVertex", offered);
     }
 
@@ -176,11 +176,11 @@ public sealed class ClientAiConnectionsControllerTests(ClientsControllerTests.Cl
         var client = this.CreateAuthorizedClient();
         var response = await client.PostAsJsonAsync(
             $"/clients/{ClientId}/ai-connections",
-            BuildCreatePayload("Bedrock-hosted Claude", providerKind: "awsBedrock"));
+            BuildCreatePayload("Gemini on Vertex", providerKind: "googleVertex"));
 
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
         var body = await response.Content.ReadAsStringAsync();
-        Assert.Contains("AwsBedrock", body, StringComparison.Ordinal);
+        Assert.Contains("GoogleVertex", body, StringComparison.Ordinal);
         Assert.Contains("OpenAiCompatible", body, StringComparison.Ordinal);
     }
 

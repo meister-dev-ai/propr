@@ -1,11 +1,14 @@
 // Copyright (c) Andreas Rain.
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
+using Amazon.Bedrock;
+using Amazon.BedrockRuntime;
 using MeisterDev.Ai.Providers.Contracts;
 using MeisterDev.Ai.Providers.Drivers;
 using MeisterDev.Ai.Providers.Enums;
 using MeisterDev.Ai.Providers.Transport;
 using Microsoft.Extensions.DependencyInjection;
+using NSubstitute;
 
 namespace MeisterDev.Ai.Providers.Tests.Conformance;
 
@@ -53,6 +56,13 @@ public sealed class DriverConformanceTests
                 "https://api.anthropic.com/v1",
                 null,
                 AiAuthMode.XApiKey),
+            new DriverConformanceFixture(
+                "AwsBedrock",
+                BedrockDriver,
+                "https://bedrock-runtime.eu-central-1.amazonaws.com",
+                // Bedrock's driver is the one that insists on an AWS host naming a region.
+                "https://bedrock.internal.example.com",
+                AiAuthMode.SigV4),
             new DriverConformanceFixture(
                 "OpenAiCompatible",
                 () => Build((transport, factory) => new OpenAiCompatibleProviderDriver(transport, factory, false, false)),
@@ -216,6 +226,17 @@ public sealed class DriverConformanceTests
             Guid.NewGuid(),
             "conformance-model",
             [AiProtocolMode.Auto, AiProtocolMode.ChatCompletions]);
+    }
+
+    // The AWS clients reach the network as soon as they are built, so the driver is given a factory that hands
+    // it substitutes. Every behaviour this suite asserts is decided before any of them is called.
+    private static IAiProviderDriver BedrockDriver()
+    {
+        var factory = Substitute.For<IBedrockClientFactory>();
+        factory.CreateRuntimeClient(Arg.Any<ProviderEndpoint>()).Returns(Substitute.For<IAmazonBedrockRuntime>());
+        factory.CreateControlPlaneClient(Arg.Any<ProviderEndpoint>()).Returns(Substitute.For<IAmazonBedrock>());
+
+        return new BedrockProviderDriver(factory, allowPrivateEgress: false, allowInsecureScheme: false);
     }
 
     private static IAiProviderDriver Build(Func<OpenAiCompatibleTransport, IHttpClientFactory, IAiProviderDriver> create)

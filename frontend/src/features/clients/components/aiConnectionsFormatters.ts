@@ -66,6 +66,44 @@ export const protocolOptionLabels: Record<AiProtocolMode, string> = {
 
 export const enabledBindings = (profile: AiConnectionDto) => (profile.purposeBindings ?? []).filter((binding) => binding.isEnabled)
 
+/**
+ * What to tell an operator about the two fields whose correct value differs most between provider families.
+ * A Bedrock access key and an Anthropic key are both "the secret", but pasted into the wrong shape one of them
+ * fails with a signing error that reads like a permissions problem — so the form says which shape it wants.
+ */
+export interface ProviderGuidance {
+  baseUrlPlaceholder: string
+  baseUrlHint: string
+  credentialHint: string
+}
+
+const defaultGuidance: ProviderGuidance = {
+  baseUrlPlaceholder: 'https://api.openai.com/v1',
+  baseUrlHint: 'Azure-hosted endpoints, including Azure AI Foundry OpenAI endpoints, belong under Azure OpenAI / AI Foundry.',
+  credentialHint: '',
+}
+
+const guidanceByProvider: Partial<Record<AiProviderKind, ProviderGuidance>> = {
+  azureOpenAi: {
+    baseUrlPlaceholder: 'https://your-resource.openai.azure.com/',
+    baseUrlHint: 'The Azure AI resource endpoint, not a deployment URL.',
+    credentialHint: '',
+  },
+  anthropic: {
+    baseUrlPlaceholder: 'https://api.anthropic.com/v1',
+    baseUrlHint: 'Any host that speaks the Messages API works, including a gateway in front of it.',
+    credentialHint: 'Sent as the x-api-key header, which is what Anthropic reads.',
+  },
+  awsBedrock: {
+    baseUrlPlaceholder: 'https://bedrock-runtime.eu-central-1.amazonaws.com',
+    baseUrlHint: 'The host names the region inference runs in, which is what pins where the data goes.',
+    credentialHint: 'Store the access key as accessKeyId:secretAccessKey, adding :sessionToken for temporary credentials.',
+  },
+}
+
+export const providerGuidance = (providerKind: AiProviderKind | undefined): ProviderGuidance =>
+  (providerKind && guidanceByProvider[providerKind]) || defaultGuidance
+
 export const authOptionsForProvider = (providerKind: AiProviderKind): Array<{ value: AiAuthMode; label: string }> => {
   return providerKind === 'azureOpenAi'
     ? [

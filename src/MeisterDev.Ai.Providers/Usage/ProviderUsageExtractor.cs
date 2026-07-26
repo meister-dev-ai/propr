@@ -40,6 +40,13 @@ public static class ProviderUsageExtractor
             [AiProviderKind.LiteLlm] = UsageKeySet.None,
             [AiProviderKind.OpenAiCompatible] = UsageKeySet.None,
 
+            // The AWS adapter maps the cache-read bucket onto the standard property but leaves the write bucket
+            // under Bedrock's own name, which no other provider uses.
+            [AiProviderKind.AwsBedrock] = new(
+                CacheWrite: ["CacheWriteInputTokens"],
+                CachedInput: ["CacheReadInputTokens"],
+                Reasoning: []),
+
             // Anthropic names both cache buckets itself and reports no reasoning counter — its thinking tokens
             // are already inside the output count, so looking for one would only find another provider's name.
             [AiProviderKind.Anthropic] = new(

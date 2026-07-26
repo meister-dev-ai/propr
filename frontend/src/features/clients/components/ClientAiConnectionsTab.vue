@@ -178,10 +178,8 @@
 
             <label class="form-field ai-form-grid-full">
               <span>Base URL</span>
-              <input v-model="editor.baseUrl" data-testid="ai-base-url" type="text" placeholder="https://api.openai.com/v1" />
-              <small class="field-hint-inline">
-                Azure-hosted endpoints, including Azure AI Foundry OpenAI endpoints, belong under <code>Azure OpenAI / AI Foundry</code>.
-              </small>
+              <input v-model="editor.baseUrl" data-testid="ai-base-url" type="text" :placeholder="guidance.baseUrlPlaceholder" />
+              <small class="field-hint-inline" data-testid="ai-base-url-hint">{{ guidance.baseUrlHint }}</small>
             </label>
 
             <label class="form-field">
@@ -194,6 +192,7 @@
             <label v-if="editor.authMode === 'apiKey'" class="form-field">
               <span>API Key</span>
               <input v-model="editor.apiKey" data-testid="ai-api-key" type="password" placeholder="Paste the provider secret" />
+              <small v-if="guidance.credentialHint" class="field-hint-inline" data-testid="ai-api-key-hint">{{ guidance.credentialHint }}</small>
             </label>
 
             <label class="form-field">
@@ -487,7 +486,7 @@
 </template>
 
 <script setup lang="ts">
-import { inject, onMounted, ref, watch } from 'vue'
+import { computed, inject, onMounted, ref, watch } from 'vue'
 import ConfirmDialog from '@/components/dialogs/ConfirmDialog.vue'
 import ModalDialog from '@/components/dialogs/ModalDialog.vue'
 import ClientReviewPassesEditor from './ClientReviewPassesEditor.vue'
@@ -503,6 +502,7 @@ import {
   authModeLabel,
   authOptionsForProvider,
   enabledBindings,
+  providerGuidance,
   providerLabel,
   providerOptions,
   purposeLabel,
@@ -603,6 +603,10 @@ const {
   confirmDelete,
   handleDelete,
 } = useClientAiConnectionsTab(props)
+
+// What the base URL and the secret have to look like differs by family, and getting either wrong surfaces as a
+// provider rejection that names something else entirely.
+const guidance = computed(() => providerGuidance(editor.providerKind))
 </script>
 
 <style scoped>
