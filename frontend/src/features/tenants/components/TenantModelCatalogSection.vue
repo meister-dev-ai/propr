@@ -313,7 +313,7 @@ function priceCell(value: number | null | undefined): string {
         self-hosted model. It becomes selectable and budgeted for this tenant's clients immediately.
       </p>
 
-      <div class="ai-form-grid ai-form-grid-compact">
+      <div class="catalog-form-grid">
         <label class="form-field">
           <span>Provider</span>
           <input v-model="definition.providerId" data-testid="define-provider" type="text" placeholder="deepseek" />
@@ -372,7 +372,7 @@ function priceCell(value: number | null | undefined): string {
           {{ draft?.providerId }} · {{ draft?.remoteModelId }}
         </div>
 
-        <div class="ai-form-grid ai-form-grid-compact">
+        <div class="catalog-form-grid">
           <label class="form-field">
             <span>Display name</span>
             <input v-model="draft!.displayName" type="text" placeholder="Leave empty to keep the catalog's" />
@@ -429,6 +429,20 @@ function priceCell(value: number | null | undefined): string {
 
 .override-form {
   margin-block-start: 0.75rem;
+}
+
+/* The forms carried the AI-connections tab's grid class names, which are scoped to that component and so did
+   nothing here. Three columns is what those forms use, and it is what the dialog has room for. */
+.catalog-form-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.85rem;
+}
+
+@media (width <= 48rem) {
+  .catalog-form-grid {
+    grid-template-columns: 1fr;
+  }
 }
 
 .override-identity {
