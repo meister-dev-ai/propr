@@ -1615,6 +1615,9 @@ function mockCatalogEntry(
   }
 }
 
+// A tenant's own price overrides, mutable so saving one and reloading shows it.
+let mockCatalogOverrides: any[] = []
+
 const mockCatalogModels = [
   mockCatalogEntry('anthropic', 'Anthropic', 'claude-opus-4-5', 'Claude Opus 4.5', 5, 25),
   mockCatalogEntry('anthropic', 'Anthropic', 'claude-sonnet-4-5', 'Claude Sonnet 4.5', 3, 15),
@@ -2983,6 +2986,59 @@ export const handlers = [
   http.get(`${base}/tenants/:tenantId/model-catalog/models`, async ({ request }) => {
     await delay(200)
     return HttpResponse.json(filterCatalogModels(request))
+  }),
+
+  // The override endpoints. Unhandled, they fell through to the dev proxy and came back 502 — the tenant settings
+  // page called one on every load, so the screen reported "no overrides" for a request that never reached a
+  // server, and any failure handling downstream was reacting to a proxy error rather than to an answer.
+  http.get(`${base}/tenants/:tenantId/model-catalog/overrides`, async () => {
+    await delay(160)
+    return HttpResponse.json(mockCatalogOverrides)
+  }),
+
+  http.put(`${base}/tenants/:tenantId/model-catalog/overrides`, async ({ request }) => {
+    await delay(240)
+    const body = await request.json() as any
+    const key = `${body.providerId}:${body.remoteModelId}`
+    mockCatalogOverrides = [
+      ...mockCatalogOverrides.filter((entry) => `${entry.providerId}:${entry.remoteModelId}` !== key),
+      { ...body, pricingLayer: 'tenant' },
+    ]
+    return new HttpResponse(null, { status: 204 })
+  }),
+
+  http.delete(`${base}/tenants/:tenantId/model-catalog/overrides/:providerId/:remoteModelId`, async ({ params }) => {
+    await delay(200)
+    const key = `${String(params.providerId)}:${String(params.remoteModelId)}`
+    mockCatalogOverrides = mockCatalogOverrides.filter((entry) => `${entry.providerId}:${entry.remoteModelId}` !== key)
+    return new HttpResponse(null, { status: 204 })
+  }),
+
+  // Defining a model the catalog does not list. The real endpoint refuses one the catalog already describes,
+  // which is the case the UI has a message for, so the mock refuses it too.
+  http.put(`${base}/tenants/:tenantId/model-catalog/models`, async ({ request }) => {
+    await delay(260)
+    const body = await request.json() as any
+    const known = mockCatalogModels.some(
+      (model) => model.providerId === body.providerId && model.remoteModelId === body.remoteModelId,
+    )
+
+    if (known) {
+      return HttpResponse.json(
+        { detail: 'The catalog already describes this model. Record a pricing override instead.' },
+        { status: 409 },
+      )
+    }
+
+    mockCatalogModels.push(mockCatalogEntry(
+      body.providerId,
+      body.providerId,
+      body.remoteModelId,
+      body.displayName || body.remoteModelId,
+      Number(body.inputCostPer1MUsd) || 0,
+      Number(body.outputCostPer1MUsd) || 0,
+    ))
+    return new HttpResponse(null, { status: 204 })
   }),
 
   http.post(`${base}/clients/:clientId/ai-connections/discover-models`, async ({ request }) => {
