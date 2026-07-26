@@ -19,7 +19,8 @@ public sealed class AiConnectionRepository(
     MeisterProPRDbContext dbContext,
     ISecretProtectionCodec secretProtectionCodec,
     IDbContextFactory<MeisterProPRDbContext>? contextFactory = null,
-    ITenantProviderPolicyProvider? providerPolicies = null) : IAiConnectionRepository
+    ITenantProviderPolicyProvider? providerPolicies = null,
+    IAiProviderConfigAuditWriter? configAudit = null) : IAiConnectionRepository
 {
     private const string SecretPurpose = "AiConnectionApiKey";
 
@@ -135,6 +136,7 @@ public sealed class AiConnectionRepository(
         };
         dbContext.AiConnectionProfiles.Add(record);
         await dbContext.SaveChangesAsync(ct);
+        await this.AuditAsync("created", record, request.Secret is not null, ct);
         return this.ToDto(record);
     }
 
@@ -170,6 +172,7 @@ public sealed class AiConnectionRepository(
         };
         dbContext.AiConnectionProfiles.Add(record);
         await dbContext.SaveChangesAsync(ct);
+        await this.AuditAsync("created", record, request.Secret is not null, ct);
         return this.ToDto(record);
     }
 
@@ -245,6 +248,7 @@ public sealed class AiConnectionRepository(
         }
 
         await dbContext.SaveChangesAsync(ct);
+        await this.AuditAsync("updated", record, request.Secret is not null, ct);
         return true;
     }
 
@@ -266,6 +270,7 @@ public sealed class AiConnectionRepository(
 
         dbContext.AiConnectionProfiles.Remove(record);
         await dbContext.SaveChangesAsync(ct);
+        await this.AuditAsync("deleted", record, false, ct);
         return true;
     }
 
@@ -349,6 +354,7 @@ public sealed class AiConnectionRepository(
         await dbContext.SaveChangesAsync(ct);
 
         await transaction.CommitAsync(ct);
+        await this.AuditAsync("activated", target, false, ct);
         return true;
     }
 
@@ -364,6 +370,7 @@ public sealed class AiConnectionRepository(
         record.UpdatedAt = DateTimeOffset.UtcNow;
 
         await dbContext.SaveChangesAsync(ct);
+        await this.AuditAsync("deactivated", record, false, ct);
         return true;
     }
 
@@ -490,6 +497,35 @@ public sealed class AiConnectionRepository(
         }
 
         return null;
+    }
+
+    // Provider configuration is where credentials and spend authority live, so every change to it is recorded
+    // against the owning tenant. Called after the write has been committed: the audit is a record of what
+    // happened, and an audit failure must not undo a change already reported as successful.
+    private async Task AuditAsync(
+        string action,
+        AiConnectionProfileRecord record,
+        bool credentialChanged,
+        CancellationToken ct)
+    {
+        if (configAudit is null)
+        {
+            return;
+        }
+
+        await configAudit.RecordAsync(
+            new AiProviderConfigAuditEntry(
+                action,
+                record.Id,
+                record.DisplayName,
+                Enum.TryParse<AiProviderKind>(record.ProviderKind, true, out var providerKind)
+                    ? providerKind
+                    : default,
+                record.BaseUrl,
+                record.ClientId,
+                record.TenantId,
+                credentialChanged),
+            ct);
     }
 
     // A tenant's provider-kind policy is enforced when a profile is written as well as when one is used, so a
