@@ -22,6 +22,9 @@ public sealed class LiteLlmProviderDriver(
 
     public AiProviderKind ProviderKind => AiProviderKind.LiteLlm;
 
+    /// <inheritdoc />
+    public IReadOnlyList<AiProtocolMode> SupportedProtocolModes => AiProtocolModeSupport.OpenAiFamily;
+
     public string? ValidateProbeTarget(AiProbeTarget target)
     {
         // LiteLLM is a generic OpenAI-compatible proxy, so (unlike plain OpenAI) an Azure host is not rejected.

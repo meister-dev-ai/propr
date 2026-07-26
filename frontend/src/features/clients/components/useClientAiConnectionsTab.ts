@@ -22,6 +22,7 @@ import type {
   AiDiscoveryMode,
   AiModelDiscoveryResultDto,
   AiProviderKind,
+  PermittedProviderDescriptor,
   AiPurpose,
   CreateAiConnectionRequest,
   DiscoverModelsRequest,
@@ -71,23 +72,27 @@ export function useClientAiConnectionsTab(props: { clientId: string }) {
     bindings: [] as EditableBinding[],
   })
 
-  // What this client may configure, straight from the server: families this build has a driver for, intersected
-  // with what the tenant permits. The server is authoritative for both, which is what keeps a provider family
-  // that is named in the enum but has no driver from ever being offered.
-  const permittedProviderKinds = ref<AiProviderKind[]>([])
-  const implementedProviderKinds = ref<AiProviderKind[]>([])
+  // What this client may configure, straight from the server: every family this build has a driver for, each
+  // flagged with whether the tenant permits it, and the wire shapes its driver speaks. The server is
+  // authoritative for all three, which is what keeps a family named in the enum but unimplemented from ever being
+  // offered, and keeps the protocol dropdown from offering a shape that cannot be called.
+  const knownProviders = ref<PermittedProviderDescriptor[]>([])
   const providersRestricted = ref(false)
+
+  const permittedProviderKinds = computed(() =>
+    knownProviders.value.filter((provider) => provider.isPermitted).map((provider) => provider.providerKind),
+  )
 
   // An empty list means the lookup failed rather than "nothing allowed" — the form still offers everything and
   // the server refuses anything invalid, which beats locking an operator out of the screen over a failed GET.
   const availableProviderOptions = computed(() =>
-    permittedProviderKinds.value.length === 0
+    knownProviders.value.length === 0
       ? providerOptions
       : providerOptions.filter((option) => permittedProviderKinds.value.includes(option.value)),
   )
 
   const isProviderPermitted = (providerKind: AiProviderKind | undefined) =>
-    permittedProviderKinds.value.length === 0
+    knownProviders.value.length === 0
     || (providerKind !== undefined && permittedProviderKinds.value.includes(providerKind))
 
   // The two reasons a family can be unavailable need different fixes — one is an operator's tenant policy, the
@@ -97,7 +102,7 @@ export function useClientAiConnectionsTab(props: { clientId: string }) {
       return ''
     }
 
-    return implementedProviderKinds.value.includes(providerKind)
+    return knownProviders.value.some((provider) => provider.providerKind === providerKind)
       ? 'This tenant does not permit this provider, so reviews using this profile are refused.'
       : 'This build has no driver for this provider, so reviews using this profile are refused.'
   }
@@ -119,12 +124,10 @@ export function useClientAiConnectionsTab(props: { clientId: string }) {
       // enforces the policy regardless of what this screen manages to display.
       try {
         const permitted = await listPermittedProviders(props.clientId)
-        permittedProviderKinds.value = permitted.providerKinds
-        implementedProviderKinds.value = permitted.implementedKinds ?? []
+        knownProviders.value = permitted.providers ?? []
         providersRestricted.value = permitted.isRestricted
       } catch {
-        permittedProviderKinds.value = []
-        implementedProviderKinds.value = []
+        knownProviders.value = []
         providersRestricted.value = false
       }
 

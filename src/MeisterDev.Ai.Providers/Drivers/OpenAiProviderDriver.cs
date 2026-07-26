@@ -27,6 +27,9 @@ public sealed class OpenAiProviderDriver(
 {
     public AiProviderKind ProviderKind => AiProviderKind.OpenAi;
 
+    /// <inheritdoc />
+    public IReadOnlyList<AiProtocolMode> SupportedProtocolModes => AiProtocolModeSupport.OpenAiFamily;
+
     public string? ValidateProbeTarget(AiProbeTarget target)
     {
         return AiProbeTargetValidation.ForOpenAiCompatible(target, allowPrivateEgress, allowInsecureScheme, rejectAzureHosts: true);
@@ -74,6 +77,8 @@ public sealed class OpenAiProviderDriver(
         ProviderModelDescriptor model,
         AiProtocolMode protocolMode)
     {
+        AiProtocolModeSupport.Require(endpoint.ProviderKind, this.SupportedProtocolModes, protocolMode);
+
         var clientOptions = this.CreateClientOptions(endpoint.BaseUrl);
         var credential = new ApiKeyCredential(endpoint.Secret ?? string.Empty);
 
@@ -107,7 +112,7 @@ public sealed class OpenAiProviderDriver(
         AiProtocolMode protocolMode,
         int dimensions)
     {
-        _ = protocolMode;
+        AiProtocolModeSupport.Require(endpoint.ProviderKind, this.SupportedProtocolModes, protocolMode);
         _ = dimensions;
 
         var clientOptions = this.CreateClientOptions(endpoint.BaseUrl);

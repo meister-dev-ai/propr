@@ -18,6 +18,9 @@ public sealed class AzureOpenAiProviderDriver : IAiProviderDriver
 {
     public AiProviderKind ProviderKind => AiProviderKind.AzureOpenAi;
 
+    /// <inheritdoc />
+    public IReadOnlyList<AiProtocolMode> SupportedProtocolModes => AiProtocolModeSupport.OpenAiFamily;
+
     public string? ValidateProbeTarget(AiProbeTarget target)
     {
         return AiProbeTargetValidation.ForAzureOpenAi(target);

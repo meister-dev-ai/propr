@@ -71,6 +71,8 @@ public sealed class AiProviderRegistryTests
     {
         public AiProviderKind ProviderKind => providerKind;
 
+        public IReadOnlyList<AiProtocolMode> SupportedProtocolModes => AiProtocolModeSupport.OpenAiFamily;
+
         public string? ValidateProbeTarget(AiProbeTarget target) => null;
 
         public Task<ProviderModelDiscoveryResult> DiscoverModelsAsync(ProviderEndpoint endpoint, CancellationToken ct = default)

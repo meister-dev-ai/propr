@@ -45,9 +45,13 @@ describe('which provider families the form offers', () => {
   // review time, which is the whole thing #148 was supposed to avoid.
   it('offers only what the server says this client can configure', async () => {
     vi.mocked(listPermittedProviders).mockResolvedValue({
-      providerKinds: ['azureOpenAi', 'openAiCompatible'],
+      providers: [
+        { providerKind: 'azureOpenAi', isPermitted: true, protocolModes: ['auto', 'responses', 'chatCompletions', 'embeddings'] },
+        { providerKind: 'openAi', isPermitted: false, protocolModes: ['auto', 'responses', 'chatCompletions', 'embeddings'] },
+        { providerKind: 'liteLlm', isPermitted: false, protocolModes: ['auto', 'responses', 'chatCompletions', 'embeddings'] },
+        { providerKind: 'openAiCompatible', isPermitted: true, protocolModes: ['auto', 'chatCompletions', 'embeddings'] },
+      ],
       isRestricted: false,
-      implementedKinds: ['azureOpenAi', 'openAi', 'liteLlm', 'openAiCompatible'],
     })
 
     await mountComposable()
@@ -61,9 +65,13 @@ describe('which provider families the form offers', () => {
   // apart is the difference between an operator editing a policy and an operator waiting for a release.
   it('tells a tenant refusal apart from a missing driver', async () => {
     vi.mocked(listPermittedProviders).mockResolvedValue({
-      providerKinds: ['azureOpenAi'],
+      providers: [
+        { providerKind: 'azureOpenAi', isPermitted: true, protocolModes: ['auto', 'responses', 'chatCompletions', 'embeddings'] },
+        { providerKind: 'openAi', isPermitted: false, protocolModes: ['auto', 'responses', 'chatCompletions', 'embeddings'] },
+        { providerKind: 'liteLlm', isPermitted: false, protocolModes: ['auto', 'responses', 'chatCompletions', 'embeddings'] },
+        { providerKind: 'openAiCompatible', isPermitted: false, protocolModes: ['auto', 'chatCompletions', 'embeddings'] },
+      ],
       isRestricted: true,
-      implementedKinds: ['azureOpenAi', 'openAi', 'liteLlm', 'openAiCompatible'],
     })
 
     await mountComposable()

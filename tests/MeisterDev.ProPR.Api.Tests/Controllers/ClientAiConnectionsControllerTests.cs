@@ -56,11 +56,15 @@ public sealed class ClientAiConnectionsControllerTests(ClientsControllerTests.Cl
             };
     }
 
-    private static object[] BuildBindings(string primaryChatModel, string embeddingModel, bool includeEffortOverrides = true)
+    private static object[] BuildBindings(
+        string primaryChatModel,
+        string embeddingModel,
+        bool includeEffortOverrides = true,
+        string protocolMode = "auto")
     {
         var bindings = new List<object>
         {
-            new { purpose = "reviewDefault", remoteModelId = primaryChatModel, protocolMode = "auto", isEnabled = true },
+            new { purpose = "reviewDefault", remoteModelId = primaryChatModel, protocolMode, isEnabled = true },
             new { purpose = "memoryReconsideration", remoteModelId = primaryChatModel, protocolMode = "auto", isEnabled = true },
             new { purpose = "embeddingDefault", remoteModelId = embeddingModel, protocolMode = "embeddings", isEnabled = true },
         };
@@ -84,7 +88,8 @@ public sealed class ClientAiConnectionsControllerTests(ClientsControllerTests.Cl
         IReadOnlyList<string>? chatModels = null,
         string? baseUrl = null,
         bool includeEffortOverrides = true,
-        string providerKind = "azureOpenAi")
+        string providerKind = "azureOpenAi",
+        string protocolMode = "auto")
     {
         var resolvedChatModels = chatModels is { Count: > 0 } ? chatModels : new[] { "gpt-4o" };
         var embeddingModel = "text-embedding-3-large";
@@ -101,7 +106,7 @@ public sealed class ClientAiConnectionsControllerTests(ClientsControllerTests.Cl
             },
             discoveryMode = "manualOnly",
             configuredModels = resolvedChatModels.Select(model => BuildConfiguredModel(model)).Concat([BuildConfiguredModel(embeddingModel, true)]),
-            purposeBindings = BuildBindings(resolvedChatModels[0], embeddingModel, includeEffortOverrides),
+            purposeBindings = BuildBindings(resolvedChatModels[0], embeddingModel, includeEffortOverrides, protocolMode),
         };
     }
 
@@ -117,13 +122,51 @@ public sealed class ClientAiConnectionsControllerTests(ClientsControllerTests.Cl
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         var payload = await response.Content.ReadFromJsonAsync<JsonElement>(ApiJsonOptions);
-        var offered = payload.GetProperty("providerKinds").EnumerateArray().Select(kind => kind.GetString()).ToList();
+        var providers = payload.GetProperty("providers").EnumerateArray().ToList();
+        var offered = providers.Select(p => p.GetProperty("providerKind").GetString()).ToList();
 
         Assert.Contains("azureOpenAi", offered);
         Assert.Contains("openAiCompatible", offered);
         Assert.DoesNotContain("anthropic", offered);
         Assert.DoesNotContain("awsBedrock", offered);
         Assert.DoesNotContain("googleVertex", offered);
+    }
+
+    // The UI must offer only wire shapes that can actually be called, and the drivers are the only place that
+    // knows which those are. An OpenAI-compatible endpoint has no Responses API, so it must not be offered one.
+    [Fact]
+    public async Task PermittedProviders_ReportsTheWireShapesEachProviderSpeaks()
+    {
+        var client = this.CreateAuthorizedClient();
+
+        var response = await client.GetAsync($"/clients/{ClientId}/ai-connections/permitted-providers");
+        var payload = await response.Content.ReadFromJsonAsync<JsonElement>(ApiJsonOptions);
+        var providers = payload.GetProperty("providers").EnumerateArray().ToList();
+
+        var shapesOf = (string kind) => providers
+            .Single(p => p.GetProperty("providerKind").GetString() == kind)
+            .GetProperty("protocolModes").EnumerateArray().Select(m => m.GetString()).ToList();
+
+        Assert.Contains("responses", shapesOf("azureOpenAi"));
+        Assert.DoesNotContain("responses", shapesOf("openAiCompatible"));
+        Assert.Contains("chatCompletions", shapesOf("openAiCompatible"));
+    }
+
+    // A binding asking for a shape the provider cannot speak is refused while the operator is looking at the
+    // form. Before this, the driver quietly sent chat-completions instead and the provider answered with a
+    // rejection that named nothing useful.
+    [Fact]
+    public async Task CreateAiConnection_WithAProtocolTheProviderCannotSpeak_IsRefused()
+    {
+        var client = this.CreateAuthorizedClient();
+
+        var response = await client.PostAsJsonAsync(
+            $"/clients/{ClientId}/ai-connections",
+            BuildCreatePayload("Anthropic-shaped binding", protocolMode: "anthropicMessages"));
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        var body = await response.Content.ReadAsStringAsync();
+        Assert.Contains("AnthropicMessages", body, StringComparison.Ordinal);
     }
 
     [Fact]

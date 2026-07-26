@@ -38,9 +38,11 @@ describe('probing a connection before saving it', () => {
   beforeEach(() => {
     vi.mocked(listAiConnections).mockResolvedValue([])
     vi.mocked(listPermittedProviders).mockResolvedValue({
-      providerKinds: ['azureOpenAi', 'openAi', 'liteLlm', 'openAiCompatible'],
+      providers: [
+        { providerKind: 'azureOpenAi', isPermitted: true, protocolModes: ['auto', 'responses', 'chatCompletions', 'embeddings'] },
+        { providerKind: 'openAiCompatible', isPermitted: true, protocolModes: ['auto', 'chatCompletions', 'embeddings'] },
+      ],
       isRestricted: false,
-      implementedKinds: ['azureOpenAi', 'openAi', 'liteLlm', 'openAiCompatible'],
     })
     vi.mocked(probeAiConnection).mockReset()
   })

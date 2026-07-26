@@ -124,4 +124,37 @@ public sealed class OpenAiCompatibleProviderDriverTests
             allowPrivateEgress,
             allowInsecureScheme);
     }
+
+    // The driver is the last line of defence: configuration refuses this long before a call is built, so reaching
+    // here means a profile was stored before the rule existed. Refusing beats silently speaking another shape.
+    [Fact]
+    public void CreateChatClient_ForAShapeThisEndpointCannotSpeak_Throws()
+    {
+        var driver = Driver();
+        var model = new ProviderModelDescriptor(Guid.NewGuid(), "deepseek-v4-flash", [AiProtocolMode.Auto]);
+        var endpoint = new ProviderEndpoint(
+            AiProviderKind.OpenAiCompatible,
+            "https://opencode.ai/zen/v1",
+            AiAuthMode.ApiKey,
+            "key");
+
+        var failure = Assert.Throws<InvalidOperationException>(() => driver.CreateChatClient(endpoint, model, AiProtocolMode.AnthropicMessages));
+
+        Assert.Contains("AnthropicMessages", failure.Message, StringComparison.Ordinal);
+    }
+
+    // The Responses API is OpenAI's, not every compatible server's, so it is refused rather than attempted.
+    [Fact]
+    public void CreateChatClient_ForTheResponsesApi_Throws()
+    {
+        var driver = Driver();
+        var model = new ProviderModelDescriptor(Guid.NewGuid(), "deepseek-v4-flash", [AiProtocolMode.Auto]);
+        var endpoint = new ProviderEndpoint(
+            AiProviderKind.OpenAiCompatible,
+            "https://opencode.ai/zen/v1",
+            AiAuthMode.ApiKey,
+            "key");
+
+        Assert.Throws<InvalidOperationException>(() => driver.CreateChatClient(endpoint, model, AiProtocolMode.Responses));
+    }
 }

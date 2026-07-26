@@ -17,6 +17,13 @@ public interface IAiProviderDriver
     AiProviderKind ProviderKind { get; }
 
     /// <summary>
+    ///     The protocol shapes this driver can speak. Declared rather than assumed, because the protocol enum
+    ///     names shapes no current driver implements: a driver that stayed silent about this would fall through
+    ///     to whatever shape it does speak and put a request on the wire in the wrong format.
+    /// </summary>
+    IReadOnlyList<AiProtocolMode> SupportedProtocolModes { get; }
+
+    /// <summary>
     ///     Validates a probe/verify target against this provider's base-URL, SSRF-egress, and auth-shape rules.
     ///     Returns a user-facing error message when the target is rejected, or <c>null</c> when it is acceptable.
     /// </summary>

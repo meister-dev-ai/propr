@@ -14381,17 +14381,27 @@ export interface components {
             key?: string | null;
             overrideState?: components["schemas"]["PremiumCapabilityOverrideState"];
         };
+        /** @description One provider family this build can call, and what a given client may do with it. */
+        PermittedProviderDescriptor: {
+            providerKind?: components["schemas"]["AiProviderKind"];
+            /** @description Whether the client's tenant permits it. */
+            isPermitted?: boolean;
+            /**
+             * @description The wire shapes this provider's driver can speak. Sent so the configuration UI offers only shapes that can
+             *     actually be called, rather than keeping a second copy of the drivers' knowledge.
+             */
+            protocolModes?: components["schemas"]["AiProtocolMode"][] | null;
+        };
         /** @description What a client may configure, and enough to explain anything it may not. */
         PermittedProvidersResponse: {
-            /** @description The families this client can configure: implemented here and permitted by its tenant. */
-            providerKinds?: components["schemas"]["AiProviderKind"][] | null;
+            /**
+             * @description Every family this build has a driver for, each flagged with whether the tenant permits it. A family absent
+             *     from this list has no driver at all — the two reasons for unavailability are different and need different
+             *     fixes, so they are reported apart rather than collapsed into one refusal.
+             */
+            providers?: components["schemas"]["PermittedProviderDescriptor"][] | null;
             /** @description Whether the tenant has stated a provider policy at all. */
             isRestricted?: boolean;
-            /**
-             * @description The families this build has a driver for, regardless of policy. Sent so a caller can tell the two reasons
-             *     for absence apart — a family this build cannot call, and one the tenant has forbidden — instead of guessing.
-             */
-            implementedKinds?: components["schemas"]["AiProviderKind"][] | null;
         };
         /** @description Summary of a single review job within the PR view. */
         PrJobSummaryDto: {

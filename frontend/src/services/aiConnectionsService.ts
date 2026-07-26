@@ -67,14 +67,21 @@ export async function listAiConnections(clientId: string): Promise<AiConnectionD
   return (data as AiConnectionDto[]) ?? []
 }
 
+/** One provider family this build can call, and what this client may do with it. */
+export interface PermittedProviderDescriptor {
+  providerKind: AiProviderKind
+  /** Whether the client's tenant permits it. */
+  isPermitted: boolean
+  /** The wire shapes this provider's driver can speak; the UI offers no others. */
+  protocolModes: AiProtocolMode[]
+}
+
 /** What this client may configure, plus enough to explain anything it may not. */
 export interface PermittedProvidersResponse {
-  /** Families this client can configure: implemented in this build and permitted by its tenant. */
-  providerKinds: AiProviderKind[]
+  /** Every family this build has a driver for. A family absent from this list has no driver at all. */
+  providers: PermittedProviderDescriptor[]
   /** Whether the tenant has stated a provider policy at all. */
   isRestricted: boolean
-  /** Families this build has a driver for, regardless of policy — the two reasons for absence are different. */
-  implementedKinds: AiProviderKind[]
 }
 
 export async function listPermittedProviders(clientId: string): Promise<PermittedProvidersResponse> {
@@ -86,7 +93,7 @@ export async function listPermittedProviders(clientId: string): Promise<Permitte
     throw new Error(getErrorMessage(error, 'Failed to load the permitted providers.'))
   }
 
-  return (data as PermittedProvidersResponse) ?? { providerKinds: [], isRestricted: false, implementedKinds: [] }
+  return (data as PermittedProvidersResponse) ?? { providers: [], isRestricted: false }
 }
 
 export async function createAiConnection(clientId: string, request: CreateAiConnectionRequest): Promise<AiConnectionDto> {

@@ -28,6 +28,9 @@ public sealed class OpenAiCompatibleProviderDriver(
 
     public AiProviderKind ProviderKind => AiProviderKind.OpenAiCompatible;
 
+    /// <inheritdoc />
+    public IReadOnlyList<AiProtocolMode> SupportedProtocolModes => AiProtocolModeSupport.OpenAiCompatibleFamily;
+
     public string? ValidateProbeTarget(AiProbeTarget target)
     {
         // The egress rules are the point of this profile: an operator sets the base URL, so it is validated
@@ -51,7 +54,14 @@ public sealed class OpenAiCompatibleProviderDriver(
 
     public IChatClient CreateChatClient(ProviderEndpoint endpoint, ProviderModelDescriptor model, AiProtocolMode protocolMode)
     {
-        return this._innerDriver.CreateChatClient(this.Rekeyed(endpoint), model, protocolMode);
+        AiProtocolModeSupport.Require(this.ProviderKind, this.SupportedProtocolModes, protocolMode);
+
+        // The model's declared shapes are narrowed too, so Auto cannot resolve to the Responses API on a server
+        // that has no Responses API — a catalog entry advertising it is describing the vendor, not this endpoint.
+        return this._innerDriver.CreateChatClient(
+            this.Rekeyed(endpoint),
+            AiProtocolModeSupport.NarrowToSupported(model, this.SupportedProtocolModes),
+            protocolMode);
     }
 
     public ProviderRuntimeCapabilities GetChatRuntimeCapabilities(
@@ -75,7 +85,13 @@ public sealed class OpenAiCompatibleProviderDriver(
         AiProtocolMode protocolMode,
         int dimensions)
     {
-        return this._innerDriver.CreateEmbeddingGenerator(this.Rekeyed(endpoint), model, protocolMode, dimensions);
+        AiProtocolModeSupport.Require(this.ProviderKind, this.SupportedProtocolModes, protocolMode);
+
+        return this._innerDriver.CreateEmbeddingGenerator(
+            this.Rekeyed(endpoint),
+            AiProtocolModeSupport.NarrowToSupported(model, this.SupportedProtocolModes),
+            protocolMode,
+            dimensions);
     }
 
     // The inner driver keys behaviour off the provider kind, so it is rewritten before delegating.

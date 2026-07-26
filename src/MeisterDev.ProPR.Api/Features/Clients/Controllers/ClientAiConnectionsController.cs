@@ -90,18 +90,18 @@ public sealed partial class ClientAiConnectionsController(
             return authResult;
         }
 
-        var implemented = providerDrivers.RegisteredKinds;
-        if (providerPolicies is null)
-        {
-            return this.Ok(new PermittedProvidersResponse(implemented, false, implemented));
-        }
+        var policy = providerPolicies is null
+            ? TenantProviderPolicy.Unrestricted
+            : await providerPolicies.GetForClientAsync(clientId, ct);
 
-        var policy = await providerPolicies.GetForClientAsync(clientId, ct);
-        return this.Ok(
-            new PermittedProvidersResponse(
-                [.. implemented.Where(policy.IsAllowed)],
-                policy.IsRestricted,
-                implemented));
+        var providers = providerDrivers.RegisteredKinds
+            .Select(kind => new PermittedProviderDescriptor(
+                kind,
+                policy.IsAllowed(kind),
+                providerDrivers.GetRequired(kind).SupportedProtocolModes))
+            .ToList();
+
+        return this.Ok(new PermittedProvidersResponse(providers, policy.IsRestricted));
     }
 
     /// <summary>Creates a new AI connection profile for the specified client.</summary>
@@ -427,6 +427,27 @@ public sealed partial class ClientAiConnectionsController(
         return this.ValidationProblem();
     }
 
+    // A binding names the wire shape a call will use, so a shape this provider cannot speak is refused while the
+    // operator is looking at the form. The driver refuses it again at call time, but by then a review is running.
+    private void RefuseUnspeakableProtocols(AiProviderKind providerKind, IReadOnlyList<AiPurposeBindingDto> bindings)
+    {
+        if (!providerDrivers.IsRegistered(providerKind))
+        {
+            return;
+        }
+
+        var supported = providerDrivers.GetRequired(providerKind).SupportedProtocolModes;
+        foreach (var binding in bindings)
+        {
+            if (AiProtocolModeSupport.DescribeRefusal(providerKind, supported, binding.ProtocolMode) is { } refusal)
+            {
+                this.ModelState.AddModelError(
+                    "purposeBindings",
+                    $"The '{binding.Purpose}' binding cannot be saved because {refusal}.");
+            }
+        }
+    }
+
     private static AiConnectionProbeOptionsDto ToProbeOptions(AiConnectionDto connection)
     {
         return new AiConnectionProbeOptionsDto(
@@ -461,6 +482,7 @@ public sealed partial class ClientAiConnectionsController(
 
         var configuredModels = this.NormalizeConfiguredModels(request.ConfiguredModels);
         var purposeBindings = this.NormalizePurposeBindings(request.PurposeBindings, configuredModels);
+        this.RefuseUnspeakableProtocols(request.ProviderKind, purposeBindings);
 
         if (!this.ModelState.IsValid)
         {
@@ -511,6 +533,7 @@ public sealed partial class ClientAiConnectionsController(
         var purposeBindings = this.NormalizePurposeBindings(
             request.PurposeBindings ?? existing.PurposeBindings.Select(ToBindingRequest).ToList(),
             configuredModels);
+        this.RefuseUnspeakableProtocols(providerKind, purposeBindings);
 
         if (!this.ModelState.IsValid)
         {
@@ -880,17 +903,28 @@ public sealed record ProbeAiConnectionRequest(
     }
 }
 
-/// <summary>What a client may configure, and enough to explain anything it may not.</summary>
-/// <param name="ProviderKinds">The families this client can configure: implemented here and permitted by its tenant.</param>
-/// <param name="IsRestricted">Whether the tenant has stated a provider policy at all.</param>
-/// <param name="ImplementedKinds">
-///     The families this build has a driver for, regardless of policy. Sent so a caller can tell the two reasons
-///     for absence apart — a family this build cannot call, and one the tenant has forbidden — instead of guessing.
+/// <summary>One provider family this build can call, and what a given client may do with it.</summary>
+/// <param name="ProviderKind">The provider family.</param>
+/// <param name="IsPermitted">Whether the client's tenant permits it.</param>
+/// <param name="ProtocolModes">
+///     The wire shapes this provider's driver can speak. Sent so the configuration UI offers only shapes that can
+///     actually be called, rather than keeping a second copy of the drivers' knowledge.
 /// </param>
+public sealed record PermittedProviderDescriptor(
+    AiProviderKind ProviderKind,
+    bool IsPermitted,
+    IReadOnlyList<AiProtocolMode> ProtocolModes);
+
+/// <summary>What a client may configure, and enough to explain anything it may not.</summary>
+/// <param name="Providers">
+///     Every family this build has a driver for, each flagged with whether the tenant permits it. A family absent
+///     from this list has no driver at all — the two reasons for unavailability are different and need different
+///     fixes, so they are reported apart rather than collapsed into one refusal.
+/// </param>
+/// <param name="IsRestricted">Whether the tenant has stated a provider policy at all.</param>
 public sealed record PermittedProvidersResponse(
-    IReadOnlyList<AiProviderKind> ProviderKinds,
-    bool IsRestricted,
-    IReadOnlyList<AiProviderKind> ImplementedKinds);
+    IReadOnlyList<PermittedProviderDescriptor> Providers,
+    bool IsRestricted);
 
 /// <summary>Authentication settings for one AI connection profile request.</summary>
 public sealed record AiConnectionAuthRequest([property: JsonRequired] AiAuthMode Mode, string? ApiKey = null)
