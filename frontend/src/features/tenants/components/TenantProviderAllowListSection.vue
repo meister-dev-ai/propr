@@ -83,8 +83,8 @@ async function save(): Promise<void> {
     <p v-if="loading" class="muted">Loading provider policy…</p>
 
     <template v-else>
-      <div class="ai-model-toggles">
-        <label v-for="option in providerOptions" :key="option.value" class="checkbox-field">
+      <div class="provider-policy-grid">
+        <label v-for="option in providerOptions" :key="option.value" class="toggle-checkbox">
           <input
             type="checkbox"
             :data-testid="`tenant-provider-${option.value}`"
@@ -95,7 +95,7 @@ async function save(): Promise<void> {
         </label>
       </div>
 
-      <p class="muted" data-testid="tenant-provider-policy-summary">
+      <p class="muted provider-policy-summary" data-testid="tenant-provider-policy-summary">
         <template v-if="isUnrestricted">
           No restriction: clients may use any provider family.
         </template>
@@ -105,8 +105,8 @@ async function save(): Promise<void> {
         </template>
       </p>
 
-      <div class="form-actions">
-        <button type="button" class="btn btn-primary" :disabled="saving" data-testid="tenant-provider-policy-save" @click="save">
+      <div class="provider-policy-actions">
+        <button type="button" class="btn-primary btn-sm" :disabled="saving" data-testid="tenant-provider-policy-save" @click="save">
           {{ saving ? 'Saving…' : 'Save provider policy' }}
         </button>
         <span v-if="savedMessage" class="muted" data-testid="tenant-provider-policy-saved">{{ savedMessage }}</span>
@@ -114,3 +114,33 @@ async function save(): Promise<void> {
     </template>
   </section>
 </template>
+
+<style scoped>
+/* Matches the other tenant sections: a settled two-column grid of controls rather than a bare checkbox list,
+   at the same text size as the surrounding prose. */
+.provider-policy-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr));
+  gap: 0.4rem 1rem;
+  margin-block-start: 0.75rem;
+}
+
+.toggle-checkbox {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.6rem;
+  font-size: 0.9rem;
+}
+
+.provider-policy-summary {
+  margin-block: 0.75rem 0;
+  font-size: 0.85rem;
+}
+
+.provider-policy-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin-block-start: 0.75rem;
+}
+</style>

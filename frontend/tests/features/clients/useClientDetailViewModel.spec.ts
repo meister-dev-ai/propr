@@ -179,7 +179,9 @@ describe('useClientDetailViewModel (FR-007, FR-008, FR-012)', () => {
     await vm.saveAdvancedSettings()
 
     const body = mockPatch.mock.calls[0][1].body as Record<string, unknown>
-    expect(body.reviewPasses).toEqual([{ ordinal: 0, configuredModelId: 'model-x', lens: null, scope: null, shadow: false, reasoningEffort: 'none' }])
+    expect(body.reviewPasses).toEqual([
+      { ordinal: 0, configuredModelId: 'model-x', logicalModelName: null, lens: null, scope: null, shadow: false, reasoningEffort: 'none' },
+    ])
   })
 
   it('saves review aggressiveness through the dedicated review-profile endpoint', async () => {

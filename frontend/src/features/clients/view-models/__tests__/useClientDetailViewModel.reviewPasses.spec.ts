@@ -18,8 +18,8 @@ describe('review-pass normalize/equal preserve the lens', () => {
     ])
 
     expect(normalized).toEqual([
-      { ordinal: 0, configuredModelId: 'm1', lens: 'security', scope: null, shadow: false, reasoningEffort: 'none' },
-      { ordinal: 1, configuredModelId: 'm2', lens: null, scope: null, shadow: false, reasoningEffort: 'none' },
+      { ordinal: 0, configuredModelId: 'm1', logicalModelName: null, lens: 'security', scope: null, shadow: false, reasoningEffort: 'none' },
+      { ordinal: 1, configuredModelId: 'm2', logicalModelName: null, lens: null, scope: null, shadow: false, reasoningEffort: 'none' },
     ])
   })
 
@@ -39,11 +39,41 @@ describe('review-pass normalize/equal preserve the lens', () => {
 
   it('normalize keeps scope/shadow and equality treats a scope- or shadow-only change as different', () => {
     const normalized = normalizeReviewPasses([{ ordinal: 0, configuredModelId: 'm1', scope: 'pr_wide', shadow: true }])
-    expect(normalized).toEqual([{ ordinal: 0, configuredModelId: 'm1', lens: null, scope: 'pr_wide', shadow: true, reasoningEffort: 'none' }])
+    expect(normalized).toEqual([
+      { ordinal: 0, configuredModelId: 'm1', logicalModelName: null, lens: null, scope: 'pr_wide', shadow: true, reasoningEffort: 'none' },
+    ])
 
     const base: ReviewPassEntry[] = [{ ordinal: 0, configuredModelId: 'm1', lens: null, scope: null, shadow: false }]
     expect(reviewPassesEqual(base, [{ ordinal: 0, configuredModelId: 'm1', lens: null, scope: 'pr_wide', shadow: false }])).toBe(false)
     expect(reviewPassesEqual(base, [{ ordinal: 0, configuredModelId: 'm1', lens: null, scope: null, shadow: true }])).toBe(false)
     expect(reviewPassesEqual(base, [{ ordinal: 0, configuredModelId: 'm1', lens: null, scope: null, shadow: false }])).toBe(true)
+  })
+
+  // A pass can run on a named logical model instead of a configured model, and then carries no configured-model
+  // id at all. Dropping those was why saving a role-based pass appeared to work and left the list empty.
+  it('normalizeReviewPasses keeps a pass that runs on a logical model', () => {
+    const normalized = normalizeReviewPasses([
+      { ordinal: 0, logicalModelName: 'Low Budget' },
+      { ordinal: 1, configuredModelId: 'm1' },
+    ])
+
+    expect(normalized).toHaveLength(2)
+    expect(normalized[0].logicalModelName).toBe('Low Budget')
+    expect(normalized[0].configuredModelId).toBe('')
+    expect(normalized[1].logicalModelName).toBeNull()
+  })
+
+  it('normalizeReviewPasses still drops a pass that names neither a model nor a role', () => {
+    expect(normalizeReviewPasses([{ ordinal: 0 }, { ordinal: 1, configuredModelId: '' }])).toEqual([])
+  })
+
+  // Without this the dirty check treats a role swap as no change, so Save does nothing.
+  it('reviewPassesEqual notices a changed logical model', () => {
+    expect(
+      reviewPassesEqual(
+        [{ ordinal: 0, logicalModelName: 'Low Budget' }],
+        [{ ordinal: 0, logicalModelName: 'High Budget' }],
+      ),
+    ).toBe(false)
   })
 })

@@ -183,12 +183,16 @@ function isDetailTab(value: string): value is DetailTab {
  * — a half-configured row is never sent to the server (which would reject it) and never
  * counts toward the dirty check. */
 export function normalizeReviewPasses(passes: ReviewPassEntry[] | null | undefined): ReviewPassEntry[] {
+  // A pass runs on EITHER a named logical model or a configured model, and a logical-model pass carries no
+  // configured-model id at all. Keeping only the latter dropped every role-based pass on the way in and again on
+  // the way out, so saving one looked like it worked and left the list empty.
   return [...(passes ?? [])]
-    .filter((pass) => (pass.configuredModelId ?? '') !== '')
+    .filter((pass) => (pass.configuredModelId ?? '') !== '' || (pass.logicalModelName ?? '') !== '')
     .sort((left, right) => (left.ordinal ?? 0) - (right.ordinal ?? 0))
     .map((pass, index) => ({
       ordinal: index,
       configuredModelId: pass.configuredModelId ?? '',
+      logicalModelName: pass.logicalModelName ?? null,
       lens: pass.lens ?? null,
       scope: pass.scope ?? null,
       shadow: pass.shadow ?? false,
@@ -259,6 +263,7 @@ export function reviewPassesEqual(left: ReviewPassEntry[], right: ReviewPassEntr
   return left.every(
     (pass, index) =>
       (pass.configuredModelId ?? '') === (right[index]?.configuredModelId ?? '') &&
+      (pass.logicalModelName ?? '') === (right[index]?.logicalModelName ?? '') &&
       (pass.lens ?? null) === (right[index]?.lens ?? null) &&
       (pass.scope ?? null) === (right[index]?.scope ?? null) &&
       (pass.shadow ?? false) === (right[index]?.shadow ?? false) &&

@@ -80,9 +80,11 @@ internal sealed class AiConnectionProfileEntityTypeConfiguration : IEntityTypeCo
             .HasDatabaseName("ix_ai_connection_profiles_tenant_id_display_name")
             .IsUnique();
 
+        // Not unique: "active" means a profile is in use, and a client is free to use several at once — which
+        // model serves which role is decided by logical models rather than by one profile holding a single slot.
+        // The index stays because the active set is read on the legacy purpose-binding path.
         builder.HasIndex(x => x.ClientId)
             .HasDatabaseName("ix_ai_connection_profiles_client_id_active")
-            .HasFilter("is_active = true")
-            .IsUnique();
+            .HasFilter("is_active = true");
     }
 }

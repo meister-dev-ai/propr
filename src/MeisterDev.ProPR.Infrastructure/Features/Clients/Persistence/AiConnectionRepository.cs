@@ -24,13 +24,6 @@ public sealed class AiConnectionRepository(
 {
     private const string SecretPurpose = "AiConnectionApiKey";
 
-    private static readonly AiPurpose[] RequiredActivationPurposes =
-    [
-        AiPurpose.ReviewDefault,
-        AiPurpose.MemoryReconsideration,
-        AiPurpose.EmbeddingDefault,
-    ];
-
     /// <inheritdoc />
     public async Task<IReadOnlyList<AiConnectionDto>> GetByClientAsync(Guid clientId, CancellationToken ct = default)
     {
@@ -84,6 +77,8 @@ public sealed class AiConnectionRepository(
                 .Include(profile => profile.PurposeBindings)
                 .Include(profile => profile.VerificationSnapshot)
                 .Where(profile => profile.ClientId == clientId && profile.IsActive)
+                .OrderBy(profile => profile.DisplayName)
+                .ThenBy(profile => profile.Id)
                 .FirstOrDefaultAsync(ct),
             ct);
         return record is null ? null : this.ToDto(record);
@@ -313,49 +308,22 @@ public sealed class AiConnectionRepository(
             return AiConnectionActivationResultDto.NotFound;
         }
 
-        // Each requirement reports itself, so an operator is told which one to fix rather than given the list of
-        // everything activation needs and left to work out which part applies.
+        // Active means "in use", not "the one". Several profiles can be active at once so a client can mix
+        // providers — which model serves which role is decided by logical models, not by which profile won a
+        // race for a single slot. Activating one therefore leaves the others alone.
         if (!string.Equals(target.VerificationSnapshot?.Status, AiVerificationStatus.Verified.ToString(), StringComparison.Ordinal))
         {
             return AiConnectionActivationResultDto.Refused("the profile has not been verified since its last change — verify it, then activate");
         }
 
-        if (DescribeMissingRequiredBinding(target) is { } bindingProblem)
+        if (target.IsActive)
         {
-            return AiConnectionActivationResultDto.Refused(bindingProblem);
-        }
-
-        var others = await dbContext.AiConnectionProfiles
-            .Where(profile => profile.ClientId == target.ClientId && profile.IsActive && profile.Id != connectionId)
-            .ToListAsync(ct);
-
-        // Only one profile per client may be active: the database enforces this with a partial unique index
-        // on client_id (filtered to is_active = true). PostgreSQL checks that index after every single
-        // statement and the check cannot be deferred to the end of the transaction. If we deactivated the old
-        // profile and activated the new one in the same SaveChanges, EF Core might send the "activate" UPDATE
-        // before the "deactivate" one (it orders same-table writes by key value), leaving two rows active for
-        // the client for an instant -- which the index rejects as a duplicate (PostgreSQL unique_violation,
-        // error 23505). So deactivate the old profile and save that first, then activate the target and save,
-        // wrapping both in one transaction so the switch is still all-or-nothing.
-        var now = DateTimeOffset.UtcNow;
-        await using var transaction = await dbContext.Database.BeginTransactionAsync(ct);
-
-        if (others.Count > 0)
-        {
-            foreach (var other in others)
-            {
-                other.IsActive = false;
-                other.UpdatedAt = now;
-            }
-
-            await dbContext.SaveChangesAsync(ct);
+            return AiConnectionActivationResultDto.Success;
         }
 
         target.IsActive = true;
-        target.UpdatedAt = now;
+        target.UpdatedAt = DateTimeOffset.UtcNow;
         await dbContext.SaveChangesAsync(ct);
-
-        await transaction.CommitAsync(ct);
         await this.AuditAsync("activated", target, false, ct);
         return AiConnectionActivationResultDto.Success;
     }
@@ -426,6 +394,8 @@ public sealed class AiConnectionRepository(
                 .Include(profile => profile.PurposeBindings)
                 .Include(profile => profile.VerificationSnapshot)
                 .Where(profile => profile.ClientId == clientId && profile.IsActive)
+                .OrderBy(profile => profile.DisplayName)
+                .ThenBy(profile => profile.Id)
                 .FirstOrDefaultAsync(ct),
             ct);
 
@@ -800,34 +770,6 @@ public sealed class AiConnectionRepository(
                 };
             })
             .ToList();
-    }
-
-    // Returns which required binding is missing or unusable, or null when they are all satisfied. The same walk
-    // that decided activation produces the explanation, so the two cannot disagree.
-    private static string? DescribeMissingRequiredBinding(AiConnectionProfileRecord record)
-    {
-        foreach (var purpose in RequiredActivationPurposes)
-        {
-            var binding = FindActiveBindingRecord(record, purpose);
-
-            if (binding is null)
-            {
-                return $"the '{purpose}' purpose has no enabled binding";
-            }
-
-            var model = record.ConfiguredModels.FirstOrDefault(candidate => candidate.Id == binding.ConfiguredModelId);
-            if (model is null)
-            {
-                return $"the '{purpose}' binding points at a model this profile no longer configures";
-            }
-
-            if (!IsBindingValid(purpose, model, binding))
-            {
-                return $"the model '{model.RemoteModelId}' bound to '{purpose}' lacks a capability that purpose needs";
-            }
-        }
-
-        return null;
     }
 
     private static AiPurposeBindingRecord? FindActiveBindingRecord(AiConnectionProfileRecord record, AiPurpose purpose)

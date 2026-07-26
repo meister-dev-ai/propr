@@ -413,8 +413,10 @@ public sealed class AiConnectionRepositoryTests
         Assert.Equal("gpt-4o", result.GetBoundModelId(AiPurpose.ReviewDefault));
     }
 
+    // Active means "in use", not "the one". A client mixing providers keeps several profiles active and decides
+    // which model serves which role through logical models, so activating one must leave the others alone.
     [Fact]
-    public async Task ActivateAsync_VerifiedProfileWithRequiredBindings_ActivatesAndDeactivatesPrevious()
+    public async Task ActivateAsync_LeavesAnAlreadyActiveProfileActive()
     {
         await using var db = CreateContext();
         var clientId = Guid.NewGuid();
@@ -433,26 +435,22 @@ public sealed class AiConnectionRepositoryTests
         var refreshedB = await db.AiConnectionProfiles.FindAsync(profileB.Id);
 
         Assert.NotNull(refreshedA);
-        Assert.False(refreshedA.IsActive);
+        Assert.True(refreshedA.IsActive);
 
         Assert.NotNull(refreshedB);
         Assert.True(refreshedB.IsActive);
     }
 
+    // Purpose bindings are the legacy selection layer and the editor no longer creates them, so requiring them
+    // for activation made every profile created today unactivatable. A verified profile with none activates.
     [Fact]
-    public async Task ActivateAsync_VerifiedProfileWithMinimalRequiredBindings_Activates()
+    public async Task ActivateAsync_VerifiedProfileWithNoPurposeBindings_Activates()
     {
         await using var db = CreateContext();
         var clientId = Guid.NewGuid();
 
-        var profile = MakeProfile(
-            clientId,
-            purposes:
-            [
-                AiPurpose.ReviewDefault,
-                AiPurpose.MemoryReconsideration,
-                AiPurpose.EmbeddingDefault,
-            ]);
+        var profile = MakeProfile(clientId, purposes: []);
+        profile.PurposeBindings.Clear();
         db.AiConnectionProfiles.Add(profile);
         await db.SaveChangesAsync();
 
@@ -480,26 +478,6 @@ public sealed class AiConnectionRepositoryTests
 
         Assert.False(result.Activated);
         Assert.Contains("verified", result.Reason!, StringComparison.Ordinal);
-    }
-
-    // The point of reporting the reason is that an operator fixes the right thing. A profile that is verified but
-    // missing a required binding must name the binding rather than mention verification.
-    [Fact]
-    public async Task ActivateAsync_MissingRequiredBinding_NamesThePurpose()
-    {
-        await using var db = CreateContext();
-        var clientId = Guid.NewGuid();
-        var profile = MakeProfile(clientId, purposes: AiPurpose.ReviewDefault);
-        db.AiConnectionProfiles.Add(profile);
-        await db.SaveChangesAsync();
-
-        var repo = CreateRepository(db);
-        var result = await repo.ActivateAsync(profile.Id);
-
-        Assert.False(result.Activated);
-        // The first unmet requirement is reported; with only ReviewDefault bound that is MemoryReconsideration.
-        Assert.Contains("MemoryReconsideration", result.Reason!, StringComparison.Ordinal);
-        Assert.DoesNotContain("verified", result.Reason!, StringComparison.Ordinal);
     }
 
     [Fact]

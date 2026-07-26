@@ -23,7 +23,8 @@ public sealed partial class ClientAiConnectionsController(
     IAiConnectionRepository aiConnections,
     IAiProviderDriverRegistry providerDrivers,
     ILogger<ClientAiConnectionsController> logger,
-    ITenantProviderPolicyProvider? providerPolicies = null) : ControllerBase
+    ITenantProviderPolicyProvider? providerPolicies = null,
+    IModelCatalogRepository? modelCatalog = null) : ControllerBase
 {
     private const string RequestModelsPropertyName = "requestModels";
 
@@ -355,7 +356,19 @@ public sealed partial class ClientAiConnectionsController(
         }
 
         var driver = providerDrivers.GetRequired(request.ProviderKind);
-        return this.Ok((await driver.DiscoverModelsAsync(probeOptions.ToProviderEndpoint(), ct)).ToDto(DateTimeOffset.UtcNow));
+        var discovered = (await driver.DiscoverModelsAsync(probeOptions.ToProviderEndpoint(), ct)).ToDto(DateTimeOffset.UtcNow);
+
+        // A model list is identifiers, not economics — several providers return nothing but an id — so the
+        // catalog supplies price, context and capabilities. Without it a discovered model arrives unpriced and a
+        // budget cap is enforced against zero.
+        if (modelCatalog is not null)
+        {
+            discovered = DiscoveredModelCatalogEnricher.Enrich(
+                discovered,
+                await modelCatalog.GetEffectiveForClientAsync(clientId, ct: ct));
+        }
+
+        return this.Ok(discovered);
     }
 
     /// <summary>

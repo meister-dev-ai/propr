@@ -137,15 +137,15 @@ function pricingNote(entry: AiModelCatalogEntryDto): string {
         <li v-for="entry in filteredModels" :key="`${entry.providerId ?? ''}:${entry.remoteModelId ?? ''}`">
           <button class="catalog-entry" @click.prevent="choose(entry)">
             <span class="catalog-entry-main">
-              <strong>{{ entry.displayName }}</strong>
+              <span class="catalog-entry-name">{{ entry.displayName }}</span>
               <span class="muted catalog-entry-id">{{ entry.remoteModelId }}</span>
             </span>
             <span class="catalog-entry-meta muted">
-              <span v-if="entry.maxContextTokens">{{ entry.maxContextTokens.toLocaleString() }} ctx</span>
+              <span v-if="entry.maxContextTokens" class="catalog-entry-figure">{{ entry.maxContextTokens.toLocaleString() }} ctx</span>
               <span v-if="entry.supportsToolUse" class="chip chip-sm">tools</span>
               <span v-if="entry.supportsReasoning" class="chip chip-sm">reasoning</span>
               <span v-if="entry.supportsPromptCaching" class="chip chip-sm">caching</span>
-              <span :title="pricingNote(entry)">
+              <span class="catalog-entry-figure" :title="pricingNote(entry)">
                 in {{ price(entry.inputCostPer1MUsd) }} · out {{ price(entry.outputCostPer1MUsd) }}
               </span>
               <span v-if="entry.pricingLayer !== 'global'" class="chip chip-sm chip-accent">negotiated</span>
@@ -182,11 +182,16 @@ function pricingNote(entry: AiModelCatalogEntryDto): string {
   padding: 0;
   max-height: 18rem;
   overflow-y: auto;
+  /* Room for the scrollbar so it never sits on top of the right-hand pricing column. */
+  padding-inline-end: 0.5rem;
 }
 
+/* A two-column grid rather than space-between: the identity column takes the slack and truncates, so the
+   metadata column keeps its width and cannot be clipped or wrapped underneath at narrow widths. */
 .catalog-entry {
-  display: flex;
-  justify-content: space-between;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: baseline;
   gap: 0.75rem;
   width: 100%;
   padding: 0.4rem 0.5rem;
@@ -195,7 +200,6 @@ function pricingNote(entry: AiModelCatalogEntryDto): string {
   border-radius: 4px;
   text-align: left;
   cursor: pointer;
-  flex-wrap: wrap;
 }
 
 .catalog-entry:hover,
@@ -207,17 +211,40 @@ function pricingNote(entry: AiModelCatalogEntryDto): string {
   display: flex;
   flex-direction: column;
   min-width: 0;
+  gap: 0.1rem;
 }
 
-.catalog-entry-id {
+/* One size for the row's text. The name was inheriting the body size against 0.8rem metadata, which read as a
+   mismatch rather than as emphasis; weight alone carries the hierarchy. */
+.catalog-entry-name,
+.catalog-entry-id,
+.catalog-entry-meta {
   font-size: 0.8rem;
+  line-height: 1.35;
+}
+
+.catalog-entry-name {
+  font-weight: 600;
+}
+
+.catalog-entry-name,
+.catalog-entry-id {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .catalog-entry-meta {
   display: flex;
   gap: 0.5rem;
   align-items: center;
+  justify-content: flex-end;
   flex-wrap: wrap;
-  font-size: 0.8rem;
+}
+
+/* Digits line up column-to-column, so context windows and prices scan vertically. */
+.catalog-entry-figure {
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
 }
 </style>
