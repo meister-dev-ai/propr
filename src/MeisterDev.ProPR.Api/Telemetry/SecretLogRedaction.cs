@@ -84,6 +84,12 @@ public static class SecretLogRedaction
             // its own, the profile as the application sees it, the write request the repository persists, and the
             // probe options a driver is handed. Each overrides ToString so plain interpolation is safe; these entries
             // cover the other rendering path, structured destructuring, where ToString is not consulted at all.
+            .Destructure.ByTransforming<ProbeAiConnectionRequest>(request => new
+            {
+                request.ProviderKind,
+                request.BaseUrl,
+                ApiKey = RedactSecret(request.Auth?.ApiKey),
+            })
             .Destructure.ByTransforming<AiConnectionAuthRequest>(request => new
             {
                 request.Mode,

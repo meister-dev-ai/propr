@@ -35,7 +35,7 @@ public interface IAiConnectionRepository
     Task<bool> DeleteAsync(Guid connectionId, CancellationToken ct = default);
 
     /// <summary>Activates the specified AI connection profile and deactivates any others for the same client.</summary>
-    Task<bool> ActivateAsync(Guid connectionId, CancellationToken ct = default);
+    Task<AiConnectionActivationResultDto> ActivateAsync(Guid connectionId, CancellationToken ct = default);
 
     /// <summary>Deactivates the specified AI connection profile. Returns false if not found.</summary>
     Task<bool> DeactivateAsync(Guid connectionId, CancellationToken ct = default);

@@ -8,6 +8,7 @@ import {
   deactivateAiConnection,
   deleteAiConnection,
   discoverAiModels,
+  probeAiConnection,
   listAiConnections,
   listPermittedProviders,
   updateAiConnection,
@@ -329,6 +330,32 @@ export function useClientAiConnectionsTab(props: { clientId: string }) {
     return `Discovered ${discoveredModels.length} ${pluralizeModels(discoveredModels.length)}.`
   }
 
+  // Probing before saving is the point: an operator can find out that a key or a base URL is wrong without first
+  // committing it to storage. The provider's own categorised reason is shown, since "failed" alone is not
+  // actionable — a bad key, an unreachable host and a rejected request need different fixes.
+  const probing = ref(false)
+  const probeMessage = ref('')
+  const probeFailed = ref(false)
+
+  const handleProbeConnection = async () => {
+    probing.value = true
+    probeMessage.value = ''
+    probeFailed.value = false
+    saveError.value = ''
+    try {
+      const result = await probeAiConnection(props.clientId, buildDiscoverRequest())
+      probeFailed.value = result.status !== 'verified'
+      probeMessage.value = probeFailed.value
+        ? [result.summary, result.actionHint].filter(Boolean).join(' ')
+        : result.summary || 'The provider accepted the connection.'
+    } catch (error) {
+      probeFailed.value = true
+      probeMessage.value = error instanceof Error ? error.message : 'Failed to probe the provider connection.'
+    } finally {
+      probing.value = false
+    }
+  }
+
   const handleDiscoverModels = async () => {
     discovering.value = true
     discoveryMessage.value = ''
@@ -581,6 +608,10 @@ export function useClientAiConnectionsTab(props: { clientId: string }) {
     addModel,
     removeModel,
     handleDiscoverModels,
+    handleProbeConnection,
+    probing,
+    probeMessage,
+    probeFailed,
     saveProfile,
     handleVerify,
     handleActivate,

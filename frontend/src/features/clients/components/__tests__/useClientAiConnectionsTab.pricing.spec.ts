@@ -16,6 +16,8 @@ vi.mock('@/services/aiConnectionsService', () => ({
   createAiConnection: vi.fn(),
   updateAiConnection: vi.fn(),
   discoverAiModels: vi.fn(),
+  probeAiConnection: vi.fn(),
+  listPermittedProviders: vi.fn(),
   verifyAiConnection: vi.fn(),
   activateAiConnection: vi.fn(),
   deactivateAiConnection: vi.fn(),

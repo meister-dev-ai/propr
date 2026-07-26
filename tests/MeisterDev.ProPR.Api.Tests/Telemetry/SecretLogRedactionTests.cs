@@ -30,6 +30,7 @@ public sealed class SecretLogRedactionTests
             { nameof(AiConnectionAuthRequest), new AiConnectionAuthRequest(AiAuthMode.ApiKey, Secret) },
             { nameof(CreateAiConnectionRequest), CreateRequest() },
             { nameof(DiscoverModelsRequest), Discover() },
+            { nameof(ProbeAiConnectionRequest), Probe() },
             { nameof(AiConnectionDto), Connection() },
             { nameof(AiConnectionWriteRequestDto), WriteRequest() },
             { nameof(AiConnectionProbeOptionsDto), ProbeOptions() },
@@ -108,6 +109,14 @@ public sealed class SecretLogRedactionTests
     private static DiscoverModelsRequest Discover()
     {
         return new DiscoverModelsRequest(
+            AiProviderKind.OpenAiCompatible,
+            "https://api.deepseek.com/v1",
+            new AiConnectionAuthRequest(AiAuthMode.ApiKey, Secret));
+    }
+
+    private static ProbeAiConnectionRequest Probe()
+    {
+        return new ProbeAiConnectionRequest(
             AiProviderKind.OpenAiCompatible,
             "https://api.deepseek.com/v1",
             new AiConnectionAuthRequest(AiAuthMode.ApiKey, Secret));

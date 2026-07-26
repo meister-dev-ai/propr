@@ -228,14 +228,12 @@ public sealed partial class ClientAiConnectionsController(
             return this.NotFound();
         }
 
-        if (!await aiConnections.ActivateAsync(connectionId, ct))
+        var activation = await aiConnections.ActivateAsync(connectionId, ct);
+        if (!activation.Activated)
         {
-            return this.BadRequest(
-                new
-                {
-                    error =
-                        "Activation requires a freshly verified profile with valid Review Default, Memory Reconsideration, and Embedding Default bindings. Re-verify the profile after connectivity, auth, model, or binding edits.",
-                });
+            // The reason comes from the rule that refused, so the operator is told which requirement to fix
+            // rather than the full list of everything activation needs.
+            return this.BadRequest(new { error = $"This profile cannot be activated: {activation.Reason}." });
         }
 
         var refreshed = await aiConnections.GetByIdAsync(connectionId, ct);
@@ -335,6 +333,54 @@ public sealed partial class ClientAiConnectionsController(
 
         var driver = providerDrivers.GetRequired(request.ProviderKind);
         return this.Ok((await driver.DiscoverModelsAsync(probeOptions.ToProviderEndpoint(), ct)).ToDto(DateTimeOffset.UtcNow));
+    }
+
+    /// <summary>
+    ///     Probes an unsaved profile: validates the target, then asks the provider whether the endpoint is
+    ///     reachable and the credential accepted. Nothing is persisted, so a credential can be tested before it is
+    ///     stored — the alternative is saving a profile in order to find out that its key is wrong.
+    /// </summary>
+    [HttpPost("probe")]
+    [ProducesResponseType(typeof(AiVerificationResultDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    public async Task<IActionResult> ProbeAiConnection(
+        Guid clientId,
+        [FromBody] ProbeAiConnectionRequest request,
+        CancellationToken ct = default)
+    {
+        var authResult = this.AuthorizeClientAccessAsync(clientId);
+        if (authResult is not null)
+        {
+            return authResult;
+        }
+
+        // The tenant's provider policy is answered before anything is dialled: probing a forbidden provider would
+        // reach it with a credential the tenant has decided it does not want used.
+        if (providerPolicies is not null)
+        {
+            var policy = await providerPolicies.GetForClientAsync(clientId, ct);
+            if (policy.DescribeRefusal(request.ProviderKind) is { } refusal)
+            {
+                this.ModelState.AddModelError("providerKind", $"This profile cannot be probed because {refusal}.");
+                return this.ValidationProblem();
+            }
+        }
+
+        var probeOptions = this.TryBuildProbeOptions(
+            request.ProviderKind,
+            request.BaseUrl,
+            request.Auth,
+            request.DefaultHeaders,
+            request.DefaultQueryParams);
+        if (probeOptions is null)
+        {
+            return this.ValidationProblem();
+        }
+
+        var driver = providerDrivers.GetRequired(request.ProviderKind);
+        return this.Ok((await driver.VerifyAsync(probeOptions.ToProviderEndpoint(), ct)).ToDto());
     }
 
     private static AiConnectionProbeOptionsDto ToProbeOptions(AiConnectionDto connection)
@@ -765,6 +811,28 @@ public sealed partial class ClientAiConnectionsController(
             binding.RemoteModelId,
             binding.ProtocolMode,
             binding.IsEnabled);
+    }
+}
+
+/// <summary>Request body for probing a profile that has not been saved yet.</summary>
+/// <param name="ProviderKind">The provider family to probe.</param>
+/// <param name="BaseUrl">The base URL to probe.</param>
+/// <param name="Auth">The credential to probe with; never stored by this call.</param>
+/// <param name="DefaultHeaders">Optional headers the profile would send.</param>
+/// <param name="DefaultQueryParams">Optional query parameters the profile would send.</param>
+public sealed record ProbeAiConnectionRequest(
+    [property: JsonRequired] AiProviderKind ProviderKind,
+    string BaseUrl,
+    AiConnectionAuthRequest Auth,
+    IReadOnlyDictionary<string, string>? DefaultHeaders = null,
+    IReadOnlyDictionary<string, string>? DefaultQueryParams = null)
+{
+    /// <summary>Renders the request without the key; see <see cref="CreateAiConnectionRequest.ToString" />.</summary>
+    public override string ToString()
+    {
+        return $"{nameof(ProbeAiConnectionRequest)} {{ ProviderKind = {this.ProviderKind}, BaseUrl = {this.BaseUrl}, "
+               + $"Auth = {this.Auth}, DefaultHeaders = [{SecretSafeRendering.KeyNames(this.DefaultHeaders)}], "
+               + $"DefaultQueryParams = [{SecretSafeRendering.KeyNames(this.DefaultQueryParams)}] }}";
     }
 }
 

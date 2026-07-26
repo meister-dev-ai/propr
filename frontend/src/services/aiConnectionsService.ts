@@ -161,6 +161,26 @@ export async function verifyAiConnection(clientId: string, connectionId: string)
   return data as AiVerificationResultDto
 }
 
+/**
+ * Probes an unsaved profile. Nothing is stored, so a credential can be tested before it is committed — otherwise
+ * finding out a key is wrong requires saving it first.
+ */
+export async function probeAiConnection(
+  clientId: string,
+  request: DiscoverModelsRequest,
+): Promise<AiVerificationResultDto> {
+  const { data, error, response } = await createAdminClient().POST('/clients/{clientId}/ai-connections/probe', {
+    params: { path: { clientId } },
+    body: request,
+  })
+
+  if (!response.ok) {
+    throw new Error(getErrorMessage(error, 'Failed to probe the provider connection.'))
+  }
+
+  return data as AiVerificationResultDto
+}
+
 export async function discoverAiModels(
   clientId: string,
   request: DiscoverModelsRequest,

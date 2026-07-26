@@ -52,9 +52,9 @@ public sealed class NoOpAiConnectionRepository : IAiConnectionRepository
         return Task.FromResult(false);
     }
 
-    public Task<bool> ActivateAsync(Guid connectionId, CancellationToken ct = default)
+    public Task<AiConnectionActivationResultDto> ActivateAsync(Guid connectionId, CancellationToken ct = default)
     {
-        return Task.FromResult(false);
+        return Task.FromResult(AiConnectionActivationResultDto.NotFound);
     }
 
     public Task<bool> DeactivateAsync(Guid connectionId, CancellationToken ct = default)

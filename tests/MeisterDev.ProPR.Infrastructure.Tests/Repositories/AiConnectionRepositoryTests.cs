@@ -427,7 +427,7 @@ public sealed class AiConnectionRepositoryTests
         var repo = CreateRepository(db);
         var result = await repo.ActivateAsync(profileB.Id);
 
-        Assert.True(result);
+        Assert.True(result.Activated);
 
         var refreshedA = await db.AiConnectionProfiles.FindAsync(profileA.Id);
         var refreshedB = await db.AiConnectionProfiles.FindAsync(profileB.Id);
@@ -459,7 +459,7 @@ public sealed class AiConnectionRepositoryTests
         var repo = CreateRepository(db);
         var result = await repo.ActivateAsync(profile.Id);
 
-        Assert.True(result);
+        Assert.True(result.Activated);
 
         var refreshed = await db.AiConnectionProfiles.FindAsync(profile.Id);
         Assert.NotNull(refreshed);
@@ -467,7 +467,7 @@ public sealed class AiConnectionRepositoryTests
     }
 
     [Fact]
-    public async Task ActivateAsync_UnverifiedProfile_ReturnsFalse()
+    public async Task ActivateAsync_UnverifiedProfile_RefusesAndSaysWhy()
     {
         await using var db = CreateContext();
         var clientId = Guid.NewGuid();
@@ -478,18 +478,40 @@ public sealed class AiConnectionRepositoryTests
         var repo = CreateRepository(db);
         var result = await repo.ActivateAsync(profile.Id);
 
-        Assert.False(result);
+        Assert.False(result.Activated);
+        Assert.Contains("verified", result.Reason!, StringComparison.Ordinal);
+    }
+
+    // The point of reporting the reason is that an operator fixes the right thing. A profile that is verified but
+    // missing a required binding must name the binding rather than mention verification.
+    [Fact]
+    public async Task ActivateAsync_MissingRequiredBinding_NamesThePurpose()
+    {
+        await using var db = CreateContext();
+        var clientId = Guid.NewGuid();
+        var profile = MakeProfile(clientId, purposes: AiPurpose.ReviewDefault);
+        db.AiConnectionProfiles.Add(profile);
+        await db.SaveChangesAsync();
+
+        var repo = CreateRepository(db);
+        var result = await repo.ActivateAsync(profile.Id);
+
+        Assert.False(result.Activated);
+        // The first unmet requirement is reported; with only ReviewDefault bound that is MemoryReconsideration.
+        Assert.Contains("MemoryReconsideration", result.Reason!, StringComparison.Ordinal);
+        Assert.DoesNotContain("verified", result.Reason!, StringComparison.Ordinal);
     }
 
     [Fact]
-    public async Task ActivateAsync_ConnectionNotFound_ReturnsFalse()
+    public async Task ActivateAsync_ConnectionNotFound_RefusesAndSaysWhy()
     {
         await using var db = CreateContext();
         var repo = CreateRepository(db);
 
         var result = await repo.ActivateAsync(Guid.NewGuid());
 
-        Assert.False(result);
+        Assert.False(result.Activated);
+        Assert.Contains("no longer exists", result.Reason!, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -815,7 +837,7 @@ public sealed class AiConnectionRepositoryTests
         Assert.Equal(AiVerificationStatus.NeverVerified, reloaded.Verification.Status);
 
         var activated = await repo.ActivateAsync(profile.Id);
-        Assert.False(activated);
+        Assert.False(activated.Activated);
     }
 
     [Fact]

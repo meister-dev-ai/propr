@@ -301,7 +301,7 @@ public sealed class AiConnectionRepository(
     }
 
     /// <inheritdoc />
-    public async Task<bool> ActivateAsync(Guid connectionId, CancellationToken ct = default)
+    public async Task<AiConnectionActivationResultDto> ActivateAsync(Guid connectionId, CancellationToken ct = default)
     {
         var target = await dbContext.AiConnectionProfiles
             .Include(profile => profile.ConfiguredModels)
@@ -310,17 +310,19 @@ public sealed class AiConnectionRepository(
             .FirstOrDefaultAsync(profile => profile.Id == connectionId, ct);
         if (target is null)
         {
-            return false;
+            return AiConnectionActivationResultDto.NotFound;
         }
 
+        // Each requirement reports itself, so an operator is told which one to fix rather than given the list of
+        // everything activation needs and left to work out which part applies.
         if (!string.Equals(target.VerificationSnapshot?.Status, AiVerificationStatus.Verified.ToString(), StringComparison.Ordinal))
         {
-            return false;
+            return AiConnectionActivationResultDto.Refused("the profile has not been verified since its last change — verify it, then activate");
         }
 
-        if (!HasValidRequiredBindings(target))
+        if (DescribeMissingRequiredBinding(target) is { } bindingProblem)
         {
-            return false;
+            return AiConnectionActivationResultDto.Refused(bindingProblem);
         }
 
         var others = await dbContext.AiConnectionProfiles
@@ -355,7 +357,7 @@ public sealed class AiConnectionRepository(
 
         await transaction.CommitAsync(ct);
         await this.AuditAsync("activated", target, false, ct);
-        return true;
+        return AiConnectionActivationResultDto.Success;
     }
 
     public async Task<bool> DeactivateAsync(Guid connectionId, CancellationToken ct = default)
@@ -800,7 +802,9 @@ public sealed class AiConnectionRepository(
             .ToList();
     }
 
-    private static bool HasValidRequiredBindings(AiConnectionProfileRecord record)
+    // Returns which required binding is missing or unusable, or null when they are all satisfied. The same walk
+    // that decided activation produces the explanation, so the two cannot disagree.
+    private static string? DescribeMissingRequiredBinding(AiConnectionProfileRecord record)
     {
         foreach (var purpose in RequiredActivationPurposes)
         {
@@ -808,17 +812,22 @@ public sealed class AiConnectionRepository(
 
             if (binding is null)
             {
-                return false;
+                return $"the '{purpose}' purpose has no enabled binding";
             }
 
             var model = record.ConfiguredModels.FirstOrDefault(candidate => candidate.Id == binding.ConfiguredModelId);
-            if (model is null || !IsBindingValid(purpose, model, binding))
+            if (model is null)
             {
-                return false;
+                return $"the '{purpose}' binding points at a model this profile no longer configures";
+            }
+
+            if (!IsBindingValid(purpose, model, binding))
+            {
+                return $"the model '{model.RemoteModelId}' bound to '{purpose}' lacks a capability that purpose needs";
             }
         }
 
-        return true;
+        return null;
     }
 
     private static AiPurposeBindingRecord? FindActiveBindingRecord(AiConnectionProfileRecord record, AiPurpose purpose)
@@ -1035,7 +1044,7 @@ public sealed class AiConnectionRepository(
                 .ToDictionary(group => group.First().Key.Trim(), group => group.First().Value.Trim(), StringComparer.OrdinalIgnoreCase);
     }
 
-    public Task<bool> ActivateAsync(Guid connectionId, string model, CancellationToken ct = default)
+    public Task<AiConnectionActivationResultDto> ActivateAsync(Guid connectionId, string model, CancellationToken ct = default)
     {
         _ = model;
         return this.ActivateAsync(connectionId, ct);

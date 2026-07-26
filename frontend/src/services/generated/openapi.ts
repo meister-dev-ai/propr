@@ -3192,6 +3192,89 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/clients/{clientId}/ai-connections/probe": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Probes an unsaved profile: validates the target, then asks the provider whether the endpoint is
+         *     reachable and the credential accepted. Nothing is persisted, so a credential can be tested before it is
+         *     stored — the alternative is saving a profile in order to find out that its key is wrong.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    clientId: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: {
+                content: {
+                    "application/json": components["schemas"]["ProbeAiConnectionRequest"];
+                    "text/json": components["schemas"]["ProbeAiConnectionRequest"];
+                    "application/*+json": components["schemas"]["ProbeAiConnectionRequest"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["AiVerificationResultDto"];
+                        "application/json": components["schemas"]["AiVerificationResultDto"];
+                        "text/json": components["schemas"]["AiVerificationResultDto"];
+                    };
+                };
+                /** @description Bad Request */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Unauthorized */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Forbidden */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/admin/clients/{clientId}/budget/consumption": {
         parameters: {
             query?: never;
@@ -14767,6 +14850,21 @@ export interface components {
             lastIndexedCommitSha?: string | null;
             isEnabled?: boolean;
             freshnessStatus?: string | null;
+        };
+        /** @description Request body for probing a profile that has not been saved yet. */
+        ProbeAiConnectionRequest: {
+            providerKind: components["schemas"]["AiProviderKind"];
+            /** @description The base URL to probe. */
+            baseUrl?: string | null;
+            auth?: components["schemas"]["AiConnectionAuthRequest"];
+            /** @description Optional headers the profile would send. */
+            defaultHeaders?: {
+                [key: string]: string;
+            } | null;
+            /** @description Optional query parameters the profile would send. */
+            defaultQueryParams?: {
+                [key: string]: string;
+            } | null;
         };
         ProblemDetails: {
             type?: string | null;

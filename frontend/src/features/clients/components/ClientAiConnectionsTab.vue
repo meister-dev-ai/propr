@@ -203,6 +203,28 @@
                 <option value="manualOnly">Manual Only</option>
               </select>
             </label>
+
+            <div class="form-field ai-form-grid-full ai-probe-row">
+              <button
+                type="button"
+                class="btn-secondary btn-sm"
+                :disabled="probing"
+                data-testid="ai-probe-connection"
+                @click="handleProbeConnection"
+              >
+                <i class="fi fi-rr-plug"></i> {{ probing ? 'Testing…' : 'Test connection' }}
+              </button>
+              <small class="field-hint-inline">
+                Checks the endpoint and credential without saving them, so a wrong key surfaces before it is stored.
+              </small>
+              <p
+                v-if="probeMessage"
+                :class="probeFailed ? 'error' : 'success-text'"
+                data-testid="ai-probe-result"
+              >
+                {{ probeMessage }}
+              </p>
+            </div>
           </div>
 
           <div class="ai-subsection ai-advanced-section">
@@ -569,6 +591,10 @@ const {
   addModel,
   removeModel,
   handleDiscoverModels,
+  handleProbeConnection,
+  probing,
+  probeMessage,
+  probeFailed,
   saveProfile,
   handleVerify,
   handleActivate,
