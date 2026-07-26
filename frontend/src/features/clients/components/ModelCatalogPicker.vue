@@ -99,9 +99,12 @@ function pricingNote(entry: AiModelCatalogEntryDto): string {
 
 <template>
   <div class="catalog-picker">
+    <!-- Opens a panel rather than acting on a row, so it is sized like the other section actions it stands
+         beside; an extra-small pill next to them read as a different kind of control. -->
     <button
       v-if="!open"
-      class="btn-secondary btn-xs"
+      class="btn-secondary btn-sm"
+      type="button"
       data-testid="catalog-picker-open"
       @click.prevent="openPicker"
     >

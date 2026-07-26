@@ -91,18 +91,21 @@ async function save(): Promise<void> {
 </script>
 
 <template>
-  <section class="card" data-testid="tenant-provider-allow-list">
-    <header class="section-header">
-      <h3>Permitted AI providers and destinations</h3>
-      <p class="muted">
-        Restrict which provider families this tenant's clients may configure, and which hosts their AI traffic may
-        reach. Leaving either empty places no restriction on it — a policy is a restriction, so an empty selection
-        is no restriction at all.
-      </p>
-    </header>
+  <section class="section-card tenant-provider-allow-list" data-testid="tenant-provider-allow-list">
+    <div class="section-card-header">
+      <div>
+        <h2>Permitted AI providers and destinations</h2>
+        <p class="section-subtitle">
+          Restrict which provider families this tenant's clients may configure, and which hosts their AI traffic may
+          reach. Leaving either empty places no restriction on it — a policy is a restriction, so an empty selection
+          is no restriction at all.
+        </p>
+      </div>
+    </div>
 
-    <p v-if="errorMessage" class="form-error" data-testid="tenant-provider-policy-error">{{ errorMessage }}</p>
-    <p v-if="loading" class="muted">Loading provider policy…</p>
+    <div class="section-card-body">
+    <p v-if="errorMessage" class="error" data-testid="tenant-provider-policy-error">{{ errorMessage }}</p>
+    <p v-if="loading" class="muted-hint">Loading provider policy…</p>
 
     <template v-else>
       <div class="provider-policy-grid">
@@ -160,6 +163,7 @@ async function save(): Promise<void> {
         <span v-if="savedMessage" class="muted" data-testid="tenant-provider-policy-saved">{{ savedMessage }}</span>
       </div>
     </template>
+    </div>
   </section>
 </template>
 

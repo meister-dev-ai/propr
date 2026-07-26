@@ -236,19 +236,22 @@ function priceCell(value: number | null | undefined): string {
 </script>
 
 <template>
-  <section class="card" data-testid="tenant-model-catalog">
-    <header class="section-header">
-      <h3>Model pricing overrides</h3>
-      <p class="muted">
-        Record the rates your tenant actually pays. A price left empty inherits the catalog's list price, so cost
-        caps are enforced against what you are billed rather than the vendor's published rate.
-      </p>
-    </header>
+  <section class="section-card tenant-model-catalog" data-testid="tenant-model-catalog">
+    <div class="section-card-header">
+      <div>
+        <h2>Model pricing overrides</h2>
+        <p class="section-subtitle">
+          Record the rates your tenant actually pays. A price left empty inherits the catalog's list price, so cost
+          caps are enforced against what you are billed rather than the vendor's published rate.
+        </p>
+      </div>
+    </div>
 
-    <p v-if="errorMessage" class="form-error" data-testid="tenant-catalog-error">{{ errorMessage }}</p>
-    <p v-if="loading" class="muted">Loading overrides…</p>
+    <div class="section-card-body">
+    <p v-if="errorMessage" class="error" data-testid="tenant-catalog-error">{{ errorMessage }}</p>
+    <p v-if="loading" class="muted-hint">Loading overrides…</p>
 
-    <table v-else-if="overrides.length > 0" class="data-table" data-testid="tenant-override-table">
+    <table v-else-if="overrides.length > 0" data-testid="tenant-override-table">
       <thead>
         <tr>
           <th>Provider</th>
@@ -275,7 +278,7 @@ function priceCell(value: number | null | undefined): string {
       </tbody>
     </table>
 
-    <p v-else class="muted" data-testid="tenant-override-empty">
+    <p v-else class="muted-hint" data-testid="tenant-override-empty">
       No overrides yet. Every model is priced at the catalog's list price.
     </p>
 
@@ -285,7 +288,7 @@ function priceCell(value: number | null | undefined): string {
         :load-models="(providerId) => listTenantModels(props.tenantId, providerId)"
         @pick="startFromCatalog"
       />
-      <button class="btn-secondary btn-xs" data-testid="define-model-open" @click.prevent="startDefinition">
+      <button class="btn-secondary btn-sm" type="button" data-testid="define-model-open" @click.prevent="startDefinition">
         Define a model the catalog does not list…
       </button>
     </div>
@@ -378,6 +381,7 @@ function priceCell(value: number | null | undefined): string {
         <button class="btn-secondary btn-sm" type="button" @click="draft = null">Cancel</button>
       </div>
     </form>
+    </div>
   </section>
 </template>
 
@@ -393,7 +397,16 @@ function priceCell(value: number | null | undefined): string {
   justify-content: flex-end;
 }
 
-.override-add,
+/* The two ways to start an override sit side by side: they are alternatives, and stacked they read as a list of
+   steps. Same row gap the other section actions on this page use. */
+.override-add {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  margin-block-start: 0.75rem;
+}
+
 .override-form {
   margin-block-start: 0.75rem;
 }
