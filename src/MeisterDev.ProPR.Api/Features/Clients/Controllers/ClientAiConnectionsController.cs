@@ -69,10 +69,15 @@ public sealed partial class ClientAiConnectionsController(
     }
 
     /// <summary>
-    ///     Lists the provider families this client's tenant permits, so the configuration UI can offer only those.
-    ///     An unrestricted tenant reports every family rather than an empty list, because "no restriction" and
-    ///     "nothing permitted" would otherwise be indistinguishable to a caller.
+    ///     Lists the provider families this client can actually configure: those its tenant permits, intersected
+    ///     with those this build has a driver for. An unrestricted tenant reports every implemented family rather
+    ///     than an empty list, because "no restriction" and "nothing permitted" would otherwise be
+    ///     indistinguishable to a caller.
     /// </summary>
+    /// <remarks>
+    ///     The driver intersection is what keeps the provider enum safe to open ahead of its drivers: a family
+    ///     that cannot be called is never offered, so nobody configures a profile that fails at review time.
+    /// </remarks>
     [HttpGet("permitted-providers")]
     [ProducesResponseType(typeof(PermittedProvidersResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
@@ -85,16 +90,18 @@ public sealed partial class ClientAiConnectionsController(
             return authResult;
         }
 
+        var implemented = providerDrivers.RegisteredKinds;
         if (providerPolicies is null)
         {
-            return this.Ok(new PermittedProvidersResponse(Enum.GetValues<AiProviderKind>(), false));
+            return this.Ok(new PermittedProvidersResponse(implemented, false, implemented));
         }
 
         var policy = await providerPolicies.GetForClientAsync(clientId, ct);
         return this.Ok(
             new PermittedProvidersResponse(
-                policy.IsRestricted ? policy.AllowedKinds : Enum.GetValues<AiProviderKind>(),
-                policy.IsRestricted));
+                [.. implemented.Where(policy.IsAllowed)],
+                policy.IsRestricted,
+                implemented));
     }
 
     /// <summary>Creates a new AI connection profile for the specified client.</summary>
@@ -112,6 +119,11 @@ public sealed partial class ClientAiConnectionsController(
         if (authResult is not null)
         {
             return authResult;
+        }
+
+        if (this.RefuseUnimplementedProvider(request.ProviderKind) is { } unimplemented)
+        {
+            return unimplemented;
         }
 
         var writeRequest = this.TryBuildWriteRequest(request);
@@ -157,6 +169,12 @@ public sealed partial class ClientAiConnectionsController(
         if (existing is null || existing.ClientId != clientId)
         {
             return this.NotFound();
+        }
+
+        // An update can switch the family, so the same refusal applies here as on create.
+        if (request.ProviderKind is { } switchedKind && this.RefuseUnimplementedProvider(switchedKind) is { } unimplemented)
+        {
+            return unimplemented;
         }
 
         var writeRequest = this.TryBuildWriteRequest(existing, request);
@@ -325,6 +343,11 @@ public sealed partial class ClientAiConnectionsController(
             return authResult;
         }
 
+        if (this.RefuseUnimplementedProvider(request.ProviderKind) is { } unimplemented)
+        {
+            return unimplemented;
+        }
+
         var probeOptions = this.TryBuildProbeOptions(request.ProviderKind, request.BaseUrl, request.Auth, request.DefaultHeaders, request.DefaultQueryParams);
         if (probeOptions is null)
         {
@@ -356,6 +379,11 @@ public sealed partial class ClientAiConnectionsController(
             return authResult;
         }
 
+        if (this.RefuseUnimplementedProvider(request.ProviderKind) is { } unimplemented)
+        {
+            return unimplemented;
+        }
+
         // The tenant's provider policy is answered before anything is dialled: probing a forbidden provider would
         // reach it with a credential the tenant has decided it does not want used.
         if (providerPolicies is not null)
@@ -381,6 +409,22 @@ public sealed partial class ClientAiConnectionsController(
 
         var driver = providerDrivers.GetRequired(request.ProviderKind);
         return this.Ok((await driver.VerifyAsync(probeOptions.ToProviderEndpoint(), ct)).ToDto());
+    }
+
+    // A provider family this build cannot call is refused where the operator can see it, naming what is
+    // available. Without this, opening the enum ahead of a driver would turn into a 500 from the registry.
+    private IActionResult? RefuseUnimplementedProvider(AiProviderKind providerKind)
+    {
+        if (providerDrivers.IsRegistered(providerKind))
+        {
+            return null;
+        }
+
+        this.ModelState.AddModelError(
+            "providerKind",
+            $"This build has no driver for the '{providerKind}' provider "
+            + $"(available: {string.Join(", ", providerDrivers.RegisteredKinds)}).");
+        return this.ValidationProblem();
     }
 
     private static AiConnectionProbeOptionsDto ToProbeOptions(AiConnectionDto connection)
@@ -836,10 +880,17 @@ public sealed record ProbeAiConnectionRequest(
     }
 }
 
-/// <summary>The provider families a client may configure, and whether that is a restriction at all.</summary>
-/// <param name="ProviderKinds">The permitted families; every known family when unrestricted.</param>
-/// <param name="IsRestricted">Whether the tenant has stated a policy.</param>
-public sealed record PermittedProvidersResponse(IReadOnlyList<AiProviderKind> ProviderKinds, bool IsRestricted);
+/// <summary>What a client may configure, and enough to explain anything it may not.</summary>
+/// <param name="ProviderKinds">The families this client can configure: implemented here and permitted by its tenant.</param>
+/// <param name="IsRestricted">Whether the tenant has stated a provider policy at all.</param>
+/// <param name="ImplementedKinds">
+///     The families this build has a driver for, regardless of policy. Sent so a caller can tell the two reasons
+///     for absence apart — a family this build cannot call, and one the tenant has forbidden — instead of guessing.
+/// </param>
+public sealed record PermittedProvidersResponse(
+    IReadOnlyList<AiProviderKind> ProviderKinds,
+    bool IsRestricted,
+    IReadOnlyList<AiProviderKind> ImplementedKinds);
 
 /// <summary>Authentication settings for one AI connection profile request.</summary>
 public sealed record AiConnectionAuthRequest([property: JsonRequired] AiAuthMode Mode, string? ApiKey = null)

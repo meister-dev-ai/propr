@@ -83,7 +83,8 @@ public sealed class ClientAiConnectionsControllerTests(ClientsControllerTests.Cl
         string displayName,
         IReadOnlyList<string>? chatModels = null,
         string? baseUrl = null,
-        bool includeEffortOverrides = true)
+        bool includeEffortOverrides = true,
+        string providerKind = "azureOpenAi")
     {
         var resolvedChatModels = chatModels is { Count: > 0 } ? chatModels : new[] { "gpt-4o" };
         var embeddingModel = "text-embedding-3-large";
@@ -91,7 +92,7 @@ public sealed class ClientAiConnectionsControllerTests(ClientsControllerTests.Cl
         return new
         {
             displayName,
-            providerKind = "azureOpenAi",
+            providerKind,
             baseUrl = baseUrl ?? "https://my-openai.openai.azure.com/",
             auth = new
             {
@@ -102,6 +103,41 @@ public sealed class ClientAiConnectionsControllerTests(ClientsControllerTests.Cl
             configuredModels = resolvedChatModels.Select(model => BuildConfiguredModel(model)).Concat([BuildConfiguredModel(embeddingModel, true)]),
             purposeBindings = BuildBindings(resolvedChatModels[0], embeddingModel, includeEffortOverrides),
         };
+    }
+
+    // #148 opens the provider enum ahead of the native drivers. These two tests are what make that safe: a family
+    // this build cannot call is never offered, and is refused with a message naming what is available if someone
+    // sends it anyway. Without them, opening the enum would just move the failure to review time.
+    [Fact]
+    public async Task PermittedProviders_OffersOnlyFamiliesThisBuildCanCall()
+    {
+        var client = this.CreateAuthorizedClient();
+
+        var response = await client.GetAsync($"/clients/{ClientId}/ai-connections/permitted-providers");
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var payload = await response.Content.ReadFromJsonAsync<JsonElement>(ApiJsonOptions);
+        var offered = payload.GetProperty("providerKinds").EnumerateArray().Select(kind => kind.GetString()).ToList();
+
+        Assert.Contains("azureOpenAi", offered);
+        Assert.Contains("openAiCompatible", offered);
+        Assert.DoesNotContain("anthropic", offered);
+        Assert.DoesNotContain("awsBedrock", offered);
+        Assert.DoesNotContain("googleVertex", offered);
+    }
+
+    [Fact]
+    public async Task CreateAiConnection_ForAFamilyWithNoDriver_IsRefusedNamingWhatIsAvailable()
+    {
+        var client = this.CreateAuthorizedClient();
+        var response = await client.PostAsJsonAsync(
+            $"/clients/{ClientId}/ai-connections",
+            BuildCreatePayload("Native Claude", providerKind: "anthropic"));
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        var body = await response.Content.ReadAsStringAsync();
+        Assert.Contains("Anthropic", body, StringComparison.Ordinal);
+        Assert.Contains("OpenAiCompatible", body, StringComparison.Ordinal);
     }
 
     private async Task<AiConnectionDto> SeedConnectionAsync(

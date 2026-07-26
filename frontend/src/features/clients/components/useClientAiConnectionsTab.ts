@@ -71,18 +71,36 @@ export function useClientAiConnectionsTab(props: { clientId: string }) {
     bindings: [] as EditableBinding[],
   })
 
-  // Which provider families the tenant permits. Loaded alongside the profiles so the form offers only what can
-  // actually be saved, and so a profile already configured on a now-forbidden family can be labelled rather than
-  // silently failing when someone next runs a review.
+  // What this client may configure, straight from the server: families this build has a driver for, intersected
+  // with what the tenant permits. The server is authoritative for both, which is what keeps a provider family
+  // that is named in the enum but has no driver from ever being offered.
   const permittedProviderKinds = ref<AiProviderKind[]>([])
+  const implementedProviderKinds = ref<AiProviderKind[]>([])
   const providersRestricted = ref(false)
 
+  // An empty list means the lookup failed rather than "nothing allowed" — the form still offers everything and
+  // the server refuses anything invalid, which beats locking an operator out of the screen over a failed GET.
   const availableProviderOptions = computed(() =>
-    providerOptions.filter((option) => !providersRestricted.value || permittedProviderKinds.value.includes(option.value)),
+    permittedProviderKinds.value.length === 0
+      ? providerOptions
+      : providerOptions.filter((option) => permittedProviderKinds.value.includes(option.value)),
   )
 
   const isProviderPermitted = (providerKind: AiProviderKind | undefined) =>
-    !providersRestricted.value || (providerKind !== undefined && permittedProviderKinds.value.includes(providerKind))
+    permittedProviderKinds.value.length === 0
+    || (providerKind !== undefined && permittedProviderKinds.value.includes(providerKind))
+
+  // The two reasons a family can be unavailable need different fixes — one is an operator's tenant policy, the
+  // other is a build that has no driver — so they are reported apart rather than as one vague refusal.
+  const providerUnavailableReason = (providerKind: AiProviderKind | undefined): string => {
+    if (providerKind === undefined || isProviderPermitted(providerKind)) {
+      return ''
+    }
+
+    return implementedProviderKinds.value.includes(providerKind)
+      ? 'This tenant does not permit this provider, so reviews using this profile are refused.'
+      : 'This build has no driver for this provider, so reviews using this profile are refused.'
+  }
 
   const showListView = computed(() => viewMode.value === 'list')
   const selectedProfile = computed(() => profiles.value.find((profile) => profile.id === editor.profileId) ?? null)
@@ -102,9 +120,11 @@ export function useClientAiConnectionsTab(props: { clientId: string }) {
       try {
         const permitted = await listPermittedProviders(props.clientId)
         permittedProviderKinds.value = permitted.providerKinds
+        implementedProviderKinds.value = permitted.implementedKinds ?? []
         providersRestricted.value = permitted.isRestricted
       } catch {
         permittedProviderKinds.value = []
+        implementedProviderKinds.value = []
         providersRestricted.value = false
       }
 
@@ -597,6 +617,7 @@ export function useClientAiConnectionsTab(props: { clientId: string }) {
     modelsForPurpose,
     availableProviderOptions,
     isProviderPermitted,
+    providerUnavailableReason,
     providersRestricted,
     // actions
     refreshProfiles,

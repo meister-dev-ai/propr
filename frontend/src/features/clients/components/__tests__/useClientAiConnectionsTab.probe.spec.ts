@@ -40,6 +40,7 @@ describe('probing a connection before saving it', () => {
     vi.mocked(listPermittedProviders).mockResolvedValue({
       providerKinds: ['azureOpenAi', 'openAi', 'liteLlm', 'openAiCompatible'],
       isRestricted: false,
+      implementedKinds: ['azureOpenAi', 'openAi', 'liteLlm', 'openAiCompatible'],
     })
     vi.mocked(probeAiConnection).mockReset()
   })

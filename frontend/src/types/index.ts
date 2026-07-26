@@ -2677,9 +2677,12 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * Lists the provider families this client's tenant permits, so the configuration UI can offer only those.
-         *     An unrestricted tenant reports every family rather than an empty list, because "no restriction" and
-         *     "nothing permitted" would otherwise be indistinguishable to a caller.
+         * Lists the provider families this client can actually configure: those its tenant permits, intersected
+         *     with those this build has a driver for. An unrestricted tenant reports every implemented family rather
+         *     than an empty list, because "no restriction" and "nothing permitted" would otherwise be
+         *     indistinguishable to a caller.
+         * @description The driver intersection is what keeps the provider enum safe to open ahead of its drivers: a family
+         *     that cannot be called is never offered, so nobody configures a profile that fails at review time.
          */
         get: {
             parameters: {
@@ -12885,7 +12888,7 @@ export interface components {
          * @description Authentication modes supported by AI providers.
          * @enum {string}
          */
-        AiAuthMode: "apiKey" | "azureIdentity";
+        AiAuthMode: "apiKey" | "azureIdentity" | "xApiKey" | "sigV4" | "gcpAdc";
         /** @description One configured or discovered model that belongs to an AI connection profile. */
         AiConfiguredModelDto: {
             /** Format: uuid */
@@ -13191,12 +13194,12 @@ export interface components {
          * @description Provider protocol mode used for a configured model binding.
          * @enum {string}
          */
-        AiProtocolMode: "auto" | "responses" | "chatCompletions" | "embeddings";
+        AiProtocolMode: "auto" | "responses" | "chatCompletions" | "embeddings" | "anthropicMessages" | "bedrockConverse" | "googleGenerateContent";
         /**
-         * @description Supported AI provider families.
+         * @description AI provider families the system can describe.
          * @enum {string}
          */
-        AiProviderKind: "azureOpenAi" | "openAi" | "liteLlm" | "openAiCompatible";
+        AiProviderKind: "azureOpenAi" | "openAi" | "liteLlm" | "openAiCompatible" | "anthropic" | "awsBedrock" | "googleVertex";
         /**
          * @description Product-owned AI purposes that resolve to configured models.
          * @enum {string}
@@ -14378,12 +14381,17 @@ export interface components {
             key?: string | null;
             overrideState?: components["schemas"]["PremiumCapabilityOverrideState"];
         };
-        /** @description The provider families a client may configure, and whether that is a restriction at all. */
+        /** @description What a client may configure, and enough to explain anything it may not. */
         PermittedProvidersResponse: {
-            /** @description The permitted families; every known family when unrestricted. */
+            /** @description The families this client can configure: implemented here and permitted by its tenant. */
             providerKinds?: components["schemas"]["AiProviderKind"][] | null;
-            /** @description Whether the tenant has stated a policy. */
+            /** @description Whether the tenant has stated a provider policy at all. */
             isRestricted?: boolean;
+            /**
+             * @description The families this build has a driver for, regardless of policy. Sent so a caller can tell the two reasons
+             *     for absence apart — a family this build cannot call, and one the tenant has forbidden — instead of guessing.
+             */
+            implementedKinds?: components["schemas"]["AiProviderKind"][] | null;
         };
         /** @description Summary of a single review job within the PR view. */
         PrJobSummaryDto: {

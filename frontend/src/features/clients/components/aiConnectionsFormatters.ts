@@ -15,11 +15,20 @@ import type { AiModelCatalogEntryDto } from '@/services/modelCatalogService'
 // Static option tables and pure label/parse helpers for the AI-connections form.
 // Extracted from ClientAiConnectionsTab.vue so the component holds only state.
 
+/**
+ * Every provider family the system can name, with its label. This is the LABEL CATALOGUE, not the offer list:
+ * which families a given client may actually pick comes from the server, because a family can be named here
+ * before this build has a driver for it. Rendering a label for such a family still matters — a profile carrying
+ * one has to read as itself rather than as "Unknown".
+ */
 export const providerOptions: Array<{ value: AiProviderKind; label: string }> = [
   { value: 'azureOpenAi', label: 'Azure OpenAI / AI Foundry' },
   { value: 'openAi', label: 'OpenAI (non-Azure)' },
   { value: 'liteLlm', label: 'LiteLLM' },
   { value: 'openAiCompatible', label: 'OpenAI-compatible (custom base URL)' },
+  { value: 'anthropic', label: 'Anthropic (native)' },
+  { value: 'awsBedrock', label: 'AWS Bedrock' },
+  { value: 'googleVertex', label: 'Google Gemini / Vertex AI' },
 ]
 
 // Sections group the purpose rows in the editor so the flat list stays readable as purposes grow.
@@ -50,6 +59,9 @@ export const protocolOptionLabels: Record<AiProtocolMode, string> = {
   responses: 'Responses',
   chatCompletions: 'Chat Completions',
   embeddings: 'Embeddings',
+  anthropicMessages: 'Anthropic Messages',
+  bedrockConverse: 'Bedrock Converse',
+  googleGenerateContent: 'Google generateContent',
 }
 
 export const enabledBindings = (profile: AiConnectionDto) => (profile.purposeBindings ?? []).filter((binding) => binding.isEnabled)

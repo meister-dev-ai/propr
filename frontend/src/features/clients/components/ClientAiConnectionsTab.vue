@@ -76,10 +76,10 @@
                 <span
                   v-if="!isProviderPermitted(profile.providerKind)"
                   class="chip chip-sm chip-danger"
-                  :title="`This tenant no longer permits ${providerLabel(profile.providerKind)}, so reviews using this profile are refused.`"
+                  :title="providerUnavailableReason(profile.providerKind)"
                   data-testid="ai-provider-unavailable"
                 >
-                  Unavailable: provider not permitted
+                  Unavailable
                 </span>
                 <span :class="['chip', 'chip-sm', profile.isActive ? 'chip-success' : 'chip-muted']">
                   {{ profile.isActive ? 'Active' : 'Inactive' }}
@@ -581,6 +581,7 @@ const {
   selectedProfile,
   availableProviderOptions,
   isProviderPermitted,
+  providerUnavailableReason,
   providersRestricted,
   refreshProfiles,
   resetEditor,

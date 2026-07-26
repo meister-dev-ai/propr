@@ -3590,7 +3590,8 @@
         "tags": [
           "ClientAiConnections"
         ],
-        "summary": "Lists the provider families this client's tenant permits, so the configuration UI can offer only those.\nAn unrestricted tenant reports every family rather than an empty list, because \"no restriction\" and\n\"nothing permitted\" would otherwise be indistinguishable to a caller.",
+        "summary": "Lists the provider families this client can actually configure: those its tenant permits, intersected\nwith those this build has a driver for. An unrestricted tenant reports every implemented family rather\nthan an empty list, because \"no restriction\" and \"nothing permitted\" would otherwise be\nindistinguishable to a caller.",
+        "description": "The driver intersection is what keeps the provider enum safe to open ahead of its drivers: a family\nthat cannot be called is never offered, so nobody configures a profile that fails at review time.",
         "parameters": [
           {
             "name": "clientId",
@@ -18869,7 +18870,10 @@
       "AiAuthMode": {
         "enum": [
           "apiKey",
-          "azureIdentity"
+          "azureIdentity",
+          "xApiKey",
+          "sigV4",
+          "gcpAdc"
         ],
         "type": "string",
         "description": "Authentication modes supported by AI providers."
@@ -19482,7 +19486,10 @@
           "auto",
           "responses",
           "chatCompletions",
-          "embeddings"
+          "embeddings",
+          "anthropicMessages",
+          "bedrockConverse",
+          "googleGenerateContent"
         ],
         "type": "string",
         "description": "Provider protocol mode used for a configured model binding."
@@ -19492,10 +19499,13 @@
           "azureOpenAi",
           "openAi",
           "liteLlm",
-          "openAiCompatible"
+          "openAiCompatible",
+          "anthropic",
+          "awsBedrock",
+          "googleVertex"
         ],
         "type": "string",
-        "description": "Supported AI provider families."
+        "description": "AI provider families the system can describe."
       },
       "AiPurpose": {
         "enum": [
@@ -22127,16 +22137,24 @@
             "items": {
               "$ref": "#/components/schemas/AiProviderKind"
             },
-            "description": "The permitted families; every known family when unrestricted.",
+            "description": "The families this client can configure: implemented here and permitted by its tenant.",
             "nullable": true
           },
           "isRestricted": {
             "type": "boolean",
-            "description": "Whether the tenant has stated a policy."
+            "description": "Whether the tenant has stated a provider policy at all."
+          },
+          "implementedKinds": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AiProviderKind"
+            },
+            "description": "The families this build has a driver for, regardless of policy. Sent so a caller can tell the two reasons\nfor absence apart — a family this build cannot call, and one the tenant has forbidden — instead of guessing.",
+            "nullable": true
           }
         },
         "additionalProperties": false,
-        "description": "The provider families a client may configure, and whether that is a restriction at all."
+        "description": "What a client may configure, and enough to explain anything it may not."
       },
       "PrJobSummaryDto": {
         "type": "object",

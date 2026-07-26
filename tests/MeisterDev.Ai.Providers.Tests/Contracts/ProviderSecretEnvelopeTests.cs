@@ -88,6 +88,24 @@ public sealed class ProviderSecretEnvelopeTests
         Assert.Equal(AiAuthMode.ApiKey, decoded.Mode);
     }
 
+    // The auth modes opened by #148 are exactly the ones whose credential is not a single string, so the envelope
+    // has to carry them intact and keep the mode that was stored.
+    [Theory]
+    [InlineData(AiAuthMode.SigV4)]
+    [InlineData(AiAuthMode.GcpAdc)]
+    [InlineData(AiAuthMode.XApiKey)]
+    public void TheNewAuthModesRoundTripWithTheirFields(AiAuthMode mode)
+    {
+        var envelope = new ProviderSecretEnvelope(
+            mode,
+            new Dictionary<string, string> { ["accessKeyId"] = "AKIA-example", ["secretAccessKey"] = "secret-part" });
+
+        var decoded = ProviderSecretEnvelope.Decode(envelope.Encode(), AiAuthMode.ApiKey);
+
+        Assert.Equal(mode, decoded.Mode);
+        Assert.Equal("secret-part", decoded.Fields["secretAccessKey"]);
+    }
+
     [Fact]
     public void RenderingTheEnvelopeNamesItsFieldsAndNeverTheirValues()
     {
