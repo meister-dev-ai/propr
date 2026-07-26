@@ -181,6 +181,13 @@ function pricingNote(entry: AiModelCatalogEntryDto): string {
   flex-wrap: wrap;
 }
 
+/* A form field carries a bottom margin globally, which the last one in a card has reset. Laid out in a row and
+   aligned on their bottoms, that margin lifted the first field by its own 1.5rem — the row's gap is what spaces
+   these two, so the margin goes. */
+.catalog-toolbar .form-field {
+  margin-bottom: 0;
+}
+
 .catalog-search {
   flex: 1 1 12rem;
 }

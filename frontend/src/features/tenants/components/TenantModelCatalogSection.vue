@@ -439,6 +439,12 @@ function priceCell(value: number | null | undefined): string {
   gap: 0.85rem;
 }
 
+/* Same reason as the picker's toolbar: the grid's gap spaces these, so the field's own bottom margin would only
+   make the rows drift apart unevenly (the last field in a card has it reset, the others do not). */
+.catalog-form-grid .form-field {
+  margin-bottom: 0;
+}
+
 @media (width <= 48rem) {
   .catalog-form-grid {
     grid-template-columns: 1fr;
