@@ -3,19 +3,16 @@
 <!-- This file implements commercial-only functionality. A commercial license is required to activate or use that functionality. -->
 
 <template>
-    <div class="page-view tenant-spend-view">
+    <div class="tenant-spend-section">
         <section class="section-card">
             <div class="section-card-header">
                 <div>
-                    <h2>Tenant Spend</h2>
+                    <h2>Spend</h2>
                     <p class="section-subtitle">
                         Aggregate USD spend across every client in this tenant for the current period, with a
                         trailing per-month trend. Spend resets each month.
                     </p>
                 </div>
-                <RouterLink class="btn-secondary btn-sm" :to="{ name: 'tenant-budget-overview', params: { tenantId } }">
-                    Per-client overview
-                </RouterLink>
             </div>
 
             <div class="section-card-body">
@@ -100,7 +97,7 @@
 
 <script lang="ts" setup>
 import { computed, onMounted } from 'vue'
-import { RouterLink, useRoute } from 'vue-router'
+import { useRoute } from 'vue-router'
 import { Line } from 'vue-chartjs'
 import {
     CategoryScale,

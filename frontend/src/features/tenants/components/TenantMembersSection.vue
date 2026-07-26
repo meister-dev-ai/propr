@@ -1,18 +1,16 @@
 <!-- Copyright (c) Andreas Rain. -->
 <!-- Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms. -->
 <!-- This file implements commercial-only functionality. A commercial license is required to activate or use that functionality. -->
+<!-- Membership management as a section of the tenant workspace; the view model reads the tenant from the route. -->
 
 <template>
-  <div class="page-view tenant-members-view">
+  <div class="tenant-members-section">
     <section class="section-card">
       <div class="section-card-header">
         <div>
-          <h2>Tenant Members</h2>
+          <h2>Members</h2>
           <p class="section-subtitle">Manage user membership and tenant roles for this tenant.</p>
         </div>
-        <RouterLink class="btn-secondary btn-sm" :to="{ name: 'tenant-settings', params: { tenantId: vm.tenantId } }">
-          Tenant settings
-        </RouterLink>
       </div>
 
       <div v-if="vm.isLoading.value" class="section-card-body">
@@ -151,14 +149,13 @@
 </template>
 
 <script setup lang="ts">
-import { RouterLink } from 'vue-router'
 import { useTenantMembersViewModel } from '@/features/tenants/view-models/useTenantMembersViewModel'
 
 const vm = useTenantMembersViewModel()
 </script>
 
 <style scoped>
-.tenant-members-view {
+.tenant-members-section {
   display: flex;
   flex-direction: column;
   gap: 1rem;

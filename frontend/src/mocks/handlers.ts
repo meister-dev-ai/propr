@@ -2572,8 +2572,8 @@ export const handlers = [
   http.get(`${base}/clients`, async () => {
     await delay(300)
     return HttpResponse.json([
-      buildMockClient('1', 'Acme Corp'),
-      buildMockClient('2', 'Globex Inc', { isActive: false, recentUsageTokens: 0 }),
+      buildMockClient('1', 'Acme Corp', { tenantId: 'tenant-1', tenantDisplayName: 'Acme Corp', tenantSlug: 'acme' }),
+      buildMockClient('2', 'Globex Inc', { isActive: false, recentUsageTokens: 0, tenantId: 'tenant-1', tenantDisplayName: 'Acme Corp', tenantSlug: 'acme' }),
       buildMockClient('3', 'Umbrella Corp', { recentUsageTokens: 89300 }),
     ])
   }),

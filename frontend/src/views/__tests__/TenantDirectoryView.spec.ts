@@ -87,16 +87,17 @@ describe('TenantDirectoryView', () => {
     ])
   })
 
-  it('loads visible tenants and renders tenant administration links', async () => {
+  it('lists the visible tenants as rows that open each tenant', async () => {
     const wrapper = await mountView()
     await flushPromises()
 
     expect(listTenantsMock).toHaveBeenCalledTimes(1)
     expect(wrapper.text()).toContain('Acme Corp')
     expect(wrapper.text()).toContain('Globex')
-    expect(wrapper.text()).toContain('Tenant settings')
-    expect(wrapper.text()).toContain('Tenant members')
-    expect(wrapper.text()).toContain('Create client')
+    // Each row opens the tenant's own workspace; the sections that used to be buttons live there.
+    expect(wrapper.get('[data-testid="tenant-row-tenant-1"] a').attributes('href'))
+      .toContain('tenant-detail')
+    // The System tenant is the one row that cannot be configured, said in the table rather than after opening it.
     expect(wrapper.text()).toContain('Managed internally')
     expect(wrapper.text()).not.toContain('Local login enabled')
     expect(wrapper.text()).not.toContain('Local login disabled')
@@ -117,6 +118,8 @@ describe('TenantDirectoryView', () => {
     const wrapper = await mountView()
     await flushPromises()
 
+    // Creating is an action on the directory now rather than a form always sitting under it.
+    await wrapper.get('[data-testid="tenant-directory-create-open"]').trigger('click')
     await wrapper.get('[data-testid="tenant-create-slug"]').setValue('initech')
     await wrapper.get('[data-testid="tenant-create-display-name"]').setValue('Initech')
     await wrapper.get('[data-testid="tenant-create-submit"]').trigger('submit')
@@ -144,7 +147,8 @@ describe('TenantDirectoryView', () => {
     await flushPromises()
 
     expect(wrapper.find('[data-testid="tenant-create-submit"]').exists()).toBe(false)
-    expect(wrapper.text()).toContain('Create client')
+    // A tenant administrator still reaches their own tenant from the row.
+    expect(wrapper.find('[data-testid="tenant-row-tenant-1"]').exists()).toBe(true)
   })
 
   it('hides tenant creation in community edition', async () => {
@@ -172,7 +176,9 @@ describe('TenantDirectoryView', () => {
     const wrapper = await mountView()
     await flushPromises()
 
-    expect(wrapper.text()).toContain('Tenant settings')
+    // A tenant record without the flag predates it and is treated as configurable, so its row opens like any
+    // other rather than being marked internal.
+    expect(wrapper.find('[data-testid="tenant-row-tenant-legacy"]').exists()).toBe(true)
     expect(wrapper.text()).not.toContain('Managed internally')
   })
 })

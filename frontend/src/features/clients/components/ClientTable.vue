@@ -7,7 +7,7 @@
     <thead>
       <tr>
         <th>Display Name</th>
-        <th>Tenant</th>
+        <th v-if="!hideTenantColumn">Tenant</th>
         <th>Status</th>
         <th>Tokens (30d)</th>
         <th>Created</th>
@@ -16,7 +16,7 @@
     <tbody>
       <tr v-for="client in filteredClients" :key="client.id" class="row-clickable" @click="openClient(client.id)">
         <td><RouterLink :to="clientDetailRoute(client.id)" @click.stop>{{ client.displayName }}</RouterLink></td>
-        <td>
+        <td v-if="!hideTenantColumn">
           <div class="tenant-cell">
             <span>{{ client.tenantDisplayName ?? 'Unassigned' }}</span>
             <span v-if="client.tenantSlug" class="tenant-slug">/{{ client.tenantSlug }}</span>
@@ -57,6 +57,8 @@ const props = defineProps<{
   clients: ClientListItem[]
   filter: string
   tenantFilterId?: string
+  /** Inside one tenant's workspace every row has the same tenant, so naming it on each is noise. */
+  hideTenantColumn?: boolean
 }>()
 
 const router = useRouter()

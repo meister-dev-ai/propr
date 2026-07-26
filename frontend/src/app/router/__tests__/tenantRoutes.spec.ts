@@ -83,6 +83,39 @@ describe('tenant router scaffolding', () => {
     expect(route?.meta.requiresTenantAdmin).toBe(true)
   })
 
+  it('registers the tenant workspace the sections live in', async () => {
+    const router = await importRouter()
+    const route = router.getRoutes().find((candidate) => candidate.name === 'tenant-detail')
+
+    expect(route?.path).toBe('/tenants/:tenantId')
+    expect(route?.meta.requiresAuth).toBe(true)
+    expect(route?.meta.requiresTenantAdmin).toBe(true)
+  })
+
+  // The four tenant pages became sections of that workspace. Their paths still resolve, so a bookmark or an
+  // older link lands on the section it meant instead of a dead end.
+  // resolve() reports the matched record rather than following a redirect, so the record's own redirect is what
+  // says where the old path lands.
+  it.each([
+    ['tenant-settings', undefined],
+    ['tenant-members', 'members'],
+    ['tenant-budget-overview', 'budget'],
+    ['tenant-spend', 'spend'],
+  ])('sends the old %s path into the workspace', async (name, section) => {
+    const router = await importRouter()
+    const record = router.getRoutes().find((candidate) => candidate.name === name)
+    const redirect = record?.redirect as
+      | ((to: { params: Record<string, unknown> }) => { name: string; params: Record<string, unknown>; query: Record<string, unknown> })
+      | undefined
+
+    expect(typeof redirect).toBe('function')
+
+    const target = redirect!({ params: { tenantId: 'tenant-1' } })
+    expect(target.name).toBe('tenant-detail')
+    expect(target.params.tenantId).toBe('tenant-1')
+    expect(target.query.section).toBe(section)
+  })
+
   it('allows the clients directory for any authenticated client access role', async () => {
     const router = await importRouter()
     const route = router.getRoutes().find((candidate) => candidate.name === 'clients')

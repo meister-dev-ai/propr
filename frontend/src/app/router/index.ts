@@ -3,9 +3,25 @@
 // This file implements commercial-only functionality. A commercial license is required to activate or use that functionality.
 
 import { createRouter, createWebHistory } from 'vue-router'
-import type { RouteLocationNormalizedGeneric, RouteLocationRaw } from 'vue-router'
+import type { RouteLocationNormalizedGeneric, RouteLocationRaw, RouteRecordRaw } from 'vue-router'
 import { useSession } from '@/composables/useSession'
 import { RoleLevel } from '@/composables/roles'
+
+/** The tenant pages that became sections, by the route name each kept and the section it now opens. */
+const TENANT_SECTION_ROUTE_NAMES = {
+  settings: 'tenant-settings',
+  members: 'tenant-members',
+  budget: 'tenant-budget-overview',
+  spend: 'tenant-spend',
+} as const
+
+const TENANT_SECTION_QUERY = {
+  // Settings was the whole page; its landing section is the workspace's default, so it carries no section.
+  settings: '',
+  members: 'members',
+  budget: 'budget',
+  spend: 'spend',
+} as const
 
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
@@ -54,29 +70,23 @@ const router = createRouter({
       component: () => import('@/features/tenants/views/TenantExternalCallbackView.vue'),
     },
     {
-      path: '/tenants/:tenantId/settings',
-      name: 'tenant-settings',
-      component: () => import('@/features/tenants/views/TenantSettingsView.vue'),
+      path: '/tenants/:tenantId',
+      name: 'tenant-detail',
+      component: () => import('@/features/tenants/views/TenantDetailView.vue'),
       meta: { requiresAuth: true, requiresTenantAdmin: true },
     },
-    {
-      path: '/tenants/:tenantId/members',
-      name: 'tenant-members',
-      component: () => import('@/features/tenants/views/TenantMembersView.vue'),
+    // What used to be four tenant pages are sections of the workspace above. The routes keep their names and
+    // their guard so existing links (and anything holding a bookmark) land on the right section instead of 404.
+    ...(['settings', 'members', 'budget', 'spend'] as const).map((section): RouteRecordRaw => ({
+      path: `/tenants/:tenantId/${section}`,
+      name: TENANT_SECTION_ROUTE_NAMES[section],
+      redirect: (to) => ({
+        name: 'tenant-detail',
+        params: { tenantId: to.params.tenantId },
+        query: TENANT_SECTION_QUERY[section] ? { section: TENANT_SECTION_QUERY[section] } : {},
+      }),
       meta: { requiresAuth: true, requiresTenantAdmin: true },
-    },
-    {
-      path: '/tenants/:tenantId/budget',
-      name: 'tenant-budget-overview',
-      component: () => import('@/features/tenants/views/TenantBudgetOverviewView.vue'),
-      meta: { requiresAuth: true, requiresTenantAdmin: true },
-    },
-    {
-      path: '/tenants/:tenantId/spend',
-      name: 'tenant-spend',
-      component: () => import('@/features/tenants/views/TenantSpendView.vue'),
-      meta: { requiresAuth: true, requiresTenantAdmin: true },
-    },
+    })),
     {
       path: '/clients',
       name: 'clients',

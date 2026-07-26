@@ -3,18 +3,15 @@
 <!-- This file implements commercial-only functionality. A commercial license is required to activate or use that functionality. -->
 
 <template>
-    <div class="page-view tenant-budget-overview-view">
+    <div class="tenant-budget-section">
         <section class="section-card">
             <div class="section-card-header">
                 <div>
-                    <h2>Budget Overview</h2>
+                    <h2>Budget</h2>
                     <p class="section-subtitle">
                         Current-period USD spend against budget for every client in this tenant. Spend resets each month.
                     </p>
                 </div>
-                <RouterLink class="btn-secondary btn-sm" :to="{ name: 'tenant-settings', params: { tenantId } }">
-                    Tenant settings
-                </RouterLink>
             </div>
 
             <div class="section-card-body">
@@ -95,7 +92,7 @@
 
 <script lang="ts" setup>
 import { computed, onMounted, ref } from 'vue'
-import { RouterLink, useRoute } from 'vue-router'
+import { useRoute } from 'vue-router'
 import ConfirmDialog from '@/components/dialogs/ConfirmDialog.vue'
 import { formatUsd } from '@/components/usageDashboardFormatters'
 import { useSession } from '@/composables/useSession'

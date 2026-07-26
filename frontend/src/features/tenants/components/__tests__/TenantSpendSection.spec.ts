@@ -3,7 +3,7 @@
 
 import { describe, expect, it, vi } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
-import TenantSpendView from '@/features/tenants/views/TenantSpendView.vue'
+import TenantSpendSection from '@/features/tenants/components/TenantSpendSection.vue'
 import type { TenantSpend } from '@/services/tenantBudgetOverviewService'
 
 const getTenantBudgetSpendMock = vi.fn()
@@ -59,7 +59,7 @@ function spend(): TenantSpend {
 }
 
 function mountView() {
-  return mount(TenantSpendView, {
+  return mount(TenantSpendSection, {
     global: {
       stubs: {
         BudgetMeter: { template: '<div class="budget-meter-stub" />' },
@@ -68,7 +68,7 @@ function mountView() {
   })
 }
 
-describe('TenantSpendView', () => {
+describe('TenantSpendSection', () => {
   it('renders aggregate spend, summed caps, and the trend chart', async () => {
     capabilityAvailable = true
     getTenantBudgetSpendMock.mockResolvedValue({ data: spend() })

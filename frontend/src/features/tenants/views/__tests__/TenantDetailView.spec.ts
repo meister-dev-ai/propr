@@ -18,11 +18,13 @@ vi.mock('vue-router', async () => {
     ...actual,
     useRouter: () => ({
       push: vi.fn(),
+      replace: vi.fn(),
     }),
     useRoute: () => ({
       params: {
         tenantId: 'tenant-1',
       },
+      query: {},
     }),
   }
 })
@@ -51,13 +53,20 @@ vi.mock('@/composables/useNotification', () => ({
 vi.mock('@/composables/useSession', () => ({
   useSession: () => ({
     getCapability: () => ssoCapabilityRef.value,
+    isCapabilityAvailable: () => true,
   }),
 }))
 
-async function mountView() {
-  const { default: TenantSettingsView } = await import('@/features/tenants/views/TenantSettingsView.vue')
+/** Opens a section from the sidebar, as a person would, since only the active section is mounted. */
+async function openSection(wrapper: Awaited<ReturnType<typeof mountView>>, section: string) {
+  await wrapper.get(`[data-testid="tenant-nav-${section}"]`).trigger('click')
+  await flushPromises()
+}
 
-  return mount(TenantSettingsView, {
+async function mountView() {
+  const { default: TenantDetailView } = await import('@/features/tenants/views/TenantDetailView.vue')
+
+  return mount(TenantDetailView, {
     global: {
       stubs: {
         RouterLink: {
@@ -69,7 +78,7 @@ async function mountView() {
   })
 }
 
-describe('TenantSettingsView', () => {
+describe('TenantDetailView', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     ssoCapabilityRef.value = { isAvailable: true, message: null }
@@ -125,13 +134,17 @@ describe('TenantSettingsView', () => {
     expect(getTenantMock).toHaveBeenCalledWith('tenant-1')
     expect(listTenantSsoProvidersMock).toHaveBeenCalledWith('tenant-1')
     expect(wrapper.text()).toContain('Acme Corp')
-    expect(wrapper.text()).toContain('Acme Entra')
+    // The membership policy is what the workspace opens on; the providers it governs are their own section.
     expect(wrapper.text()).toContain('Tenant memberships are created when someone signs in through an enabled provider')
+
+    await openSection(wrapper, 'sso')
+    expect(wrapper.text()).toContain('Acme Entra')
   })
 
   it('shows the stable tenant redirect URI for provider registration', async () => {
     const wrapper = await mountView()
     await flushPromises()
+    await openSection(wrapper, 'sso')
 
     await wrapper.get('[data-testid="provider-add"]').trigger('click')
     await flushPromises()
@@ -160,6 +173,7 @@ describe('TenantSettingsView', () => {
 
     const wrapper = await mountView()
     await flushPromises()
+    await openSection(wrapper, 'sso')
 
     await wrapper.get('[data-testid="provider-add"]').trigger('click')
     await flushPromises()
@@ -213,6 +227,7 @@ describe('TenantSettingsView', () => {
 
     const wrapper = await mountView()
     await flushPromises()
+    await openSection(wrapper, 'sso')
 
     await wrapper.get('[data-testid="provider-edit"]').trigger('click')
     await flushPromises()

@@ -3,7 +3,7 @@
 
 import { describe, expect, it, vi } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
-import TenantBudgetOverviewView from '@/features/tenants/views/TenantBudgetOverviewView.vue'
+import TenantBudgetSection from '@/features/tenants/components/TenantBudgetSection.vue'
 import type { TenantBudgetOverview } from '@/services/tenantBudgetOverviewService'
 
 const getTenantBudgetOverviewMock = vi.fn()
@@ -44,12 +44,12 @@ function overview(): TenantBudgetOverview {
 }
 
 function mountView() {
-  return mount(TenantBudgetOverviewView, {
+  return mount(TenantBudgetSection, {
     global: { stubs: { BudgetMeter: { template: '<div class="budget-meter-stub" />' } } },
   })
 }
 
-describe('TenantBudgetOverviewView', () => {
+describe('TenantBudgetSection', () => {
   it('renders a filterable row per client with a drill-down link', async () => {
     capabilityAvailable = true
     getTenantBudgetOverviewMock.mockResolvedValue({ data: overview() })

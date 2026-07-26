@@ -47,8 +47,8 @@ vi.mock('@/composables/useNotification', () => ({
 }))
 
 async function mountView() {
-  const { default: TenantMembersView } = await import('@/features/tenants/views/TenantMembersView.vue')
-  return mount(TenantMembersView, {
+  const { default: TenantMembersSection } = await import('@/features/tenants/components/TenantMembersSection.vue')
+  return mount(TenantMembersSection, {
     global: {
       stubs: {
         RouterLink: {
@@ -60,7 +60,7 @@ async function mountView() {
   })
 }
 
-describe('TenantMembersView', () => {
+describe('TenantMembersSection', () => {
   beforeEach(() => {
     vi.clearAllMocks()
 
