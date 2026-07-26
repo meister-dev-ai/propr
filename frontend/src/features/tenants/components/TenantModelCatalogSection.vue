@@ -10,6 +10,7 @@
 
 import { computed, onMounted, ref, watch } from 'vue'
 
+import ModalDialog from '@/components/dialogs/ModalDialog.vue'
 import ModelCatalogPicker from '@/features/clients/components/ModelCatalogPicker.vue'
 import {
   type AiModelCatalogDefinitionDto,
@@ -71,7 +72,6 @@ const priceLabels: Array<{ field: PriceFields; label: string }> = [
   { field: 'cacheWriteCostPer1MUsd', label: 'Cache write $/M' },
 ]
 
-const isEditing = computed(() => draft.value !== null || definition.value !== null)
 
 async function load(): Promise<void> {
   loading.value = true
@@ -248,7 +248,9 @@ function priceCell(value: number | null | undefined): string {
     </div>
 
     <div class="section-card-body">
-    <p v-if="errorMessage" class="error" data-testid="tenant-catalog-error">{{ errorMessage }}</p>
+    <p v-if="errorMessage && draft === null && definition === null" class="error" data-testid="tenant-catalog-error">
+      {{ errorMessage }}
+    </p>
     <p v-if="loading" class="muted-hint">Loading overrides…</p>
 
     <table v-else-if="overrides.length > 0" data-testid="tenant-override-table">
@@ -282,7 +284,7 @@ function priceCell(value: number | null | undefined): string {
       No overrides yet. Every model is priced at the catalog's list price.
     </p>
 
-    <div v-if="!isEditing" class="override-add">
+    <div class="override-add">
       <ModelCatalogPicker
         :load-providers="() => listTenantProviders(props.tenantId)"
         :load-models="(providerId) => listTenantModels(props.tenantId, providerId)"
@@ -293,12 +295,19 @@ function priceCell(value: number | null | undefined): string {
       </button>
     </div>
 
-    <form
-      v-else-if="definition"
-      class="override-form"
-      data-testid="define-model-form"
-      @submit.prevent="saveDefinition"
+    <!-- Both forms open over the page. Inline they moved the section's own content around, and the override form
+         appeared far from the row it belongs to. -->
+    <ModalDialog
+      :isOpen="definition !== null"
+      title="Define a model the catalog does not list"
+      @update:isOpen="open => { if (!open) { definition = null } }"
     >
+      <form
+        v-if="definition"
+        class="override-form"
+        data-testid="define-model-form"
+        @submit.prevent="saveDefinition"
+      >
       <p class="muted">
         For a model the catalog has never described: a private fine-tune, a release newer than the snapshot, or a
         self-hosted model. It becomes selectable and budgeted for this tenant's clients immediately.
@@ -342,45 +351,56 @@ function priceCell(value: number | null | undefined): string {
         <label><input v-model="definition.supportsReasoning" type="checkbox" /> Reasoning</label>
       </div>
 
+      <p v-if="errorMessage" class="error" data-testid="tenant-catalog-error">{{ errorMessage }}</p>
+
       <div class="override-form-actions">
         <button class="btn-primary btn-sm" type="submit" :disabled="saving" data-testid="define-save">
           {{ saving ? 'Saving…' : 'Define model' }}
         </button>
         <button class="btn-secondary btn-sm" type="button" @click="definition = null">Cancel</button>
       </div>
-    </form>
+      </form>
+    </ModalDialog>
 
-    <form v-else-if="draft" class="override-form" data-testid="tenant-override-form" @submit.prevent="save">
-      <div class="override-identity muted">
-        {{ draft?.providerId }} · {{ draft?.remoteModelId }}
-      </div>
+    <ModalDialog
+      :isOpen="draft !== null"
+      :title="`Pricing override — ${draft?.remoteModelId ?? ''}`"
+      @update:isOpen="open => { if (!open) { draft = null } }"
+    >
+      <form v-if="draft" class="override-form" data-testid="tenant-override-form" @submit.prevent="save">
+        <div class="override-identity muted">
+          {{ draft?.providerId }} · {{ draft?.remoteModelId }}
+        </div>
 
-      <div class="ai-form-grid ai-form-grid-compact">
-        <label class="form-field">
-          <span>Display name</span>
-          <input v-model="draft!.displayName" type="text" placeholder="Leave empty to keep the catalog's" />
-        </label>
+        <div class="ai-form-grid ai-form-grid-compact">
+          <label class="form-field">
+            <span>Display name</span>
+            <input v-model="draft!.displayName" type="text" placeholder="Leave empty to keep the catalog's" />
+          </label>
 
-        <label v-for="price in priceLabels" :key="price.field" class="form-field">
-          <span>{{ price.label }}</span>
-          <input
-            v-model="draft![price.field]"
-            :data-testid="`override-${price.field}`"
-            type="number"
-            min="0"
-            step="any"
-            placeholder="inherited"
-          />
-        </label>
-      </div>
+          <label v-for="price in priceLabels" :key="price.field" class="form-field">
+            <span>{{ price.label }}</span>
+            <input
+              v-model="draft![price.field]"
+              :data-testid="`override-${price.field}`"
+              type="number"
+              min="0"
+              step="any"
+              placeholder="inherited"
+            />
+          </label>
+        </div>
 
-      <div class="override-form-actions">
-        <button class="btn-primary btn-sm" type="submit" :disabled="saving" data-testid="override-save">
-          {{ saving ? 'Saving…' : 'Save override' }}
-        </button>
-        <button class="btn-secondary btn-sm" type="button" @click="draft = null">Cancel</button>
-      </div>
-    </form>
+        <p v-if="errorMessage" class="error" data-testid="tenant-catalog-error">{{ errorMessage }}</p>
+
+        <div class="override-form-actions">
+          <button class="btn-primary btn-sm" type="submit" :disabled="saving" data-testid="override-save">
+            {{ saving ? 'Saving…' : 'Save override' }}
+          </button>
+          <button class="btn-secondary btn-sm" type="button" @click="draft = null">Cancel</button>
+        </div>
+      </form>
+    </ModalDialog>
     </div>
   </section>
 </template>

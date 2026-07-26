@@ -10,6 +10,7 @@
 
 import { computed, ref, watch } from 'vue'
 
+import ModalDialog from '@/components/dialogs/ModalDialog.vue'
 import type { AiModelCatalogEntryDto, ModelCatalogProviderResponse } from '@/services/modelCatalogService'
 
 interface Props {
@@ -99,10 +100,7 @@ function pricingNote(entry: AiModelCatalogEntryDto): string {
 
 <template>
   <div class="catalog-picker">
-    <!-- Opens a panel rather than acting on a row, so it is sized like the other section actions it stands
-         beside; an extra-small pill next to them read as a different kind of control. -->
     <button
-      v-if="!open"
       class="btn-secondary btn-sm"
       type="button"
       data-testid="catalog-picker-open"
@@ -111,61 +109,69 @@ function pricingNote(entry: AiModelCatalogEntryDto): string {
       Browse catalog…
     </button>
 
-    <div v-else class="catalog-panel" data-testid="catalog-picker-panel">
-      <div class="catalog-toolbar">
-        <label class="form-field">
-          <span>Provider</span>
-          <select v-model="selectedProviderId" data-testid="catalog-provider-select">
-            <option v-for="provider in providers" :key="provider.providerId ?? ''" :value="provider.providerId ?? ''">
-              {{ provider.providerName }} ({{ provider.modelCount }})
-            </option>
-          </select>
-        </label>
+    <!-- Browsing happens over the page rather than inside it: the list is long and its own scroller, so inline it
+         pushed the surrounding section around and left the neighbouring action stranded beside it. -->
+    <ModalDialog :isOpen="open" title="Browse the model catalog" @update:isOpen="open = $event">
+      <div class="catalog-panel" data-testid="catalog-picker-panel">
+        <div class="catalog-toolbar">
+          <label class="form-field">
+            <span>Provider</span>
+            <select v-model="selectedProviderId" data-testid="catalog-provider-select">
+              <option v-for="provider in providers" :key="provider.providerId ?? ''" :value="provider.providerId ?? ''">
+                {{ provider.providerName }} ({{ provider.modelCount }})
+              </option>
+            </select>
+          </label>
 
-        <label class="form-field catalog-search">
-          <span>Filter</span>
-          <input v-model="search" type="search" placeholder="Model name or id" data-testid="catalog-search" />
-        </label>
+          <label class="form-field catalog-search">
+            <span>Filter</span>
+            <input v-model="search" type="search" placeholder="Model name or id" data-testid="catalog-search" />
+          </label>
+        </div>
 
-        <button class="btn-secondary btn-xs" @click.prevent="open = false">Close</button>
+        <p v-if="loading" class="muted" data-testid="catalog-loading">Loading catalog…</p>
+        <p v-else-if="errorMessage" class="form-error" data-testid="catalog-error">{{ errorMessage }}</p>
+        <p v-else-if="filteredModels.length === 0" class="muted" data-testid="catalog-empty">
+          No catalog models match. You can still enter a model id by hand.
+        </p>
+
+        <ul v-else class="catalog-list" data-testid="catalog-list">
+          <li v-for="entry in filteredModels" :key="`${entry.providerId ?? ''}:${entry.remoteModelId ?? ''}`">
+            <button class="catalog-entry" type="button" @click.prevent="choose(entry)">
+              <span class="catalog-entry-main">
+                <span class="catalog-entry-name">{{ entry.displayName }}</span>
+                <span class="muted catalog-entry-id">{{ entry.remoteModelId }}</span>
+              </span>
+              <span class="catalog-entry-meta muted">
+                <span v-if="entry.maxContextTokens" class="catalog-entry-figure">{{ entry.maxContextTokens.toLocaleString() }} ctx</span>
+                <span v-if="entry.supportsToolUse" class="chip chip-sm">tools</span>
+                <span v-if="entry.supportsReasoning" class="chip chip-sm">reasoning</span>
+                <span v-if="entry.supportsPromptCaching" class="chip chip-sm">caching</span>
+                <span class="catalog-entry-figure" :title="pricingNote(entry)">
+                  in {{ price(entry.inputCostPer1MUsd) }} · out {{ price(entry.outputCostPer1MUsd) }}
+                </span>
+                <span v-if="entry.pricingLayer !== 'global'" class="chip chip-sm chip-accent">negotiated</span>
+              </span>
+            </button>
+          </li>
+        </ul>
       </div>
 
-      <p v-if="loading" class="muted" data-testid="catalog-loading">Loading catalog…</p>
-      <p v-else-if="errorMessage" class="form-error" data-testid="catalog-error">{{ errorMessage }}</p>
-      <p v-else-if="filteredModels.length === 0" class="muted" data-testid="catalog-empty">
-        No catalog models match. You can still enter a model id by hand.
-      </p>
-
-      <ul v-else class="catalog-list" data-testid="catalog-list">
-        <li v-for="entry in filteredModels" :key="`${entry.providerId ?? ''}:${entry.remoteModelId ?? ''}`">
-          <button class="catalog-entry" @click.prevent="choose(entry)">
-            <span class="catalog-entry-main">
-              <span class="catalog-entry-name">{{ entry.displayName }}</span>
-              <span class="muted catalog-entry-id">{{ entry.remoteModelId }}</span>
-            </span>
-            <span class="catalog-entry-meta muted">
-              <span v-if="entry.maxContextTokens" class="catalog-entry-figure">{{ entry.maxContextTokens.toLocaleString() }} ctx</span>
-              <span v-if="entry.supportsToolUse" class="chip chip-sm">tools</span>
-              <span v-if="entry.supportsReasoning" class="chip chip-sm">reasoning</span>
-              <span v-if="entry.supportsPromptCaching" class="chip chip-sm">caching</span>
-              <span class="catalog-entry-figure" :title="pricingNote(entry)">
-                in {{ price(entry.inputCostPer1MUsd) }} · out {{ price(entry.outputCostPer1MUsd) }}
-              </span>
-              <span v-if="entry.pricingLayer !== 'global'" class="chip chip-sm chip-accent">negotiated</span>
-            </span>
-          </button>
-        </li>
-      </ul>
-    </div>
+      <template #footer>
+        <button class="btn-secondary btn-sm" type="button" data-testid="catalog-picker-close" @click="open = false">
+          Close
+        </button>
+      </template>
+    </ModalDialog>
   </div>
 </template>
 
 <style scoped>
+/* The modal supplies the surface, so the panel only lays its own contents out. */
 .catalog-panel {
-  border: 1px solid var(--border-subtle, #d0d7de);
-  border-radius: 6px;
-  padding: 0.75rem;
-  margin-block: 0.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
 }
 
 .catalog-toolbar {
@@ -181,9 +187,10 @@ function pricingNote(entry: AiModelCatalogEntryDto): string {
 
 .catalog-list {
   list-style: none;
-  margin: 0.75rem 0 0;
+  margin: 0;
   padding: 0;
-  max-height: 18rem;
+  /* The modal caps its own height, so the list scrolls inside it rather than growing the dialog off-screen. */
+  max-height: 55vh;
   overflow-y: auto;
   /* Room for the scrollbar so it never sits on top of the right-hand pricing column. */
   padding-inline-end: 0.5rem;
