@@ -136,11 +136,10 @@ public sealed class LogicalModelCapabilityValidatorTests
         await this.Sut().ValidateAsync(Entry("embed", AiOperationKind.Embedding, connection.Id, modelId));
     }
 
-    // A model requiring its reasoning echoed back would fail part-way through a multi-turn review, because the
-    // client library does not put that field on an assistant turn. Refusing at configuration time is the only
-    // honest answer until the transport can carry it.
+    // The transport now carries reasoning_content across turns, so the model this guard was written for is
+    // usable again. This is the test that would have to change back if the handler were ever removed.
     [Fact]
-    public async Task ChatRole_OnAModelRequiringReasoningEchoedBack_Throws()
+    public async Task ChatRole_OnAModelRequiringTheSupportedReasoningField_IsAllowed()
     {
         var modelId = Guid.NewGuid();
         var model = AiConnectionTestFactory.CreateChatModel("deepseek-reasoner", modelId) with
@@ -150,10 +149,26 @@ public sealed class LogicalModelCapabilityValidatorTests
         var connection = AiConnectionTestFactory.CreateConnection(ClientId, [model]);
         this._connections.GetByIdAsync(connection.Id, Arg.Any<CancellationToken>()).Returns(connection);
 
+        await this.Sut().ValidateAsync(Entry("deep", AiOperationKind.Chat, connection.Id, modelId));
+    }
+
+    // A model naming some other field is still refused: the handler carries one well-known field, and pretending
+    // otherwise would move the failure back into the middle of a review.
+    [Fact]
+    public async Task ChatRole_OnAModelRequiringSomeOtherReasoningField_Throws()
+    {
+        var modelId = Guid.NewGuid();
+        var model = AiConnectionTestFactory.CreateChatModel("some-reasoner", modelId) with
+        {
+            ReasoningContentField = "thinking_trace",
+        };
+        var connection = AiConnectionTestFactory.CreateConnection(ClientId, [model]);
+        this._connections.GetByIdAsync(connection.Id, Arg.Any<CancellationToken>()).Returns(connection);
+
         var ex = await Assert.ThrowsAsync<LogicalModelReferenceInvalidException>(() =>
             this.Sut().ValidateAsync(Entry("deep", AiOperationKind.Chat, connection.Id, modelId)));
 
-        Assert.Contains("reasoning_content", ex.Message, StringComparison.Ordinal);
+        Assert.Contains("thinking_trace", ex.Message, StringComparison.Ordinal);
         // The message must name a way forward, not just refuse.
         Assert.Contains("LiteLLM", ex.Message, StringComparison.Ordinal);
     }

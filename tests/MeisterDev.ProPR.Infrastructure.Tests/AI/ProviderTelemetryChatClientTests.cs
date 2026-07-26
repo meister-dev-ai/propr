@@ -16,22 +16,45 @@ namespace MeisterDev.ProPR.Infrastructure.Tests.AI;
 /// </summary>
 public sealed class ProviderTelemetryChatClientTests : IDisposable
 {
-    private static readonly ProviderCallTarget Target =
-        new(AiProviderKind.OpenAiCompatible, "deepseek-reasoner", "Primary DeepSeek");
+    // An ActivityListener is process-wide and the infrastructure source is shared, so anything else emitting on
+    // it while this class runs would land in the same list. Each instance therefore tags its calls with a model
+    // id nobody else uses and keeps only those — without it, asserting on a single activity is a race that shows
+    // up as an occasional failure in the full suite and never when the class is run alone.
+    private readonly string _modelId = $"deepseek-reasoner-{Guid.NewGuid():N}";
+    private readonly ProviderCallTarget _target;
 
-    private readonly List<Activity> _activities = [];
+    private readonly List<Activity> _captured = [];
     private readonly ActivityListener _listener;
     private readonly AiProviderMetrics _metrics = new();
 
     public ProviderTelemetryChatClientTests()
     {
+        this._target = new ProviderCallTarget(AiProviderKind.OpenAiCompatible, this._modelId, "Primary DeepSeek");
         this._listener = new ActivityListener
         {
             ShouldListenTo = source => source.Name == "MeisterProPR.Infrastructure",
             Sample = (ref ActivityCreationOptions<ActivityContext> _) => ActivitySamplingResult.AllDataAndRecorded,
-            ActivityStopped = activity => this._activities.Add(activity),
+            ActivityStopped = activity =>
+            {
+                lock (this._captured)
+                {
+                    this._captured.Add(activity);
+                }
+            },
         };
         ActivitySource.AddActivityListener(this._listener);
+    }
+
+    /// <summary>Only this instance's own calls, so a concurrent test on the shared source cannot be mistaken for one.</summary>
+    private List<Activity> Activities
+    {
+        get
+        {
+            lock (this._captured)
+            {
+                return [.. this._captured.Where(activity => (activity.GetTagItem("ai_model") as string) == this._modelId)];
+            }
+        }
     }
 
     public void Dispose()
@@ -47,10 +70,10 @@ public sealed class ProviderTelemetryChatClientTests : IDisposable
 
         await client.GetResponseAsync([new ChatMessage(ChatRole.User, "hello")]);
 
-        var activity = Assert.Single(this._activities);
+        var activity = Assert.Single(this.Activities);
         Assert.Equal("ai.provider.chat", activity.OperationName);
         Assert.Equal("OpenAiCompatible", Tag(activity, "ai_provider"));
-        Assert.Equal("deepseek-reasoner", Tag(activity, "ai_model"));
+        Assert.Equal(this._modelId, Tag(activity, "ai_model"));
         Assert.Equal("Primary DeepSeek", Tag(activity, "ai_profile"));
         Assert.Equal(ActivityStatusCode.Ok, activity.Status);
     }
@@ -68,7 +91,7 @@ public sealed class ProviderTelemetryChatClientTests : IDisposable
 
         await client.GetResponseAsync([new ChatMessage(ChatRole.User, "hello")]);
 
-        var activity = Assert.Single(this._activities);
+        var activity = Assert.Single(this.Activities);
         Assert.Equal(1_000L, activity.GetTagItem("ai_input_tokens"));
         Assert.Equal(200L, activity.GetTagItem("ai_output_tokens"));
         Assert.Equal(400L, activity.GetTagItem("ai_cached_input_tokens"));
@@ -86,7 +109,7 @@ public sealed class ProviderTelemetryChatClientTests : IDisposable
 
         await client.GetResponseAsync([new ChatMessage(ChatRole.User, "hello")]);
 
-        var activity = Assert.Single(this._activities);
+        var activity = Assert.Single(this.Activities);
         Assert.Equal(false, activity.GetTagItem("ai_usage_measured"));
     }
 
@@ -97,7 +120,7 @@ public sealed class ProviderTelemetryChatClientTests : IDisposable
 
         await Assert.ThrowsAsync<InvalidOperationException>(() => client.GetResponseAsync([new ChatMessage(ChatRole.User, "hello")]));
 
-        var activity = Assert.Single(this._activities);
+        var activity = Assert.Single(this.Activities);
         Assert.Equal(ActivityStatusCode.Error, activity.Status);
         Assert.Equal("System.InvalidOperationException", Tag(activity, "error.type"));
     }
@@ -111,7 +134,7 @@ public sealed class ProviderTelemetryChatClientTests : IDisposable
 
         await Assert.ThrowsAsync<OperationCanceledException>(() => client.GetResponseAsync([new ChatMessage(ChatRole.User, "hello")]));
 
-        var activity = Assert.Single(this._activities);
+        var activity = Assert.Single(this.Activities);
         Assert.NotEqual(ActivityStatusCode.Error, activity.Status);
     }
 
@@ -129,7 +152,7 @@ public sealed class ProviderTelemetryChatClientTests : IDisposable
     {
         return new ProviderTelemetryChatClient(
             inner,
-            Target,
+            this._target,
             pricing ?? new ModelPricing(3m, 15m),
             this._metrics,
             clientId: Guid.NewGuid());

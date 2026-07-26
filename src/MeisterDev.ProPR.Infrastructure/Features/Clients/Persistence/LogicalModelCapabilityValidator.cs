@@ -2,6 +2,7 @@
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
 using MeisterDev.Ai.Providers.Enums;
+using MeisterDev.Ai.Providers.Transport;
 using MeisterDev.ProPR.Application.DTOs;
 using MeisterDev.ProPR.Application.Exceptions;
 using MeisterDev.ProPR.Application.Interfaces;
@@ -39,18 +40,23 @@ public sealed class LogicalModelCapabilityValidator(IAiConnectionRepository conn
                         $"model '{model.RemoteModelId}' does not support chat, which this role requires.");
                 }
 
-                // A model that requires its reasoning echoed back cannot survive the review loop yet: the loop is
-                // multi-turn with tools, and the client library does not serialize that field onto an assistant
-                // turn, so the provider rejects the second call. Refusing here turns a mid-review failure into a
-                // configuration-time answer, which is the only honest option until the transport can carry it.
-                if (!string.IsNullOrWhiteSpace(model.ReasoningContentField))
+                // A model that requires its reasoning echoed back on every assistant turn is now supported: the
+                // transport carries the well-known reasoning_content field across turns. A model naming some
+                // OTHER field still is not, and would fail part-way through a multi-turn review, so it is refused
+                // here — a configuration-time answer beats a mid-review 400.
+                if (!string.IsNullOrWhiteSpace(model.ReasoningContentField)
+                    && !string.Equals(
+                        model.ReasoningContentField,
+                        ReasoningContentRoundTripHandler.ReasoningContentField,
+                        StringComparison.OrdinalIgnoreCase))
                 {
                     throw new LogicalModelReferenceInvalidException(
                         entry.Name,
                         $"model '{model.RemoteModelId}' requires its '{model.ReasoningContentField}' field echoed back on "
-                        + "every assistant turn, which this build cannot yet do, so a multi-turn review would fail "
-                        + "part-way through. Choose a model without that requirement, or reach this one through a "
-                        + "LiteLLM profile, which normalizes the field itself.");
+                        + "every assistant turn, and this build only carries "
+                        + $"'{ReasoningContentRoundTripHandler.ReasoningContentField}' across turns, so a multi-turn "
+                        + "review would fail part-way through. Choose a model without that requirement, or reach this "
+                        + "one through a LiteLLM profile, which normalizes the field itself.");
                 }
 
                 break;

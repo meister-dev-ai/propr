@@ -12,8 +12,9 @@ namespace MeisterDev.Ai.Providers.Tests.Drivers;
 
 /// <summary>
 ///     Pins what actually crosses the wire for a DeepSeek-style model, using a fake compatible endpoint rather
-///     than assumptions. These are the facts a reasoning-content normalizer has to be built against: whether the
-///     non-standard <c>reasoning_content</c> field survives the client library in either direction.
+///     than assumptions. These are the facts that decided where the round-trip had to live: the client library
+///     surfaces the non-standard <c>reasoning_content</c> field inbound but drops it outbound, which is why
+///     <see cref="ReasoningContentRoundTripHandler" /> works below the library rather than above it.
 /// </summary>
 public sealed class ReasoningContentWireBehaviourTests
 {
@@ -52,9 +53,10 @@ public sealed class ReasoningContentWireBehaviourTests
         Assert.Contains("let me think", reasoning);
     }
 
-    // The other direction, and the constraint that decides the design: reasoning content held on an assistant
+    // The other direction, and the constraint that decided the design: reasoning content held on an assistant
     // turn is NOT serialized back, because the field is not part of the OpenAI request schema the client library
-    // writes. A model that requires its chain of thought echoed therefore cannot be satisfied from here.
+    // writes. A model that requires its chain of thought echoed cannot be satisfied from here — only from below,
+    // which is what the transport handler exists for (see the last test).
     [Fact]
     public async Task ReasoningContentOnAnAssistantTurn_IsNotSentBack()
     {
@@ -106,10 +108,39 @@ public sealed class ReasoningContentWireBehaviourTests
         Assert.Contains("\"first\"", body, StringComparison.Ordinal);
     }
 
-    private static IChatClient Client(FakeCompatibleEndpoint endpoint)
+    // The resolution, end to end through the real client library: with the transport handler in the pipeline, a
+    // second call carries the field the provider demands, even though nothing above the wire can express it.
+    [Fact]
+    public async Task WithTheTransportHandler_TheSecondCallCarriesTheReasoningBack()
+    {
+        var endpoint = new FakeCompatibleEndpoint()
+            .RespondsWithReasoning("42", "let me think")
+            .RespondsWithReasoning("still 42", "more thought");
+        var client = Client(endpoint, withRoundTrip: true);
+
+        var first = await client.GetResponseAsync([new ChatMessage(ChatRole.User, "what is 6*7?")]);
+        await client.GetResponseAsync(
+        [
+            new ChatMessage(ChatRole.User, "what is 6*7?"),
+            new ChatMessage(ChatRole.Assistant, first.Text),
+            new ChatMessage(ChatRole.User, "are you sure?"),
+        ]);
+
+        var secondRequest = endpoint.RequestBodies[1];
+        Assert.Contains("reasoning_content", secondRequest, StringComparison.Ordinal);
+        Assert.Contains("let me think", secondRequest, StringComparison.Ordinal);
+    }
+
+    private static IChatClient Client(FakeCompatibleEndpoint endpoint, bool withRoundTrip = false)
     {
         var services = new ServiceCollection();
-        services.AddHttpClient("AiProviderRuntime").ConfigurePrimaryHttpMessageHandler(() => endpoint);
+        var runtime = services.AddHttpClient("AiProviderRuntime");
+        if (withRoundTrip)
+        {
+            runtime.AddHttpMessageHandler(() => new ReasoningContentRoundTripHandler());
+        }
+
+        runtime.ConfigurePrimaryHttpMessageHandler(() => endpoint);
         services.AddHttpClient("AiProviderAdmin").ConfigurePrimaryHttpMessageHandler(() => endpoint);
         services.AddSingleton<OpenAiCompatibleRequestFactory>();
         services.AddSingleton<OpenAiCompatibleTransport>();

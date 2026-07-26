@@ -172,7 +172,11 @@ public static class InfrastructureServiceExtensions
         // Runtime chat/embedding traffic egresses through the same SSRF guard. An infinite HttpClient
         // timeout matches the SDK's default shared transport so long completions are not truncated; the
         // per-request cancellation token still bounds each call.
+        // The reasoning round-trip sits above the egress guard: it rewrites bodies, which is only meaningful for
+        // a request that is allowed out in the first place. It configures itself from the wire, so providers that
+        // never send the field pay one substring check per response.
         services.AddHttpClient("AiProviderRuntime", client => client.Timeout = Timeout.InfiniteTimeSpan)
+            .AddHttpMessageHandler(() => new ReasoningContentRoundTripHandler())
             .ConfigurePrimaryHttpMessageHandler(() => GuardedEgressHttpHandler.Create(allowPrivateEgress));
         services.AddSingleton<OpenAiCompatibleRequestFactory>();
         services.AddSingleton<OpenAiCompatibleTransport>();
