@@ -64,6 +64,13 @@ public sealed class DriverConformanceTests
                 "https://bedrock.internal.example.com",
                 AiAuthMode.SigV4),
             new DriverConformanceFixture(
+                "GoogleVertex",
+                GoogleDriver,
+                "https://europe-west4-aiplatform.googleapis.com",
+                // Google's driver is the one that insists on a Google host, and on Vertex that it names a location.
+                "https://gemini.internal.example.com",
+                AiAuthMode.GcpAdc),
+            new DriverConformanceFixture(
                 "OpenAiCompatible",
                 () => Build((transport, factory) => new OpenAiCompatibleProviderDriver(transport, factory, false, false)),
                 "https://opencode.ai/zen/v1",
@@ -237,6 +244,22 @@ public sealed class DriverConformanceTests
         factory.CreateControlPlaneClient(Arg.Any<ProviderEndpoint>()).Returns(Substitute.For<IAmazonBedrock>());
 
         return new BedrockProviderDriver(factory, allowPrivateEgress: false, allowInsecureScheme: false);
+    }
+
+    // Minting a Google token would need a Google account; every behaviour this suite asserts is decided
+    // before a credential is used.
+    private static IAiProviderDriver GoogleDriver()
+    {
+        var services = new ServiceCollection();
+        services.AddHttpClient("AiProviderAdmin");
+        services.AddHttpClient("AiProviderRuntime");
+        var provider = services.BuildServiceProvider();
+
+        return new GoogleVertexProviderDriver(
+            provider.GetRequiredService<IHttpClientFactory>(),
+            Substitute.For<IGoogleCredentialSource>(),
+            allowPrivateEgress: false,
+            allowInsecureScheme: false);
     }
 
     private static IAiProviderDriver Build(Func<OpenAiCompatibleTransport, IHttpClientFactory, IAiProviderDriver> create)

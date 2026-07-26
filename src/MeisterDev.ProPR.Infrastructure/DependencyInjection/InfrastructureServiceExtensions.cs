@@ -208,6 +208,12 @@ public static class InfrastructureServiceExtensions
             serviceProvider.GetRequiredService<IBedrockClientFactory>(),
             allowPrivateEgress,
             allowInsecureScheme: isDevelopment));
+        services.AddSingleton<IGoogleCredentialSource, GoogleCredentialSource>();
+        services.AddSingleton<IAiProviderDriver>(serviceProvider => new GoogleVertexProviderDriver(
+            serviceProvider.GetRequiredService<IHttpClientFactory>(),
+            serviceProvider.GetRequiredService<IGoogleCredentialSource>(),
+            allowPrivateEgress,
+            allowInsecureScheme: isDevelopment));
         services.AddSingleton<IAiProviderDriverRegistry, AiProviderRegistry>();
         services.AddSingleton<IAiChatClientFactory, AiChatClientFactory>();
 

@@ -124,6 +124,53 @@ internal static class AiProbeTargetValidation
             : "An AWS access key is required. Store it as 'accessKeyId:secretAccessKey'.";
     }
 
+    /// <summary>
+    ///     Validates a Google target on either of its two surfaces. Which surface it is, is decided by the host,
+    ///     and on Vertex the location is part of that host — so a project pinned to a region is visible in the
+    ///     URL rather than hidden in a setting.
+    /// </summary>
+    /// <param name="target">The probe target.</param>
+    /// <param name="allowPrivateEgress">When true, a host outside Google's own is permitted.</param>
+    /// <param name="allowInsecureScheme">When true (Development only), a plain-http baseUrl is permitted.</param>
+    public static string? ForGoogle(AiProbeTarget target, bool allowPrivateEgress, bool allowInsecureScheme)
+    {
+        ArgumentNullException.ThrowIfNull(target);
+
+        if (!Uri.TryCreate(target.BaseUrl, UriKind.Absolute, out var uri))
+        {
+            return "baseUrl must be an absolute URL.";
+        }
+
+        var egressError = ValidateEgress(uri, allowPrivateEgress, allowInsecureScheme);
+        if (egressError is not null)
+        {
+            return egressError;
+        }
+
+        if (GoogleEndpointResolution.IsVertex(target.BaseUrl))
+        {
+            if (GoogleEndpointResolution.LocationFromHost(uri.Host) is null)
+            {
+                return "A Vertex AI endpoint must name its location, for example "
+                       + "https://europe-west4-aiplatform.googleapis.com.";
+            }
+
+            // A service-account key is a JSON document, not a key string, and the surface will not take one
+            // without the other.
+            return target.HasApiKey
+                ? null
+                : "Vertex AI requires the JSON key of a service account that may call the Vertex AI API.";
+        }
+
+        if (!uri.Host.EndsWith(".googleapis.com", StringComparison.OrdinalIgnoreCase) && !allowPrivateEgress)
+        {
+            return "A Google connection must target a Google host, for example "
+                   + "https://generativelanguage.googleapis.com.";
+        }
+
+        return target.HasApiKey ? null : "An API key is required for the Gemini API.";
+    }
+
     /// <summary>Validates an Azure OpenAI target: the host is locked to Azure AI hosts (the Azure SDK bypasses the connect-time egress guard).</summary>
     /// <param name="target">The probe target.</param>
     public static string? ForAzureOpenAi(AiProbeTarget target)

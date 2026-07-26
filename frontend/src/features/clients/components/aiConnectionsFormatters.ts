@@ -99,6 +99,13 @@ const guidanceByProvider: Partial<Record<AiProviderKind, ProviderGuidance>> = {
     baseUrlHint: 'The host names the region inference runs in, which is what pins where the data goes.',
     credentialHint: 'Store the access key as accessKeyId:secretAccessKey, adding :sessionToken for temporary credentials.',
   },
+  googleVertex: {
+    baseUrlPlaceholder: 'https://europe-west4-aiplatform.googleapis.com',
+    baseUrlHint:
+      'A Vertex host names the location and needs project=<your-project> in the default query parameters. '
+      + 'For the Gemini API use https://generativelanguage.googleapis.com instead.',
+    credentialHint: 'Vertex takes the JSON key of a service account; the Gemini API takes a plain API key.',
+  },
 }
 
 export const providerGuidance = (providerKind: AiProviderKind | undefined): ProviderGuidance =>

@@ -110,12 +110,12 @@ public sealed class ClientAiConnectionsControllerTests(ClientsControllerTests.Cl
         };
     }
 
-    // The provider enum names families ahead of the drivers that serve them. These two tests are what make that
-    // safe: a family this build cannot call is never offered, and is refused with a message naming what is
-    // available if someone sends it anyway. Without them, naming a family early would just move the failure to
-    // review time. The offered set therefore grows as drivers land, and this test is where that is recorded.
+    // What a client may configure comes from the drivers this build composed, not from the enum: a family named
+    // without a driver behind it must never be offered, or the failure only moves to review time. Every family
+    // the enum names now has one, so the offered set is the whole enum — and this test is what notices if a
+    // future family is named before it can be called.
     [Fact]
-    public async Task PermittedProviders_OffersOnlyFamiliesThisBuildCanCall()
+    public async Task PermittedProviders_OffersEveryFamilyThisBuildCanCall()
     {
         var client = this.CreateAuthorizedClient();
 
@@ -123,14 +123,15 @@ public sealed class ClientAiConnectionsControllerTests(ClientsControllerTests.Cl
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         var payload = await response.Content.ReadFromJsonAsync<JsonElement>(ApiJsonOptions);
-        var providers = payload.GetProperty("providers").EnumerateArray().ToList();
-        var offered = providers.Select(p => p.GetProperty("providerKind").GetString()).ToList();
+        var offered = payload.GetProperty("providers")
+            .EnumerateArray()
+            .Select(provider => provider.GetProperty("providerKind").GetString())
+            .ToList();
 
-        Assert.Contains("azureOpenAi", offered);
-        Assert.Contains("openAiCompatible", offered);
-        Assert.Contains("anthropic", offered);
-        Assert.Contains("awsBedrock", offered);
-        Assert.DoesNotContain("googleVertex", offered);
+        foreach (var family in new[] { "azureOpenAi", "openAi", "liteLlm", "openAiCompatible", "anthropic", "awsBedrock", "googleVertex" })
+        {
+            Assert.Contains(family, offered);
+        }
     }
 
     // The UI must offer only wire shapes that can actually be called, and the drivers are the only place that
@@ -168,20 +169,6 @@ public sealed class ClientAiConnectionsControllerTests(ClientsControllerTests.Cl
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
         var body = await response.Content.ReadAsStringAsync();
         Assert.Contains("AnthropicMessages", body, StringComparison.Ordinal);
-    }
-
-    [Fact]
-    public async Task CreateAiConnection_ForAFamilyWithNoDriver_IsRefusedNamingWhatIsAvailable()
-    {
-        var client = this.CreateAuthorizedClient();
-        var response = await client.PostAsJsonAsync(
-            $"/clients/{ClientId}/ai-connections",
-            BuildCreatePayload("Gemini on Vertex", providerKind: "googleVertex"));
-
-        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
-        var body = await response.Content.ReadAsStringAsync();
-        Assert.Contains("GoogleVertex", body, StringComparison.Ordinal);
-        Assert.Contains("OpenAiCompatible", body, StringComparison.Ordinal);
     }
 
     private async Task<AiConnectionDto> SeedConnectionAsync(

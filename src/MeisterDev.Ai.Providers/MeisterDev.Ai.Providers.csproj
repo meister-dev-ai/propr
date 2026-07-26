@@ -32,6 +32,7 @@
         <PackageReference Include="AWSSDK.Extensions.Bedrock.MEAI" Version="4.0.101.6"/>
         <PackageReference Include="Azure.AI.OpenAI" Version="2.9.0-beta.1"/>
         <PackageReference Include="Azure.Identity" Version="1.19.0"/>
+        <PackageReference Include="Google.Apis.Auth" Version="1.75.0"/>
         <PackageReference Include="Microsoft.Extensions.AI" Version="10.5.1"/>
         <PackageReference Include="Microsoft.Extensions.AI.Abstractions" Version="10.5.1"/>
         <PackageReference Include="Microsoft.Extensions.AI.OpenAI" Version="10.5.1"/>
