@@ -18,6 +18,12 @@ public sealed class TenantRecord
     /// </summary>
     public string[] AllowedAiProviderKinds { get; set; } = [];
 
+    /// <summary>
+    ///     Endpoint hosts this tenant's clients may send AI traffic to. Empty means unrestricted. An entry
+    ///     matches a host exactly, or any subdomain of it when written with a leading dot.
+    /// </summary>
+    public string[] AllowedAiEndpointHosts { get; set; } = [];
+
     public DateTimeOffset CreatedAt { get; set; }
     public DateTimeOffset UpdatedAt { get; set; }
 

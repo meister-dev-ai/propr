@@ -64,6 +64,7 @@ public interface ITenantAdminService
         bool? isActive = null,
         bool? localLoginEnabled = null,
         IReadOnlyList<AiProviderKind>? allowedAiProviderKinds = null,
+        IReadOnlyList<string>? allowedAiEndpointHosts = null,
         CancellationToken ct = default);
 
     /// <summary>

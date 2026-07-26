@@ -141,6 +141,7 @@ public sealed class TenantsController(ITenantAdminService tenantAdminService) : 
                 request.IsActive,
                 request.LocalLoginEnabled,
                 request.AllowedAiProviderKinds,
+                request.AllowedAiEndpointHosts,
                 ct);
 
             return updated is null ? this.NotFound() : this.Ok(updated);
@@ -178,8 +179,13 @@ public sealed record CreateTenantRequest(string Slug, string DisplayName);
 ///     Provider families this tenant's clients may use, or null to leave unchanged. An empty list clears the
 ///     restriction back to unrestricted.
 /// </param>
+/// <param name="AllowedAiEndpointHosts">
+///     Endpoint hosts this tenant's clients may reach, or null to leave unchanged. An empty list clears the
+///     restriction. An entry matches a host exactly, or any subdomain when written with a leading dot.
+/// </param>
 public sealed record UpdateTenantRequest(
     string? DisplayName,
     bool? IsActive,
     bool? LocalLoginEnabled,
-    IReadOnlyList<AiProviderKind>? AllowedAiProviderKinds = null);
+    IReadOnlyList<AiProviderKind>? AllowedAiProviderKinds = null,
+    IReadOnlyList<string>? AllowedAiEndpointHosts = null);

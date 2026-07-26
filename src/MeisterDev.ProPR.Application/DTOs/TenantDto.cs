@@ -18,6 +18,10 @@ namespace MeisterDev.ProPR.Application.DTOs;
 ///     Provider families this tenant's clients may use. Empty means unrestricted, which is what a tenant that has
 ///     never stated a policy looks like.
 /// </param>
+/// <param name="AllowedAiEndpointHosts">
+///     Endpoint hosts this tenant's clients may send AI traffic to. Empty means unrestricted. An entry matches a
+///     host exactly, or any subdomain of it when written with a leading dot.
+/// </param>
 public sealed record TenantDto(
     Guid Id,
     string Slug,
@@ -27,4 +31,5 @@ public sealed record TenantDto(
     bool IsEditable,
     DateTimeOffset CreatedAt,
     DateTimeOffset UpdatedAt,
-    IReadOnlyList<AiProviderKind>? AllowedAiProviderKinds = null);
+    IReadOnlyList<AiProviderKind>? AllowedAiProviderKinds = null,
+    IReadOnlyList<string>? AllowedAiEndpointHosts = null);

@@ -1006,6 +1006,38 @@ public sealed class AiConnectionRepositoryTests
         Assert.NotNull(await repo.AddAsync(clientId, CreateWriteRequest()));
     }
 
+    // The destination half of the tenant policy, refused where the operator can see it. A profile pointed at a
+    // host the tenant has not permitted is the case a provider-family list cannot catch on its own.
+    [Fact]
+    public async Task AddAsync_RefusesAnEndpointTheTenantDoesNotPermit()
+    {
+        await using var db = CreateContext();
+        var clientId = Guid.NewGuid();
+        var policies = Substitute.For<ITenantProviderPolicyProvider>();
+        policies.GetForClientAsync(clientId, Arg.Any<CancellationToken>())
+            .Returns(new TenantProviderPolicy([], ["opencode.ai"]));
+        var repo = new AiConnectionRepository(db, CreateCodec(), null, policies);
+
+        // CreateWriteRequest points at an Azure host, which this tenant has not permitted.
+        var failure = await Assert.ThrowsAsync<ProviderKindNotPermittedException>(() => repo.AddAsync(clientId, CreateWriteRequest()));
+
+        Assert.Contains("opencode.ai", failure.Message, StringComparison.Ordinal);
+        Assert.Empty(db.AiConnectionProfiles);
+    }
+
+    [Fact]
+    public async Task AddAsync_AllowsAnEndpointTheTenantPermits()
+    {
+        await using var db = CreateContext();
+        var clientId = Guid.NewGuid();
+        var policies = Substitute.For<ITenantProviderPolicyProvider>();
+        policies.GetForClientAsync(clientId, Arg.Any<CancellationToken>())
+            .Returns(new TenantProviderPolicy([], [".openai.azure.com"]));
+        var repo = new AiConnectionRepository(db, CreateCodec(), null, policies);
+
+        Assert.NotNull(await repo.AddAsync(clientId, CreateWriteRequest()));
+    }
+
     // Rows written before the envelope existed hold a bare protected string. They have to keep resolving, or
     // adopting the envelope would quietly break every profile already configured.
     [Fact]

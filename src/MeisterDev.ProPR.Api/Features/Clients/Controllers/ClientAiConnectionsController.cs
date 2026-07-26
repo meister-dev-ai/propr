@@ -407,6 +407,12 @@ public sealed partial class ClientAiConnectionsController(
                 this.ModelState.AddModelError("providerKind", $"This profile cannot be probed because {refusal}.");
                 return this.ValidationProblem();
             }
+
+            if (policy.DescribeEndpointRefusal(request.BaseUrl) is { } endpointRefusal)
+            {
+                this.ModelState.AddModelError("baseUrl", $"This profile cannot be probed because {endpointRefusal}.");
+                return this.ValidationProblem();
+            }
         }
 
         var probeOptions = this.TryBuildProbeOptions(

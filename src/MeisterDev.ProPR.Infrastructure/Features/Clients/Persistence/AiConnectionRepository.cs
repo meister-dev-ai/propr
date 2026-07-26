@@ -103,7 +103,7 @@ public sealed class AiConnectionRepository(
         AiConnectionWriteRequestDto request,
         CancellationToken ct = default)
     {
-        await this.GuardProviderKindForClientAsync(clientId, request.ProviderKind, ct);
+        await this.GuardProviderPolicyForClientAsync(clientId, request.ProviderKind, request.BaseUrl, ct);
 
         var profileId = Guid.NewGuid();
         var now = DateTimeOffset.UtcNow;
@@ -138,7 +138,7 @@ public sealed class AiConnectionRepository(
     /// <inheritdoc />
     public async Task<AiConnectionDto> AddTenantAsync(Guid tenantId, AiConnectionWriteRequestDto request, CancellationToken ct = default)
     {
-        await this.GuardProviderKindForTenantAsync(tenantId, request.ProviderKind, ct);
+        await this.GuardProviderPolicyForTenantAsync(tenantId, request.ProviderKind, request.BaseUrl, ct);
 
         var profileId = Guid.NewGuid();
         var now = DateTimeOffset.UtcNow;
@@ -190,11 +190,11 @@ public sealed class AiConnectionRepository(
         // An update can change the provider family, so the policy is checked here too rather than only on create.
         if (record.TenantId is { } ownerTenantId)
         {
-            await this.GuardProviderKindForTenantAsync(ownerTenantId, request.ProviderKind, ct);
+            await this.GuardProviderPolicyForTenantAsync(ownerTenantId, request.ProviderKind, request.BaseUrl, ct);
         }
         else if (record.ClientId is { } ownerClientId)
         {
-            await this.GuardProviderKindForClientAsync(ownerClientId, request.ProviderKind, ct);
+            await this.GuardProviderPolicyForClientAsync(ownerClientId, request.ProviderKind, request.BaseUrl, ct);
         }
 
         var updatedModels = BuildConfiguredModels(record.Id, request, record.ConfiguredModels);
@@ -503,31 +503,46 @@ public sealed class AiConnectionRepository(
     // A tenant's provider-kind policy is enforced when a profile is written as well as when one is used, so a
     // forbidden provider cannot be configured and then discovered mid-review. The refusal names what is
     // permitted, because an operator staring at a rejected form needs to know what to choose instead.
-    private async Task GuardProviderKindForClientAsync(Guid clientId, AiProviderKind providerKind, CancellationToken ct)
+    private async Task GuardProviderPolicyForClientAsync(
+        Guid clientId,
+        AiProviderKind providerKind,
+        string baseUrl,
+        CancellationToken ct)
     {
         if (providerPolicies is null || clientId == Guid.Empty)
         {
             return;
         }
 
-        Throw(await providerPolicies.GetForClientAsync(clientId, ct), providerKind);
+        Throw(await providerPolicies.GetForClientAsync(clientId, ct), providerKind, baseUrl);
     }
 
-    private async Task GuardProviderKindForTenantAsync(Guid tenantId, AiProviderKind providerKind, CancellationToken ct)
+    private async Task GuardProviderPolicyForTenantAsync(
+        Guid tenantId,
+        AiProviderKind providerKind,
+        string baseUrl,
+        CancellationToken ct)
     {
         if (providerPolicies is null || tenantId == Guid.Empty)
         {
             return;
         }
 
-        Throw(await providerPolicies.GetForTenantAsync(tenantId, ct), providerKind);
+        Throw(await providerPolicies.GetForTenantAsync(tenantId, ct), providerKind, baseUrl);
     }
 
-    private static void Throw(TenantProviderPolicy policy, AiProviderKind providerKind)
+    private static void Throw(TenantProviderPolicy policy, AiProviderKind providerKind, string baseUrl)
     {
-        if (policy.DescribeRefusal(providerKind) is { } refusal)
+        if (policy.DescribeRefusal(providerKind) is { } kindRefusal)
         {
-            throw new ProviderKindNotPermittedException(providerKind, refusal);
+            throw new ProviderKindNotPermittedException(providerKind, kindRefusal);
+        }
+
+        // Where the traffic goes is the half a provider family cannot answer: a family reached at an
+        // operator-supplied base URL constrains nothing by itself.
+        if (policy.DescribeEndpointRefusal(baseUrl) is { } endpointRefusal)
+        {
+            throw new ProviderKindNotPermittedException(providerKind, endpointRefusal);
         }
     }
 

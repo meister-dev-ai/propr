@@ -13,10 +13,10 @@ namespace MeisterDev.ProPR.Infrastructure.Repositories;
 ///     the tenant's own business, but crossing a tenant boundary is always refused.
 /// </summary>
 /// <remarks>
-///     The tenant's provider-kind allow-list is answered here too, because it is the same question asked of the
-///     same reference — may this tenant use this profile — and the guard is already consulted both when a
-///     reference is written and before a credential is used. Answering it anywhere else would mean two places
-///     that could disagree.
+///     The tenant's provider policy — which families, and which endpoint hosts — is answered here too, because it
+///     is the same question asked of the same reference: may this tenant use this profile. The guard is already
+///     consulted both when a reference is written and before a credential is used, so answering it anywhere else
+///     would mean two places that could disagree.
 /// </remarks>
 public sealed class AiConnectionScopeGuard(
     IClientRegistry clients,
@@ -44,9 +44,14 @@ public sealed class AiConnectionScopeGuard(
         if (providerPolicies is not null)
         {
             var policy = await providerPolicies.GetForTenantAsync(referencingTenantId, ct).ConfigureAwait(false);
-            if (policy.DescribeRefusal(connection.ProviderKind) is { } refusal)
+            if (policy.DescribeRefusal(connection.ProviderKind) is { } kindRefusal)
             {
-                return $"connection '{connection.DisplayName}' cannot be used because {refusal}.";
+                return $"connection '{connection.DisplayName}' cannot be used because {kindRefusal}.";
+            }
+
+            if (policy.DescribeEndpointRefusal(connection.BaseUrl) is { } endpointRefusal)
+            {
+                return $"connection '{connection.DisplayName}' cannot be used because {endpointRefusal}.";
             }
         }
 

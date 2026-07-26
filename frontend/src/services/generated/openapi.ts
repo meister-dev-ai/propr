@@ -15836,6 +15836,11 @@ export interface components {
              *     never stated a policy looks like.
              */
             allowedAiProviderKinds?: components["schemas"]["AiProviderKind"][] | null;
+            /**
+             * @description Endpoint hosts this tenant's clients may send AI traffic to. Empty means unrestricted. An entry matches a
+             *     host exactly, or any subdomain of it when written with a leading dot.
+             */
+            allowedAiEndpointHosts?: string[] | null;
         };
         /** @description Tenant-local login request payload. */
         TenantLocalLoginRequest: {
@@ -16165,6 +16170,11 @@ export interface components {
              *     restriction back to unrestricted.
              */
             allowedAiProviderKinds?: components["schemas"]["AiProviderKind"][] | null;
+            /**
+             * @description Endpoint hosts this tenant's clients may reach, or null to leave unchanged. An empty list clears the
+             *     restriction. An entry matches a host exactly, or any subdomain when written with a leading dot.
+             */
+            allowedAiEndpointHosts?: string[] | null;
         };
         /** @description Replace-tenant-provider request payload. */
         UpdateTenantSsoProviderRequest: {

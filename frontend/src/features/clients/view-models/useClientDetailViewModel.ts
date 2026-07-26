@@ -182,16 +182,28 @@ function isDetailTab(value: string): value is DetailTab {
  * count toward the dirty check. Entries with an empty/missing configuredModelId are dropped
  * — a half-configured row is never sent to the server (which would reject it) and never
  * counts toward the dirty check. */
+/** The all-zeros id the API sends for a pass that runs on a role: storage holds null, the contract cannot. */
+const NO_CONFIGURED_MODEL_ID = '00000000-0000-0000-0000-000000000000'
+
+function configuredModelIdOf(pass: ReviewPassEntry): string | undefined {
+  const id = pass.configuredModelId ?? ''
+  return id === '' || id === NO_CONFIGURED_MODEL_ID ? undefined : id
+}
+
 export function normalizeReviewPasses(passes: ReviewPassEntry[] | null | undefined): ReviewPassEntry[] {
   // A pass runs on EITHER a named logical model or a configured model, and a logical-model pass carries no
   // configured-model id at all. Keeping only the latter dropped every role-based pass on the way in and again on
   // the way out, so saving one looked like it worked and left the list empty.
+  //
+  // The id is omitted rather than sent empty when there is none: the field is a uuid on the wire, and an empty
+  // string fails to parse as one — which rejects the WHOLE request body, surfacing as "The request field is
+  // required" with nothing to say which field was at fault.
   return [...(passes ?? [])]
-    .filter((pass) => (pass.configuredModelId ?? '') !== '' || (pass.logicalModelName ?? '') !== '')
+    .filter((pass) => configuredModelIdOf(pass) !== undefined || (pass.logicalModelName ?? '') !== '')
     .sort((left, right) => (left.ordinal ?? 0) - (right.ordinal ?? 0))
     .map((pass, index) => ({
       ordinal: index,
-      configuredModelId: pass.configuredModelId ?? '',
+      configuredModelId: configuredModelIdOf(pass),
       logicalModelName: pass.logicalModelName ?? null,
       lens: pass.lens ?? null,
       scope: pass.scope ?? null,
@@ -262,7 +274,7 @@ export function reviewPassesEqual(left: ReviewPassEntry[], right: ReviewPassEntr
 
   return left.every(
     (pass, index) =>
-      (pass.configuredModelId ?? '') === (right[index]?.configuredModelId ?? '') &&
+      (configuredModelIdOf(pass) ?? '') === (configuredModelIdOf(right[index] ?? {}) ?? '') &&
       (pass.logicalModelName ?? '') === (right[index]?.logicalModelName ?? '') &&
       (pass.lens ?? null) === (right[index]?.lens ?? null) &&
       (pass.scope ?? null) === (right[index]?.scope ?? null) &&

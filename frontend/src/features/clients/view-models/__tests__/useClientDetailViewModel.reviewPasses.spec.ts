@@ -59,12 +59,24 @@ describe('review-pass normalize/equal preserve the lens', () => {
 
     expect(normalized).toHaveLength(2)
     expect(normalized[0].logicalModelName).toBe('Low Budget')
-    expect(normalized[0].configuredModelId).toBe('')
+    // Omitted, not empty: an empty string is not a uuid and the server rejects the whole body over it.
+    expect(normalized[0].configuredModelId).toBeUndefined()
     expect(normalized[1].logicalModelName).toBeNull()
   })
 
   it('normalizeReviewPasses still drops a pass that names neither a model nor a role', () => {
     expect(normalizeReviewPasses([{ ordinal: 0 }, { ordinal: 1, configuredModelId: '' }])).toEqual([])
+  })
+
+  // The API sends the all-zeros id for a role-based pass because the contract's field is a non-nullable uuid.
+  // Echoing it back would be meaningless, so it is treated as the absence it represents.
+  it('normalizeReviewPasses treats the all-zeros id as no configured model', () => {
+    const normalized = normalizeReviewPasses([
+      { ordinal: 0, configuredModelId: '00000000-0000-0000-0000-000000000000', logicalModelName: 'Medium Budget' },
+    ])
+
+    expect(normalized[0].configuredModelId).toBeUndefined()
+    expect(normalized[0].logicalModelName).toBe('Medium Budget')
   })
 
   // Without this the dirty check treats a role swap as no change, so Save does nothing.

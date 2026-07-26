@@ -34,6 +34,15 @@ internal sealed class TenantEntityTypeConfiguration : IEntityTypeConfiguration<T
         builder.Property(t => t.AllowedAiProviderKinds)
             .IsRequired()
             .HasDefaultValue(Array.Empty<string>());
+        builder.Property(t => t.AllowedAiEndpointHosts)
+            .HasColumnName("allowed_ai_endpoint_hosts")
+            .HasColumnType("jsonb")
+            .HasConversion(JsonPropertyConversions.StringArrayConverter)
+            .Metadata.SetValueComparer(JsonPropertyConversions.StringArrayComparer);
+        builder.Property(t => t.AllowedAiEndpointHosts)
+            .IsRequired()
+            .HasDefaultValue(Array.Empty<string>());
+
         builder.Property(t => t.CreatedAt).HasColumnName("created_at").IsRequired();
         builder.Property(t => t.UpdatedAt).HasColumnName("updated_at").IsRequired();
 

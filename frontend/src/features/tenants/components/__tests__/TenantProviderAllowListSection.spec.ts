@@ -12,7 +12,7 @@ vi.mock('@/services/tenantAdminService', () => ({
   updateTenant: (...a: unknown[]) => updateTenant(...a),
 }))
 
-const tenant = (allowed?: string[]): TenantDto =>
+const tenant = (allowed?: string[], hosts?: string[]): TenantDto =>
   ({
     id: 't1',
     slug: 'acme',
@@ -23,6 +23,7 @@ const tenant = (allowed?: string[]): TenantDto =>
     createdAt: '2026-07-01T00:00:00Z',
     updatedAt: '2026-07-01T00:00:00Z',
     allowedAiProviderKinds: allowed,
+    allowedAiEndpointHosts: hosts,
   }) as TenantDto
 
 const section = () => mount(TenantProviderAllowListSection, { props: { tenantId: 't1' } })
@@ -32,8 +33,9 @@ describe('TenantProviderAllowListSection', () => {
     getTenant.mockReset()
     updateTenant.mockReset()
     getTenant.mockResolvedValue(tenant([]))
-    updateTenant.mockImplementation((_id: string, body: { allowedAiProviderKinds?: string[] }) =>
-      Promise.resolve(tenant(body.allowedAiProviderKinds)),
+    updateTenant.mockImplementation(
+      (_id: string, body: { allowedAiProviderKinds?: string[]; allowedAiEndpointHosts?: string[] }) =>
+        Promise.resolve(tenant(body.allowedAiProviderKinds, body.allowedAiEndpointHosts)),
     )
   })
 
@@ -63,7 +65,10 @@ describe('TenantProviderAllowListSection', () => {
     await wrapper.get('[data-testid="tenant-provider-policy-save"]').trigger('click')
     await flushPromises()
 
-    expect(updateTenant).toHaveBeenCalledWith('t1', { allowedAiProviderKinds: ['liteLlm'] })
+    expect(updateTenant).toHaveBeenCalledWith('t1', {
+      allowedAiProviderKinds: ['liteLlm'],
+      allowedAiEndpointHosts: [],
+    })
     expect(wrapper.get('[data-testid="tenant-provider-policy-saved"]').text()).toBe('Provider policy saved.')
   })
 
@@ -77,8 +82,8 @@ describe('TenantProviderAllowListSection', () => {
     await wrapper.get('[data-testid="tenant-provider-policy-save"]').trigger('click')
     await flushPromises()
 
-    expect(updateTenant).toHaveBeenCalledWith('t1', { allowedAiProviderKinds: [] })
-    expect(wrapper.get('[data-testid="tenant-provider-policy-saved"]').text()).toContain('Every provider is permitted')
+    expect(updateTenant).toHaveBeenCalledWith('t1', { allowedAiProviderKinds: [], allowedAiEndpointHosts: [] })
+    expect(wrapper.get('[data-testid="tenant-provider-policy-saved"]').text()).toContain('Every provider and destination is permitted')
   })
 
   it('surfaces the server reason when saving fails', async () => {
@@ -90,5 +95,37 @@ describe('TenantProviderAllowListSection', () => {
     await flushPromises()
 
     expect(wrapper.get('[data-testid="tenant-provider-policy-error"]').text()).toBe('Tenant policy is locked.')
+  })
+
+  // Where the traffic goes is the half a provider family cannot answer, so the host list is its own control and
+  // saves alongside the families rather than as a separate action.
+  it('saves the permitted endpoint hosts, one per line', async () => {
+    const wrapper = section()
+    await flushPromises()
+
+    await wrapper.get('[data-testid="tenant-endpoint-hosts"]').setValue('api.openai.com\n  .openai.azure.com  \n\nopencode.ai')
+    await wrapper.get('[data-testid="tenant-provider-policy-save"]').trigger('click')
+    await flushPromises()
+
+    expect(updateTenant).toHaveBeenCalledWith('t1', {
+      allowedAiProviderKinds: [],
+      allowedAiEndpointHosts: ['api.openai.com', '.openai.azure.com', 'opencode.ai'],
+    })
+  })
+
+  it('states plainly when no destination is restricted', async () => {
+    const wrapper = section()
+    await flushPromises()
+
+    expect(wrapper.get('[data-testid="tenant-endpoint-policy-summary"]').text()).toContain('any host')
+  })
+
+  it('pre-fills the hosts the tenant already permits', async () => {
+    getTenant.mockResolvedValue(tenant([], ['opencode.ai']))
+    const wrapper = section()
+    await flushPromises()
+
+    expect(wrapper.get<HTMLTextAreaElement>('[data-testid="tenant-endpoint-hosts"]').element.value).toBe('opencode.ai')
+    expect(wrapper.get('[data-testid="tenant-endpoint-policy-summary"]').text()).toContain('opencode.ai')
   })
 })

@@ -25521,6 +25521,14 @@
             },
             "description": "Provider families this tenant's clients may use. Empty means unrestricted, which is what a tenant that has\nnever stated a policy looks like.",
             "nullable": true
+          },
+          "allowedAiEndpointHosts": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Endpoint hosts this tenant's clients may send AI traffic to. Empty means unrestricted. An entry matches a\nhost exactly, or any subdomain of it when written with a leading dot.",
+            "nullable": true
           }
         },
         "additionalProperties": false,
@@ -26124,6 +26132,14 @@
               "$ref": "#/components/schemas/AiProviderKind"
             },
             "description": "Provider families this tenant's clients may use, or null to leave unchanged. An empty list clears the\nrestriction back to unrestricted.",
+            "nullable": true
+          },
+          "allowedAiEndpointHosts": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Endpoint hosts this tenant's clients may reach, or null to leave unchanged. An empty list clears the\nrestriction. An entry matches a host exactly, or any subdomain when written with a leading dot.",
             "nullable": true
           }
         },

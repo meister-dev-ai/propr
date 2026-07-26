@@ -65,4 +65,77 @@ public sealed class TenantProviderPolicyTests
 
         Assert.Equal([AiProviderKind.OpenAi], policy.AllowedKinds);
     }
+
+    // Where the traffic goes is the half a provider family cannot answer: an OpenAI-compatible profile reached at
+    // an operator-supplied base URL is constrained by its family not at all.
+    [Fact]
+    public void NoStatedHostPolicyPermitsEveryDestination()
+    {
+        Assert.False(TenantProviderPolicy.Unrestricted.RestrictsEndpoints);
+        Assert.True(TenantProviderPolicy.Unrestricted.IsEndpointAllowed("https://anywhere.example/v1"));
+    }
+
+    [Fact]
+    public void AStatedHostPolicyPermitsOnlyWhatItNames()
+    {
+        var policy = new TenantProviderPolicy([], ["opencode.ai"]);
+
+        Assert.True(policy.RestrictsEndpoints);
+        Assert.True(policy.IsEndpointAllowed("https://opencode.ai/zen/v1"));
+        Assert.False(policy.IsEndpointAllowed("https://api.deepseek.com/v1"));
+    }
+
+    // A vendor whose customers each get their own name is permitted by the parent domain, or the policy would
+    // have to be rewritten for every new resource.
+    [Fact]
+    public void ALeadingDotPermitsSubdomainsAndTheDomainItself()
+    {
+        var policy = new TenantProviderPolicy([], [".openai.azure.com"]);
+
+        Assert.True(policy.IsEndpointAllowed("https://my-resource.openai.azure.com/"));
+        Assert.True(policy.IsEndpointAllowed("https://openai.azure.com/"));
+        Assert.False(policy.IsEndpointAllowed("https://notopenai.azure.com/"));
+        Assert.False(policy.IsEndpointAllowed("https://openai.azure.com.evil.example/"));
+    }
+
+    [Fact]
+    public void HostMatchingIgnoresCaseAndSurroundingNoise()
+    {
+        var policy = new TenantProviderPolicy([], ["  OpenCode.AI/  "]);
+
+        Assert.True(policy.IsEndpointAllowed("https://OPENCODE.ai/zen/v1"));
+    }
+
+    // A policy that only constrains the URLs it can read is not a policy.
+    [Fact]
+    public void AnUnreadableBaseUrlIsRefusedRatherThanWavedThrough()
+    {
+        var policy = new TenantProviderPolicy([], ["opencode.ai"]);
+
+        Assert.False(policy.IsEndpointAllowed("not a url"));
+        Assert.False(policy.IsEndpointAllowed(null));
+    }
+
+    [Fact]
+    public void TheEndpointRefusalNamesWhatIsPermitted()
+    {
+        var policy = new TenantProviderPolicy([], ["opencode.ai"]);
+
+        var refusal = policy.DescribeEndpointRefusal("https://api.deepseek.com/v1");
+
+        Assert.NotNull(refusal);
+        Assert.Contains("api.deepseek.com", refusal, StringComparison.Ordinal);
+        Assert.Contains("opencode.ai", refusal, StringComparison.Ordinal);
+    }
+
+    // The two restrictions are independent: a tenant can constrain families, hosts, both, or neither.
+    [Fact]
+    public void FamiliesAndHostsRestrictIndependently()
+    {
+        var hostsOnly = new TenantProviderPolicy([], ["opencode.ai"]);
+
+        Assert.False(hostsOnly.IsRestricted);
+        Assert.True(hostsOnly.IsAllowed(AiProviderKind.Anthropic));
+        Assert.False(hostsOnly.IsEndpointAllowed("https://api.anthropic.com/"));
+    }
 }

@@ -95,6 +95,7 @@ public sealed class TenantAdminService(
         bool? isActive = null,
         bool? localLoginEnabled = null,
         IReadOnlyList<AiProviderKind>? allowedAiProviderKinds = null,
+        IReadOnlyList<string>? allowedAiEndpointHosts = null,
         CancellationToken ct = default)
     {
         var isCommunityEdition = await this.IsCommunityEditionAsync(ct);
@@ -139,6 +140,17 @@ public sealed class TenantAdminService(
                 .ToArray();
         }
 
+        if (allowedAiEndpointHosts is not null)
+        {
+            // Stored lower-cased and de-duplicated: a host comparison is case-insensitive, and storing the
+            // operator's casing would make the audit trail read as a change when nothing changed.
+            tenant.AllowedAiEndpointHosts = allowedAiEndpointHosts
+                .Select(host => host.Trim().Trim('/').ToLowerInvariant())
+                .Where(host => host.Length > 0)
+                .Distinct(StringComparer.Ordinal)
+                .ToArray();
+        }
+
         tenant.UpdatedAt = DateTimeOffset.UtcNow;
         await dbContext.SaveChangesAsync(ct);
         await this.AddAuditEntryAsync(
@@ -146,7 +158,8 @@ public sealed class TenantAdminService(
             "tenant.policy.updated",
             $"Updated tenant '{tenant.DisplayName}' policy.",
             $"displayName={tenant.DisplayName}; isActive={tenant.IsActive}; localLoginEnabled={tenant.LocalLoginEnabled}; "
-            + $"allowedAiProviderKinds={(tenant.AllowedAiProviderKinds.Length == 0 ? "(unrestricted)" : string.Join(",", tenant.AllowedAiProviderKinds))}",
+            + $"allowedAiProviderKinds={(tenant.AllowedAiProviderKinds.Length == 0 ? "(unrestricted)" : string.Join(",", tenant.AllowedAiProviderKinds))}; "
+            + $"allowedAiEndpointHosts={(tenant.AllowedAiEndpointHosts.Length == 0 ? "(unrestricted)" : string.Join(",", tenant.AllowedAiEndpointHosts))}",
             ct);
 
         return ToDto(tenant);
@@ -203,7 +216,8 @@ public sealed class TenantAdminService(
             TenantCatalog.IsEditable(tenant.Id),
             tenant.CreatedAt,
             tenant.UpdatedAt,
-            ParseAllowedProviderKinds(tenant.AllowedAiProviderKinds));
+            ParseAllowedProviderKinds(tenant.AllowedAiProviderKinds),
+            tenant.AllowedAiEndpointHosts);
     }
 
     // A stored name that no longer parses is dropped rather than failing the read: a renamed provider family must

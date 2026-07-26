@@ -16,6 +16,8 @@ export interface TenantDto {
   updatedAt: string
   /** Provider families this tenant's clients may use; empty or absent means unrestricted. */
   allowedAiProviderKinds?: AiProviderKind[]
+  /** Endpoint hosts this tenant's clients may reach; empty or absent means unrestricted. */
+  allowedAiEndpointHosts?: string[]
 }
 
 export interface CreateTenantRequest {
@@ -29,6 +31,8 @@ export interface UpdateTenantRequest {
   localLoginEnabled?: boolean
   /** Provider families to permit; an empty array clears the restriction rather than forbidding everything. */
   allowedAiProviderKinds?: AiProviderKind[]
+  /** Endpoint hosts to permit; an empty array clears the restriction rather than forbidding everything. */
+  allowedAiEndpointHosts?: string[]
 }
 
 function buildTenantsPath(): string {

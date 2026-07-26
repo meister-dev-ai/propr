@@ -35,7 +35,7 @@ public sealed class TenantProviderPolicyProvider(IDbContextFactory<MeisterProPRD
         var stored = await db.Tenants
             .AsNoTracking()
             .Where(tenant => tenant.Id == tenantId)
-            .Select(tenant => tenant.AllowedAiProviderKinds)
+            .Select(tenant => new StoredPolicy(tenant.AllowedAiProviderKinds, tenant.AllowedAiEndpointHosts))
             .FirstOrDefaultAsync(ct)
             .ConfigureAwait(false);
 
@@ -66,25 +66,30 @@ public sealed class TenantProviderPolicyProvider(IDbContextFactory<MeisterProPRD
         var stored = await db.Tenants
             .AsNoTracking()
             .Where(tenant => tenant.Id == tenantId)
-            .Select(tenant => tenant.AllowedAiProviderKinds)
+            .Select(tenant => new StoredPolicy(tenant.AllowedAiProviderKinds, tenant.AllowedAiEndpointHosts))
             .FirstOrDefaultAsync(ct)
             .ConfigureAwait(false);
 
         return ToPolicy(stored);
     }
 
-    private static TenantProviderPolicy ToPolicy(string[]? stored)
+    private static TenantProviderPolicy ToPolicy(StoredPolicy? stored)
     {
-        if (stored is null || stored.Length == 0)
+        if (stored is null)
         {
             return TenantProviderPolicy.Unrestricted;
         }
 
-        var kinds = stored
+        var kinds = (stored.ProviderKinds ?? [])
             .Select(name => Enum.TryParse<AiProviderKind>(name, true, out var kind) ? kind : (AiProviderKind?)null)
             .OfType<AiProviderKind>()
             .ToList();
+        var hosts = stored.EndpointHosts ?? [];
 
-        return kinds.Count == 0 ? TenantProviderPolicy.Unrestricted : new TenantProviderPolicy(kinds);
+        return kinds.Count == 0 && hosts.Length == 0
+            ? TenantProviderPolicy.Unrestricted
+            : new TenantProviderPolicy(kinds, hosts);
     }
+
+    private sealed record StoredPolicy(string[]? ProviderKinds, string[]? EndpointHosts);
 }
