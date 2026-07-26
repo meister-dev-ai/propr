@@ -82,6 +82,8 @@ public sealed class AzureOpenAiProviderDriver : IAiProviderDriver
         ProviderModelDescriptor model,
         AiProtocolMode protocolMode)
     {
+        AiProtocolModeSupport.Require(this.ProviderKind, this.SupportedProtocolModes, protocolMode);
+
         var client = CreateAzureClient(
             new ProviderEndpoint(
                 endpoint.ProviderKind,
@@ -120,7 +122,7 @@ public sealed class AzureOpenAiProviderDriver : IAiProviderDriver
         AiProtocolMode protocolMode,
         int dimensions)
     {
-        _ = protocolMode;
+        AiProtocolModeSupport.Require(this.ProviderKind, this.SupportedProtocolModes, protocolMode);
         _ = dimensions;
 
         var client = CreateAzureClient(
