@@ -8,7 +8,7 @@ A separate commercial license is required to activate or use commercial-only fea
 
 ## Source License Map
 
-The current source license map is maintained in `docs/source-license-map.md`.
+The current source license map is maintained in `docs/reference/source-license-map.md`.
 
 To regenerate it, run:
 

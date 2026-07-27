@@ -4,7 +4,7 @@ using System.Text;
 
 var appFilePath = GetAppFilePath();
 var repoRoot = FindRepoRoot(Path.GetDirectoryName(appFilePath)!);
-var outputFile = Path.Combine(repoRoot, "docs", "source-license-map.md");
+var outputFile = Path.Combine(repoRoot, "docs", "reference", "source-license-map.md");
 
 const string commercialNotice = "This file implements commercial-only functionality. A commercial license is required to activate or use that functionality.";
 
