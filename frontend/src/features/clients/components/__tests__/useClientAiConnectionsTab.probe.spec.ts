@@ -86,3 +86,79 @@ describe('probing a connection before saving it', () => {
     expect(api.probeMessage.value).toContain('not permitted')
   })
 })
+
+// The probe sends the credential in its request, so it can only ever test a key present in the form. A saved
+// profile's key is never returned to the browser, which used to leave the button offering a test that came back
+// as a validation refusal about a missing key rather than as a missing input.
+describe('offering the probe only when there is something to probe with', () => {
+  beforeEach(() => {
+    vi.mocked(listAiConnections).mockResolvedValue([])
+    vi.mocked(listPermittedProviders).mockResolvedValue({
+      providers: [
+        { providerKind: 'azureOpenAi', isPermitted: true, protocolModes: ['auto', 'responses'] },
+      ],
+      isRestricted: false,
+    })
+    vi.mocked(probeAiConnection).mockReset()
+  })
+
+  it('is unavailable while the api-key field is empty', async () => {
+    await mountComposable()
+    api.editor.authMode = 'apiKey'
+    api.editor.apiKey = ''
+
+    expect(api.canProbe.value).toBe(false)
+  })
+
+  it('becomes available once a key is typed', async () => {
+    await mountComposable()
+    api.editor.authMode = 'apiKey'
+    api.editor.apiKey = 'sk-test'
+
+    expect(api.canProbe.value).toBe(true)
+  })
+
+  it('stays available for azure identity, which carries no key at all', async () => {
+    await mountComposable()
+    api.editor.authMode = 'azureIdentity'
+    api.editor.apiKey = ''
+
+    expect(api.canProbe.value).toBe(true)
+  })
+
+  // A result belongs to the credential that produced it, so opening another profile must not inherit it.
+  it('drops a previous result when a different profile is opened', async () => {
+    await mountComposable()
+    vi.mocked(probeAiConnection).mockResolvedValue({
+      status: 'failed',
+      summary: 'The provider rejected the credential (HTTP 401).',
+    } as never)
+
+    await api.handleProbeConnection()
+    expect(api.probeMessage.value).toContain('HTTP 401')
+
+    api.openEditEditor({
+      id: 'other-profile',
+      displayName: 'Another provider',
+      providerKind: 'azureOpenAi',
+      baseUrl: 'https://other.openai.azure.com/',
+      authMode: 'apiKey',
+    } as never)
+
+    expect(api.probeMessage.value).toBe('')
+    expect(api.probeFailed.value).toBe(false)
+  })
+
+  it('drops a previous result when the form is reset for a new profile', async () => {
+    await mountComposable()
+    vi.mocked(probeAiConnection).mockResolvedValue({ status: 'failed', summary: 'Refused.' } as never)
+
+    await api.handleProbeConnection()
+    expect(api.probeMessage.value).toBe('Refused.')
+
+    api.openCreateEditor()
+
+    expect(api.probeMessage.value).toBe('')
+    expect(api.probeFailed.value).toBe(false)
+  })
+})

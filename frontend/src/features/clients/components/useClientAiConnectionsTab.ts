@@ -161,6 +161,7 @@ export function useClientAiConnectionsTab(props: { clientId: string }) {
     editor.bindings = makeBindingDefaults().map((binding) => ({ ...binding, isEnabled: false }))
     saveError.value = ''
     discoveryMessage.value = ''
+    clearProbeResult()
     advancedSettingsOpen.value = false
     editingModelId.value = null
   }
@@ -172,6 +173,9 @@ export function useClientAiConnectionsTab(props: { clientId: string }) {
 
   const openEditEditor = (profile: AiConnectionDto) => {
     viewMode.value = 'detail'
+    // A probe result belongs to the credential that was in the form when it ran, so it is dropped when a
+    // different profile is opened rather than left to look like this one's outcome.
+    clearProbeResult()
     editor.mode = 'edit'
     editor.profileId = profile.id ?? ''
     editor.displayName = profile.displayName ?? ''
@@ -365,6 +369,18 @@ export function useClientAiConnectionsTab(props: { clientId: string }) {
   const probing = ref(false)
   const probeMessage = ref('')
   const probeFailed = ref(false)
+
+  const clearProbeResult = () => {
+    probeMessage.value = ''
+    probeFailed.value = false
+  }
+
+  // The probe carries the credential in the request, because it deliberately tests the form's values rather than
+  // anything stored. A saved profile's key is never returned to the browser, so on an existing profile the field
+  // is blank and there is nothing to probe with until the operator types one. Offering the button then would
+  // produce a refusal that reads like a broken connection instead of a missing input — re-checking the stored
+  // credential is what Verify does.
+  const canProbe = computed(() => editor.authMode !== 'apiKey' || editor.apiKey.trim().length > 0)
 
   const handleProbeConnection = async () => {
     probing.value = true
@@ -642,6 +658,7 @@ export function useClientAiConnectionsTab(props: { clientId: string }) {
     probing,
     probeMessage,
     probeFailed,
+    canProbe,
     saveProfile,
     handleVerify,
     handleActivate,

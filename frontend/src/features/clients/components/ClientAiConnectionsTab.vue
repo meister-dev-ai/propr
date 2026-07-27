@@ -215,14 +215,19 @@
               <button
                 type="button"
                 class="btn-secondary btn-sm"
-                :disabled="probing"
+                :disabled="probing || !canProbe"
                 data-testid="ai-probe-connection"
                 @click="handleProbeConnection"
               >
                 <i class="fi fi-rr-plug"></i> {{ probing ? 'Testing…' : 'Test connection' }}
               </button>
-              <small class="field-hint-inline">
-                Checks the endpoint and credential without saving them, so a wrong key surfaces before it is stored.
+              <small v-if="canProbe" class="field-hint-inline">
+                Checks the endpoint and the API key in this form without saving them, so a wrong key surfaces
+                before it is stored.
+              </small>
+              <small v-else class="field-hint-inline" data-testid="ai-probe-needs-credential">
+                Tests the API key in this form, so enter one to use it. A saved key is never shown again — to
+                re-check the one already stored, save and use <strong>Verify</strong>.
               </small>
               <p
                 v-if="probeMessage"
@@ -606,6 +611,7 @@ const {
   probing,
   probeMessage,
   probeFailed,
+  canProbe,
   saveProfile,
   handleVerify,
   handleActivate,

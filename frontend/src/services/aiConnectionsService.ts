@@ -46,11 +46,13 @@ function getErrorMessage(error: unknown, fallback: string): string {
     errors?: Record<string, string[]>
   }
 
+  // A field error is read before the title: a validation ProblemDetails always titles itself "One or more
+  // validation errors occurred.", which tells the operator nothing, while the field entry names what is wrong.
   return (
     readStringField(apiError.error) ??
     readStringField(apiError.detail) ??
-    readStringField(apiError.title) ??
     readFirstFieldError(apiError.errors) ??
+    readStringField(apiError.title) ??
     fallback
   )
 }
