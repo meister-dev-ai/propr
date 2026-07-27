@@ -8,13 +8,13 @@
   <a href="https://github.com/meister-dev-ai/propr/actions/workflows/ci.yml"><img src="https://github.com/meister-dev-ai/propr/actions/workflows/ci.yml/badge.svg?branch=main" alt="CI"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-ELv2-blue.svg" alt="License: ELv2"></a>
   <img src="https://img.shields.io/badge/.NET-10-512BD4?logo=dotnet" alt=".NET 10">
-  <a href="https://techcommunity.microsoft.com/blog/azure-events/announcing-the-ai-dev-days-hackathon-winners/4513528"><img src="https://img.shields.io/badge/🏆%20AI%20Dev%20Days-Best%20Enterprise%20Solution-gold" alt="AI Dev Days Hackathon — Best Enterprise Solution"></a>
+  <a href="https://techcommunity.microsoft.com/blog/azure-events/announcing-the-ai-dev-days-hackathon-winners/4513528"><img src="https://img.shields.io/badge/🏆%20AI%20Dev%20Days-Best%20Enterprise%20Solution-gold" alt="AI Dev Days Hackathon - Best Enterprise Solution"></a>
 </p>
 
 ---
 
 ProPR reviews your pull and merge requests with AI, right where your code already lives. It reads
-the changed files, comments on specific lines, and posts a summary — either automatically as PRs
+the changed files, comments on specific lines, and posts a summary - either automatically as PRs
 come in, or on demand from CI.
 
 ## What we care about
@@ -23,11 +23,11 @@ come in, or on demand from CI.
   Forgejo-family hosts. No mirroring your repos somewhere else.
 - **Your AI, your keys.** Bring your own model: Azure OpenAI / AI Foundry, OpenAI, Anthropic, AWS
   Bedrock, Google Gemini and Vertex AI, a LiteLLM gateway, or any OpenAI-compatible endpoint you point
-  it at — including ones you host yourself. ProPR doesn't ship a model or route your code through ours.
+  it at - including ones you host yourself. ProPR doesn't ship a model or route your code through ours.
 - **Self-hostable and sovereign.** Run the whole stack yourself. Provider and AI credentials are
   scoped per client and protected at rest.
 - **Every decision is on the record.** Reviews, AI calls, tool calls, filter decisions, and timing
-  are all stored and inspectable from the management UI — no log spelunking.
+  are all stored and inspectable from the management UI - no log spelunking.
 - **Built to stay out of the way.** Token-aware reviews, per-file passes, and relevance filtering
   keep the signal high and the cost down.
 
@@ -75,8 +75,8 @@ entry points:
 ProPR is distributed under the Elastic License 2.0. Some features in the tree are commercial-only and
 require a license to use, even when self-hosted.
 
-- [LICENSE](LICENSE) — repository-wide source license
-- [LICENSING.md](LICENSING.md) — path-by-path capability classification
-- [COMMERCIAL.md](COMMERCIAL.md) — when a commercial license is required
-- [SECURITY.md](SECURITY.md) — reporting vulnerabilities
-- [CONTRIBUTING.md](CONTRIBUTING.md) — how to contribute
+- [LICENSE](LICENSE) - repository-wide source license
+- [LICENSING.md](LICENSING.md) - path-by-path capability classification
+- [COMMERCIAL.md](COMMERCIAL.md) - when a commercial license is required
+- [SECURITY.md](SECURITY.md) - reporting vulnerabilities
+- [CONTRIBUTING.md](CONTRIBUTING.md) - how to contribute

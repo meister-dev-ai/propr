@@ -4,13 +4,13 @@ Everything needed to talk to a model provider, and nothing about what the conver
 
 The library answers four questions for a host application:
 
-1. **Which provider families can this build actually call?** — the driver registry.
-2. **Can I reach this endpoint, and what models does it have?** — probe, verify, discover.
-3. **Give me an `IChatClient` / `IEmbeddingGenerator` for this endpoint and model.** — the driver seam.
-4. **Was that failure worth retrying, and what did the call cost in tokens?** — retry classification and usage extraction.
+1. **Which provider families can this build actually call?** - the driver registry.
+2. **Can I reach this endpoint, and what models does it have?** - probe, verify, discover.
+3. **Give me an `IChatClient` / `IEmbeddingGenerator` for this endpoint and model.** - the driver seam.
+4. **Was that failure worth retrying, and what did the call cost in tokens?** - retry classification and usage extraction.
 
 It is built on `Microsoft.Extensions.AI`, so what comes back out is `IChatClient` and
-`IEmbeddingGenerator<string, Embedding<float>>` — not a wrapper type of our own.
+`IEmbeddingGenerator<string, Embedding<float>>` - not a wrapper type of our own.
 
 ## Boundary rules
 
@@ -23,7 +23,7 @@ Two rules keep this library separable from the product that hosts it, and both a
 
 A third rule follows from them: no review vocabulary on the seam. The library knows about endpoints, models,
 protocols, tokens and failures. It does not know what a finding, a pass, a client or a tenant is. Anything the
-library would need a product concept for is instead *contributed* by the host — see
+library would need a product concept for is instead *contributed* by the host - see
 [Extension points](#extension-points-a-host-fills-in).
 
 ## Quick start
@@ -68,7 +68,7 @@ var client = driver.CreateChatClient(endpoint, model, protocolMode);
 var capabilities = driver.GetChatRuntimeCapabilities(endpoint, model, protocolMode);
 ```
 
-`ProviderEndpoint` and `ProviderModelDescriptor` are the only inputs a driver takes — the same shapes at
+`ProviderEndpoint` and `ProviderModelDescriptor` are the only inputs a driver takes - the same shapes at
 configuration time and at run time, because both answer the same question:
 
 ```csharp
@@ -107,7 +107,7 @@ var model = new ProviderModelDescriptor(
 `AiProviderKind`, `AiProtocolMode` and `AiAuthMode` are open vocabularies: a family can be named here before its
 driver exists. **The registry, not the enum, is the authority on what this build can call.** Ask
 `RegisteredKinds` before offering a family to an operator, and `SupportedProtocolModes` before offering a protocol
-— otherwise opening the enum lets someone store a profile that only fails once a workload runs.
+- otherwise opening the enum lets someone store a profile that only fails once a workload runs.
 
 `AiProtocolModeSupport` is how a driver says no in one voice: `DescribeRefusal` for the configuration path (a
 message), `Require` for the runtime path (a throw), `NarrowToSupported` so `Auto` can never resolve to a shape the
@@ -115,7 +115,7 @@ driver does not speak.
 
 ### Capabilities are facts, not intentions
 
-`GetChatRuntimeCapabilities` reports what the provider *and the protocol it was bound to* can do —
+`GetChatRuntimeCapabilities` reports what the provider *and the protocol it was bound to* can do -
 provider-managed sessions, background responses, prompt caching, cache routing. A driver claims a capability only
 when the client it just built actually exercises it: reaching Claude through an OpenAI-compatible proxy loses
 cache-control breakpoints, so only the native Anthropic driver claims `SupportsPromptCaching`.
@@ -124,7 +124,7 @@ cache-control breakpoints, so only the native Anthropic driver claims `SupportsP
 
 `ClassifyRuntimeFailure` has a default implementation that reads the HTTP status, and is right for anything
 speaking HTTP with conventional codes. Override it to recognise SDK-specific signals *first*, then defer to
-`DriverFailureMapper.ClassifyRuntimeFailure` for the rest — a driver that classifies everything itself gets the
+`DriverFailureMapper.ClassifyRuntimeFailure` for the rest - a driver that classifies everything itself gets the
 common cases subtly wrong. Anthropic's `529 overloaded` and the AWS SDK's own throttling exception types are the
 two cases in the library today.
 
@@ -158,7 +158,7 @@ provoked it; normalization innermost applies to retried attempts too.
    `AiProtocolModeSupport.Require` at the top of `CreateChatClient` / `CreateEmbeddingGenerator`.
 3. Validate the probe target through `AiProbeTargetValidation` so the SSRF-egress and auth-shape rules stay
    shared rather than re-derived.
-4. Build the transport on the host's `"AiProviderRuntime"` `HttpClient` — that is where the egress guard and the
+4. Build the transport on the host's `"AiProviderRuntime"` `HttpClient` - that is where the egress guard and the
    reasoning round-trip live. An SDK with its own transport needs an `HttpClientFactory` hook to the same client
    (see `BedrockClientFactory`).
 5. Claim capabilities only where the client exercises them. Refuse what the provider does not serve, with a
@@ -166,7 +166,7 @@ provoked it; normalization innermost applies to retried attempts too.
 6. Add a `Usage.ProviderUsageExtractor` key set if the provider names its cache or reasoning counters its own way.
 7. Add a `DriverConformanceFixture` entry. The conformance suite measures the seam behaviour every driver must
    share; a new driver joining it is how parity stops being a matter of opinion.
-8. Register the driver in the host's composition root. The registry indexes what was registered — nothing else
+8. Register the driver in the host's composition root. The registry indexes what was registered - nothing else
    needs to change.
 
 ## Tests

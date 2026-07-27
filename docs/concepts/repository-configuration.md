@@ -4,11 +4,11 @@ Two settings live in the repository rather than in ProPR, in a `.meister-propr/`
 from the **target branch** of the pull request. Files on the source branch are never read, so a
 contributor cannot change how their own pull request is reviewed.
 
-Everything else about a review is set in ProPR — see [what you can tune](reviews.md#what-you-can-tune).
+Everything else about a review is set in ProPR - see [what you can tune](reviews.md#what-you-can-tune).
 
 ## `.meister-propr/exclude`
 
-Glob patterns for files ProPR should not review — one pattern per line. Blank lines and lines starting
+Glob patterns for files ProPR should not review - one pattern per line. Blank lines and lines starting
 with `#` are ignored. Matching is case-insensitive and relative to the repository root.
 
 ```
@@ -21,7 +21,7 @@ with `#` are ignored. Matching is case-insensitive and relative to the repositor
 | Situation | What ProPR uses |
 |---|---|
 | No `exclude` file, or it cannot be read | The built-in defaults: `**/Migrations/*.Designer.cs` and `**/Migrations/*ModelSnapshot.cs` |
-| `exclude` file with at least one pattern | Exactly those patterns — the built-in defaults no longer apply |
+| `exclude` file with at least one pattern | Exactly those patterns - the built-in defaults no longer apply |
 | `exclude` file with only comments and blank lines | No exclusions at all |
 
 Because a present file replaces the defaults entirely, repeat any default you still want. This works
@@ -29,7 +29,7 @@ on Azure DevOps, GitHub, GitLab and Forgejo.
 
 ## `.meister-propr/instructions-*.md`
 
-Repository-specific guidance handed to the reviewer — house conventions, what to be strict about, what
+Repository-specific guidance handed to the reviewer - house conventions, what to be strict about, what
 to leave alone. Any file in the folder whose name starts with `instructions-` is picked up; the folder
 is read one level deep, not recursively.
 

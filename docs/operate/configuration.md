@@ -13,7 +13,7 @@ Three different things happen depending on how a value is wrong, and only one of
 | What you did | What happens |
 |---|---|
 | Set it somewhere the container never sees | Silently ignored. See [the example stack](#does-the-example-stack-forward-it) below. |
-| Set it to something unparsable — a word where a number belongs, or a blank value | Silently ignored; the default is used. |
+| Set it to something unparsable - a word where a number belongs, or a blank value | Silently ignored; the default is used. |
 | Set it to a parsable value outside the accepted range | **Startup fails** for most settings, with a message naming the setting and its bounds. |
 
 Three groups behave differently, and it is worth knowing which:
@@ -36,7 +36,7 @@ Compose only passes a variable to a container if the service's `environment:` bl
 silently ignored.**
 
 One syntax note that applies to every value on this page: in an env file, do not put spaces around the
-equals sign. `KEY=value`, never `KEY = value` — the spaces become part of the name and the value.
+equals sign. `KEY=value`, never `KEY = value` - the spaces become part of the name and the value.
 
 The last column of every table below says which:
 
@@ -58,11 +58,11 @@ To use one that is not forwarded, add it to the `meisterpropr` service's `enviro
 | Variable | What it does | Default | Accepted | Example stack |
 |---|---|---|---|---|
 | `MEISTER_JWT_SECRET` | Signing secret for session access tokens | none | at least 32 characters | yes |
-| `MEISTER_BOOTSTRAP_ADMIN_USER` | Username of the admin account seeded on first start | none | — | yes |
-| `MEISTER_BOOTSTRAP_ADMIN_PASSWORD` | Password for that account | none | — | yes |
-| `DB_CONNECTION_STRING` | PostgreSQL connection string for the ProPR database | none | — | yes |
-| `PROCURSOR_SHARED_KEY` | Shared secret the API and ProCursor authenticate to each other with | none | — | yes |
-| `PROCURSOR_DB_CONNECTION_STRING` | PostgreSQL connection string for the ProCursor database | none | — | yes |
+| `MEISTER_BOOTSTRAP_ADMIN_USER` | Username of the admin account seeded on first start | none | - | yes |
+| `MEISTER_BOOTSTRAP_ADMIN_PASSWORD` | Password for that account | none | - | yes |
+| `DB_CONNECTION_STRING` | PostgreSQL connection string for the ProPR database | none | - | yes |
+| `PROCURSOR_SHARED_KEY` | Shared secret the API and ProCursor authenticate to each other with | none | - | yes |
+| `PROCURSOR_DB_CONNECTION_STRING` | PostgreSQL connection string for the ProCursor database | none | - | yes |
 | `PROCURSOR_PROPR_BASE_URL` | Internal base URL ProCursor calls the API on | none | absolute URL | yes |
 
 What "required" means differs per variable, and the failure modes are not alike:
@@ -71,12 +71,12 @@ What "required" means differs per variable, and the failure modes are not alike:
   ignored. When none does and they are absent, startup fails.
 - ProPR registers its database-backed features only when `DB_CONNECTION_STRING` is set.
 - The ProCursor service refuses to start without its own connection string, its shared key, and the API
-  base URL. On the API side, an absent shared key or service base URL simply turns ProCursor off — see
+  base URL. On the API side, an absent shared key or service base URL simply turns ProCursor off - see
   [running without ProCursor](deploy.md#running-without-procursor).
 - `MEISTER_JWT_SECRET` is different in kind: it is read when the first token is signed, not at startup.
   A missing or too-short secret therefore lets the stack come up healthy and fails the first sign-in
   instead.
-- On the bundled compose stack, an absent `PROCURSOR_SHARED_KEY` does not turn ProCursor off — that
+- On the bundled compose stack, an absent `PROCURSOR_SHARED_KEY` does not turn ProCursor off - that
   stack always defines the service and gates the API on it, so ProCursor crash-loops and the API never
   starts. See [running without ProCursor](deploy.md#running-without-procursor).
 
@@ -99,7 +99,7 @@ See [deployment topology](deploy.md#deployment-topology) for why both matter beh
 
 | Variable | What it does | Default | Accepted | Example stack |
 |---|---|---|---|---|
-| `MEISTER_DATA_PROTECTION_KEYS_PATH` | Directory holding the key ring that encrypts stored provider and AI credentials | unset — keys live on the container's own filesystem and are lost when it is replaced | writable directory path, created if absent | pinned |
+| `MEISTER_DATA_PROTECTION_KEYS_PATH` | Directory holding the key ring that encrypts stored provider and AI credentials | unset - keys live on the container's own filesystem and are lost when it is replaced | writable directory path, created if absent | pinned |
 
 The example stack pins this to a fixed in-container path rather than reading it from `.env`, and mounts a
 named volume there shared by both services. Putting it somewhere durable of your own means editing that
@@ -133,7 +133,7 @@ What these controls are for, and why the per-IP limit is deliberately looser tha
 | `WORKER_STUCK_JOB_TIMEOUT_MINUTES` | How long a job may sit in processing before it is failed | `30` | 5–1440 | no |
 
 `WORKER_MAX_CONCURRENT_REVIEW_JOBS` needs a commercial license for parallel review execution to have any
-effect — see [editions](../reference/editions.md) — and it is one of the two multipliers described under
+effect - see [editions](../reference/editions.md) - and it is one of the two multipliers described under
 [review workers](deploy.md#review-workers).
 
 ## Review workspace
@@ -192,7 +192,7 @@ Read by the ProCursor service.
 ## Review loop budgets
 
 These bound the work one review may do. They are the settings that most directly move token spend that
-the management UI does not expose — see [control cost](../guides/control-cost.md).
+the management UI does not expose - see [control cost](../guides/control-cost.md).
 
 | Variable | What it does | Default | Accepted | Example stack |
 |---|---|---|---|---|
@@ -207,7 +207,7 @@ the management UI does not expose — see [control cost](../guides/control-cost.
 | `AI_FILE_BATCH_LINES` | Lines returned per file-content read the reviewer makes | `100` | 10–1000 | no |
 | `AI_MAX_FILE_SIZE_BYTES` | Largest file the reviewer may read; above it the read returns an error instead of content | `1048576` | 1024 or more | no |
 
-Which files land in which complexity tier is decided per review — see
+Which files land in which complexity tier is decided per review - see
 [reviews](../concepts/reviews.md).
 
 ## Finding thresholds
@@ -219,7 +219,7 @@ Which files land in which complexity tier is decided per review — see
 | `AI_CONFIDENCE_FLOOR_WARNING` | Minimum confidence to post at warning severity; below it the finding is downgraded to suggestion | `60` | 0–100 | yes |
 | `AI_QUALITY_FILTER_THRESHOLD` | Total comment count across all files below which the cross-file quality pass is skipped | `20` | 1–500 | yes |
 
-These sit under the publication gate, not in place of it — see
+These sit under the publication gate, not in place of it - see
 [why a finding did not get posted](../concepts/reviews.md#why-a-finding-did-not-get-posted).
 
 ## Thread memory
@@ -230,7 +230,7 @@ These sit under the publication gate, not in place of it — see
 | `AI_MEMORY_MIN_SIMILARITY` | Minimum similarity for a past resolution to be considered | `0.80` | 0.0–1.0 | yes |
 | `AI_MEMORY_EMBEDDING_DIMENSIONS` | Embedding width; must match the model bound to the embedding purpose | `1536` | 64–4096 | yes |
 
-The embedding model itself is configured per client, not here — see
+The embedding model itself is configured per client, not here - see
 [purposes](../ai/purposes.md).
 
 ## Code-structure tools
@@ -261,7 +261,7 @@ work one lookup may do before it returns what it has, marked truncated.
 | `AI_MAX_LINKED_ITEM_TOOL_RESULT_CHARS` | Character budget for one such result | `8000` | 256–64000 | no |
 | `AI_LINKED_ITEM_TOOL_TIMEOUT_MS` | Budget for one such lookup; on overshoot it returns empty | `5000` | 100–30000 | no |
 
-Whether linked items are pulled in at all is a per-client setting — see
+Whether linked items are pulled in at all is a per-client setting - see
 [what you can tune](../concepts/reviews.md#what-you-can-tune).
 
 ## Egress and stored content
@@ -280,13 +280,13 @@ reasoning contains, and when to turn it off:
 
 | Variable | What it does | Default | Accepted | Example stack |
 |---|---|---|---|---|
-| `AZURE_TENANT_ID` | Microsoft Entra tenant of the service principal | none | — | no |
-| `AZURE_CLIENT_ID` | Application ID of the service principal | none | — | no |
-| `AZURE_CLIENT_SECRET` | Its client secret | none | — | no |
+| `AZURE_TENANT_ID` | Microsoft Entra tenant of the service principal | none | - | no |
+| `AZURE_CLIENT_ID` | Application ID of the service principal | none | - | no |
+| `AZURE_CLIENT_SECRET` | Its client secret | none | - | no |
 
 All three together supply one Azure service principal to the backend process. That one credential serves
-two unrelated purposes: Azure DevOps operations for a client that has no connection of its own — see
-[global Azure fallback](../platforms/azure-devops.md#global-azure-fallback) — and Azure-hosted AI
+two unrelated purposes: Azure DevOps operations for a client that has no connection of its own - see
+[global Azure fallback](../platforms/azure-devops.md#global-azure-fallback) - and Azure-hosted AI
 endpoints configured with Azure Identity instead of a key.
 
 Set fewer than three and none of them are used. When they are all absent, ProPR uses the ambient Azure
@@ -296,12 +296,12 @@ credential instead: a managed identity, an Azure CLI login, or whatever else the
 
 | Variable | What it does | Default | Accepted | Example stack |
 |---|---|---|---|---|
-| `OTLP_ENDPOINT` | OTLP collector to export traces to | none — traces are not exported | absolute URL | no |
-| `LOKI_URL` | Grafana Loki instance to ship logs to | none — logs go to stdout only | absolute URL | pinned |
+| `OTLP_ENDPOINT` | OTLP collector to export traces to | none - traces are not exported | absolute URL | no |
+| `LOKI_URL` | Grafana Loki instance to ship logs to | none - logs go to stdout only | absolute URL | pinned |
 | `ASPNETCORE_ENVIRONMENT` | The runtime environment name | `Production` when unset | `Production`, `Development`, or your own name | pinned |
 
-`Development` is not a production setting: it serves the API documentation UI — see
-[the API reference](../reference/api.md#more) — and relaxes the outbound AI egress checks — see
+`Development` is not a production setting: it serves the API documentation UI - see
+[the API reference](../reference/api.md#more) - and relaxes the outbound AI egress checks - see
 [outbound request protection](../reference/security.md#outbound-request-protection). Run `Production`
 anywhere real. Where traces and logs end up:
 [observability](observability.md#traces-metrics-and-logs).
@@ -311,10 +311,10 @@ anywhere real. Where traces and logs end up:
 | Variable | What it does | Default | Accepted | Example stack |
 |---|---|---|---|---|
 | `AI_EVALUATOR_ENDPOINT` | Azure OpenAI endpoint for the repository-instruction relevance evaluator | none | Azure OpenAI endpoint URL | no |
-| `AI_EVALUATOR_DEPLOYMENT` | Deployment name to call on it | none | — | no |
-| `AI_API_KEY` | Key for that endpoint; omit to authenticate with the host's ambient Azure credential instead | none | — | no |
+| `AI_EVALUATOR_DEPLOYMENT` | Deployment name to call on it | none | - | no |
+| `AI_API_KEY` | Key for that endpoint; omit to authenticate with the host's ambient Azure credential instead | none | - | no |
 
 This evaluator judges which of a repository's instruction files apply to a diff. It is registered only
-when the endpoint and the deployment are both set, and it is Azure OpenAI only — it does not go through
+when the endpoint and the deployment are both set, and it is Azure OpenAI only - it does not go through
 the per-client AI connections, so it is the one model call in the product that a client's provider
 configuration does not control. Leave all three unset unless you specifically want it.

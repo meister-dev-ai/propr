@@ -1,6 +1,6 @@
 # Troubleshooting
 
-Find your symptom, go to the page that fixes it. This page holds no diagnosis of its own — every entry
+Find your symptom, go to the page that fixes it. This page holds no diagnosis of its own - every entry
 below is owned somewhere else, and that page has the detail.
 
 ## The stack itself
@@ -53,7 +53,7 @@ Confirming one review end to end, if you have not had a successful one yet, is
 | The row fails immediately | A purpose the review needs resolves to no model | [purposes](../ai/purposes.md) |
 | An AI connection will not verify | Credentials, endpoint reachability, or the wrong family for that endpoint | [verification failures](../ai/credentials.md#verification-failures) |
 | No comments on the pull request, or fewer than the summary suggests | Comment posting is off for the client, or the gate and the minimum severity to post filtered them | [why a finding did not get posted](../concepts/reviews.md#why-a-finding-did-not-get-posted) |
-| A finding you expected never appeared | Exclusion patterns, the context budget, or the gate — all of which the protocol records | [what happens during a review](../concepts/reviews.md#what-happens-during-a-review) |
+| A finding you expected never appeared | Exclusion patterns, the context budget, or the gate - all of which the protocol records | [what happens during a review](../concepts/reviews.md#what-happens-during-a-review) |
 
 ## Cost and spend figures
 

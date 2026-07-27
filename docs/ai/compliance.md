@@ -2,11 +2,11 @@
 
 Restricting which AI provider families and which endpoint hosts a tenant's clients may reach.
 
-**Commercial only.** These restrictions are set on a tenant, and a Community installation has no editable tenant —
+**Commercial only.** These restrictions are set on a tenant, and a Community installation has no editable tenant -
 so in Community both lists stay empty and AI traffic is unrestricted. See [editions](../reference/editions.md).
 
 Under **Tenant → Compliance**, a tenant can state where its AI traffic may go. Both lists are independent and
-both are empty by default, and **empty means unrestricted** — a tenant that states no policy is unaffected.
+both are empty by default, and **empty means unrestricted** - a tenant that states no policy is unaffected.
 
 | Setting | Meaning |
 |---|---|
@@ -23,7 +23,7 @@ Policy is enforced when a connection is saved **and** again before a credential 
 tightening a policy takes effect on existing connections without any cleanup on your side. Every change here is
 [audited](../reference/security.md#auditing).
 
-These lists are a policy layer on top of the rules that apply to every installation, licensed or not — see
+These lists are a policy layer on top of the rules that apply to every installation, licensed or not - see
 [outbound request protection](../reference/security.md#outbound-request-protection).
 
 For the order to apply these controls in, and how to prove afterwards that they hold, see

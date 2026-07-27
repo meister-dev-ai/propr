@@ -6,7 +6,7 @@ rely on. To report a vulnerability, see [SECURITY.md](../../SECURITY.md).
 ## Where your code goes
 
 ProPR reads pull requests from your SCM host and sends the relevant content to the AI provider **you**
-configured. There is no ProPR-operated service in that path — no mirroring, no proxying through us, no
+configured. There is no ProPR-operated service in that path - no mirroring, no proxying through us, no
 telemetry containing your code.
 
 A tenant can constrain this further by restricting which AI provider families and which endpoint hosts
@@ -14,7 +14,7 @@ its clients may use. See [tenant compliance](../ai/compliance.md).
 
 ## What ProPR stores
 
-Reviews, findings, and protocol traces are always persisted — that is the product's history and the
+Reviews, findings, and protocol traces are always persisted - that is the product's history and the
 basis for thread memory.
 
 Raw pull-request content is not. Archiving a connection's comment threads or its diffs is opt-in per
@@ -28,7 +28,7 @@ SCM provider connection, under **Data retention** on the connection form:
 
 A purge worker sweeps on the interval `REVIEW_ARCHIVE_PURGE_INTERVAL_SECONDS` sets; see
 [the environment variable reference](../operate/configuration.md#background-intervals). Retention is
-evaluated per pull request against its last activity — open pull requests are not exempt. If both
+evaluated per pull request against its last activity - open pull requests are not exempt. If both
 toggles are off, that connection's archived data is deleted wholesale on the next sweep.
 
 The sweep only ever touches archived raw content. It never deletes review jobs, file results,
@@ -44,14 +44,14 @@ An AI endpoint URL is operator-supplied, which makes it a potential way to reach
 Every AI endpoint must be reachable over `https`.
 
 Outbound AI traffic goes through a guarded transport that checks the connection at connect time against the
-**resolved IP address**, not just the hostname — so a name that resolves to an internal address, or is rebound to
-one between check and connect, is refused — and never follows redirects. Private, loopback and link-local
+**resolved IP address**, not just the hostname - so a name that resolves to an internal address, or is rebound to
+one between check and connect, is refused - and never follows redirects. Private, loopback and link-local
 addresses, including cloud metadata endpoints, are refused by default. That guard covers every provider family
 except Azure OpenAI.
 
 Azure OpenAI is reached through the Azure SDK, which uses its own transport and so does not pass through that
 check. It is constrained differently: an Azure connection's base URL is rejected unless its host is an Azure AI
-host — `*.openai.azure.com`, `*.services.ai.azure.com` or `*.cognitiveservices.azure.com` — and unless it uses
+host - `*.openai.azure.com`, `*.services.ai.azure.com` or `*.cognitiveservices.azure.com` - and unless it uses
 `https`. Those hostnames are Microsoft-controlled, including for private endpoints, so an Azure profile cannot be
 pointed at an arbitrary internal host. An Azure-hosted endpoint configured under the plain OpenAI family is
 refused, with a message naming the family to use, so it cannot end up under the wrong set of rules.
@@ -62,7 +62,7 @@ disable the redirect block.
 
 ## What to block at your edge
 
-The API maps an anonymous Prometheus scraping endpoint at `/metrics`. That is deliberate — it is meant
+The API maps an anonymous Prometheus scraping endpoint at `/metrics`. That is deliberate - it is meant
 for scrapers inside your environment reaching the API directly. But a reverse proxy that forwards all
 of `/api/` to the API republishes it as `/api/metrics` to the internet. Block that path at the edge on
 any public deployment; the nginx configuration under `example/azure/.azure/` shows the rule.
@@ -71,13 +71,13 @@ any public deployment; the nginx configuration under `example/azure/.azure/` sho
 
 Provider connection secrets, AI credentials, and webhook secrets are encrypted at rest with a key ring
 you control. They are never returned by the API, never shown again in the UI after saving, and never
-written to logs, audit records, or error messages — a connection rendered into a log line shows its
+written to logs, audit records, or error messages - a connection rendered into a log line shows its
 field names and an elided credential, never the value.
 
 For GitHub App connections, the stored secret is the private key. Short-lived installation access
 tokens are minted on demand and never written to disk or to the database.
 
-Audit and webhook delivery history record status, failure category, and summaries — never raw secrets
+Audit and webhook delivery history record status, failure category, and summaries - never raw secrets
 or authorization headers.
 
 ### The encryption key ring
@@ -90,7 +90,7 @@ everything it protected becomes unreadable.
 
 **A database backup alone is not a restorable install.** Without the matching key ring, every stored
 provider connection secret, AI credential, and webhook secret is undecryptable and has to be entered
-again from scratch. Back it up with the database, and restore the two together — the full list is under
+again from scratch. Back it up with the database, and restore the two together - the full list is under
 [what to back up](../operate/upgrades-and-backups.md#what-to-back-up).
 
 When ProPR and ProCursor both run, point both at the same key ring. They share one protection identity,
@@ -116,7 +116,7 @@ continuously-used session is still forced to re-authenticate eventually.
 
 Two controls sit in front of sign-in. A per-account lockout locks an account after consecutive failed
 passwords and backs off exponentially to a cap. A per-IP rate limit caps auth requests per client IP over
-a rolling window. The IP limit is deliberately loose — colleagues behind one office egress share an
+a rolling window. The IP limit is deliberately loose - colleagues behind one office egress share an
 address. The account lockout is the tight control.
 
 The variables that set these four limits, with their defaults and accepted ranges, are under
@@ -128,7 +128,7 @@ local password, the sign-in is refused with `external_link_requires_confirmation
 made deliberately. An existing account with no local password is linked to the external identity.
 
 If nobody can sign in, or sessions end sooner than you expect, start at
-[troubleshooting](../operate/troubleshooting.md) — it names the symptom and where it is fixed.
+[troubleshooting](../operate/troubleshooting.md) - it names the symptom and where it is fixed.
 
 ## Automation credentials
 
@@ -153,7 +153,7 @@ one client never confers access to another.
 
 An AI connection belongs either to a tenant or to one of that tenant's clients. Logical models
 reference a connection by id, and a tenant-level entry deliberately resolves for every client in that
-tenant — so sharing a connection inside a tenant works.
+tenant - so sharing a connection inside a tenant works.
 
 Crossing a tenant boundary is always refused, and it is checked twice: when the reference is saved, and
 again at review time before the credential is handed to a provider. One tenant's credentials, quota,

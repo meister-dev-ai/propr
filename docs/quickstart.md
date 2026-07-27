@@ -3,7 +3,7 @@
 Deploy ProPR on one machine, sign in for the first time, configure your first client, and get a review
 posted on a real pull request.
 
-This is the evaluation path. The example stack it uses is not a deployment you would keep — for ingress,
+This is the evaluation path. The example stack it uses is not a deployment you would keep - for ingress,
 published images, worker sizing and persistence, see [deploying ProPR](operate/deploy.md). Terms this
 product invented are defined once in the [glossary](glossary.md).
 
@@ -14,8 +14,8 @@ product invented are defined once in the [glossary](glossary.md).
 | A container runtime with Compose support | The example stack is a Docker Compose file |
 | PostgreSQL with the `vector` extension | The example stack runs the `pgvector/pgvector:pg17` image, and that is the version ProPR is tested against. No minimum server version is checked at startup. On a managed service, enable the `vector` extension before the first start or the initial migration fails. |
 | A second database for ProCursor | The example creates `meisterpropr_procursor` on the same server. It needs the `vector` extension too. Skip it if you deploy without ProCursor. |
-| A writable directory for review workspaces | ProPR clones the repositories it reviews onto local disk — see [review workspace](operate/deploy.md#review-workspace) |
-| An AI provider account | Any supported family — see [AI providers](ai/index.md) |
+| A writable directory for review workspaces | ProPR clones the repositories it reviews onto local disk - see [review workspace](operate/deploy.md#review-workspace) |
+| An AI provider account | Any supported family - see [AI providers](ai/index.md) |
 | At least one SCM provider account | Azure DevOps, GitHub, GitLab, or Forgejo |
 
 ## Quick start
@@ -54,8 +54,8 @@ Keep the compose default `MEISTER_PUBLIC_BASE_URL=https://localhost:5443/api`; w
 To run published release images instead of building from the checkout, see
 [running published images](operate/deploy.md#running-published-images).
 
-The compose stack is for evaluation on one machine. For an Azure-hosted variant of the same stack —
-Container Apps, Key Vault, VNet integration and Azure Files — see `example/azure/.azure/`. It is one way
+The compose stack is for evaluation on one machine. For an Azure-hosted variant of the same stack -
+Container Apps, Key Vault, VNet integration and Azure Files - see `example/azure/.azure/`. It is one way
 of many to host ProPR, not a recommended architecture.
 
 > The example stack also runs Grafana and Loki for log browsing, reachable at
@@ -73,14 +73,14 @@ Use this order when setting up a new client.
    users from the frontend.
 
 2. **Enable your provider family.** GitHub and Forgejo are off in a fresh installation, so do this
-   before you try to connect anything — see
+   before you try to connect anything - see
    [enabling a provider family](platforms/index.md#enabling-a-provider-family).
 
 3. **Create a client.** Each client owns its own SCM provider connections, scopes, reviewer-trigger
    identity, AI connections, ProCursor sources, and crawl or webhook configuration.
 
 4. **Add one or more provider connections.** Open the client, then **SCM Providers**. Go straight to the
-   page for your host — each one lists its authentication modes, what to enter, and where to get it:
+   page for your host - each one lists its authentication modes, what to enter, and where to get it:
    [Azure DevOps](platforms/azure-devops.md), [GitHub](platforms/github.md),
    [GitLab](platforms/gitlab.md), [Forgejo](platforms/forgejo.md). The
    [support matrix](platforms/index.md#support-matrix) compares all four if you have not chosen yet.
@@ -95,7 +95,7 @@ Use this order when setting up a new client.
    [reviewer identity fields](platforms/index.md#reviewer-identity-fields).
 
 7. **Configure ProCursor sources.** Use guided discovery to pick repositories or wikis, then create
-   sources from the selected scope — the per-source options are in
+   sources from the selected scope - the per-source options are in
    [configuring a source](concepts/how-it-works.md#configuring-a-source). Skip this if you run without
    ProCursor.
 
@@ -113,7 +113,7 @@ Use this order when setting up a new client.
    configurations accept an optional [review temperature](concepts/reviews.md#what-you-can-tune), so
    webhook-triggered reviews can differ from crawl-triggered ones for the same client. For registering
    the webhook on your SCM host, see [webhooks](platforms/webhooks.md). Scheduled crawling needs a
-   commercial license; without one, use webhooks or the API — see [editions](reference/editions.md).
+   commercial license; without one, use webhooks or the API - see [editions](reference/editions.md).
 
 10. **Trigger your first review and confirm it worked.** See [First review](#first-review) below.
 
@@ -125,7 +125,7 @@ Use this order when setting up a new client.
 Setup is not finished until a review has actually run. Do one deliberately rather than waiting for one to
 happen.
 
-**Start it.** If you registered a webhook, open a pull request — or push a commit to an existing one — in
+**Start it.** If you registered a webhook, open a pull request - or push a commit to an existing one - in
 a repository the configuration covers. Otherwise submit one pull request over the API: it needs neither a
 webhook nor a commercial license. See [Trigger a review](reference/api.md#trigger-a-review).
 
@@ -142,17 +142,17 @@ with nothing posted is a normal outcome, not a failure: findings are filtered be
 | Symptom | Where to look |
 |---|---|
 | No review row appears at all | Check that the delivery reached ProPR: **Webhooks →** the configuration **→ Delivery History**, then [webhook troubleshooting](platforms/webhooks.md#troubleshooting) for what its outcome means. |
-| The row fails immediately | Open **Protocol ↗**; the row's summary column also shows the error. An unresolvable **Review default** purpose names that purpose in the message — go back to **AI Providers → Purposes**. |
-| The row stays pending | Another review is still running and the installation is Community edition, which runs one at a time — see [editions](reference/editions.md). Otherwise check `GET /healthz`: the `worker` check must be healthy — see [what the health checks mean](operate/observability.md#what-the-health-checks-mean). |
-| The review completes but the pull request has no comments | Check **System → Post review comments to SCM** on the client, then read the protocol — see [why a finding did not get posted](concepts/reviews.md#why-a-finding-did-not-get-posted). |
-| Fewer inline comments than the summary suggests | The gate and the per-client minimum severity to post both hold findings back — see [why a finding did not get posted](concepts/reviews.md#why-a-finding-did-not-get-posted). |
+| The row fails immediately | Open **Protocol ↗**; the row's summary column also shows the error. An unresolvable **Review default** purpose names that purpose in the message - go back to **AI Providers → Purposes**. |
+| The row stays pending | Another review is still running and the installation is Community edition, which runs one at a time - see [editions](reference/editions.md). Otherwise check `GET /healthz`: the `worker` check must be healthy - see [what the health checks mean](operate/observability.md#what-the-health-checks-mean). |
+| The review completes but the pull request has no comments | Check **System → Post review comments to SCM** on the client, then read the protocol - see [why a finding did not get posted](concepts/reviews.md#why-a-finding-did-not-get-posted). |
+| Fewer inline comments than the summary suggests | The gate and the per-client minimum severity to post both hold findings back - see [why a finding did not get posted](concepts/reviews.md#why-a-finding-did-not-get-posted). |
 
 For a symptom that is not in this table, [troubleshooting](operate/troubleshooting.md) routes by symptom
 across the whole documentation.
 
 ## Where to go next
 
-- [Reviews](concepts/reviews.md) — what happened inside that review, and what you can tune.
-- [Deploying ProPR](operate/deploy.md) — turn the evaluation stack into a deployment you keep.
-- [Control what a review costs](guides/control-cost.md) — before you point it at every repository.
-- [The documentation index](index.md) — the rest of the documentation, by question.
+- [Reviews](concepts/reviews.md) - what happened inside that review, and what you can tune.
+- [Deploying ProPR](operate/deploy.md) - turn the evaluation stack into a deployment you keep.
+- [Control what a review costs](guides/control-cost.md) - before you point it at every repository.
+- [The documentation index](index.md) - the rest of the documentation, by question.

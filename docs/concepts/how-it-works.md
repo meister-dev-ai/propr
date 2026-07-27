@@ -17,7 +17,7 @@ terminates TLS:
 | PostgreSQL | All durable state | yes |
 | Reverse proxy | Terminates TLS and routes to the API and the frontend | yes, in the example stack |
 
-The example compose stack uses nginx for the proxy, and bundles Loki and Grafana for log browsing —
+The example compose stack uses nginx for the proxy, and bundles Loki and Grafana for log browsing -
 conveniences nothing in ProPR depends on. What has to route where, and on which ports, is in
 [deployment topology](../operate/deploy.md#deployment-topology).
 
@@ -57,25 +57,25 @@ aligned; see [running published images](../operate/deploy.md#running-published-i
 
 Three ways, and they produce the same review:
 
-1. **Webhook** — your SCM host notifies ProPR when a pull request opens or updates. See [webhooks](../platforms/webhooks.md).
-2. **Crawl** — ProPR polls for open pull requests on a schedule you configure. Crawling requires a commercial license; see [editions and licensed features](../reference/editions.md).
-3. **On demand** — a call to the review API, from CI or an extension. See [trigger a review](../reference/api.md#trigger-a-review).
+1. **Webhook** - your SCM host notifies ProPR when a pull request opens or updates. See [webhooks](../platforms/webhooks.md).
+2. **Crawl** - ProPR polls for open pull requests on a schedule you configure. Crawling requires a commercial license; see [editions and licensed features](../reference/editions.md).
+3. **On demand** - a call to the review API, from CI or an extension. See [trigger a review](../reference/api.md#trigger-a-review).
 
 A pull request that already has a review running will not start a second one; the existing job is
 returned instead.
 
 ## Asking ProPR a question
 
-Mention the client's configured reviewer identity in a pull request comment — `@<guid>` on Azure
-DevOps, `@login` on GitHub, GitLab and Forgejo — and ProPR answers in that same thread, using the
+Mention the client's configured reviewer identity in a pull request comment - `@<guid>` on Azure
+DevOps, `@login` on GitHub, GitLab and Forgejo - and ProPR answers in that same thread, using the
 pull request as context. It is a question-and-answer path, not a re-review: no new findings are
 posted and no comments are resolved.
 
 Mentions are found by a periodic scan, not by webhook, so a reply is not instant. The scan interval
-is set by `MENTION_CRAWL_INTERVAL_SECONDS` — see
+is set by `MENTION_CRAWL_INTERVAL_SECONDS` - see
 [background intervals](../operate/configuration.md#background-intervals). The scan walks your crawl configurations and skips
 any that has no resolvable reviewer identity, so answering mentions needs both a reviewer identity
-and at least one crawl configuration — and crawl configurations are a licensed capability.
+and at least one crawl configuration - and crawl configurations are a licensed capability.
 
 ## ProCursor
 
@@ -83,7 +83,7 @@ ProCursor is the optional code-knowledge service. It indexes the repositories an
 at, and the review loop queries it for symbol definitions, references, and related documentation when
 it needs context the diff does not contain.
 
-You can run without it — reviews then see the diff and the files in the pull request, but cannot look
+You can run without it - reviews then see the diff and the files in the pull request, but cannot look
 up how a changed function is used elsewhere. Enable it when your reviews need repository-wide
 context. For how it is deployed, and how to leave it out, see
 [running without ProCursor](../operate/deploy.md#running-without-procursor).
@@ -104,5 +104,5 @@ A source is one repository or one Azure DevOps wiki, added per client. Per sourc
 ### What it costs
 
 Indexing and querying spend embedding tokens on the logical model mapped to the client's Embedding
-default purpose — see [AI purposes](../ai/purposes.md#ai-purposes). That usage is reported per client, separately
+default purpose - see [AI purposes](../ai/purposes.md#ai-purposes). That usage is reported per client, separately
 from review token usage, so you can see what indexing costs before you widen it.

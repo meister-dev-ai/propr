@@ -30,13 +30,13 @@ principal object ID. The service principal must be usable against the target org
 ## Azure DevOps Server
 
 Do not use `https://dev.azure.com` for a self-hosted server; that host is only for Azure DevOps
-Services. Both self-hosted modes require an HTTPS `hostBaseUrl` — HTTP is rejected when you save.
+Services. Both self-hosted modes require an HTTPS `hostBaseUrl` - HTTP is rejected when you save.
 
 Prepare the endpoint before creating the connection:
 
 1. Expose Azure DevOps Server over HTTPS, and make sure the certificate's subject alternative names
    cover the exact host name or IP address ProPR will call.
-2. From the machine or container ProPR runs in — not your browser — run
+2. From the machine or container ProPR runs in - not your browser - run
    `curl https://<ado-server-host>/`. Expect the normal Azure DevOps page or a `401` challenge, not a
    timeout and not a certificate error.
 3. If the certificate is self-signed or issued by a private CA, install it or its issuing CA into that
@@ -82,8 +82,8 @@ Notes for this mode:
   name for NTLM or Negotiate authentication.
 - `userName` is stored separately from the password and is returned in API responses so edit screens
   can show it. The password stays protected secret material and is never returned.
-- ProPR authenticates with the stored credentials only. Host-integrated Windows authentication — the
-  identity of the ProPR process itself — is not used.
+- ProPR authenticates with the stored credentials only. Host-integrated Windows authentication - the
+  identity of the ProPR process itself - is not used.
 - ProPR enables managed NTLM on Linux and WSL runtimes by default.
 
 ## Scope examples
@@ -114,7 +114,7 @@ that supply it, see
 
 Create the configuration in ProPR first; see
 [create the webhook configuration](webhooks.md#create-the-webhook-configuration). In the repository
-filters, prefer the canonical repository entry discovery offers — it stores the repository GUID and
+filters, prefer the canonical repository entry discovery offers - it stores the repository GUID and
 avoids the name-versus-id mismatch described below.
 
 Register the listener under **Project settings → Service hooks → new subscription → Web Hooks**. The
@@ -164,7 +164,7 @@ A `400` when saving the connection is usually one of the Azure DevOps field rule
 
 ### Which Azure ID is the tenant ID?
 
-Use the Microsoft Entra tenant or directory ID — not the subscription ID, not the service principal
+Use the Microsoft Entra tenant or directory ID - not the subscription ID, not the service principal
 object ID, and not the secret ID.
 
 ### Azure DevOps Server verification or reviewer resolution fails
@@ -177,5 +177,5 @@ object ID, and not the secret ID.
 | Authentication rejected in PAT mode | PATs may be disabled on that server instance; use `windowsUserAccount` instead. |
 | PAT works but `windowsUserAccount` does not | Save `userName` in the server-accepted format, preferably `DOMAIN\user`, then restart ProPR and retry. If the runtime still behaves as unauthenticated, install the Linux NTLM support package and restart: `sudo apt update && sudo apt install -y gss-ntlmssp`. |
 
-For anything not listed here — reviewer identity, deliveries, reviews — start at
+For anything not listed here - reviewer identity, deliveries, reviews - start at
 [troubleshooting](../operate/troubleshooting.md).

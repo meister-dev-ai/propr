@@ -12,15 +12,15 @@ once in the [glossary](glossary.md).
 
 Read these five in order to get from nothing to a deployment you would keep.
 
-1. [Quickstart](quickstart.md) — clone the example stack, sign in, configure one client, get one review
+1. [Quickstart](quickstart.md) - clone the example stack, sign in, configure one client, get one review
    posted on a real pull request.
-2. [How it works](concepts/how-it-works.md) — what you just deployed, how a review gets triggered, and
+2. [How it works](concepts/how-it-works.md) - what you just deployed, how a review gets triggered, and
    what ProCursor adds.
-3. [SCM platforms](platforms/index.md) — the support matrix, then the page for the host you actually
+3. [SCM platforms](platforms/index.md) - the support matrix, then the page for the host you actually
    use, then [webhooks](platforms/webhooks.md) so reviews start by themselves.
-4. [AI providers](ai/index.md) — which model providers ProPR can call, then
+4. [AI providers](ai/index.md) - which model providers ProPR can call, then
    [credentials](ai/credentials.md), [models](ai/models-and-catalog.md) and [purposes](ai/purposes.md).
-5. [Deploying](operate/deploy.md) — the evaluation stack is not a deployment. This is what to change.
+5. [Deploying](operate/deploy.md) - the evaluation stack is not a deployment. This is what to change.
 
 ## Common questions
 
@@ -119,8 +119,8 @@ about which one to reach for first.
 
 ## Outside these docs
 
-- [LICENSE](../LICENSE), [LICENSING.md](../LICENSING.md) and [COMMERCIAL.md](../COMMERCIAL.md) — the
+- [LICENSE](../LICENSE), [LICENSING.md](../LICENSING.md) and [COMMERCIAL.md](../COMMERCIAL.md) - the
   legal terms; [reference/editions.md](reference/editions.md) describes runtime behaviour only.
-- [SECURITY.md](../SECURITY.md) — reporting a vulnerability.
-- `openapi.json` at the repository root — the committed API contract.
-- `example/docker-compose/` and `example/azure/.azure/` — the two deployment examples that ship.
+- [SECURITY.md](../SECURITY.md) - reporting a vulnerability.
+- `openapi.json` at the repository root - the committed API contract.
+- `example/docker-compose/` and `example/azure/.azure/` - the two deployment examples that ship.

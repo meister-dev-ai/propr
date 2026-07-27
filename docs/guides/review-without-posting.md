@@ -4,7 +4,7 @@ Let ProPR review real pull requests while nothing reaches them, so you can judge
 team sees it.
 
 A review with commenting disabled still runs and still costs tokens; only publication is skipped, and
-everything it produced is stored and inspectable — see
+everything it produced is stored and inspectable - see
 [why a finding did not get posted](../concepts/reviews.md#why-a-finding-did-not-get-posted). That makes this
 the safe way to trial ProPR, a new model, or a prompt override on live pull requests instead of on
 contrived ones.
@@ -21,7 +21,7 @@ nothing from the review record.
 
 ## 2. Run one deliberately
 
-Do not wait for a review to happen. Trigger one — over the API, or by opening a pull request if a webhook
+Do not wait for a review to happen. Trigger one - over the API, or by opening a pull request if a webhook
 is already registered. Both routes are in [first review](../quickstart.md#first-review).
 
 ## 3. Read the results
@@ -30,8 +30,8 @@ is already registered. Both routes are in [first review](../quickstart.md#first-
 |---|---|
 | Whether it completed, and how far it got | **Reviews** in the top navigation, or **Review History** inside the client |
 | What the model actually did, pass by pass | **Protocol ↗** on the review row, or [review diagnostics](../reference/api.md#review-diagnostics) |
-| Which findings would have been published, kept to the summary, or dropped, and why | The gate records a decision per finding — see [why a finding did not get posted](../concepts/reviews.md#why-a-finding-did-not-get-posted) |
-| What the trial cost | Token reporting per client, and what to change if it is higher than you expected — see [control what a review costs](control-cost.md) |
+| Which findings would have been published, kept to the summary, or dropped, and why | The gate records a decision per finding - see [why a finding did not get posted](../concepts/reviews.md#why-a-finding-did-not-get-posted) |
+| What the trial cost | Token reporting per client, and what to change if it is higher than you expected - see [control what a review costs](control-cost.md) |
 
 Judge quality from the gate decisions rather than from the finding count. A review that would have
 published nothing is a normal outcome, not a failure.
@@ -40,10 +40,10 @@ published nothing is a normal outcome, not a failure.
 
 A shadow pass is the same idea at finer grain: one pass that runs and is recorded but can never reach your
 pull request, while the client publishes normally. Use it to try one model or one lens on live pull
-requests. It costs full tokens — see [review passes](../concepts/reviews.md#review-passes).
+requests. It costs full tokens - see [review passes](../concepts/reviews.md#review-passes).
 
 If a particular pull request should not be reviewed at all, block it, and stop a job that is already
-running separately — see [blocking and dismissing](../reference/api.md#blocking-and-dismissing).
+running separately - see [blocking and dismissing](../reference/api.md#blocking-and-dismissing).
 
 ## 5. Turn posting back on
 

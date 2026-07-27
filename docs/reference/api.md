@@ -1,11 +1,11 @@
-# API reference — ProPR backend
+# API reference - ProPR backend
 
 This page contains technical API examples for automating administrative tasks that are also
 available from the frontend. Use the frontend for interactive configuration; use the endpoints
 below for automation and scripting.
 
 Every example below is written against the evaluation stack's origin, `https://localhost:5443`, whose
-certificate is self-signed — that is what `curl -k` is for. Behind your own ingress, substitute your API
+certificate is self-signed - that is what `curl -k` is for. Behind your own ingress, substitute your API
 base URL.
 
 ## Admin authentication
@@ -19,7 +19,7 @@ curl -k -X POST https://localhost:5443/api/auth/login \
 ```
 
 The response body contains `accessToken`, `expiresIn` (seconds) and `tokenType`. The refresh token is
-not in the body — it is issued as an httpOnly cookie. Use `Authorization: Bearer <accessToken>` on
+not in the body - it is issued as an httpOnly cookie. Use `Authorization: Bearer <accessToken>` on
 subsequent requests. `POST /api/auth/refresh` reads that cookie and returns a new access token; a
 `refreshToken` field in the request body is accepted only as a fallback for callers that cannot hold
 cookies.
@@ -218,7 +218,7 @@ rejected with `400`.
 
 ### Purpose bindings
 
-A binding names a `purpose` and the model on this profile that serves it — by `remoteModelId`, matched against
+A binding names a `purpose` and the model on this profile that serves it - by `remoteModelId`, matched against
 `configuredModels` in the same request, or by `configuredModelId` once the model has an id. `protocolMode`
 defaults to `auto` and `isEnabled` to `true`. A purpose may appear once.
 
@@ -245,11 +245,11 @@ are under [Logical models and purposes](#logical-models-and-purposes) below.
 | `inputCostPer1MUsd`, `outputCostPer1MUsd`, `cachedInputCostPer1MUsd` | Prices used for spend reporting |
 | `id`, `source`, `lastSeenAt` | Round-tripped from discovery; omit on a hand-written model |
 
-Omitting `operationKinds` does not make a model unbindable — the server infers one. It infers `embedding` when the
+Omitting `operationKinds` does not make a model unbindable - the server infers one. It infers `embedding` when the
 model id contains `embedding` or when `tokenizerName` or `embeddingDimensions` is supplied, and `chat` otherwise.
 `supportedProtocolModes` is inferred the same way: `auto` and `embeddings` for an embedding-only model, `auto`,
-`responses` and `chatCompletions` otherwise. Declaring a protocol the model's capabilities do not support — the
-embeddings protocol without embedding capability, or a chat protocol without chat capability — is rejected.
+`responses` and `chatCompletions` otherwise. Declaring a protocol the model's capabilities do not support - the
+embeddings protocol without embedding capability, or a chat protocol without chat capability - is rejected.
 
 An embedding model must carry `tokenizerName`, a `maxInputTokens` above zero, and an `embeddingDimensions` between
 64 and 4096. `source` is `discovered`, `manual` or `knownCatalog`.
@@ -283,7 +283,7 @@ name you choose that points at one model on one connection; a purpose is a fixed
 
 | Call | Does |
 |---|---|
-| `GET /api/clients/<client-id>/logical-models` | The names effective for this client — its own overrides plus the tenant-catalog entries they do not shadow |
+| `GET /api/clients/<client-id>/logical-models` | The names effective for this client - its own overrides plus the tenant-catalog entries they do not shadow |
 | `POST /api/clients/<client-id>/logical-models/overrides` | Defines a per-client name |
 | `PUT /api/clients/<client-id>/logical-models/purposes/<purpose>` | Points one purpose at a name |
 | `GET /api/tenants/<tenant-id>/logical-models` | The tenant-catalog names every client in that tenant inherits |
@@ -350,7 +350,7 @@ Repeat the last call for every purpose you use; an unmapped purpose fails the wo
 `capability` is `chat` or `embedding`; `reasoningEffort` takes the values listed under
 [reasoning effort](../ai/purposes.md#reasoning-effort).
 
-`defaultQueryParams` carries what a provider reads from the profile rather than from the URL — `region` for AWS
+`defaultQueryParams` carries what a provider reads from the profile rather than from the URL - `region` for AWS
 Bedrock, `project` for Vertex AI. When to set each, and which wins if the host names one too, is in
 [provider-specific setup notes](../ai/credentials.md#provider-specific-setup-notes). `defaultHeaders` sends extra
 headers a gateway in front of a provider expects; probe after setting one, because the families differ in where
@@ -562,7 +562,7 @@ even if the event is intentionally ignored:
 { "status": "ignored" }
 ```
 
-The trigger only decides when a review starts, not what it produces — see
+The trigger only decides when a review starts, not what it produces - see
 [how a review gets triggered](../concepts/how-it-works.md#how-a-review-gets-triggered).
 
 ## Trigger a review
@@ -605,7 +605,7 @@ reviewed while the first review is still running.
 
 A successful submission returns `202 Accepted` with `jobId` and `status`. A `409 Conflict` means
 either an active job already exists for that revision, the pull request is blocked, or another review
-is still running on an installation that runs them one at a time — see [editions](editions.md).
+is still running on an installation that runs them one at a time - see [editions](editions.md).
 
 Poll the job, and restart or stop it:
 
@@ -621,13 +621,13 @@ curl -k -X POST https://localhost:5443/api/reviewing/jobs/<job-id>/stop \
 ```
 
 Reading status and restarting need only `ClientUser`; stopping needs `ClientAdministrator`. Failed
-reviews are never continued automatically — restart is always explicit. Stopping is terminal and does
+reviews are never continued automatically - restart is always explicit. Stopping is terminal and does
 not requeue the job.
 
 ## Blocking and dismissing
 
 Block a pull request so no further review jobs are created for it. This does not stop a job that is
-already running — stop that job separately.
+already running - stop that job separately.
 
 ```bash
 curl -k -X POST https://localhost:5443/api/clients/<client-id>/reviewing/blocked-prs \
@@ -675,7 +675,7 @@ Reading a protocol to answer a specific symptom starts at
 
 ## Health endpoints behind the proxy
 
-Through the bundled reverse proxy, the API is reached under `/api/` — that prefix is stripped before
+Through the bundled reverse proxy, the API is reached under `/api/` - that prefix is stripped before
 the request arrives, so the API's own `/healthz` is `/api/healthz` from outside:
 
 ```bash
@@ -686,24 +686,24 @@ Note that `https://localhost:5443/healthz` without the prefix is answered by the
 own static health string and tells you nothing about the API. What each check reports, and which
 endpoint to point a probe at, is in [observability](../operate/observability.md).
 
-The same prefix rule applies to `/metrics`, which becomes `/api/metrics` — a path to
+The same prefix rule applies to `/metrics`, which becomes `/api/metrics` - a path to
 [block at your edge](security.md#what-to-block-at-your-edge).
 
 ## More
 
-For every other endpoint — prompt overrides, dismissal search, token reporting, ProCursor token usage,
-tenant administration — read the OpenAPI specification.
+For every other endpoint - prompt overrides, dismissal search, token reporting, ProCursor token usage,
+tenant administration - read the OpenAPI specification.
 
 In Development the API serves it on its own address: Swagger UI at `/swagger`, the document at
 `/swagger/v1/swagger.json`. Behind a reverse proxy that strips a leading `/api`, as the bundled one does, those
 become `/api/swagger` and `/api/swagger/v1/swagger.json`. Neither is served in other environments, and the
-bundled stack runs in Production — so on a stock deployment there is no Swagger UI and no served document, at any
+bundled stack runs in Production - so on a stock deployment there is no Swagger UI and no served document, at any
 path. `https://localhost:5443/swagger` without the prefix is answered by the frontend container, the same trap as
 `/healthz` above.
 
 Script against `openapi.json` at the repository root instead. It is committed, and it covers every endpoint on
 this page except `/healthz`, `/livez` and `/metrics`, which [observability](../operate/observability.md)
-describes. Its paths carry no `/api` prefix —
-`/clients/{clientId}/ai-connections`, not `/api/clients/{clientId}/ai-connections` — because that prefix belongs
+describes. Its paths carry no `/api` prefix -
+`/clients/{clientId}/ai-connections`, not `/api/clients/{clientId}/ai-connections` - because that prefix belongs
 to the proxy, not to the API. Through the bundled proxy, prepend `https://localhost:5443/api` as every example
 above does; the public webhook receiver is the exception, forwarded at its own path.

@@ -16,7 +16,7 @@ which source files are commercial-only is generated into
 | **Commercial** | Unlocks the licensed capabilities below. Required even when self-hosted. |
 
 The edition is installation-wide, not per tenant or per client. It persists across restarts and
-redeploys, and is not configured through an environment variable — see
+redeploys, and is not configured through an environment variable - see
 [Setting the edition](#setting-the-edition).
 
 ## What requires a commercial license
@@ -36,13 +36,13 @@ drain strictly one at a time.
 
 Multi-tenancy is commercial as well, gated by the edition itself rather than by a key of its own. A
 Community installation has exactly one tenant, the built-in System tenant: no further tenants can be
-created, and the System tenant cannot be edited. Anything configured per tenant — identity providers,
+created, and the System tenant cannot be edited. Anything configured per tenant - identity providers,
 login policy, the [AI provider and endpoint-host compliance restrictions](../ai/compliance.md), and the
-tenant logical-model catalog with the tenant-owned AI connections behind it — is therefore out of reach
+tenant logical-model catalog with the tenant-owned AI connections behind it - is therefore out of reach
 in Community.
 
-Everything else — reviewing itself, all four SCM provider families, every AI provider, per-client
-logical models, thread memory, ProCursor, and the full review diagnostics — is available in Community
+Everything else - reviewing itself, all four SCM provider families, every AI provider, per-client
+logical models, thread memory, ProCursor, and the full review diagnostics - is available in Community
 edition.
 
 The model catalog is available with one limit worth knowing before you evaluate: browsing it and attaching
@@ -64,7 +64,7 @@ additional provider connections stay in the database exactly as you left them.
 
 They stop being exercised, though. Scheduled crawling and @-mention scanning stop running, and budget
 caps stop being enforced, until the capability is available again. Nothing warns you per configuration
-row — the feature simply goes quiet.
+row - the feature simply goes quiet.
 
 If you are not sure a license is what refused you, [troubleshooting](../operate/troubleshooting.md) routes
 the symptom to the page that fixes it.
@@ -74,8 +74,8 @@ the symptom to the page that fixes it.
 A platform administrator sets the edition under **Administration → Licensing** in the management UI.
 The capability list on that page is read-only.
 
-Individual capabilities can be overridden one at a time — that is how a license covering part of the
-product is reflected — but only through the API, by sending a `capabilityOverrides` array to
+Individual capabilities can be overridden one at a time - that is how a license covering part of the
+product is reflected - but only through the API, by sending a `capabilityOverrides` array to
 `PATCH /api/admin/licensing`. There is no UI control for it. That request also requires `edition`, so
 send the edition you are keeping, and each override entry carries a capability `key` from the table
 above plus an `overrideState` of `default`, `enabled` or `disabled`.

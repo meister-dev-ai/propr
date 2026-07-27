@@ -22,7 +22,7 @@ the frontend and the API have to be served from one hostname.
 
 The API serves plain HTTP on port 8080 and ProCursor on port 8081, both as a non-root user. The frontend
 image also serves HTTP on 8080, as a non-root user. TLS terminates at your proxy. Nothing routes to
-ProCursor's port from outside — see [ProCursor as a separate service](#procursor-as-a-separate-service).
+ProCursor's port from outside - see [ProCursor as a separate service](#procursor-as-a-separate-service).
 
 Set `MEISTER_PUBLIC_BASE_URL` to the externally reachable API base URL, including the `/api` prefix if
 your proxy uses one. It is used to generate the webhook listener URLs shown in the UI, to build SSO
@@ -41,7 +41,7 @@ request's own scheme and host.
 
 Additional browser origins can be allowed with `CORS_ORIGINS` (comma-separated).
 
-Do not route `/metrics`, or `/api/metrics`, from a public edge — see
+Do not route `/metrics`, or `/api/metrics`, from a public edge - see
 [what to block at your edge](../reference/security.md#what-to-block-at-your-edge).
 
 Symptoms that trace back to routing or the public base URL are indexed in
@@ -49,7 +49,7 @@ Symptoms that trace back to routing or the public base URL are indexed in
 
 ## Running published images
 
-`docker compose up --build` builds the three ProPR images — API, ProCursor and frontend — from the
+`docker compose up --build` builds the three ProPR images - API, ProCursor and frontend - from the
 checkout. To run published release images instead, replace the `build:` block of each of those three
 services in `example/docker-compose/docker-compose.yml` with an `image:` line:
 
@@ -59,13 +59,13 @@ services in `example/docker-compose/docker-compose.yml` with an `image:` line:
 | `procursor` | `ghcr.io/meister-dev-ai/propr/procursor:<tag>` |
 | `frontend` | `ghcr.io/meister-dev-ai/propr/frontend:<tag>` |
 
-Then start the stack with `docker compose up -d`, without `--build`. Keep the three tags aligned — see
+Then start the stack with `docker compose up -d`, without `--build`. Keep the three tags aligned - see
 [upgrades and backups](upgrades-and-backups.md#upgrading). Everything else in the file, including
 PostgreSQL and the bundled proxy, already runs published images.
 
 ## Review workers
 
-There is no separate worker to deploy — the background work runs inside the API process, listed under
+There is no separate worker to deploy - the background work runs inside the API process, listed under
 [what you run](../concepts/how-it-works.md#what-you-run). Sizing review throughput therefore means
 sizing the API host.
 
@@ -74,7 +74,7 @@ instance runs at once, and `AI_MAX_FILE_REVIEW_CONCURRENCY` bounds how many file
 parallel. Raise either and the host needs the memory, CPU and provider rate limit to match.
 
 Of those two, only `WORKER_MAX_CONCURRENT_REVIEW_JOBS` is licensed: without parallel review execution it
-has no effect at all — see [editions](../reference/editions.md).
+has no effect at all - see [editions](../reference/editions.md).
 
 More API instances is not the lever, and is not safe: those in-process workers are not coordinated
 between processes, so a second instance means the crawler, the mention scan and the retention purge all
@@ -86,7 +86,7 @@ ProPR clones the repositories it reviews to local disk on the API host and reuse
 reviews. Plan for a writable directory large enough for the repositories you review, and bound it with
 `REVIEW_WORKSPACE_MAX_CACHE_SIZE_MEGABYTES`.
 
-The directory is a cache — losing it costs re-cloning, not data. But if you leave it on the container's
+The directory is a cache - losing it costs re-cloning, not data. But if you leave it on the container's
 writable layer, as the example stack does, every restart re-clones everything. Mount a volume for it in
 any deployment you keep, and point `REVIEW_WORKSPACE_ROOT_PATH` at it.
 
@@ -94,11 +94,11 @@ any deployment you keep, and point `REVIEW_WORKSPACE_ROOT_PATH` at it.
 
 ProCursor runs as a separate internal service and is never exposed publicly: the API is the only public
 control plane, and the two authenticate to each other with `PROCURSOR_SHARED_KEY`. It keeps its own
-operational data — indexes, snapshots, token usage — in its own database, and reports health on its own
-endpoint, which the API surfaces as the `procursor-remote` check — see
+operational data - indexes, snapshots, token usage - in its own database, and reports health on its own
+endpoint, which the API surfaces as the `procursor-remote` check - see
 [what the health checks mean](observability.md#what-the-health-checks-mean).
 
-Point both services at the same encryption key ring — see
+Point both services at the same encryption key ring - see
 [the encryption key ring](../reference/security.md#the-encryption-key-ring).
 
 For what ProCursor does and what indexing costs, see [ProCursor](../concepts/how-it-works.md#procursor).
@@ -108,7 +108,7 @@ For what ProCursor does and what indexing costs, see [ProCursor](../concepts/how
 To deploy ProPR without the code-knowledge service, set `PROCURSOR_REMOTE_MODE=disabled` and leave
 `PROCURSOR_SERVICE_BASE_URL` and `PROCURSOR_SHARED_KEY` unset. ProPR then omits the ProCursor review
 tools instead of reporting a broken dependency, and the `procursor-remote` check drops out of `/healthz`.
-Reviews still run — for what they lose, see [ProCursor](../concepts/how-it-works.md#procursor).
+Reviews still run - for what they lose, see [ProCursor](../concepts/how-it-works.md#procursor).
 
 **This applies to a deployment you assemble yourself, not to the bundled compose stack.** That stack
 always defines the ProCursor service and will not start without it: the API waits for ProCursor to

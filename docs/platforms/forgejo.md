@@ -22,7 +22,7 @@ created.
 ## Provider scope
 
 Every connection needs at least one enabled scope before it counts as ready, Forgejo included. The four
-fields are stored as you enter them — only Azure DevOps interprets `scopeType` — so what matters is that
+fields are stored as you enter them - only Azure DevOps interprets `scopeType` - so what matters is that
 they name the owner your repositories live under, on the same host as the connection.
 
 | ProPR field | Value | Example |

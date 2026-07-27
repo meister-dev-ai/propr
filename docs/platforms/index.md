@@ -21,7 +21,7 @@ Use these pages when configuring providers in the frontend, or when automating t
 This section covers SCM provider connections: the credentials ProPR uses for repository discovery,
 crawling, and review publication.
 
-Tenant sign-in providers are something else — they only decide how people log in to ProPR. A tenant
+Tenant sign-in providers are something else - they only decide how people log in to ProPR. A tenant
 can configure `EntraId`, `Google`, or `GitHub` as an identity provider over `Oidc` or `Oauth2`; see
 [sign-in and sessions](../reference/security.md#sign-in-and-sessions). Configuring one does not give
 ProPR any access to a repository.
@@ -39,7 +39,7 @@ ProPR any access to a repository.
 | [Forgejo](forgejo.md) | your Forgejo base URL, for example `https://codeberg.org` | `personalAccessToken` | none | Forgejo access token |
 
 Any combination not in the table is refused when you save the connection, with an error naming the
-modes that provider does accept — so you find out at save time rather than at the first connection
+modes that provider does accept - so you find out at save time rather than at the first connection
 attempt. `appInstallation` in particular is GitHub-only.
 
 ## Enabling a provider family
@@ -54,7 +54,7 @@ inbound webhook deliveries for it are rejected.
 
 Once a connection verifies and has at least one enabled scope, ProPR labels it **Workflow Complete**
 or **Onboarding Ready**. Only Azure DevOps Services and GitHub Cloud reach **Workflow Complete**; every
-other host variant — self-hosted Azure DevOps Server, GitHub Enterprise, GitLab, Forgejo — stays
+other host variant - self-hosted Azure DevOps Server, GitHub Enterprise, GitLab, Forgejo - stays
 **Onboarding Ready**. The label describes how much operational coverage that host variant has, not
 whether reviews work: discovery, review, and comment publication run either way.
 
@@ -133,7 +133,7 @@ Problems specific to one platform are on that platform's page. These two are sha
 | `userName` is required for `windowsUserAccount` and must be empty for every other authentication kind | Azure DevOps |
 | Switching between Azure DevOps authentication modes requires a replacement `secret` for the new mode | Azure DevOps |
 | `gitHubAppId` and `gitHubAppInstallationId` are both required for `appInstallation`, and rejected on any other connection or authentication kind | GitHub |
-| Switching between PAT and App mode means `secret` must carry the other credential type — a PAT one way, a private key PEM the other | GitHub |
+| Switching between PAT and App mode means `secret` must carry the other credential type - a PAT one way, a private key PEM the other | GitHub |
 | `retentionDays` must be between `1` and `3650` when set | All |
 
 ### Connection verifies but reviewer identity resolution fails

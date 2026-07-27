@@ -21,7 +21,7 @@ requires the broader `api` scope.
 ## Provider scope
 
 Every connection needs at least one enabled scope before it counts as ready, GitLab included. On GitLab
-the four fields are stored as you enter them — only Azure DevOps interprets `scopeType` — so what matters
+the four fields are stored as you enter them - only Azure DevOps interprets `scopeType` - so what matters
 is that they name the group your projects live under, on the same host as the connection.
 
 | ProPR field | Value | Example |
@@ -31,7 +31,7 @@ is that they name the group your projects live under, on the same host as the co
 | `scopePath` | That group's URL | `https://gitlab.com/my-group` |
 | `displayName` | Any label you want in the UI | `My Group` |
 
-For a self-managed GitLab, use your own host in `scopePath`. For a subgroup, use the full path —
+For a self-managed GitLab, use your own host in `scopePath`. For a subgroup, use the full path -
 `my-group/platform` and `https://gitlab.com/my-group/platform`.
 
 ## Webhook registration
@@ -67,5 +67,5 @@ bash scripts/send-gitlab-webhook.sh \
 ## Troubleshooting
 
 If the connection verifies but comments never appear, check the token scope above before anything else.
-For anything else — reviewer identity, deliveries, reviews — start at
+For anything else - reviewer identity, deliveries, reviews - start at
 [troubleshooting](../operate/troubleshooting.md).

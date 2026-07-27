@@ -47,7 +47,7 @@ Important GitHub App notes:
 ## Provider scope
 
 Every connection needs at least one enabled scope before it counts as ready, GitHub included. On GitHub
-the four fields are stored as you enter them — only Azure DevOps interprets `scopeType` — so what matters
+the four fields are stored as you enter them - only Azure DevOps interprets `scopeType` - so what matters
 is that they name the account your repositories live under, on the same host as the connection.
 
 | ProPR field | Value | Example |
@@ -57,7 +57,7 @@ is that they name the account your repositories live under, on the same host as 
 | `scopePath` | That account's URL | `https://github.com/my-org` |
 | `displayName` | Any label you want in the UI | `My Org` |
 
-For GitHub Enterprise Server, use your own host in `scopePath` — `https://github.example.com/my-org`.
+For GitHub Enterprise Server, use your own host in `scopePath` - `https://github.example.com/my-org`.
 
 ## Webhook registration
 
@@ -92,5 +92,5 @@ bash scripts/send-github-webhook.sh \
 ## Troubleshooting
 
 A `400` when saving the connection is usually one of the App-versus-PAT field rules in
-[HTTP 400 when saving a connection](index.md#http-400-when-saving-a-connection). For anything else —
-reviewer identity, deliveries, reviews — start at [troubleshooting](../operate/troubleshooting.md).
+[HTTP 400 when saving a connection](index.md#http-400-when-saving-a-connection). For anything else -
+reviewer identity, deliveries, reviews - start at [troubleshooting](../operate/troubleshooting.md).

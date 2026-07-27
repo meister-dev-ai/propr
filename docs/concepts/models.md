@@ -6,9 +6,9 @@ get called.
 
 Two objects, and the difference matters:
 
-- An **AI purpose** is a fixed slot the review loop asks for — review generation, triage, verification,
+- An **AI purpose** is a fixed slot the review loop asks for - review generation, triage, verification,
   embeddings. The set is fixed; you cannot add one.
-- A **logical model** is a name you choose (`fast`, `deep`, `embed` — anything) that points at one model
+- A **logical model** is a name you choose (`fast`, `deep`, `embed` - anything) that points at one model
   on one connection and carries that model's reasoning effort and protocol mode.
 
 That indirection is what you get for the extra object: because no client's review configuration names
