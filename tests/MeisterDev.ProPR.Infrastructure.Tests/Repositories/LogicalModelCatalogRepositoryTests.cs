@@ -433,4 +433,63 @@ public sealed class LogicalModelCatalogRepositoryTests(PostgresContainerFixture 
             CreatedAt = now,
         };
     }
+
+    // The per-file review loop reviews several files at once and each one resolves its triage purpose, so these reads
+    // run concurrently. A repository holding one scoped context served the first caller and made Entity Framework
+    // refuse the rest, which surfaced as an unmapped purpose and silently dropped every file to the size heuristic.
+    [Fact]
+    public async Task GetPurposeRoleAsync_ServesConcurrentReaders()
+    {
+        await this._repo.SetPurposeRoleAsync(this._clientA, AiPurpose.ReviewTriage, "triage", default);
+
+        var options = new DbContextOptionsBuilder<MeisterProPRDbContext>()
+            .UseNpgsql(fixture.ConnectionString, o => o.UseVector())
+            .Options;
+        var concurrentRepo = new LogicalModelCatalogRepository(
+            this._dbContext,
+            Substitute.For<ILogicalModelCapabilityValidator>(),
+            Substitute.For<IAiConnectionRepository>(),
+            Substitute.For<IAiConnectionScopeGuard>(),
+            new TestDbContextFactory(options));
+
+        var reads = Enumerable.Range(0, 24)
+            .Select(_ => concurrentRepo.GetPurposeRoleAsync(this._clientA, AiPurpose.ReviewTriage, default))
+            .ToList();
+
+        var roles = await Task.WhenAll(reads);
+
+        Assert.All(roles, role => Assert.Equal("triage", role));
+    }
+
+    [Fact]
+    public async Task GetPurposeRolesAsync_ServesConcurrentReaders()
+    {
+        await this._repo.SetPurposeRoleAsync(this._clientB, AiPurpose.ReviewDefault, "deep", default);
+
+        var options = new DbContextOptionsBuilder<MeisterProPRDbContext>()
+            .UseNpgsql(fixture.ConnectionString, o => o.UseVector())
+            .Options;
+        var concurrentRepo = new LogicalModelCatalogRepository(
+            this._dbContext,
+            Substitute.For<ILogicalModelCapabilityValidator>(),
+            Substitute.For<IAiConnectionRepository>(),
+            Substitute.For<IAiConnectionScopeGuard>(),
+            new TestDbContextFactory(options));
+
+        var reads = Enumerable.Range(0, 24)
+            .Select(_ => concurrentRepo.GetPurposeRolesAsync(this._clientB, default))
+            .ToList();
+
+        var maps = await Task.WhenAll(reads);
+
+        Assert.All(maps, map => Assert.Equal("deep", map[AiPurpose.ReviewDefault]));
+    }
+
+    // A minimal factory so the concurrency tests get an independent context per read, the way dependency injection
+    // supplies one at run time.
+    private sealed class TestDbContextFactory(DbContextOptions<MeisterProPRDbContext> options)
+        : IDbContextFactory<MeisterProPRDbContext>
+    {
+        public MeisterProPRDbContext CreateDbContext() => new(options);
+    }
 }

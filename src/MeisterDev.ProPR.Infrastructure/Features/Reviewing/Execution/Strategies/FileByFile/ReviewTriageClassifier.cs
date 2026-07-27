@@ -2,6 +2,7 @@
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
 using System.Text.Json;
+using MeisterDev.ProPR.Application.Exceptions;
 using MeisterDev.ProPR.Application.Features.Reviewing.Execution.Models;
 using MeisterDev.ProPR.Application.Features.Reviewing.Execution.Services;
 using MeisterDev.ProPR.Application.Interfaces;
@@ -44,10 +45,19 @@ internal sealed partial class ReviewTriageClassifier(
         {
             throw;
         }
-        catch (Exception ex)
+        catch (AiPurposeBindingNotConfiguredException ex)
         {
+            // The expected case: this client does not use a triage model, so the deterministic heuristic tiers the file.
             LogTriageBindingUnavailable(logger, file.Path, ex);
             return new TriageVerdict(fallbackTier, false, "size-heuristic fallback: no ReviewTriage binding");
+        }
+        catch (Exception ex)
+        {
+            // Anything else is a fault rather than a configuration choice. The review still proceeds on the heuristic,
+            // because losing it over triage would be worse, but it must not be reported as an absent binding: doing so
+            // sent operators to check mappings that were correct while the real cause went unnamed.
+            LogTriageResolutionFailed(logger, file.Path, ex);
+            return new TriageVerdict(fallbackTier, false, "size-heuristic fallback: triage runtime could not be resolved");
         }
 
         try
@@ -175,6 +185,11 @@ internal sealed partial class ReviewTriageClassifier(
 
     [LoggerMessage(Level = LogLevel.Debug, Message = "ReviewTriage binding unavailable for {Path}; using size heuristic.")]
     private static partial void LogTriageBindingUnavailable(ILogger logger, string path, Exception ex);
+
+    [LoggerMessage(
+        Level = LogLevel.Error,
+        Message = "Resolving the ReviewTriage runtime failed for {Path}; using size heuristic. This is a fault, not a missing binding.")]
+    private static partial void LogTriageResolutionFailed(ILogger logger, string path, Exception ex);
 
     [LoggerMessage(Level = LogLevel.Warning, Message = "ReviewTriage call failed for {Path}; using size heuristic.")]
     private static partial void LogTriageCallFailed(ILogger logger, string path, Exception ex);

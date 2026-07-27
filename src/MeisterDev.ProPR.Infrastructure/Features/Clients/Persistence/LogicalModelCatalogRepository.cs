@@ -19,11 +19,18 @@ namespace MeisterDev.ProPR.Infrastructure.Repositories;
 ///     tenant-catalog table (<c>ai_logical_models</c>) and a per-client override table (<c>ai_logical_model_overrides</c>),
 ///     and reads them back by scope.
 /// </summary>
+/// <remarks>
+///     The purpose-role reads take their own short-lived context when a factory is available. They are called from
+///     the per-file review loop, which reviews several files at once, and a scoped context serves one operation at a
+///     time — concurrent readers on the shared instance make Entity Framework refuse the second one. The write paths
+///     keep the scoped context: they run from a single request and rely on its change tracking.
+/// </remarks>
 public sealed class LogicalModelCatalogRepository(
     MeisterProPRDbContext db,
     ILogicalModelCapabilityValidator validator,
     IAiConnectionRepository connections,
-    IAiConnectionScopeGuard scopeGuard)
+    IAiConnectionScopeGuard scopeGuard,
+    IDbContextFactory<MeisterProPRDbContext>? contextFactory = null)
     : ILogicalModelCatalogRepository
 {
     /// <inheritdoc />
@@ -322,17 +329,46 @@ public sealed class LogicalModelCatalogRepository(
     /// <inheritdoc />
     public async Task<string?> GetPurposeRoleAsync(Guid clientId, AiPurpose purpose, CancellationToken ct)
     {
-        return await db.ClientPurposeLogicalModels
+        if (contextFactory is null)
+        {
+            return await ReadPurposeRoleAsync(db, clientId, purpose, ct);
+        }
+
+        await using var isolated = await contextFactory.CreateDbContextAsync(ct);
+        return await ReadPurposeRoleAsync(isolated, clientId, purpose, ct);
+    }
+
+    /// <inheritdoc />
+    public async Task<IReadOnlyDictionary<AiPurpose, string>> GetPurposeRolesAsync(Guid clientId, CancellationToken ct)
+    {
+        if (contextFactory is null)
+        {
+            return await ReadPurposeRolesAsync(db, clientId, ct);
+        }
+
+        await using var isolated = await contextFactory.CreateDbContextAsync(ct);
+        return await ReadPurposeRolesAsync(isolated, clientId, ct);
+    }
+
+    private static async Task<string?> ReadPurposeRoleAsync(
+        MeisterProPRDbContext context,
+        Guid clientId,
+        AiPurpose purpose,
+        CancellationToken ct)
+    {
+        return await context.ClientPurposeLogicalModels
             .AsNoTracking()
             .Where(x => x.ClientId == clientId && x.Purpose == purpose)
             .Select(x => x.LogicalModelName)
             .FirstOrDefaultAsync(ct);
     }
 
-    /// <inheritdoc />
-    public async Task<IReadOnlyDictionary<AiPurpose, string>> GetPurposeRolesAsync(Guid clientId, CancellationToken ct)
+    private static async Task<IReadOnlyDictionary<AiPurpose, string>> ReadPurposeRolesAsync(
+        MeisterProPRDbContext context,
+        Guid clientId,
+        CancellationToken ct)
     {
-        var rows = await db.ClientPurposeLogicalModels
+        var rows = await context.ClientPurposeLogicalModels
             .AsNoTracking()
             .Where(x => x.ClientId == clientId)
             .ToListAsync(ct);

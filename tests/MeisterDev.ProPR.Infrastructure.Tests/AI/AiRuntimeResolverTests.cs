@@ -4,6 +4,7 @@
 using MeisterDev.Ai.Providers.Enums;
 using MeisterDev.ProPR.Application.AI;
 using MeisterDev.ProPR.Application.DTOs;
+using MeisterDev.ProPR.Application.Exceptions;
 using MeisterDev.ProPR.Application.Interfaces;
 using MeisterDev.ProPR.Domain.Enums;
 using MeisterDev.ProPR.Infrastructure.AI;
@@ -59,10 +60,14 @@ public sealed class AiRuntimeResolverTests
         this._repository.GetActiveBindingForPurposeAsync(ClientId, AiPurpose.ReviewDefault, Arg.Any<CancellationToken>())
             .Returns((AiResolvedPurposeBindingDto?)null);
 
-        var exception = await Assert.ThrowsAsync<InvalidOperationException>(() => this.Sut().ResolveChatRuntimeAsync(
+        // The distinct type is the contract callers act on: an optional purpose degrades to non-AI behaviour on this
+        // exception alone, so a fault must not arrive wearing the same type and be mistaken for an unmapped purpose.
+        var exception = await Assert.ThrowsAsync<AiPurposeBindingNotConfiguredException>(() => this.Sut().ResolveChatRuntimeAsync(
             ClientId, AiPurpose.ReviewDefault, CancellationToken.None));
 
+        Assert.Equal(AiPurpose.ReviewDefault, exception.Purpose);
         Assert.Contains("No active AI binding is configured", exception.Message, StringComparison.Ordinal);
+        Assert.IsAssignableFrom<InvalidOperationException>(exception);
         await this._repository.DidNotReceive().GetActiveForClientAsync(ClientId, Arg.Any<CancellationToken>());
     }
 

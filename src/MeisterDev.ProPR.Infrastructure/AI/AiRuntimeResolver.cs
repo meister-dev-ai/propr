@@ -2,6 +2,7 @@
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
 using MeisterDev.ProPR.Application.DTOs;
+using MeisterDev.ProPR.Application.Exceptions;
 using MeisterDev.ProPR.Application.Features.Budgeting;
 using MeisterDev.ProPR.Application.Interfaces;
 using MeisterDev.ProPR.Domain.Enums;
@@ -38,7 +39,7 @@ public sealed class AiRuntimeResolver(
         }
 
         var resolved = await aiConnectionRepository.GetActiveBindingForPurposeAsync(clientId, purpose, ct)
-                       ?? throw new InvalidOperationException($"No active AI binding is configured for purpose '{purpose}'.");
+                       ?? throw new AiPurposeBindingNotConfiguredException(purpose);
 
         if (!resolved.Model.SupportsChat)
         {
@@ -83,7 +84,7 @@ public sealed class AiRuntimeResolver(
         }
 
         var resolved = await aiConnectionRepository.GetActiveBindingForPurposeAsync(clientId, purpose, ct)
-                       ?? throw new InvalidOperationException($"No active AI binding is configured for purpose '{purpose}'.");
+                       ?? throw new AiPurposeBindingNotConfiguredException(purpose);
 
         if (!resolved.Model.SupportsEmbedding)
         {
