@@ -1,3 +1,6 @@
+<!-- Copyright (c) Andreas Rain. -->
+<!-- Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms. -->
+
 <template>
   <div class="ai-config-tab">
     <!-- The subnavigation lives in the client sidebar (like the SCM-provider detail), so entering the AI
@@ -52,7 +55,7 @@
           No AI connections yet. Use <strong>Add Profile</strong> to create one.
         </p>
         <p v-else class="muted ai-list-hint">
-          Select a profile to inspect its bindings, verification state, and provider details.
+          Select a profile to inspect its models, verification state, and provider details.
         </p>
 
         <div v-if="profiles.length > 0" class="ai-profile-list">
@@ -98,9 +101,9 @@
               <!-- The models the profile carries, not the purpose bindings it used to: purposes and passes are
                    assigned through logical models now, so a per-profile binding list would read as "None" on
                    every profile no matter how it is used. -->
-              <div class="bindings-summary-col">
+              <div class="models-summary-col">
                 <span class="summary-label">Models</span>
-                <div class="ai-binding-tags">
+                <div class="ai-model-tags">
                   <span
                     v-for="model in (profile.configuredModels ?? [])"
                     :key="model.id || model.remoteModelId || ''"
@@ -743,7 +746,7 @@ const guidance = computed(() => providerGuidance(editor.providerKind))
   margin-top: 0.9rem;
 }
 
-.ai-binding-tags {
+.ai-model-tags {
   display: flex;
   flex-wrap: wrap;
   gap: 0.4rem;
@@ -756,20 +759,7 @@ const guidance = computed(() => providerGuidance(editor.providerKind))
   color: var(--color-text-muted);
 }
 
-.ai-binding-list {
-  list-style: none;
-  margin: 0.9rem 0 0;
-  padding: 0;
-  display: grid;
-  gap: 0.35rem;
-}
 
-.ai-binding-list li {
-  display: flex;
-  justify-content: space-between;
-  gap: 0.75rem;
-  font-size: 0.92rem;
-}
 
 .ai-verification-summary {
   margin: 0.9rem 0 0;
@@ -798,8 +788,7 @@ const guidance = computed(() => providerGuidance(editor.providerKind))
   justify-items: start;
 }
 
-.ai-form-grid,
-.ai-binding-editor-grid {
+.ai-form-grid {
   display: grid;
   gap: 0.85rem;
 }
@@ -866,8 +855,7 @@ const guidance = computed(() => providerGuidance(editor.providerKind))
   align-items: center;
 }
 
-.ai-model-row,
-.ai-binding-row {
+.ai-model-row {
   border: 1px solid var(--color-border);
   border-radius: var(--radius-lg);
   padding: 0.9rem;
@@ -964,49 +952,6 @@ textarea {
   padding: 0.25rem;
 }
 
-/* Bindings compact row */
-.compact-bindings {
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-}
-.ai-binding-section-header {
-  grid-column: 1 / -1;
-  margin-top: 0.35rem;
-  font-size: 0.72rem;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  opacity: 0.6;
-}
-.compact-binding-row {
-  display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
-  padding: 0.85rem;
-  transition: opacity 0.2s;
-}
-.compact-binding-row.is-disabled {
-  opacity: 0.6;
-}
-.binding-header {
-  display: flex;
-  flex-direction: column;
-  gap: 0.25rem;
-}
-.binding-enable-toggle {
-  margin: 0;
-}
-.binding-desc {
-  margin: 0 0 0 1.7rem;
-  font-size: 0.8rem;
-}
-.binding-controls {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 0.75rem;
-  margin-top: 0.5rem;
-  margin-left: 1.7rem;
-  align-items: start;
-}
 .form-input-sm {
   padding: 0.35rem 0.5rem;
   font-size: 0.85rem;
