@@ -4,7 +4,7 @@
 <template>
   <div v-if="normalizedBreakdown.length > 0" class="token-breakdown">
     <h4 class="breakdown-title">Token Breakdown by Tier, Logical Model and Model</h4>
-    <p class="breakdown-caption">Each row shows the routing tier, the logical model, and the exact end model used for that portion of the job.</p>
+    <p class="breakdown-caption">Each row shows the routing tier, the logical model, and the exact direct model used for that portion of the job.</p>
     <table class="breakdown-table">
       <thead>
         <tr>

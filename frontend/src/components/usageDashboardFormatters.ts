@@ -93,13 +93,13 @@ export type ReviewChartGroupBy = 'logicalModel' | 'model' | 'provider'
 /** How each grouping dimension is described in the chart's caption. */
 export const REVIEW_GROUP_BY_LABELS: Record<ReviewChartGroupBy, string> = {
   logicalModel: 'logical model',
-  model: 'end model',
+  model: 'direct model',
   provider: 'provider',
 }
 
 export function getReviewSeriesKey(sample: ClientTokenUsageSample, groupBy: ReviewChartGroupBy): string {
   if (groupBy === 'logicalModel') {
-    return sample.logicalModelName?.trim() ? sample.logicalModelName : '(raw model)'
+    return sample.logicalModelName?.trim() ? sample.logicalModelName : '(direct model)'
   }
 
   // Usage recorded before the provider was captured, or against a profile since deleted, has no provider. It
@@ -113,7 +113,7 @@ export function getReviewSeriesKey(sample: ClientTokenUsageSample, groupBy: Revi
 
 export function getReviewSeriesLabel(sample: ClientTokenUsageSample, groupBy: ReviewChartGroupBy): string {
   if (groupBy === 'logicalModel') {
-    return sample.logicalModelName?.trim() ? sample.logicalModelName : 'Raw model'
+    return sample.logicalModelName?.trim() ? sample.logicalModelName : 'Direct model'
   }
 
   if (groupBy === 'provider') {
@@ -172,7 +172,7 @@ export function buildReviewChartData(
 
   const datesSet = new Set<string>()
   const seriesSet = new Map<string, string>()
-  // key -> date -> summed tokens. Several samples can share a series and date (e.g. the same end model used
+  // key -> date -> summed tokens. Several samples can share a series and date (e.g. the same direct model used
   // by two logical models, or the same logical model on two tiers), so tokens are accumulated, not overwritten.
   const lookup = new Map<string, Map<string, number>>()
 

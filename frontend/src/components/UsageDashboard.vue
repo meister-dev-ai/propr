@@ -94,7 +94,7 @@
               <label for="review-groupby">Group by</label>
               <select id="review-groupby" v-model="reviewGroupBy">
                 <option value="logicalModel">Logical model</option>
-                <option value="model">End model</option>
+                <option value="model">Direct model</option>
                 <option value="provider">Provider</option>
               </select>
             </div>
@@ -126,7 +126,7 @@
               </thead>
               <tbody>
                 <tr v-for="row in reviewUsageByLogicalModel" :key="row.logicalModelName || '(raw)'">
-                  <td>{{ row.logicalModelName || 'Raw model' }}</td>
+                  <td>{{ row.logicalModelName || 'Direct model' }}</td>
                   <td>{{ formatNumber(row.inputTokens) }}</td>
                   <td>{{ formatNumber(row.outputTokens) }}</td>
                   <td>{{ formatNumber(row.reasoningTokens) }}</td>

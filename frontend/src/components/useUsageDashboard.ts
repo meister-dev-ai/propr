@@ -106,7 +106,7 @@ export function useUsageDashboard(props: { clientId: string }) {
   })
   const lastRollupCompletedLabel = computed(() => formatDateTime(proCursorUsage.value?.lastRollupCompletedAtUtc))
 
-  // Which dimension the review chart plots one curve per — logical model (the default), the end model, or the
+  // Which dimension the review chart plots one curve per — logical model (the default), the direct model, or the
   // provider it was reached through, which is the only one of the three that separates two profiles serving the
   // same model.
   const reviewGroupBy = ref<ReviewChartGroupBy>('logicalModel')
