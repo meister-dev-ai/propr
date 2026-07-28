@@ -7,16 +7,17 @@
         <GenerateDocumentationFile>true</GenerateDocumentationFile>
         <ServerGarbageCollection>true</ServerGarbageCollection>
         <RootNamespace>MeisterDev.Ai.Providers</RootNamespace>
-        <!-- OPENAI001 / MEAI001: the Responses API and parts of Microsoft.Extensions.AI are still marked
-             experimental but are used deliberately for reasoning and tool use. Revisit when they stabilise. -->
-        <NoWarn>$(NoWarn);OPENAI001;MEAI001</NoWarn>
+        <!-- OPENAI001: the Responses API is still marked for evaluation only, and is used deliberately for
+             reasoning and tool use. Without this the four call sites are errors, not warnings. Revisit when the
+             API stabilises. -->
+        <NoWarn>$(NoWarn);OPENAI001</NoWarn>
     </PropertyGroup>
 
     <!--
-        This library owns the "talk to a model provider" concern and is intentionally self-contained: it must
-        never take a ProjectReference on any MeisterDev.ProPR.* project, and no file in it may carry the
-        commercial-only notice. Those two rules are what keep it separable from the product that hosts it.
-        Dependencies are limited to Microsoft.Extensions.AI and the provider SDKs behind it.
+        This library implements provider communication and nothing else. Two rules keep it separable from the
+        product that hosts it: it must never take a ProjectReference on a MeisterDev.ProPR.* project, and no file
+        in it may carry the commercial-only notice. Dependencies stay limited to Microsoft.Extensions.AI and the
+        provider SDKs beneath it.
     -->
     <!--
         The catalog snapshot is embedded rather than fetched, so the application populates its model catalog

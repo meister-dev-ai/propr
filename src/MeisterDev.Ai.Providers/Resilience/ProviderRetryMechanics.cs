@@ -42,7 +42,6 @@ internal static class ProviderRetryMechanics
         bool answerAlreadyStarted = false)
     {
         ArgumentNullException.ThrowIfNull(policy);
-        ArgumentNullException.ThrowIfNull(verdict);
 
         return !answerAlreadyStarted && verdict.IsTransient && attempt < policy.MaxAttempts;
     }

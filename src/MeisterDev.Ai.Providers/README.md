@@ -1,6 +1,6 @@
 # MeisterDev.Ai.Providers
 
-Everything needed to talk to a model provider, and nothing about what the conversation is for.
+Everything needed to reach a model provider, and nothing about what the request is for.
 
 The library answers four questions for a host application:
 
