@@ -150,7 +150,28 @@ Use a comma-separated list if you need multiple local proxy hostnames. For tenan
 - In extracted mode, ProPR `/healthz` includes a `procursor-remote` dependency entry and returns `503` if the remote service is unhealthy.
 - The ProCursor host exposes its own `/healthz` endpoint for worker and service readiness.
 - Swagger UI in Development: `https://localhost:5443/swagger`
+- Metrics: both hosts expose a Prometheus scrape endpoint at `/metrics`, always on and independent of the tracing settings below.
 - Optional tracing: `OTLP_ENDPOINT`
+
+### Trace volume
+
+Metrics are pre-aggregated, so their cost does not grow with traffic. Traces do: one span per request,
+billed per record by most backends. The settings below shape the trace volume; none of them affect the
+metrics endpoint, which keeps counting every request either way.
+
+| Variable | Default | Effect |
+| --- | --- | --- |
+| `OTLP_ENDPOINT` | unset | Where traces are exported. **While unset, no trace pipeline is built at all** — spans are not assembled, so leaving it empty costs nothing. |
+| `TELEMETRY_HTTP_CLIENT_TRACES` | `foreground` | Which outbound requests become spans. `foreground` skips unattended work: crawl cycles, mention scans, and health probes. `all` traces every request. `off` traces none. |
+| `TELEMETRY_TRACE_SAMPLE_RATIO` | `1.0` | Head-sampling ratio for the traces that survive the filters, from `0.0` to `1.0`. At the default no sampler is installed, which leaves the standard `OTEL_TRACES_SAMPLER` and `OTEL_TRACES_SAMPLER_ARG` variables in charge. |
+| `TELEMETRY_TRACE_IGNORED_PATHS` | `/healthz,/livez,/metrics` | Request path prefixes that are never traced, inbound or outbound. A leading `/` is optional. |
+
+The recurring crawl and mention workers re-read provider APIs on every tick whether or not anything
+changed, which is what makes them the bulk of the trace volume on an otherwise idle deployment. The
+default `foreground` mode keeps those requests out of the traces and leaves them visible through the
+`http.client.request.duration` metric, including its `http.response.status_code` dimension, so failure
+rates stay observable in aggregate. Set `TELEMETRY_HTTP_CLIENT_TRACES=all` when you need the individual
+spans back while diagnosing a polling problem.
 
 ## Related docs
 

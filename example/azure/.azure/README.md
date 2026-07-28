@@ -162,4 +162,10 @@ The backend and ProCursor apps also mount the same Azure Files-backed Data Prote
 
 If `OTLP_ENDPOINT` is supplied to the apps, the backend and ProCursor services emit traces under the
 distinct service names `MeisterDev.ProPR.Api` and `MeisterDev.ProPR.ProCursor.Service` so Azure-hosted flows
-can be correlated across the internal service boundary.
+can be correlated across the internal service boundary. Leaving it unset builds no trace pipeline at all.
+
+When those traces are forwarded to Application Insights, every span becomes a billed record in the Log
+Analytics workspace, and the recurring crawl and mention workers dominate that volume because they poll
+provider APIs on a fixed interval whether or not anything changed. The shipped defaults keep unattended
+requests out of the traces; see the trace-volume settings in `docs/getting-started.md` before widening
+them, and note that this example provisions the workspace with `dailyQuotaGb: -1`, meaning no cap.

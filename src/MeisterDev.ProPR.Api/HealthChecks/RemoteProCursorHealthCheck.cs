@@ -4,6 +4,7 @@
 using System.Net;
 using MeisterDev.ProPR.Application.Options;
 using MeisterDev.ProPR.Infrastructure.Features.ProCursor.Remote;
+using MeisterDev.ProPR.Observability;
 using Microsoft.Extensions.Diagnostics.HealthChecks;
 using Microsoft.Extensions.Options;
 
@@ -29,6 +30,10 @@ public sealed class RemoteProCursorHealthCheck(
         }
 
         var requestUri = (remote.HealthEndpointPath ?? "/healthz").Trim();
+
+        // Probes run on the orchestrator's schedule forever; the health result itself is the signal, so
+        // the probe request is kept out of the traces regardless of which path was configured for it.
+        using var background = BackgroundActivityScope.Begin();
         try
         {
             var client = httpClientFactory.CreateClient(nameof(RemoteProCursorHealthCheck));

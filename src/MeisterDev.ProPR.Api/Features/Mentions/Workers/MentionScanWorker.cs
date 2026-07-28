@@ -8,6 +8,7 @@ using MeisterDev.ProPR.Application.Features.Licensing.Ports;
 using MeisterDev.ProPR.Application.Features.Licensing.Support;
 using MeisterDev.ProPR.Application.Interfaces;
 using MeisterDev.ProPR.Domain.Entities;
+using MeisterDev.ProPR.Observability;
 
 namespace MeisterDev.ProPR.Api.Workers;
 
@@ -52,6 +53,9 @@ public sealed partial class MentionScanWorker(
 
     private async Task ScanOnceAsync(CancellationToken stoppingToken)
     {
+        // Same reasoning as the crawl cycle: an unattended scan re-reads provider threads on every tick,
+        // so its outbound requests stay in the metrics aggregate instead of becoming a span apiece.
+        using var background = BackgroundActivityScope.Begin();
         var stopwatch = Stopwatch.StartNew();
         var outcome = "completed";
         var providerScope = "none";

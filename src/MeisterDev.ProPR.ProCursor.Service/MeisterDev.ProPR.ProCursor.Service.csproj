@@ -1,6 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk.Web">
 
     <ItemGroup>
+        <ProjectReference Include="..\MeisterDev.ProPR.Observability\MeisterDev.ProPR.Observability.csproj"/>
         <ProjectReference Include="..\MeisterDev.ProPR.ProCursor\MeisterDev.ProPR.ProCursor.csproj"/>
         <ProjectReference Include="..\MeisterDev.ProPR.ProCursor.Contracts\MeisterDev.ProPR.ProCursor.Contracts.csproj"/>
     </ItemGroup>

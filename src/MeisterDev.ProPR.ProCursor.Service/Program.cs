@@ -2,6 +2,7 @@
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
 using MeisterDev.ProPR.Infrastructure.Features.ProCursor.Remote;
+using MeisterDev.ProPR.Observability;
 using MeisterDev.ProPR.ProCursor.HealthChecks;
 using MeisterDev.ProPR.ProCursor.Infrastructure.DependencyInjection;
 using MeisterDev.ProPR.ProCursor.Infrastructure.Remote;
@@ -14,9 +15,6 @@ using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Diagnostics.HealthChecks;
-using OpenTelemetry.Metrics;
-using OpenTelemetry.Resources;
-using OpenTelemetry.Trace;
 using Serilog;
 using Serilog.Events;
 using Serilog.Formatting.Json;
@@ -105,25 +103,11 @@ try
         .AddCheck<ProCursorIndexWorkerHealthCheck>("procursor-index-worker")
         .AddCheck<ProCursorTokenUsageRollupWorkerHealthCheck>("procursor-token-usage-rollup-worker");
 
-    builder.Services.AddOpenTelemetry()
-        .ConfigureResource(resource => resource.AddService("MeisterDev.ProPR.ProCursor.Service"))
-        .WithTracing(tracing => tracing
-            .AddSource("MeisterProPR.Infrastructure")
-            .AddAspNetCoreInstrumentation()
-            .AddHttpClientInstrumentation()
-            .AddOtlpExporter(options =>
-            {
-                var endpoint = builder.Configuration["OTLP_ENDPOINT"];
-                if (!string.IsNullOrWhiteSpace(endpoint))
-                {
-                    options.Endpoint = new Uri(endpoint);
-                }
-            }))
-        .WithMetrics(metrics => metrics
-            .AddMeter("MeisterProPR")
-            .AddAspNetCoreInstrumentation()
-            .AddHttpClientInstrumentation()
-            .AddPrometheusExporter());
+    builder.Services.AddProPrTelemetry(
+        builder.Configuration,
+        "MeisterDev.ProPR.ProCursor.Service",
+        ["MeisterProPR.Infrastructure"],
+        ["MeisterProPR"]);
 
     var app = builder.Build();
 

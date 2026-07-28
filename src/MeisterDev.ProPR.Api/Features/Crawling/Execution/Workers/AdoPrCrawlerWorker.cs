@@ -8,6 +8,7 @@ using MeisterDev.ProPR.Application.Features.Licensing.Ports;
 using MeisterDev.ProPR.Application.Features.Licensing.Support;
 using MeisterDev.ProPR.Application.Interfaces;
 using MeisterDev.ProPR.Domain.Enums;
+using MeisterDev.ProPR.Observability;
 
 namespace MeisterDev.ProPR.Api.Workers;
 
@@ -50,6 +51,9 @@ public sealed partial class AdoPrCrawlerWorker(
 
     private async Task RunCrawlCycleAsync(CancellationToken ct)
     {
+        // A crawl cycle fans out over provider APIs on every tick whether or not anything changed, so
+        // its outbound requests are counted by the metrics pipeline rather than traced one span each.
+        using var background = BackgroundActivityScope.Begin();
         using var activity = ReviewJobTelemetry.Source.StartActivity("AdoPrCrawlerWorker.CrawlCycle");
         var sw = Stopwatch.StartNew();
         try

@@ -42,6 +42,7 @@ using MeisterDev.ProPR.Infrastructure.Features.Reviewing.DependencyInjection;
 using MeisterDev.ProPR.Infrastructure.Features.UsageReporting;
 using MeisterDev.ProPR.Infrastructure.Repositories;
 using MeisterDev.ProPR.Infrastructure.Services;
+using MeisterDev.ProPR.Observability;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.DataProtection;
@@ -54,9 +55,6 @@ using Microsoft.Extensions.Diagnostics.HealthChecks;
 using Microsoft.Extensions.Options;
 using Microsoft.FeatureManagement;
 using Microsoft.OpenApi;
-using OpenTelemetry.Metrics;
-using OpenTelemetry.Resources;
-using OpenTelemetry.Trace;
 using Serilog;
 using Serilog.Events;
 using Serilog.Formatting.Json;
@@ -337,28 +335,16 @@ try
 
     builder.Services.AddSingleton<ReviewJobMetrics>();
 
-    builder.Services.AddOpenTelemetry()
-        .ConfigureResource(resource => resource.AddService("MeisterDev.ProPR.Api"))
-        .WithTracing(tracing => tracing
-            .AddSource(ReviewJobTelemetry.Source.Name)
-            .AddSource("MeisterProPR.Webhooks")
-            .AddSource("MeisterProPR.Crawling")
-            .AddSource("MeisterProPR.Infrastructure")
-            .AddAspNetCoreInstrumentation()
-            .AddHttpClientInstrumentation()
-            .AddOtlpExporter(o =>
-            {
-                var endpoint = builder.Configuration["OTLP_ENDPOINT"];
-                if (!string.IsNullOrEmpty(endpoint))
-                {
-                    o.Endpoint = new Uri(endpoint);
-                }
-            }))
-        .WithMetrics(metrics => metrics
-            .AddMeter("MeisterProPR")
-            .AddAspNetCoreInstrumentation()
-            .AddHttpClientInstrumentation()
-            .AddPrometheusExporter());
+    builder.Services.AddProPrTelemetry(
+        builder.Configuration,
+        "MeisterDev.ProPR.Api",
+        [
+            ReviewJobTelemetry.Source.Name,
+            "MeisterProPR.Webhooks",
+            "MeisterProPR.Crawling",
+            "MeisterProPR.Infrastructure",
+        ],
+        ["MeisterProPR"]);
 
     builder.Services.AddEndpointsApiExplorer();
     builder.Services.AddSwaggerGen(options =>
