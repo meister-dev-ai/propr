@@ -1,6 +1,7 @@
 // Copyright (c) Andreas Rain.
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
+using System.Diagnostics;
 using MeisterDev.Ai.Providers.Contracts;
 using MeisterDev.Ai.Providers.Drivers;
 using Microsoft.Extensions.AI;
@@ -15,6 +16,13 @@ namespace MeisterDev.Ai.Providers.Resilience;
 /// </summary>
 public sealed partial class ProviderRetryEmbeddingGenerator : DelegatingEmbeddingGenerator<string, Embedding<float>>
 {
+    /// <summary>
+    ///     Why the code after the attempt loop cannot run: the loop is bounded by the policy's attempt count, and the
+    ///     final attempt either produces embeddings or is refused a retry and throws.
+    /// </summary>
+    private const string LoopEndedWithoutOutcome =
+        "The attempt loop ended without a result or a failure, which the attempt bound makes impossible.";
+
     private readonly ProviderRetryPolicy _policy;
     private readonly Func<Exception, ProviderFailureVerdict> _classify;
     private readonly ProviderCallTarget _target;
@@ -59,7 +67,7 @@ public sealed partial class ProviderRetryEmbeddingGenerator : DelegatingEmbeddin
 
         var batch = values as IList<string> ?? values.ToList();
 
-        for (var attempt = 1;; attempt++)
+        for (var attempt = 1; attempt <= this._policy.MaxAttempts; attempt++)
         {
             try
             {
@@ -67,28 +75,42 @@ public sealed partial class ProviderRetryEmbeddingGenerator : DelegatingEmbeddin
             }
             catch (Exception exception) when (ProviderRetryMechanics.IsClassifiable(exception, cancellationToken))
             {
-                var verdict = this._classify(exception);
-                if (!verdict.IsTransient || attempt >= this._policy.MaxAttempts)
-                {
-                    throw new ProviderCallFailedException(
-                        this._target,
-                        verdict,
-                        attempt,
-                        DriverFailureMapper.ActionHintFor(verdict.HttpStatus),
-                        exception);
-                }
-
-                var delay = ProviderRetryMechanics.Delay(this._policy, verdict, attempt);
-                if (this._logger is not null)
-                {
-                    LogRetrying(this._logger, this._target.Describe(), attempt, this._policy.MaxAttempts, delay.TotalSeconds, verdict.Reason);
-                }
-
-                if (delay > TimeSpan.Zero)
-                {
-                    await Task.Delay(delay, this._timeProvider, cancellationToken).ConfigureAwait(false);
-                }
+                await this.ThrowOrWaitAsync(exception, attempt, cancellationToken).ConfigureAwait(false);
             }
+        }
+
+        throw new UnreachableException(LoopEndedWithoutOutcome);
+    }
+
+    /// <summary>
+    ///     Reports the failure when no further attempt is allowed, and otherwise waits out the backoff so the
+    ///     caller's loop can make the next one.
+    /// </summary>
+    /// <param name="exception">The failure the attempt threw.</param>
+    /// <param name="attempt">The attempt that failed, counted from one.</param>
+    /// <param name="cancellationToken">The caller's token.</param>
+    private async Task ThrowOrWaitAsync(Exception exception, int attempt, CancellationToken cancellationToken)
+    {
+        var verdict = this._classify(exception);
+        if (!ProviderRetryMechanics.ShouldRetry(this._policy, verdict, attempt))
+        {
+            throw new ProviderCallFailedException(
+                this._target,
+                verdict,
+                attempt,
+                DriverFailureMapper.ActionHintFor(verdict.HttpStatus),
+                exception);
+        }
+
+        var delay = ProviderRetryMechanics.Delay(this._policy, verdict, attempt);
+        if (this._logger is not null)
+        {
+            LogRetrying(this._logger, this._target.Describe(), attempt, this._policy.MaxAttempts, delay.TotalSeconds, verdict.Reason);
+        }
+
+        if (delay > TimeSpan.Zero)
+        {
+            await Task.Delay(delay, this._timeProvider, cancellationToken).ConfigureAwait(false);
         }
     }
 

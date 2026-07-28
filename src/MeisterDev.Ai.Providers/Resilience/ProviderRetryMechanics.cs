@@ -25,6 +25,29 @@ internal static class ProviderRetryMechanics
     }
 
     /// <summary>
+    ///     Whether a classified failure earns another attempt. The rule lives here for the same reason the other two
+    ///     do: the chat and embedding wrappers must not disagree about when a call has run out of attempts.
+    /// </summary>
+    /// <param name="policy">The retry policy in force.</param>
+    /// <param name="verdict">The driver's classification of the failure.</param>
+    /// <param name="attempt">The attempt that just failed, counted from one.</param>
+    /// <param name="answerAlreadyStarted">
+    ///     Whether part of an answer has already reached the caller. A streaming call that has handed over updates
+    ///     cannot be retried, because a second attempt would either duplicate or contradict what was already read.
+    /// </param>
+    public static bool ShouldRetry(
+        ProviderRetryPolicy policy,
+        ProviderFailureVerdict verdict,
+        int attempt,
+        bool answerAlreadyStarted = false)
+    {
+        ArgumentNullException.ThrowIfNull(policy);
+        ArgumentNullException.ThrowIfNull(verdict);
+
+        return !answerAlreadyStarted && verdict.IsTransient && attempt < policy.MaxAttempts;
+    }
+
+    /// <summary>
     ///     How long to wait before the next attempt: the provider's own stated delay when it gave one, otherwise
     ///     an exponential schedule. Both are capped by the policy — a <c>Retry-After</c> of an hour must not park
     ///     a review job for an hour.
