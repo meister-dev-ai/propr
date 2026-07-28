@@ -167,5 +167,5 @@ can be correlated across the internal service boundary. Leaving it unset builds 
 When those traces are forwarded to Application Insights, every span becomes a billed record in the Log
 Analytics workspace, and the recurring crawl and mention workers dominate that volume because they poll
 provider APIs on a fixed interval whether or not anything changed. The shipped defaults keep unattended
-requests out of the traces; see the trace-volume settings in `docs/getting-started.md` before widening
+requests out of the traces; see the trace-volume settings in `docs/operate/observability.md` before widening
 them, and note that this example provisions the workspace with `dailyQuotaGb: -1`, meaning no cap.

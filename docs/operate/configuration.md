@@ -296,9 +296,18 @@ credential instead: a managed identity, an Azure CLI login, or whatever else the
 
 | Variable | What it does | Default | Accepted | Example stack |
 |---|---|---|---|---|
-| `OTLP_ENDPOINT` | OTLP collector to export traces to | none - traces are not exported | absolute URL | no |
+| `OTLP_ENDPOINT` | OTLP collector to export traces to | none - no trace pipeline is built at all, so spans are never assembled | absolute URL | no |
+| `TELEMETRY_HTTP_CLIENT_TRACES` | Which outbound requests become spans. `foreground` skips unattended work: crawl cycles, mention scans and health probes | `foreground` | `foreground`, `all`, `off` | no |
+| `TELEMETRY_TRACE_SAMPLE_RATIO` | Head-sampling ratio applied to the traces that survive the filters | `1.0` - no sampler is installed, which leaves the standard `OTEL_TRACES_SAMPLER` and `OTEL_TRACES_SAMPLER_ARG` in charge | `0.0` to `1.0`, clamped into range | no |
+| `TELEMETRY_TRACE_IGNORED_PATHS` | Request path prefixes that are never traced, inbound or outbound | `/healthz,/livez,/metrics` | comma-separated path prefixes, leading `/` optional | no |
 | `LOKI_URL` | Grafana Loki instance to ship logs to | none - logs go to stdout only | absolute URL | pinned |
 | `ASPNETCORE_ENVIRONMENT` | The runtime environment name | `Production` when unset | `Production`, `Development`, or your own name | pinned |
+
+The three `TELEMETRY_` variables only do anything while `OTLP_ENDPOINT` is set, and none of them affect
+`/metrics`, which keeps counting every request either way. An unrecognised value is not an error: the
+trace mode falls back to `foreground` and an unparseable ratio to `1.0`, so a typo silently gets you the
+default rather than a failed start. Why you would change them:
+[trace volume](observability.md#trace-volume).
 
 `Development` is not a production setting: it serves the API documentation UI - see
 [the API reference](../reference/api.md#more) - and relaxes the outbound AI egress checks - see

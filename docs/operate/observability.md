@@ -46,6 +46,23 @@ neither variable. Defaults for both are in [the environment variable reference](
 Metrics do not follow the OTLP endpoint - they are exposed for scraping only. Point your Prometheus at
 `/metrics` on the API, and on ProCursor if you want its numbers too.
 
+## Trace volume
+
+Metrics are pre-aggregated, so their cost does not grow with traffic. Traces do: one span per request,
+billed per record by most backends. The knobs that shape trace volume are listed under
+[observability](configuration.md#observability); this is when to reach for them.
+
+Most of the spans on an otherwise idle deployment come from work nobody is waiting for. The crawl and
+mention workers re-read the provider APIs on every tick whether or not anything changed, and the health
+checks probe on their own schedule. That is why outbound tracing defaults to `foreground`: those requests
+are excluded, while the requests made while serving somebody stay traced. The excluded ones remain
+visible through the `http.client.request.duration` metric and its `http.response.status_code` dimension,
+so failure rates stay observable in aggregate even though the individual spans are gone. Set
+`TELEMETRY_HTTP_CLIENT_TRACES=all` to get them back while diagnosing a polling problem.
+
+If the volume is still too high after that, sample. Reach for `TELEMETRY_TRACE_SAMPLE_RATIO` last: it
+drops whole traces at random, so a request you care about is as likely to be missing as any other.
+
 ## What to look at when a review misbehaves
 
 Server logs are the wrong place to start. Every review records its own protocol - each pass, model call,
