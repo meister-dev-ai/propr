@@ -170,14 +170,17 @@ const canCreate = computed(
   () => draft.name.trim().length > 0 && !!draft.connectionId && !!draft.configuredModelId,
 )
 
-// Resolve the stored connection/model ids to display names via the client's connections. A tenant-inherited
-// entry points at a tenant connection this client does not own, so it is named as such rather than dashed out:
-// a dash reads as "bound to nothing", when in fact it is bound to something this table cannot see.
+// Resolve the stored connection/model ids to display names via the client's connections. Each state is named
+// rather than dashed out. A dash cannot distinguish "nothing is bound" from "what is bound has since been
+// deleted" - one is a configuration the operator has not finished, the other is one that has broken - and it
+// reads as nothing at all to a screen reader.
 const tenantManaged = 'Tenant-managed'
+const notSet = 'Not set'
+const missing = 'No longer configured'
 
 function connectionName(connectionId: string | null | undefined): string {
   if (!connectionId) {
-    return '—'
+    return notSet
   }
 
   return props.connections.find(connection => connection.id === connectionId)?.displayName ?? tenantManaged
@@ -185,7 +188,7 @@ function connectionName(connectionId: string | null | undefined): string {
 
 function modelName(connectionId: string | null | undefined, modelId: string | null | undefined): string {
   if (!connectionId || !modelId) {
-    return '—'
+    return notSet
   }
 
   const connection = props.connections.find(candidate => candidate.id === connectionId)
@@ -194,7 +197,11 @@ function modelName(connectionId: string | null | undefined, modelId: string | nu
   }
 
   const model = connection.configuredModels?.find(candidate => candidate.id === modelId)
-  return model?.displayName || model?.remoteModelId || '—'
+  if (model === undefined) {
+    return missing
+  }
+
+  return model.displayName || model.remoteModelId || 'Unnamed model'
 }
 
 // Opening the form via the header button always starts a fresh create (never a leftover edit).

@@ -266,6 +266,19 @@ public sealed class AnthropicMessagesChatClient : INativeProtocolChatClient
         return block;
     }
 
+    /// <summary>
+    ///     Sizes the conversation so a cache marker is only spent where it can pay for itself. Characters rather
+    ///     than tokens because this only has to clear a floor, and tokenising the conversation to answer it would
+    ///     cost more than the marker saves.
+    /// </summary>
+    /// <remarks>
+    ///     Marking cache points is specific to this protocol, not something the other providers omit. Anthropic
+    ///     requires the caller to state where its cache may break; Gemini caches implicitly and offers nothing to
+    ///     mark, and reports what it served from cache as <c>cachedContentTokenCount</c> instead. Both therefore
+    ///     report a cached token count, which is what the review protocol reads.
+    /// </remarks>
+    /// <param name="conversation">The messages about to be sent.</param>
+    /// <returns>The total length of the text carried by the conversation.</returns>
     private static long EstimateChars(JsonArray conversation)
     {
         long total = 0;

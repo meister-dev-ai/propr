@@ -5,6 +5,7 @@ using System.Collections.Concurrent;
 using System.Net.Http.Headers;
 using System.Security.Cryptography;
 using System.Text;
+using System.Text.Json;
 using Google.Apis.Auth.OAuth2;
 using MeisterDev.Ai.Providers.Contracts;
 
@@ -69,13 +70,13 @@ public sealed class GoogleCredentialSource : IGoogleCredentialSource
     {
         try
         {
-            // Deprecated in favour of typed factory methods, which would mean naming the credential kind up
-            // front — and a tenant may store a service-account key or a workload-identity configuration, both
-            // of which this has to accept. The deprecation warns about loading credentials from a string; here
-            // the string is a tenant secret read from the protected store, which is the intended use.
-#pragma warning disable CS0618
-            return GoogleCredential.FromJson(secret).CreateScoped(CloudPlatformScope);
-#pragma warning restore CS0618
+            // CredentialFactory rather than GoogleCredential.FromJson, which Google deprecated over a security
+            // risk in sniffing the kind out of an arbitrary payload. Its replacement wants the kind named, and a
+            // tenant may store a service-account key or a workload-identity configuration, so the kind is read
+            // from the payload's own "type" field and passed in rather than assumed.
+            return CredentialFactory
+                .FromJson(secret, ReadCredentialType(secret))
+                .CreateScoped(CloudPlatformScope);
         }
         catch (Exception failure) when (failure is InvalidOperationException or System.Text.Json.JsonException or ArgumentException)
         {
@@ -86,6 +87,24 @@ public sealed class GoogleCredentialSource : IGoogleCredentialSource
                 + "that may call the Vertex AI API.",
                 failure);
         }
+    }
+
+    /// <summary>
+    ///     Reads the credential kind the payload declares. A payload with no <c>type</c> is treated as a service
+    ///     account, which is both the common case and what the failure message tells an operator to store.
+    /// </summary>
+    /// <param name="secret">The stored credential JSON.</param>
+    /// <returns>The credential type to build.</returns>
+    private static string ReadCredentialType(string secret)
+    {
+        using var document = JsonDocument.Parse(secret);
+
+        return document.RootElement.ValueKind == JsonValueKind.Object
+               && document.RootElement.TryGetProperty("type", out var declared)
+               && declared.ValueKind == JsonValueKind.String
+               && declared.GetString() is { Length: > 0 } kind
+            ? kind
+            : JsonCredentialParameters.ServiceAccountCredentialType;
     }
 
     private static string Fingerprint(string secret)

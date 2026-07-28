@@ -50,6 +50,10 @@ internal static class ReviewReasoningRequest
 
         chatOptions.RawRepresentationFactory = client =>
         {
+            // Two arms, and both are load-bearing. A client speaking a provider's own protocol is handed the
+            // neutral request and maps it itself. Everything else is an OpenAI-adapter client, and that adapter
+            // reads only the OpenAI library's own options object - hand it the neutral form and the reasoning
+            // settings are silently dropped, so the OpenAI arm cannot be folded into the neutral one.
             if (client is INativeProtocolChatClient)
             {
                 return new ProviderReasoningRequest(MapNeutralEffort(reasoningEffort), captureReasoning);
