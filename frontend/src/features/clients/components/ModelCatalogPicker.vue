@@ -214,7 +214,7 @@ function pricingNote(entry: AiModelCatalogEntryDto): string {
   padding: 0.4rem 0.5rem;
   background: none;
   border: 0;
-  border-radius: 4px;
+  border-radius: var(--radius-xs);
   text-align: left;
   cursor: pointer;
 }

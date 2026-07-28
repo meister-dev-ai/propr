@@ -152,6 +152,6 @@ defineExpose({ load })
 }
 
 .purpose-roles-warning {
-  color: var(--color-warning, #e0a33e);
+  color: var(--color-warning);
 }
 </style>
