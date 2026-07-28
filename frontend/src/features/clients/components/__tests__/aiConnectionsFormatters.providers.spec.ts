@@ -1,3 +1,6 @@
+// Copyright (c) Andreas Rain.
+// Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
+
 import { describe, expect, it } from 'vitest'
 
 import { authOptionsForProvider, providerGuidance, providerLabel, providerOptions } from '../aiConnectionsFormatters'
