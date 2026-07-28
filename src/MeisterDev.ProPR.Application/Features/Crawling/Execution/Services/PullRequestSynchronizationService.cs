@@ -110,7 +110,13 @@ public sealed class PullRequestSynchronizationService(
 
             var reviewerIdentity = await this.ResolveReviewerIdentityAsync(request, ct);
             var reviewerId = ResolveReviewerId(reviewerIdentity);
-            await this.RunThreadMemoryStateMachineAsync(request, reviewerId, ct);
+
+            // Thread memory reconciliation and the review decision both need the reviewer's threads for
+            // this pass. Fetching once means one provider round trip per pull request per cycle instead
+            // of two, and both consumers now reason about the same point-in-time snapshot.
+            var threadStatuses = new ReviewerThreadStatusSnapshot(request, reviewerId);
+
+            await this.RunThreadMemoryStateMachineAsync(request, threadStatuses, ct);
             await this.IngestRetainedThreadsAsync(request, reviewerIdentity, reviewerId, ct);
 
             var iterationId = await this.ResolveIterationIdAsync(request, ct);
@@ -123,7 +129,11 @@ public sealed class PullRequestSynchronizationService(
                 return CompleteOutcome(activity, startedAt, request, activeJobReconciliation.DuplicateOutcome);
             }
 
-            var reviewDecision = await this.EvaluateReviewDecisionAsync(request, reviewerId, iterationId, ct);
+            var reviewDecision = await this.EvaluateReviewDecisionAsync(
+                request,
+                iterationId,
+                threadStatuses,
+                ct);
             if (reviewDecision is not null)
             {
                 return CompleteOutcome(
@@ -337,8 +347,8 @@ public sealed class PullRequestSynchronizationService(
 
     private async Task<PullRequestSynchronizationOutcome?> EvaluateReviewDecisionAsync(
         PullRequestSynchronizationRequest request,
-        Guid? reviewerId,
         int iterationId,
+        ReviewerThreadStatusSnapshot threadStatuses,
         CancellationToken ct)
     {
         var existingJob = jobs.FindActiveJob(
@@ -412,14 +422,7 @@ public sealed class PullRequestSynchronizationService(
                     : null;
             }
 
-            var currentThreads = await threadStatusFetcher.GetReviewerThreadStatusesAsync(
-                request.ProviderScopePath,
-                request.ProviderProjectKey,
-                request.RepositoryId,
-                request.PullRequestId,
-                reviewerId ?? Guid.Empty,
-                request.ClientId,
-                ct);
+            var currentThreads = await threadStatuses.GetAsync(threadStatusFetcher, ct);
 
             return HasNewReviewerThreadReplies(currentThreads, scan)
                 ? null
@@ -644,7 +647,7 @@ public sealed class PullRequestSynchronizationService(
 
     private async Task RunThreadMemoryStateMachineAsync(
         PullRequestSynchronizationRequest request,
-        Guid? reviewerId,
+        ReviewerThreadStatusSnapshot threadStatuses,
         CancellationToken ct)
     {
         if (threadStatusFetcher is null || threadMemoryService is null || prScanRepository is null)
@@ -664,14 +667,7 @@ public sealed class PullRequestSynchronizationService(
                 return;
             }
 
-            var currentThreads = await threadStatusFetcher.GetReviewerThreadStatusesAsync(
-                request.ProviderScopePath,
-                request.ProviderProjectKey,
-                request.RepositoryId,
-                request.PullRequestId,
-                reviewerId ?? Guid.Empty,
-                request.ClientId,
-                ct);
+            var currentThreads = await threadStatuses.GetAsync(threadStatusFetcher, ct);
             if (currentThreads.Count == 0)
             {
                 return;
@@ -1041,6 +1037,43 @@ public sealed class PullRequestSynchronizationService(
         return string.IsNullOrWhiteSpace(configuredProfileId)
             ? ReviewPipelineProfileCatalog.FileByFileBalancedProfileId
             : configuredProfileId;
+    }
+
+    /// <summary>
+    ///     Holds the reviewer's thread statuses for the lifetime of a single synchronization pass so the
+    ///     provider is asked once no matter how many consumers need them.
+    /// </summary>
+    /// <remarks>
+    ///     A failed fetch is deliberately not cached: each consumer already degrades on its own terms, so
+    ///     a later consumer keeps the chance to succeed exactly as it did when both fetched independently.
+    /// </remarks>
+    private sealed class ReviewerThreadStatusSnapshot(
+        PullRequestSynchronizationRequest request,
+        Guid? reviewerId)
+    {
+        private IReadOnlyList<PrThreadStatusEntry>? threads;
+
+        /// <param name="fetcher">
+        ///     Supplied per call because it is optional on the service and each consumer null-checks it
+        ///     before reaching here. What the snapshot identifies is fixed at construction.
+        /// </param>
+        /// <param name="ct">Cancels the fetch.</param>
+        /// <returns>The reviewer's threads for this pass.</returns>
+        public async Task<IReadOnlyList<PrThreadStatusEntry>> GetAsync(
+            IReviewerThreadStatusFetcher fetcher,
+            CancellationToken ct)
+        {
+            this.threads ??= await fetcher.GetReviewerThreadStatusesAsync(
+                request.ProviderScopePath,
+                request.ProviderProjectKey,
+                request.RepositoryId,
+                request.PullRequestId,
+                reviewerId ?? Guid.Empty,
+                request.ClientId,
+                ct);
+
+            return this.threads;
+        }
     }
 
     private sealed record ActiveJobReconciliationResult(

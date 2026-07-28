@@ -554,6 +554,75 @@ public sealed class PullRequestSynchronizationServiceTests
                 Arg.Any<CancellationToken>());
     }
 
+    /// <summary>
+    ///     Thread memory reconciliation and the review decision both consume the reviewer's threads. The
+    ///     pass asks the provider once and shares the snapshot, which halves the crawl's outbound calls
+    ///     for every open pull request on every tick.
+    /// </summary>
+    [Fact]
+    public async Task SynchronizeAsync_ActivePullRequest_FetchesReviewerThreadStatusesOncePerPass()
+    {
+        var jobs = Substitute.For<IJobRepository>();
+        var iterationResolver = Substitute.For<IPullRequestIterationResolver>();
+        var threadStatusFetcher = Substitute.For<IReviewerThreadStatusFetcher>();
+        var threadMemoryService = Substitute.For<IThreadMemoryService>();
+        var scanRepository = Substitute.For<IReviewPrScanRepository>();
+
+        jobs.FindActiveJob("https://dev.azure.com/org", "project", "repo-1", 42, 7).Returns((ReviewJob?)null);
+        jobs.FindCompletedJob("https://dev.azure.com/org", "project", "repo-1", 42, 7).Returns((ReviewJob?)null);
+        jobs.TryAddIfNoActiveDuplicateAsync(Arg.Any<ReviewJob>(), Arg.Any<CancellationToken>())
+            .Returns(new TryAddReviewJobResult(true, null, 0));
+
+        var scan = new ReviewPrScan(Guid.NewGuid(), ClientId, "repo-1", 42, "7");
+        scan.Threads.Add(
+            new ReviewPrScanThread
+            {
+                ReviewPrScanId = scan.Id,
+                ThreadId = 17,
+                LastSeenReplyCount = 0,
+                LastSeenStatus = "Active",
+            });
+
+        scanRepository.GetAsync(ClientId, "repo-1", 42, Arg.Any<CancellationToken>()).Returns(scan);
+        threadStatusFetcher.GetReviewerThreadStatusesAsync(
+                "https://dev.azure.com/org",
+                "project",
+                "repo-1",
+                42,
+                ReviewerId,
+                ClientId,
+                Arg.Any<CancellationToken>())
+            .Returns(
+            [
+                new PrThreadStatusEntry(17, "Fixed", "/src/file.ts", "Bot: comment\nUser: reply", 1),
+            ]);
+
+        var sut = new PullRequestSynchronizationService(
+            jobs,
+            NullLogger<PullRequestSynchronizationService>.Instance,
+            iterationResolver,
+            threadStatusFetcher,
+            threadMemoryService,
+            scanRepository);
+
+        await sut.SynchronizeAsync(
+            CreateRequest(PullRequestActivationSource.Crawl, "crawl discovery") with
+            {
+                CandidateIterationId = 7,
+                RequestedReviewerIdentity = CreateRequestedReviewerIdentity(),
+            });
+
+        await threadStatusFetcher.Received(1)
+            .GetReviewerThreadStatusesAsync(
+                "https://dev.azure.com/org",
+                "project",
+                "repo-1",
+                42,
+                ReviewerId,
+                ClientId,
+                Arg.Any<CancellationToken>());
+    }
+
     private static PullRequestSynchronizationRequest CreateRequest(
         PullRequestActivationSource activationSource,
         string summaryLabel)
