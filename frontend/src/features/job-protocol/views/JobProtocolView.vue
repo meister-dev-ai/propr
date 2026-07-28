@@ -120,7 +120,7 @@ const vm = useJobProtocolViewModel()
     gap: 0.85rem;
     align-items: flex-start;
     padding: 0.9rem 1.1rem;
-    border-radius: var(--radius-md, 8px);
+    border-radius: var(--radius-md);
     border: 1px solid transparent;
     margin-bottom: 1.5rem;
 }
@@ -134,7 +134,7 @@ const vm = useJobProtocolViewModel()
 .budget-banner--stopped {
     background: rgba(249, 115, 22, 0.1);
     border-color: rgba(249, 115, 22, 0.35);
-    color: #f97316;
+    color: var(--color-budget-exceeded);
 }
 
 .budget-banner--soft-capped {

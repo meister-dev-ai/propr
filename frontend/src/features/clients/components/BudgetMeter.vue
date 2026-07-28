@@ -24,14 +24,14 @@ const clampedPercent = computed(() => Math.max(0, Math.min(100, props.percent)))
 <style scoped>
 .budget-meter {
     height: 0.6rem;
-    border-radius: 999px;
+    border-radius: var(--radius-pill);
     background: var(--color-muted-soft);
     overflow: hidden;
 }
 
 .budget-meter-fill {
     height: 100%;
-    border-radius: 999px;
+    border-radius: var(--radius-pill);
     transition: width 0.3s ease;
 }
 

@@ -654,7 +654,7 @@ function prReviewLink(group: PrGroup): object {
 
 .status-budget-exceeded {
     background: rgba(249, 115, 22, 0.18);
-    color: #f97316;
+    color: var(--color-budget-exceeded);
 }
 
 .status-soft-capped {

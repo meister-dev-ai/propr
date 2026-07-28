@@ -26,6 +26,9 @@
   /* Severity / category palette (review findings, status pills). */
   --color-info: #3b82f6;
   --color-suggestion: #a855f7;
+  /* Escalation above --color-warning: a hard limit was reached and work stopped
+   * (budget exceeded / run halted), as opposed to a warning that is merely held. */
+  --color-budget-exceeded: #f97316;
 
   /* Semantic soft tints — translucent backgrounds for chips/badges/status pills.
    * Keep in lockstep with the base palette above. */

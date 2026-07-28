@@ -61,7 +61,7 @@
 
 .btn-critical {
   background: var(--color-critical);
-  color: #ffffff !important;
+  color: var(--color-text) !important;
 }
 
 .btn-critical:hover {
