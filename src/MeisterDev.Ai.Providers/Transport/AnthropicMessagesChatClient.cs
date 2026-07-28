@@ -40,8 +40,6 @@ public sealed class AnthropicMessagesChatClient : INativeProtocolChatClient
     ///     allowed and buy nothing. Four characters per token is the usual approximation and does not need to be
     ///     exact — being wrong here costs a cache miss, not a failure.
     /// </summary>
-    private const int MinimumCacheableChars = 4096;
-
     private static readonly JsonSerializerOptions SerializerOptions = new(JsonSerializerDefaults.Web);
 
     private readonly HttpClient _httpClient;
@@ -225,7 +223,7 @@ public sealed class AnthropicMessagesChatClient : INativeProtocolChatClient
     /// </remarks>
     private static JsonNode ToSystemField(string system)
     {
-        if (system.Length < MinimumCacheableChars)
+        if (system.Length < PromptCachePolicy.MinimumCacheableChars)
         {
             return JsonValue.Create(system);
         }
@@ -246,7 +244,7 @@ public sealed class AnthropicMessagesChatClient : INativeProtocolChatClient
     /// </remarks>
     private static void MarkConversationPrefixAsCacheable(JsonArray conversation)
     {
-        if (conversation.Count < 2 || EstimateChars(conversation) < MinimumCacheableChars)
+        if (conversation.Count < 2 || EstimateChars(conversation) < PromptCachePolicy.MinimumCacheableChars)
         {
             return;
         }

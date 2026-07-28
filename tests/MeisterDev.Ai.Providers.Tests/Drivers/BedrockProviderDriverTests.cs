@@ -241,12 +241,101 @@ public sealed class BedrockProviderDriverTests
         Assert.Contains("thinking", thinking.AsDictionary().Keys);
     }
 
-    private static ProviderModelDescriptor Model()
+    // Caching is the model's property, not the provider's, and getting it wrong is not a missed optimisation: a
+    // cache point sent to a model that cannot cache is a request Bedrock refuses outright.
+    [Fact]
+    public void CachingIsClaimedOnlyForAModelTheHostSaysCanCache()
+    {
+        var driver = Driver();
+
+        Assert.True(driver.GetChatRuntimeCapabilities(Endpoint(), Model(caching: true), AiProtocolMode.Auto).SupportsPromptCaching);
+        Assert.False(driver.GetChatRuntimeCapabilities(Endpoint(), Model(), AiProtocolMode.Auto).SupportsPromptCaching);
+    }
+
+    [Fact]
+    public async Task AModelThatCannotCacheIsSentNoCachePointAtAll()
+    {
+        var request = await CapturedRequest(Model(), Conversation(LongText()));
+
+        Assert.DoesNotContain(request.Messages.SelectMany(m => m.Content), block => block.CachePoint is not null);
+        Assert.DoesNotContain(request.System ?? [], block => block.CachePoint is not null);
+    }
+
+    // The system turn is identical across every file of a review, so it is the block worth caching; the end of the
+    // conversation is what a follow-up turn repeats.
+    [Fact]
+    public async Task ACachingModelGetsTheSystemTurnAndTheConversationEndMarked()
+    {
+        var request = await CapturedRequest(Model(caching: true), Conversation(LongText()));
+
+        Assert.Contains(request.System ?? [], block => block.CachePoint is not null);
+        Assert.NotNull(request.Messages[^1].Content.SingleOrDefault(block => block.CachePoint is not null));
+    }
+
+    // Below the floor the marker costs more to write than the reads save, so a short prompt is left unmarked even
+    // on a model that could cache it.
+    [Fact]
+    public async Task APromptTooSmallToPayForItselfIsLeftUnmarked()
+    {
+        var request = await CapturedRequest(Model(caching: true), Conversation("still quite short"));
+
+        Assert.DoesNotContain(request.Messages.SelectMany(m => m.Content), block => block.CachePoint is not null);
+        Assert.DoesNotContain(request.System ?? [], block => block.CachePoint is not null);
+    }
+
+    // A multi-pass review hands the same conversation to several models. A Bedrock-specific marker left behind on
+    // it would travel to a provider that cannot read it.
+    [Fact]
+    public async Task MarkingDoesNotWriteBackIntoTheCallersConversation()
+    {
+        var conversation = Conversation(LongText());
+
+        await CapturedRequest(Model(caching: true), conversation);
+
+        Assert.All(conversation, message => Assert.Null(message.AdditionalProperties));
+    }
+
+    private static async Task<ConverseRequest> CapturedRequest(
+        ProviderModelDescriptor model,
+        IReadOnlyList<ChatMessage> conversation)
+    {
+        var runtime = Substitute.For<IAmazonBedrockRuntime>();
+        runtime.ConverseAsync(Arg.Any<ConverseRequest>(), Arg.Any<CancellationToken>()).Returns(TextAnswer("ok"));
+
+        using var client = Driver(runtime: runtime).CreateChatClient(Endpoint(), model, AiProtocolMode.Auto);
+        await client.GetResponseAsync(conversation);
+
+        return runtime.ReceivedCalls()
+            .Select(call => call.GetArguments()[0])
+            .OfType<ConverseRequest>()
+            .Single();
+    }
+
+    private static List<ChatMessage> Conversation(string userText)
+    {
+        return
+        [
+            new ChatMessage(ChatRole.System, "You review code."),
+            new ChatMessage(ChatRole.User, userText),
+        ];
+    }
+
+    // Comfortably past the library's minimum-cacheable floor. Stated here rather than read from the library, whose
+    // policy is internal: if the floor ever rises above this the marking tests fail loudly rather than quietly
+    // asserting the wrong side of it.
+    private static string LongText()
+    {
+        return new string('x', 8192);
+    }
+
+    private static ProviderModelDescriptor Model(bool caching = false)
     {
         return new ProviderModelDescriptor(
             Guid.NewGuid(),
             "anthropic.claude-opus-4-5",
-            [AiProtocolMode.Auto, AiProtocolMode.BedrockConverse]);
+            [AiProtocolMode.Auto, AiProtocolMode.BedrockConverse],
+            ReasoningContentField: null,
+            SupportsPromptCaching: caching);
     }
 
     private static ProviderEndpoint Endpoint(string baseUrl = "https://bedrock-runtime.eu-central-1.amazonaws.com")

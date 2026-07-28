@@ -19,8 +19,15 @@ namespace MeisterDev.Ai.Providers.Contracts;
 ///     the descriptor is the only channel by which host-held model metadata reaches the library, so a normalizing
 ///     stage can act on the quirk without any model being named in code.
 /// </param>
+/// <param name="SupportsPromptCaching">
+///     Whether this model can serve part of a prompt from the provider's cache. Carried for the same reason as
+///     <paramref name="ReasoningContentField" />: it is per-model rather than per-provider, and a transport that
+///     marks cache points has to know before it marks one. Marking a model that does not support caching is not a
+///     missed optimisation but a rejected request, so the default is off and the host states it explicitly.
+/// </param>
 public sealed record ProviderModelDescriptor(
     Guid Id,
     string RemoteModelId,
     IReadOnlyList<AiProtocolMode> SupportedProtocolModes,
-    string? ReasoningContentField = null);
+    string? ReasoningContentField = null,
+    bool SupportsPromptCaching = false);

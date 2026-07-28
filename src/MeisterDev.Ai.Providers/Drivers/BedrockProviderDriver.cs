@@ -178,7 +178,7 @@ public sealed class BedrockProviderDriver(
 
         var runtime = clientFactory.CreateRuntimeClient(endpoint);
 
-        return new BedrockConverseChatClient(runtime.AsIChatClient(model.RemoteModelId));
+        return new BedrockConverseChatClient(runtime.AsIChatClient(model.RemoteModelId), model.SupportsPromptCaching);
     }
 
     /// <inheritdoc />
@@ -187,14 +187,15 @@ public sealed class BedrockProviderDriver(
         ProviderModelDescriptor model,
         AiProtocolMode protocolMode)
     {
+        ArgumentNullException.ThrowIfNull(model);
+
         _ = endpoint;
-        _ = model;
         _ = protocolMode;
 
-        // Bedrock reports its cache buckets in usage, and those are read where they appear — but nothing here
-        // places a cache breakpoint, so caching is not claimed. The Converse API expresses one as a content
-        // block, and the adapter this driver is built on offers no way to add one.
-        return ProviderRuntimeCapabilities.None;
+        // Caching is claimed per model rather than per provider: on Bedrock it is the model that supports it, and a
+        // cache point sent to one that does not is a rejected request rather than a wasted marker. The host states
+        // which models qualify, and the read side is already in place - Bedrock reports its cache buckets in usage.
+        return ProviderRuntimeCapabilities.None with { SupportsPromptCaching = model.SupportsPromptCaching };
     }
 
     /// <inheritdoc />
