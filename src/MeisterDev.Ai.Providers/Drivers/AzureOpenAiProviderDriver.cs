@@ -21,9 +21,33 @@ public sealed class AzureOpenAiProviderDriver : IAiProviderDriver
     /// <inheritdoc />
     public IReadOnlyList<AiProtocolMode> SupportedProtocolModes => AiProtocolModeSupport.OpenAiFamily;
 
+    /// <remarks>
+    ///     The host is locked to Azure's own AI hosts and the scheme is checked here rather than through the shared
+    ///     egress policy, because the Azure SDK supplies its own transport and so bypasses the connect-time egress
+    ///     guard the other providers are held to.
+    /// </remarks>
     public string? ValidateProbeTarget(AiProbeTarget target)
     {
-        return AiProbeTargetValidation.ForAzureOpenAi(target);
+        if (ProbeTargetChecks.AbsoluteUrl(target, out var uri) is { } urlError)
+        {
+            return urlError;
+        }
+
+        if (!AzureAiHostPolicy.IsAzureAiHost(uri.Host))
+        {
+            return "Azure OpenAI connections must target an Azure AI host (*.openai.azure.com, "
+                   + "*.services.ai.azure.com, or *.cognitiveservices.azure.com).";
+        }
+
+        if (!string.Equals(uri.Scheme, Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase))
+        {
+            return "baseUrl must use https.";
+        }
+
+        // Azure can authenticate with a managed identity, in which case there is no key to require.
+        return target.AuthMode == AiAuthMode.AzureIdentity
+            ? null
+            : ProbeTargetChecks.RequireApiKey(target, "An API key or Azure identity is required for this provider.");
     }
 
     public async Task<ProviderModelDiscoveryResult> DiscoverModelsAsync(

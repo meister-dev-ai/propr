@@ -28,7 +28,13 @@ public sealed class LiteLlmProviderDriver(
     public string? ValidateProbeTarget(AiProbeTarget target)
     {
         // LiteLLM is a generic OpenAI-compatible proxy, so (unlike plain OpenAI) an Azure host is not rejected.
-        return AiProbeTargetValidation.ForOpenAiCompatible(target, allowPrivateEgress, allowInsecureScheme, rejectAzureHosts: false);
+        // A LiteLLM gateway is operator-hosted, so an Azure host behind it is the gateway's business rather than
+        // a misconfigured provider kind.
+        return OpenAiCompatibleProbeRules.Validate(
+            target,
+            allowPrivateEgress,
+            allowInsecureScheme,
+            rejectAzureHosts: false);
     }
 
     public Task<ProviderModelDiscoveryResult> DiscoverModelsAsync(ProviderEndpoint endpoint, CancellationToken ct = default)

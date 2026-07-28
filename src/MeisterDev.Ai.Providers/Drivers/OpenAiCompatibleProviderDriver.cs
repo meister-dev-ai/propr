@@ -35,7 +35,7 @@ public sealed class OpenAiCompatibleProviderDriver(
     {
         // The egress rules are the point of this profile: an operator sets the base URL, so it is validated
         // against the private-address and scheme policy exactly as any other operator-supplied endpoint.
-        return AiProbeTargetValidation.ForOpenAiCompatible(
+        return OpenAiCompatibleProbeRules.Validate(
             target,
             allowPrivateEgress,
             allowInsecureScheme,

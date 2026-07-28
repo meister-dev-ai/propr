@@ -34,9 +34,31 @@ public sealed class AnthropicProviderDriver(
         [AiProtocolMode.Auto, AiProtocolMode.AnthropicMessages];
 
     /// <inheritdoc />
+    /// <remarks>
+    ///     The host is deliberately not pinned to Anthropic's own domain: the Messages protocol is also served by
+    ///     gateways and enterprise proxies, so what is checked is the egress policy and that a key is present in
+    ///     the mode Anthropic reads it from.
+    /// </remarks>
     public string? ValidateProbeTarget(AiProbeTarget target)
     {
-        return AiProbeTargetValidation.ForAnthropic(target, allowPrivateEgress, allowInsecureScheme);
+        if (ProbeTargetChecks.AbsoluteUrl(target, out var uri) is { } urlError)
+        {
+            return urlError;
+        }
+
+        if (ProbeTargetChecks.Egress(uri, allowPrivateEgress, allowInsecureScheme) is { } egressError)
+        {
+            return egressError;
+        }
+
+        // Anthropic rejects a bearer token and reads x-api-key, so a profile configured for bearer auth would
+        // fail on its first call. Saying so here beats a 401 an operator has to interpret.
+        if (target.AuthMode != AiAuthMode.XApiKey && target.AuthMode != AiAuthMode.ApiKey)
+        {
+            return "Anthropic authenticates with an API key sent as 'x-api-key'; choose that authentication mode.";
+        }
+
+        return target.HasApiKey ? null : "An API key is required for Anthropic.";
     }
 
     /// <inheritdoc />

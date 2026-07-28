@@ -17,14 +17,20 @@ namespace MeisterDev.Ai.Providers.Tests.Conformance;
 /// </summary>
 /// <remarks>
 ///     <para>
-///         Written as one parameterised suite rather than a set of per-driver tests on purpose. The property that
-///         matters is that the drivers behave the <em>same</em> at the seam, and per-driver tests cannot show
-///         that: each would assert its own driver's behaviour and none would notice the two drifting apart. A
-///         shared suite turns seam parity from a claim into a measurement.
+///         Every driver also has a test class of its own, and that is where its rules belong: which hosts it
+///         accepts, which authentication modes it reads, what its endpoint has to name. Read those to learn what a
+///         provider does.
 ///     </para>
 ///     <para>
-///         Adding a provider means adding a line to <see cref="Drivers" />. A driver that cannot pass this is not
-///         shippable — the review loop calls every driver through the same seam and has no way to special-case one.
+///         What is left here is the one property per-driver tests structurally cannot assert: that the drivers
+///         behave the <em>same</em> at the seam. A test that knows only its own driver cannot notice two drivers
+///         drifting apart, and the review loop calls all of them through one seam with no way to special-case one.
+///         So this suite asserts nothing provider-specific - only what every driver owes its caller regardless of
+///         which provider it is.
+///     </para>
+///     <para>
+///         Adding a provider means adding a line to <see cref="Drivers" /> as well as writing its own test class. A
+///         driver that cannot pass this is not shippable.
 ///     </para>
 /// </remarks>
 public sealed class DriverConformanceTests

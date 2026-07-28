@@ -32,7 +32,13 @@ public sealed class OpenAiProviderDriver(
 
     public string? ValidateProbeTarget(AiProbeTarget target)
     {
-        return AiProbeTargetValidation.ForOpenAiCompatible(target, allowPrivateEgress, allowInsecureScheme, rejectAzureHosts: true);
+        // Azure-hosted endpoints are refused rather than accepted here: they authenticate differently, and the
+        // Azure driver is the one that can use a managed identity instead of a key.
+        return OpenAiCompatibleProbeRules.Validate(
+            target,
+            allowPrivateEgress,
+            allowInsecureScheme,
+            rejectAzureHosts: true);
     }
 
     public async Task<ProviderModelDiscoveryResult> DiscoverModelsAsync(

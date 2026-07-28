@@ -44,9 +44,48 @@ public sealed class BedrockProviderDriver(
         [AiProtocolMode.Auto, AiProtocolMode.BedrockConverse, AiProtocolMode.Embeddings];
 
     /// <inheritdoc />
+    /// <remarks>
+    ///     The endpoint has to name its region, because that is where the inference happens and a profile whose
+    ///     region is implicit cannot be checked against a residency requirement.
+    /// </remarks>
     public string? ValidateProbeTarget(AiProbeTarget target)
     {
-        return AiProbeTargetValidation.ForAwsBedrock(target, allowPrivateEgress, allowInsecureScheme);
+        if (ProbeTargetChecks.AbsoluteUrl(target, out var uri) is { } urlError)
+        {
+            return urlError;
+        }
+
+        if (ProbeTargetChecks.Egress(uri, allowPrivateEgress, allowInsecureScheme) is { } egressError)
+        {
+            return egressError;
+        }
+
+        // Anything that is not an AWS host is a private or VPC endpoint, which is the operator opt-in's business
+        // rather than the default. On an AWS host the region is read from the host itself.
+        var isAwsHost = uri.Host.EndsWith(".amazonaws.com", StringComparison.OrdinalIgnoreCase)
+                        || uri.Host.EndsWith(".amazonaws.com.cn", StringComparison.OrdinalIgnoreCase);
+        if (!isAwsHost && !allowPrivateEgress)
+        {
+            return "An AWS Bedrock connection must target an AWS host, for example "
+                   + "https://bedrock-runtime.eu-central-1.amazonaws.com.";
+        }
+
+        if (isAwsHost && BedrockEndpointResolution.RegionFromHost(uri.Host) is null)
+        {
+            return "The endpoint must name its region, for example https://bedrock-runtime.eu-central-1.amazonaws.com.";
+        }
+
+        if (target.AuthMode != AiAuthMode.SigV4 && target.AuthMode != AiAuthMode.ApiKey)
+        {
+            return "AWS Bedrock signs its requests with an access key; choose the API key or SigV4 authentication mode.";
+        }
+
+        // The ambient AWS credential chain is deliberately not a fallback here: in a multi-tenant deployment it
+        // is the operator's identity, not the tenant's, so a profile without its own key is refused rather than
+        // quietly served by someone else's role.
+        return target.HasApiKey
+            ? null
+            : "An AWS access key is required. Store it as 'accessKeyId:secretAccessKey'.";
     }
 
     /// <inheritdoc />

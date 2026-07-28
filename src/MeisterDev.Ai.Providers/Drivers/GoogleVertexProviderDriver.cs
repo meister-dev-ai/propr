@@ -35,9 +35,45 @@ public sealed class GoogleVertexProviderDriver(
         [AiProtocolMode.Auto, AiProtocolMode.GoogleGenerateContent, AiProtocolMode.Embeddings];
 
     /// <inheritdoc />
+    /// <remarks>
+    ///     One driver, two surfaces. Which one a target is, is decided by its host, and on Vertex the location is
+    ///     part of that host - so a project pinned to a region is visible in the URL rather than hidden in a
+    ///     setting.
+    /// </remarks>
     public string? ValidateProbeTarget(AiProbeTarget target)
     {
-        return AiProbeTargetValidation.ForGoogle(target, allowPrivateEgress, allowInsecureScheme);
+        if (ProbeTargetChecks.AbsoluteUrl(target, out var uri) is { } urlError)
+        {
+            return urlError;
+        }
+
+        if (ProbeTargetChecks.Egress(uri, allowPrivateEgress, allowInsecureScheme) is { } egressError)
+        {
+            return egressError;
+        }
+
+        if (GoogleEndpointResolution.IsVertex(target.BaseUrl))
+        {
+            if (GoogleEndpointResolution.LocationFromHost(uri.Host) is null)
+            {
+                return "A Vertex AI endpoint must name its location, for example "
+                       + "https://europe-west4-aiplatform.googleapis.com.";
+            }
+
+            // A service-account key is a JSON document, not a key string, and the surface will not take one
+            // without the other.
+            return target.HasApiKey
+                ? null
+                : "Vertex AI requires the JSON key of a service account that may call the Vertex AI API.";
+        }
+
+        if (!uri.Host.EndsWith(".googleapis.com", StringComparison.OrdinalIgnoreCase) && !allowPrivateEgress)
+        {
+            return "A Google connection must target a Google host, for example "
+                   + "https://generativelanguage.googleapis.com.";
+        }
+
+        return target.HasApiKey ? null : "An API key is required for the Gemini API.";
     }
 
     /// <inheritdoc />
