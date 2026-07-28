@@ -26,7 +26,7 @@ internal static class HtmlSanitizer
     {
         if (string.IsNullOrEmpty(input))
         {
-            return input ?? string.Empty;
+            return string.Empty;
         }
 
         return WebUtility.HtmlEncode(input);
