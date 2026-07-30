@@ -2,10 +2,13 @@
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
 using System.Collections.Concurrent;
+using System.Globalization;
 using System.Text;
 using System.Text.Json;
 using MeisterDev.ProPR.Application.AI;
 using MeisterDev.ProPR.Application.DTOs;
+using MeisterDev.ProPR.Application.Features.CodeInsights;
+using MeisterDev.ProPR.Application.Features.CodeInsights.Ports;
 using MeisterDev.ProPR.Application.Interfaces;
 using MeisterDev.ProPR.Application.Options;
 using MeisterDev.ProPR.Domain.Entities;
@@ -33,7 +36,10 @@ public sealed partial class ThreadMemoryService(
     IChatClient? chatClient = null,
     IAiConnectionRepository? aiConnectionRepository = null,
     IAiChatClientFactory? aiChatClientFactory = null,
-    IAiRuntimeResolver? aiRuntimeResolver = null) : IThreadMemoryService
+    IAiRuntimeResolver? aiRuntimeResolver = null,
+    ICodeInsightFindingStore? codeInsightFindingStore = null,
+    IMemoryKeywordExtractor? memoryKeywordExtractor = null,
+    ICodeInsightsCollectionGate? codeInsightsCollectionGate = null) : IThreadMemoryService
 {
     private const double HistoricalTextFallbackThreshold = 0.72;
     private const string EmbeddingDegradedComponent = "thread_memory_embedding";
@@ -119,6 +125,11 @@ public sealed partial class ThreadMemoryService(
                 UpdatedAt = now,
             };
 
+            // Additive code-insight enrichment: the finding this memory came from, and searchable keywords.
+            // It sets fields on a record that is already decided and never influences whether the memory is
+            // stored, what it says, or how it is later matched.
+            await this.EnrichForCodeInsightsAsync(record, evt, ct);
+
             await repository.UpsertAsync(record, ct);
 
             await activityLog.AppendAsync(
@@ -145,6 +156,70 @@ public sealed partial class ThreadMemoryService(
             // record the skip rather than a phantom "Stored" entry.
             LogProcessResolvedFailed(logger, evt.ThreadId, evt.ClientId, ex);
             await this.RecordResolvedSkipAsync(evt, "embedding_failed", ct);
+        }
+    }
+
+    /// <summary>
+    ///     Attaches code-insight enrichment to a memory record that has already been decided: the finding it
+    ///     originated from, and human-searchable keywords.
+    /// </summary>
+    /// <remarks>
+    ///     Strictly additive and entirely best-effort. It runs after every storage and clarity gate has passed,
+    ///     sets fields on the record and nothing else, and swallows its own failures: a memory is far more
+    ///     valuable than the metadata hanging off it, so enrichment must never be the reason one is lost.
+    ///     Both dependencies are optional: absent, or the client's collection gate closed, means no enrichment.
+    /// </remarks>
+    private async Task EnrichForCodeInsightsAsync(
+        ThreadMemoryRecord record,
+        ThreadResolvedDomainEvent evt,
+        CancellationToken ct)
+    {
+        if (codeInsightsCollectionGate is null
+            || (codeInsightFindingStore is null && memoryKeywordExtractor is null))
+        {
+            return;
+        }
+
+        try
+        {
+            if (!await codeInsightsCollectionGate.IsCollectionEnabledAsync(evt.ClientId, ct))
+            {
+                return;
+            }
+
+            if (codeInsightFindingStore is not null)
+            {
+                // Same invariant conversion the disposition path uses: the crawl carries a number, the insight
+                // store holds the provider's own string form.
+                var finding = await codeInsightFindingStore.FindByProviderThreadAsync(
+                    evt.ClientId,
+                    evt.RepositoryId,
+                    evt.PullRequestId,
+                    evt.ThreadId.ToString(CultureInfo.InvariantCulture),
+                    ct);
+
+                // Null is the ordinary case for a human thread, an admin dismissal, or a thread raised before
+                // collection was enabled. The link simply stays absent.
+                record.CodeInsightFindingId = finding?.Id;
+            }
+
+            if (memoryKeywordExtractor is not null)
+            {
+                var keywords = await memoryKeywordExtractor.ExtractAsync(
+                    evt.ClientId,
+                    record.ResolutionSummary,
+                    record.ChangeExcerpt,
+                    ct);
+                record.Keywords = [.. keywords];
+            }
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            LogCodeInsightEnrichmentFailed(logger, evt.ThreadId, evt.ClientId, ex);
         }
     }
 

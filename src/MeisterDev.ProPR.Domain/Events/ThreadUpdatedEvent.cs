@@ -44,10 +44,16 @@ public sealed record ThreadUpdatedEvent(
 ///     The review job that produced this comment, when its provenance is retained; null otherwise. Set by
 ///     the producer from a passive provenance side-read and never influences review behavior.
 /// </param>
+/// <param name="IsSystemGenerated">
+///     Whether the provider wrote this entry itself to record an activity ("added a reviewer", a vote, a policy
+///     result) rather than a person writing it. Carried from the provider adapter, because anything reasoning
+///     about what a human said on a pull request has to exclude entries no human wrote.
+/// </param>
 public sealed record ThreadUpdatedComment(
     string CommentId,
     string AuthorIdentity,
     bool IsAiAuthored,
     DateTimeOffset PublishedAt,
     string Text,
-    Guid? OriginatingJobId = null);
+    Guid? OriginatingJobId = null,
+    bool IsSystemGenerated = false);

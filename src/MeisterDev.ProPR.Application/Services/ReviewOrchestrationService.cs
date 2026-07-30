@@ -8,6 +8,8 @@ using MeisterDev.ProPR.Application.DTOs;
 using MeisterDev.ProPR.Application.Exceptions;
 using MeisterDev.ProPR.Application.Features.Budgeting;
 using MeisterDev.ProPR.Application.Features.Budgeting.Models;
+using MeisterDev.ProPR.Application.Features.CodeInsights;
+using MeisterDev.ProPR.Application.Features.CodeInsights.Ports;
 using MeisterDev.ProPR.Application.Features.ReviewArchive;
 using MeisterDev.ProPR.Application.Features.Reviewing.Execution;
 using MeisterDev.ProPR.Application.Features.Reviewing.Execution.Models;
@@ -55,6 +57,7 @@ public sealed partial class ReviewOrchestrationService(
     IClientScmConnectionRepository? scmConnectionRepository = null,
     IReviewArchiveIngestionService? reviewArchiveIngestionService = null,
     IPostedCommentOriginStore? postedCommentOriginStore = null,
+    ICodeInsightFindingIngestionService? codeInsightFindingIngestionService = null,
     IBudgetCapsProvider? budgetCapsProvider = null,
     IReviewSpendAccumulator? spendAccumulator = null,
     IBudgetScopeAccessor? budgetScopeAccessor = null,
@@ -489,11 +492,19 @@ public sealed partial class ReviewOrchestrationService(
         }
     }
 
-    // Passive provenance observer: when the producing connection opted in to thread retention, persist a
-    // mapping from each provider comment this posting pass created back to the originating job, so a later
-    // ingestion step can stamp the job onto retained comments. This is strictly best-effort — it is wrapped
-    // so that nothing it does can disrupt or change publishing. When retention is off, the store is absent,
-    // or no provider comment ids were captured, it records nothing.
+    // Passive provenance observer: persist a mapping from each provider comment this posting pass created back
+    // to the originating job. Two readers depend on it. Thread retention stamps the job onto retained comments,
+    // and authorship attribution uses it to recognise ProPR's own comments when the crawl sees them again.
+    //
+    // It records regardless of the thread-retention opt-in, which the second reader needs. A pull-request
+    // summary is the only thread ProPR posts that carries no finding, so nothing else identifies it: without
+    // provenance it comes back looking like a human thread ProPR failed to raise, and the reviewer's own
+    // summary is charged against its recall. What is stored here is ProPR's own record of what it posted (ids
+    // and timestamps, no comment content), which is a narrower thing than the retained threads the opt-in
+    // governs.
+    //
+    // Strictly best-effort: wrapped so that nothing it does can disrupt or change publishing. When the store is
+    // absent or no provider comment ids were captured, it records nothing.
     private async Task RecordPostedCommentOriginsAsync(
         ReviewJob job,
         ReviewCommentPostingDiagnosticsDto diagnostics,
@@ -506,12 +517,6 @@ public sealed partial class ReviewOrchestrationService(
 
         try
         {
-            var connection = await this.ResolveRetentionConnectionAsync(job, ct);
-            if (connection is null || !connection.StoreThreads)
-            {
-                return;
-            }
-
             var postedAt = DateTimeOffset.UtcNow;
             var entries = diagnostics.PostedComments
                 .Where(comment => !string.IsNullOrWhiteSpace(comment.ProviderCommentId))
@@ -536,6 +541,100 @@ public sealed partial class ReviewOrchestrationService(
         {
             LogPostedCommentOriginRecordingFailed(logger, job.Id, ex);
         }
+    }
+
+    // Passive code-insight observer: materialise the increment's findings as durable records with stable
+    // identifiers, so quality analytics have something to attach tags, dispositions, and roll-ups to. This
+    // runs after the review result is persisted and decided, over the UNFILTERED finding set: the
+    // minimum-severity filter governs provider publication only, and a suppressed finding is still a
+    // finding that was produced. It never alters review behaviour, deduplication, memory, or the scope
+    // snapshot, and when the consumer is absent it is a no-op.
+    private async Task CollectCodeInsightFindingsAsync(
+        ReviewJob job,
+        PullRequest pr,
+        ReviewResult result,
+        ReviewCommentPostingDiagnosticsDto diagnostics,
+        CancellationToken ct)
+    {
+        if (codeInsightFindingIngestionService is null)
+        {
+            return;
+        }
+
+        try
+        {
+            var observedAt = DateTimeOffset.UtcNow;
+            var revisionKey = ReviewRevisionKeys.GetStoredKey(job.ReviewRevisionReference, job.IterationId);
+
+            var evt = new ReviewFindingsProducedEvent(
+                job.ClientId,
+                job.RepositoryId,
+                job.PullRequestId,
+                job.Id,
+                revisionKey,
+                pr.Status.ToString(),
+                observedAt,
+                BuildProducedFindings(result.Comments, diagnostics.PostedComments),
+                pr.RepositoryName);
+
+            await codeInsightFindingIngestionService.HandleReviewFindingsProducedAsync(evt, ct);
+        }
+        catch (Exception ex) when (!ct.IsCancellationRequested)
+        {
+            logger.LogWarning(
+                ex,
+                "Code-insight collection failed for PR {PullRequestId}; continuing without collecting.",
+                job.PullRequestId);
+        }
+    }
+
+    // Pair each produced finding with the provider comment the posting pass created for it. The anchor
+    // (file path + line) is the only basis both sides share, which is the same basis the posted-comment
+    // provenance side-write uses. Each posted ref is consumed at most once so two findings on the same
+    // anchor cannot both claim the same provider thread.
+    private static IReadOnlyList<ReviewFindingProduced> BuildProducedFindings(
+        IReadOnlyList<ReviewComment> comments,
+        IReadOnlyList<PostedReviewCommentRef> postedComments)
+    {
+        var unclaimed = postedComments.ToList();
+        var produced = new List<ReviewFindingProduced>(comments.Count);
+
+        for (var ordinal = 0; ordinal < comments.Count; ordinal++)
+        {
+            var comment = comments[ordinal];
+            var matchIndex = unclaimed.FindIndex(posted =>
+                string.Equals(posted.FilePath, comment.FilePath, StringComparison.Ordinal)
+                && posted.Line == comment.LineNumber);
+
+            PostedReviewCommentRef? match = null;
+            if (matchIndex >= 0)
+            {
+                match = unclaimed[matchIndex];
+                unclaimed.RemoveAt(matchIndex);
+            }
+
+            produced.Add(
+                new ReviewFindingProduced(
+                    ordinal,
+                    comment.FilePath,
+                    comment.LineNumber,
+                    comment.Severity,
+                    comment.Message,
+                    comment.OriginPassKind,
+                    comment.OriginPassIndex,
+                    comment.OriginPassLens,
+                    comment.OriginPassShadow,
+                    comment.ScopeRelation,
+                    comment.SourceReadGrounding,
+                    match?.ProviderThreadId,
+                    match?.ProviderCommentId,
+                    comment.OriginModelId,
+                    comment.OriginLogicalModelName,
+                    comment.OriginSymbolName,
+                    comment.OriginSymbolKind));
+        }
+
+        return produced;
     }
 
     private async Task<ClientScmConnectionDto?> ResolveRetentionConnectionAsync(ReviewJob job, CancellationToken ct)
@@ -655,6 +754,8 @@ public sealed partial class ReviewOrchestrationService(
             await jobs.SetResultAsync(job.Id, publicationResult, ct);
 
             await this.RecordPostedCommentOriginsAsync(job, diagnostics, ct);
+
+            await this.CollectCodeInsightFindingsAsync(job, pr, publicationResult, diagnostics, ct);
 
             if (protocolId.HasValue)
             {

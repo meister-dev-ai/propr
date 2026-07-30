@@ -8,6 +8,7 @@ using MeisterDev.ProPR.Application.Features.Reviewing.Execution.Models;
 using MeisterDev.ProPR.Application.Features.Reviewing.Execution.Ports;
 using MeisterDev.ProPR.Application.Features.Reviewing.Execution.Strategies.Ports;
 using MeisterDev.ProPR.Application.Interfaces;
+using MeisterDev.ProPR.CodeAnalysis;
 using MeisterDev.ProPR.Application.Options;
 using MeisterDev.ProPR.Application.Services;
 using MeisterDev.ProPR.Application.ValueObjects;
@@ -74,7 +75,8 @@ internal sealed partial class FileByFileReviewOrchestrator(
         IReviewPipelineProfileProvider? pipelineProfileProvider = null,
         IProRVPrefilter? proRvPrefilter = null,
         Func<IPrWideCandidateGenerator?>? prWideCandidateGeneratorFactory = null,
-        ILogicalModelResolver? logicalModelResolver = null)
+        ILogicalModelResolver? logicalModelResolver = null,
+        IStructuralCodeAnalyzer? structuralAnalyzer = null)
         : this(
             protocolRecorder,
             jobRepository,
@@ -103,7 +105,8 @@ internal sealed partial class FileByFileReviewOrchestrator(
                 new LocalReviewVerificationExecutor(reviewClaimExtractor, reviewFindingVerifier, protocolRecorder),
                 pipelineProfileProvider,
                 proRvPrefilter,
-                logicalModelResolver: logicalModelResolver),
+                logicalModelResolver: logicalModelResolver,
+                structuralAnalyzer: structuralAnalyzer),
             null,
             null,
             null,

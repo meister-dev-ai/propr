@@ -77,6 +77,7 @@ public sealed class ClientAdminService(
         BudgetConfigDto? budgetConfig = null,
         CommentSeverity? minimumSeverityToPost = null,
         IReadOnlyList<CommentSeverity>? autoResolveSeverities = null,
+        bool? codeInsightsCollectionEnabled = null,
         CancellationToken ct = default)
     {
         var isCommunityEdition = await this.IsCommunityEditionAsync(ct);
@@ -106,7 +107,8 @@ public sealed class ClientAdminService(
             enableMultiPassUnion,
             includeLinkedItemsInContext,
             baselineReasoningEffort,
-            minimumSeverityToPost);
+            minimumSeverityToPost,
+            codeInsightsCollectionEnabled);
         ReplaceReviewPassesIfProvided(client, reviewPasses);
         ReplaceBudgetCapsIfProvided(client, budgetConfig);
         ReplaceAutoResolveSeveritiesIfProvided(client, autoResolveSeverities);
@@ -128,7 +130,8 @@ public sealed class ClientAdminService(
         bool? enableMultiPassUnion,
         bool? includeLinkedItemsInContext,
         ReviewReasoningEffort? baselineReasoningEffort,
-        CommentSeverity? minimumSeverityToPost)
+        CommentSeverity? minimumSeverityToPost,
+        bool? codeInsightsCollectionEnabled)
     {
         ApplyIfHasValue(isActive, value => client.IsActive = value);
         ApplyIfNotNull(displayName, value => client.DisplayName = value);
@@ -150,6 +153,7 @@ public sealed class ClientAdminService(
         ApplyIfHasValue(enableEvidenceBackedVerification, value => client.EnableEvidenceBackedVerification = value);
         ApplyIfHasValue(enableLanguageRobustScreening, value => client.EnableLanguageRobustScreening = value);
         ApplyIfHasValue(enableMultiPassUnion, value => client.EnableMultiPassUnion = value);
+        ApplyIfHasValue(codeInsightsCollectionEnabled, value => client.CodeInsightsCollectionEnabled = value);
         ApplyIfHasValue(includeLinkedItemsInContext, value => client.IncludeLinkedItemsInContext = value);
         ApplyIfHasValue(baselineReasoningEffort, value => client.BaselineReasoningEffort = value);
     }
@@ -444,7 +448,8 @@ public sealed class ClientAdminService(
                 client.IncrementBudgetSoftCapUsd,
                 client.IncrementBudgetHardCapUsd),
             client.MinimumSeverityToPost,
-            client.AutoResolveSeverities);
+            client.AutoResolveSeverities,
+            client.CodeInsightsCollectionEnabled);
     }
 
     private async Task<bool> IsCommunityEditionAsync(CancellationToken ct)

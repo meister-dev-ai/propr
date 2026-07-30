@@ -46,7 +46,7 @@
                         <input
                           v-model="search"
                           class="glass-input search-field"
-                          placeholder="Repo, file, or summary..."
+                          placeholder="Repo, file, summary, or keyword..."
                           @input="onSearchInput"
                         />
                       </div>
@@ -298,6 +298,28 @@
               </div>
             </div>
 
+            <!-- Keywords are what make a memory findable without an embedding query, so they are shown as
+                 clickable search terms rather than as static labels. -->
+            <div
+              v-if="selectedEmbedding.keywords && selectedEmbedding.keywords.length > 0"
+              class="detail-group"
+              data-testid="memory-keywords"
+            >
+              <span class="detail-caption">Keywords</span>
+              <div class="keyword-pills">
+                <button
+                  v-for="keyword in selectedEmbedding.keywords"
+                  :key="keyword"
+                  class="keyword-pill"
+                  type="button"
+                  :title="`Search for ${keyword}`"
+                  @click="searchForKeyword(keyword)"
+                >
+                  {{ keyword }}
+                </button>
+              </div>
+            </div>
+
             <div class="detail-group">
               <span class="detail-caption">Timestamps</span>
               <div class="timestamp-grid">
@@ -372,6 +394,13 @@ let searchTimer: ReturnType<typeof setTimeout> | null = null
 function onSearchInput() {
   if (searchTimer) clearTimeout(searchTimer)
   searchTimer = setTimeout(() => loadEmbeddings(1), 400)
+}
+
+/** Searches for one of a memory's keywords. Immediate rather than debounced: this is a click, not typing. */
+function searchForKeyword(keyword: string) {
+  if (searchTimer) clearTimeout(searchTimer)
+  search.value = keyword
+  loadEmbeddings(1)
 }
 
 // Activity Log State
@@ -488,6 +517,27 @@ function formatDateShort(iso: string): string {
 </script>
 
 <style scoped>
+.keyword-pills {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.35rem;
+    margin-top: 0.35rem;
+}
+
+.keyword-pill {
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-pill, 999px);
+    background: transparent;
+    color: var(--color-text);
+    cursor: pointer;
+    font-size: 0.8rem;
+    padding: 0.15rem 0.6rem;
+}
+
+.keyword-pill:hover {
+    border-color: var(--color-primary);
+}
+
 .thread-memory-view {
   height: 100%;
 }

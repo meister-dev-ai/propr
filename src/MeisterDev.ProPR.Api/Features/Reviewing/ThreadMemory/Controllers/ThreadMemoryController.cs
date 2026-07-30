@@ -252,7 +252,9 @@ public sealed partial class ThreadMemoryController(
             r.FilePath,
             r.ResolutionSummary,
             r.CreatedAt,
-            r.UpdatedAt);
+            r.UpdatedAt,
+            r.Keywords,
+            r.CodeInsightFindingId);
     }
 
     [LoggerMessage(Level = LogLevel.Information, Message = "Embedding {Id} deleted by admin for client {ClientId}")]
@@ -283,4 +285,6 @@ public sealed record ThreadMemoryRecordDto(
     string? FilePath,
     string ResolutionSummary,
     DateTimeOffset CreatedAt,
-    DateTimeOffset UpdatedAt);
+    DateTimeOffset UpdatedAt,
+    IReadOnlyList<string>? Keywords = null,
+    Guid? CodeInsightFindingId = null);

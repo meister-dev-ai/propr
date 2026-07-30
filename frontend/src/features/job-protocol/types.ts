@@ -3,6 +3,7 @@
 // This file implements commercial-only functionality. A commercial license is required to activate or use that functionality.
 
 import type { components } from '@/services/generated/openapi'
+import type { CodeInsightFindingClassification } from '@/services/codeInsightFindingsService'
 
 export type ReviewJobProtocolDto = components['schemas']['ReviewJobProtocolDto']
 export type ProtocolEventDto = components['schemas']['ProtocolEventDto']
@@ -234,6 +235,10 @@ export type ReviewCommentRecord = {
     originPassKind?: string | null
     originPassIndex?: number | null
     originPassLens?: string | null
+    originModelId?: string | null
+    originLogicalModelName?: string | null
+    originSymbolName?: string | null
+    originSymbolKind?: string | null
 }
 
 /**
@@ -253,7 +258,17 @@ export interface CommentGroupComment {
     originPassKind?: string | null
     originPassIndex?: number | null
     originPassLens?: string | null
+    originModelId?: string | null
+    originLogicalModelName?: string | null
+    originSymbolName?: string | null
+    originSymbolKind?: string | null
     changedLineRelation?: ReviewCommentDto['changedLineRelation']
+    /**
+     * The collected Code Insights classification for this finding, stamped on by the view model from the
+     * finding's ordinal in the persisted review result. Absent when nothing was collected: unlicensed,
+     * not opted in, or the slice is not registered.
+     */
+    codeInsights?: CodeInsightFindingClassification | null
 }
 
 /** Parsed details of a `triage_decision` protocol event. */

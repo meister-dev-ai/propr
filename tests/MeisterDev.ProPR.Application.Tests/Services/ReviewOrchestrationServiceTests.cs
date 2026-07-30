@@ -5734,8 +5734,13 @@ public partial class ReviewOrchestrationServiceTests
     }
 
     [Fact]
-    public async Task ProcessAsync_RetentionThreadsOff_RecordsNothing()
+    public async Task ProcessAsync_RetentionThreadsOff_StillRecordsPostedCommentOrigins()
     {
+        // Provenance is what lets the crawl recognise ProPR's own comments later, and the pull-request summary
+        // is the one thread ProPR posts that carries no finding, so nothing else identifies it. Skipping the
+        // recording when thread retention is off left the summary looking like a human thread ProPR failed to
+        // raise, which charged the reviewer's own summary against its recall. Ids and timestamps are recorded,
+        // never comment content, so the retention opt-in still governs everything it did before.
         var (jobs, prFetcher, orchestrator, _, reviewerManager, clientRegistry, prScanRepository, _, _, logger) =
             CreateDeps();
 
@@ -5763,8 +5768,13 @@ public partial class ReviewOrchestrationServiceTests
 
         await service.ProcessAsync(job, CancellationToken.None);
 
-        await originStore.DidNotReceiveWithAnyArgs()
-            .RecordAsync(Arg.Any<IReadOnlyList<PostedCommentOriginEntry>>(), Arg.Any<CancellationToken>());
+        await originStore.Received(1).RecordAsync(
+            Arg.Is<IReadOnlyList<PostedCommentOriginEntry>>(entries =>
+                entries.Count == 1
+                && entries[0].ProviderCommentId == "comment-1"
+                && entries[0].ProviderThreadId == "thread-1"
+                && entries[0].JobId == job.Id),
+            Arg.Any<CancellationToken>());
     }
 
     [Fact]

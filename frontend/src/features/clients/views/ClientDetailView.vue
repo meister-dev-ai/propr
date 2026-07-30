@@ -49,6 +49,11 @@
                             :class="{ active: activeTab === 'budget' }" @click="activeTab = 'budget'">
                             <i class="fi fi-rr-badge-dollar"></i> Budget
                         </button>
+                        <button v-if="isCodeInsightsAvailable" class="sidebar-nav-link"
+                            :class="{ active: activeTab === 'code-insights' }"
+                            @click="activeTab = 'code-insights'">
+                            <i class="fi fi-rr-tags"></i> Code Insights
+                        </button>
                     </div>
 
                     <div class="sidebar-nav-group">
@@ -69,7 +74,7 @@
                         </button>
                     </div>
 
-                    <div v-if="isUsageTabAvailable || (isBudgetingAvailable && canManageClient)" class="sidebar-nav-group">
+                    <div v-if="isUsageTabAvailable || (isBudgetingAvailable && canManageClient) || isCodeInsightsAvailable" class="sidebar-nav-group">
                         <h4>Analytics</h4>
                         <button v-if="isUsageTabAvailable" class="sidebar-nav-link" :class="{ active: activeTab === 'usage' }"
                             @click="activeTab = 'usage'">
@@ -78,6 +83,13 @@
                         <button v-if="isBudgetingAvailable && canManageClient" class="sidebar-nav-link"
                             :class="{ active: activeTab === 'spend' }" @click="activeTab = 'spend'">
                             <i class="fi fi-rr-chart-line-up"></i> Spend &amp; Budget
+                        </button>
+                        <!-- Analytics, not settings: the Code Insights entry above configures collection, this
+                             one reads what was collected. Any client user may see it: it judges the code, not
+                             the reviewer. -->
+                        <button v-if="isCodeInsightsAvailable" class="sidebar-nav-link"
+                            :class="{ active: activeTab === 'code-quality' }" @click="activeTab = 'code-quality'">
+                            <i class="fi fi-rr-chart-histogram"></i> Code Quality
                         </button>
                     </div>
                 </div>
@@ -170,6 +182,21 @@
                 <div v-if="canManageClient" v-show="activeTab === 'budget'">
                     <ClientBudgetTab />
                 </div>
+
+                <!-- Tab: Code Insights. Content host mirrors the Budget tab: rendered for managers so a deep
+                     link on an unlicensed install shows the upgrade note rather than a blank panel; the nav
+                     entry stays hidden until Code Insights is licensed. -->
+                <div v-if="canManageClient" v-show="activeTab === 'code-insights'" class="code-insights-tab">
+                    <ClientCodeInsightsCollectionSection />
+                    <ClientCodeInsightsTaxonomySection :client-id="client.id" />
+                </div>
+
+                <!-- Tab: Code Quality. The reading surface for what collection produced, pinned to this client.
+                     Not gated on management: it says what the code keeps getting wrong, which is every
+                     contributor's business. -->
+                <div v-show="activeTab === 'code-quality'">
+                    <ClientCodeQualityTab :client-id="client.id" />
+                </div>
             </template>
 
         <TextViewerModal :isOpen="isTextViewerOpen" @update:isOpen="isTextViewerOpen = $event" :title="textViewerTitle"
@@ -183,6 +210,7 @@ import { RouterLink } from "vue-router";
 import { AppNavDrawer, PageWithSidebar } from "@/components";
 import ClientSystemTab from "@/features/clients/components/ClientSystemTab.vue";
 import ClientBudgetTab from "@/features/clients/components/ClientBudgetTab.vue";
+import ClientCodeQualityTab from "@/features/clients/components/ClientCodeQualityTab.vue";
 import ClientSpendTab from "@/features/clients/components/ClientSpendTab.vue";
 import ClientCrawlConfigsTab from "@/features/clients/components/ClientCrawlConfigsTab.vue";
 import ClientWebhookConfigsTab from "@/features/clients/components/ClientWebhookConfigsTab.vue";
@@ -191,6 +219,8 @@ import ClientAiConnectionsTab from "@/features/clients/components/ClientAiConnec
 import ClientProCursorTab from "@/features/clients/components/ClientProCursorTab.vue";
 import ClientDismissalsTab from "@/features/clients/components/ClientDismissalsTab.vue";
 import ClientPromptOverridesTab from "@/features/clients/components/ClientPromptOverridesTab.vue";
+import ClientCodeInsightsTaxonomySection from "@/features/clients/components/ClientCodeInsightsTaxonomySection.vue";
+import ClientCodeInsightsCollectionSection from "@/features/clients/components/ClientCodeInsightsCollectionSection.vue";
 import UsageDashboard from "@/components/UsageDashboard.vue";
 import ReviewHistorySection from "@/features/reviews/components/ReviewHistorySection.vue";
 import TextViewerModal from "@/components/text/TextViewerModal.vue";
@@ -212,6 +242,7 @@ const {
     providerUpgradeMessage,
     isCrawlConfigsAvailable,
     isBudgetingAvailable,
+    isCodeInsightsAvailable,
     isUsageTabAvailable,
 } = vm;
 
@@ -222,7 +253,8 @@ const textViewerContent = ref("");
 </script>
 
 <style scoped>
-.provider-operations-tab {
+.provider-operations-tab,
+.code-insights-tab {
     display: flex;
     flex-direction: column;
     gap: 1rem;

@@ -71,6 +71,20 @@
                 >
                     Browser
                 </button>
+                <!-- Absent rather than disabled when the capability is not licensed: a licence is not a role, and a
+                     tab that can only apologise is worse than no tab. The server repeats the check. -->
+                <button
+                    v-if="canViewCodeQuality"
+                    type="button"
+                    role="tab"
+                    class="tab-btn pr-tab-btn"
+                    :class="{ 'tab-active': activeTab === 'codeQuality' }"
+                    :aria-selected="activeTab === 'codeQuality'"
+                    data-testid="pr-tab-code-quality"
+                    @click="activeTab = 'codeQuality'"
+                >
+                    Code Quality
+                </button>
             </div>
 
             <div v-show="activeTab === 'stats'" role="tabpanel" data-testid="pr-panel-stats">
@@ -250,6 +264,17 @@
                     :client-id="retainedIdentity.clientId"
                 />
             </div>
+
+            <!-- Rendered only once opened: the reads behind it are three requests nobody asked for while looking at
+                 the stats. Everything it needs is already on this page's own scope. -->
+            <div v-show="activeTab === 'codeQuality'" role="tabpanel" data-testid="pr-panel-code-quality">
+                <PrCodeQualityTab
+                    v-if="activeTab === 'codeQuality' && canViewCodeQuality && clientId && repositoryId && pullRequestId != null"
+                    :client-id="clientId"
+                    :repository-id="repositoryId"
+                    :pull-request-id="pullRequestId"
+                />
+            </div>
         </template>
 
         <p v-else class="empty-state">No data. Provide clientId, providerScopePath, providerProjectKey, repositoryId and pullRequestId query parameters.</p>
@@ -263,6 +288,7 @@ import TokenBreakdownTable from '@/components/usage/TokenBreakdownTable.vue'
 import OverflowMenu from '@/components/OverflowMenu.vue'
 import RetainedConversationTab from '@/features/reviews/components/RetainedConversationTab.vue'
 import RetainedBrowserTab from '@/features/reviews/components/RetainedBrowserTab.vue'
+import PrCodeQualityTab from '@/features/reviews/components/PrCodeQualityTab.vue'
 import {
     useRetainedPrData,
     type RetainedPrIdentity,
@@ -273,19 +299,23 @@ import { useSession } from '@/composables/useSession'
 import { RoleLevel } from '@/composables/roles'
 
 const route = useRoute()
-const { hasClientRole } = useSession()
+const { hasClientRole, isCapabilityAvailable } = useSession()
 
 const loading = ref(false)
 const error = ref('')
 const data = ref<PrReviewViewDto | null>(null)
 const memoryTab = ref<'originated' | 'contributed'>('originated')
-const activeTab = ref<'stats' | 'conversation' | 'browser'>('stats')
+const activeTab = ref<'stats' | 'conversation' | 'browser' | 'codeQuality'>('stats')
 
 const clientId = computed(() => route.query.clientId as string | undefined)
 const providerScopePath = computed(() => route.query.providerScopePath as string | undefined)
 const providerProjectKey = computed(() => route.query.providerProjectKey as string | undefined)
 const repositoryId = computed(() => route.query.repositoryId as string | undefined)
 const pullRequestId = computed(() => route.query.pullRequestId ? Number(route.query.pullRequestId) : undefined)
+
+// The same rule as the top-level Code Quality area: client access (which this whole view already requires) plus
+// the licence.
+const canViewCodeQuality = computed(() => isCapabilityAvailable('code-insights'))
 
 // Block/unblock controls are admin-gated. The PR identity comes from the route query params.
 const isBlocked = ref(false)

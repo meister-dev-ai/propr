@@ -55,7 +55,8 @@ public sealed class ClientsController(
             recentUsageTokens,
             client.BudgetConfigOrEmpty,
             client.MinimumSeverityToPost,
-            client.AutoResolveSeveritiesOrEmpty);
+            client.AutoResolveSeveritiesOrEmpty,
+            client.CodeInsightsCollectionEnabled);
     }
 
     private IActionResult? ValidateRequest(ValidationResult result)
@@ -397,6 +398,7 @@ public sealed class ClientsController(
             request.BudgetConfig,
             request.MinimumSeverityToPost,
             request.AutoResolveSeverities,
+            request.CodeInsightsCollectionEnabled,
             ct);
         return client is null ? this.NotFound() : this.Ok(ToClientResponse(client));
     }
@@ -425,7 +427,8 @@ public sealed record ClientResponse(
     long? RecentUsageTokens = null,
     BudgetConfigDto? BudgetConfig = null,
     CommentSeverity MinimumSeverityToPost = CommentSeverity.Info,
-    IReadOnlyList<CommentSeverity>? AutoResolveSeverities = null);
+    IReadOnlyList<CommentSeverity>? AutoResolveSeverities = null,
+    bool CodeInsightsCollectionEnabled = false);
 
 /// <summary>One entry in a client's ordered review-pass list: an additional multi-pass union pass bound to a model.</summary>
 /// <param name="Ordinal">Zero-based position of this pass after the implicit tier baseline pass.</param>
@@ -505,4 +508,5 @@ public sealed record PatchClientRequest(
     ReviewReasoningEffort? BaselineReasoningEffort = null,
     BudgetConfigDto? BudgetConfig = null,
     CommentSeverity? MinimumSeverityToPost = null,
-    IReadOnlyList<CommentSeverity>? AutoResolveSeverities = null);
+    IReadOnlyList<CommentSeverity>? AutoResolveSeverities = null,
+    bool? CodeInsightsCollectionEnabled = null);

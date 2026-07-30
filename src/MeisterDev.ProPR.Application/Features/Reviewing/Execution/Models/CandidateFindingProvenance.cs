@@ -83,6 +83,18 @@ public sealed record CandidateFindingProvenance
     ///     Whether the finding came from a shadow pass — a pass that runs and is recorded for diagnostics but whose
     ///     findings are never published. <see langword="false" /> for ordinary findings.
     /// </param>
+    /// <param name="originModelId">
+    ///     The remote model of the pass that produced the finding, or <see langword="null" /> when no single pass
+    ///     owns it.
+    /// </param>
+    /// <param name="originLogicalModelName">
+    ///     The client's logical model name for that pass, when it ran through a named logical model.
+    /// </param>
+    /// <param name="originSymbolName">
+    ///     Name of the definition the finding's line falls inside, resolved structurally, or <see langword="null" />
+    ///     when none could be.
+    /// </param>
+    /// <param name="originSymbolKind">What kind of definition that is, as the structural analyzer classified it.</param>
     public CandidateFindingProvenance(
         string originKind,
         string generatedByStage,
@@ -97,7 +109,11 @@ public sealed record CandidateFindingProvenance
         int? unionPassIndex = null,
         string? unionArmLabel = null,
         string? unionLens = null,
-        bool shadow = false)
+        bool shadow = false,
+        string? originModelId = null,
+        string? originLogicalModelName = null,
+        string? originSymbolName = null,
+        string? originSymbolKind = null)
     {
         if (string.IsNullOrWhiteSpace(originKind))
         {
@@ -123,6 +139,10 @@ public sealed record CandidateFindingProvenance
         this.UnionArmLabel = string.IsNullOrWhiteSpace(unionArmLabel) ? null : unionArmLabel;
         this.UnionLens = string.IsNullOrWhiteSpace(unionLens) ? null : unionLens;
         this.Shadow = shadow;
+        this.OriginModelId = string.IsNullOrWhiteSpace(originModelId) ? null : originModelId;
+        this.OriginLogicalModelName = string.IsNullOrWhiteSpace(originLogicalModelName) ? null : originLogicalModelName;
+        this.OriginSymbolName = string.IsNullOrWhiteSpace(originSymbolName) ? null : originSymbolName;
+        this.OriginSymbolKind = string.IsNullOrWhiteSpace(originSymbolKind) ? null : originSymbolKind;
     }
 
     /// <summary>
@@ -198,6 +218,30 @@ public sealed record CandidateFindingProvenance
     ///     diagnostics but whose findings are never published.
     /// </summary>
     public bool Shadow { get; }
+
+    /// <summary>
+    ///     Gets the remote model of the pass that produced the finding, or <see langword="null" /> when no single
+    ///     pass owns it.
+    /// </summary>
+    public string? OriginModelId { get; }
+
+    /// <summary>
+    ///     Gets the client's logical model name for the producing pass, or <see langword="null" /> when the pass ran
+    ///     through a bare connection binding rather than a named logical model. Carried alongside
+    ///     <see cref="OriginModelId" /> because a logical name can be repointed at another remote model.
+    /// </summary>
+    public string? OriginLogicalModelName { get; }
+
+    /// <summary>
+    ///     Gets the name of the definition the finding's line falls inside (the method, class, or function it is
+    ///     about) or <see langword="null" /> when the file's syntax could not place it.
+    /// </summary>
+    public string? OriginSymbolName { get; }
+
+    /// <summary>
+    ///     Gets what kind of definition <see cref="OriginSymbolName" /> is, as the structural analyzer classified it.
+    /// </summary>
+    public string? OriginSymbolKind { get; }
 
     /// <summary>
     ///     Resolves the single producing review pass for a published finding as a <see cref="ReviewPassKind" />

@@ -38,9 +38,17 @@ public sealed record PrCommentThread(
 ///     When the comment was published in ADO. Used as the per-PR watermark in mention scanning.
 ///     <c>null</c> when not provided.
 /// </param>
+/// <param name="IsSystemGenerated">
+///     <c>true</c> when the provider wrote this entry itself to record an activity rather than a person writing
+///     it: "added a reviewer", "updated the source branch", a vote, a policy result. Providers return these
+///     through the same comments API as human replies, so anything that reasons about what a human said has to
+///     exclude them. <c>false</c> when the provider gave no signal either way, which is the safe default: an
+///     unmarked activity entry is a misread comment, while a human comment marked as activity is a lost one.
+/// </param>
 public sealed record PrThreadComment(
     string AuthorName,
     string Content,
     Guid? AuthorId = null,
     long CommentId = 0,
-    DateTimeOffset? PublishedAt = null);
+    DateTimeOffset? PublishedAt = null,
+    bool IsSystemGenerated = false);

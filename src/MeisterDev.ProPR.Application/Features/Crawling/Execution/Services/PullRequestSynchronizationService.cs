@@ -10,6 +10,8 @@ using MeisterDev.ProPR.Application.DTOs;
 using MeisterDev.ProPR.Application.Features.Crawling.Execution.Models;
 using MeisterDev.ProPR.Application.Features.Crawling.Execution.Ports;
 using MeisterDev.ProPR.Application.Features.Crawling.Webhooks.Ports;
+using MeisterDev.ProPR.Application.Features.CodeInsights;
+using MeisterDev.ProPR.Application.Features.CodeInsights.Ports;
 using MeisterDev.ProPR.Application.Features.ReviewArchive;
 using MeisterDev.ProPR.Application.Features.Reviewing.Execution.Models;
 using MeisterDev.ProPR.Application.Interfaces;
@@ -35,7 +37,10 @@ public sealed class PullRequestSynchronizationService(
     IPullRequestFetcher? pullRequestFetcher = null,
     IReviewArchiveIngestionService? reviewArchiveIngestionService = null,
     IPostedCommentOriginStore? postedCommentOriginStore = null,
-    IBlockedPullRequestStore? blockedPullRequestStore = null) : IPullRequestSynchronizationService
+    IBlockedPullRequestStore? blockedPullRequestStore = null,
+    ICodeInsightDispositionService? codeInsightDispositionService = null,
+    ICodeInsightMissHarvester? codeInsightMissHarvester = null,
+    ICodeInsightMetricSealer? codeInsightMetricSealer = null) : IPullRequestSynchronizationService
 {
     private const string ActivationSourceTagName = "pull_request.activation_source";
     private static readonly ActivitySource CrawlingActivitySource = new("MeisterProPR.Crawling", "1.0.0");
@@ -312,6 +317,12 @@ public sealed class PullRequestSynchronizationService(
         PullRequestSynchronizationRequest request,
         CancellationToken ct)
     {
+        // The pull request has stopped being active: merged, abandoned, or closed. This is the moment the
+        // correctness measurement is taken, and it runs before the job reconciliation below because the common
+        // case has no active job left to cancel: the review finished long before the pull request did. The
+        // sealer decides for itself whether anything is measurable, and never throws back into the crawl.
+        await this.SealCodeInsightMetricAsync(request, ct);
+
         var activeJobs = await jobs.GetActiveJobsForConfigAsync(
             request.ProviderScopePath,
             request.ProviderProjectKey,
@@ -343,6 +354,38 @@ public sealed class PullRequestSynchronizationService(
             [
                 $"Cancelled {matchingJobs.Count} active review job(s) for PR #{request.PullRequestId} because the pull request is {pullRequestStatus}.",
             ]);
+    }
+
+    /// <summary>
+    ///     Seals the pull request's code-insight measurement, once, at its first observed close. Every close
+    ///     type seals identically: a finding the reviewer got right was right whether or not the pull request
+    ///     was merged.
+    /// </summary>
+    private async Task SealCodeInsightMetricAsync(
+        PullRequestSynchronizationRequest request,
+        CancellationToken ct)
+    {
+        if (codeInsightMetricSealer is null)
+        {
+            return;
+        }
+
+        try
+        {
+            await codeInsightMetricSealer.SealAsync(
+                new CodeInsightPullRequestKey(request.ClientId, request.RepositoryId, request.PullRequestId),
+                request.PullRequestStatus.ToString(),
+                ct);
+        }
+        catch (Exception ex) when (!ct.IsCancellationRequested)
+        {
+            // The sealer already swallows its own failures; this is the belt to that braces, because lifecycle
+            // synchronization has to cancel superseded jobs whatever a measurement does.
+            logger.LogWarning(
+                ex,
+                "Sealing the code-insight measurement for PR {PullRequestId} failed; lifecycle synchronization continues.",
+                request.PullRequestId);
+        }
     }
 
     private async Task<PullRequestSynchronizationOutcome?> EvaluateReviewDecisionAsync(
@@ -683,19 +726,27 @@ public sealed class PullRequestSynchronizationService(
 
                 if (isCurrentlyResolved && !wasPreviouslyResolved)
                 {
-                    await threadMemoryService.HandleThreadResolvedAsync(
-                        new ThreadResolvedDomainEvent(
-                            request.ClientId,
-                            request.RepositoryId,
-                            request.PullRequestId,
-                            thread.ThreadId,
-                            thread.FilePath,
-                            null,
-                            thread.CommentHistory,
-                            DateTimeOffset.UtcNow,
-                            currentIntent,
-                            thread.CodeChangedSinceRaised),
-                        ct);
+                    var resolved = new ThreadResolvedDomainEvent(
+                        request.ClientId,
+                        request.RepositoryId,
+                        request.PullRequestId,
+                        thread.ThreadId,
+                        thread.FilePath,
+                        null,
+                        thread.CommentHistory,
+                        DateTimeOffset.UtcNow,
+                        currentIntent,
+                        thread.CodeChangedSinceRaised);
+
+                    await threadMemoryService.HandleThreadResolvedAsync(resolved, ct);
+
+                    // Passive code-insight observer, a sibling of thread memory rather than a change to it:
+                    // a finding gets an outcome even in the cases memory deliberately refuses to store,
+                    // because those are exactly the cases a quality metric needs. It never throws.
+                    if (codeInsightDispositionService is not null)
+                    {
+                        await codeInsightDispositionService.HandleThreadResolvedAsync(resolved, ct);
+                    }
                 }
                 else if (!isCurrentlyResolved && wasPreviouslyResolved)
                 {
@@ -727,11 +778,17 @@ public sealed class PullRequestSynchronizationService(
         Guid? reviewerId,
         CancellationToken ct)
     {
-        // Passive archive observer: only runs when an opted-in connection is resolved and the archive
-        // consumer is registered. When retention is off it performs no extra work and no extra fetch.
-        if (reviewArchiveIngestionService is null
-            || pullRequestFetcher is null
-            || scmConnectionRepository is null)
+        // Two independent passive observers read the same thread snapshots: the review archive (when the
+        // producing connection opted in to thread retention) and code-insight miss harvesting (when the
+        // client's collection gate is open). Each has its own precondition, so neither depends on the other
+        // being switched on, but the provider fetch is shared, because this runs on every crawl cycle and a
+        // second fetch would double the request load for the same data.
+        if (pullRequestFetcher is null || scmConnectionRepository is null)
+        {
+            return;
+        }
+
+        if (reviewArchiveIngestionService is null && codeInsightMissHarvester is null)
         {
             return;
         }
@@ -739,15 +796,21 @@ public sealed class PullRequestSynchronizationService(
         try
         {
             var connection = await this.ResolveRetentionConnectionAsync(request, ct);
-            if (connection is null || !connection.StoreThreads)
+            if (connection is null)
             {
                 return;
             }
 
-            // Fetch only the comment threads; never download changed-file content here. Thread retention
-            // runs on every crawl cycle, so a full pull-request fetch would multiply the provider request
-            // load and risk rate limits. Diff retention captures diffs from the review's own fetched
-            // changes, not from this path.
+            var archiveWanted = reviewArchiveIngestionService is not null && connection.StoreThreads;
+            var harvestWanted = codeInsightMissHarvester is not null;
+            if (!archiveWanted && !harvestWanted)
+            {
+                return;
+            }
+
+            // Fetch only the comment threads; never download changed-file content here. This runs on every
+            // crawl cycle, so a full pull-request fetch would multiply the provider request load and risk
+            // rate limits. Diff retention captures diffs from the review's own fetched changes, not here.
             var threads = await pullRequestFetcher.FetchThreadsAsync(
                 request.ProviderScopePath,
                 request.ProviderProjectKey,
@@ -760,17 +823,35 @@ public sealed class PullRequestSynchronizationService(
             // passive side-read: when the store is absent or the read fails, stamping is simply skipped and
             // ingestion proceeds with no originating job, never disrupting the crawl.
             var originatingJobs = OriginatingJobResolver.FromRows(await this.ResolveOriginatingJobsAsync(request, ct));
+
+            // Who ProPR posts as is learned from its own recorded posts in this pull request, not assumed from the
+            // configured reviewer identity: that identity is who a review is *requested* of and need not be the
+            // account whose token posts. Getting this wrong makes ProPR's own threads look human, which is a
+            // false negative charged against its recall.
+            var authorship = AiAuthorshipResolver.Learn(threads, originatingJobs, reviewerIdentity, reviewerId);
+
             foreach (var thread in threads)
             {
-                var evt = BuildThreadUpdatedEvent(request, connection.Id, thread, reviewerIdentity, reviewerId, originatingJobs);
-                await reviewArchiveIngestionService.HandleThreadUpdatedAsync(evt, ct);
+                var evt = BuildThreadUpdatedEvent(request, connection.Id, thread, authorship, originatingJobs);
+
+                if (archiveWanted)
+                {
+                    await reviewArchiveIngestionService!.HandleThreadUpdatedAsync(evt, ct);
+                }
+
+                if (harvestWanted)
+                {
+                    // Human threads ProPR did not raise are what makes recall measurable; the harvester
+                    // decides which of these qualify and never throws back into the crawl.
+                    await codeInsightMissHarvester!.HandleThreadObservedAsync(evt, ct);
+                }
             }
         }
         catch (Exception ex) when (!ct.IsCancellationRequested)
         {
             logger.LogWarning(
                 ex,
-                "Thread retention ingestion failed for PR {PullRequestId}; continuing without archiving.",
+                "Thread observation failed for PR {PullRequestId}; continuing without archiving or harvesting.",
                 request.PullRequestId);
         }
     }
@@ -845,8 +926,7 @@ public sealed class PullRequestSynchronizationService(
         PullRequestSynchronizationRequest request,
         Guid connectionId,
         PrCommentThread thread,
-        ReviewerIdentity? reviewerIdentity,
-        Guid? reviewerId,
+        AiAuthorshipResolver authorship,
         OriginatingJobResolver originatingJobs)
     {
         var comments = new List<ThreadUpdatedComment>(thread.Comments.Count);
@@ -872,10 +952,11 @@ public sealed class PullRequestSynchronizationService(
                 new ThreadUpdatedComment(
                     commentId,
                     ResolveAuthorIdentity(comment),
-                    IsAiAuthored(comment, reviewerIdentity, reviewerId),
+                    authorship.IsAiAuthored(comment, originatingJobId),
                     publishedAt,
                     comment.Content,
-                    originatingJobId));
+                    originatingJobId,
+                    comment.IsSystemGenerated));
         }
 
         if (lastActivityAt == DateTimeOffset.MinValue)
@@ -906,27 +987,95 @@ public sealed class PullRequestSynchronizationService(
         return string.IsNullOrWhiteSpace(comment.AuthorName) ? "unknown" : comment.AuthorName;
     }
 
-    private static bool IsAiAuthored(PrThreadComment comment, ReviewerIdentity? reviewerIdentity, Guid? reviewerId)
+    /// <summary>
+    ///     Decides which comments on a pull request are ProPR's own.
+    /// </summary>
+    /// <remarks>
+    ///     <para>
+    ///         The load-bearing signal is provenance, not identity: a comment whose provider id ProPR recorded when
+    ///         it posted is ProPR's, whatever account it went out as. From those comments the posting identity is
+    ///         <em>learned</em>, and any other comment on the pull request by the same author is ProPR's too: which
+    ///         covers threads whose ids were never recorded, and threads ProPR resolved rather than created.
+    ///     </para>
+    ///     <para>
+    ///         The configured reviewer identity is kept as one more input and no longer the only one. It is who a
+    ///         review is requested of: an account that need not be the one whose token posts, and on several
+    ///         installations is not configured at all. Relying on it alone marked every ProPR thread human, and a
+    ///         human thread ProPR did not raise is by definition a miss, so its own findings were being counted
+    ///         against its recall.
+    ///     </para>
+    /// </remarks>
+    private sealed class AiAuthorshipResolver
     {
-        if (reviewerIdentity is null)
+        private readonly HashSet<Guid> _authorIds = [];
+        private readonly HashSet<string> _authorNames = new(StringComparer.OrdinalIgnoreCase);
+
+        public static AiAuthorshipResolver Learn(
+            IReadOnlyList<PrCommentThread> threads,
+            OriginatingJobResolver originatingJobs,
+            ReviewerIdentity? reviewerIdentity,
+            Guid? reviewerId)
         {
-            return false;
+            var resolver = new AiAuthorshipResolver();
+
+            if (reviewerId.HasValue)
+            {
+                resolver._authorIds.Add(reviewerId.Value);
+            }
+
+            if (reviewerIdentity is not null)
+            {
+                resolver.Remember(reviewerIdentity.Login);
+                resolver.Remember(reviewerIdentity.DisplayName);
+            }
+
+            foreach (var thread in threads)
+            {
+                var threadId = thread.ThreadId.ToString(CultureInfo.InvariantCulture);
+                foreach (var comment in thread.Comments)
+                {
+                    var commentId = comment.CommentId.ToString(CultureInfo.InvariantCulture);
+                    if (originatingJobs.Resolve(threadId, commentId) is null)
+                    {
+                        continue;
+                    }
+
+                    // ProPR posted this one and recorded its id, so whatever account it appears under is the
+                    // account ProPR posts as on this connection.
+                    if (comment.AuthorId is { } authorId && authorId != Guid.Empty)
+                    {
+                        resolver._authorIds.Add(authorId);
+                    }
+
+                    resolver.Remember(comment.AuthorName);
+                }
+            }
+
+            return resolver;
         }
 
-        // Identity-bearing providers (Azure DevOps) stamp the author GUID; match it to the resolved
-        // reviewer GUID. Other providers expose a login/display name; match on that instead.
-        if (comment.AuthorId.HasValue && reviewerId.HasValue && comment.AuthorId.Value == reviewerId.Value)
+        public bool IsAiAuthored(PrThreadComment comment, Guid? originatingJobId)
         {
-            return true;
+            if (originatingJobId.HasValue)
+            {
+                return true;
+            }
+
+            if (comment.AuthorId is { } authorId && authorId != Guid.Empty && this._authorIds.Contains(authorId))
+            {
+                return true;
+            }
+
+            return !string.IsNullOrWhiteSpace(comment.AuthorName) && this._authorNames.Contains(comment.AuthorName);
         }
 
-        if (string.IsNullOrWhiteSpace(comment.AuthorName))
+        private void Remember(string? name)
         {
-            return false;
+            if (!string.IsNullOrWhiteSpace(name))
+            {
+                this._authorNames.Add(name);
+            }
         }
-
-        return string.Equals(comment.AuthorName, reviewerIdentity.Login, StringComparison.OrdinalIgnoreCase)
-               || string.Equals(comment.AuthorName, reviewerIdentity.DisplayName, StringComparison.OrdinalIgnoreCase);
     }
 
     private async Task UpdateLastSeenStatusesAsync(

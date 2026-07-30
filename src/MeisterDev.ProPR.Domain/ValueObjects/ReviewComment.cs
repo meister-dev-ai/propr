@@ -105,4 +105,39 @@ public sealed record ReviewComment
     ///     (unknown line, or a comment produced outside the file-by-file read loop).
     /// </summary>
     public ReviewCommentReadGrounding? SourceReadGrounding { get; init; }
+
+    /// <summary>
+    ///     The remote model that produced this finding, when a single pass owns it. Provenance metadata only: it
+    ///     does not participate in deduplication and is <see langword="null" /> for legacy comments and for
+    ///     comments no single pass produced (a synthesized cross-cutting concern is drawn from many).
+    /// </summary>
+    public string? OriginModelId { get; init; }
+
+    /// <summary>
+    ///     The client's logical model name for the producing pass, when the pass ran through a named logical model
+    ///     rather than a bare connection binding. Kept alongside <see cref="OriginModelId" /> rather than instead of
+    ///     it, because a logical name can be repointed at a different remote model: attributing findings to the name
+    ///     alone would silently merge two models' results, and to the remote id alone would lose the name the
+    ///     operator actually configures.
+    /// </summary>
+    public string? OriginLogicalModelName { get; init; }
+
+    /// <summary>
+    ///     Name of the definition this comment's line falls inside (the method, class, or function the finding is
+    ///     about) resolved structurally from the file's own syntax. Provenance metadata only: it does not
+    ///     participate in deduplication and is <see langword="null" /> for pull-request-level comments, unparsable
+    ///     or unsupported languages, and lines that fall outside every definition.
+    /// </summary>
+    /// <remarks>
+    ///     Name-based, like the analyzer's own floor: two overloads share a name, and the name says nothing about
+    ///     the namespace. It is enough to ask which parts of a codebase keep producing findings, and it is what the
+    ///     reference lookup already keys on.
+    /// </remarks>
+    public string? OriginSymbolName { get; init; }
+
+    /// <summary>
+    ///     What kind of definition <see cref="OriginSymbolName" /> is (method, class, function, …), as the
+    ///     structural analyzer classified it. <see langword="null" /> whenever the name is.
+    /// </summary>
+    public string? OriginSymbolKind { get; init; }
 }

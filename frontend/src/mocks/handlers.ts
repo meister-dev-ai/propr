@@ -76,6 +76,18 @@ function getMockBudgetingCapability() {
   }
 }
 
+function getMockCodeInsightsCapability() {
+  return {
+    key: 'code-insights',
+    displayName: 'Code Insights',
+    requiresCommercial: true,
+    defaultWhenCommercial: true,
+    overrideState: 'default',
+    isAvailable: true,
+    message: null,
+  }
+}
+
 function getMockTenantBySlug(tenantSlug: string) {
   return mockTenants.find((tenant) => tenant.slug === tenantSlug) ?? null
 }
@@ -2216,12 +2228,84 @@ function updatedMapping(entry: any, body: any): any {
   }
 }
 
+
+/** A metric payload with every field present, so a view never has to defend against a partial mock. */
+function mockMetric(overrides: Record<string, unknown> = {}) {
+  return {
+    precision: null,
+    recall: null,
+    f1: null,
+    acceptanceRate: null,
+    addressed: 18,
+    acknowledged: 4,
+    dismissed: 3,
+    falsePositive: 6,
+    misses: 9,
+    sampleSize: 12,
+    discussed: 0,
+    ...overrides,
+  }
+}
+
+/** Findings for the drill-through, including one still open so both outcome states are visible. */
+function mockCodeInsightFindings(coreType: string | null) {
+  const all = [
+    {
+      id: 'finding-1',
+      clientId: '1',
+      repositoryId: 'payments-api',
+      pullRequestId: 4821,
+      jobId: '11111111-1111-1111-1111-111111111111',
+      filePath: 'src/Payments/RefundProcessor.cs',
+      lineNumber: 214,
+      severity: 'Error',
+      message: 'The retry loop has no ceiling: a persistent 409 from the gateway will retry indefinitely.',
+      coreTags: ['logic-error', 'resource-handling'],
+      disposition: 'addressed',
+      providerThreadId: '90412',
+      observedAt: '2026-07-22T08:55:00Z',
+    },
+    {
+      id: 'finding-2',
+      clientId: '1',
+      repositoryId: 'payments-api',
+      pullRequestId: 4821,
+      jobId: '11111111-1111-1111-1111-111111111111',
+      filePath: 'src/Payments/LedgerWriter.cs',
+      lineNumber: 63,
+      severity: 'Warning',
+      message: 'The ledger write and the balance update are not in one transaction.',
+      coreTags: ['data-validation'],
+      disposition: 'falsePositive',
+      providerThreadId: '90415',
+      observedAt: '2026-07-22T08:56:00Z',
+    },
+    {
+      id: 'finding-3',
+      clientId: '1',
+      repositoryId: 'payments-api',
+      pullRequestId: 4790,
+      jobId: '22222222-2222-2222-2222-222222222222',
+      filePath: 'src/Api/WebhookController.cs',
+      lineNumber: 47,
+      severity: 'Info',
+      message: 'The webhook signature is compared with a non-constant-time equality check.',
+      coreTags: ['security'],
+      disposition: null,
+      providerThreadId: null,
+      observedAt: '2026-07-19T13:20:00Z',
+    },
+  ]
+
+  return coreType ? all.filter((finding) => finding.coreTags.includes(coreType)) : all
+}
+
 export const handlers = [
   http.get(`${base}/auth/options`, async () => {
     return HttpResponse.json({
       edition: mockEdition,
       availableSignInMethods: mockSsoCapabilityAvailable ? ['password', 'sso'] : ['password'],
-      capabilities: [getMockSsoCapability(), getMockBudgetingCapability()],
+      capabilities: [getMockSsoCapability(), getMockBudgetingCapability(), getMockCodeInsightsCapability()],
     })
   }),
 
@@ -2243,7 +2327,7 @@ export const handlers = [
 
     return HttpResponse.json({
       edition: mockEdition,
-      capabilities: [getMockSsoCapability(), getMockBudgetingCapability()],
+      capabilities: [getMockSsoCapability(), getMockBudgetingCapability(), getMockCodeInsightsCapability()],
     })
   }),
 
@@ -2291,7 +2375,7 @@ export const handlers = [
       tenantRoles: isAdmin ? { 'tenant-1': 1 } : { 'tenant-1': 0 },
       hasLocalPassword: isAdmin || !username.includes('sso'),
       edition: mockEdition,
-      capabilities: [getMockSsoCapability(), getMockBudgetingCapability()],
+      capabilities: [getMockSsoCapability(), getMockBudgetingCapability(), getMockCodeInsightsCapability()],
     })
   }),
 
@@ -4549,6 +4633,560 @@ export const handlers = [
       })
     }
     return new HttpResponse(null, { status: 200 })
+  }),
+
+
+  // --- Code Insights: two surfaces, two audiences ---
+  // The mock data deliberately exercises the states worth looking at rather than the happy path only: a metric
+  // above its sample floor and one below it, a harvested thread that counts toward recall and one that does not,
+  // and findings both with and without an outcome.
+
+  http.get(`${base}/code-quality/types-over-time`, async ({ request }) => {
+    await delay(220)
+    const url = new URL(request.url)
+    const repository = url.searchParams.get('repositoryId')
+    const pullRequestId = url.searchParams.get('pullRequestId')
+
+    // One pull request's own mix, for the view embedded in a review: a handful of findings across its increments
+    // rather than a codebase's month.
+    if (pullRequestId) {
+      const perPr: Record<string, number[]> = {
+        'logic-error': [3, 1],
+        'error-handling-observability': [2, 2],
+        'data-validation': [1, 0],
+      }
+      const prBuckets = ['2026-07-20', '2026-07-23']
+      const prPoints = Object.entries(perPr).flatMap(([key, counts]) =>
+        counts.map((count, index) => ({ bucketStart: prBuckets[index], key, count })),
+      )
+
+      return HttpResponse.json({
+        points: prPoints,
+        totalFindings: prPoints.reduce((total, point) => total + point.count, 0),
+        keys: Object.keys(perPr),
+      })
+    }
+
+    // A quiet repository shows a thinner mix, so switching the picker visibly changes the chart.
+    const buckets = ['2026-07-06', '2026-07-13', '2026-07-20', '2026-07-27']
+    const mix: Record<string, number[]> = repository === 'quiet-service'
+      ? { 'naming-clarity': [1, 0, 2, 1] }
+      : {
+          'logic-error': [6, 4, 7, 5],
+          'error-handling-observability': [3, 5, 2, 4],
+          'data-validation': [2, 2, 3, 1],
+          security: [1, 0, 2, 1],
+          concurrency: [0, 1, 0, 2],
+        }
+
+    const points = Object.entries(mix).flatMap(([key, counts]) =>
+      counts.map((count, index) => ({ bucketStart: buckets[index], key, count })),
+    )
+
+    return HttpResponse.json({
+      points,
+      totalFindings: points.reduce((total, point) => total + point.count, 0),
+      keys: Object.keys(mix),
+    })
+  }),
+
+  http.get(`${base}/code-quality/concentration`, async ({ request }) => {
+    await delay(180)
+    const url = new URL(request.url)
+    const grain = url.searchParams.get('grain') ?? 'repository'
+    const pullRequestId = url.searchParams.get('pullRequestId')
+
+    // Scoped to one pull request (the view embedded in a review) only that pull request's own rows exist.
+    if (pullRequestId) {
+      if (grain === 'file') {
+        return HttpResponse.json([
+          { clientId: '1', clientName: 'Acme Corp', repositoryId: 'payments-api', repositoryName: 'payments-api', pullRequestId: Number(pullRequestId), filePath: 'src/Payments/RefundProcessor.cs', count: 5 },
+          { clientId: '1', clientName: 'Acme Corp', repositoryId: 'payments-api', repositoryName: 'payments-api', pullRequestId: Number(pullRequestId), filePath: 'src/Api/WebhookController.cs', count: 3 },
+          { clientId: '1', clientName: 'Acme Corp', repositoryId: 'payments-api', repositoryName: 'payments-api', pullRequestId: Number(pullRequestId), filePath: '', count: 1 },
+        ])
+      }
+
+      return HttpResponse.json([
+        { clientId: '1', clientName: 'Acme Corp', repositoryId: 'payments-api', repositoryName: 'payments-api', pullRequestId: Number(pullRequestId), filePath: null, count: 9 },
+      ])
+    }
+
+    // Provider repository identifiers are opaque (several providers use a bare number) so the mock carries the
+    // display name separately, including one repository with no recorded name so the fallback stays visible.
+    if (grain === 'repository') {
+      return HttpResponse.json([
+        { clientId: '1', clientName: 'Acme Corp', repositoryId: 'payments-api', repositoryName: 'payments-api', pullRequestId: null, filePath: null, count: 48 },
+        { clientId: '1', clientName: 'Acme Corp', repositoryId: '4', repositoryName: 'checkout-web', pullRequestId: null, filePath: null, count: 21 },
+        { clientId: '2', clientName: 'Globex', repositoryId: 'quiet-service', repositoryName: null, pullRequestId: null, filePath: null, count: 4 },
+      ])
+    }
+
+    if (grain === 'file') {
+      return HttpResponse.json([
+        { clientId: '1', clientName: 'Acme Corp', repositoryId: 'payments-api', repositoryName: 'payments-api', pullRequestId: null, filePath: 'src/Payments/RefundProcessor.cs', count: 14 },
+        { clientId: '1', clientName: 'Acme Corp', repositoryId: 'payments-api', pullRequestId: null, filePath: 'src/Payments/LedgerWriter.cs', count: 9 },
+        { clientId: '1', clientName: 'Acme Corp', repositoryId: 'payments-api', pullRequestId: null, filePath: 'src/Api/WebhookController.cs', count: 6 },
+        { clientId: '1', clientName: 'Acme Corp', repositoryId: 'payments-api', pullRequestId: null, filePath: '', count: 3 },
+      ])
+    }
+
+    if (grain === 'pullRequest') {
+      return HttpResponse.json([
+        { clientId: '1', clientName: 'Acme Corp', repositoryId: 'payments-api', repositoryName: 'payments-api', pullRequestId: 4821, filePath: null, count: 11 },
+        { clientId: '1', clientName: 'Acme Corp', repositoryId: 'payments-api', pullRequestId: 4790, filePath: null, count: 7 },
+      ])
+    }
+
+    return HttpResponse.json([
+      { clientId: '1', clientName: 'Acme Corp', repositoryId: null, pullRequestId: null, filePath: null, count: 69 },
+      { clientId: '2', clientName: 'Globex', repositoryId: null, pullRequestId: null, filePath: null, count: 4 },
+    ])
+  }),
+
+  http.get(`${base}/code-quality/repositories`, async () => {
+    await delay(200)
+
+    // The entry: where the findings are, ranked by volume. Two of these belong to different clients, which is what
+    // the row's second line is for.
+    const rows = [
+      { clientId: '1', clientName: 'Acme Corp', repositoryId: 'payments-api', repositoryName: 'payments-api', findings: 48, pullRequests: 17, files: 22, averagePerPullRequest: 48 / 17, lastActivityOn: '2026-07-28' },
+      { clientId: '1', clientName: 'Acme Corp', repositoryId: '4', repositoryName: 'checkout-web', findings: 21, pullRequests: 9, files: 12, averagePerPullRequest: 21 / 9, lastActivityOn: '2026-07-26' },
+      { clientId: '2', clientName: 'Globex', repositoryId: 'quiet-service', repositoryName: null, findings: 4, pullRequests: 3, files: 3, averagePerPullRequest: 4 / 3, lastActivityOn: '2026-07-11' },
+    ]
+    const totalFindings = rows.reduce((total, row) => total + row.findings, 0)
+    const pullRequests = rows.reduce((total, row) => total + row.pullRequests, 0)
+
+    return HttpResponse.json({
+      totalFindings,
+      repositories: rows.length,
+      pullRequests,
+      averagePerPullRequest: totalFindings / pullRequests,
+      rows,
+    })
+  }),
+
+  http.get(`${base}/code-quality/hotspots`, async ({ request }) => {
+    await delay(200)
+    const url = new URL(request.url)
+    const filesFrom = url.searchParams.get('filesFromPullRequestId')
+
+    // Grouped by definition: the same findings, one level deeper, and the ones the syntax could not place are
+    // reported as a count rather than ranked as a bucket.
+    if (url.searchParams.get('groupBy') === 'symbol') {
+      const symbols = [
+        { filePath: 'src/Payments/RefundProcessor.cs', symbolName: 'Process', findings: 18, pullRequests: 8, averagePerPullRequest: 18 / 8 },
+        { filePath: 'src/Payments/RefundProcessor.cs', symbolName: 'ValidateRefund', findings: 9, pullRequests: 5, averagePerPullRequest: 9 / 5 },
+        { filePath: 'src/Payments/LedgerWriter.cs', symbolName: 'Write', findings: 14, pullRequests: 6, averagePerPullRequest: 14 / 6 },
+        { filePath: 'src/Api/WebhookController.cs', symbolName: 'Post', findings: 6, pullRequests: 4, averagePerPullRequest: 1.5 },
+      ]
+      const placed = symbols.reduce((total, symbol) => total + symbol.findings, 0)
+
+      return HttpResponse.json({
+        totalFindings: placed,
+        pullRequests: filesFrom ? 12 : 26,
+        averagePerPullRequest: placed / (filesFrom ? 12 : 26),
+        fileCount: symbols.length,
+        files: symbols,
+        unplacedFindings: 42,
+      })
+    }
+
+    // A pull-request-scoped ask reports only that pull request's files, but with the history they carry, which is
+    // the whole point: three findings here, thirty over the file's life.
+    const files = filesFrom
+      ? [
+          { filePath: 'src/Payments/RefundProcessor.cs', findings: 31, pullRequests: 11, averagePerPullRequest: 31 / 11 },
+          { filePath: 'src/Api/WebhookController.cs', findings: 9, pullRequests: 5, averagePerPullRequest: 9 / 5 },
+          { filePath: '', findings: 2, pullRequests: 2, averagePerPullRequest: 1 },
+        ]
+      : [
+          { filePath: 'src/Payments/RefundProcessor.cs', findings: 31, pullRequests: 11, averagePerPullRequest: 31 / 11 },
+          { filePath: 'src/Payments/LedgerWriter.cs', findings: 22, pullRequests: 9, averagePerPullRequest: 22 / 9 },
+          { filePath: 'src/Payments/Fees/FeeCalculator.cs', findings: 14, pullRequests: 6, averagePerPullRequest: 14 / 6 },
+          { filePath: 'src/Api/WebhookController.cs', findings: 9, pullRequests: 5, averagePerPullRequest: 9 / 5 },
+          { filePath: 'src/Api/HealthController.cs', findings: 3, pullRequests: 3, averagePerPullRequest: 1 },
+          { filePath: 'tests/Payments/RefundProcessorTests.cs', findings: 6, pullRequests: 4, averagePerPullRequest: 1.5 },
+          { filePath: '', findings: 4, pullRequests: 3, averagePerPullRequest: 4 / 3 },
+        ]
+
+    const totalFindings = files.reduce((total, file) => total + file.findings, 0)
+    const pullRequests = filesFrom ? 12 : 26
+
+    return HttpResponse.json({
+      totalFindings,
+      pullRequests,
+      averagePerPullRequest: totalFindings / pullRequests,
+      fileCount: files.length,
+      files,
+      unplacedFindings: 0,
+    })
+  }),
+
+  http.get(`${base}/code-quality/survival`, async ({ request }) => {
+    await delay(200)
+    const url = new URL(request.url)
+    const pullRequestId = url.searchParams.get('pullRequestId')
+
+    // Scoped to one pull request, the totals and the single broken-out row are the same pull request.
+    if (pullRequestId) {
+      const own = {
+        persisted: 6,
+        fixed: 4,
+        dropped: 2,
+        total: 12,
+        persistenceRate: 0.5,
+        pullRequests: 1,
+      }
+
+      return HttpResponse.json({
+        total: own,
+        pullRequests: [
+          {
+            clientId: '1',
+            repositoryId: 'payments-api',
+            repositoryName: 'payments-api',
+            pullRequestId: Number(pullRequestId),
+            revisions: 3,
+            survival: own,
+          },
+        ],
+      })
+    }
+
+    // A quiet repository has nothing multi-increment in it, so the "nothing to say yet" state is reachable.
+    if (url.searchParams.get('repositoryId') === 'quiet-service') {
+      return HttpResponse.json({
+        total: { persisted: 0, fixed: 0, dropped: 0, total: 0, persistenceRate: null, pullRequests: 0 },
+        pullRequests: [],
+      })
+    }
+
+    return HttpResponse.json({
+      total: { persisted: 19, fixed: 11, dropped: 7, total: 37, persistenceRate: 19 / 37, pullRequests: 6 },
+      pullRequests: [
+        { clientId: '1', repositoryId: 'payments-api', repositoryName: 'payments-api', pullRequestId: 4790, revisions: 4, survival: { persisted: 2, fixed: 1, dropped: 4, total: 7, persistenceRate: 2 / 7, pullRequests: 1 } },
+        { clientId: '1', repositoryId: 'payments-api', pullRequestId: 4821, revisions: 3, survival: { persisted: 6, fixed: 4, dropped: 2, total: 12, persistenceRate: 0.5, pullRequests: 1 } },
+        { clientId: '1', repositoryId: '4', repositoryName: 'checkout-web', pullRequestId: 3312, revisions: 2, survival: { persisted: 5, fixed: 3, dropped: 1, total: 9, persistenceRate: 5 / 9, pullRequests: 1 } },
+        { clientId: '1', repositoryId: 'payments-api', pullRequestId: 4802, revisions: 2, survival: { persisted: 6, fixed: 3, dropped: 0, total: 9, persistenceRate: 6 / 9, pullRequests: 1 } },
+      ],
+    })
+  }),
+
+  http.get(`${base}/code-quality/findings`, async ({ request }) => {
+    await delay(200)
+    const url = new URL(request.url)
+    const coreType = url.searchParams.get('coreType')
+
+    return HttpResponse.json(mockCodeInsightFindings(coreType))
+  }),
+
+  http.get(`${base}/reviewer-performance/quality`, async ({ request }) => {
+    await delay(260)
+    const url = new URL(request.url)
+    // A repository narrowing lands on a scope with too few closed pull requests, so the suppressed state is
+    // reachable in the mock rather than only in a unit test.
+    const thin = url.searchParams.get('repositoryId') === 'quiet-service'
+
+    const correctness = thin
+      ? [
+          { bucketStart: '2026-07-13', metric: mockMetric({ f1: 0.42, sampleSize: 1 }) },
+          { bucketStart: '2026-07-20', metric: mockMetric({ f1: 0.90, sampleSize: 2 }) },
+        ]
+      : [
+          // Eight weeks, because a trend is tested rather than read off the ends and the test needs that many.
+          { bucketStart: '2026-06-01', metric: mockMetric({ precision: 0.66, recall: 0.47, f1: 0.55, sampleSize: 11 }) },
+          { bucketStart: '2026-06-08', metric: mockMetric({ precision: 0.68, recall: 0.50, f1: 0.58, sampleSize: 13 }) },
+          { bucketStart: '2026-06-15', metric: mockMetric({ precision: 0.70, recall: 0.52, f1: 0.60, sampleSize: 14 }) },
+          { bucketStart: '2026-06-22', metric: mockMetric({ precision: 0.72, recall: 0.55, f1: 0.63, sampleSize: 17 }) },
+          { bucketStart: '2026-06-29', metric: mockMetric({ precision: 0.75, recall: 0.57, f1: 0.65, sampleSize: 14 }) },
+          { bucketStart: '2026-07-06', metric: mockMetric({ precision: 0.77, recall: 0.60, f1: 0.68, sampleSize: 17 }) },
+          { bucketStart: '2026-07-13', metric: mockMetric({ precision: 0.79, recall: 0.61, f1: 0.69, sampleSize: 19 }) },
+          { bucketStart: '2026-07-20', metric: mockMetric({ precision: 0.82, recall: 0.66, f1: 0.73, sampleSize: 22 }) },
+        ]
+
+    return HttpResponse.json({
+      correctness,
+      acceptance: [
+        { bucketStart: '2026-06-01', metric: mockMetric({ acceptanceRate: 0.66, sampleSize: 62 }) },
+        { bucketStart: '2026-06-08', metric: mockMetric({ acceptanceRate: 0.61, sampleSize: 70 }) },
+        { bucketStart: '2026-06-15', metric: mockMetric({ acceptanceRate: 0.70, sampleSize: 66 }) },
+        { bucketStart: '2026-06-22', metric: mockMetric({ acceptanceRate: 0.64, sampleSize: 81 }) },
+        { bucketStart: '2026-06-29', metric: mockMetric({ acceptanceRate: 0.62, sampleSize: 84 }) },
+        { bucketStart: '2026-07-06', metric: mockMetric({ acceptanceRate: 0.67, sampleSize: 91 }) },
+        { bucketStart: '2026-07-13', metric: mockMetric({ acceptanceRate: 0.71, sampleSize: 78 }) },
+        { bucketStart: '2026-07-20', metric: mockMetric({ acceptanceRate: 0.69, sampleSize: 40 }) },
+      ],
+      correctnessTotal: thin
+        ? mockMetric({ precision: 0.66, recall: 0.5, f1: 0.57, sampleSize: 3 })
+        : mockMetric({
+            precision: 0.79,
+            recall: 0.6,
+            f1: 0.68,
+            addressed: 132,
+            acknowledged: 24,
+            dismissed: 19,
+            falsePositive: 46,
+            misses: 117,
+            sampleSize: 72,
+          }),
+      acceptanceTotal: mockMetric({
+        acceptanceRate: 0.68,
+        addressed: 132,
+        acknowledged: 24,
+        dismissed: 19,
+        falsePositive: 46,
+        sampleSize: 221,
+        // Neither accepted nor rejected, and in neither ratio: roughly the share the published study found.
+        discussed: 17,
+      }),
+      correctnessTrend: thin
+        ? // Both of the thin buckets rest on fewer closed pull requests than the floor, so none was tested.
+          { direction: 'insufficient', tau: null, pValue: null, slopePerPeriod: null, periods: 0 }
+        : { direction: 'improving', tau: 1, pValue: 0.0002, slopePerPeriod: 0.026, periods: 8 },
+      acceptanceTrend: { direction: 'flat', tau: 0.14, pValue: 0.71, slopePerPeriod: 0.004, periods: 8 },
+      minimumSampleSize: 10,
+      minimumTrendPeriods: 8,
+    })
+  }),
+
+  http.get(`${base}/reviewer-performance/by-grain`, async ({ request }) => {
+    await delay(200)
+    const url = new URL(request.url)
+    const grain = url.searchParams.get('grain') ?? 'repository'
+
+    // Worst first, as the server ranks it, and one row deliberately below the sample floor so the suppressed
+    // presentation is reachable here rather than only in a unit test.
+    if (grain === 'client') {
+      return HttpResponse.json([
+        { clientId: '2', clientName: 'Globex', repositoryId: null, pullRequestId: null, metric: mockMetric({ precision: 0.55, recall: 0.4, f1: 0.46, falsePositive: 18, misses: 27, sampleSize: 21 }) },
+        { clientId: '1', clientName: 'Acme Corp', repositoryId: null, pullRequestId: null, metric: mockMetric({ precision: 0.84, recall: 0.67, f1: 0.75, falsePositive: 28, misses: 90, sampleSize: 51 }) },
+      ])
+    }
+
+    // Grouped by producing model: no client scope, no recall, no misses, and the sample counts resolved findings.
+    // The last row is the unattributed tail: reviews that ran before the model was recorded.
+    if (grain === 'model') {
+      return HttpResponse.json([
+        {
+          clientId: null,
+          clientName: null,
+          repositoryId: null,
+          pullRequestId: null,
+          modelId: 'gpt-5.4-mini',
+          logicalModelName: 'thrifty-reviewer',
+          metric: mockMetric({ precision: 0.61, recall: null, f1: null, acceptanceRate: 0.52, addressed: 34, acknowledged: 9, dismissed: 12, falsePositive: 35, misses: 0, sampleSize: 90 }),
+        },
+        {
+          clientId: null,
+          clientName: null,
+          repositoryId: null,
+          pullRequestId: null,
+          modelId: 'claude-opus-5',
+          logicalModelName: 'balanced-reviewer',
+          metric: mockMetric({ precision: 0.88, recall: null, f1: null, acceptanceRate: 0.74, addressed: 96, acknowledged: 15, dismissed: 21, falsePositive: 18, misses: 0, sampleSize: 150 }),
+        },
+        {
+          clientId: null,
+          clientName: null,
+          repositoryId: null,
+          pullRequestId: null,
+          modelId: null,
+          logicalModelName: null,
+          metric: mockMetric({ precision: 0.8, recall: null, f1: null, acceptanceRate: 0.7, addressed: 5, acknowledged: 1, dismissed: 2, falsePositive: 2, misses: 0, sampleSize: 4 }),
+        },
+      ])
+    }
+
+    if (grain === 'pullRequest') {
+      return HttpResponse.json([
+        { clientId: '1', clientName: 'Acme Corp', repositoryId: 'payments-api', pullRequestId: 4790, metric: mockMetric({ precision: 0.5, recall: 0.33, f1: 0.4, falsePositive: 4, misses: 8, sampleSize: 12 }) },
+        { clientId: '1', clientName: 'Acme Corp', repositoryId: 'payments-api', pullRequestId: 4821, metric: mockMetric({ precision: 0.86, recall: 0.7, f1: 0.77, falsePositive: 2, misses: 5, sampleSize: 14 }) },
+        { clientId: '1', clientName: 'Acme Corp', repositoryId: 'checkout-web', pullRequestId: 3312, metric: mockMetric({ precision: 1, recall: 1, f1: 1, falsePositive: 0, misses: 0, sampleSize: 2 }) },
+      ])
+    }
+
+    return HttpResponse.json([
+      { clientId: '2', clientName: 'Globex', repositoryId: 'quiet-service', repositoryName: null, pullRequestId: null, metric: mockMetric({ precision: 0.5, recall: 0.31, f1: 0.38, falsePositive: 9, misses: 20, sampleSize: 11 }) },
+      { clientId: '1', clientName: 'Acme Corp', repositoryId: '4', repositoryName: 'checkout-web', pullRequestId: null, metric: mockMetric({ precision: 0.72, recall: 0.58, f1: 0.64, falsePositive: 12, misses: 31, sampleSize: 18 }) },
+      { clientId: '1', clientName: 'Acme Corp', repositoryId: 'payments-api', repositoryName: 'payments-api', pullRequestId: null, metric: mockMetric({ precision: 0.85, recall: 0.69, f1: 0.76, falsePositive: 21, misses: 62, sampleSize: 40 }) },
+      { clientId: '1', clientName: 'Acme Corp', repositoryId: 'internal-tools', pullRequestId: null, metric: mockMetric({ precision: 1, recall: 1, f1: 1, falsePositive: 0, misses: 0, sampleSize: 3 }) },
+    ])
+  }),
+
+  // Coverage of the collection against review history. Deliberately uneven across repositories: the reading a
+  // reader has to be able to make here is "these numbers are thin because collection was off, not because the
+  // reviewer found nothing".
+  http.get(`${base}/reviewer-performance/rejection-reasons`, async () => {
+    await delay(160)
+    // Roughly the distribution the published study found: genuine mistakes are well under half of the
+    // rejections, and the rest are spread over reasons that each call for a different fix.
+    return HttpResponse.json({
+      reasons: [
+        { reason: 'Wrong', count: 26 },
+        { reason: 'DesignTradeOff', count: 14 },
+        { reason: 'DeveloperPreference', count: 11 },
+        { reason: 'OutOfScope', count: 6 },
+        { reason: 'Redundant', count: 3 },
+      ],
+      unclassified: 5,
+      rejections: 65,
+      // The two classes are turned down at similar rates for different reasons: the functional rejections are
+      // mostly the reviewer being wrong, the evolvability ones mostly the team not wanting the advice.
+      byConcernClass: [
+        {
+          concernClass: 'Functional',
+          reasons: [
+            { reason: 'Wrong', count: 21 },
+            { reason: 'OutOfScope', count: 4 },
+            { reason: 'Redundant', count: 2 },
+            { reason: 'DesignTradeOff', count: 2 },
+          ],
+          unclassified: 3,
+          rejections: 32,
+        },
+        {
+          concernClass: 'Evolvability',
+          reasons: [
+            { reason: 'DeveloperPreference', count: 11 },
+            { reason: 'DesignTradeOff', count: 12 },
+            { reason: 'Wrong', count: 5 },
+            { reason: 'OutOfScope', count: 2 },
+            { reason: 'Redundant', count: 1 },
+          ],
+          unclassified: 2,
+          rejections: 33,
+        },
+      ],
+    })
+  }),
+
+  http.get(`${base}/reviewer-performance/coverage`, async () => {
+    await delay(180)
+    return HttpResponse.json({
+      reviewJobs: 61,
+      jobsCollected: 24,
+      producedFindings: 508,
+      collectedFindings: 173,
+      pullRequests: 29,
+      pullRequestsRetained: 11,
+      clientsWithCollectionOff: 1,
+      rows: [
+        {
+          clientId: '3',
+          clientName: 'Umbrella Corp',
+          repositoryId: 'legacy-billing',
+          repositoryName: 'legacy-billing',
+          reviewJobs: 18,
+          jobsCollected: 0,
+          producedFindings: 214,
+          collectedFindings: 0,
+          pullRequests: 9,
+          pullRequestsRetained: 0,
+          retainedThreads: 0,
+          dispositions: 0,
+          misses: 0,
+          pullRequestsSealed: 0,
+        },
+        {
+          clientId: '1',
+          clientName: 'Acme Corp',
+          repositoryId: 'checkout-web',
+          repositoryName: 'checkout-web',
+          reviewJobs: 21,
+          jobsCollected: 8,
+          producedFindings: 152,
+          collectedFindings: 47,
+          pullRequests: 11,
+          pullRequestsRetained: 3,
+          retainedThreads: 26,
+          dispositions: 19,
+          misses: 4,
+          pullRequestsSealed: 2,
+        },
+        {
+          clientId: '1',
+          clientName: 'Acme Corp',
+          repositoryId: 'payments-api',
+          repositoryName: 'payments-api',
+          reviewJobs: 22,
+          jobsCollected: 16,
+          producedFindings: 142,
+          collectedFindings: 126,
+          pullRequests: 9,
+          pullRequestsRetained: 8,
+          retainedThreads: 71,
+          dispositions: 88,
+          misses: 12,
+          pullRequestsSealed: 6,
+        },
+      ],
+    })
+  }),
+
+  http.get(`${base}/reviewer-performance/misses`, async () => {
+    await delay(200)
+    return HttpResponse.json([
+      {
+        id: 'miss-1',
+        clientId: '1',
+        repositoryId: 'payments-api',
+        pullRequestId: 4821,
+        providerThreadId: '90412',
+        filePath: 'src/Payments/RefundProcessor.cs',
+        lineNumber: 214,
+        discussion: 'alice: this retries forever if the gateway returns 409: we need a ceiling\nbob: good catch, capped at 5',
+        isSubstantive: true,
+        wasActedOn: true,
+        isInScope: true,
+        countsAsMiss: true,
+        classifierConfidence: 0.88,
+        harvestedAt: '2026-07-22T09:14:00Z',
+      },
+      {
+        id: 'miss-2',
+        clientId: '1',
+        repositoryId: 'payments-api',
+        pullRequestId: 4790,
+        providerThreadId: '90188',
+        filePath: 'src/Api/WebhookController.cs',
+        lineNumber: 47,
+        discussion: 'carol: can we rename this to match the handler above?\ndave: sure',
+        isSubstantive: false,
+        wasActedOn: true,
+        isInScope: false,
+        countsAsMiss: false,
+        classifierConfidence: 0.74,
+        harvestedAt: '2026-07-21T15:02:00Z',
+      },
+      {
+        id: 'miss-3',
+        clientId: '1',
+        repositoryId: 'checkout-web',
+        pullRequestId: 3312,
+        providerThreadId: '88740',
+        filePath: 'src/checkout/session.ts',
+        lineNumber: 88,
+        discussion: 'erin: the session token is logged here in full',
+        isSubstantive: true,
+        wasActedOn: true,
+        isInScope: true,
+        countsAsMiss: true,
+        classifierConfidence: 0.93,
+        harvestedAt: '2026-07-20T11:40:00Z',
+      },
+    ])
+  }),
+
+  http.get(`${base}/reviewer-performance/findings`, async ({ request }) => {
+    await delay(200)
+    const url = new URL(request.url)
+    const disposition = url.searchParams.get('disposition')
+
+    return HttpResponse.json(
+      mockCodeInsightFindings(null).filter((finding) =>
+        !disposition || finding.disposition === disposition,
+      ),
+    )
   }),
 
   http.post(`${base}/clients/:clientId/reviewing/blocked-prs/unblock`, async ({ params, request }) => {

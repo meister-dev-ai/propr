@@ -62,6 +62,22 @@ public sealed class ThreadMemoryRecord
     public MemorySource MemorySource { get; init; } = MemorySource.ThreadResolved;
 
     /// <summary>
+    ///     The durable code-insight finding this memory came from, when one is known; <see langword="null" />
+    ///     otherwise, for an admin-dismissed record, a thread raised before insight collection was enabled,
+    ///     or a client that does not collect insights at all.
+    ///     Held <em>by value</em>, with no foreign key: the two stores keep independent lifecycles, so a purge
+    ///     on either side must not cascade into the other.
+    /// </summary>
+    public Guid? CodeInsightFindingId { get; set; }
+
+    /// <summary>
+    ///     Human-searchable keywords for this memory. Display and search metadata only: the similarity
+    ///     matching path uses <see cref="EmbeddingVector" /> and is unaffected by these.
+    ///     Empty when none have been extracted; existing records without keywords stay valid.
+    /// </summary>
+    public List<string> Keywords { get; set; } = [];
+
+    /// <summary>
     ///     Validates the record and throws <see cref="ArgumentException" /> for any violated rule.
     /// </summary>
     /// <exception cref="ArgumentException">When any validation rule is violated.</exception>

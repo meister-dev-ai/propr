@@ -43,6 +43,7 @@ Questions, not symptoms. If something is broken rather than unclear, start at
 | What does this environment variable do? | [operate/configuration.md](operate/configuration.md) |
 | What do I back up, and how do I upgrade? | [operate/upgrades-and-backups.md](operate/upgrades-and-backups.md) |
 | Which probe do I point my orchestrator at? | [operate/observability.md](operate/observability.md) |
+| How much can I trust the numbers that judge the reviewer? | [reference/code-insight-calibration.md](reference/code-insight-calibration.md) |
 | How do I automate all of this? | [reference/api.md](reference/api.md) |
 | Does this need a commercial license? | [reference/editions.md](reference/editions.md) |
 | What does *increment*, *lens* or *logical model* mean? | [glossary.md](glossary.md) |

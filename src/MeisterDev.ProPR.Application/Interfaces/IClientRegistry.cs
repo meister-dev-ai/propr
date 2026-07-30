@@ -83,6 +83,15 @@ public interface IClientRegistry
     Task<bool> GetMultiPassUnionEnabledAsync(Guid clientId, CancellationToken ct = default);
 
     /// <summary>
+    ///     Returns whether the client has opted in to Code Insights collection.
+    ///     Defaults to <see langword="false" /> if the client does not exist, so an unknown client never
+    ///     starts collecting. The commercial capability gate applies in addition to this flag.
+    /// </summary>
+    /// <param name="clientId">Client identifier.</param>
+    /// <param name="ct">Cancellation token.</param>
+    Task<bool> GetCodeInsightsCollectionEnabledAsync(Guid clientId, CancellationToken ct = default);
+
+    /// <summary>
     ///     Returns whether linked work items / issues should be fetched and included in the review context
     ///     for the given client. Defaults to <see langword="true" /> if the client does not exist.
     /// </summary>

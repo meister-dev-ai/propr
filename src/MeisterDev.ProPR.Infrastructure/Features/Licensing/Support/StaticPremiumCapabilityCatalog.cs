@@ -36,6 +36,11 @@ public sealed class StaticPremiumCapabilityCatalog : IPremiumCapabilityCatalog
             "Budgeting",
             "A commercial license is required to set and enforce USD spend budgets, including in self-hosted deployments.",
             "Budgeting is currently disabled for this installation."),
+        new(
+            PremiumCapabilityKey.CodeInsights,
+            "Code Insights",
+            "A commercial license is required to collect and view code-quality insights, including in self-hosted deployments.",
+            "Code Insights is currently disabled for this installation."),
     ];
 
     private static readonly IReadOnlyDictionary<string, PremiumCapabilityDefinition> CapabilityMap =

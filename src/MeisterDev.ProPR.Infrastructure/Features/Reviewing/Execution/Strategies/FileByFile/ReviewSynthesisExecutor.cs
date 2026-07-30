@@ -157,6 +157,10 @@ internal sealed class ReviewSynthesisExecutor(
                         OriginPassIndex = finding.Provenance.UnionPassIndex,
                         OriginPassLens = finding.Provenance.UnionLens,
                         ScopeRelation = ReviewCommentScopeRelationMapper.Map(finding.ScopeRelation),
+                        OriginModelId = finding.Provenance.OriginModelId,
+                        OriginLogicalModelName = finding.Provenance.OriginLogicalModelName,
+                        OriginSymbolName = finding.Provenance.OriginSymbolName,
+                        OriginSymbolKind = finding.Provenance.OriginSymbolKind,
                     });
             var combinedComments = synthesizedComments.Concat(prWideComments).Concat(deduped).ToList();
 
@@ -589,6 +593,16 @@ internal sealed class ReviewSynthesisExecutor(
                     OriginPassIndex = finding.Provenance.UnionPassIndex,
                     OriginPassLens = finding.Provenance.UnionLens,
                     ScopeRelation = ReviewCommentScopeRelationMapper.Map(finding.ScopeRelation),
+
+                    // The model that produced the finding travels with the published comment, so a finding's
+                    // durable record can attribute it without the collection path re-deriving anything.
+                    OriginModelId = finding.Provenance.OriginModelId,
+                    OriginLogicalModelName = finding.Provenance.OriginLogicalModelName,
+
+                    // The definition the finding sits in travels with the published comment too, so the collected
+                    // record can count findings per part of the codebase without re-parsing anything.
+                    OriginSymbolName = finding.Provenance.OriginSymbolName,
+                    OriginSymbolKind = finding.Provenance.OriginSymbolKind,
                 })
             .ToList();
     }

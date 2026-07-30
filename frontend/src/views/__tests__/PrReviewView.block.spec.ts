@@ -30,6 +30,8 @@ vi.mock('@/services/jobsService', () => ({
 vi.mock('@/composables/useSession', () => ({
   useSession: () => ({
     hasClientRole: (clientId: string, minRole: number) => clientId === 'client-1' && (assignedAdmin ? 1 : 0) >= minRole,
+    // This spec is about the block controls; the licensed capability behind the Code Quality tab is not part of it.
+    isCapabilityAvailable: () => false,
   }),
 }))
 

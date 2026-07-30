@@ -464,7 +464,10 @@ internal sealed class GitLabPullRequestFetcher(
             note.Body ?? string.Empty,
             stableAuthorId,
             note.Id,
-            note.CreatedAt);
+            note.CreatedAt,
+            // Discussions already drop GitLab's own activity notes, and carrying the flag as well keeps the
+            // provider boundary uniform for anything that reads a thread without going through that filter.
+            note.System);
     }
 
     private static ChangedFileSummary MapSummary(GitLabMergeRequestChangeResponse change)

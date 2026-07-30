@@ -1,0 +1,81 @@
+/* Copyright (c) Andreas Rain. */
+/* Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms. */
+
+/*
+ * Shared panel chrome for the Code Insights views. Imported into each panel's scoped block rather than made
+ * global, so these class names cannot leak into unrelated widgets the way bare element selectors have before.
+ */
+
+.insights-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  padding: 1.25rem;
+  border: 1px solid var(--color-border);
+  border-radius: 0.9rem;
+  background: var(--color-surface);
+}
+
+.panel-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+.panel-kicker {
+  margin: 0;
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--color-accent);
+}
+
+.panel-header h3 {
+  margin: 0.2rem 0 0;
+  font-size: 1.15rem;
+  color: var(--color-text);
+}
+
+.panel-copy {
+  margin: 0.35rem 0 0;
+  max-width: 60ch;
+  font-size: 0.85rem;
+  line-height: 1.4;
+  color: var(--color-text-muted);
+}
+
+.panel-empty {
+  margin: 0;
+  padding: 1rem;
+  border: 1px dashed var(--color-border);
+  border-radius: 0.6rem;
+  color: var(--color-text-muted);
+  font-size: 0.9rem;
+  line-height: 1.45;
+}
+
+/*
+ * Tables in these panels use a row header for their first cell, which two global rules do not expect. The global
+ * hover paints `td` only, leaving the row header at the panel background, and the global `th` rule uppercases it.
+ * A row header here carries a file path, a definition name or a repository name, and in those, capitalization is
+ * information: "totalPullRequests" and "TotalPullRequests" are different symbols.
+ */
+.insights-panel tbody th {
+  text-transform: none;
+  letter-spacing: normal;
+  font-size: inherit;
+  color: var(--color-text);
+}
+
+.insights-panel tbody tr:hover th,
+.insights-panel tbody tr:hover td {
+  background: var(--surface-hover);
+}
+
+.insights-panel tbody th,
+.insights-panel tbody td {
+  vertical-align: middle;
+}

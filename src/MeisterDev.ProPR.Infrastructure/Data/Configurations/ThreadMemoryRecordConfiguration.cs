@@ -77,6 +77,31 @@ internal sealed class ThreadMemoryRecordConfiguration : IEntityTypeConfiguration
             .HasDefaultValue(MemorySource.ThreadResolved)
             .IsRequired();
 
+        builder.Property(r => r.CodeInsightFindingId)
+            .HasColumnName("code_insight_finding_id")
+            .IsRequired(false);
+
+        // A primitive collection, mapped by the provider rather than by a hand-written converter: Npgsql
+        // stores it as text[], and the in-memory provider used by the unit tests handles it too. Declaring
+        // the PostgreSQL column type here instead would collide with the in-memory provider's own mapping.
+        // An empty-array default, so adding the column to a table that already holds memories succeeds and
+        // every pre-existing record reads as "no keywords yet" rather than as null.
+        builder.PrimitiveCollection(r => r.Keywords)
+            .HasColumnName("keywords")
+            .HasDefaultValueSql("'{}'");
+
+        // The finding link is by value, with no foreign key: the insight store and the memory store keep
+        // independent lifecycles and a purge on either side must not cascade into the other. Indexed because
+        // the analysis that motivates the link joins memories to findings.
+        builder.HasIndex(r => r.CodeInsightFindingId)
+            .HasDatabaseName("ix_thread_memory_records_code_insight_finding_id");
+
+        // Keyword search is a containment test over an array, which a B-tree cannot serve. Declared the same
+        // way as the vector index below: the method is metadata the in-memory test provider simply ignores.
+        builder.HasIndex(r => r.Keywords)
+            .HasMethod("gin")
+            .HasDatabaseName("ix_thread_memory_records_keywords_gin");
+
         // Unique constraint: at-most-one record per ADO thread per client per repository.
         builder.HasIndex(r => new { r.ClientId, r.RepositoryId, r.ThreadId })
             .IsUnique()

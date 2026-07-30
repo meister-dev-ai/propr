@@ -146,7 +146,10 @@ public static class ReviewingModuleServiceCollectionExtensions
             sp.GetService<LocalReviewVerificationExecutor>(),
             sp.GetService<IReviewPipelineProfileProvider>(),
             sp.GetService<IProRVPrefilter>(),
-            sp.GetService<IReviewComplexityClassifier>()));
+            sp.GetService<IReviewComplexityClassifier>(),
+            sp.GetService<ILogicalModelResolver>(),
+            // The same structural analyzer the context stages use, so a finding can name the definition it sits in.
+            sp.GetService<IStructuralCodeAnalyzer>()));
         services.AddScoped<IFileByFileReviewOrchestrator>(sp => new FileByFileReviewOrchestrator(
             sp.GetRequiredService<IProtocolRecorder>(),
             sp.GetRequiredService<IJobRepository>(),
@@ -168,7 +171,10 @@ public static class ReviewingModuleServiceCollectionExtensions
             sp.GetService<ISummaryReconciliationService>(),
             // Lazy: resolved only when a pr_wide-scope pass entry runs, after this orchestrator is constructed, so
             // the PR-wide generator's dependency back on the file-by-file orchestrator does not form a DI cycle.
-            () => sp.GetService<IPrWideCandidateGenerator>()));
+            // The structural analyzer reaches the review through the FileReviewer above: this orchestrator never
+            // resolves a definition itself.
+            () => sp.GetService<IPrWideCandidateGenerator>(),
+            sp.GetService<ILogicalModelResolver>()));
         if (!hasDatabase)
         {
             services.AddScoped<IReviewWorkflowRunner, ReviewWorkflowRunner>();

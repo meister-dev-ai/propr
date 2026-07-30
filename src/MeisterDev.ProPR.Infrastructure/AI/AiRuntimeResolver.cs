@@ -5,6 +5,7 @@ using MeisterDev.ProPR.Application.DTOs;
 using MeisterDev.ProPR.Application.Exceptions;
 using MeisterDev.ProPR.Application.Features.Budgeting;
 using MeisterDev.ProPR.Application.Interfaces;
+using MeisterDev.ProPR.Application.Support;
 using MeisterDev.ProPR.Domain.Enums;
 using MeisterDev.ProPR.Domain.ValueObjects;
 using Microsoft.Extensions.AI;
@@ -38,8 +39,24 @@ public sealed class AiRuntimeResolver(
             return resolvedRole.Runtime;
         }
 
-        var resolved = await aiConnectionRepository.GetActiveBindingForPurposeAsync(clientId, purpose, ct)
-                       ?? throw new AiPurposeBindingNotConfiguredException(purpose);
+        var resolved = await aiConnectionRepository.GetActiveBindingForPurposeAsync(clientId, purpose, ct);
+
+        if (resolved is null)
+        {
+            // Last resort, and only once both lookups above have come up empty: try the purpose's fallback chain
+            // against the logical-model mapping. A client that configures models exclusively as logical models has
+            // no connection binding for the chain above to walk, so a purpose it has not mapped would otherwise
+            // resolve to nothing at all, which is how a newly introduced purpose ends up permanently unusable on
+            // an installation that has every model it needs.
+            var fallbackRole = await this.TryGetFallbackPurposeRoleAsync(clientId, purpose, ct);
+            if (fallbackRole is not null)
+            {
+                var resolvedFallback = await logicalModelResolver!.ResolveChatRuntimeAsync(clientId, fallbackRole, ct: ct);
+                return resolvedFallback.Runtime;
+            }
+
+            throw new AiPurposeBindingNotConfiguredException(purpose);
+        }
 
         if (!resolved.Model.SupportsChat)
         {
@@ -141,5 +158,36 @@ public sealed class AiRuntimeResolver(
 
         var roleName = await logicalModelCatalog.GetPurposeRoleAsync(clientId, purpose, ct);
         return string.IsNullOrEmpty(roleName) ? null : roleName;
+    }
+
+    /// <summary>
+    ///     Walks the purpose's fallback chain against the logical-model mapping, returning the first mapped role.
+    /// </summary>
+    /// <remarks>
+    ///     Deliberately not folded into <see cref="TryGetPurposeRoleAsync" />: that one is consulted first, and
+    ///     widening it would change which model an already-working purpose resolves to. This runs only after both
+    ///     the direct mapping and the connection binding (itself chain-walking) have found nothing, so it can
+    ///     only turn a failure into a resolution, never one resolution into another.
+    /// </remarks>
+    private async Task<string?> TryGetFallbackPurposeRoleAsync(
+        Guid clientId,
+        AiPurpose purpose,
+        CancellationToken ct)
+    {
+        if (logicalModelResolver is null || logicalModelCatalog is null)
+        {
+            return null;
+        }
+
+        foreach (var fallback in AiPurposeFallbacks.Chain(purpose))
+        {
+            var roleName = await logicalModelCatalog.GetPurposeRoleAsync(clientId, fallback, ct);
+            if (!string.IsNullOrEmpty(roleName))
+            {
+                return roleName;
+            }
+        }
+
+        return null;
     }
 }

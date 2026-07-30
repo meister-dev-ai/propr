@@ -17,13 +17,17 @@
     <nav class="app-nav">
       <RouterLink v-if="canViewClients" :to="{ name: 'clients' }" class="nav-link" :class="{ 'router-link-active': $route.name === 'clients' || $route.name === 'client-detail' }"><i class="fi fi-rr-users"></i> Clients</RouterLink>
       <RouterLink :to="{ name: 'reviews' }" class="nav-link" :class="{ 'router-link-active': $route.name === 'reviews' || $route.name === 'job-protocol' || $route.name === 'pr-review' }"><i class="fi fi-rr-search"></i> Reviews</RouterLink>
+      <!-- Absent rather than disabled when the capability is not licensed: a link that cannot go anywhere is
+           worse than no link. The route guard and the server both repeat the check. -->
+      <RouterLink v-if="canViewCodeQuality" :to="{ name: 'code-quality' }" class="nav-link" :class="{ 'router-link-active': $route.name === 'code-quality' }"><i class="fi fi-rr-chart-histogram"></i> Code Quality</RouterLink>
       <div v-if="hasAnyAdministrationAccess" class="nav-dropdown" @mouseenter="adminDropdownOpen = true" @mouseleave="adminDropdownOpen = false">
-        <button class="nav-link dropdown-toggle" :class="{ 'router-link-active': $route.name === 'tenant-directory' || $route.name === 'tenant-settings' || $route.name === 'tenant-members' || $route.name === 'users' || $route.name === 'thread-memory' || $route.name === 'provider-settings' || $route.name === 'licensing' }" @click="adminDropdownOpen = !adminDropdownOpen">
+        <button class="nav-link dropdown-toggle" :class="{ 'router-link-active': $route.name === 'tenant-directory' || $route.name === 'tenant-settings' || $route.name === 'tenant-members' || $route.name === 'users' || $route.name === 'thread-memory' || $route.name === 'provider-settings' || $route.name === 'licensing' || $route.name === 'reviewer-performance' }" @click="adminDropdownOpen = !adminDropdownOpen">
           <i class="fi fi-rr-shield-check"></i> Administration
           <i class="fi fi-rr-angle-small-down ml-1 text-xs"></i>
         </button>
         <div v-if="adminDropdownOpen" class="dropdown-menu">
           <RouterLink v-if="defaultTenantAdminRoute" :to="defaultTenantAdminRoute" class="dropdown-item" :class="{ 'active': $route.name === 'tenant-directory' || $route.name === 'tenant-settings' || $route.name === 'tenant-members' }" @click="adminDropdownOpen = false"><i class="fi fi-rr-building"></i> Tenants</RouterLink>
+          <RouterLink v-if="canViewReviewerPerformance" :to="{ name: 'reviewer-performance' }" class="dropdown-item" :class="{ 'active': $route.name === 'reviewer-performance' }" @click="adminDropdownOpen = false"><i class="fi fi-rr-chart-line-up"></i> Reviewer Performance</RouterLink>
           <RouterLink v-if="isAdmin" :to="{ name: 'licensing' }" class="dropdown-item" :class="{ 'active': $route.name === 'licensing' }" @click="adminDropdownOpen = false"><i class="fi fi-rr-badge"></i> Licensing</RouterLink>
           <RouterLink v-if="isAdmin" :to="{ name: 'provider-settings' }" class="dropdown-item" :class="{ 'active': $route.name === 'provider-settings' }" @click="adminDropdownOpen = false"><i class="fi fi-rr-plug-connection"></i> SCM Providers</RouterLink>
           <RouterLink v-if="isAdmin" :to="{ name: 'users' }" class="dropdown-item" :class="{ 'active': $route.name === 'users' }" @click="adminDropdownOpen = false"><i class="fi fi-rr-user"></i> Users</RouterLink>
@@ -63,11 +67,19 @@ import icon from '@/assets/logo_standalone.png'
 import githubMark from '@/assets/icons/github.svg?raw'
 
 const router = useRouter()
-const { logout: endSession, isAdmin, clientRoles, tenantRoles, edition } = useSession()
+const { logout: endSession, isAdmin, clientRoles, tenantRoles, edition, isCapabilityAvailable } = useSession()
 
 /** True for global admins or users with any visible client role. */
 const canViewClients = computed(
   () => isAdmin.value || Object.values(clientRoles.value).some((r) => r >= 0),
+)
+
+/**
+ * Client access plus the licence, which is the whole rule for the code-quality views. A licence is not a role, so
+ * an administrator of an installation without the capability sees no entry either.
+ */
+const canViewCodeQuality = computed(
+  () => canViewClients.value && isCapabilityAvailable('code-insights'),
 )
 
 const canAccessTenantAdministration = computed(
@@ -76,6 +88,14 @@ const canAccessTenantAdministration = computed(
 
 const hasAnyTenantAdminRole = computed(
   () => isAdmin.value || Object.values(tenantRoles.value).some((role) => role >= 1),
+)
+
+/**
+ * Reviewer performance judges the tool from AI-estimated evidence, so it sits with the other operator surfaces:
+ * platform administration or tenant administration, plus the licence.
+ */
+const canViewReviewerPerformance = computed(
+  () => hasAnyTenantAdminRole.value && isCapabilityAvailable('code-insights'),
 )
 
 const hasAnyAdministrationAccess = computed(

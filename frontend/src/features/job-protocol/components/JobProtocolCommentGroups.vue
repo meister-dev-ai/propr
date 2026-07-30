@@ -29,7 +29,13 @@
                         <div v-html="vm.renderMarkdown(comment.message)"></div>
                     </div>
                     <div
-                        v-if="(showOrigin && vm.commentOriginLabel(comment)) || comment.changedLineRelation === 'outsideChange'"
+                        v-if="
+                            (showOrigin &&
+                                (vm.commentOriginLabel(comment) ||
+                                    vm.commentModelLabel(comment) ||
+                                    vm.commentSymbolLabel(comment))) ||
+                            comment.changedLineRelation === 'outsideChange'
+                        "
                         class="comment-origin-row"
                     >
                         <button
@@ -43,6 +49,30 @@
                             <span class="origin-badge-lbl">found by</span>
                             {{ vm.commentOriginLabel(comment) }}
                         </button>
+
+                        <!-- Where in the file it sits: the definition its line falls inside, resolved from the
+                             file's own syntax. A line number says where; this says what. -->
+                        <span
+                            v-if="showOrigin && vm.commentSymbolLabel(comment)"
+                            class="symbol-badge"
+                            data-testid="symbol-badge"
+                            :title="`Inside ${comment.originSymbolKind?.toLowerCase() ?? 'definition'} ${vm.commentSymbolLabel(comment)}`"
+                        >
+                            <span class="origin-badge-lbl">in</span>
+                            {{ vm.commentSymbolLabel(comment) }}
+                        </span>
+
+                        <!-- Which model produced it. Shown beside the pass because "Pass 2" only answers half of
+                             "where did this come from" once passes can run on different models. -->
+                        <span
+                            v-if="showOrigin && vm.commentModelLabel(comment)"
+                            class="model-badge"
+                            data-testid="model-badge"
+                            :title="vm.commentModelTitle(comment) ?? undefined"
+                        >
+                            <span class="origin-badge-lbl">model</span>
+                            {{ vm.commentModelLabel(comment) }}
+                        </span>
                         <span
                             v-if="comment.changedLineRelation === 'outsideChange'"
                             class="scope-badge"
@@ -50,6 +80,50 @@
                             title="This finding is in pre-existing code, outside the lines this pull request changed."
                         >
                             Outside your changes
+                        </span>
+                    </div>
+
+                    <!-- Collected finding type, level, and qualifier. Classification is post-hoc, so a
+                         just-finished review legitimately has none yet: "not yet" is shown distinctly from
+                         "the model could not place this", and neither looks like a missing feature. -->
+                    <div
+                        v-if="comment.codeInsights"
+                        class="insight-row"
+                        data-testid="insight-row"
+                    >
+                        <template v-if="comment.codeInsights.status === 'classified'">
+                            <span
+                                v-for="tag in comment.codeInsights.coreTags"
+                                :key="`core-${tag}`"
+                                class="insight-badge insight-badge--core"
+                                data-testid="insight-core-tag"
+                            >{{ tag }}</span>
+                            <span
+                                v-for="tag in comment.codeInsights.customTags"
+                                :key="`custom-${tag}`"
+                                class="insight-badge insight-badge--custom"
+                                data-testid="insight-custom-tag"
+                                title="A type this client defined, not part of the comparable core set."
+                            >{{ tag }}</span>
+                            <span v-if="insightShape(comment.codeInsights)" class="insight-shape">
+                                {{ insightShape(comment.codeInsights) }}
+                            </span>
+                        </template>
+                        <span
+                            v-else-if="comment.codeInsights.status === 'pending'"
+                            class="insight-pending"
+                            data-testid="insight-pending"
+                            title="Findings are classified after the review finishes; this one has not been classified yet."
+                        >
+                            classifying…
+                        </span>
+                        <span
+                            v-else
+                            class="insight-pending"
+                            data-testid="insight-unclassifiable"
+                            title="Classification was attempted and did not produce a usable type for this finding."
+                        >
+                            not classified
                         </span>
                     </div>
                 </li>
@@ -60,8 +134,33 @@
 </template>
 
 <script setup lang="ts">
+import type { CodeInsightFindingClassification } from '@/services/codeInsightFindingsService'
 import type { JobProtocolViewModel } from '@/features/job-protocol/composables/useJobProtocolViewModel'
 import type { CommentGroupComment } from '../types'
+
+/** Prose for the level and qualifier axes, which are single-valued and read better together than as pills. */
+const LEVEL_LABELS: Record<string, string> = {
+    statement: 'statement',
+    member: 'method',
+    type: 'class',
+    file: 'file',
+    crossFile: 'cross-file',
+}
+
+/**
+ * Renders the level and qualifier as one short phrase, e.g. "missing, method-level". Both are optional:
+ * an older record classified before either axis existed simply shows nothing here.
+ */
+function insightShape(insight: CodeInsightFindingClassification): string {
+    const parts: string[] = []
+    if (insight.qualifier) {
+        parts.push(insight.qualifier)
+    }
+    if (insight.level) {
+        parts.push(`${LEVEL_LABELS[insight.level] ?? insight.level}-level`)
+    }
+    return parts.join(', ')
+}
 
 defineProps<{
     vm: JobProtocolViewModel
@@ -74,6 +173,46 @@ defineProps<{
 </script>
 
 <style scoped>
+.insight-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.35rem;
+    margin-top: 0.4rem;
+}
+
+.insight-badge {
+    display: inline-flex;
+    align-items: center;
+    font-size: 0.68rem;
+    padding: 0.1rem 0.45rem;
+    border-radius: var(--radius-pill, 999px);
+    border: 1px solid var(--color-border);
+    color: var(--color-text-muted);
+}
+
+/* Core types are the cross-client comparable vocabulary; custom ones are this client's own. The
+   distinction is worth seeing, because only the core set means the same thing everywhere. */
+.insight-badge--core {
+    border-style: solid;
+}
+
+.insight-badge--custom {
+    border-style: dashed;
+}
+
+.insight-shape {
+    font-size: 0.68rem;
+    color: var(--color-text-muted);
+    font-style: italic;
+}
+
+.insight-pending {
+    font-size: 0.68rem;
+    color: var(--color-text-muted);
+    font-style: italic;
+}
+
 .comments-empty-state {
     text-align: center;
     color: var(--color-text-muted);
@@ -156,6 +295,34 @@ defineProps<{
 
 .origin-badge-lbl {
     color: var(--color-text-muted);
+}
+
+/* Same shape as the model badge: provenance, not navigation. */
+.symbol-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    font-size: 0.72rem;
+    color: var(--color-text);
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid var(--color-border);
+    padding: 0.15rem 0.5rem;
+    border-radius: var(--radius-xs);
+    font-family: var(--font-mono, inherit);
+}
+
+/* Not a button: the pass badge navigates to its trace, and a model has no trace of its own to open. */
+.model-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    font-size: 0.72rem;
+    color: var(--color-text);
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid var(--color-border);
+    padding: 0.15rem 0.5rem;
+    border-radius: var(--radius-xs);
+    font-family: var(--font-mono, inherit);
 }
 
 .scope-badge {

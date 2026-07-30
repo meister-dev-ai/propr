@@ -16,11 +16,13 @@ const detailTabs = [
   'procursor',
   'ai',
   'budget',
+  'code-insights',
   'history',
   'dismissals',
   'prompt-overrides',
   'usage',
   'spend',
+  'code-quality',
 ] as const
 
 export type DetailTab = (typeof detailTabs)[number]
@@ -46,6 +48,7 @@ export interface ClientDetailDto {
   budgetConfig?: BudgetConfig | null
   minimumSeverityToPost?: CommentSeverity | null
   autoResolveSeverities?: CommentSeverity[] | null
+  codeInsightsCollectionEnabled?: boolean | null
 }
 
 export interface ReviewProfileCatalogItemDto {
@@ -82,6 +85,7 @@ export interface ClientDetailViewModel {
   editedBaselineReasoningEffort: Ref<ReviewReasoningEffort>
   editedMinimumSeverityToPost: Ref<CommentSeverity>
   editedAutoResolveSeverities: Ref<CommentSeverity[]>
+  editedCodeInsightsCollectionEnabled: Ref<boolean>
   editedMonthlyBudgetSoftCapUsd: Ref<string>
   editedMonthlyBudgetHardCapUsd: Ref<string>
   editedPullRequestBudgetSoftCapUsd: Ref<string>
@@ -101,6 +105,8 @@ export interface ClientDetailViewModel {
   isCrawlConfigsAvailable: ComputedRef<boolean>
   isBudgetingAvailable: ComputedRef<boolean>
   budgetingUpgradeMessage: ComputedRef<string>
+  isCodeInsightsAvailable: ComputedRef<boolean>
+  codeInsightsUpgradeMessage: ComputedRef<string>
   isUsageTabAvailable: ComputedRef<boolean>
   loadClient: () => Promise<void>
   saveDisplayName: () => Promise<void>
@@ -109,6 +115,7 @@ export interface ClientDetailViewModel {
   saveReviewProfile: () => Promise<void>
   saveBudgetConfig: () => Promise<void>
   savePostConfiguration: () => Promise<void>
+  saveCodeInsightsCollection: () => Promise<void>
   isAdvancedSettingsButtonEnabled: () => boolean
   isBudgetButtonEnabled: () => boolean
   isReviewProfileButtonEnabled: () => boolean
@@ -334,6 +341,7 @@ export function useClientDetailViewModel(options: UseClientDetailViewModelOption
   const editedBaselineReasoningEffort = ref<ReviewReasoningEffort>('none')
   const editedMinimumSeverityToPost = ref<CommentSeverity>('info')
   const editedAutoResolveSeverities = ref<CommentSeverity[]>([])
+  const editedCodeInsightsCollectionEnabled = ref(false)
   const editedMonthlyBudgetSoftCapUsd = ref('')
   const editedMonthlyBudgetHardCapUsd = ref('')
   const editedPullRequestBudgetSoftCapUsd = ref('')
@@ -357,6 +365,11 @@ export function useClientDetailViewModel(options: UseClientDetailViewModelOption
   const budgetingCapability = computed(() => getCapability('budgeting'))
   const isBudgetingAvailable = computed(() => budgetingCapability.value?.isAvailable === true)
   const budgetingUpgradeMessage = computed(() => budgetingCapability.value?.message ?? '')
+  const codeInsightsCapability = computed(() => getCapability('code-insights'))
+  const isCodeInsightsAvailable = computed(
+    () => codeInsightsCapability.value?.isAvailable === true,
+  )
+  const codeInsightsUpgradeMessage = computed(() => codeInsightsCapability.value?.message ?? '')
   const isUsageTabAvailable = computed(() => isProCursorTokenUsageReportingEnabled)
   const availableTabs = computed<DetailTab[]>(() => {
     const tabs: DetailTab[] = ['history']
@@ -396,6 +409,7 @@ export function useClientDetailViewModel(options: UseClientDetailViewModelOption
     editedBaselineReasoningEffort.value = nextClient.baselineReasoningEffort ?? 'none'
     editedMinimumSeverityToPost.value = nextClient.minimumSeverityToPost ?? 'info'
     editedAutoResolveSeverities.value = [...(nextClient.autoResolveSeverities ?? [])]
+    editedCodeInsightsCollectionEnabled.value = Boolean(nextClient.codeInsightsCollectionEnabled)
     editedMonthlyBudgetSoftCapUsd.value = capToInput(nextClient.budgetConfig?.monthlySoftCapUsd)
     editedMonthlyBudgetHardCapUsd.value = capToInput(nextClient.budgetConfig?.monthlyHardCapUsd)
     editedPullRequestBudgetSoftCapUsd.value = capToInput(nextClient.budgetConfig?.pullRequestSoftCapUsd)
@@ -657,6 +671,29 @@ export function useClientDetailViewModel(options: UseClientDetailViewModelOption
     }
   }
 
+  async function saveCodeInsightsCollection() {
+    if (!canManageClient.value || !client.value) return
+    saving.value = true
+    saveError.value = ''
+    try {
+      // Opting in starts forward-only collection; opting out stops further collection and leaves what was
+      // already collected to the retention window. The commercial gate is enforced server-side regardless of
+      // this flag, so a client on Community can hold it set and still collect nothing.
+      const result = await patchClientFn(clientId, {
+        codeInsightsCollectionEnabled: editedCodeInsightsCollectionEnabled.value,
+      })
+      if (isFailedPatch(result)) {
+        saveError.value = extractValidationMessage(result.error, 'Failed to save the Code Insights setting.')
+        return
+      }
+      applyClient(result.data as ClientDetailDto | null | undefined)
+    } catch {
+      saveError.value = 'Failed to save the Code Insights setting.'
+    } finally {
+      saving.value = false
+    }
+  }
+
   async function saveReviewProfile() {
     if (!canManageClient.value || !client.value) return
     saving.value = true
@@ -763,6 +800,7 @@ export function useClientDetailViewModel(options: UseClientDetailViewModelOption
     editedBaselineReasoningEffort,
     editedMinimumSeverityToPost,
     editedAutoResolveSeverities,
+    editedCodeInsightsCollectionEnabled,
     editedMonthlyBudgetSoftCapUsd,
     editedMonthlyBudgetHardCapUsd,
     editedPullRequestBudgetSoftCapUsd,
@@ -781,6 +819,8 @@ export function useClientDetailViewModel(options: UseClientDetailViewModelOption
     providerUpgradeMessage,
     isCrawlConfigsAvailable,
     isBudgetingAvailable,
+    isCodeInsightsAvailable,
+    codeInsightsUpgradeMessage,
     budgetingUpgradeMessage,
     isUsageTabAvailable,
     loadClient,
@@ -790,6 +830,7 @@ export function useClientDetailViewModel(options: UseClientDetailViewModelOption
     saveReviewProfile,
     saveBudgetConfig,
     savePostConfiguration,
+    saveCodeInsightsCollection,
     isAdvancedSettingsButtonEnabled,
     isBudgetButtonEnabled,
     isReviewProfileButtonEnabled,

@@ -24,7 +24,7 @@ export interface PullRequestIdentity {
   pullRequestId: number
 }
 
-function getJobsBaseUrl(): string {
+export function getJobsBaseUrl(): string {
   return getActiveRuntime().apiBaseUrl
 }
 

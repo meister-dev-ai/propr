@@ -122,6 +122,28 @@ const router = createRouter({
       meta: { requiresAuth: true, requiresAdmin: true },
     },
     {
+      path: '/code-quality',
+      name: 'code-quality',
+      component: () => import('@/features/code-insights/views/CodeQualityView.vue'),
+      // What a developer needs from the collected findings: client access plus the licence, no extra role. The
+      // capability check mirrors the nav check so a deep link cannot reach what a hidden link would not offer;
+      // the server denies it too, so this guard is a courtesy rather than the boundary.
+      meta: { requiresAuth: true, requiresClientAccess: true, requiresCapability: 'code-insights' },
+    },
+    {
+      path: '/reviewer-performance',
+      name: 'reviewer-performance',
+      component: () => import('@/features/code-insights/views/ReviewerPerformanceView.vue'),
+      // Judging the reviewer is an operator's job, and the evidence underneath it is AI-estimated and
+      // uncalibrated, so it sits with the other Administration entries rather than in front of every developer.
+      meta: { requiresAuth: true, requiresAnyTenantAdmin: true, requiresCapability: 'code-insights' },
+    },
+    {
+      // The area used to be one page. A bookmark should land somewhere useful rather than on a 404.
+      path: '/code-insights',
+      redirect: { name: 'code-quality' },
+    },
+    {
       path: '/thread-memory',
       name: 'thread-memory',
       component: () => import('@/features/thread-memory/views/ThreadMemoryView.vue'),
@@ -189,6 +211,21 @@ function resolveTenantDirectoryGuard(
   return hasAnyTenantAdminRole ? undefined : ACCESS_DENIED
 }
 
+/**
+ * Denies a route reserved to operators. Satisfied by a platform administrator or by administering any tenant,
+ * unlike the tenant-scoped guard below, which checks the tenant named in the route.
+ */
+function resolveAnyTenantAdminGuard(
+  to: RouteLocationNormalizedGeneric,
+  isAdmin: boolean,
+  tenantRoles: Record<string, number>,
+): RouteLocationRaw | undefined {
+  if (!to.meta.requiresAnyTenantAdmin || isAdmin) {
+    return undefined
+  }
+  return Object.values(tenantRoles).some((role) => role >= RoleLevel.Administrator) ? undefined : ACCESS_DENIED
+}
+
 function resolveTenantAdminGuard(
   to: RouteLocationNormalizedGeneric,
   isAdmin: boolean,
@@ -235,6 +272,21 @@ function resolveClientAccessGuard(
   return hasAnyMatchingRole ? undefined : ACCESS_DENIED
 }
 
+/**
+ * Denies a route whose licensed capability is unavailable. Applies to admins too: a licence is not a role, and
+ * an administrator of an installation that has not bought a capability still cannot use it.
+ */
+function resolveCapabilityGuard(
+  to: RouteLocationNormalizedGeneric,
+  isCapabilityAvailable: (key: string) => boolean,
+): RouteLocationRaw | undefined {
+  const required = to.meta.requiresCapability
+  if (typeof required !== 'string') {
+    return undefined
+  }
+  return isCapabilityAvailable(required) ? undefined : ACCESS_DENIED
+}
+
 function resolveLoginRedirectGuard(
   to: RouteLocationNormalizedGeneric,
   isAuthenticated: boolean,
@@ -243,7 +295,16 @@ function resolveLoginRedirectGuard(
 }
 
 router.beforeEach((to) => {
-  const { isAuthenticated, isAdmin, hasClientRole, hasTenantRole, clientRoles, tenantRoles, edition } = useSession()
+  const {
+    isAuthenticated,
+    isAdmin,
+    hasClientRole,
+    hasTenantRole,
+    clientRoles,
+    tenantRoles,
+    edition,
+    isCapabilityAvailable,
+  } = useSession()
 
   if (to.meta.requiresAuth && !isAuthenticated.value) {
     return { name: 'login' }
@@ -256,6 +317,8 @@ router.beforeEach((to) => {
   }
 
   return (
+    resolveCapabilityGuard(to, isCapabilityAvailable) ??
+    resolveAnyTenantAdminGuard(to, isAdmin.value, tenantRoles.value) ??
     resolveTenantDirectoryGuard(to, isAdmin.value, tenantRoles.value) ??
     resolveTenantAdminGuard(to, isAdmin.value, hasTenantRole) ??
     resolveClientAccessGuard(to, isAdmin.value, hasClientRole, clientRoles.value) ??

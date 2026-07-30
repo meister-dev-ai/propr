@@ -636,7 +636,10 @@ public sealed partial class AdoPrFetcher(
                             c.Id,
                             c.PublishedDate != default
                                 ? new DateTimeOffset(c.PublishedDate, TimeSpan.Zero)
-                                : null))
+                                : null,
+                            // Azure DevOps returns its own activity entries ("added a reviewer", a vote, a policy
+                            // result) through this same API, authored by a system identity and typed as System.
+                            c.CommentType == CommentType.System))
                         .ToList()
                         .AsReadOnly(),
                     t.Status.ToString()))

@@ -4880,6 +4880,514 @@
         }
       }
     },
+    "/clients/{clientId}/code-insights/taxonomy": {
+      "get": {
+        "tags": [
+          "ClientCodeInsightTaxonomy"
+        ],
+        "summary": "Returns the client's full finding-type vocabulary, including retired custom tags.",
+        "parameters": [
+          {
+            "name": "clientId",
+            "in": "path",
+            "description": "Client identifier.",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The vocabulary.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/CodeInsightTaxonomyDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CodeInsightTaxonomyDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CodeInsightTaxonomyDto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid credentials.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Caller lacks required client access.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/clients/{clientId}/code-insights/taxonomy/custom-tags": {
+      "post": {
+        "tags": [
+          "ClientCodeInsightTaxonomy"
+        ],
+        "summary": "Creates a custom finding type for the client.",
+        "parameters": [
+          {
+            "name": "clientId",
+            "in": "path",
+            "description": "Client identifier.",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "description": "The tag to create.",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CodeInsightCustomTagWriteRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CodeInsightCustomTagWriteRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/CodeInsightCustomTagWriteRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "The tag was created.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/CodeInsightCustomTagDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CodeInsightCustomTagDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CodeInsightCustomTagDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The request was malformed.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid credentials.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Caller lacks required client access.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "The slug shadows a core type or is already used by this client.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/clients/{clientId}/code-insights/taxonomy/custom-tags/{tagId}": {
+      "put": {
+        "tags": [
+          "ClientCodeInsightTaxonomy"
+        ],
+        "summary": "Updates a custom finding type. Existing assignments are unaffected.",
+        "parameters": [
+          {
+            "name": "clientId",
+            "in": "path",
+            "description": "Client identifier.",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "tagId",
+            "in": "path",
+            "description": "Custom tag identifier.",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "description": "The new slug, display name, and definition.",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CodeInsightCustomTagWriteRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CodeInsightCustomTagWriteRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/CodeInsightCustomTagWriteRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The tag was updated.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/CodeInsightCustomTagDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CodeInsightCustomTagDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CodeInsightCustomTagDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The request was malformed.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid credentials.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Caller lacks required client access.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "The tag does not exist for this client.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "The slug shadows a core type or is already used by this client.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/clients/{clientId}/code-insights/taxonomy/custom-tags/{tagId}/retire": {
+      "post": {
+        "tags": [
+          "ClientCodeInsightTaxonomy"
+        ],
+        "summary": "Retires a custom finding type. It stops being offered for new findings; findings that already\ncarry it keep resolving.",
+        "parameters": [
+          {
+            "name": "clientId",
+            "in": "path",
+            "description": "Client identifier.",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "tagId",
+            "in": "path",
+            "description": "Custom tag identifier.",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The tag is retired.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/CodeInsightCustomTagDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CodeInsightCustomTagDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CodeInsightCustomTagDto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid credentials.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Caller lacks required client access.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "The tag does not exist for this client.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/clients/{clientId}/logical-models": {
       "get": {
         "tags": [
@@ -8244,6 +8752,810 @@
         }
       }
     },
+    "/code-quality/types-over-time": {
+      "get": {
+        "tags": [
+          "CodeQuality"
+        ],
+        "summary": "Returns the counted type series: \"what kinds of problem does this codebase keep producing\".",
+        "parameters": [
+          {
+            "name": "from",
+            "in": "query",
+            "description": "Inclusive start of the window, by review date. Defaults to 30 days ago.",
+            "schema": {
+              "type": "string",
+              "format": "date"
+            }
+          },
+          {
+            "name": "to",
+            "in": "query",
+            "description": "Inclusive end of the window, by review date. Defaults to today.",
+            "schema": {
+              "type": "string",
+              "format": "date"
+            }
+          },
+          {
+            "name": "bucket",
+            "in": "query",
+            "description": "Bucket size: `day`, `week`, or `month`. Defaults to day.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "clientId",
+            "in": "query",
+            "description": "Narrows to one client the caller may already see.",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "repositoryId",
+            "in": "query",
+            "description": "Narrows to one repository: the usual case for this audience.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "pullRequestId",
+            "in": "query",
+            "description": "Narrows to one pull request, for the view embedded in a review.",
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          },
+          {
+            "name": "filePath",
+            "in": "query",
+            "description": "Narrows to one file.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The series, possibly empty.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/CodeInsightTypeSeriesResponse"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CodeInsightTypeSeriesResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CodeInsightTypeSeriesResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid credentials.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Caller has no client access, lacks the licence, or asked for a client it cannot see.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/code-quality/concentration": {
+      "get": {
+        "tags": [
+          "CodeQuality"
+        ],
+        "summary": "Returns the top scopes by finding count at the requested grain: \"where does it keep happening\".",
+        "description": "Also how a caller finds the repository worth landing on: ranked at the repository grain, the first row is\nthe busiest repository the caller can see.",
+        "parameters": [
+          {
+            "name": "grain",
+            "in": "query",
+            "description": "Grain: `client`, `repository`, `pullRequest`, `file`, or `job`.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "topN",
+            "in": "query",
+            "description": "How many rows to return. Clamped to 1–100.",
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "default": 10
+            }
+          },
+          {
+            "name": "from",
+            "in": "query",
+            "description": "Inclusive start of the window. Defaults to 30 days ago.",
+            "schema": {
+              "type": "string",
+              "format": "date"
+            }
+          },
+          {
+            "name": "to",
+            "in": "query",
+            "description": "Inclusive end of the window. Defaults to today.",
+            "schema": {
+              "type": "string",
+              "format": "date"
+            }
+          },
+          {
+            "name": "clientId",
+            "in": "query",
+            "description": "Narrows to one client the caller may already see.",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "repositoryId",
+            "in": "query",
+            "description": "Narrows to one repository, for drilling from a repository into its files.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "pullRequestId",
+            "in": "query",
+            "description": "Narrows to one pull request, for the view embedded in a review.",
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The ranking, possibly empty.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/CodeInsightConcentrationResponse"
+                  }
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/CodeInsightConcentrationResponse"
+                  }
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/CodeInsightConcentrationResponse"
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid credentials.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Caller has no client access, lacks the licence, or asked for a client it cannot see.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/code-quality/repositories": {
+      "get": {
+        "tags": [
+          "CodeQuality"
+        ],
+        "summary": "Returns the repository directory, every repository with findings in the window, busiest first, with the\ntotals across them.",
+        "description": "What a reader picks from. Everything else on this surface describes one codebase, and codebases are not\ncomparable to each other on anything but volume: they differ in size, language, age, and how much of them\na review looks at. So this read deliberately ignores a repository narrowing: it is the list of\nalternatives, and narrowing it to the current choice would hide them.",
+        "parameters": [
+          {
+            "name": "from",
+            "in": "query",
+            "description": "Inclusive start of the window, by review date. Defaults to 30 days ago.",
+            "schema": {
+              "type": "string",
+              "format": "date"
+            }
+          },
+          {
+            "name": "to",
+            "in": "query",
+            "description": "Inclusive end of the window, by review date. Defaults to today.",
+            "schema": {
+              "type": "string",
+              "format": "date"
+            }
+          },
+          {
+            "name": "clientId",
+            "in": "query",
+            "description": "Narrows to one client the caller may already see.",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The directory, possibly empty.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/CodeInsightRepositoryDirectoryResponse"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CodeInsightRepositoryDirectoryResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CodeInsightRepositoryDirectoryResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid credentials.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Caller has no client access, lacks the licence, or asked for a client it cannot see.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/code-quality/hotspots": {
+      "get": {
+        "tags": [
+          "CodeQuality"
+        ],
+        "summary": "Returns the file hotspots: \"which files keep producing findings, and how many per pull request\".",
+        "description": "\nHistory by definition, so a pull-request filter is not honoured here. What a pull request can do is\n                    choose the files: filesFromPullRequestId restricts the ranking to the files that\n                    pull request raised findings in, while every count still spans every pull request in scope. That is\n                    what lets the view embedded in a review say \"this file has produced thirty findings before today\".\n\nThe averages are over the pull requests that raised at least one finding in a file. That is the only\n                    denominator the collection can see, and it is narrower than \"pull requests that touched the file\",\n                    a caller must not present it as the latter.",
+        "parameters": [
+          {
+            "name": "from",
+            "in": "query",
+            "description": "Inclusive start of the window, by review date. Defaults to 30 days ago.",
+            "schema": {
+              "type": "string",
+              "format": "date"
+            }
+          },
+          {
+            "name": "to",
+            "in": "query",
+            "description": "Inclusive end of the window, by review date. Defaults to today.",
+            "schema": {
+              "type": "string",
+              "format": "date"
+            }
+          },
+          {
+            "name": "clientId",
+            "in": "query",
+            "description": "Narrows to one client the caller may already see.",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "repositoryId",
+            "in": "query",
+            "description": "Narrows to one repository.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "filesFromPullRequestId",
+            "in": "query",
+            "description": "Restricts the files considered to those one pull request found something in.",
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          },
+          {
+            "name": "groupBy",
+            "in": "query",
+            "description": "`file` (default) or `symbol`. Grouped by symbol the rows are definitions within their files, and\n                only findings the file's syntax placed are counted: the remainder comes back as `unplacedFindings`.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "topN",
+            "in": "query",
+            "description": "How many rows to return. Clamped to 1–200.",
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "default": 25
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The hotspots, possibly empty.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/CodeInsightHotspotResponse"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CodeInsightHotspotResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CodeInsightHotspotResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid credentials.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Caller has no client access, lacks the licence, or asked for a client it cannot see.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/code-quality/survival": {
+      "get": {
+        "tags": [
+          "CodeQuality"
+        ],
+        "summary": "Returns how much of what was raised stuck: \"of the problems reviews found here, how many were still\nbeing reported when the pull request finished\".",
+        "description": "Pull requests reviewed only once are excluded, because every problem in them is trivially still present\nat the newest increment; including them would report near-perfect persistence for work that was never\ngiven the chance to shed anything.",
+        "parameters": [
+          {
+            "name": "from",
+            "in": "query",
+            "description": "Inclusive start of the window, by review date. Defaults to 30 days ago.",
+            "schema": {
+              "type": "string",
+              "format": "date"
+            }
+          },
+          {
+            "name": "to",
+            "in": "query",
+            "description": "Inclusive end of the window, by review date. Defaults to today.",
+            "schema": {
+              "type": "string",
+              "format": "date"
+            }
+          },
+          {
+            "name": "clientId",
+            "in": "query",
+            "description": "Narrows to one client the caller may already see.",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "repositoryId",
+            "in": "query",
+            "description": "Narrows to one repository.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "pullRequestId",
+            "in": "query",
+            "description": "Narrows to one pull request, for the view embedded in a review. A pull request reviewed only once still\nreports nothing, for the reason above.",
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          },
+          {
+            "name": "topN",
+            "in": "query",
+            "description": "How many pull requests to break out. Clamped to 1–50.",
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "default": 10
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The survival counts, possibly empty.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/CodeInsightSurvivalReport"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CodeInsightSurvivalReport"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CodeInsightSurvivalReport"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid credentials.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Caller has no client access, lacks the licence, or asked for a client it cannot see.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/code-quality/findings": {
+      "get": {
+        "tags": [
+          "CodeQuality"
+        ],
+        "summary": "Returns the findings behind a number, so anything on a view can be opened up and checked.",
+        "parameters": [
+          {
+            "name": "from",
+            "in": "query",
+            "description": "Inclusive start of the window, by review date. Defaults to 30 days ago.",
+            "schema": {
+              "type": "string",
+              "format": "date"
+            }
+          },
+          {
+            "name": "to",
+            "in": "query",
+            "description": "Inclusive end of the window, by review date. Defaults to today.",
+            "schema": {
+              "type": "string",
+              "format": "date"
+            }
+          },
+          {
+            "name": "clientId",
+            "in": "query",
+            "description": "Narrows to one client the caller may already see.",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "repositoryId",
+            "in": "query",
+            "description": "Narrows to one repository.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "pullRequestId",
+            "in": "query",
+            "description": "Narrows to one pull request.",
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          },
+          {
+            "name": "filePath",
+            "in": "query",
+            "description": "Narrows to one file.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "coreType",
+            "in": "query",
+            "description": "Narrows to one core type slug: what a click on a type series means.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "symbolName",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "disposition",
+            "in": "query",
+            "description": "Narrows to one outcome.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "description": "Maximum rows. Clamped to 1–200.",
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "default": 50
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The findings, possibly empty.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/CodeInsightFindingResponse"
+                  }
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/CodeInsightFindingResponse"
+                  }
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/CodeInsightFindingResponse"
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid credentials.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Caller has no client access, lacks the licence, or asked for a client it cannot see.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/clients/{clientId}/reviewing/dismiss-finding": {
       "post": {
         "tags": [
@@ -8573,6 +9885,228 @@
           },
           "404": {
             "description": "No identity found with that display name.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/reviewing/jobs/{id}/code-insights/findings": {
+      "get": {
+        "tags": [
+          "JobCodeInsights"
+        ],
+        "summary": "Returns the classification of each finding of the job, keyed by the finding's position in the job's\nreview result. Empty when nothing was collected for the job, when Code Insights is not licensed, or\nwhen the slice is not registered: an empty list rather than an error, because \"no tags\" is a normal\nstate a review view has to render anyway.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "Review job identifier.",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Classifications returned, possibly empty.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/CodeInsightFindingClassificationView"
+                  }
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/CodeInsightFindingClassificationView"
+                  }
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/CodeInsightFindingClassificationView"
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid credentials.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Caller lacks access to the job's client.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Job not found.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/jobs/{id}/code-insights/findings": {
+      "get": {
+        "tags": [
+          "JobCodeInsights"
+        ],
+        "summary": "Returns the classification of each finding of the job, keyed by the finding's position in the job's\nreview result. Empty when nothing was collected for the job, when Code Insights is not licensed, or\nwhen the slice is not registered: an empty list rather than an error, because \"no tags\" is a normal\nstate a review view has to render anyway.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "Review job identifier.",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Classifications returned, possibly empty.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/CodeInsightFindingClassificationView"
+                  }
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/CodeInsightFindingClassificationView"
+                  }
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/CodeInsightFindingClassificationView"
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid credentials.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Caller lacks access to the job's client.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Job not found.",
             "content": {
               "text/plain": {
                 "schema": {
@@ -12998,6 +14532,732 @@
           },
           "404": {
             "description": "No diff is retained for the file.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/reviewer-performance/quality": {
+      "get": {
+        "tags": [
+          "ReviewerPerformance"
+        ],
+        "summary": "Returns both metric lenses over the window (\"is the reviewer right and improving\" and \"do humans want\nwhat it says\") as series, as totals, and with the direction each moved.",
+        "parameters": [
+          {
+            "name": "from",
+            "in": "query",
+            "description": "Inclusive start of the window. Defaults to 30 days ago.",
+            "schema": {
+              "type": "string",
+              "format": "date"
+            }
+          },
+          {
+            "name": "to",
+            "in": "query",
+            "description": "Inclusive end of the window. Defaults to today.",
+            "schema": {
+              "type": "string",
+              "format": "date"
+            }
+          },
+          {
+            "name": "bucket",
+            "in": "query",
+            "description": "Bucket size: `day`, `week`, or `month`. Defaults to week.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "clientId",
+            "in": "query",
+            "description": "Narrows to one client the caller administers.",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "repositoryId",
+            "in": "query",
+            "description": "Narrows to one repository.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Both lenses, possibly empty.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/CodeInsightQualityResponse"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CodeInsightQualityResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CodeInsightQualityResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid credentials.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Caller does not administer a tenant, lacks the licence, or named a client it cannot see.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/reviewer-performance/by-grain": {
+      "get": {
+        "tags": [
+          "ReviewerPerformance"
+        ],
+        "summary": "Returns correctness grouped by scope: whether the reviewer is working everywhere, or one client,\nrepository, or pull request is carrying the whole shortfall.",
+        "description": "\nOnly the grains a seal has. A measurement is sealed per pull request, so client, repository, and pull\n                    request are meaningful and finer grains are not; asking for one is answered at the pull-request grain\n                    rather than with an empty list. Every row is computed from its own summed counts, never by averaging\n                    the rows beneath it, which would weight a pull request with one finding like one with a hundred.\n\n`model` groups by what produced the findings instead of by where they landed: the reading that\n                    answers whether a cheaper model would have done. It comes from the findings rather than the seals,\n                    because one pull request can be reviewed by several models, and it reports only the ratios a model can\n                    be held to: precision and acceptance, never recall or F1.",
+        "parameters": [
+          {
+            "name": "grain",
+            "in": "query",
+            "description": "Grain: `client`, `repository`, `pullRequest`, or `model`. Defaults to repository.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "from",
+            "in": "query",
+            "description": "Inclusive start of the window, by seal date. Defaults to 30 days ago.",
+            "schema": {
+              "type": "string",
+              "format": "date"
+            }
+          },
+          {
+            "name": "to",
+            "in": "query",
+            "description": "Inclusive end of the window, by seal date. Defaults to today.",
+            "schema": {
+              "type": "string",
+              "format": "date"
+            }
+          },
+          {
+            "name": "clientId",
+            "in": "query",
+            "description": "Narrows to one client the caller administers.",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "repositoryId",
+            "in": "query",
+            "description": "Narrows to one repository.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The grouped metrics, possibly empty.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/CodeInsightScopedMetricResponse"
+                  }
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/CodeInsightScopedMetricResponse"
+                  }
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/CodeInsightScopedMetricResponse"
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid credentials.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Caller does not administer a tenant, lacks the licence, or named a client it cannot see.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/reviewer-performance/misses": {
+      "get": {
+        "tags": [
+          "ReviewerPerformance"
+        ],
+        "summary": "Returns the harvested human threads (what the reviewer did not raise) with all three judgements,\nincluding the threads that did not qualify.",
+        "description": "The non-qualifying rows are the point, not noise: recall depends on where the \"should have caught this\"\nline sits, and nobody can calibrate that line without seeing what it currently excludes. They are also\nthe most easily misread data in the product, which is why this read sits behind administration.",
+        "parameters": [
+          {
+            "name": "from",
+            "in": "query",
+            "description": "Inclusive start of the window, by harvest date. Defaults to 30 days ago.",
+            "schema": {
+              "type": "string",
+              "format": "date"
+            }
+          },
+          {
+            "name": "to",
+            "in": "query",
+            "description": "Inclusive end of the window, by harvest date. Defaults to today.",
+            "schema": {
+              "type": "string",
+              "format": "date"
+            }
+          },
+          {
+            "name": "clientId",
+            "in": "query",
+            "description": "Narrows to one client the caller administers.",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "repositoryId",
+            "in": "query",
+            "description": "Narrows to one repository.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "pullRequestId",
+            "in": "query",
+            "description": "Narrows to one pull request.",
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "description": "Maximum rows. Clamped to 1–200.",
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "default": 50
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The harvested threads, possibly empty.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/CodeInsightMissResponse"
+                  }
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/CodeInsightMissResponse"
+                  }
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/CodeInsightMissResponse"
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid credentials.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Caller does not administer a tenant, lacks the licence, or named a client it cannot see.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/reviewer-performance/findings": {
+      "get": {
+        "tags": [
+          "ReviewerPerformance"
+        ],
+        "summary": "Returns the findings behind a reviewer-performance number: the false positives behind a precision\nfigure, the fixes behind an acceptance rate.",
+        "parameters": [
+          {
+            "name": "from",
+            "in": "query",
+            "description": "Inclusive start of the window, by review date. Defaults to 30 days ago.",
+            "schema": {
+              "type": "string",
+              "format": "date"
+            }
+          },
+          {
+            "name": "to",
+            "in": "query",
+            "description": "Inclusive end of the window, by review date. Defaults to today.",
+            "schema": {
+              "type": "string",
+              "format": "date"
+            }
+          },
+          {
+            "name": "clientId",
+            "in": "query",
+            "description": "Narrows to one client the caller administers.",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "repositoryId",
+            "in": "query",
+            "description": "Narrows to one repository.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "disposition",
+            "in": "query",
+            "description": "Narrows to one outcome: what a click on an outcome means.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "description": "Maximum rows. Clamped to 1–200.",
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "default": 50
+            }
+          },
+          {
+            "name": "rejectionReason",
+            "in": "query",
+            "description": "Narrows to one rejection reason: what a click on a reason in the distribution means. A reason already\nimplies its outcome, so it needs no disposition beside it.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The findings, possibly empty.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/CodeInsightFindingResponse"
+                  }
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/CodeInsightFindingResponse"
+                  }
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/CodeInsightFindingResponse"
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid credentials.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Caller does not administer a tenant, lacks the licence, or named a client it cannot see.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/reviewer-performance/rejection-reasons": {
+      "get": {
+        "tags": [
+          "ReviewerPerformance"
+        ],
+        "summary": "Returns why the rejections in the window were rejected.",
+        "description": "\nA precision number says how often the reviewer was turned down, and nothing about what to change.\n                    These five reasons each point somewhere different: a reviewer that invents problems needs a better\n                    prompt, one that argues with deliberate decisions needs the codebase's conventions, one that\n                    repeats another tool needs to be told what that tool already covers.\n\nRejections carrying no reason are reported as their own count rather than folded into one. The\n                    reason could not be judged, or the outcome was decided before reasons were recorded, and neither\n                    of those is a reason.",
+        "parameters": [
+          {
+            "name": "from",
+            "in": "query",
+            "description": "Inclusive start of the window, by review date. Defaults to 30 days ago.",
+            "schema": {
+              "type": "string",
+              "format": "date"
+            }
+          },
+          {
+            "name": "to",
+            "in": "query",
+            "description": "Inclusive end of the window, by review date. Defaults to today.",
+            "schema": {
+              "type": "string",
+              "format": "date"
+            }
+          },
+          {
+            "name": "clientId",
+            "in": "query",
+            "description": "Narrows to one client the caller administers.",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "repositoryId",
+            "in": "query",
+            "description": "Narrows to one repository.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The distribution, possibly empty.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/CodeInsightRejectionReasonsResponse"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CodeInsightRejectionReasonsResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CodeInsightRejectionReasonsResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid credentials.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Caller does not administer a tenant, lacks the licence, or named a client it cannot see.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/reviewer-performance/coverage": {
+      "get": {
+        "tags": [
+          "ReviewerPerformance"
+        ],
+        "summary": "Returns how much of the review history that already exists the collection knows about, per repository.",
+        "description": "\nCollection starts the day the licence and the per-client toggle are both on, and nothing imports what\n                    ran before that. Every other number on this surface is therefore silent about earlier reviews, and\n                    silence reads exactly like a reviewer that found nothing. This read is the difference: per repository,\n                    the findings the reviews themselves persisted against the findings the collection holds, the pull\n                    requests whose threads are retained (the only ones an outcome can still be recovered from), and how\n                    many pull requests have been sealed.\n\nIt counts rows that already exist. No provider call, no model token, nothing written.",
+        "parameters": [
+          {
+            "name": "from",
+            "in": "query",
+            "description": "Inclusive start of the window, by review submission date. Defaults to 30 days ago.",
+            "schema": {
+              "type": "string",
+              "format": "date"
+            }
+          },
+          {
+            "name": "to",
+            "in": "query",
+            "description": "Inclusive end of the window. Defaults to today.",
+            "schema": {
+              "type": "string",
+              "format": "date"
+            }
+          },
+          {
+            "name": "clientId",
+            "in": "query",
+            "description": "Narrows to one client the caller administers.",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Coverage per repository, possibly empty.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/CodeInsightCoverageResponse"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CodeInsightCoverageResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CodeInsightCoverageResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid credentials.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Caller does not administer a tenant, lacks the licence, or named a client it cannot see.",
             "content": {
               "text/plain": {
                 "schema": {
@@ -19517,7 +21777,8 @@
           "memoryReconsideration",
           "embeddingDefault",
           "reviewTriage",
-          "reviewVerification"
+          "reviewVerification",
+          "insightsClassification"
         ],
         "type": "string",
         "description": "Product-owned AI purposes that resolve to configured models."
@@ -20322,6 +22583,9 @@
               "$ref": "#/components/schemas/CommentSeverity"
             },
             "nullable": true
+          },
+          "codeInsightsCollectionEnabled": {
+            "type": "boolean"
           }
         },
         "additionalProperties": false,
@@ -20684,6 +22948,1135 @@
         },
         "additionalProperties": false,
         "description": "A single (model, day) token usage data point returned by the token-usage dashboard endpoint."
+      },
+      "CodeInsightClassificationStatus": {
+        "enum": [
+          "classified",
+          "pending",
+          "unclassifiable"
+        ],
+        "type": "string",
+        "description": "Where one finding stands in the classification pipeline. The three states are distinguished because a\nfreshly finished review legitimately shows no tags for a cycle or two, and \"not yet\" must not read the\nsame as \"nothing to say\"."
+      },
+      "CodeInsightConcentrationResponse": {
+        "type": "object",
+        "properties": {
+          "clientId": {
+            "type": "string",
+            "description": "The client the scope belongs to.",
+            "format": "uuid"
+          },
+          "clientName": {
+            "type": "string",
+            "description": "Display name of that client, when it could be resolved.",
+            "nullable": true
+          },
+          "repositoryId": {
+            "type": "string",
+            "description": "Repository, when the grain includes one.",
+            "nullable": true
+          },
+          "pullRequestId": {
+            "type": "integer",
+            "description": "Pull request, when the grain includes one.",
+            "format": "int64",
+            "nullable": true
+          },
+          "filePath": {
+            "type": "string",
+            "description": "File, when the grain is per-file.",
+            "nullable": true
+          },
+          "count": {
+            "type": "integer",
+            "description": "Findings attributed to this scope in the window.",
+            "format": "int32"
+          },
+          "repositoryName": {
+            "type": "string",
+            "description": "The repository's display name, when one has been recorded. `null` leaves the caller showing\nRepositoryId: the provider's own identifier, which for several providers is a bare\nnumber and reads as anything but a repository.",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false,
+        "description": "One row of a concentration ranking, where findings cluster."
+      },
+      "CodeInsightConcernClassRejectionsResponse": {
+        "type": "object",
+        "properties": {
+          "concernClass": {
+            "type": "string",
+            "description": "`Functional`, `Evolvability`, or `null` for the findings that carry no core type.",
+            "nullable": true
+          },
+          "reasons": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CodeInsightRejectionReasonCountResponse"
+            },
+            "description": "One entry per reason present in this class, largest first.",
+            "nullable": true
+          },
+          "unclassified": {
+            "type": "integer",
+            "description": "Rejections in this class carrying no reason.",
+            "format": "int32"
+          },
+          "rejections": {
+            "type": "integer",
+            "description": "Every rejection in this class.",
+            "format": "int32"
+          }
+        },
+        "additionalProperties": false,
+        "description": "One concern class and why its findings were turned down."
+      },
+      "CodeInsightCoreTagDto": {
+        "type": "object",
+        "properties": {
+          "slug": {
+            "type": "string",
+            "description": "Stable identifier.",
+            "nullable": true
+          },
+          "displayName": {
+            "type": "string",
+            "description": "Human-readable name.",
+            "nullable": true
+          },
+          "definition": {
+            "type": "string",
+            "description": "One-sentence definition, shared with the classifier.",
+            "nullable": true
+          },
+          "characteristic": {
+            "$ref": "#/components/schemas/CodeInsightQualityCharacteristic"
+          },
+          "behaviourChanging": {
+            "type": "boolean",
+            "description": "Whether the type describes a defect in behaviour rather than in evolvability."
+          }
+        },
+        "additionalProperties": false,
+        "description": "A core finding type as the taxonomy surface returns it: read-only vocabulary, identical for every\nclient of the installation."
+      },
+      "CodeInsightCountPointResponse": {
+        "type": "object",
+        "properties": {
+          "bucketStart": {
+            "type": "string",
+            "description": "Start of the bucket: the day, the week's Monday, or the month's first.",
+            "format": "date"
+          },
+          "key": {
+            "type": "string",
+            "description": "The core type slug, or the empty string for a plain total.",
+            "nullable": true
+          },
+          "count": {
+            "type": "integer",
+            "description": "How many findings fell in this bucket for this key.",
+            "format": "int32"
+          }
+        },
+        "additionalProperties": false,
+        "description": "One point of a counted series."
+      },
+      "CodeInsightCoverageResponse": {
+        "type": "object",
+        "properties": {
+          "reviewJobs": {
+            "type": "integer",
+            "description": "Completed review jobs in the window.",
+            "format": "int32"
+          },
+          "jobsCollected": {
+            "type": "integer",
+            "description": "Jobs the collection holds findings for.",
+            "format": "int32"
+          },
+          "producedFindings": {
+            "type": "integer",
+            "description": "Findings those jobs persisted.",
+            "format": "int32"
+          },
+          "collectedFindings": {
+            "type": "integer",
+            "description": "Findings the collection holds.",
+            "format": "int32"
+          },
+          "pullRequests": {
+            "type": "integer",
+            "description": "Distinct pull requests reviewed.",
+            "format": "int32"
+          },
+          "pullRequestsRetained": {
+            "type": "integer",
+            "description": "Pull requests whose threads are retained.",
+            "format": "int32"
+          },
+          "clientsWithCollectionOff": {
+            "type": "integer",
+            "description": "Clients with review activity in the window that have collection switched off. Their absence from the\nnumbers is a setting rather than missing data.",
+            "format": "int32"
+          },
+          "rows": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CodeInsightCoverageRowResponse"
+            },
+            "description": "Per-repository rows, least covered first.",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false,
+        "description": "Coverage of the collection against existing review history, per repository and in total."
+      },
+      "CodeInsightCoverageRowResponse": {
+        "type": "object",
+        "properties": {
+          "clientId": {
+            "type": "string",
+            "description": "Owning client.",
+            "format": "uuid"
+          },
+          "clientName": {
+            "type": "string",
+            "description": "Client display name.",
+            "nullable": true
+          },
+          "repositoryId": {
+            "type": "string",
+            "description": "Provider repository identifier.",
+            "nullable": true
+          },
+          "repositoryName": {
+            "type": "string",
+            "description": "Display name a review recorded for it, when there is one.",
+            "nullable": true
+          },
+          "reviewJobs": {
+            "type": "integer",
+            "description": "Completed review jobs in the window.",
+            "format": "int32"
+          },
+          "jobsCollected": {
+            "type": "integer",
+            "description": "Of those, jobs the collection holds at least one finding for.",
+            "format": "int32"
+          },
+          "producedFindings": {
+            "type": "integer",
+            "description": "Findings those jobs persisted in their own results.",
+            "format": "int32"
+          },
+          "collectedFindings": {
+            "type": "integer",
+            "description": "Findings the collection holds for those jobs.",
+            "format": "int32"
+          },
+          "pullRequests": {
+            "type": "integer",
+            "description": "Distinct pull requests reviewed.",
+            "format": "int32"
+          },
+          "pullRequestsRetained": {
+            "type": "integer",
+            "description": "Of those, pull requests whose threads are retained.",
+            "format": "int32"
+          },
+          "retainedThreads": {
+            "type": "integer",
+            "description": "Retained threads on them, whoever authored them.",
+            "format": "int32"
+          },
+          "dispositions": {
+            "type": "integer",
+            "description": "Outcomes recorded for the collected findings.",
+            "format": "int32"
+          },
+          "misses": {
+            "type": "integer",
+            "description": "Human threads harvested as findings the reviewer did not raise.",
+            "format": "int32"
+          },
+          "pullRequestsSealed": {
+            "type": "integer",
+            "description": "Pull requests whose correctness has been sealed.",
+            "format": "int32"
+          }
+        },
+        "additionalProperties": false,
+        "description": "One repository's answer to how much of the review history that already exists the collection knows about."
+      },
+      "CodeInsightCustomTagDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "Stable identity; assignments reference this.",
+            "format": "uuid"
+          },
+          "slug": {
+            "type": "string",
+            "description": "Lower-kebab-case identifier, unique within the client.",
+            "nullable": true
+          },
+          "displayName": {
+            "type": "string",
+            "description": "Human-readable name.",
+            "nullable": true
+          },
+          "definition": {
+            "type": "string",
+            "description": "One-sentence definition, shared with the classifier.",
+            "nullable": true
+          },
+          "retiredAt": {
+            "type": "string",
+            "description": "When the tag was retired, or `null` while it is active.",
+            "format": "date-time",
+            "nullable": true
+          },
+          "createdAt": {
+            "type": "string",
+            "description": "When the tag was created.",
+            "format": "date-time"
+          },
+          "updatedAt": {
+            "type": "string",
+            "description": "When the tag was last changed.",
+            "format": "date-time"
+          }
+        },
+        "additionalProperties": false,
+        "description": "A client's custom finding type as the taxonomy surface returns it."
+      },
+      "CodeInsightCustomTagWriteRequest": {
+        "type": "object",
+        "properties": {
+          "slug": {
+            "type": "string",
+            "description": "Lower-kebab-case identifier; must not collide with a core type or another of the client's tags.",
+            "nullable": true
+          },
+          "displayName": {
+            "type": "string",
+            "description": "Human-readable name.",
+            "nullable": true
+          },
+          "definition": {
+            "type": "string",
+            "description": "One-sentence definition the classifier will use as the label description.",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false,
+        "description": "A request to create or update a client's custom finding type."
+      },
+      "CodeInsightFileHotspotResponse": {
+        "type": "object",
+        "properties": {
+          "filePath": {
+            "type": "string",
+            "description": "The file, or the empty string for findings raised about the pull request as a whole.",
+            "nullable": true
+          },
+          "findings": {
+            "type": "integer",
+            "description": "Findings raised in this file across every pull request in scope.",
+            "format": "int32"
+          },
+          "pullRequests": {
+            "type": "integer",
+            "description": "How many distinct pull requests raised at least one finding in it.",
+            "format": "int32"
+          },
+          "averagePerPullRequest": {
+            "type": "number",
+            "description": "Findings per such pull request, or `null` when there were none.",
+            "format": "double",
+            "nullable": true
+          },
+          "symbolName": {
+            "type": "string",
+            "description": "The definition within the file, when the ranking is grouped by symbol; `null` for a file-grouped row.",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false,
+        "description": "One file's history: how much has been found in it, and across how many pull requests."
+      },
+      "CodeInsightFindingClassificationView": {
+        "type": "object",
+        "properties": {
+          "ordinal": {
+            "type": "integer",
+            "description": "Index of the finding within its job's review result.",
+            "format": "int32"
+          },
+          "status": {
+            "$ref": "#/components/schemas/CodeInsightClassificationStatus"
+          },
+          "coreTags": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Core type slugs, comparable across clients. Empty unless classified.",
+            "nullable": true
+          },
+          "customTags": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "The client's own type slugs, including any since retired. Empty unless classified.",
+            "nullable": true
+          },
+          "level": {
+            "$ref": "#/components/schemas/CodeInsightFindingLevel"
+          },
+          "qualifier": {
+            "$ref": "#/components/schemas/CodeInsightFindingQualifier"
+          },
+          "confidence": {
+            "type": "number",
+            "description": "The classifier's confidence, when classified.",
+            "format": "double",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false,
+        "description": "The classification of one finding of a review job, keyed by its position in that job's finding list."
+      },
+      "CodeInsightFindingLevel": {
+        "enum": [
+          "statement",
+          "member",
+          "type",
+          "file",
+          "crossFile"
+        ],
+        "type": "string",
+        "description": "The level of code a finding concerns: the highest one it reaches. This is the granularity axis the\ncode-quality literature settles on (a problem local to one method, one inside a type and its\ncollaborators, and one spanning components are different kinds of problem with different costs to\nfix), collapsed to the levels a reviewer can actually distinguish from a diff."
+      },
+      "CodeInsightFindingQualifier": {
+        "enum": [
+          "missing",
+          "incorrect",
+          "extraneous"
+        ],
+        "type": "string",
+        "description": "Whether the code the finding is about is absent, present but wrong, or present but unnecessary.\nThis is the defect-qualifier axis orthogonal-defect classification established: \"we forgot a null\ncheck\" and \"our null check is wrong\" are the same finding type and call for different responses, so\na spike in one means something different from a spike in the other."
+      },
+      "CodeInsightFindingResponse": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "Surrogate identity of the finding.",
+            "format": "uuid"
+          },
+          "clientId": {
+            "type": "string",
+            "description": "Owning client.",
+            "format": "uuid"
+          },
+          "repositoryId": {
+            "type": "string",
+            "description": "Provider repository identifier.",
+            "nullable": true
+          },
+          "pullRequestId": {
+            "type": "integer",
+            "description": "Provider pull-request identifier.",
+            "format": "int64"
+          },
+          "jobId": {
+            "type": "string",
+            "description": "The review job that produced it: the link back to the review protocol.",
+            "format": "uuid"
+          },
+          "filePath": {
+            "type": "string",
+            "description": "File the finding is anchored to, when applicable.",
+            "nullable": true
+          },
+          "lineNumber": {
+            "type": "integer",
+            "description": "Line the finding is anchored to, when known.",
+            "format": "int32",
+            "nullable": true
+          },
+          "severity": {
+            "type": "string",
+            "description": "Severity the review assigned, as its name.",
+            "nullable": true
+          },
+          "message": {
+            "type": "string",
+            "description": "The finding text.",
+            "nullable": true
+          },
+          "coreTags": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Core type slugs assigned to it; empty while unclassified.",
+            "nullable": true
+          },
+          "disposition": {
+            "type": "string",
+            "description": "What became of it, or `null` while its thread has not resolved.",
+            "nullable": true
+          },
+          "providerThreadId": {
+            "type": "string",
+            "description": "Provider thread it was posted as, when it was posted.",
+            "nullable": true
+          },
+          "observedAt": {
+            "type": "string",
+            "description": "When the review that produced it ran.",
+            "format": "date-time"
+          },
+          "rejectionReason": {
+            "type": "string",
+            "description": "Why it was rejected, as its name, or `null` when it was not rejected or the reason could not be\njudged. A caller must show that as unknown rather than as any particular reason.",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false,
+        "description": "One finding, as a drill-through from any number on a view shows it."
+      },
+      "CodeInsightHotspotResponse": {
+        "type": "object",
+        "properties": {
+          "totalFindings": {
+            "type": "integer",
+            "description": "Findings across every file in scope.",
+            "format": "int32"
+          },
+          "pullRequests": {
+            "type": "integer",
+            "description": "Distinct pull requests that raised any of them.",
+            "format": "int32"
+          },
+          "averagePerPullRequest": {
+            "type": "number",
+            "description": "Findings per such pull request across the whole scope.",
+            "format": "double",
+            "nullable": true
+          },
+          "fileCount": {
+            "type": "integer",
+            "description": "How many distinct rows carried findings, before truncation.",
+            "format": "int32"
+          },
+          "files": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CodeInsightFileHotspotResponse"
+            },
+            "description": "The worst rows, most findings first.",
+            "nullable": true
+          },
+          "unplacedFindings": {
+            "type": "integer",
+            "description": "Findings in scope this grouping could not place, and so counts nowhere above, always zero when grouping by\nfile. Reported rather than folded into an \"(unknown)\" row that would rank as if it were somewhere in the code.",
+            "format": "int32"
+          }
+        },
+        "additionalProperties": false,
+        "description": "Which files keep producing findings, with the totals the per-file rows sit inside."
+      },
+      "CodeInsightMetricPointResponse": {
+        "type": "object",
+        "properties": {
+          "bucketStart": {
+            "type": "string",
+            "description": "Start of the bucket.",
+            "format": "date"
+          },
+          "metric": {
+            "$ref": "#/components/schemas/CodeInsightMetricResponse"
+          }
+        },
+        "additionalProperties": false,
+        "description": "One bucket of a metric series."
+      },
+      "CodeInsightMetricResponse": {
+        "type": "object",
+        "properties": {
+          "precision": {
+            "type": "number",
+            "description": "Of the findings that resolved, the share that were right.",
+            "format": "double",
+            "nullable": true
+          },
+          "recall": {
+            "type": "number",
+            "description": "Of the issues that were there to find, the share the reviewer found.",
+            "format": "double",
+            "nullable": true
+          },
+          "f1": {
+            "type": "number",
+            "description": "Harmonic mean of precision and recall.",
+            "format": "double",
+            "nullable": true
+          },
+          "acceptanceRate": {
+            "type": "number",
+            "description": "Of the findings that resolved, the share a human acted on or agreed with.",
+            "format": "double",
+            "nullable": true
+          },
+          "addressed": {
+            "type": "integer",
+            "description": "Findings whose claimed fix was corroborated by a code change.",
+            "format": "int32"
+          },
+          "acknowledged": {
+            "type": "integer",
+            "description": "Findings a human accepted without changing the code.",
+            "format": "int32"
+          },
+          "dismissed": {
+            "type": "integer",
+            "description": "Findings judged correct but not wanted here.",
+            "format": "int32"
+          },
+          "falsePositive": {
+            "type": "integer",
+            "description": "Findings judged wrong.",
+            "format": "int32"
+          },
+          "misses": {
+            "type": "integer",
+            "description": "Human-raised issues that qualified as something the reviewer should have caught.",
+            "format": "int32"
+          },
+          "sampleSize": {
+            "type": "integer",
+            "description": "What the metric rests on: sealed pull requests for correctness, resolved findings for acceptance.",
+            "format": "int32"
+          },
+          "discussed": {
+            "type": "integer",
+            "description": "Findings a human engaged with and left unresolved: neither accepted nor rejected. Counted here and absent\nfrom every ratio, so a caller can show how many threads ended without a verdict without treating them as\nevidence either way.",
+            "format": "int32"
+          }
+        },
+        "additionalProperties": false,
+        "description": "One measured metric: the ratios, the counts they came from, and the sample they rest on."
+      },
+      "CodeInsightMissResponse": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "Surrogate identity of the harvested record.",
+            "format": "uuid"
+          },
+          "clientId": {
+            "type": "string",
+            "description": "Owning client.",
+            "format": "uuid"
+          },
+          "repositoryId": {
+            "type": "string",
+            "description": "Provider repository identifier.",
+            "nullable": true
+          },
+          "pullRequestId": {
+            "type": "integer",
+            "description": "Provider pull-request identifier.",
+            "format": "int64"
+          },
+          "providerThreadId": {
+            "type": "string",
+            "description": "The human thread's provider identity.",
+            "nullable": true
+          },
+          "filePath": {
+            "type": "string",
+            "description": "File the thread is anchored to, when applicable.",
+            "nullable": true
+          },
+          "lineNumber": {
+            "type": "integer",
+            "description": "Line the thread is anchored to, when known.",
+            "format": "int32",
+            "nullable": true
+          },
+          "discussion": {
+            "type": "string",
+            "description": "The discussion the judgement was made from.",
+            "nullable": true
+          },
+          "isSubstantive": {
+            "type": "boolean",
+            "description": "Judged a real code issue rather than a question or a nit."
+          },
+          "wasActedOn": {
+            "type": "boolean",
+            "description": "Judged accepted, or to have led to a code change."
+          },
+          "isInScope": {
+            "type": "boolean",
+            "description": "Judged within the class an automated reviewer should reasonably catch."
+          },
+          "countsAsMiss": {
+            "type": "boolean",
+            "description": "Whether it counts toward recall."
+          },
+          "classifierConfidence": {
+            "type": "number",
+            "description": "The classifier's confidence, 0–1.",
+            "format": "double",
+            "nullable": true
+          },
+          "harvestedAt": {
+            "type": "string",
+            "description": "When it was harvested.",
+            "format": "date-time"
+          }
+        },
+        "additionalProperties": false,
+        "description": "One harvested human thread, with all three judgements, including the threads that did not qualify."
+      },
+      "CodeInsightPullRequestSurvivalResponse": {
+        "type": "object",
+        "properties": {
+          "clientId": {
+            "type": "string",
+            "description": "Owning client.",
+            "format": "uuid"
+          },
+          "repositoryId": {
+            "type": "string",
+            "description": "Provider repository identifier.",
+            "nullable": true
+          },
+          "pullRequestId": {
+            "type": "integer",
+            "description": "Provider pull-request identifier.",
+            "format": "int64"
+          },
+          "revisions": {
+            "type": "integer",
+            "description": "How many increments were collected for it.",
+            "format": "int32"
+          },
+          "survival": {
+            "$ref": "#/components/schemas/CodeInsightSurvivalResponse"
+          },
+          "repositoryName": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false,
+        "description": "Survival for one pull request, so the aggregate can be opened up."
+      },
+      "CodeInsightQualityCharacteristic": {
+        "enum": [
+          "reliability",
+          "security",
+          "performanceEfficiency",
+          "maintainability"
+        ],
+        "type": "string",
+        "description": "The product-quality characteristic a finding type contributes to. These are the four\nsource-code-level characteristics the ISO/IEC 25010 product quality model defines and the\nindustry's automated code-quality measures report on, so a roll-up by characteristic reads the\nsame way as the quality reporting an organisation already does.\nEach core finding type maps to exactly one of these; the mapping lives in the versioned core\ntaxonomy so a characteristic roll-up needs no second classification."
+      },
+      "CodeInsightQualityResponse": {
+        "type": "object",
+        "properties": {
+          "correctness": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CodeInsightMetricPointResponse"
+            },
+            "description": "Correctness per bucket, by seal date.",
+            "nullable": true
+          },
+          "acceptance": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CodeInsightMetricPointResponse"
+            },
+            "description": "Acceptance per bucket, by review date.",
+            "nullable": true
+          },
+          "correctnessTotal": {
+            "$ref": "#/components/schemas/CodeInsightMetricResponse"
+          },
+          "acceptanceTotal": {
+            "$ref": "#/components/schemas/CodeInsightMetricResponse"
+          },
+          "correctnessTrend": {
+            "$ref": "#/components/schemas/CodeInsightTrendResponse"
+          },
+          "acceptanceTrend": {
+            "$ref": "#/components/schemas/CodeInsightTrendResponse"
+          },
+          "minimumSampleSize": {
+            "type": "integer",
+            "description": "Below this sample, a caller must annotate or suppress the metric rather than draw it as precise.",
+            "format": "int32"
+          },
+          "minimumTrendPeriods": {
+            "type": "integer",
+            "description": "Buckets a window needs before a trend is tested at all, so a caller can say how many are still missing\ninstead of only that there are too few.",
+            "format": "int32"
+          }
+        },
+        "additionalProperties": false,
+        "description": "Both metric lenses over the requested window and scope, as series and as totals."
+      },
+      "CodeInsightRejectionReasonCountResponse": {
+        "type": "object",
+        "properties": {
+          "reason": {
+            "type": "string",
+            "description": "The reason, as its name.",
+            "nullable": true
+          },
+          "count": {
+            "type": "integer",
+            "description": "Rejections carrying it.",
+            "format": "int32"
+          }
+        },
+        "additionalProperties": false,
+        "description": "One rejection reason and how often it was the reason."
+      },
+      "CodeInsightRejectionReasonsResponse": {
+        "type": "object",
+        "properties": {
+          "reasons": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CodeInsightRejectionReasonCountResponse"
+            },
+            "description": "One entry per reason present, largest first. A reason with no rejections is absent.",
+            "nullable": true
+          },
+          "unclassified": {
+            "type": "integer",
+            "description": "Rejections carrying no reason: the reason could not be judged, or the outcome predates reasons being\nrecorded. Reported rather than folded into a reason, because neither is one.",
+            "format": "int32"
+          },
+          "rejections": {
+            "type": "integer",
+            "description": "Every rejection in scope, whether or not it carries a reason.",
+            "format": "int32"
+          },
+          "byConcernClass": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CodeInsightConcernClassRejectionsResponse"
+            },
+            "description": "The same rejections split by the kind of concern they raised, functional against evolvability. The two are\nrejected for different reasons, so the comparison worth making is within a class rather than across the\nwhole set. Findings carrying no core type appear with a `null` class rather than being dropped.",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false,
+        "description": "Why the rejections in a window were rejected, and how many carried no reason."
+      },
+      "CodeInsightRepositoryDirectoryResponse": {
+        "type": "object",
+        "properties": {
+          "totalFindings": {
+            "type": "integer",
+            "description": "Findings across every repository in scope.",
+            "format": "int32"
+          },
+          "repositories": {
+            "type": "integer",
+            "description": "How many repositories carried any.",
+            "format": "int32"
+          },
+          "pullRequests": {
+            "type": "integer",
+            "description": "Distinct pull requests across all of them.",
+            "format": "int32"
+          },
+          "averagePerPullRequest": {
+            "type": "number",
+            "description": "Findings per such pull request across the whole scope.",
+            "format": "double",
+            "nullable": true
+          },
+          "rows": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CodeInsightRepositorySummaryResponse"
+            },
+            "description": "The repositories, most findings first.",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false,
+        "description": "Every repository with findings in the window, busiest first, and the totals across them."
+      },
+      "CodeInsightRepositorySummaryResponse": {
+        "type": "object",
+        "properties": {
+          "clientId": {
+            "type": "string",
+            "description": "The client the repository belongs to.",
+            "format": "uuid"
+          },
+          "clientName": {
+            "type": "string",
+            "description": "Display name of that client, when it could be resolved.",
+            "nullable": true
+          },
+          "repositoryId": {
+            "type": "string",
+            "description": "Provider repository identifier: what every other read filters on.",
+            "nullable": true
+          },
+          "repositoryName": {
+            "type": "string",
+            "description": "Display name, when one has been recorded.",
+            "nullable": true
+          },
+          "findings": {
+            "type": "integer",
+            "description": "Findings collected in the window.",
+            "format": "int32"
+          },
+          "pullRequests": {
+            "type": "integer",
+            "description": "Distinct pull requests that produced them.",
+            "format": "int32"
+          },
+          "files": {
+            "type": "integer",
+            "description": "Distinct files carrying them; a pull-request-level finding is not in a file.",
+            "format": "int32"
+          },
+          "averagePerPullRequest": {
+            "type": "number",
+            "description": "Findings per such pull request, or `null` when there were none.",
+            "format": "double",
+            "nullable": true
+          },
+          "lastActivityOn": {
+            "type": "string",
+            "description": "The most recent day a finding was collected here.",
+            "format": "date",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false,
+        "description": "One repository's own numbers, for the directory a reader lands on."
+      },
+      "CodeInsightScopedMetricResponse": {
+        "type": "object",
+        "properties": {
+          "clientId": {
+            "type": "string",
+            "description": "The client the scope belongs to, or `null` when the row is not a client scope: a model row spans every\nclient the caller administers.",
+            "format": "uuid",
+            "nullable": true
+          },
+          "clientName": {
+            "type": "string",
+            "description": "Display name of that client, when it could be resolved.",
+            "nullable": true
+          },
+          "repositoryId": {
+            "type": "string",
+            "description": "Repository, when the grain includes one.",
+            "nullable": true
+          },
+          "pullRequestId": {
+            "type": "integer",
+            "description": "Pull request, when the grain includes one.",
+            "format": "int64",
+            "nullable": true
+          },
+          "metric": {
+            "$ref": "#/components/schemas/CodeInsightMetricResponse"
+          },
+          "modelId": {
+            "type": "string",
+            "description": "The remote model, when the grouping is by model. `null` together with\nLogicalModelName marks the unattributed row.",
+            "nullable": true
+          },
+          "logicalModelName": {
+            "type": "string",
+            "description": "The client's logical model name for that model, when the producing pass ran through a named logical model.",
+            "nullable": true
+          },
+          "repositoryName": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false,
+        "description": "One measured metric for one scope, when reviewer performance is grouped rather than aggregated."
+      },
+      "CodeInsightSurvivalReport": {
+        "type": "object",
+        "properties": {
+          "total": {
+            "$ref": "#/components/schemas/CodeInsightSurvivalResponse"
+          },
+          "pullRequests": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CodeInsightPullRequestSurvivalResponse"
+            },
+            "description": "The pull requests that shed the most, so the total can be opened up.",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false,
+        "description": "The survival answer: the window's totals, plus the pull requests that shed the most."
+      },
+      "CodeInsightSurvivalResponse": {
+        "type": "object",
+        "properties": {
+          "persisted": {
+            "type": "integer",
+            "description": "Problems still being raised at the newest increment.",
+            "format": "int32"
+          },
+          "fixed": {
+            "type": "integer",
+            "description": "Problems that stopped being raised and carry a corroborated fix.",
+            "format": "int32"
+          },
+          "dropped": {
+            "type": "integer",
+            "description": "Problems that stopped being raised with nothing to show for it.",
+            "format": "int32"
+          },
+          "total": {
+            "type": "integer",
+            "description": "Every problem raised, however it ended.",
+            "format": "int32"
+          },
+          "persistenceRate": {
+            "type": "number",
+            "description": "The share still standing, or `null` when nothing was raised.",
+            "format": "double",
+            "nullable": true
+          },
+          "pullRequests": {
+            "type": "integer",
+            "description": "How many multi-increment pull requests these counts come from.",
+            "format": "int32"
+          }
+        },
+        "additionalProperties": false,
+        "description": "How much of what a review raised was still being raised when the pull request finished."
+      },
+      "CodeInsightTaxonomyDto": {
+        "type": "object",
+        "properties": {
+          "version": {
+            "type": "integer",
+            "description": "Version of the core vocabulary these core tags come from.",
+            "format": "int32"
+          },
+          "coreTags": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CodeInsightCoreTagDto"
+            },
+            "description": "The fixed core types, comparable across clients.",
+            "nullable": true
+          },
+          "customTags": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CodeInsightCustomTagDto"
+            },
+            "description": "The client's own types, including retired ones so history stays readable.",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false,
+        "description": "The full vocabulary available to one client: the fixed core set plus that client's custom tags."
+      },
+      "CodeInsightTrendDirection": {
+        "enum": [
+          "insufficient",
+          "improving",
+          "declining",
+          "flat"
+        ],
+        "type": "string",
+        "description": "Which way a metric has moved across the window, as the server judges it, so every caller reads the same\ndirection from the same data instead of each inventing its own comparison."
+      },
+      "CodeInsightTrendResponse": {
+        "type": "object",
+        "properties": {
+          "direction": {
+            "$ref": "#/components/schemas/CodeInsightTrendDirection"
+          },
+          "tau": {
+            "type": "number",
+            "description": "Kendall's Tau, from -1 to 1: how consistently the metric moved one way, independent of how far it moved.",
+            "format": "double",
+            "nullable": true
+          },
+          "pValue": {
+            "type": "number",
+            "description": "Two-sided p-value of the Mann-Kendall test. Above the significance level the direction is reported as flat\nhowever large the slope looks.",
+            "format": "double",
+            "nullable": true
+          },
+          "slopePerPeriod": {
+            "type": "number",
+            "description": "Sen's slope: the median change per bucket, in the metric's own units, which for a ratio is a change in that\nratio per bucket.",
+            "format": "double",
+            "nullable": true
+          },
+          "periods": {
+            "type": "integer",
+            "description": "Buckets that carried enough sample to be tested. Compare against\nMeisterDev.ProPR.Api.Features.CodeInsights.Contracts.CodeInsightQualityResponse.MinimumTrendPeriods to say how far a window is from testable.",
+            "format": "int32"
+          }
+        },
+        "additionalProperties": false,
+        "description": "A direction with the test behind it, so a reader can see how much the metric moved and how much the\nmovement is worth."
+      },
+      "CodeInsightTypeSeriesResponse": {
+        "type": "object",
+        "properties": {
+          "points": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CodeInsightCountPointResponse"
+            },
+            "description": "The series. Empty when nothing was collected in the window.",
+            "nullable": true
+          },
+          "totalFindings": {
+            "type": "integer",
+            "description": "Findings in the window and scope, whether or not they carry a type yet.",
+            "format": "int32"
+          },
+          "keys": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "The distinct type slugs present, so a caller can build a stable legend.",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false,
+        "description": "The counted series behind the \"what kinds of problem, over time\" question."
       },
       "CodeReviewPlatformKind": {
         "enum": [
@@ -22109,6 +25502,10 @@
             "items": {
               "$ref": "#/components/schemas/CommentSeverity"
             },
+            "nullable": true
+          },
+          "codeInsightsCollectionEnabled": {
+            "type": "boolean",
             "nullable": true
           }
         },
@@ -24004,6 +27401,26 @@
             "type": "string",
             "description": "The specialist lens (e.g. `security`) of the multi-pass union pass that produced this finding, when the\npass ran under a lens. null for the baseline, ordinary resample passes, and legacy comments.",
             "nullable": true
+          },
+          "originModelId": {
+            "type": "string",
+            "description": "The remote model that produced this finding. null for legacy comments and for findings no\nsingle pass owns.",
+            "nullable": true
+          },
+          "originLogicalModelName": {
+            "type": "string",
+            "description": "The client's logical model name for the producing pass, when it ran through a named logical model rather than\na bare connection binding.",
+            "nullable": true
+          },
+          "originSymbolName": {
+            "type": "string",
+            "description": "The definition this finding's line falls inside, resolved from the file's own syntax. null\nfor pull-request-level findings and wherever the syntax could not place the line.",
+            "nullable": true
+          },
+          "originSymbolKind": {
+            "type": "string",
+            "description": "What kind of definition that is (method, class, function, …).",
+            "nullable": true
           }
         },
         "additionalProperties": false,
@@ -25890,6 +29307,18 @@
             "type": "string",
             "description": "When the record was last upserted.",
             "format": "date-time"
+          },
+          "keywords": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "nullable": true
+          },
+          "codeInsightFindingId": {
+            "type": "string",
+            "format": "uuid",
+            "nullable": true
           }
         },
         "additionalProperties": false,
@@ -26479,6 +29908,9 @@
       "name": "ClientBudgetConsumption"
     },
     {
+      "name": "ClientCodeInsightTaxonomy"
+    },
+    {
       "name": "ClientLogicalModels"
     },
     {
@@ -26500,10 +29932,16 @@
       "name": "ClientTokenUsage"
     },
     {
+      "name": "CodeQuality"
+    },
+    {
       "name": "FindingDismissal"
     },
     {
       "name": "Identities"
+    },
+    {
+      "name": "JobCodeInsights"
     },
     {
       "name": "Jobs"
@@ -26537,6 +29975,9 @@
     },
     {
       "name": "RetainedPullRequestData"
+    },
+    {
+      "name": "ReviewerPerformance"
     },
     {
       "name": "ReviewJobs"

@@ -8,6 +8,7 @@ using MeisterDev.ProPR.Application.Features.Reviewing.Execution.Models;
 using MeisterDev.ProPR.Application.Interfaces;
 using MeisterDev.ProPR.Application.Options;
 using MeisterDev.ProPR.Application.ValueObjects;
+using MeisterDev.ProPR.CodeAnalysis;
 using MeisterDev.ProPR.Domain.Entities;
 using MeisterDev.ProPR.Domain.Enums;
 using MeisterDev.ProPR.Domain.ValueObjects;
@@ -94,7 +95,8 @@ public sealed class FileReviewerMultiPassUnionTests
 
     private FileReviewer CreateReviewer(
         IAiRuntimeResolver? aiRuntimeResolver = null,
-        ILogicalModelResolver? logicalModelResolver = null)
+        ILogicalModelResolver? logicalModelResolver = null,
+        IStructuralCodeAnalyzer? structuralAnalyzer = null)
     {
         this._aiCore
             .ReviewAsync(Arg.Any<PullRequest>(), Arg.Any<ReviewSystemContext>(), Arg.Any<CancellationToken>())
@@ -128,7 +130,8 @@ public sealed class FileReviewerMultiPassUnionTests
             null,
             null,
             null,
-            logicalModelResolver: logicalModelResolver);
+            logicalModelResolver: logicalModelResolver,
+            structuralAnalyzer: structuralAnalyzer);
     }
 
     // Minimal chat-capable configured-model DTO carrying the RemoteModelId the review core selects on.
@@ -286,6 +289,114 @@ public sealed class FileReviewerMultiPassUnionTests
     }
 
     [Fact]
+    public async Task EachFindingNamesTheDefinitionItsLineFallsInside()
+    {
+        // A line number says where a finding is; the definition says what it is about, and it is what makes
+        // "which parts of this codebase keep producing findings" answerable later.
+        var analyzer = Substitute.For<IStructuralCodeAnalyzer>();
+        analyzer.IsAvailable.Returns(true);
+        analyzer.CanAnalyze(Arg.Any<string>()).Returns(true);
+        analyzer
+            .ResolveEnclosingDefinitionsAsync(Arg.Any<StructuralParseRequest>(), Arg.Any<CancellationToken>())
+            .Returns([new EnclosingDefinition(DefinitionKind.Method, "Process", 10, 40, 120)]);
+
+        var reviewer = this.CreateReviewer(structuralAnalyzer: analyzer);
+        var file = FileForTier(FileComplexityTier.Low);
+        var (job, pr) = Fixture(file);
+
+        await reviewer.ReviewAsync(job, pr, file, 1, 1, MultiPassContext(0), null, Substitute.For<IChatClient>(), CancellationToken.None);
+
+        var comment = this._persistedResult!.Comments![0];
+        Assert.Equal("Process", comment.OriginSymbolName);
+        Assert.Equal(nameof(DefinitionKind.Method), comment.OriginSymbolKind);
+    }
+
+    [Fact]
+    public async Task AFindingWhoseLineFallsOutsideEveryDefinitionStaysUnattributed()
+    {
+        // Rather than reaching for the nearest definition: a using directive or a file-level statement belongs to
+        // no method, and saying it does would put findings in code that never produced them.
+        var analyzer = Substitute.For<IStructuralCodeAnalyzer>();
+        analyzer.IsAvailable.Returns(true);
+        analyzer.CanAnalyze(Arg.Any<string>()).Returns(true);
+        analyzer
+            .ResolveEnclosingDefinitionsAsync(Arg.Any<StructuralParseRequest>(), Arg.Any<CancellationToken>())
+            .Returns([]);
+
+        var reviewer = this.CreateReviewer(structuralAnalyzer: analyzer);
+        var file = FileForTier(FileComplexityTier.Low);
+        var (job, pr) = Fixture(file);
+
+        await reviewer.ReviewAsync(job, pr, file, 1, 1, MultiPassContext(0), null, Substitute.For<IChatClient>(), CancellationToken.None);
+
+        Assert.Null(this._persistedResult!.Comments![0].OriginSymbolName);
+    }
+
+    [Fact]
+    public async Task TheFileIsParsedOnceHoweverManyLinesAreAttributed()
+    {
+        // Provenance is metadata, and neither analyzer backend caches a parse: asking per line would parse the
+        // same file once per finding on the review's own hot path. The port takes every range in one request.
+        var analyzer = Substitute.For<IStructuralCodeAnalyzer>();
+        analyzer.IsAvailable.Returns(true);
+        analyzer.CanAnalyze(Arg.Any<string>()).Returns(true);
+        analyzer
+            .ResolveEnclosingDefinitionsAsync(Arg.Any<StructuralParseRequest>(), Arg.Any<CancellationToken>())
+            .Returns(
+            [
+                new EnclosingDefinition(DefinitionKind.Class, "Program", 1, 120, 120),
+                new EnclosingDefinition(DefinitionKind.Method, "Process", 10, 40, 120),
+            ]);
+
+        var reviewer = this.CreateReviewer(structuralAnalyzer: analyzer);
+        var file = FileForTier(FileComplexityTier.Low);
+        var (job, pr) = Fixture(file);
+
+        await reviewer.ReviewAsync(job, pr, file, 1, 1, MultiPassContext(0), null, Substitute.For<IChatClient>(), CancellationToken.None);
+
+        await analyzer.Received(1).ResolveEnclosingDefinitionsAsync(
+            Arg.Any<StructuralParseRequest>(),
+            Arg.Any<CancellationToken>());
+
+        // The innermost definition containing the line wins, so the finding names the method rather than the class
+        // that also spans it.
+        Assert.Equal("Process", this._persistedResult!.Comments![0].OriginSymbolName);
+    }
+
+    [Fact]
+    public async Task AnAnalyzerThatThrowsCostsTheProvenanceAndNotTheReview()
+    {
+        var analyzer = Substitute.For<IStructuralCodeAnalyzer>();
+        analyzer.IsAvailable.Returns(true);
+        analyzer.CanAnalyze(Arg.Any<string>()).Returns(true);
+        analyzer
+            .ResolveEnclosingDefinitionsAsync(Arg.Any<StructuralParseRequest>(), Arg.Any<CancellationToken>())
+            .Returns<IReadOnlyList<EnclosingDefinition>>(_ => throw new InvalidOperationException("parser fault"));
+
+        var reviewer = this.CreateReviewer(structuralAnalyzer: analyzer);
+        var file = FileForTier(FileComplexityTier.Low);
+        var (job, pr) = Fixture(file);
+
+        await reviewer.ReviewAsync(job, pr, file, 1, 1, MultiPassContext(0), null, Substitute.For<IChatClient>(), CancellationToken.None);
+
+        Assert.NotEmpty(this._persistedResult!.Comments!);
+        Assert.Null(this._persistedResult!.Comments![0].OriginSymbolName);
+    }
+
+    [Fact]
+    public async Task WithNoAnalyzerConfiguredTheReviewIsUnchanged()
+    {
+        var reviewer = this.CreateReviewer();
+        var file = FileForTier(FileComplexityTier.Low);
+        var (job, pr) = Fixture(file);
+
+        await reviewer.ReviewAsync(job, pr, file, 1, 1, MultiPassContext(0), null, Substitute.For<IChatClient>(), CancellationToken.None);
+
+        Assert.NotEmpty(this._persistedResult!.Comments!);
+        Assert.Null(this._persistedResult!.Comments![0].OriginSymbolName);
+    }
+
+    [Fact]
     public async Task InScopeTier_RecordsProvenancePerPass()
     {
         var reviewer = this.CreateReviewer();
@@ -419,6 +530,11 @@ public sealed class FileReviewerMultiPassUnionTests
         var comments = this._persistedResult!.Comments!;
         Assert.Equal(3, comments.Count);
         Assert.Equal(NullRefLeakOffByOneMessages, comments.Select(c => c.Message).ToArray());
+
+        // Each finding records the model that produced it, not the model the file's tier happened to start on.
+        // This is what makes reviewer quality readable per model later.
+        Assert.Equal(["gpt-5.3-codex", "model-a", "model-b"], comments.Select(c => c.OriginModelId));
+
         await this._recorder.Received(1).RecordReviewStrategyEventAsync(
             Arg.Any<Guid>(), ReviewProtocolEventNames.MultiPassUnionCompleted,
             Arg.Any<string?>(), Arg.Any<string?>(), Arg.Any<string?>(), Arg.Any<CancellationToken>());
@@ -430,6 +546,9 @@ public sealed class FileReviewerMultiPassUnionTests
     public async Task Production_NameBasedPass_ResolvesViaLogicalModelCatalog()
     {
         var passRuntime = RuntimeForModel("logical-deep");
+        // The production resolver builds the runtime with the role name on it, so the pass carries the configured
+        // name as well as the remote model it currently resolves to.
+        passRuntime.LogicalModelName.Returns("deep");
         var logicalResolver = Substitute.For<ILogicalModelResolver>();
         logicalResolver
             .ResolveChatRuntimeAsync(Arg.Any<Guid>(), "deep", Arg.Any<IProtocolRecorder?>(), Arg.Any<Guid?>(), Arg.Any<CancellationToken>())
@@ -448,6 +567,14 @@ public sealed class FileReviewerMultiPassUnionTests
         Assert.Equal(2, this._observedModelIds.Count);
         Assert.Equal("gpt-5.3-codex", this._observedModelIds[0]);
         Assert.Equal("logical-deep", this._observedModelIds[1]);
+
+        // The pass's findings carry both identities: the configured name an operator compares models by, and the
+        // remote model it currently resolves to, because that name can be repointed.
+        Assert.NotNull(this._persistedResult);
+        var passComment = this._persistedResult!.Comments![1];
+        Assert.Equal("deep", passComment.OriginLogicalModelName);
+        Assert.Equal("logical-deep", passComment.OriginModelId);
+
         await logicalResolver.Received(1)
             .ResolveChatRuntimeAsync(Arg.Any<Guid>(), "deep", Arg.Any<IProtocolRecorder?>(), Arg.Any<Guid?>(), Arg.Any<CancellationToken>());
     }

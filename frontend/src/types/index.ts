@@ -3543,6 +3543,345 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/clients/{clientId}/code-insights/taxonomy": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Returns the client's full finding-type vocabulary, including retired custom tags. */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    /** @description Client identifier. */
+                    clientId: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description The vocabulary. */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["CodeInsightTaxonomyDto"];
+                        "application/json": components["schemas"]["CodeInsightTaxonomyDto"];
+                        "text/json": components["schemas"]["CodeInsightTaxonomyDto"];
+                    };
+                };
+                /** @description Missing or invalid credentials. */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Caller lacks required client access. */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/clients/{clientId}/code-insights/taxonomy/custom-tags": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Creates a custom finding type for the client. */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    /** @description Client identifier. */
+                    clientId: string;
+                };
+                cookie?: never;
+            };
+            /** @description The tag to create. */
+            requestBody?: {
+                content: {
+                    "application/json": components["schemas"]["CodeInsightCustomTagWriteRequest"];
+                    "text/json": components["schemas"]["CodeInsightCustomTagWriteRequest"];
+                    "application/*+json": components["schemas"]["CodeInsightCustomTagWriteRequest"];
+                };
+            };
+            responses: {
+                /** @description The tag was created. */
+                201: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["CodeInsightCustomTagDto"];
+                        "application/json": components["schemas"]["CodeInsightCustomTagDto"];
+                        "text/json": components["schemas"]["CodeInsightCustomTagDto"];
+                    };
+                };
+                /** @description The request was malformed. */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Missing or invalid credentials. */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Caller lacks required client access. */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description The slug shadows a core type or is already used by this client. */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/clients/{clientId}/code-insights/taxonomy/custom-tags/{tagId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Updates a custom finding type. Existing assignments are unaffected. */
+        put: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    /** @description Client identifier. */
+                    clientId: string;
+                    /** @description Custom tag identifier. */
+                    tagId: string;
+                };
+                cookie?: never;
+            };
+            /** @description The new slug, display name, and definition. */
+            requestBody?: {
+                content: {
+                    "application/json": components["schemas"]["CodeInsightCustomTagWriteRequest"];
+                    "text/json": components["schemas"]["CodeInsightCustomTagWriteRequest"];
+                    "application/*+json": components["schemas"]["CodeInsightCustomTagWriteRequest"];
+                };
+            };
+            responses: {
+                /** @description The tag was updated. */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["CodeInsightCustomTagDto"];
+                        "application/json": components["schemas"]["CodeInsightCustomTagDto"];
+                        "text/json": components["schemas"]["CodeInsightCustomTagDto"];
+                    };
+                };
+                /** @description The request was malformed. */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Missing or invalid credentials. */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Caller lacks required client access. */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description The tag does not exist for this client. */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description The slug shadows a core type or is already used by this client. */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+            };
+        };
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/clients/{clientId}/code-insights/taxonomy/custom-tags/{tagId}/retire": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Retires a custom finding type. It stops being offered for new findings; findings that already
+         *     carry it keep resolving.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    /** @description Client identifier. */
+                    clientId: string;
+                    /** @description Custom tag identifier. */
+                    tagId: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description The tag is retired. */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["CodeInsightCustomTagDto"];
+                        "application/json": components["schemas"]["CodeInsightCustomTagDto"];
+                        "text/json": components["schemas"]["CodeInsightCustomTagDto"];
+                    };
+                };
+                /** @description Missing or invalid credentials. */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Caller lacks required client access. */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description The tag does not exist for this client. */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/clients/{clientId}/logical-models": {
         parameters: {
             query?: never;
@@ -5685,6 +6024,484 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/code-quality/types-over-time": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Returns the counted type series: "what kinds of problem does this codebase keep producing". */
+        get: {
+            parameters: {
+                query?: {
+                    /** @description Inclusive start of the window, by review date. Defaults to 30 days ago. */
+                    from?: string;
+                    /** @description Inclusive end of the window, by review date. Defaults to today. */
+                    to?: string;
+                    /** @description Bucket size: `day`, `week`, or `month`. Defaults to day. */
+                    bucket?: string;
+                    /** @description Narrows to one client the caller may already see. */
+                    clientId?: string;
+                    /** @description Narrows to one repository: the usual case for this audience. */
+                    repositoryId?: string;
+                    /** @description Narrows to one pull request, for the view embedded in a review. */
+                    pullRequestId?: number;
+                    /** @description Narrows to one file. */
+                    filePath?: string;
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description The series, possibly empty. */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["CodeInsightTypeSeriesResponse"];
+                        "application/json": components["schemas"]["CodeInsightTypeSeriesResponse"];
+                        "text/json": components["schemas"]["CodeInsightTypeSeriesResponse"];
+                    };
+                };
+                /** @description Missing or invalid credentials. */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Caller has no client access, lacks the licence, or asked for a client it cannot see. */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/code-quality/concentration": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Returns the top scopes by finding count at the requested grain: "where does it keep happening".
+         * @description Also how a caller finds the repository worth landing on: ranked at the repository grain, the first row is
+         *     the busiest repository the caller can see.
+         */
+        get: {
+            parameters: {
+                query?: {
+                    /** @description Grain: `client`, `repository`, `pullRequest`, `file`, or `job`. */
+                    grain?: string;
+                    /** @description How many rows to return. Clamped to 1–100. */
+                    topN?: number;
+                    /** @description Inclusive start of the window. Defaults to 30 days ago. */
+                    from?: string;
+                    /** @description Inclusive end of the window. Defaults to today. */
+                    to?: string;
+                    /** @description Narrows to one client the caller may already see. */
+                    clientId?: string;
+                    /** @description Narrows to one repository, for drilling from a repository into its files. */
+                    repositoryId?: string;
+                    /** @description Narrows to one pull request, for the view embedded in a review. */
+                    pullRequestId?: number;
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description The ranking, possibly empty. */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["CodeInsightConcentrationResponse"][];
+                        "application/json": components["schemas"]["CodeInsightConcentrationResponse"][];
+                        "text/json": components["schemas"]["CodeInsightConcentrationResponse"][];
+                    };
+                };
+                /** @description Missing or invalid credentials. */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Caller has no client access, lacks the licence, or asked for a client it cannot see. */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/code-quality/repositories": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Returns the repository directory, every repository with findings in the window, busiest first, with the
+         *     totals across them.
+         * @description What a reader picks from. Everything else on this surface describes one codebase, and codebases are not
+         *     comparable to each other on anything but volume: they differ in size, language, age, and how much of them
+         *     a review looks at. So this read deliberately ignores a repository narrowing: it is the list of
+         *     alternatives, and narrowing it to the current choice would hide them.
+         */
+        get: {
+            parameters: {
+                query?: {
+                    /** @description Inclusive start of the window, by review date. Defaults to 30 days ago. */
+                    from?: string;
+                    /** @description Inclusive end of the window, by review date. Defaults to today. */
+                    to?: string;
+                    /** @description Narrows to one client the caller may already see. */
+                    clientId?: string;
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description The directory, possibly empty. */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["CodeInsightRepositoryDirectoryResponse"];
+                        "application/json": components["schemas"]["CodeInsightRepositoryDirectoryResponse"];
+                        "text/json": components["schemas"]["CodeInsightRepositoryDirectoryResponse"];
+                    };
+                };
+                /** @description Missing or invalid credentials. */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Caller has no client access, lacks the licence, or asked for a client it cannot see. */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/code-quality/hotspots": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Returns the file hotspots: "which files keep producing findings, and how many per pull request".
+         * @description History by definition, so a pull-request filter is not honoured here. What a pull request can do is
+         *                         choose the files: filesFromPullRequestId restricts the ranking to the files that
+         *                         pull request raised findings in, while every count still spans every pull request in scope. That is
+         *                         what lets the view embedded in a review say "this file has produced thirty findings before today".
+         *
+         *     The averages are over the pull requests that raised at least one finding in a file. That is the only
+         *                         denominator the collection can see, and it is narrower than "pull requests that touched the file",
+         *                         a caller must not present it as the latter.
+         */
+        get: {
+            parameters: {
+                query?: {
+                    /** @description Inclusive start of the window, by review date. Defaults to 30 days ago. */
+                    from?: string;
+                    /** @description Inclusive end of the window, by review date. Defaults to today. */
+                    to?: string;
+                    /** @description Narrows to one client the caller may already see. */
+                    clientId?: string;
+                    /** @description Narrows to one repository. */
+                    repositoryId?: string;
+                    /** @description Restricts the files considered to those one pull request found something in. */
+                    filesFromPullRequestId?: number;
+                    /**
+                     * @description `file` (default) or `symbol`. Grouped by symbol the rows are definitions within their files, and
+                     *                     only findings the file's syntax placed are counted: the remainder comes back as `unplacedFindings`.
+                     */
+                    groupBy?: string;
+                    /** @description How many rows to return. Clamped to 1–200. */
+                    topN?: number;
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description The hotspots, possibly empty. */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["CodeInsightHotspotResponse"];
+                        "application/json": components["schemas"]["CodeInsightHotspotResponse"];
+                        "text/json": components["schemas"]["CodeInsightHotspotResponse"];
+                    };
+                };
+                /** @description Missing or invalid credentials. */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Caller has no client access, lacks the licence, or asked for a client it cannot see. */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/code-quality/survival": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Returns how much of what was raised stuck: "of the problems reviews found here, how many were still
+         *     being reported when the pull request finished".
+         * @description Pull requests reviewed only once are excluded, because every problem in them is trivially still present
+         *     at the newest increment; including them would report near-perfect persistence for work that was never
+         *     given the chance to shed anything.
+         */
+        get: {
+            parameters: {
+                query?: {
+                    /** @description Inclusive start of the window, by review date. Defaults to 30 days ago. */
+                    from?: string;
+                    /** @description Inclusive end of the window, by review date. Defaults to today. */
+                    to?: string;
+                    /** @description Narrows to one client the caller may already see. */
+                    clientId?: string;
+                    /** @description Narrows to one repository. */
+                    repositoryId?: string;
+                    /**
+                     * @description Narrows to one pull request, for the view embedded in a review. A pull request reviewed only once still
+                     *     reports nothing, for the reason above.
+                     */
+                    pullRequestId?: number;
+                    /** @description How many pull requests to break out. Clamped to 1–50. */
+                    topN?: number;
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description The survival counts, possibly empty. */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["CodeInsightSurvivalReport"];
+                        "application/json": components["schemas"]["CodeInsightSurvivalReport"];
+                        "text/json": components["schemas"]["CodeInsightSurvivalReport"];
+                    };
+                };
+                /** @description Missing or invalid credentials. */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Caller has no client access, lacks the licence, or asked for a client it cannot see. */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/code-quality/findings": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Returns the findings behind a number, so anything on a view can be opened up and checked. */
+        get: {
+            parameters: {
+                query?: {
+                    /** @description Inclusive start of the window, by review date. Defaults to 30 days ago. */
+                    from?: string;
+                    /** @description Inclusive end of the window, by review date. Defaults to today. */
+                    to?: string;
+                    /** @description Narrows to one client the caller may already see. */
+                    clientId?: string;
+                    /** @description Narrows to one repository. */
+                    repositoryId?: string;
+                    /** @description Narrows to one pull request. */
+                    pullRequestId?: number;
+                    /** @description Narrows to one file. */
+                    filePath?: string;
+                    /** @description Narrows to one core type slug: what a click on a type series means. */
+                    coreType?: string;
+                    symbolName?: string;
+                    /** @description Narrows to one outcome. */
+                    disposition?: string;
+                    /** @description Maximum rows. Clamped to 1–200. */
+                    limit?: number;
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description The findings, possibly empty. */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["CodeInsightFindingResponse"][];
+                        "application/json": components["schemas"]["CodeInsightFindingResponse"][];
+                        "text/json": components["schemas"]["CodeInsightFindingResponse"][];
+                    };
+                };
+                /** @description Missing or invalid credentials. */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Caller has no client access, lacks the licence, or asked for a client it cannot see. */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/clients/{clientId}/reviewing/dismiss-finding": {
         parameters: {
             query?: never;
@@ -5907,6 +6724,164 @@ export interface paths {
                     };
                 };
                 /** @description No identity found with that display name. */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/reviewing/jobs/{id}/code-insights/findings": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Returns the classification of each finding of the job, keyed by the finding's position in the job's
+         *     review result. Empty when nothing was collected for the job, when Code Insights is not licensed, or
+         *     when the slice is not registered: an empty list rather than an error, because "no tags" is a normal
+         *     state a review view has to render anyway.
+         */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    /** @description Review job identifier. */
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Classifications returned, possibly empty. */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["CodeInsightFindingClassificationView"][];
+                        "application/json": components["schemas"]["CodeInsightFindingClassificationView"][];
+                        "text/json": components["schemas"]["CodeInsightFindingClassificationView"][];
+                    };
+                };
+                /** @description Missing or invalid credentials. */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Caller lacks access to the job's client. */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Job not found. */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/jobs/{id}/code-insights/findings": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Returns the classification of each finding of the job, keyed by the finding's position in the job's
+         *     review result. Empty when nothing was collected for the job, when Code Insights is not licensed, or
+         *     when the slice is not registered: an empty list rather than an error, because "no tags" is a normal
+         *     state a review view has to render anyway.
+         */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    /** @description Review job identifier. */
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Classifications returned, possibly empty. */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["CodeInsightFindingClassificationView"][];
+                        "application/json": components["schemas"]["CodeInsightFindingClassificationView"][];
+                        "text/json": components["schemas"]["CodeInsightFindingClassificationView"][];
+                    };
+                };
+                /** @description Missing or invalid credentials. */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Caller lacks access to the job's client. */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Job not found. */
                 404: {
                     headers: {
                         [name: string]: unknown;
@@ -8977,6 +9952,479 @@ export interface paths {
                 };
                 /** @description No diff is retained for the file. */
                 404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/reviewer-performance/quality": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Returns both metric lenses over the window ("is the reviewer right and improving" and "do humans want
+         *     what it says") as series, as totals, and with the direction each moved.
+         */
+        get: {
+            parameters: {
+                query?: {
+                    /** @description Inclusive start of the window. Defaults to 30 days ago. */
+                    from?: string;
+                    /** @description Inclusive end of the window. Defaults to today. */
+                    to?: string;
+                    /** @description Bucket size: `day`, `week`, or `month`. Defaults to week. */
+                    bucket?: string;
+                    /** @description Narrows to one client the caller administers. */
+                    clientId?: string;
+                    /** @description Narrows to one repository. */
+                    repositoryId?: string;
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Both lenses, possibly empty. */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["CodeInsightQualityResponse"];
+                        "application/json": components["schemas"]["CodeInsightQualityResponse"];
+                        "text/json": components["schemas"]["CodeInsightQualityResponse"];
+                    };
+                };
+                /** @description Missing or invalid credentials. */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Caller does not administer a tenant, lacks the licence, or named a client it cannot see. */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/reviewer-performance/by-grain": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Returns correctness grouped by scope: whether the reviewer is working everywhere, or one client,
+         *     repository, or pull request is carrying the whole shortfall.
+         * @description Only the grains a seal has. A measurement is sealed per pull request, so client, repository, and pull
+         *                         request are meaningful and finer grains are not; asking for one is answered at the pull-request grain
+         *                         rather than with an empty list. Every row is computed from its own summed counts, never by averaging
+         *                         the rows beneath it, which would weight a pull request with one finding like one with a hundred.
+         *
+         *     `model` groups by what produced the findings instead of by where they landed: the reading that
+         *                         answers whether a cheaper model would have done. It comes from the findings rather than the seals,
+         *                         because one pull request can be reviewed by several models, and it reports only the ratios a model can
+         *                         be held to: precision and acceptance, never recall or F1.
+         */
+        get: {
+            parameters: {
+                query?: {
+                    /** @description Grain: `client`, `repository`, `pullRequest`, or `model`. Defaults to repository. */
+                    grain?: string;
+                    /** @description Inclusive start of the window, by seal date. Defaults to 30 days ago. */
+                    from?: string;
+                    /** @description Inclusive end of the window, by seal date. Defaults to today. */
+                    to?: string;
+                    /** @description Narrows to one client the caller administers. */
+                    clientId?: string;
+                    /** @description Narrows to one repository. */
+                    repositoryId?: string;
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description The grouped metrics, possibly empty. */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["CodeInsightScopedMetricResponse"][];
+                        "application/json": components["schemas"]["CodeInsightScopedMetricResponse"][];
+                        "text/json": components["schemas"]["CodeInsightScopedMetricResponse"][];
+                    };
+                };
+                /** @description Missing or invalid credentials. */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Caller does not administer a tenant, lacks the licence, or named a client it cannot see. */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/reviewer-performance/misses": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Returns the harvested human threads (what the reviewer did not raise) with all three judgements,
+         *     including the threads that did not qualify.
+         * @description The non-qualifying rows are the point, not noise: recall depends on where the "should have caught this"
+         *     line sits, and nobody can calibrate that line without seeing what it currently excludes. They are also
+         *     the most easily misread data in the product, which is why this read sits behind administration.
+         */
+        get: {
+            parameters: {
+                query?: {
+                    /** @description Inclusive start of the window, by harvest date. Defaults to 30 days ago. */
+                    from?: string;
+                    /** @description Inclusive end of the window, by harvest date. Defaults to today. */
+                    to?: string;
+                    /** @description Narrows to one client the caller administers. */
+                    clientId?: string;
+                    /** @description Narrows to one repository. */
+                    repositoryId?: string;
+                    /** @description Narrows to one pull request. */
+                    pullRequestId?: number;
+                    /** @description Maximum rows. Clamped to 1–200. */
+                    limit?: number;
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description The harvested threads, possibly empty. */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["CodeInsightMissResponse"][];
+                        "application/json": components["schemas"]["CodeInsightMissResponse"][];
+                        "text/json": components["schemas"]["CodeInsightMissResponse"][];
+                    };
+                };
+                /** @description Missing or invalid credentials. */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Caller does not administer a tenant, lacks the licence, or named a client it cannot see. */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/reviewer-performance/findings": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Returns the findings behind a reviewer-performance number: the false positives behind a precision
+         *     figure, the fixes behind an acceptance rate.
+         */
+        get: {
+            parameters: {
+                query?: {
+                    /** @description Inclusive start of the window, by review date. Defaults to 30 days ago. */
+                    from?: string;
+                    /** @description Inclusive end of the window, by review date. Defaults to today. */
+                    to?: string;
+                    /** @description Narrows to one client the caller administers. */
+                    clientId?: string;
+                    /** @description Narrows to one repository. */
+                    repositoryId?: string;
+                    /** @description Narrows to one outcome: what a click on an outcome means. */
+                    disposition?: string;
+                    /** @description Maximum rows. Clamped to 1–200. */
+                    limit?: number;
+                    /**
+                     * @description Narrows to one rejection reason: what a click on a reason in the distribution means. A reason already
+                     *     implies its outcome, so it needs no disposition beside it.
+                     */
+                    rejectionReason?: string;
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description The findings, possibly empty. */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["CodeInsightFindingResponse"][];
+                        "application/json": components["schemas"]["CodeInsightFindingResponse"][];
+                        "text/json": components["schemas"]["CodeInsightFindingResponse"][];
+                    };
+                };
+                /** @description Missing or invalid credentials. */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Caller does not administer a tenant, lacks the licence, or named a client it cannot see. */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/reviewer-performance/rejection-reasons": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Returns why the rejections in the window were rejected.
+         * @description A precision number says how often the reviewer was turned down, and nothing about what to change.
+         *                         These five reasons each point somewhere different: a reviewer that invents problems needs a better
+         *                         prompt, one that argues with deliberate decisions needs the codebase's conventions, one that
+         *                         repeats another tool needs to be told what that tool already covers.
+         *
+         *     Rejections carrying no reason are reported as their own count rather than folded into one. The
+         *                         reason could not be judged, or the outcome was decided before reasons were recorded, and neither
+         *                         of those is a reason.
+         */
+        get: {
+            parameters: {
+                query?: {
+                    /** @description Inclusive start of the window, by review date. Defaults to 30 days ago. */
+                    from?: string;
+                    /** @description Inclusive end of the window, by review date. Defaults to today. */
+                    to?: string;
+                    /** @description Narrows to one client the caller administers. */
+                    clientId?: string;
+                    /** @description Narrows to one repository. */
+                    repositoryId?: string;
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description The distribution, possibly empty. */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["CodeInsightRejectionReasonsResponse"];
+                        "application/json": components["schemas"]["CodeInsightRejectionReasonsResponse"];
+                        "text/json": components["schemas"]["CodeInsightRejectionReasonsResponse"];
+                    };
+                };
+                /** @description Missing or invalid credentials. */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Caller does not administer a tenant, lacks the licence, or named a client it cannot see. */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/reviewer-performance/coverage": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Returns how much of the review history that already exists the collection knows about, per repository.
+         * @description Collection starts the day the licence and the per-client toggle are both on, and nothing imports what
+         *                         ran before that. Every other number on this surface is therefore silent about earlier reviews, and
+         *                         silence reads exactly like a reviewer that found nothing. This read is the difference: per repository,
+         *                         the findings the reviews themselves persisted against the findings the collection holds, the pull
+         *                         requests whose threads are retained (the only ones an outcome can still be recovered from), and how
+         *                         many pull requests have been sealed.
+         *
+         *     It counts rows that already exist. No provider call, no model token, nothing written.
+         */
+        get: {
+            parameters: {
+                query?: {
+                    /** @description Inclusive start of the window, by review submission date. Defaults to 30 days ago. */
+                    from?: string;
+                    /** @description Inclusive end of the window. Defaults to today. */
+                    to?: string;
+                    /** @description Narrows to one client the caller administers. */
+                    clientId?: string;
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Coverage per repository, possibly empty. */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["CodeInsightCoverageResponse"];
+                        "application/json": components["schemas"]["CodeInsightCoverageResponse"];
+                        "text/json": components["schemas"]["CodeInsightCoverageResponse"];
+                    };
+                };
+                /** @description Missing or invalid credentials. */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Caller does not administer a tenant, lacks the licence, or named a client it cannot see. */
+                403: {
                     headers: {
                         [name: string]: unknown;
                     };
@@ -13204,7 +14652,7 @@ export interface components {
          * @description Product-owned AI purposes that resolve to configured models.
          * @enum {string}
          */
-        AiPurpose: "reviewDefault" | "proRvPrefilter" | "reviewLowEffort" | "reviewMediumEffort" | "reviewHighEffort" | "memoryReconsideration" | "embeddingDefault" | "reviewTriage" | "reviewVerification";
+        AiPurpose: "reviewDefault" | "proRvPrefilter" | "reviewLowEffort" | "reviewMediumEffort" | "reviewHighEffort" | "memoryReconsideration" | "embeddingDefault" | "reviewTriage" | "reviewVerification" | "insightsClassification";
         /** @description One configured AI purpose binding for an AI connection profile. */
         AiPurposeBindingDto: {
             /** Format: uuid */
@@ -13642,6 +15090,7 @@ export interface components {
             budgetConfig?: components["schemas"]["BudgetConfigDto"];
             minimumSeverityToPost?: components["schemas"]["CommentSeverity"];
             autoResolveSeverities?: components["schemas"]["CommentSeverity"][] | null;
+            codeInsightsCollectionEnabled?: boolean;
         };
         /** @description Client-scoped review profile response. */
         ClientReviewProfileResponse: {
@@ -13824,6 +15273,768 @@ export interface components {
             logicalModelName?: string | null;
             /** @description The provider family the tokens were spent against, or the empty string when it could not be determined. */
             providerKind?: string | null;
+        };
+        /**
+         * @description Where one finding stands in the classification pipeline. The three states are distinguished because a
+         *     freshly finished review legitimately shows no tags for a cycle or two, and "not yet" must not read the
+         *     same as "nothing to say".
+         * @enum {string}
+         */
+        CodeInsightClassificationStatus: "classified" | "pending" | "unclassifiable";
+        /** @description One row of a concentration ranking, where findings cluster. */
+        CodeInsightConcentrationResponse: {
+            /**
+             * Format: uuid
+             * @description The client the scope belongs to.
+             */
+            clientId?: string;
+            /** @description Display name of that client, when it could be resolved. */
+            clientName?: string | null;
+            /** @description Repository, when the grain includes one. */
+            repositoryId?: string | null;
+            /**
+             * Format: int64
+             * @description Pull request, when the grain includes one.
+             */
+            pullRequestId?: number | null;
+            /** @description File, when the grain is per-file. */
+            filePath?: string | null;
+            /**
+             * Format: int32
+             * @description Findings attributed to this scope in the window.
+             */
+            count?: number;
+            /**
+             * @description The repository's display name, when one has been recorded. `null` leaves the caller showing
+             *     RepositoryId: the provider's own identifier, which for several providers is a bare
+             *     number and reads as anything but a repository.
+             */
+            repositoryName?: string | null;
+        };
+        /** @description One concern class and why its findings were turned down. */
+        CodeInsightConcernClassRejectionsResponse: {
+            /** @description `Functional`, `Evolvability`, or `null` for the findings that carry no core type. */
+            concernClass?: string | null;
+            /** @description One entry per reason present in this class, largest first. */
+            reasons?: components["schemas"]["CodeInsightRejectionReasonCountResponse"][] | null;
+            /**
+             * Format: int32
+             * @description Rejections in this class carrying no reason.
+             */
+            unclassified?: number;
+            /**
+             * Format: int32
+             * @description Every rejection in this class.
+             */
+            rejections?: number;
+        };
+        /**
+         * @description A core finding type as the taxonomy surface returns it: read-only vocabulary, identical for every
+         *     client of the installation.
+         */
+        CodeInsightCoreTagDto: {
+            /** @description Stable identifier. */
+            slug?: string | null;
+            /** @description Human-readable name. */
+            displayName?: string | null;
+            /** @description One-sentence definition, shared with the classifier. */
+            definition?: string | null;
+            characteristic?: components["schemas"]["CodeInsightQualityCharacteristic"];
+            /** @description Whether the type describes a defect in behaviour rather than in evolvability. */
+            behaviourChanging?: boolean;
+        };
+        /** @description One point of a counted series. */
+        CodeInsightCountPointResponse: {
+            /**
+             * Format: date
+             * @description Start of the bucket: the day, the week's Monday, or the month's first.
+             */
+            bucketStart?: string;
+            /** @description The core type slug, or the empty string for a plain total. */
+            key?: string | null;
+            /**
+             * Format: int32
+             * @description How many findings fell in this bucket for this key.
+             */
+            count?: number;
+        };
+        /** @description Coverage of the collection against existing review history, per repository and in total. */
+        CodeInsightCoverageResponse: {
+            /**
+             * Format: int32
+             * @description Completed review jobs in the window.
+             */
+            reviewJobs?: number;
+            /**
+             * Format: int32
+             * @description Jobs the collection holds findings for.
+             */
+            jobsCollected?: number;
+            /**
+             * Format: int32
+             * @description Findings those jobs persisted.
+             */
+            producedFindings?: number;
+            /**
+             * Format: int32
+             * @description Findings the collection holds.
+             */
+            collectedFindings?: number;
+            /**
+             * Format: int32
+             * @description Distinct pull requests reviewed.
+             */
+            pullRequests?: number;
+            /**
+             * Format: int32
+             * @description Pull requests whose threads are retained.
+             */
+            pullRequestsRetained?: number;
+            /**
+             * Format: int32
+             * @description Clients with review activity in the window that have collection switched off. Their absence from the
+             *     numbers is a setting rather than missing data.
+             */
+            clientsWithCollectionOff?: number;
+            /** @description Per-repository rows, least covered first. */
+            rows?: components["schemas"]["CodeInsightCoverageRowResponse"][] | null;
+        };
+        /** @description One repository's answer to how much of the review history that already exists the collection knows about. */
+        CodeInsightCoverageRowResponse: {
+            /**
+             * Format: uuid
+             * @description Owning client.
+             */
+            clientId?: string;
+            /** @description Client display name. */
+            clientName?: string | null;
+            /** @description Provider repository identifier. */
+            repositoryId?: string | null;
+            /** @description Display name a review recorded for it, when there is one. */
+            repositoryName?: string | null;
+            /**
+             * Format: int32
+             * @description Completed review jobs in the window.
+             */
+            reviewJobs?: number;
+            /**
+             * Format: int32
+             * @description Of those, jobs the collection holds at least one finding for.
+             */
+            jobsCollected?: number;
+            /**
+             * Format: int32
+             * @description Findings those jobs persisted in their own results.
+             */
+            producedFindings?: number;
+            /**
+             * Format: int32
+             * @description Findings the collection holds for those jobs.
+             */
+            collectedFindings?: number;
+            /**
+             * Format: int32
+             * @description Distinct pull requests reviewed.
+             */
+            pullRequests?: number;
+            /**
+             * Format: int32
+             * @description Of those, pull requests whose threads are retained.
+             */
+            pullRequestsRetained?: number;
+            /**
+             * Format: int32
+             * @description Retained threads on them, whoever authored them.
+             */
+            retainedThreads?: number;
+            /**
+             * Format: int32
+             * @description Outcomes recorded for the collected findings.
+             */
+            dispositions?: number;
+            /**
+             * Format: int32
+             * @description Human threads harvested as findings the reviewer did not raise.
+             */
+            misses?: number;
+            /**
+             * Format: int32
+             * @description Pull requests whose correctness has been sealed.
+             */
+            pullRequestsSealed?: number;
+        };
+        /** @description A client's custom finding type as the taxonomy surface returns it. */
+        CodeInsightCustomTagDto: {
+            /**
+             * Format: uuid
+             * @description Stable identity; assignments reference this.
+             */
+            id?: string;
+            /** @description Lower-kebab-case identifier, unique within the client. */
+            slug?: string | null;
+            /** @description Human-readable name. */
+            displayName?: string | null;
+            /** @description One-sentence definition, shared with the classifier. */
+            definition?: string | null;
+            /**
+             * Format: date-time
+             * @description When the tag was retired, or `null` while it is active.
+             */
+            retiredAt?: string | null;
+            /**
+             * Format: date-time
+             * @description When the tag was created.
+             */
+            createdAt?: string;
+            /**
+             * Format: date-time
+             * @description When the tag was last changed.
+             */
+            updatedAt?: string;
+        };
+        /** @description A request to create or update a client's custom finding type. */
+        CodeInsightCustomTagWriteRequest: {
+            /** @description Lower-kebab-case identifier; must not collide with a core type or another of the client's tags. */
+            slug?: string | null;
+            /** @description Human-readable name. */
+            displayName?: string | null;
+            /** @description One-sentence definition the classifier will use as the label description. */
+            definition?: string | null;
+        };
+        /** @description One file's history: how much has been found in it, and across how many pull requests. */
+        CodeInsightFileHotspotResponse: {
+            /** @description The file, or the empty string for findings raised about the pull request as a whole. */
+            filePath?: string | null;
+            /**
+             * Format: int32
+             * @description Findings raised in this file across every pull request in scope.
+             */
+            findings?: number;
+            /**
+             * Format: int32
+             * @description How many distinct pull requests raised at least one finding in it.
+             */
+            pullRequests?: number;
+            /**
+             * Format: double
+             * @description Findings per such pull request, or `null` when there were none.
+             */
+            averagePerPullRequest?: number | null;
+            /** @description The definition within the file, when the ranking is grouped by symbol; `null` for a file-grouped row. */
+            symbolName?: string | null;
+        };
+        /** @description The classification of one finding of a review job, keyed by its position in that job's finding list. */
+        CodeInsightFindingClassificationView: {
+            /**
+             * Format: int32
+             * @description Index of the finding within its job's review result.
+             */
+            ordinal?: number;
+            status?: components["schemas"]["CodeInsightClassificationStatus"];
+            /** @description Core type slugs, comparable across clients. Empty unless classified. */
+            coreTags?: string[] | null;
+            /** @description The client's own type slugs, including any since retired. Empty unless classified. */
+            customTags?: string[] | null;
+            level?: components["schemas"]["CodeInsightFindingLevel"];
+            qualifier?: components["schemas"]["CodeInsightFindingQualifier"];
+            /**
+             * Format: double
+             * @description The classifier's confidence, when classified.
+             */
+            confidence?: number | null;
+        };
+        /**
+         * @description The level of code a finding concerns: the highest one it reaches. This is the granularity axis the
+         *     code-quality literature settles on (a problem local to one method, one inside a type and its
+         *     collaborators, and one spanning components are different kinds of problem with different costs to
+         *     fix), collapsed to the levels a reviewer can actually distinguish from a diff.
+         * @enum {string}
+         */
+        CodeInsightFindingLevel: "statement" | "member" | "type" | "file" | "crossFile";
+        /**
+         * @description Whether the code the finding is about is absent, present but wrong, or present but unnecessary.
+         *     This is the defect-qualifier axis orthogonal-defect classification established: "we forgot a null
+         *     check" and "our null check is wrong" are the same finding type and call for different responses, so
+         *     a spike in one means something different from a spike in the other.
+         * @enum {string}
+         */
+        CodeInsightFindingQualifier: "missing" | "incorrect" | "extraneous";
+        /** @description One finding, as a drill-through from any number on a view shows it. */
+        CodeInsightFindingResponse: {
+            /**
+             * Format: uuid
+             * @description Surrogate identity of the finding.
+             */
+            id?: string;
+            /**
+             * Format: uuid
+             * @description Owning client.
+             */
+            clientId?: string;
+            /** @description Provider repository identifier. */
+            repositoryId?: string | null;
+            /**
+             * Format: int64
+             * @description Provider pull-request identifier.
+             */
+            pullRequestId?: number;
+            /**
+             * Format: uuid
+             * @description The review job that produced it: the link back to the review protocol.
+             */
+            jobId?: string;
+            /** @description File the finding is anchored to, when applicable. */
+            filePath?: string | null;
+            /**
+             * Format: int32
+             * @description Line the finding is anchored to, when known.
+             */
+            lineNumber?: number | null;
+            /** @description Severity the review assigned, as its name. */
+            severity?: string | null;
+            /** @description The finding text. */
+            message?: string | null;
+            /** @description Core type slugs assigned to it; empty while unclassified. */
+            coreTags?: string[] | null;
+            /** @description What became of it, or `null` while its thread has not resolved. */
+            disposition?: string | null;
+            /** @description Provider thread it was posted as, when it was posted. */
+            providerThreadId?: string | null;
+            /**
+             * Format: date-time
+             * @description When the review that produced it ran.
+             */
+            observedAt?: string;
+            /**
+             * @description Why it was rejected, as its name, or `null` when it was not rejected or the reason could not be
+             *     judged. A caller must show that as unknown rather than as any particular reason.
+             */
+            rejectionReason?: string | null;
+        };
+        /** @description Which files keep producing findings, with the totals the per-file rows sit inside. */
+        CodeInsightHotspotResponse: {
+            /**
+             * Format: int32
+             * @description Findings across every file in scope.
+             */
+            totalFindings?: number;
+            /**
+             * Format: int32
+             * @description Distinct pull requests that raised any of them.
+             */
+            pullRequests?: number;
+            /**
+             * Format: double
+             * @description Findings per such pull request across the whole scope.
+             */
+            averagePerPullRequest?: number | null;
+            /**
+             * Format: int32
+             * @description How many distinct rows carried findings, before truncation.
+             */
+            fileCount?: number;
+            /** @description The worst rows, most findings first. */
+            files?: components["schemas"]["CodeInsightFileHotspotResponse"][] | null;
+            /**
+             * Format: int32
+             * @description Findings in scope this grouping could not place, and so counts nowhere above, always zero when grouping by
+             *     file. Reported rather than folded into an "(unknown)" row that would rank as if it were somewhere in the code.
+             */
+            unplacedFindings?: number;
+        };
+        /** @description One bucket of a metric series. */
+        CodeInsightMetricPointResponse: {
+            /**
+             * Format: date
+             * @description Start of the bucket.
+             */
+            bucketStart?: string;
+            metric?: components["schemas"]["CodeInsightMetricResponse"];
+        };
+        /** @description One measured metric: the ratios, the counts they came from, and the sample they rest on. */
+        CodeInsightMetricResponse: {
+            /**
+             * Format: double
+             * @description Of the findings that resolved, the share that were right.
+             */
+            precision?: number | null;
+            /**
+             * Format: double
+             * @description Of the issues that were there to find, the share the reviewer found.
+             */
+            recall?: number | null;
+            /**
+             * Format: double
+             * @description Harmonic mean of precision and recall.
+             */
+            f1?: number | null;
+            /**
+             * Format: double
+             * @description Of the findings that resolved, the share a human acted on or agreed with.
+             */
+            acceptanceRate?: number | null;
+            /**
+             * Format: int32
+             * @description Findings whose claimed fix was corroborated by a code change.
+             */
+            addressed?: number;
+            /**
+             * Format: int32
+             * @description Findings a human accepted without changing the code.
+             */
+            acknowledged?: number;
+            /**
+             * Format: int32
+             * @description Findings judged correct but not wanted here.
+             */
+            dismissed?: number;
+            /**
+             * Format: int32
+             * @description Findings judged wrong.
+             */
+            falsePositive?: number;
+            /**
+             * Format: int32
+             * @description Human-raised issues that qualified as something the reviewer should have caught.
+             */
+            misses?: number;
+            /**
+             * Format: int32
+             * @description What the metric rests on: sealed pull requests for correctness, resolved findings for acceptance.
+             */
+            sampleSize?: number;
+            /**
+             * Format: int32
+             * @description Findings a human engaged with and left unresolved: neither accepted nor rejected. Counted here and absent
+             *     from every ratio, so a caller can show how many threads ended without a verdict without treating them as
+             *     evidence either way.
+             */
+            discussed?: number;
+        };
+        /** @description One harvested human thread, with all three judgements, including the threads that did not qualify. */
+        CodeInsightMissResponse: {
+            /**
+             * Format: uuid
+             * @description Surrogate identity of the harvested record.
+             */
+            id?: string;
+            /**
+             * Format: uuid
+             * @description Owning client.
+             */
+            clientId?: string;
+            /** @description Provider repository identifier. */
+            repositoryId?: string | null;
+            /**
+             * Format: int64
+             * @description Provider pull-request identifier.
+             */
+            pullRequestId?: number;
+            /** @description The human thread's provider identity. */
+            providerThreadId?: string | null;
+            /** @description File the thread is anchored to, when applicable. */
+            filePath?: string | null;
+            /**
+             * Format: int32
+             * @description Line the thread is anchored to, when known.
+             */
+            lineNumber?: number | null;
+            /** @description The discussion the judgement was made from. */
+            discussion?: string | null;
+            /** @description Judged a real code issue rather than a question or a nit. */
+            isSubstantive?: boolean;
+            /** @description Judged accepted, or to have led to a code change. */
+            wasActedOn?: boolean;
+            /** @description Judged within the class an automated reviewer should reasonably catch. */
+            isInScope?: boolean;
+            /** @description Whether it counts toward recall. */
+            countsAsMiss?: boolean;
+            /**
+             * Format: double
+             * @description The classifier's confidence, 0–1.
+             */
+            classifierConfidence?: number | null;
+            /**
+             * Format: date-time
+             * @description When it was harvested.
+             */
+            harvestedAt?: string;
+        };
+        /** @description Survival for one pull request, so the aggregate can be opened up. */
+        CodeInsightPullRequestSurvivalResponse: {
+            /**
+             * Format: uuid
+             * @description Owning client.
+             */
+            clientId?: string;
+            /** @description Provider repository identifier. */
+            repositoryId?: string | null;
+            /**
+             * Format: int64
+             * @description Provider pull-request identifier.
+             */
+            pullRequestId?: number;
+            /**
+             * Format: int32
+             * @description How many increments were collected for it.
+             */
+            revisions?: number;
+            survival?: components["schemas"]["CodeInsightSurvivalResponse"];
+            repositoryName?: string | null;
+        };
+        /**
+         * @description The product-quality characteristic a finding type contributes to. These are the four
+         *     source-code-level characteristics the ISO/IEC 25010 product quality model defines and the
+         *     industry's automated code-quality measures report on, so a roll-up by characteristic reads the
+         *     same way as the quality reporting an organisation already does.
+         *     Each core finding type maps to exactly one of these; the mapping lives in the versioned core
+         *     taxonomy so a characteristic roll-up needs no second classification.
+         * @enum {string}
+         */
+        CodeInsightQualityCharacteristic: "reliability" | "security" | "performanceEfficiency" | "maintainability";
+        /** @description Both metric lenses over the requested window and scope, as series and as totals. */
+        CodeInsightQualityResponse: {
+            /** @description Correctness per bucket, by seal date. */
+            correctness?: components["schemas"]["CodeInsightMetricPointResponse"][] | null;
+            /** @description Acceptance per bucket, by review date. */
+            acceptance?: components["schemas"]["CodeInsightMetricPointResponse"][] | null;
+            correctnessTotal?: components["schemas"]["CodeInsightMetricResponse"];
+            acceptanceTotal?: components["schemas"]["CodeInsightMetricResponse"];
+            correctnessTrend?: components["schemas"]["CodeInsightTrendResponse"];
+            acceptanceTrend?: components["schemas"]["CodeInsightTrendResponse"];
+            /**
+             * Format: int32
+             * @description Below this sample, a caller must annotate or suppress the metric rather than draw it as precise.
+             */
+            minimumSampleSize?: number;
+            /**
+             * Format: int32
+             * @description Buckets a window needs before a trend is tested at all, so a caller can say how many are still missing
+             *     instead of only that there are too few.
+             */
+            minimumTrendPeriods?: number;
+        };
+        /** @description One rejection reason and how often it was the reason. */
+        CodeInsightRejectionReasonCountResponse: {
+            /** @description The reason, as its name. */
+            reason?: string | null;
+            /**
+             * Format: int32
+             * @description Rejections carrying it.
+             */
+            count?: number;
+        };
+        /** @description Why the rejections in a window were rejected, and how many carried no reason. */
+        CodeInsightRejectionReasonsResponse: {
+            /** @description One entry per reason present, largest first. A reason with no rejections is absent. */
+            reasons?: components["schemas"]["CodeInsightRejectionReasonCountResponse"][] | null;
+            /**
+             * Format: int32
+             * @description Rejections carrying no reason: the reason could not be judged, or the outcome predates reasons being
+             *     recorded. Reported rather than folded into a reason, because neither is one.
+             */
+            unclassified?: number;
+            /**
+             * Format: int32
+             * @description Every rejection in scope, whether or not it carries a reason.
+             */
+            rejections?: number;
+            /**
+             * @description The same rejections split by the kind of concern they raised, functional against evolvability. The two are
+             *     rejected for different reasons, so the comparison worth making is within a class rather than across the
+             *     whole set. Findings carrying no core type appear with a `null` class rather than being dropped.
+             */
+            byConcernClass?: components["schemas"]["CodeInsightConcernClassRejectionsResponse"][] | null;
+        };
+        /** @description Every repository with findings in the window, busiest first, and the totals across them. */
+        CodeInsightRepositoryDirectoryResponse: {
+            /**
+             * Format: int32
+             * @description Findings across every repository in scope.
+             */
+            totalFindings?: number;
+            /**
+             * Format: int32
+             * @description How many repositories carried any.
+             */
+            repositories?: number;
+            /**
+             * Format: int32
+             * @description Distinct pull requests across all of them.
+             */
+            pullRequests?: number;
+            /**
+             * Format: double
+             * @description Findings per such pull request across the whole scope.
+             */
+            averagePerPullRequest?: number | null;
+            /** @description The repositories, most findings first. */
+            rows?: components["schemas"]["CodeInsightRepositorySummaryResponse"][] | null;
+        };
+        /** @description One repository's own numbers, for the directory a reader lands on. */
+        CodeInsightRepositorySummaryResponse: {
+            /**
+             * Format: uuid
+             * @description The client the repository belongs to.
+             */
+            clientId?: string;
+            /** @description Display name of that client, when it could be resolved. */
+            clientName?: string | null;
+            /** @description Provider repository identifier: what every other read filters on. */
+            repositoryId?: string | null;
+            /** @description Display name, when one has been recorded. */
+            repositoryName?: string | null;
+            /**
+             * Format: int32
+             * @description Findings collected in the window.
+             */
+            findings?: number;
+            /**
+             * Format: int32
+             * @description Distinct pull requests that produced them.
+             */
+            pullRequests?: number;
+            /**
+             * Format: int32
+             * @description Distinct files carrying them; a pull-request-level finding is not in a file.
+             */
+            files?: number;
+            /**
+             * Format: double
+             * @description Findings per such pull request, or `null` when there were none.
+             */
+            averagePerPullRequest?: number | null;
+            /**
+             * Format: date
+             * @description The most recent day a finding was collected here.
+             */
+            lastActivityOn?: string | null;
+        };
+        /** @description One measured metric for one scope, when reviewer performance is grouped rather than aggregated. */
+        CodeInsightScopedMetricResponse: {
+            /**
+             * Format: uuid
+             * @description The client the scope belongs to, or `null` when the row is not a client scope: a model row spans every
+             *     client the caller administers.
+             */
+            clientId?: string | null;
+            /** @description Display name of that client, when it could be resolved. */
+            clientName?: string | null;
+            /** @description Repository, when the grain includes one. */
+            repositoryId?: string | null;
+            /**
+             * Format: int64
+             * @description Pull request, when the grain includes one.
+             */
+            pullRequestId?: number | null;
+            metric?: components["schemas"]["CodeInsightMetricResponse"];
+            /**
+             * @description The remote model, when the grouping is by model. `null` together with
+             *     LogicalModelName marks the unattributed row.
+             */
+            modelId?: string | null;
+            /** @description The client's logical model name for that model, when the producing pass ran through a named logical model. */
+            logicalModelName?: string | null;
+            repositoryName?: string | null;
+        };
+        /** @description The survival answer: the window's totals, plus the pull requests that shed the most. */
+        CodeInsightSurvivalReport: {
+            total?: components["schemas"]["CodeInsightSurvivalResponse"];
+            /** @description The pull requests that shed the most, so the total can be opened up. */
+            pullRequests?: components["schemas"]["CodeInsightPullRequestSurvivalResponse"][] | null;
+        };
+        /** @description How much of what a review raised was still being raised when the pull request finished. */
+        CodeInsightSurvivalResponse: {
+            /**
+             * Format: int32
+             * @description Problems still being raised at the newest increment.
+             */
+            persisted?: number;
+            /**
+             * Format: int32
+             * @description Problems that stopped being raised and carry a corroborated fix.
+             */
+            fixed?: number;
+            /**
+             * Format: int32
+             * @description Problems that stopped being raised with nothing to show for it.
+             */
+            dropped?: number;
+            /**
+             * Format: int32
+             * @description Every problem raised, however it ended.
+             */
+            total?: number;
+            /**
+             * Format: double
+             * @description The share still standing, or `null` when nothing was raised.
+             */
+            persistenceRate?: number | null;
+            /**
+             * Format: int32
+             * @description How many multi-increment pull requests these counts come from.
+             */
+            pullRequests?: number;
+        };
+        /** @description The full vocabulary available to one client: the fixed core set plus that client's custom tags. */
+        CodeInsightTaxonomyDto: {
+            /**
+             * Format: int32
+             * @description Version of the core vocabulary these core tags come from.
+             */
+            version?: number;
+            /** @description The fixed core types, comparable across clients. */
+            coreTags?: components["schemas"]["CodeInsightCoreTagDto"][] | null;
+            /** @description The client's own types, including retired ones so history stays readable. */
+            customTags?: components["schemas"]["CodeInsightCustomTagDto"][] | null;
+        };
+        /**
+         * @description Which way a metric has moved across the window, as the server judges it, so every caller reads the same
+         *     direction from the same data instead of each inventing its own comparison.
+         * @enum {string}
+         */
+        CodeInsightTrendDirection: "insufficient" | "improving" | "declining" | "flat";
+        /**
+         * @description A direction with the test behind it, so a reader can see how much the metric moved and how much the
+         *     movement is worth.
+         */
+        CodeInsightTrendResponse: {
+            direction?: components["schemas"]["CodeInsightTrendDirection"];
+            /**
+             * Format: double
+             * @description Kendall's Tau, from -1 to 1: how consistently the metric moved one way, independent of how far it moved.
+             */
+            tau?: number | null;
+            /**
+             * Format: double
+             * @description Two-sided p-value of the Mann-Kendall test. Above the significance level the direction is reported as flat
+             *     however large the slope looks.
+             */
+            pValue?: number | null;
+            /**
+             * Format: double
+             * @description Sen's slope: the median change per bucket, in the metric's own units, which for a ratio is a change in that
+             *     ratio per bucket.
+             */
+            slopePerPeriod?: number | null;
+            /**
+             * Format: int32
+             * @description Buckets that carried enough sample to be tested. Compare against
+             *     MeisterDev.ProPR.Api.Features.CodeInsights.Contracts.CodeInsightQualityResponse.MinimumTrendPeriods to say how far a window is from testable.
+             */
+            periods?: number;
+        };
+        /** @description The counted series behind the "what kinds of problem, over time" question. */
+        CodeInsightTypeSeriesResponse: {
+            /** @description The series. Empty when nothing was collected in the window. */
+            points?: components["schemas"]["CodeInsightCountPointResponse"][] | null;
+            /**
+             * Format: int32
+             * @description Findings in the window and scope, whether or not they carry a type yet.
+             */
+            totalFindings?: number;
+            /** @description The distinct type slugs present, so a caller can build a stable legend. */
+            keys?: string[] | null;
         };
         /**
          * @description The native review surface used by a provider.
@@ -14375,6 +16586,7 @@ export interface components {
             budgetConfig?: components["schemas"]["BudgetConfigDto"];
             minimumSeverityToPost?: components["schemas"]["CommentSeverity"];
             autoResolveSeverities?: components["schemas"]["CommentSeverity"][] | null;
+            codeInsightsCollectionEnabled?: boolean | null;
         };
         /** @description Patch payload for one premium capability override. */
         PatchPremiumCapabilityOverrideRequest: {
@@ -15139,6 +17351,23 @@ export interface components {
              *     pass ran under a lens. null for the baseline, ordinary resample passes, and legacy comments.
              */
             originPassLens?: string | null;
+            /**
+             * @description The remote model that produced this finding. null for legacy comments and for findings no
+             *     single pass owns.
+             */
+            originModelId?: string | null;
+            /**
+             * @description The client's logical model name for the producing pass, when it ran through a named logical model rather than
+             *     a bare connection binding.
+             */
+            originLogicalModelName?: string | null;
+            /**
+             * @description The definition this finding's line falls inside, resolved from the file's own syntax. null
+             *     for pull-request-level findings and wherever the syntax could not place the line.
+             */
+            originSymbolName?: string | null;
+            /** @description What kind of definition that is (method, class, function, …). */
+            originSymbolKind?: string | null;
         };
         /** @description Visibility for one tool-result evidence bounding or refresh action. */
         ProtocolToolEvidenceDto: {
@@ -16051,6 +18280,9 @@ export interface components {
              * @description When the record was last upserted.
              */
             updatedAt?: string;
+            keywords?: string[] | null;
+            /** Format: uuid */
+            codeInsightFindingId?: string | null;
         };
         /** @description Generic paginated result wrapper. */
         ThreadMemoryRecordDtoPagedResult: {

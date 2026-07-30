@@ -47,6 +47,45 @@ public sealed class ReviewSynthesisExecutorMaterializeTests
     }
 
     [Fact]
+    public void MaterializePublishedComments_CarriesTheProducingModelOntoThePublishedComment()
+    {
+        // The published comment is what the collection path sees, so an attribution that stops at the gate is an
+        // attribution that never reaches a metric.
+        var finding = new CandidateReviewFinding(
+            "finding-a",
+            new CandidateFindingProvenance(
+                CandidateFindingProvenance.PerFileCommentOrigin,
+                "per_file_review",
+                "src/Foo.cs",
+                originModelId: "gpt-5.4-mini",
+                originLogicalModelName: "thrifty"),
+            CommentSeverity.Error,
+            "Potential null dereference.",
+            CandidateReviewFinding.PerFileCommentCategory,
+            "src/Foo.cs",
+            12);
+
+        var comment = Assert.Single(ReviewSynthesisExecutor.MaterializePublishedComments([finding], [Publish("finding-a", null)]));
+
+        Assert.Equal("gpt-5.4-mini", comment.OriginModelId);
+        Assert.Equal("thrifty", comment.OriginLogicalModelName);
+    }
+
+    [Fact]
+    public void MaterializePublishedComments_WithNoRecordedModel_LeavesTheAttributionEmpty()
+    {
+        // A finding no single pass owns must not borrow one: null is what the per-model reading shows as
+        // unattributed, and a guess here would be indistinguishable from a measurement.
+        var comment = Assert.Single(
+            ReviewSynthesisExecutor.MaterializePublishedComments(
+                [Finding("finding-a", "Cross-cutting concern.")],
+                [Publish("finding-a", null)]));
+
+        Assert.Null(comment.OriginModelId);
+        Assert.Null(comment.OriginLogicalModelName);
+    }
+
+    [Fact]
     public void MaterializePublishedComments_AppendsPublicationNoteToTheComment()
     {
         var finding = Finding("finding-a", "Potential null dereference.");

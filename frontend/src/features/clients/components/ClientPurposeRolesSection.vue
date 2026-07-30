@@ -78,6 +78,7 @@ const purposes: PurposeOption[] = [
   { value: 'proRvPrefilter', label: 'ProRV prefilter', embedding: false },
   { value: 'memoryReconsideration', label: 'Memory reconsideration', embedding: false },
   { value: 'embeddingDefault', label: 'Embedding default', embedding: true },
+  { value: 'insightsClassification', label: 'Insights classification', embedding: false },
 ]
 
 const effective = ref<LogicalModelResponse[]>([])

@@ -60,6 +60,16 @@ public sealed class ClientRecord
     public bool EnableMultiPassUnion { get; set; } = false;
 
     /// <summary>
+    ///     Controls whether Code Insights collects quality facts for this client (finding records, type
+    ///     tags, dispositions, misses, and memory keywords) and spends model tokens classifying them.
+    ///     Defaults to <see langword="false" />: making an installation commercial changes nothing until a
+    ///     client opts in. Collection is forward-only, so turning it on collects from that point and turning
+    ///     it off stops further collection without removing what was already collected.
+    ///     The commercial capability gate applies in addition to this flag; both must be open.
+    /// </summary>
+    public bool CodeInsightsCollectionEnabled { get; set; } = false;
+
+    /// <summary>
     ///     Reasoning effort applied to the implicit tier baseline review pass for this client.
     ///     Defaults to <see cref="Domain.Enums.ReviewReasoningEffort.None" /> so no effort is sent until a user
     ///     opts in (behavior and cost unchanged). Per-additional-pass effort lives on each

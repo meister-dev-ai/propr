@@ -267,6 +267,19 @@ public sealed record ProtocolWorkspaceDto(
 ///     The specialist lens (e.g. <c>security</c>) of the multi-pass union pass that produced this finding, when the
 ///     pass ran under a lens. <see langword="null" /> for the baseline, ordinary resample passes, and legacy comments.
 /// </param>
+/// <param name="OriginModelId">
+///     The remote model that produced this finding. <see langword="null" /> for legacy comments and for findings no
+///     single pass owns.
+/// </param>
+/// <param name="OriginLogicalModelName">
+///     The client's logical model name for the producing pass, when it ran through a named logical model rather than
+///     a bare connection binding.
+/// </param>
+/// <param name="OriginSymbolName">
+///     The definition this finding's line falls inside, resolved from the file's own syntax. <see langword="null" />
+///     for pull-request-level findings and wherever the syntax could not place the line.
+/// </param>
+/// <param name="OriginSymbolKind">What kind of definition that is (method, class, function, …).</param>
 public sealed record ProtocolReviewCommentDto(
     string? FilePath,
     int? LineNumber,
@@ -275,7 +288,11 @@ public sealed record ProtocolReviewCommentDto(
     string? OriginPassKind = null,
     ReviewCommentScopeRelation? ChangedLineRelation = null,
     int? OriginPassIndex = null,
-    string? OriginPassLens = null);
+    string? OriginPassLens = null,
+    string? OriginModelId = null,
+    string? OriginLogicalModelName = null,
+    string? OriginSymbolName = null,
+    string? OriginSymbolKind = null);
 
 /// <summary>
 ///     Terminal outcome metadata for one file-linked protocol pass.

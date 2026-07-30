@@ -16,12 +16,27 @@ namespace MeisterDev.ProPR.Api.Tests.Startup;
 ///     ships an endpoint whose only protection is the global fallback (authenticated caller, no per-resource scoping).
 ///     This test enumerates every controller action and fails when one has neither an authorization attribute nor a
 ///     recognized in-code gate, so a forgotten check cannot pass CI unnoticed.
+///     <para>
+///         A gate may be a call into <see cref="AuthHelpers" /> or into a named scope resolver: see
+///         <c>GateTokens</c> for why both count, and for the deliberate choice to list resolver methods one by one.
+///     </para>
 /// </summary>
 public sealed class ControllerAuthorizationCoverageTests
 {
     // Substrings that mark a method body as consulting the shared auth context. Any AuthHelpers member
     // (RequireAdmin/RequireClientRole/RequireAuthenticated/IsAdmin/GetUserId/...) counts as a gate.
-    private static readonly string[] GateTokens = ["AuthHelpers."];
+    //
+    // A named scope resolver counts too. Where an action's authorisation is inseparable from deciding which
+    // records it may read (a cross-client aggregate, say, where the authorised set *is* the query) the two
+    // belong in one collaborator rather than as a check the action performs and then hopes it obeyed. Each such
+    // resolver method is named here explicitly rather than matched by a loose prefix, so adding one stays a
+    // deliberate act.
+    private static readonly string[] GateTokens =
+    [
+        "AuthHelpers.",
+        "scopeResolver.ResolveForClientAccessAsync",
+        "scopeResolver.ResolveForTenantAdministrationAsync",
+    ];
 
     [Fact]
     public void EveryControllerAction_HasAuthorizationAttributeOrInCodeGate()

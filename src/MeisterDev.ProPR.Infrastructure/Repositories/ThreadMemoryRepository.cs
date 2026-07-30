@@ -126,10 +126,16 @@ public sealed class ThreadMemoryRepository(
                 if (!string.IsNullOrWhiteSpace(search))
                 {
                     var searchPattern = $"%{EscapeLikePattern(search)}%";
+                    var keywordTerm = search.Trim().ToLowerInvariant();
+
+                    // Keywords are matched additively alongside the existing columns. They exist so an operator
+                    // who remembers roughly what a decision was about can find it without an embedding query;
+                    // the similarity-matching path is a different query entirely and is untouched by this.
                     query = query.Where(r =>
                         (r.FilePath != null && EF.Functions.ILike(r.FilePath, searchPattern)) ||
                         EF.Functions.ILike(r.RepositoryId, searchPattern) ||
-                        EF.Functions.ILike(r.ResolutionSummary, searchPattern));
+                        EF.Functions.ILike(r.ResolutionSummary, searchPattern) ||
+                        r.Keywords.Contains(keywordTerm));
                 }
 
                 var total = await query.CountAsync(ct);

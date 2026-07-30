@@ -21,6 +21,10 @@ export interface ThreadMemoryRecordDto {
   resolutionSummary: string
   createdAt: string
   updatedAt: string
+  /** AI-extracted keywords, searchable alongside repo/file/summary. Absent on records stored before they existed. */
+  keywords?: string[] | null
+  /** The code-insight finding this memory came from, when one is known. */
+  codeInsightFindingId?: string | null
 }
 
 export interface MemoryActivityLogEntryDto {

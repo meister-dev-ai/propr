@@ -334,7 +334,9 @@ public sealed partial class PrWideAgenticReviewOrchestrator(
                         reviewPassKind: ReviewPassKind.MultiPassUnion,
                         unionPassIndex: unionPassIndex,
                         unionLens: ReviewPassScope.PrWide,
-                        shadow: shadow),
+                        shadow: shadow,
+                        originModelId: runtime.Model.RemoteModelId,
+                        originLogicalModelName: runtime.LogicalModelName),
                     findingId: $"finding-prw-{unionPassIndex:D2}-{index + 1:D3}",
                     scopeRelation: ClassifyCandidateScope(candidate, changedRanges)))
                 .ToList();

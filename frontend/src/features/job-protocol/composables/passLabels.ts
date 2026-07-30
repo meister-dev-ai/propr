@@ -75,6 +75,55 @@ function lensLabel(lens: string): string {
  * A specialist lens (e.g. security) is appended as "Pass N · Security". Returns null
  * when the origin is unknown so callers render no badge.
  */
+/**
+ * Which model produced a finding, as a badge label: the client's logical model name when the pass ran through
+ * one, otherwise the remote model that actually answered. Null when neither was recorded: findings collected
+ * before the model was tracked, and findings no single pass owns, must render no badge rather than a guess.
+ */
+export function modelLabel(
+    originModelId: string | null | undefined,
+    originLogicalModelName?: string | null,
+): string | null {
+    const logical = (originLogicalModelName ?? '').trim()
+    if (logical) return logical
+
+    const remote = (originModelId ?? '').trim()
+    return remote || null
+}
+
+/**
+ * Tooltip for the model badge. When a logical model is in play both identities are shown, because the name is
+ * what an operator configures and the remote id is what actually ran, and the first can be repointed at a
+ * different second.
+ */
+export function modelTitle(
+    originModelId: string | null | undefined,
+    originLogicalModelName?: string | null,
+): string | null {
+    const logical = (originLogicalModelName ?? '').trim()
+    const remote = (originModelId ?? '').trim()
+
+    if (logical && remote) return `Logical model "${logical}", served by ${remote}`
+    if (logical) return `Logical model "${logical}"`
+    return remote ? `Model ${remote}` : null
+}
+
+/**
+ * Where in the file a finding sits, as a badge: the definition its line falls inside. Null when nothing placed it,
+ * a pull-request-level finding, an unsupported language, or a line outside every definition.
+ */
+export function symbolLabel(
+    originSymbolName: string | null | undefined,
+    originSymbolKind?: string | null,
+): string | null {
+    const name = (originSymbolName ?? '').trim()
+    if (!name) return null
+
+    const kind = (originSymbolKind ?? '').trim().toLowerCase()
+    // A method reads as a call, everything else as what it is.
+    return kind === 'method' || kind === 'function' ? `${name}()` : name
+}
+
 export function originLabel(
     originPassKind: string | null | undefined,
     originPassIndex?: number | null,

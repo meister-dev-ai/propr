@@ -4,7 +4,7 @@
 import { describe, expect, it, vi } from 'vitest'
 import { mount } from '@vue/test-utils'
 import JobProtocolCommentGroups from '@/features/job-protocol/components/JobProtocolCommentGroups.vue'
-import { originLabel } from '@/features/job-protocol/composables/passLabels'
+import { modelLabel, modelTitle, originLabel, symbolLabel } from '@/features/job-protocol/composables/passLabels'
 import type { JobProtocolViewModel } from '@/features/job-protocol/composables/useJobProtocolViewModel'
 
 function stubVm(overrides: Partial<Record<string, unknown>> = {}): JobProtocolViewModel {
@@ -12,6 +12,12 @@ function stubVm(overrides: Partial<Record<string, unknown>> = {}): JobProtocolVi
     return {
         renderMarkdown: (s: string) => `<p>${s}</p>`,
         commentOriginLabel: (comment: { originPassKind?: string | null }) => originLabel(comment.originPassKind),
+        commentModelLabel: (comment: { originModelId?: string | null; originLogicalModelName?: string | null }) =>
+            modelLabel(comment.originModelId, comment.originLogicalModelName),
+        commentModelTitle: (comment: { originModelId?: string | null; originLogicalModelName?: string | null }) =>
+            modelTitle(comment.originModelId, comment.originLogicalModelName),
+        commentSymbolLabel: (comment: { originSymbolName?: string | null; originSymbolKind?: string | null }) =>
+            symbolLabel(comment.originSymbolName, comment.originSymbolKind),
         selectFindingOrigin,
         routeClientId: undefined,
         dismissingIds: new Set<string>(),

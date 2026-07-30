@@ -8,6 +8,7 @@ using MeisterDev.ProPR.Application.Features.Reviewing.Execution.Ports;
 using MeisterDev.ProPR.Application.Features.Reviewing.Execution.Services;
 using MeisterDev.ProPR.Application.Features.Reviewing.Execution.Strategies.Ports;
 using MeisterDev.ProPR.Application.Interfaces;
+using MeisterDev.ProPR.CodeAnalysis;
 using MeisterDev.ProPR.Application.Options;
 using MeisterDev.ProPR.Application.ValueObjects;
 using MeisterDev.ProPR.Domain.Entities;
@@ -40,10 +41,15 @@ internal sealed partial class FileReviewer(
     IReviewPipelineProfileProvider? pipelineProfileProvider,
     IProRVPrefilter? proRvPrefilter = null,
     IReviewComplexityClassifier? complexityClassifier = null,
-    ILogicalModelResolver? logicalModelResolver = null)
+    ILogicalModelResolver? logicalModelResolver = null,
+    IStructuralCodeAnalyzer? structuralAnalyzer = null)
 {
     // Stage id recorded on the ProRV-lens applicability screen's protocol events.
     private const string ProRvLensStageId = "file-by-file.prorv-lens";
+
+    // How many distinct anchored lines one file's symbol attribution will parse for. Findings per file are in the
+    // handful; the cap exists so a generated file with hundreds of them cannot turn provenance into the cost centre.
+    private const int SymbolAttributionLineBudget = 50;
 
     // The embedded ProRV catalog is compiled into the ProRV assembly, so its assembly version is a stable token
     // that changes only when the assets change — used to key the per-job focused-guidance cache.
@@ -199,6 +205,16 @@ internal sealed partial class FileReviewer(
                 reviewInvariantFactProviders?.SelectMany(provider => provider.GetFacts()).ToList() ?? []);
 
             result = await this.RunReviewResultPipelineAsync(pipelineState, result, pipelineProfile, ct);
+
+            // Attribute this file's findings to the model that produced them, before any additional pass unions its
+            // own in. The context's own model is the one the loop actually called: the tier model when a tier
+            // runtime resolved, and otherwise whatever the job was configured with. Only comments that carry no
+            // model yet are stamped, so a pass can never be relabelled by a later stage: whichever pass produced a
+            // finding is the one that owns it.
+            result = result with
+            {
+                Comments = StampOriginModel(result.Comments, fileContext.ModelId, tierLogicalModelName),
+            };
 
             // The full deterministic security floor for this file (path + content-marker + model-escalate legs).
             // A security-lens pass is scoped to flagged files regardless of tier, so it is carried into the fan-out
@@ -416,7 +432,11 @@ internal sealed partial class FileReviewer(
                     plannedPass.LogicalModelName,
                     inputs.Ct));
 
-            unionComments.AddRange(StampUnionOrigin(passResult.Comments, plannedPass.PassIndex, plannedPass.Lens, plannedPass.Shadow));
+            unionComments.AddRange(
+                StampOriginModel(
+                    StampUnionOrigin(passResult.Comments, plannedPass.PassIndex, plannedPass.Lens, plannedPass.Shadow),
+                    plannedPass.ModelId,
+                    plannedPass.LogicalModelName));
             perPassCatchCounts.Add(passResult.Comments.Count);
             perPassModels.Add(plannedPass.ModelId);
             perPassLenses.Add(plannedPass.Lens);
@@ -617,6 +637,153 @@ internal sealed partial class FileReviewer(
                     OriginPassLens = lens,
                     OriginPassShadow = shadow,
                 });
+        }
+
+        return stamped;
+    }
+
+    /// <summary>
+    ///     Names the definition each finding sits inside (the method, class, or function) from the file's own
+    ///     syntax, so findings can later be counted per part of the codebase rather than only per file.
+    /// </summary>
+    /// <remarks>
+    ///     <para>
+    ///         Structural and local: the changed file already carries its content, and the analyzer is the same port
+    ///         the context stages use (tree-sitter for the languages it covers, Roslyn syntax for C#). No model call,
+    ///         no network, and nothing fetched.
+    ///     </para>
+    ///     <para>
+    ///         Best-effort throughout. No analyzer, an unsupported language, no content, a parse that comes back
+    ///         empty, or a line that falls outside every definition all leave the finding unattributed, which is
+    ///         what a later reading must show as "not resolved" rather than inventing a symbol for it.
+    ///     </para>
+    /// </remarks>
+    private async Task<ReviewResult> ApplySymbolAttributionStageAsync(
+        ReviewResultPipelineState state,
+        ReviewResult result,
+        CancellationToken ct)
+    {
+        var path = state.File.Path;
+        var content = state.File.FullContent;
+
+        if (structuralAnalyzer is null
+            || result.Comments.Count == 0
+            || string.IsNullOrEmpty(content)
+            || !structuralAnalyzer.CanAnalyze(path)
+            || LanguagePaths.TryResolve(path) is not { } language)
+        {
+            return result;
+        }
+
+        // Every anchored line in one request, because the port takes a list of ranges and answers one definition
+        // per range: asking line by line would parse the same file once per finding, and neither backend caches a
+        // parse. Distinct because several findings on one line share an enclosing definition by construction, and
+        // bounded so a pathological file cannot turn a review into a parsing exercise.
+        var lines = result.Comments
+            .Where(comment => comment.LineNumber is > 0)
+            .Select(comment => comment.LineNumber!.Value)
+            .Distinct()
+            .Take(SymbolAttributionLineBudget)
+            .ToList();
+
+        if (lines.Count == 0)
+        {
+            return result;
+        }
+
+        IReadOnlyList<EnclosingDefinition> definitions;
+        try
+        {
+            var request = new StructuralParseRequest(
+                path,
+                language,
+                content,
+                lines.Select(line => new ChangedLineRange(line, line)).ToList());
+            definitions = await structuralAnalyzer
+                .ResolveEnclosingDefinitionsAsync(request, ct)
+                .ConfigureAwait(false);
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            // A finding is worth more than its provenance: losing the symbol must never lose the review.
+            LogSymbolAttributionFailed(logger, state.Job.Id, path, ex);
+            return result;
+        }
+
+        var named = definitions
+            .Where(definition => !string.IsNullOrWhiteSpace(definition.Name))
+            .ToList();
+
+        var byLine = new Dictionary<int, EnclosingDefinition>();
+        foreach (var line in lines)
+        {
+            // The innermost definition containing the line: a method inside a class is what the finding is about,
+            // and the enclosing type would answer a coarser question than the one being asked. Containment is
+            // checked rather than assumed, because overlapping ranges come back merged into one answer.
+            var enclosing = named
+                .Where(definition => definition.StartLine <= line && line <= definition.EndLine)
+                .OrderBy(definition => definition.EndLine - definition.StartLine)
+                .FirstOrDefault();
+
+            if (enclosing is not null)
+            {
+                byLine[line] = enclosing;
+            }
+        }
+
+        if (byLine.Count == 0)
+        {
+            return result;
+        }
+
+        var attributed = new List<ReviewComment>(result.Comments.Count);
+        foreach (var comment in result.Comments)
+        {
+            if (comment.LineNumber is { } line
+                && comment.OriginSymbolName is null
+                && byLine.TryGetValue(line, out var definition))
+            {
+                attributed.Add(
+                    comment with
+                    {
+                        OriginSymbolName = definition.Name,
+                        OriginSymbolKind = definition.Kind.ToString(),
+                    });
+                continue;
+            }
+
+            attributed.Add(comment);
+        }
+
+        return result with { Comments = attributed };
+    }
+
+    // Records which model produced a finding, so reviewer quality can later be read per model: the only way to
+    // answer whether a cheaper model would have done. Both identities are kept: the remote model is what actually
+    // ran, and the logical name is what the client configured and may repoint. Comments that already carry a model
+    // are left alone; a pass that resolved no model at all leaves its findings unattributed rather than borrowing
+    // another pass's label.
+    private static IReadOnlyList<ReviewComment> StampOriginModel(
+        IReadOnlyList<ReviewComment> comments,
+        string? modelId,
+        string? logicalModelName)
+    {
+        if (comments.Count == 0 || (string.IsNullOrWhiteSpace(modelId) && string.IsNullOrWhiteSpace(logicalModelName)))
+        {
+            return comments;
+        }
+
+        var stamped = new List<ReviewComment>(comments.Count);
+        foreach (var comment in comments)
+        {
+            stamped.Add(
+                comment.OriginModelId is null && comment.OriginLogicalModelName is null
+                    ? comment with { OriginModelId = modelId, OriginLogicalModelName = logicalModelName }
+                    : comment);
         }
 
         return stamped;
@@ -996,6 +1163,8 @@ internal sealed partial class FileReviewer(
         result = await this.ApplyCommentRelevanceFilterStageAsync(state, result, ct);
         result = await this.ApplyMemoryReconsiderationStageAsync(state, result, ct);
         result = NormalizeCommentAnchors(result);
+        // After the anchors are final, because the definition a finding sits inside is decided by its line.
+        result = await this.ApplySymbolAttributionStageAsync(state, result, ct);
         return await this.ApplyLocalVerificationStageAsync(state, result, ct);
     }
 

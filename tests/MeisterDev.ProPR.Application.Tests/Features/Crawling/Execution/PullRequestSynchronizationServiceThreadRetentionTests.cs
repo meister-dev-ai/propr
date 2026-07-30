@@ -72,6 +72,44 @@ public sealed class PullRequestSynchronizationServiceThreadRetentionTests
     }
 
     [Fact]
+    public async Task SynchronizeAsync_LearnsThePostingIdentityFromItsOwnRecordedPosts()
+    {
+        // The reported defect. With no configured reviewer identity (the common case) authorship used to come
+        // back false for everything, so ProPR's own threads were harvested as human threads it had failed to
+        // raise. What ProPR posted is knowable from the provider ids it recorded, and the account those comments
+        // appear under is the account it posts as.
+        var originStore = Substitute.For<IPostedCommentOriginStore>();
+        originStore.GetJobIdsForPullRequestAsync(ClientId, "repo-1", 42, Arg.Any<CancellationToken>())
+            .Returns(new List<PostedCommentOriginRow> { new("17", "100", Guid.NewGuid()) });
+
+        var harness = new Harness(true, originStore);
+
+        await harness.RunAsync(withReviewerIdentity: false);
+
+        await harness.IngestionService.Received(1).HandleThreadUpdatedAsync(
+            Arg.Is<ThreadUpdatedEvent>(evt =>
+                // Recorded as posted by ProPR, so ProPR's, no identity comparison needed.
+                evt.Comments[0].IsAiAuthored
+                // And the human's comment beside it stays human.
+                && !evt.Comments[1].IsAiAuthored),
+            Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task SynchronizeAsync_WithNoIdentityAndNoProvenance_LeavesEveryCommentHuman()
+    {
+        // The honest floor: with nothing to learn from, nothing is claimed. A thread ProPR posted before its ids
+        // were recorded stays misattributed here, and the harvester's own thread-id guard is what catches it.
+        var harness = new Harness(true);
+
+        await harness.RunAsync(withReviewerIdentity: false);
+
+        await harness.IngestionService.Received(1).HandleThreadUpdatedAsync(
+            Arg.Is<ThreadUpdatedEvent>(evt => evt.Comments.All(comment => !comment.IsAiAuthored)),
+            Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
     public async Task SynchronizeAsync_WithOriginStore_StampsOriginatingJobIdFromProvenance()
     {
         var originatingJobId = Guid.NewGuid();
@@ -240,7 +278,7 @@ public sealed class PullRequestSynchronizationServiceThreadRetentionTests
 
         public IPullRequestFetcher PullRequestFetcher { get; }
 
-        public async Task RunAsync()
+        public async Task RunAsync(bool withReviewerIdentity = true)
         {
             var host = new ProviderHostRef(ScmProvider.AzureDevOps, "https://dev.azure.com/org");
             var request = new PullRequestSynchronizationRequest
@@ -256,12 +294,11 @@ public sealed class PullRequestSynchronizationServiceThreadRetentionTests
                 Provider = ScmProvider.AzureDevOps,
                 Host = host,
                 CandidateIterationId = 7,
-                RequestedReviewerIdentity = new ReviewerIdentity(
-                    host,
-                    ReviewerId.ToString("D"),
-                    "review-bot",
-                    "Review Bot",
-                    true),
+                // Omitted on purpose in one test: on most installations nothing configures a reviewer identity,
+                // and the account whose token posts is a different account anyway.
+                RequestedReviewerIdentity = withReviewerIdentity
+                    ? new ReviewerIdentity(host, ReviewerId.ToString("D"), "review-bot", "Review Bot", true)
+                    : null,
             };
 
             await this._sut.SynchronizeAsync(request);

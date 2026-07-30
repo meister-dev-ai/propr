@@ -8,12 +8,13 @@ import type { LocationQueryRaw } from 'vue-router'
 import { createAdminClient } from '@/services/api'
 import { createDismissal } from '@/services/findingDismissalsService'
 import { restartJob, stopJob } from '@/services/jobsService'
+import { fetchFindingClassifications, type CodeInsightFindingClassification } from '@/services/codeInsightFindingsService'
 import { formatBudgetBlockMessage, formatBudgetSoftCapMessage } from './budgetBlock'
 import { useSession } from '@/composables/useSession'
 import { RoleLevel } from '@/composables/roles'
 import { formatTriageDecision } from './formatTriageDecision'
 import { parseAssistantTurnRecord } from '../utils/assistantTurn'
-import { originLabel, passKindLabel } from './passLabels'
+import { modelLabel, modelTitle, originLabel, passKindLabel, symbolLabel } from './passLabels'
 import { parseUnionContributions, parseUnionPassIndex, type UnionPassContribution } from './multiPassUnionContribution'
 import { useFileDiff } from './useFileDiff'
 import { useTokenTotals } from './useTokenTotals'
@@ -132,6 +133,27 @@ function commentOriginLabel(comment: {
     return originLabel(comment.originPassKind, comment.originPassIndex, comment.originPassLens)
 }
 
+function commentModelLabel(comment: {
+    originModelId?: string | null
+    originLogicalModelName?: string | null
+}): string | null {
+    return modelLabel(comment.originModelId, comment.originLogicalModelName)
+}
+
+function commentSymbolLabel(comment: {
+    originSymbolName?: string | null
+    originSymbolKind?: string | null
+}): string | null {
+    return symbolLabel(comment.originSymbolName, comment.originSymbolKind)
+}
+
+function commentModelTitle(comment: {
+    originModelId?: string | null
+    originLogicalModelName?: string | null
+}): string | null {
+    return modelTitle(comment.originModelId, comment.originLogicalModelName)
+}
+
 function parentIterationLabel(name: string): string {
     const match = /^ai_call_iter_(\d+)$/.exec(name)
     if (!match) {
@@ -165,6 +187,8 @@ export function useJobProtocolViewModel() {
     const modalPhaseGroupsPending = ref(false)
     const isReasoningExpanded = ref(false)
     const reviewStatus = ref<ReviewJobResultDto | null>(null)
+    // Collected Code Insights classifications, keyed by the finding's ordinal in the persisted review result.
+    const codeInsightsByOrdinal = ref<Map<number, CodeInsightFindingClassification>>(new Map())
     const jobDetail = ref<JobDetail | null>(null)
     const jobStatus = ref<string | null>(null)
     const restarting = ref(false)
@@ -381,8 +405,67 @@ export function useJobProtocolViewModel() {
         })
     })
 
+    /**
+     * Loads the Code Insights classifications for the current job, if there is anything to load.
+     *
+     * Self-limiting on purpose. The view polls, and classification is post-hoc on a worker, so tags for a
+     * freshly finished review arrive a cycle or two late. Re-fetching only while at least one finding is still
+     * `pending` means the tags fill in on their own and then the extra request stops, rather than either
+     * riding every poll forever or requiring a page reload to ever see them.
+     */
+    async function loadCodeInsightsIfNeeded(): Promise<void> {
+        const jobId = route.params.id as string | undefined
+        if (!jobId) {
+            return
+        }
+
+        const findingCount = reviewStatus.value?.result?.comments?.length ?? 0
+        if (findingCount === 0) {
+            codeInsightsByOrdinal.value = new Map()
+            return
+        }
+
+        const loaded = codeInsightsByOrdinal.value
+        const nothingLoadedYet = loaded.size === 0
+        const stillSettling = [...loaded.values()].some(entry => entry.status === 'pending')
+        if (!nothingLoadedYet && !stillSettling) {
+            return
+        }
+
+        try {
+            const classifications = await fetchFindingClassifications(jobId)
+            codeInsightsByOrdinal.value = new Map(
+                classifications.map(entry => [entry.ordinal, entry] as const),
+            )
+        } catch {
+            // Tags are supplementary to the finding. Losing them must not disturb a view whose job is to show
+            // the review; the badges simply do not render.
+        }
+    }
+
+    /**
+     * The persisted findings with their Code Insights classification attached.
+     *
+     * The stamp happens HERE and nowhere later, because this is the last point at which the list is still in
+     * the order the review persisted it, which is exactly what the ordinal indexes. Everything downstream
+     * filters by severity and re-sorts by severity then line, so a render index is not an ordinal and must
+     * never be used as one.
+     */
+    const commentsWithCodeInsights = computed<ProtocolReviewComment[]>(() => {
+        const persisted = (reviewStatus.value?.result?.comments ?? []) as ProtocolReviewComment[]
+        const classifications = codeInsightsByOrdinal.value
+        if (classifications.size === 0) {
+            return persisted
+        }
+
+        return persisted.map((comment, ordinal) => {
+            const codeInsights = classifications.get(ordinal)
+            return codeInsights ? { ...comment, codeInsights } : comment
+        })
+    })
+
     const filteredCommentsForDetail = computed<ProtocolReviewComment[]>(() => {
-        const allComments = (reviewStatus.value?.result?.comments ?? []) as ProtocolReviewComment[]
+        const allComments = commentsWithCodeInsights.value
         const query = localSearchQuery.value.trim().toLowerCase()
         const severities = localSeverities.value
 
@@ -1823,6 +1906,7 @@ export function useJobProtocolViewModel() {
             loadedProtocolIds.value = nextLoaded
             if (resultRes.data) {
                 reviewStatus.value = resultRes.data
+                await loadCodeInsightsIfNeeded()
             }
             if (detailRes.data) {
                 const detail = detailRes.data
@@ -2293,6 +2377,9 @@ export function useJobProtocolViewModel() {
         selectFile,
         selectFindingOrigin,
         commentOriginLabel,
+        commentModelLabel,
+        commentModelTitle,
+        commentSymbolLabel,
         activePassFinalComments,
         activePassUnionContribution,
         activePass,

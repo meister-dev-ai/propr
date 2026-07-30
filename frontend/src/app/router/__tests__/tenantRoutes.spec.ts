@@ -19,6 +19,8 @@ vi.mock('@/composables/useSession', () => ({
     edition: computed(() => edition.value),
     hasClientRole,
     hasTenantRole,
+    // The guard chain asks about licensed capabilities for the routes that declare one; none of these do.
+    isCapabilityAvailable: () => false,
   }),
 }))
 

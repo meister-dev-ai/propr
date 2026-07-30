@@ -30,7 +30,8 @@ public sealed record ClientDto(
     string? TenantDisplayName = null,
     BudgetConfigDto? BudgetConfig = null,
     CommentSeverity MinimumSeverityToPost = CommentSeverity.Info,
-    IReadOnlyList<CommentSeverity>? AutoResolveSeverities = null)
+    IReadOnlyList<CommentSeverity>? AutoResolveSeverities = null,
+    bool CodeInsightsCollectionEnabled = false)
 {
     /// <summary>The ordered review-pass list, or an empty list when none are configured.</summary>
     public IReadOnlyList<ReviewPassDto> ReviewPassesOrEmpty => this.ReviewPasses ?? [];

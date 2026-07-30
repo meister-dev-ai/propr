@@ -10,6 +10,8 @@ using FluentValidation;
 using MeisterDev.ProPR.Api.Controllers;
 using MeisterDev.ProPR.Api.Extensions;
 using MeisterDev.ProPR.Api.Features.Clients.Controllers;
+using MeisterDev.ProPR.Api.Features.CodeInsights.Support;
+using MeisterDev.ProPR.Api.Features.CodeInsights.Workers;
 using MeisterDev.ProPR.Api.Features.Crawling.Webhooks.Validators;
 using MeisterDev.ProPR.Api.Features.IdentityAndAccess.Authentication;
 using MeisterDev.ProPR.Api.Features.IdentityAndAccess.Validators;
@@ -31,6 +33,7 @@ using MeisterDev.ProPR.Infrastructure.Auth;
 using MeisterDev.ProPR.Infrastructure.Data;
 using MeisterDev.ProPR.Infrastructure.DependencyInjection;
 using MeisterDev.ProPR.Infrastructure.Features.Clients;
+using MeisterDev.ProPR.Infrastructure.Features.CodeInsights;
 using MeisterDev.ProPR.Infrastructure.Features.Crawling;
 using MeisterDev.ProPR.Infrastructure.Features.IdentityAndAccess;
 using MeisterDev.ProPR.Infrastructure.Features.Licensing;
@@ -113,7 +116,12 @@ try
     builder.Services.AddUsageReportingModule(builder.Configuration, builder.Environment);
     builder.Services.AddLicensingModule(builder.Configuration, builder.Environment);
     builder.Services.AddReviewArchiveModule(builder.Configuration, builder.Environment);
+    builder.Services.AddCodeInsightsModule(builder.Configuration, builder.Environment);
     builder.Services.AddProCursorRemoteMode(builder.Configuration);
+    // Decides which clients a code-insight read may aggregate over. Two audiences, two rules, one place: the
+    // code-quality views take client access, reviewer performance takes tenant administration.
+    builder.Services.AddScoped<CodeInsightScopeResolver>();
+
     builder.Services.AddScoped<ProCursorRuntimeConfigurationProjectionService>();
     builder.Services.AddScoped<ManagedRemoteProCursorGateway>();
     builder.Services.AddScoped<LocalProPrScmBroker>();
@@ -266,6 +274,42 @@ try
     if (hasDatabaseConnectionString && !isTesting && !disableHostedServices)
     {
         builder.Services.AddHostedService(sp => sp.GetRequiredService<RetentionPurgeWorker>());
+    }
+
+    // CodeInsightClassificationWorker classifies collected findings by type, post-hoc. It depends on the
+    // code-insight module, which is only registered when a database connection string is configured, so gate
+    // it the same way to keep it inert in DB-less test runs. The collection gate keeps it inert per client.
+    builder.Services.AddSingleton<CodeInsightClassificationWorker>();
+    if (hasDatabaseConnectionString && !isTesting && !disableHostedServices)
+    {
+        builder.Services.AddHostedService(sp => sp.GetRequiredService<CodeInsightClassificationWorker>());
+    }
+
+    // CodeInsightRetentionPurgeWorker deletes elapsed collected code-insight data. It depends on the
+    // code-insight store, which is only registered when a database connection string is configured, so gate
+    // it the same way to keep it inert in DB-less test runs.
+    builder.Services.AddSingleton<CodeInsightRetentionPurgeWorker>();
+    if (hasDatabaseConnectionString && !isTesting && !disableHostedServices)
+    {
+        builder.Services.AddHostedService(sp => sp.GetRequiredService<CodeInsightRetentionPurgeWorker>());
+    }
+
+    // CodeInsightCatchUpWorker projects roll-ups for findings collected before the projection existed and
+    // seals pull requests whose closure the synchronization path never observed. Same gating as its siblings;
+    // both sweeps are bounded per cycle and resumable, so a missed cycle costs nothing but latency.
+    builder.Services.AddSingleton<CodeInsightCatchUpWorker>();
+    if (hasDatabaseConnectionString && !isTesting && !disableHostedServices)
+    {
+        builder.Services.AddHostedService(sp => sp.GetRequiredService<CodeInsightCatchUpWorker>());
+    }
+
+    // CodeInsightConditionWorker evaluates the quality conditions and records the transitions worth alerting
+    // on. Same gating as its siblings, and the collection gate keeps it inert per client. It writes only to its
+    // own event table, so it cannot disturb collection, sealing, or projection.
+    builder.Services.AddSingleton<CodeInsightConditionWorker>();
+    if (hasDatabaseConnectionString && !isTesting && !disableHostedServices)
+    {
+        builder.Services.AddHostedService(sp => sp.GetRequiredService<CodeInsightConditionWorker>());
     }
 
     var allowedOrigins = BrowserOriginPolicy.GetAllowedOrigins(builder.Configuration);

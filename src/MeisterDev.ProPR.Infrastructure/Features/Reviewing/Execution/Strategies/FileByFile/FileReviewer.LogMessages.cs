@@ -22,6 +22,12 @@ internal sealed partial class FileReviewer
     private static partial void LogProtocolBeginFailed(ILogger logger, string filePath, Guid jobId, Exception ex);
 
     [LoggerMessage(
+        Level = LogLevel.Debug,
+        Message = "Structural symbol attribution failed for {FilePath} in job {JobId}; its findings stay "
+                  + "unattributed and the review is unaffected.")]
+    private static partial void LogSymbolAttributionFailed(ILogger logger, Guid jobId, string filePath, Exception ex);
+
+    [LoggerMessage(
         Level = LogLevel.Information,
         Message = "Multi-pass union pass #{PassIndex} for job {JobId} could not resolve its configured model "
                   + "{ConfiguredModelId}; skipping that pass for file {FilePath} (the other passes still run).")]

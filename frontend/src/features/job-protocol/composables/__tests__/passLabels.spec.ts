@@ -2,7 +2,7 @@
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
 import { describe, expect, it } from 'vitest'
-import { originLabel, passKindLabel } from '../passLabels'
+import { modelLabel, modelTitle, originLabel, passKindLabel, symbolLabel } from '../passLabels'
 
 describe('originLabel', () => {
     it('renders "Pass N" for a numbered multi-pass union finding', () => {
@@ -44,5 +44,51 @@ describe('passKindLabel', () => {
 
     it('labels the baseline pass', () => {
         expect(passKindLabel('Baseline', null)).toBe('Initial review')
+    })
+})
+
+describe('modelLabel', () => {
+    it('prefers the configured name, because that is what an operator chooses between', () => {
+        expect(modelLabel('gpt-5.4-mini', 'thrifty-reviewer')).toBe('thrifty-reviewer')
+    })
+
+    it('falls back to the remote model when no logical model is in play', () => {
+        expect(modelLabel('gpt-5.4-mini', null)).toBe('gpt-5.4-mini')
+    })
+
+    it('renders no badge when nothing was recorded rather than inventing one', () => {
+        expect(modelLabel(null, null)).toBeNull()
+        expect(modelLabel('   ', '  ')).toBeNull()
+    })
+})
+
+describe('modelTitle', () => {
+    it('shows both identities, because a logical name can be repointed', () => {
+        expect(modelTitle('gpt-5.4-mini', 'thrifty')).toBe('Logical model "thrifty", served by gpt-5.4-mini')
+    })
+
+    it('names the remote model on its own when there is no logical model', () => {
+        expect(modelTitle('gpt-5.4-mini', null)).toBe('Model gpt-5.4-mini')
+    })
+
+    it('has nothing to say when nothing was recorded', () => {
+        expect(modelTitle(null, null)).toBeNull()
+    })
+})
+
+describe('symbolLabel', () => {
+    it('renders a method as a call, so it reads as code', () => {
+        expect(symbolLabel('Process', 'Method')).toBe('Process()')
+        expect(symbolLabel('handle_refund', 'Function')).toBe('handle_refund()')
+    })
+
+    it('leaves a type or module as its plain name', () => {
+        expect(symbolLabel('RefundProcessor', 'Class')).toBe('RefundProcessor')
+        expect(symbolLabel('payments', 'Module')).toBe('payments')
+    })
+
+    it('renders nothing when the line was never placed in a definition', () => {
+        expect(symbolLabel(null)).toBeNull()
+        expect(symbolLabel('   ', 'Method')).toBeNull()
     })
 })

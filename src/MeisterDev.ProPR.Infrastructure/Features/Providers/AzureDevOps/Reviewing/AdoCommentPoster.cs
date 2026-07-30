@@ -6,6 +6,7 @@ using System.Globalization;
 using System.Text;
 using MeisterDev.ProPR.Application.DTOs;
 using MeisterDev.ProPR.Application.Exceptions;
+using MeisterDev.ProPR.Application.Features.CodeInsights.Misses;
 using MeisterDev.ProPR.Application.Features.Reviewing.Execution.Models;
 using MeisterDev.ProPR.Application.Interfaces;
 using MeisterDev.ProPR.Domain.Enums;
@@ -364,7 +365,7 @@ public sealed class AdoCommentPoster(
     /// </summary>
     internal static string BuildSummaryText(ReviewResult result)
     {
-        var sb = new StringBuilder("**AI Review Summary**\n\n");
+        var sb = new StringBuilder(HarvestedThreadEligibility.SummaryPrefix + "\n\n");
         sb.Append(HtmlSanitizer.RenderForDisplay(result.Summary, ReviewBodyRenderingMode.Summary).RenderedText);
 
         if (result.CarriedForwardFilePaths.Count > 0)
@@ -439,7 +440,7 @@ public sealed class AdoCommentPoster(
         return (threads ?? []).Any(t =>
             t.FilePath is null &&
             t.Comments.Any(c => IsBotAuthor(c.AuthorId, botId, c.AuthorName, publicationIdentity)
-                                && c.Content.StartsWith("**AI Review Summary**", StringComparison.Ordinal)));
+                                && c.Content.StartsWith(HarvestedThreadEligibility.SummaryPrefix, StringComparison.Ordinal)));
     }
 
     /// <summary>

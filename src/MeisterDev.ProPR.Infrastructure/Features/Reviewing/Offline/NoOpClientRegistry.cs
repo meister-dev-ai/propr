@@ -59,6 +59,11 @@ public sealed class NoOpClientRegistry : IClientRegistry
         return Task.FromResult(false);
     }
 
+    public Task<bool> GetCodeInsightsCollectionEnabledAsync(Guid clientId, CancellationToken ct = default)
+    {
+        return Task.FromResult(false);
+    }
+
     public Task<bool> GetIncludeLinkedItemsInContextEnabledAsync(Guid clientId, CancellationToken ct = default)
     {
         return Task.FromResult(true);

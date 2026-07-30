@@ -37,4 +37,11 @@ public enum AiPurpose
 
     /// <summary>Evidence-gathering verification of a candidate finding before publication.</summary>
     ReviewVerification = 8,
+
+    /// <summary>
+    ///     Post-hoc classification of an already-published finding for quality analytics: its type, the level
+    ///     of code it concerns, and whether the code in question is absent, wrong, or unnecessary. Runs off
+    ///     the review path and never influences review output.
+    /// </summary>
+    InsightsClassification = 9,
 }

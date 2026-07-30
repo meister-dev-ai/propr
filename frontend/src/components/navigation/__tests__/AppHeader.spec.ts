@@ -8,6 +8,7 @@ const isAdmin = ref(false)
 const clientRoles = ref<Record<string, number>>({})
 const tenantRoles = ref<Record<string, number>>({})
 const edition = ref<'community' | 'commercial'>('commercial')
+const availableCapabilities = ref<string[]>([])
 
 vi.mock('vue-router', async () => {
   const actual = await vi.importActual<typeof import('vue-router')>('vue-router')
@@ -27,6 +28,7 @@ vi.mock('@/composables/useSession', () => ({
     clientRoles,
     tenantRoles,
     edition: computed(() => edition.value),
+    isCapabilityAvailable: (key: string) => availableCapabilities.value.includes(key),
   }),
 }))
 
@@ -54,6 +56,7 @@ describe('AppHeader', () => {
     clientRoles.value = {}
     tenantRoles.value = {}
     edition.value = 'commercial'
+    availableCapabilities.value = []
   })
 
   it('shows Tenants inside the Administration dropdown for tenant administrators', async () => {
@@ -115,5 +118,63 @@ describe('AppHeader', () => {
 
     expect(wrapper.text()).not.toContain('Tenants')
     expect(wrapper.text()).toContain('Licensing')
+  })
+  it('offers Code Quality when the capability is licensed and the caller can see a client', async () => {
+    clientRoles.value = { 'client-1': 0 }
+    availableCapabilities.value = ['code-insights']
+
+    const wrapper = await mountHeader()
+
+    expect(wrapper.text()).toContain('Code Quality')
+  })
+
+  it('leaves Code Quality out entirely when the capability is not licensed', async () => {
+    // Absent rather than disabled: a link that cannot go anywhere is worse than no link.
+    clientRoles.value = { 'client-1': 0 }
+    availableCapabilities.value = []
+
+    const wrapper = await mountHeader()
+
+    expect(wrapper.text()).not.toContain('Code Quality')
+  })
+
+  it('leaves Code Quality out for an administrator of an unlicensed installation', async () => {
+    // A licence is not a role.
+    isAdmin.value = true
+    availableCapabilities.value = []
+
+    const wrapper = await mountHeader()
+
+    expect(wrapper.text()).not.toContain('Code Quality')
+  })
+
+  it('does not offer a client user Reviewer Performance anywhere', async () => {
+    // It judges the tool from AI-estimated evidence, so it belongs with the operator surfaces.
+    clientRoles.value = { 'client-1': 0 }
+    availableCapabilities.value = ['code-insights']
+
+    const wrapper = await mountHeader()
+
+    expect(wrapper.text()).not.toContain('Reviewer Performance')
+  })
+
+  it('offers Reviewer Performance inside Administration to a tenant administrator', async () => {
+    tenantRoles.value = { 'tenant-1': 1 }
+    availableCapabilities.value = ['code-insights']
+
+    const wrapper = await mountHeader()
+    await wrapper.get('.dropdown-toggle').trigger('click')
+
+    expect(wrapper.text()).toContain('Reviewer Performance')
+  })
+
+  it('leaves Reviewer Performance out for an unlicensed installation', async () => {
+    isAdmin.value = true
+    availableCapabilities.value = []
+
+    const wrapper = await mountHeader()
+    await wrapper.get('.dropdown-toggle').trigger('click')
+
+    expect(wrapper.text()).not.toContain('Reviewer Performance')
   })
 })

@@ -25,7 +25,7 @@ public static class FindingDeduplicator
     ///     than <see cref="JaccardThreshold" /> so that distinct findings on different lines of one file are
     ///     preserved and only near-identical restatements collapse.
     /// </summary>
-    private const double SameFileDuplicateThreshold = 0.72;
+    internal const double SameFileDuplicateThreshold = 0.72;
 
     /// <summary>
     ///     Stop words excluded from Jaccard tokenisation so that common grammatical words

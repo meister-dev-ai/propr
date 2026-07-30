@@ -84,6 +84,10 @@ internal sealed class ClientEntityTypeConfiguration : IEntityTypeConfiguration<C
             .HasColumnName("enable_multi_pass_union")
             .HasDefaultValue(false);
 
+        builder.Property(c => c.CodeInsightsCollectionEnabled)
+            .HasColumnName("code_insights_collection_enabled")
+            .HasDefaultValue(false);
+
         builder.Property(c => c.BaselineReasoningEffort)
             .HasColumnName("baseline_reasoning_effort")
             .HasConversion<int>()

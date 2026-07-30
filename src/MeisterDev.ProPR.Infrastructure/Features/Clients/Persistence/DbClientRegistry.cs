@@ -155,6 +155,17 @@ public sealed class DbClientRegistry(
     }
 
     /// <inheritdoc />
+    public async Task<bool> GetCodeInsightsCollectionEnabledAsync(Guid clientId, CancellationToken ct = default)
+    {
+        // A missing client falls through to false: an unknown client must never start collecting.
+        return await dbContext.Clients
+                   .Where(c => c.Id == clientId)
+                   .Select(c => (bool?)c.CodeInsightsCollectionEnabled)
+                   .FirstOrDefaultAsync(ct)
+               ?? false;
+    }
+
+    /// <inheritdoc />
     public async Task<bool> GetIncludeLinkedItemsInContextEnabledAsync(Guid clientId, CancellationToken ct = default)
     {
         return await dbContext.Clients

@@ -198,6 +198,72 @@ public sealed class AiRuntimeResolverTests
         Assert.Same(expected, runtime);
     }
 
+    [Fact]
+    public async Task ResolveChatRuntimeAsync_WithNoBindingAnywhere_FallsBackToARelatedPurposesLogicalModel()
+    {
+        // The failure this closes: a client that configures models exclusively as logical models has no connection
+        // binding for the binding-side chain to walk, so a purpose it has not mapped resolved to nothing at all,
+        // which is how a newly introduced purpose ends up unusable on an installation that has every model it needs.
+        var catalog = Substitute.For<ILogicalModelCatalogRepository>();
+        catalog.GetPurposeRoleAsync(ClientId, AiPurpose.InsightsClassification, Arg.Any<CancellationToken>())
+            .Returns((string?)null);
+        catalog.GetPurposeRoleAsync(ClientId, AiPurpose.ReviewTriage, Arg.Any<CancellationToken>())
+            .Returns("triage-role");
+        this._repository
+            .GetActiveBindingForPurposeAsync(ClientId, AiPurpose.InsightsClassification, Arg.Any<CancellationToken>())
+            .Returns((AiResolvedPurposeBindingDto?)null);
+
+        var expected = Substitute.For<IResolvedAiChatRuntime>();
+        var logicalResolver = Substitute.For<ILogicalModelResolver>();
+        logicalResolver.ResolveChatRuntimeAsync(ClientId, "triage-role", Arg.Any<IProtocolRecorder?>(), Arg.Any<Guid?>(), Arg.Any<CancellationToken>())
+            .Returns(new ResolvedLogicalModelChatRuntime(expected, "triage-role", LogicalModelLayer.ClientOverride, ReviewReasoningEffort.Medium));
+
+        var runtime = await this.Sut(logicalResolver, catalog)
+            .ResolveChatRuntimeAsync(ClientId, AiPurpose.InsightsClassification, CancellationToken.None);
+
+        Assert.Same(expected, runtime);
+    }
+
+    [Fact]
+    public async Task ResolveChatRuntimeAsync_TheFallbackIsALastResortAndNeverOvertakesADirectMapping()
+    {
+        // Strictly additive: a purpose that resolves today must resolve to exactly the same model afterwards.
+        var catalog = Substitute.For<ILogicalModelCatalogRepository>();
+        catalog.GetPurposeRoleAsync(ClientId, AiPurpose.InsightsClassification, Arg.Any<CancellationToken>())
+            .Returns("insights-role");
+        catalog.GetPurposeRoleAsync(ClientId, AiPurpose.ReviewTriage, Arg.Any<CancellationToken>())
+            .Returns("triage-role");
+
+        var expected = Substitute.For<IResolvedAiChatRuntime>();
+        var logicalResolver = Substitute.For<ILogicalModelResolver>();
+        logicalResolver.ResolveChatRuntimeAsync(ClientId, "insights-role", Arg.Any<IProtocolRecorder?>(), Arg.Any<Guid?>(), Arg.Any<CancellationToken>())
+            .Returns(new ResolvedLogicalModelChatRuntime(expected, "insights-role", LogicalModelLayer.ClientOverride, ReviewReasoningEffort.Medium));
+
+        var runtime = await this.Sut(logicalResolver, catalog)
+            .ResolveChatRuntimeAsync(ClientId, AiPurpose.InsightsClassification, CancellationToken.None);
+
+        Assert.Same(expected, runtime);
+        // The binding lookup is not even reached, let alone the fallback chain.
+        await this._repository.DidNotReceive().GetActiveBindingForPurposeAsync(
+            Arg.Any<Guid>(),
+            Arg.Any<AiPurpose>(),
+            Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task ResolveChatRuntimeAsync_WithNothingMappedAnywhereStillReportsTheUnconfiguredPurpose()
+    {
+        var catalog = Substitute.For<ILogicalModelCatalogRepository>();
+        catalog.GetPurposeRoleAsync(Arg.Any<Guid>(), Arg.Any<AiPurpose>(), Arg.Any<CancellationToken>())
+            .Returns((string?)null);
+        this._repository
+            .GetActiveBindingForPurposeAsync(Arg.Any<Guid>(), Arg.Any<AiPurpose>(), Arg.Any<CancellationToken>())
+            .Returns((AiResolvedPurposeBindingDto?)null);
+
+        await Assert.ThrowsAsync<AiPurposeBindingNotConfiguredException>(() => this.Sut(Substitute.For<ILogicalModelResolver>(), catalog)
+            .ResolveChatRuntimeAsync(ClientId, AiPurpose.InsightsClassification, CancellationToken.None));
+    }
+
     private AiRuntimeResolver Sut(
         ILogicalModelResolver? logicalModelResolver = null,
         ILogicalModelCatalogRepository? logicalModelCatalog = null,

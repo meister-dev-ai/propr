@@ -32,14 +32,15 @@ export const providerOptions: Array<{ value: AiProviderKind; label: string }> = 
 ]
 
 // Sections group the purpose rows in the editor so the flat list stays readable as purposes grow.
-export type PurposeSection = 'generation' | 'support' | 'memory'
+export type PurposeSection = 'generation' | 'support' | 'memory' | 'insights'
 
-export const purposeSectionOrder: PurposeSection[] = ['generation', 'support', 'memory']
+export const purposeSectionOrder: PurposeSection[] = ['generation', 'support', 'memory', 'insights']
 
 export const purposeSectionLabels: Record<PurposeSection, string> = {
   generation: 'Review generation',
   support: 'Review support',
   memory: 'Memory & embeddings',
+  insights: 'Code Insights',
 }
 
 export const purposeOptions: Array<{ value: AiPurpose; label: string; description: string; defaultEnabled: boolean; section: PurposeSection }> = [
@@ -52,6 +53,7 @@ export const purposeOptions: Array<{ value: AiPurpose; label: string; descriptio
   { value: 'reviewVerification', label: 'Review Verification', description: 'Evidence-gathering verification of candidate findings. Falls back to Review Triage when unset.', defaultEnabled: false, section: 'support' },
   { value: 'memoryReconsideration', label: 'Memory Reconsideration', description: 'Thread-memory reconsideration calls.', defaultEnabled: true, section: 'memory' },
   { value: 'embeddingDefault', label: 'Embedding Default', description: 'Embedding generation for memory and ProCursor.', defaultEnabled: true, section: 'memory' },
+  { value: 'insightsClassification', label: 'Insights Classification', description: 'Classifies collected findings for quality analytics. Falls back to Review Triage when unset.', defaultEnabled: false, section: 'insights' },
 ]
 
 export const protocolOptionLabels: Record<AiProtocolMode, string> = {

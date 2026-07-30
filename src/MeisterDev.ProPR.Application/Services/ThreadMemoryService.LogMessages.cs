@@ -34,6 +34,16 @@ public sealed partial class ThreadMemoryService
 
     [LoggerMessage(
         Level = LogLevel.Warning,
+        Message = "Code-insight enrichment failed for thread {ThreadId} client {ClientId}; "
+                  + "the memory is stored without the finding link or keywords")]
+    private static partial void LogCodeInsightEnrichmentFailedCore(
+        ILogger logger,
+        Exception exception,
+        long threadId,
+        Guid clientId);
+
+    [LoggerMessage(
+        Level = LogLevel.Warning,
         Message = "Failed to process reopened thread {ThreadId} for client {ClientId}")]
     private static partial void LogProcessReopenedFailedCore(
         ILogger logger,
@@ -89,6 +99,15 @@ public sealed partial class ThreadMemoryService
         string repositoryId,
         int pullRequestId,
         Guid clientId);
+
+    private static void LogCodeInsightEnrichmentFailed(
+        ILogger logger,
+        long threadId,
+        Guid clientId,
+        Exception exception)
+    {
+        LogCodeInsightEnrichmentFailedCore(logger, exception, threadId, clientId);
+    }
 
     private static void LogProcessResolvedFailed(ILogger logger, long threadId, Guid clientId, Exception exception)
     {

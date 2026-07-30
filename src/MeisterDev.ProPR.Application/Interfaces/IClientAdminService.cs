@@ -84,6 +84,7 @@ public interface IClientAdminService
         BudgetConfigDto? budgetConfig = null,
         CommentSeverity? minimumSeverityToPost = null,
         IReadOnlyList<CommentSeverity>? autoResolveSeverities = null,
+        bool? codeInsightsCollectionEnabled = null,
         CancellationToken ct = default);
 
     /// <summary>

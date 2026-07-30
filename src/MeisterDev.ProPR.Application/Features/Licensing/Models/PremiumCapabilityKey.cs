@@ -21,6 +21,12 @@ public static class PremiumCapabilityKey
     /// <summary>Capability key for configuring and enforcing USD spend budgets.</summary>
     public const string Budgeting = "budgeting";
 
+    /// <summary>
+    ///     Capability key for collecting and viewing Code Insights quality analytics. Collection also
+    ///     requires a per-client opt-in, so this capability being available is necessary but not sufficient.
+    /// </summary>
+    public const string CodeInsights = "code-insights";
+
     /// <summary>All known premium capability keys in their canonical order.</summary>
     public static IReadOnlyList<string> All { get; } =
     [
@@ -29,5 +35,6 @@ public static class PremiumCapabilityKey
         MultipleScmProviders,
         CrawlConfigs,
         Budgeting,
+        CodeInsights,
     ];
 }

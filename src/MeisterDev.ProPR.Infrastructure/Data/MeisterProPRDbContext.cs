@@ -188,6 +188,38 @@ public sealed class MeisterProPRDbContext(DbContextOptions<MeisterProPRDbContext
     /// <summary>Manual spend resets: each row grants a period extra allowance and records who granted it.</summary>
     public DbSet<BudgetSpendReset> BudgetSpendResets => this.Set<BudgetSpendReset>();
 
+    /// <summary>Code-insight pull requests (the per-PR purge unit for collected quality facts).</summary>
+    public DbSet<CodeInsightPullRequest> CodeInsightPullRequests => this.Set<CodeInsightPullRequest>();
+
+    /// <summary>Durable code-insight finding records with stable surrogate ids (message encrypted at rest).</summary>
+    public DbSet<CodeInsightFinding> CodeInsightFindings => this.Set<CodeInsightFinding>();
+
+    /// <summary>Per-client custom finding-type tags, on top of the fixed core taxonomy.</summary>
+    public DbSet<CodeInsightCustomTag> CodeInsightCustomTags => this.Set<CodeInsightCustomTag>();
+
+    /// <summary>Type tags assigned to code-insight findings, each either a core type or a client's custom tag.</summary>
+    public DbSet<CodeInsightFindingTag> CodeInsightFindingTags => this.Set<CodeInsightFindingTag>();
+
+    /// <summary>Human-authored threads harvested as things ProPR missed (discussion encrypted at rest).</summary>
+    public DbSet<CodeInsightMiss> CodeInsightMisses => this.Set<CodeInsightMiss>();
+
+    /// <summary>Daily projected counts of findings, core types, and outcomes at the finest finding scope.</summary>
+    public DbSet<CodeInsightDailyCount> CodeInsightDailyCounts => this.Set<CodeInsightDailyCount>();
+
+    /// <summary>What became of each finding once its review thread resolved; at most one row per finding.</summary>
+    public DbSet<CodeInsightFindingDisposition> CodeInsightFindingDispositions =>
+        this.Set<CodeInsightFindingDisposition>();
+
+    /// <summary>Correctness measurements sealed once per pull request at its first close.</summary>
+    public DbSet<CodeInsightPullRequestMetric> CodeInsightPullRequestMetrics =>
+        this.Set<CodeInsightPullRequestMetric>();
+
+    /// <summary>
+    ///     Code-insight quality-condition transitions: the queryable contract for a notification/alerting
+    ///     capability. Code Insights writes them and never delivers them; no consumer has to exist.
+    /// </summary>
+    public DbSet<CodeInsightEvent> CodeInsightEvents => this.Set<CodeInsightEvent>();
+
     /// <inheritdoc />
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {

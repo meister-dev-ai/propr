@@ -7,6 +7,7 @@ using MeisterDev.ProPR.Application.AI;
 using MeisterDev.ProPR.Application.DTOs;
 using MeisterDev.ProPR.Application.Exceptions;
 using MeisterDev.ProPR.Application.Interfaces;
+using MeisterDev.ProPR.Application.Support;
 using MeisterDev.ProPR.Domain.Enums;
 using MeisterDev.ProPR.Infrastructure.Data;
 using MeisterDev.ProPR.Infrastructure.Data.Models;
@@ -805,22 +806,9 @@ public sealed class AiConnectionRepository(
 
     private static AiPurpose? FallbackPurpose(AiPurpose purpose)
     {
-        return purpose switch
-        {
-            // Cheap per-file triage falls back to the low-effort review model (which itself falls back to
-            // ReviewDefault below), so the model still judges complexity on a cheap model when no dedicated
-            // triage binding is configured — instead of silently dropping to the size heuristic.
-            AiPurpose.ReviewTriage => AiPurpose.ReviewLowEffort,
-            // Evidence-gathering verification falls back to the cheap triage model (then to low-effort →
-            // default), so verification runs on an independent, inexpensive model rather than self-verifying
-            // on the reviewer's model when no dedicated verification binding is configured.
-            AiPurpose.ReviewVerification => AiPurpose.ReviewTriage,
-            AiPurpose.ProRVPrefilter
-                or AiPurpose.ReviewLowEffort
-                or AiPurpose.ReviewMediumEffort
-                or AiPurpose.ReviewHighEffort => AiPurpose.ReviewDefault,
-            _ => null,
-        };
+        // One shared definition of the chain: it is consulted here and by the logical-model role lookup, and two
+        // copies would drift into a purpose silently running on a different model than an operator was told.
+        return AiPurposeFallbacks.Next(purpose);
     }
 
     private static bool IsBindingValid(AiPurpose purpose, AiConfiguredModelRecord model, AiPurposeBindingRecord binding)

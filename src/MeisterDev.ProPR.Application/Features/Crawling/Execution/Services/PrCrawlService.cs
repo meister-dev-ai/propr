@@ -6,6 +6,7 @@ using MeisterDev.ProPR.Application.Features.Crawling.Execution.Models;
 using MeisterDev.ProPR.Application.Features.Crawling.Execution.Ports;
 using MeisterDev.ProPR.Application.Features.Crawling.Execution.Services;
 using MeisterDev.ProPR.Application.Features.Reviewing.Execution.Models;
+using MeisterDev.ProPR.Application.Features.CodeInsights.Ports;
 using MeisterDev.ProPR.Application.Interfaces;
 using MeisterDev.ProPR.Application.Support;
 using MeisterDev.ProPR.Domain.Entities;
@@ -28,7 +29,8 @@ public sealed partial class PrCrawlService(
     IReviewPrScanRepository? prScanRepository = null,
     IPullRequestSynchronizationService? pullRequestSynchronizationService = null,
     IProviderActivationService? providerActivationService = null,
-    IClientRegistry? clientRegistry = null) : IPrCrawlService
+    IClientRegistry? clientRegistry = null,
+    ICodeInsightDispositionService? codeInsightDispositionService = null) : IPrCrawlService
 {
     /// <summary>
     ///     Runs one crawl cycle across all active configurations, creating review jobs for newly discovered pull requests.
@@ -540,19 +542,27 @@ public sealed partial class PrCrawlService(
 
                 if (isCurrentlyResolved && !wasPreviouslyResolved)
                 {
-                    await threadMemoryService!.HandleThreadResolvedAsync(
-                        new ThreadResolvedDomainEvent(
-                            config.ClientId,
-                            pr.Repository.ExternalRepositoryId,
-                            pr.CodeReview.Number,
-                            thread.ThreadId,
-                            thread.FilePath,
-                            null,
-                            thread.CommentHistory,
-                            DateTimeOffset.UtcNow,
-                            currentIntent,
-                            thread.CodeChangedSinceRaised),
-                        ct);
+                    var resolved = new ThreadResolvedDomainEvent(
+                        config.ClientId,
+                        pr.Repository.ExternalRepositoryId,
+                        pr.CodeReview.Number,
+                        thread.ThreadId,
+                        thread.FilePath,
+                        null,
+                        thread.CommentHistory,
+                        DateTimeOffset.UtcNow,
+                        currentIntent,
+                        thread.CodeChangedSinceRaised);
+
+                    await threadMemoryService!.HandleThreadResolvedAsync(resolved, ct);
+
+                    // Passive code-insight observer, a sibling of thread memory rather than a change to it:
+                    // a finding gets an outcome even in the cases memory deliberately refuses to store,
+                    // because those are exactly the cases a quality metric needs. It never throws.
+                    if (codeInsightDispositionService is not null)
+                    {
+                        await codeInsightDispositionService.HandleThreadResolvedAsync(resolved, ct);
+                    }
                 }
                 else if (!isCurrentlyResolved && wasPreviouslyResolved)
                 {
