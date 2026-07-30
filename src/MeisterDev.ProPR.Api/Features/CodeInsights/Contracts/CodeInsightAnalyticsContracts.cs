@@ -528,3 +528,58 @@ public sealed record CodeInsightCoverageResponse(
     int PullRequestsRetained,
     int ClientsWithCollectionOff,
     IReadOnlyList<CodeInsightCoverageRowResponse> Rows);
+
+/// <summary>
+///     Asks for reviews that ran before collection was switched on to be replayed into it.
+/// </summary>
+/// <param name="ClientId">The client to import. One per request, so a run's cost belongs to somebody.</param>
+/// <param name="From">Inclusive start of the window, by review submission date.</param>
+/// <param name="To">Inclusive end of the window, by review submission date.</param>
+/// <param name="IncludeOutcomes">
+///     Whether to replay what became of each finding and the human threads it missed. This is the only part of an
+///     import that calls a model, so it is off unless asked for.
+/// </param>
+/// <param name="MaxJobs">Upper bound on review jobs read in one run.</param>
+public sealed record CodeInsightImportRequestBody(
+    Guid ClientId,
+    DateOnly From,
+    DateOnly To,
+    bool IncludeOutcomes = false,
+    int? MaxJobs = null);
+
+/// <summary>
+///     What one import run read and wrote.
+/// </summary>
+/// <param name="JobsRead">Completed review jobs examined.</param>
+/// <param name="JobsImported">Jobs whose findings were materialised.</param>
+/// <param name="JobsAlreadyCollected">Jobs skipped because the collection already holds their findings.</param>
+/// <param name="FindingsImported">Findings materialised.</param>
+/// <param name="FindingsWithoutThread">
+///     Findings imported with no provider thread, which no outcome can ever be recorded against, because their
+///     posted comments were never linked to a thread on this installation.
+/// </param>
+/// <param name="PullRequests">Distinct pull requests touched.</param>
+/// <param name="OutcomeThreadsReplayed">Resolved ProPR threads handed to the outcome path.</param>
+/// <param name="HumanThreadsReplayed">Threads handed to the miss harvester, which judges each for itself.</param>
+/// <param name="CollectionDisabled">The run did nothing because the licence or the client's opt-in is off.</param>
+/// <param name="ReachedLimit">Jobs were left beyond this run's bound, so running it again will do more work.</param>
+/// <param name="FindingsAlreadyHeld">
+///     Findings the collection already held for these jobs, so this run plus what was there can be compared
+///     against what coverage says the reviews produced.
+/// </param>
+/// <param name="ThreadsNotReplayable">
+///     Threads that could not be replayed because their provider thread id is not numeric.
+/// </param>
+public sealed record CodeInsightImportResponse(
+    int JobsRead,
+    int JobsImported,
+    int JobsAlreadyCollected,
+    int FindingsImported,
+    int FindingsWithoutThread,
+    int PullRequests,
+    int OutcomeThreadsReplayed,
+    int HumanThreadsReplayed,
+    bool CollectionDisabled,
+    bool ReachedLimit,
+    int FindingsAlreadyHeld,
+    int ThreadsNotReplayable);

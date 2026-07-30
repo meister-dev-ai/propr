@@ -10367,6 +10367,77 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/reviewer-performance/import": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Largest first, because the reason worth acting on is the one that happens most.
+         * @description Bounded and repeatable. Findings, roll-ups and coverage cost nothing; asking for outcomes replays what
+         *     became of each finding and the human threads it missed, which is the only part that calls a model.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            /** @description The client, the window, and whether to include outcomes. */
+            requestBody?: {
+                content: {
+                    "application/json": components["schemas"]["CodeInsightImportRequestBody"];
+                    "text/json": components["schemas"]["CodeInsightImportRequestBody"];
+                    "application/*+json": components["schemas"]["CodeInsightImportRequestBody"];
+                };
+            };
+            responses: {
+                /** @description What the run read and wrote. */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["CodeInsightImportResponse"];
+                        "application/json": components["schemas"]["CodeInsightImportResponse"];
+                        "text/json": components["schemas"]["CodeInsightImportResponse"];
+                    };
+                };
+                /** @description The window is inverted, or no client was named. */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description The caller does not administer the client's tenant, or the licence is absent. */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/reviewer-performance/coverage": {
         parameters: {
             query?: never;
@@ -15641,6 +15712,93 @@ export interface components {
              *     file. Reported rather than folded into an "(unknown)" row that would rank as if it were somewhere in the code.
              */
             unplacedFindings?: number;
+        };
+        /** @description Asks for reviews that ran before collection was switched on to be replayed into it. */
+        CodeInsightImportRequestBody: {
+            /**
+             * Format: uuid
+             * @description The client to import. One per request, so a run's cost belongs to somebody.
+             */
+            clientId?: string;
+            /**
+             * Format: date
+             * @description Inclusive start of the window, by review submission date.
+             */
+            from?: string;
+            /**
+             * Format: date
+             * @description Inclusive end of the window, by review submission date.
+             */
+            to?: string;
+            /**
+             * @description Whether to replay what became of each finding and the human threads it missed. This is the only part of an
+             *     import that calls a model, so it is off unless asked for.
+             */
+            includeOutcomes?: boolean;
+            /**
+             * Format: int32
+             * @description Upper bound on review jobs read in one run.
+             */
+            maxJobs?: number | null;
+        };
+        /** @description What one import run read and wrote. */
+        CodeInsightImportResponse: {
+            /**
+             * Format: int32
+             * @description Completed review jobs examined.
+             */
+            jobsRead?: number;
+            /**
+             * Format: int32
+             * @description Jobs whose findings were materialised.
+             */
+            jobsImported?: number;
+            /**
+             * Format: int32
+             * @description Jobs skipped because the collection already holds their findings.
+             */
+            jobsAlreadyCollected?: number;
+            /**
+             * Format: int32
+             * @description Findings materialised.
+             */
+            findingsImported?: number;
+            /**
+             * Format: int32
+             * @description Findings imported with no provider thread, which no outcome can ever be recorded against, because their
+             *     posted comments were never linked to a thread on this installation.
+             */
+            findingsWithoutThread?: number;
+            /**
+             * Format: int32
+             * @description Distinct pull requests touched.
+             */
+            pullRequests?: number;
+            /**
+             * Format: int32
+             * @description Resolved ProPR threads handed to the outcome path.
+             */
+            outcomeThreadsReplayed?: number;
+            /**
+             * Format: int32
+             * @description Threads handed to the miss harvester, which judges each for itself.
+             */
+            humanThreadsReplayed?: number;
+            /** @description The run did nothing because the licence or the client's opt-in is off. */
+            collectionDisabled?: boolean;
+            /** @description Jobs were left beyond this run's bound, so running it again will do more work. */
+            reachedLimit?: boolean;
+            /**
+             * Format: int32
+             * @description Findings the collection already held for these jobs, so this run plus what was there can be compared
+             *     against what coverage says the reviews produced.
+             */
+            findingsAlreadyHeld?: number;
+            /**
+             * Format: int32
+             * @description Threads that could not be replayed because their provider thread id is not numeric.
+             */
+            threadsNotReplayable?: number;
         };
         /** @description One bucket of a metric series. */
         CodeInsightMetricPointResponse: {

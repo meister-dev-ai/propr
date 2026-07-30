@@ -29,6 +29,7 @@ const missesMock = vi.fn()
 const reviewerFindingsMock = vi.fn()
 const coverageMock = vi.fn()
 const rejectionReasonsMock = vi.fn()
+const importMock = vi.fn()
 
 /**
  * Half of what the reviews produced is collected, and only one of the two pull requests still has its threads.
@@ -70,6 +71,7 @@ vi.mock('@/services/codeInsightsAnalyticsService', () => ({
   fetchRejectionReasons: (...args: unknown[]) => rejectionReasonsMock(...args),
   fetchReviewerFindings: (...args: unknown[]) => reviewerFindingsMock(...args),
   fetchReviewerPerformanceByGrain: (...args: unknown[]) => byGrainMock(...args),
+  importHistory: (...args: unknown[]) => importMock(...args),
   fetchTypesOverTime: vi.fn(),
   fetchConcentration: vi.fn(),
   fetchFindings: vi.fn(),
@@ -253,6 +255,20 @@ describe('ReviewerPerformanceView', () => {
     byGrainMock.mockResolvedValue(BY_SCOPE)
     coverageMock.mockResolvedValue(COVERAGE)
     rejectionReasonsMock.mockResolvedValue(REJECTION_REASONS)
+    importMock.mockResolvedValue({
+      jobsRead: 4,
+      jobsImported: 3,
+      jobsAlreadyCollected: 1,
+      findingsImported: 12,
+      findingsWithoutThread: 2,
+      pullRequests: 2,
+      outcomeThreadsReplayed: 0,
+      humanThreadsReplayed: 0,
+      collectionDisabled: false,
+      reachedLimit: false,
+      findingsAlreadyHeld: 7,
+      threadsNotReplayable: 0,
+    })
   })
 
   it('says up front that these numbers measure the reviewer and are AI-estimated', async () => {
@@ -572,6 +588,65 @@ describe('ReviewerPerformanceView', () => {
 
     await wrapper.findAll('.section-tab')[2].trigger('click')
     expect(wrapper.find('.panel-error').text()).toContain('Failed to load the rejection reasons.')
+  })
+
+  it('imports the window for one client, without outcomes unless asked', async () => {
+    const wrapper = await mountView()
+    await wrapper.findAll('.section-tab')[4].trigger('click')
+
+    await wrapper.find('.import-form').trigger('submit')
+    await flushPromises()
+
+    // Findings are free; the part that spends tokens stays off until the box is ticked.
+    expect(importMock).toHaveBeenCalledWith(
+      expect.objectContaining({ clientId: COVERAGE.rows[0].clientId, includeOutcomes: false }),
+    )
+    // Coverage is reloaded, so the comparison that prompted the run reflects what it wrote.
+    expect(coverageMock).toHaveBeenCalledTimes(2)
+    expect(wrapper.find('.import-result').text()).toContain('12 findings from 3 reviews')
+    expect(wrapper.find('.import-result').text()).toContain('1 already collected')
+    expect(wrapper.find('.import-result').text()).toContain('2 of them with no thread to resolve against')
+    // Beside what the run wrote, so the total is checkable against the produced figure on the same panel.
+    expect(wrapper.find('.import-result').text()).toContain('7 findings were already held')
+  })
+
+  it('asks for outcomes only when the box is ticked', async () => {
+    const wrapper = await mountView()
+    await wrapper.findAll('.section-tab')[4].trigger('click')
+
+    await wrapper.find('.import-check input').setValue(true)
+    await wrapper.find('.import-form').trigger('submit')
+    await flushPromises()
+
+    expect(importMock).toHaveBeenCalledWith(expect.objectContaining({ includeOutcomes: true }))
+  })
+
+  it('drops a previous run\'s import summary when the window changes', async () => {
+    // A summary of what May imported, sitting under March's coverage, reads as though it described March.
+    const wrapper = await mountView()
+    await wrapper.findAll('.section-tab')[4].trigger('click')
+    await wrapper.find('.import-form').trigger('submit')
+    await flushPromises()
+    expect(wrapper.find('.import-result').exists()).toBe(true)
+
+    await wrapper.findAll('input[type="date"]')[0].setValue('2026-03-01')
+    await wrapper.find('.performance-filters').trigger('submit')
+    await flushPromises()
+
+    expect(wrapper.find('.import-result').exists()).toBe(false)
+  })
+
+  it('keeps a failed import inside the import message', async () => {
+    // The coverage comparison is what a reader came for. A refused import must not take it off the screen.
+    importMock.mockRejectedValue(new Error('Failed to import review history.'))
+    const wrapper = await mountView()
+    await wrapper.findAll('.section-tab')[4].trigger('click')
+
+    await wrapper.find('.import-form').trigger('submit')
+    await flushPromises()
+
+    expect(wrapper.find('.import-error').text()).toContain('Failed to import review history.')
+    expect(wrapper.text()).toContain('50%')
   })
 
   it('reports a failed coverage read inside its own section, with a way to retry', async () => {

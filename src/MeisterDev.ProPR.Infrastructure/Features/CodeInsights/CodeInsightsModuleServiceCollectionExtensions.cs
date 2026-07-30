@@ -117,6 +117,11 @@ public static class CodeInsightsModuleServiceCollectionExtensions
         // day it is switched on, so this is what turns "the numbers look thin" into a count per repository.
         services.AddScoped<ICodeInsightHistoryReader, CodeInsightHistoryReader>();
 
+        // The importer replays history through the same consumers the live path uses, so it takes them as
+        // dependencies rather than reaching for the store. The two archive stores are optional: without them a run
+        // still imports findings, and says how many could never be linked to a thread.
+        services.AddScoped<ICodeInsightHistoryImporter, CodeInsightHistoryImporter>();
+
         return services;
     }
 }

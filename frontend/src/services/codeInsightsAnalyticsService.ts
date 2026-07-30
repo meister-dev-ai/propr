@@ -713,3 +713,52 @@ export async function fetchRejectionReasons(
     byConcernClass: payload.byConcernClass ?? [],
   }
 }
+
+/** What one import run read and wrote. */
+export interface CodeInsightImportOutcome {
+  jobsRead: number
+  jobsImported: number
+  jobsAlreadyCollected: number
+  findingsImported: number
+  findingsWithoutThread: number
+  pullRequests: number
+  outcomeThreadsReplayed: number
+  humanThreadsReplayed: number
+  collectionDisabled: boolean
+  reachedLimit: boolean
+  findingsAlreadyHeld: number
+  threadsNotReplayable: number
+}
+
+/** What to replay, for one client. */
+export interface CodeInsightImportOptions {
+  clientId: string
+  from: string
+  to: string
+  includeOutcomes?: boolean
+  maxJobs?: number
+}
+
+/**
+ * Replays reviews that ran before collection was switched on into it. Findings and roll-ups cost nothing;
+ * includeOutcomes replays what became of each finding and the threads it missed, which is the only part that
+ * calls a model. Bounded per run and safe to repeat: already-collected jobs are skipped.
+ */
+export async function importHistory(
+  options: CodeInsightImportOptions,
+): Promise<CodeInsightImportOutcome> {
+  const { data, error } = await createAdminClient().POST('/reviewer-performance/import', {
+    body: {
+      clientId: options.clientId,
+      from: options.from,
+      to: options.to,
+      includeOutcomes: options.includeOutcomes ?? false,
+      maxJobs: options.maxJobs ?? null,
+    },
+  })
+  if (error || !data) {
+    throw new Error(getApiErrorMessage(error, 'Failed to import review history.'))
+  }
+
+  return data as unknown as CodeInsightImportOutcome
+}

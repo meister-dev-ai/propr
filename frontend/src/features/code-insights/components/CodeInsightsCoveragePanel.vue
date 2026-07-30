@@ -36,7 +36,12 @@
         <article class="coverage-card">
           <h4>Findings produced</h4>
           <p class="card-value">{{ coverage.producedFindings }}</p>
-          <p class="card-sub">persisted by {{ coverage.reviewJobs }} completed review{{ coverage.reviewJobs === 1 ? '' : 's' }}</p>
+          <!-- Counted once per reviewed revision, so a revision reviewed twice is not counted twice. The review
+               count beside it is every job, which is why the two do not divide into each other. -->
+          <p class="card-sub">
+            across {{ coverage.reviewJobs }} completed review{{ coverage.reviewJobs === 1 ? '' : 's' }}, counting
+            each reviewed revision once
+          </p>
         </article>
         <article class="coverage-card">
           <h4>Findings collected</h4>
@@ -99,16 +104,139 @@
           </tbody>
         </table>
       </div>
+
+      <form v-if="importableClients.length > 0" class="import-form" @submit.prevent="run">
+        <h4 class="import-title">Import earlier reviews</h4>
+        <p class="import-hint">
+          Replays reviews from this window into the collection. Findings cost nothing. Outcomes and missed
+          findings are judged by a model, so they are only replayed when asked for, and only where threads were
+          retained.
+        </p>
+
+        <div class="import-controls">
+          <label class="import-field">
+            <span>Client</span>
+            <select v-model="selectedClientId" :disabled="running">
+              <option v-for="client in importableClients" :key="client.id" :value="client.id">
+                {{ client.name }}
+              </option>
+            </select>
+          </label>
+
+          <label class="import-check">
+            <input v-model="includeOutcomes" type="checkbox" :disabled="running" />
+            <span>Also replay outcomes and missed findings (spends model tokens)</span>
+          </label>
+
+          <button type="submit" class="import-run" :disabled="running">
+            {{ running ? 'Importing...' : 'Run import' }}
+          </button>
+        </div>
+
+        <p v-if="importError" class="import-error" role="alert">{{ importError }}</p>
+        <p v-else-if="outcome" class="import-result" role="status">{{ summary }}</p>
+      </form>
     </template>
   </section>
 </template>
 
 <script setup lang="ts">
-import type { CodeInsightCoverage } from '@/services/codeInsightsAnalyticsService'
+import { computed, ref, watch } from 'vue'
+import type {
+  CodeInsightCoverage,
+  CodeInsightImportOutcome,
+} from '@/services/codeInsightsAnalyticsService'
 
-defineProps<{ coverage: CodeInsightCoverage; error?: string | null }>()
+const props = defineProps<{
+  coverage: CodeInsightCoverage
+  error?: string | null
+  importing?: boolean
+  importOutcome?: CodeInsightImportOutcome | null
+  importError?: string | null
+}>()
 
-const emit = defineEmits<{ retry: [] }>()
+const emit = defineEmits<{
+  retry: []
+  import: [clientId: string, includeOutcomes: boolean]
+}>()
+
+const includeOutcomes = ref(false)
+const selectedClientId = ref<string>('')
+
+const running = computed(() => props.importing === true)
+const outcome = computed(() => props.importOutcome ?? null)
+const importError = computed(() => props.importError ?? null)
+
+/**
+ * The clients the rows name. An import runs per client, and several repositories share one, so the choice is a
+ * client rather than a row.
+ */
+const importableClients = computed(() => {
+  const seen = new Map<string, string>()
+  for (const row of props.coverage.rows) {
+    if (!seen.has(row.clientId)) {
+      seen.set(row.clientId, row.clientName ?? row.clientId)
+    }
+  }
+  return [...seen].map(([id, name]) => ({ id, name }))
+})
+
+// Selecting the first client is a state change, so it happens in a watcher rather than inside the computed that
+// lists them: a computed that assigns while it is being read runs whenever something re-reads it.
+watch(
+  importableClients,
+  (clients) => {
+    if (clients.length > 0 && !clients.some((client) => client.id === selectedClientId.value)) {
+      selectedClientId.value = clients[0].id
+    }
+  },
+  { immediate: true },
+)
+
+/** States what the run did, including the two things it deliberately could not do. */
+const summary = computed(() => {
+  const result = outcome.value
+  if (!result) {
+    return ''
+  }
+  if (result.collectionDisabled) {
+    return 'Nothing imported: collection is switched off for this client, or the licence does not cover it.'
+  }
+
+  const parts = [
+    `${result.findingsImported} finding${result.findingsImported === 1 ? '' : 's'} from ${result.jobsImported} review${result.jobsImported === 1 ? '' : 's'}`,
+  ]
+  if (result.jobsAlreadyCollected > 0) {
+    parts.push(`${result.jobsAlreadyCollected} already collected`)
+  }
+  if (result.findingsWithoutThread > 0) {
+    parts.push(`${result.findingsWithoutThread} of them with no thread to resolve against, ever`)
+  }
+  if (result.findingsAlreadyHeld > 0) {
+    // Beside what this run wrote, so the total can be checked against the produced figure above: a review the
+    // collection holds only part of cannot be repaired by importing over it.
+    parts.push(`${result.findingsAlreadyHeld} findings were already held`)
+  }
+  if (result.threadsNotReplayable > 0) {
+    parts.push(`${result.threadsNotReplayable} thread${result.threadsNotReplayable === 1 ? '' : 's'} could not be replayed, because this provider's thread ids are not numeric`)
+  }
+  if (result.outcomeThreadsReplayed > 0 || result.humanThreadsReplayed > 0) {
+    parts.push(
+      `${result.outcomeThreadsReplayed} resolved and ${result.humanThreadsReplayed} human thread${result.humanThreadsReplayed === 1 ? '' : 's'} replayed`,
+    )
+  }
+  if (result.reachedLimit) {
+    parts.push('stopped at the per-run limit, so running it again will do more')
+  }
+  return `${parts.join('. ')}.`
+})
+
+function run(): void {
+  if (running.value || !selectedClientId.value) {
+    return
+  }
+  emit('import', selectedClientId.value, includeOutcomes.value)
+}
 
 /** Undefined rather than 0% when nothing was produced: there was nothing to collect. */
 function formatShare(part: number, whole: number): string {
@@ -263,4 +391,66 @@ function formatShare(part: number, whole: number): string {
   white-space: nowrap;
   border: 0;
 }
+.import-form {
+  margin-top: 1.25rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--color-border, #d0d7de);
+}
+
+.import-title {
+  margin: 0 0 0.35rem;
+  font-size: 0.95rem;
+}
+
+.import-hint {
+  margin: 0 0 0.75rem;
+  max-width: 62ch;
+  color: var(--color-text-muted, #57606a);
+  font-size: 0.85rem;
+}
+
+.import-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem 1rem;
+  align-items: center;
+}
+
+.import-field {
+  display: flex;
+  gap: 0.4rem;
+  align-items: center;
+  font-size: 0.85rem;
+}
+
+.import-check {
+  display: flex;
+  gap: 0.4rem;
+  align-items: center;
+  font-size: 0.85rem;
+}
+
+.import-run {
+  padding: 0.35rem 0.9rem;
+}
+
+.import-run:disabled {
+  cursor: default;
+  opacity: 0.55;
+}
+
+.import-error,
+.import-result {
+  margin: 0.75rem 0 0;
+  font-size: 0.85rem;
+}
+
+.import-error {
+  color: var(--color-danger, #b42318);
+}
+
+.import-result {
+  color: var(--color-text-muted, #57606a);
+}
+
 </style>

@@ -18,10 +18,12 @@ import {
   fetchRejectionReasons,
   fetchReviewerFindings,
   fetchReviewerPerformanceByGrain,
+  importHistory,
   type CodeInsightBucket,
   type CodeInsightCoverage,
   type CodeInsightDisposition,
   type CodeInsightFinding,
+  type CodeInsightImportOutcome,
   type CodeInsightMiss,
   type CodeInsightQuality,
   type CodeInsightRejectionReason,
@@ -77,6 +79,10 @@ export function useReviewerPerformanceViewModel() {
   const byScope = shallowRef<CodeInsightScopedMetric[]>([])
   const coverage = shallowRef<CodeInsightCoverage>(EMPTY_COVERAGE)
   const coverageError = ref<string | null>(null)
+
+  const importing = ref(false)
+  const importOutcome = shallowRef<CodeInsightImportOutcome | null>(null)
+  const importError = ref<string | null>(null)
   const scopeGrain = ref<ReviewerPerformanceGrain>('repository')
 
   const rejectionReasons = shallowRef<CodeInsightRejectionReasons>(EMPTY_REASONS)
@@ -107,6 +113,10 @@ export function useReviewerPerformanceViewModel() {
   async function load(): Promise<void> {
     loading.value = true
     error.value = null
+    // The window is about to change under it, and a summary of what an earlier window imported would read as
+    // though it described this one.
+    importOutcome.value = null
+    importError.value = null
     try {
       // Coverage loads beside these rather than with them. It describes the measurement apparatus rather than
       // the measurements, and one failed read of it must not cost the page every number on it: an installation
@@ -197,6 +207,35 @@ export function useReviewerPerformanceViewModel() {
     drillFindings.value = []
   }
 
+  /**
+   * Replays the window's earlier reviews for one client, then reloads coverage so the panel's own numbers move
+   * with what the run just wrote. Its failure stays in the import's own message: an import that could not run is
+   * no reason to blank the comparison that prompted it.
+   */
+  async function runImport(targetClientId: string, includeOutcomes: boolean): Promise<void> {
+    if (importing.value) {
+      return
+    }
+
+    importing.value = true
+    importError.value = null
+    importOutcome.value = null
+
+    try {
+      importOutcome.value = await importHistory({
+        clientId: targetClientId,
+        from: from.value,
+        to: to.value,
+        includeOutcomes,
+      })
+      await loadCoverage()
+    } catch (err) {
+      importError.value = err instanceof Error ? err.message : 'Failed to import review history.'
+    } finally {
+      importing.value = false
+    }
+  }
+
   return {
     section,
     from,
@@ -211,6 +250,10 @@ export function useReviewerPerformanceViewModel() {
     byScope,
     coverage,
     coverageError,
+    importing,
+    importOutcome,
+    importError,
+    runImport,
     loadCoverage,
     rejectionReasons,
     rejectionReasonsError,

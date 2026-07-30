@@ -5060,6 +5060,25 @@ export const handlers = [
     })
   }),
 
+  http.post(`${base}/reviewer-performance/import`, async ({ request }) => {
+    await delay(400)
+    const body = (await request.json()) as { includeOutcomes?: boolean }
+    // Shaped like a real second run: some jobs were already collected, and some findings can never gain an
+    // outcome because their comments were never linked to a thread.
+    return HttpResponse.json({
+      jobsRead: 42,
+      jobsImported: 31,
+      jobsAlreadyCollected: 11,
+      findingsImported: 184,
+      findingsWithoutThread: 26,
+      pullRequests: 17,
+      outcomeThreadsReplayed: body.includeOutcomes ? 58 : 0,
+      humanThreadsReplayed: body.includeOutcomes ? 23 : 0,
+      collectionDisabled: false,
+      reachedLimit: false,
+    })
+  }),
+
   http.get(`${base}/reviewer-performance/coverage`, async () => {
     await delay(180)
     return HttpResponse.json({

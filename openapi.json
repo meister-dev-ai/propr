@@ -15179,6 +15179,97 @@
         }
       }
     },
+    "/reviewer-performance/import": {
+      "post": {
+        "tags": [
+          "ReviewerPerformance"
+        ],
+        "summary": "Largest first, because the reason worth acting on is the one that happens most.",
+        "description": "Bounded and repeatable. Findings, roll-ups and coverage cost nothing; asking for outcomes replays what\nbecame of each finding and the human threads it missed, which is the only part that calls a model.",
+        "requestBody": {
+          "description": "The client, the window, and whether to include outcomes.",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CodeInsightImportRequestBody"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CodeInsightImportRequestBody"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/CodeInsightImportRequestBody"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "What the run read and wrote.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/CodeInsightImportResponse"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CodeInsightImportResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CodeInsightImportResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The window is inverted, or no client was named.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The caller does not administer the client's tenant, or the licence is absent.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/reviewer-performance/coverage": {
       "get": {
         "tags": [
@@ -23491,6 +23582,103 @@
         },
         "additionalProperties": false,
         "description": "Which files keep producing findings, with the totals the per-file rows sit inside."
+      },
+      "CodeInsightImportRequestBody": {
+        "type": "object",
+        "properties": {
+          "clientId": {
+            "type": "string",
+            "description": "The client to import. One per request, so a run's cost belongs to somebody.",
+            "format": "uuid"
+          },
+          "from": {
+            "type": "string",
+            "description": "Inclusive start of the window, by review submission date.",
+            "format": "date"
+          },
+          "to": {
+            "type": "string",
+            "description": "Inclusive end of the window, by review submission date.",
+            "format": "date"
+          },
+          "includeOutcomes": {
+            "type": "boolean",
+            "description": "Whether to replay what became of each finding and the human threads it missed. This is the only part of an\nimport that calls a model, so it is off unless asked for."
+          },
+          "maxJobs": {
+            "type": "integer",
+            "description": "Upper bound on review jobs read in one run.",
+            "format": "int32",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false,
+        "description": "Asks for reviews that ran before collection was switched on to be replayed into it."
+      },
+      "CodeInsightImportResponse": {
+        "type": "object",
+        "properties": {
+          "jobsRead": {
+            "type": "integer",
+            "description": "Completed review jobs examined.",
+            "format": "int32"
+          },
+          "jobsImported": {
+            "type": "integer",
+            "description": "Jobs whose findings were materialised.",
+            "format": "int32"
+          },
+          "jobsAlreadyCollected": {
+            "type": "integer",
+            "description": "Jobs skipped because the collection already holds their findings.",
+            "format": "int32"
+          },
+          "findingsImported": {
+            "type": "integer",
+            "description": "Findings materialised.",
+            "format": "int32"
+          },
+          "findingsWithoutThread": {
+            "type": "integer",
+            "description": "Findings imported with no provider thread, which no outcome can ever be recorded against, because their\nposted comments were never linked to a thread on this installation.",
+            "format": "int32"
+          },
+          "pullRequests": {
+            "type": "integer",
+            "description": "Distinct pull requests touched.",
+            "format": "int32"
+          },
+          "outcomeThreadsReplayed": {
+            "type": "integer",
+            "description": "Resolved ProPR threads handed to the outcome path.",
+            "format": "int32"
+          },
+          "humanThreadsReplayed": {
+            "type": "integer",
+            "description": "Threads handed to the miss harvester, which judges each for itself.",
+            "format": "int32"
+          },
+          "collectionDisabled": {
+            "type": "boolean",
+            "description": "The run did nothing because the licence or the client's opt-in is off."
+          },
+          "reachedLimit": {
+            "type": "boolean",
+            "description": "Jobs were left beyond this run's bound, so running it again will do more work."
+          },
+          "findingsAlreadyHeld": {
+            "type": "integer",
+            "description": "Findings the collection already held for these jobs, so this run plus what was there can be compared\nagainst what coverage says the reviews produced.",
+            "format": "int32"
+          },
+          "threadsNotReplayable": {
+            "type": "integer",
+            "description": "Threads that could not be replayed because their provider thread id is not numeric.",
+            "format": "int32"
+          }
+        },
+        "additionalProperties": false,
+        "description": "What one import run read and wrote."
       },
       "CodeInsightMetricPointResponse": {
         "type": "object",

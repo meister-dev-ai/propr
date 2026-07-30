@@ -8,9 +8,10 @@ namespace MeisterDev.ProPR.Application.Features.Crawling.Execution.Services;
 /// <summary>
 ///     Maps a provider's native reviewer-thread status onto a provider-neutral
 ///     <see cref="ThreadResolutionIntent" />, so the thread-memory state machine never branches on
-///     provider-specific status strings. Shared by every crawl entry point that reconciles thread memory.
+///     provider-specific status strings. Shared by every crawl entry point that reconciles thread memory, and by
+///     the history import, which has to read a retained thread's status exactly as the crawl read it live.
 /// </summary>
-internal static class ThreadResolutionStatusInterpreter
+public static class ThreadResolutionStatusInterpreter
 {
     /// <summary>
     ///     Classifies a native thread status. "Fixed"/"Closed" only claim the concern was addressed;

@@ -75,7 +75,11 @@
       v-if="vm.section.value === 'coverage'"
       :coverage="vm.coverage.value"
       :error="vm.coverageError.value"
+      :importing="vm.importing.value"
+      :import-outcome="vm.importOutcome.value"
+      :import-error="vm.importError.value"
       @retry="vm.loadCoverage"
+      @import="vm.runImport"
     />
 
     <template v-else-if="vm.quality.value">

@@ -6,6 +6,7 @@ using MeisterDev.ProPR.Api.Features.CodeInsights.Contracts;
 using MeisterDev.ProPR.Api.Features.CodeInsights.Support;
 using MeisterDev.ProPR.Application.Features.CodeInsights.History;
 using MeisterDev.ProPR.Application.Features.CodeInsights.Metrics;
+using MeisterDev.ProPR.Application.Features.CodeInsights.Ports;
 using MeisterDev.ProPR.Application.Features.CodeInsights.Rollups;
 using MeisterDev.ProPR.Application.Interfaces;
 using MeisterDev.ProPR.Domain.Enums;
@@ -38,7 +39,8 @@ public sealed class ReviewerPerformanceController(
     IClientAdminService clientAdminService,
     ICodeInsightMetricReader? metricReader = null,
     ICodeInsightBrowseReader? browseReader = null,
-    ICodeInsightHistoryReader? historyReader = null) : ControllerBase
+    ICodeInsightHistoryReader? historyReader = null,
+    ICodeInsightHistoryImporter? historyImporter = null) : ControllerBase
 {
     /// <summary>
     ///     Sealed pull requests a correctness metric needs before a caller should present it as precise.
@@ -422,6 +424,74 @@ public sealed class ReviewerPerformanceController(
     }
 
     /// <summary>Largest first, because the reason worth acting on is the one that happens most.</summary>
+    /// <summary>
+    ///     Replays reviews that ran before collection was switched on into it, for one client and one window.
+    /// </summary>
+    /// <remarks>
+    ///     Bounded and repeatable. Findings, roll-ups and coverage cost nothing; asking for outcomes replays what
+    ///     became of each finding and the human threads it missed, which is the only part that calls a model.
+    /// </remarks>
+    /// <param name="body">The client, the window, and whether to include outcomes.</param>
+    /// <param name="ct">Cancellation token.</param>
+    /// <response code="200">What the run read and wrote.</response>
+    /// <response code="400">The window is inverted, or no client was named.</response>
+    /// <response code="403">The caller does not administer the client's tenant, or the licence is absent.</response>
+    [HttpPost("import")]
+    [ProducesResponseType<CodeInsightImportResponse>(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    public async Task<IActionResult> Import(
+        [FromBody] CodeInsightImportRequestBody body,
+        CancellationToken ct = default)
+    {
+        if (body is null || body.ClientId == Guid.Empty)
+        {
+            return this.BadRequest(new { error = "A client must be named." });
+        }
+
+        if (body.To < body.From)
+        {
+            return this.BadRequest(new { error = "The window ends before it starts." });
+        }
+
+        // The same resolver every read on this surface uses, so the licence and the tenancy rule are decided in one
+        // place. Naming a client outside the caller's tenants is a denial rather than an empty run.
+        var scope = await scopeResolver.ResolveForTenantAdministrationAsync(this.HttpContext, body.ClientId, ct);
+        if (scope.Denied is not null)
+        {
+            return scope.Denied;
+        }
+
+        if (historyImporter is null || scope.ClientIds.Count == 0)
+        {
+            return this.Ok(new CodeInsightImportResponse(0, 0, 0, 0, 0, 0, 0, 0, true, false, 0, 0));
+        }
+
+        var result = await historyImporter.ImportAsync(
+            new CodeInsightImportRequest(
+                body.ClientId,
+                body.From,
+                body.To,
+                body.IncludeOutcomes,
+                body.MaxJobs ?? CodeInsightImportRequest.DefaultMaxJobs),
+            ct);
+
+        return this.Ok(
+            new CodeInsightImportResponse(
+                result.JobsRead,
+                result.JobsImported,
+                result.JobsAlreadyCollected,
+                result.FindingsImported,
+                result.FindingsWithoutThread,
+                result.PullRequests,
+                result.OutcomeThreadsReplayed,
+                result.HumanThreadsReplayed,
+                result.CollectionDisabled,
+                result.ReachedLimit,
+                result.FindingsAlreadyHeld,
+                result.ThreadsNotReplayable));
+    }
+
     private static List<CodeInsightRejectionReasonCountResponse> Ranked(IReadOnlyDictionary<CodeInsightRejectionReason, int> counts)
     {
         return counts

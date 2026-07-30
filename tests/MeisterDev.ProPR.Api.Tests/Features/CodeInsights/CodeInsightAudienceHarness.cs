@@ -4,6 +4,7 @@
 using MeisterDev.ProPR.Api.Features.CodeInsights.Controllers;
 using MeisterDev.ProPR.Api.Features.CodeInsights.Support;
 using MeisterDev.ProPR.Application.DTOs;
+using MeisterDev.ProPR.Application.Features.CodeInsights.Ports;
 using MeisterDev.ProPR.Application.Features.CodeInsights.Metrics;
 using MeisterDev.ProPR.Application.Features.CodeInsights.Rollups;
 using MeisterDev.ProPR.Application.Features.CodeInsights.Survival;
@@ -204,11 +205,15 @@ internal sealed class CodeInsightAudienceHarness
             resolver,
             this.Clients,
             withReaders ? this.Metrics : null,
-            withReaders ? this.Browse : null)
+            withReaders ? this.Browse : null,
+            null,
+            withReaders ? this.Importer : null)
         {
             ControllerContext = new ControllerContext { HttpContext = httpContext },
         };
     }
+
+    public ICodeInsightHistoryImporter Importer { get; } = Substitute.For<ICodeInsightHistoryImporter>();
 
     public ICodeInsightRollupReader Rollups { get; }
 
