@@ -9,6 +9,7 @@ using MeisterDev.ProPR.Infrastructure.AI;
 using Microsoft.Extensions.AI;
 using NSubstitute;
 using NSubstitute.ExceptionExtensions;
+using MeisterDev.ProPR.TestSupport;
 
 namespace MeisterDev.ProPR.Infrastructure.Tests.AI;
 

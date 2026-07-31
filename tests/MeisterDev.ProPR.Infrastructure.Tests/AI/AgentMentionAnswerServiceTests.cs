@@ -8,6 +8,7 @@ using MeisterDev.ProPR.Infrastructure.AI;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Logging.Abstractions;
 using NSubstitute;
+using MeisterDev.ProPR.TestSupport;
 
 namespace MeisterDev.ProPR.Infrastructure.Tests.AI;
 

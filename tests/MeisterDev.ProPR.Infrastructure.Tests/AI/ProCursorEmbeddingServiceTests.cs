@@ -7,6 +7,7 @@ using MeisterDev.ProPR.Domain.Enums;
 using MeisterDev.ProPR.Infrastructure.AI.ProCursor;
 using MeisterDev.ProPR.ProCursor.Options;
 using NSubstitute;
+using MeisterDev.ProPR.TestSupport;
 
 namespace MeisterDev.ProPR.Infrastructure.Tests.AI;
 

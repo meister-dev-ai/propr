@@ -8,6 +8,7 @@ using MeisterDev.ProPR.Infrastructure.Features.Budgeting;
 using MeisterDev.ProPR.Infrastructure.Tests.Fixtures;
 using Microsoft.EntityFrameworkCore;
 using Xunit;
+using MeisterDev.ProPR.TestSupport;
 
 namespace MeisterDev.ProPR.Infrastructure.Tests.Features.Budgeting;
 

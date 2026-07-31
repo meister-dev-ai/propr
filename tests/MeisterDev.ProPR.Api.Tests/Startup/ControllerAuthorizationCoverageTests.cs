@@ -4,9 +4,12 @@
 using System.Reflection;
 using System.Text;
 using MeisterDev.ProPR.Api.Extensions;
+using MeisterDev.ProPR.Api.Controllers;
+using MeisterDev.ProPR.CodeInsights.Controllers;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Routing;
+using MeisterDev.ProPR.Web;
 
 namespace MeisterDev.ProPR.Api.Tests.Startup;
 
@@ -41,10 +44,23 @@ public sealed class ControllerAuthorizationCoverageTests
     [Fact]
     public void EveryControllerAction_HasAuthorizationAttributeOrInCodeGate()
     {
-        var apiAssembly = typeof(AuthHelpers).Assembly;
-        var apiSourceRoot = LocateApiSourceRoot();
+        // Every assembly the host registers controllers from, not only the entry one. Anchored on controllers
+        // rather than on AuthHelpers, which moved to the shared web project: using the helpers as the anchor
+        // silently pointed this test at an assembly with no controllers in it. A feature project that ships
+        // endpoints must be added here at the same time as its AddApplicationPart call, or its endpoints leave
+        // this test's coverage without anything failing.
+        var controllerAssemblies = new[]
+        {
+            typeof(AuthController).Assembly,
+            typeof(CodeQualityController).Assembly,
+        };
+        var sourceRoots = new[]
+        {
+            LocateSourceRoot("MeisterDev.ProPR.Api"),
+            LocateSourceRoot("MeisterDev.ProPR.CodeInsights"),
+        };
 
-        var controllerTypes = apiAssembly.GetTypes()
+        var controllerTypes = controllerAssemblies.SelectMany(assembly => assembly.GetTypes())
             .Where(type => typeof(ControllerBase).IsAssignableFrom(type) && type is { IsAbstract: false, IsClass: true })
             .OrderBy(type => type.FullName, StringComparer.Ordinal)
             .ToArray();
@@ -70,7 +86,7 @@ public sealed class ControllerAuthorizationCoverageTests
             // Only pay the source-parsing cost for controllers that might rely on an in-code gate.
             var gatedMethodNames = classCovered
                 ? new HashSet<string>(StringComparer.Ordinal)
-                : ResolveGatedMethodNames(controllerType, apiSourceRoot);
+                : ResolveGatedMethodNames(controllerType, sourceRoots);
 
             foreach (var action in actions)
             {
@@ -118,9 +134,9 @@ public sealed class ControllerAuthorizationCoverageTests
 
     // A controller method "gates" when its body reaches AuthHelpers directly or by calling another method on the
     // same controller that does. Computed as a fixed point over the controller's own method bodies.
-    private static HashSet<string> ResolveGatedMethodNames(Type controllerType, string apiSourceRoot)
+    private static HashSet<string> ResolveGatedMethodNames(Type controllerType, IReadOnlyList<string> sourceRoots)
     {
-        var source = ReadControllerSource(controllerType, apiSourceRoot);
+        var source = ReadControllerSource(controllerType, sourceRoots);
         if (source is null)
         {
             // No source located: return empty so the action is flagged rather than silently passed.
@@ -426,12 +442,12 @@ public sealed class ControllerAuthorizationCoverageTests
     // Concatenates every hand-written source file that declares this controller. Controllers can be `partial`
     // (e.g. for [LoggerMessage]); the compiler generates additional partials under obj/ that hold none of the
     // real action logic, so build-output directories are excluded to avoid matching those generated copies.
-    private static string? ReadControllerSource(Type controllerType, string apiSourceRoot)
+    private static string? ReadControllerSource(Type controllerType, IReadOnlyList<string> sourceRoots)
     {
         var simpleName = controllerType.Name;
         var combined = new StringBuilder();
 
-        foreach (var file in Directory.EnumerateFiles(apiSourceRoot, "*.cs", SearchOption.AllDirectories))
+        foreach (var file in sourceRoots.SelectMany(root => Directory.EnumerateFiles(root, "*.cs", SearchOption.AllDirectories)))
         {
             if (IsBuildOutputPath(file))
             {
@@ -477,13 +493,13 @@ public sealed class ControllerAuthorizationCoverageTests
                || normalized.Contains("/bin/", StringComparison.Ordinal);
     }
 
-    private static string LocateApiSourceRoot()
+    private static string LocateSourceRoot(string projectName)
     {
         var directory = new DirectoryInfo(AppContext.BaseDirectory);
         while (directory is not null)
         {
-            var candidate = Path.Combine(directory.FullName, "src", "MeisterDev.ProPR.Api");
-            if (File.Exists(Path.Combine(candidate, "MeisterDev.ProPR.Api.csproj")))
+            var candidate = Path.Combine(directory.FullName, "src", projectName);
+            if (File.Exists(Path.Combine(candidate, projectName + ".csproj")))
             {
                 return candidate;
             }
@@ -491,6 +507,6 @@ public sealed class ControllerAuthorizationCoverageTests
             directory = directory.Parent;
         }
 
-        throw new DirectoryNotFoundException("Could not locate the MeisterDev.ProPR.Api source directory from " + AppContext.BaseDirectory);
+        throw new DirectoryNotFoundException($"Could not locate the {projectName} source directory from {AppContext.BaseDirectory}");
     }
 }

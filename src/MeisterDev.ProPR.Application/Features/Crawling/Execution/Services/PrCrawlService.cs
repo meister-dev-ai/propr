@@ -6,7 +6,6 @@ using MeisterDev.ProPR.Application.Features.Crawling.Execution.Models;
 using MeisterDev.ProPR.Application.Features.Crawling.Execution.Ports;
 using MeisterDev.ProPR.Application.Features.Crawling.Execution.Services;
 using MeisterDev.ProPR.Application.Features.Reviewing.Execution.Models;
-using MeisterDev.ProPR.Application.Features.CodeInsights.Ports;
 using MeisterDev.ProPR.Application.Interfaces;
 using MeisterDev.ProPR.Application.Support;
 using MeisterDev.ProPR.Domain.Entities;
@@ -14,6 +13,7 @@ using MeisterDev.ProPR.Domain.Enums;
 using MeisterDev.ProPR.Domain.Events;
 using MeisterDev.ProPR.Domain.ValueObjects;
 using Microsoft.Extensions.Logging;
+using MeisterDev.ProPR.CodeInsights.Contracts;
 
 namespace MeisterDev.ProPR.Application.Services;
 

@@ -5,6 +5,7 @@ using MeisterDev.ProPR.Api.Extensions;
 using MeisterDev.ProPR.Domain.Enums;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
+using MeisterDev.ProPR.Web;
 
 namespace MeisterDev.ProPR.Api.Tests.Extensions;
 

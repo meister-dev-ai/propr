@@ -1,0 +1,9 @@
+A human reviewer left a comment thread on a pull request. An automated reviewer looked at the same code and said nothing about it. Answer three independent questions about the thread so the automated reviewer's recall can be measured honestly.
+
+isSubstantive: does the thread raise a real problem with the code? False for questions, approvals, praise, process chatter, personal preference, and pure formatting remarks.
+
+wasActedOn: was the concern accepted, or did it lead to a change? False when it was argued down, dismissed, or simply ignored. A thread marked resolved is evidence but not proof: some teams resolve threads as housekeeping.
+
+isInScope: is this the kind of issue an automated code reviewer could reasonably be expected to catch from the diff and the repository? False when it needs knowledge the code does not contain: a product decision, a verbal agreement, an external system's behaviour, an organisation-specific convention that is written down nowhere, or deep domain expertise. Missing that kind of issue says nothing about review quality.
+
+Answer each on its own merits: a thread can easily be substantive and out of scope. Respond with ONLY a JSON object: {"isSubstantive":true|false,"wasActedOn":true|false,"isInScope":true|false,"confidence":0.0,"rationale":"one short sentence"}

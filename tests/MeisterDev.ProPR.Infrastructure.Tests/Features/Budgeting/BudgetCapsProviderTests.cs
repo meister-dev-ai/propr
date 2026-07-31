@@ -12,6 +12,7 @@ using MeisterDev.ProPR.Infrastructure.Tests.Fixtures;
 using Microsoft.EntityFrameworkCore;
 using NSubstitute;
 using FactAttribute = Xunit.SkippableFactAttribute;
+using MeisterDev.ProPR.TestSupport;
 
 namespace MeisterDev.ProPR.Infrastructure.Tests.Features.Budgeting;
 

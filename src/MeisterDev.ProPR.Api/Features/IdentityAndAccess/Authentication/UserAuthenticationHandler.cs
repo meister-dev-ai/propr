@@ -4,6 +4,7 @@
 using System.Text.Encodings.Web;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.Extensions.Options;
+using MeisterDev.ProPR.Web;
 
 namespace MeisterDev.ProPR.Api.Features.IdentityAndAccess.Authentication;
 

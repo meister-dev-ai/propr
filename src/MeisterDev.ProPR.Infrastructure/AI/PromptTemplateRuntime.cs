@@ -3,7 +3,15 @@
 
 namespace MeisterDev.ProPR.Infrastructure.AI;
 
-internal static class PromptTemplateRuntime
+/// <summary>
+///     Renders prompt templates from the shipped <c>AI/Prompts</c> tree.
+/// </summary>
+/// <remarks>
+///     Public because the templates are not all review stages: a feature project that ships its own templates
+///     into the same tree renders them through <see cref="RenderTemplateFile" /> rather than reimplementing the
+///     file lookup, the partial registry and the validation pass.
+/// </remarks>
+public static class PromptTemplateRuntime
 {
     private static readonly Lazy<PromptTemplateFileProvider> FileProvider =
         new(() => new PromptTemplateFileProvider(AppContext.BaseDirectory));
@@ -13,6 +21,27 @@ internal static class PromptTemplateRuntime
 
     private static readonly Lazy<HandlebarsPromptRenderer> Renderer = new(() => new HandlebarsPromptRenderer());
     private static readonly Lazy<PromptTemplateValidator> Validator = new(() => new PromptTemplateValidator(FileProvider.Value));
+
+    /// <summary>
+    ///     Renders the template at <paramref name="relativePath" /> under the prompt root, with the shared
+    ///     partials available to it.
+    /// </summary>
+    /// <param name="relativePath">Path under <c>AI/Prompts</c>, for example <c>code-insights/finding-type-system.hbs</c>.</param>
+    /// <param name="model">The model the template is rendered against.</param>
+    public static string RenderTemplateFile(string relativePath, object? model = null)
+    {
+        try
+        {
+            var template = FileProvider.Value.ReadTemplate(relativePath);
+            var partials = PartialRegistry.Value.GetPartials();
+            Validator.Value.ValidateTemplate(relativePath, template, partials);
+            return Renderer.Value.Render(template, model, partials).TrimEnd();
+        }
+        catch (InvalidOperationException ex)
+        {
+            throw new InvalidOperationException($"Failed to render prompt template '{relativePath}': {ex.Message}", ex);
+        }
+    }
 
     internal static string RenderStage(string stageKey, object? model = null)
     {

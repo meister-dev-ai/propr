@@ -10,8 +10,6 @@ using FluentValidation;
 using MeisterDev.ProPR.Api.Controllers;
 using MeisterDev.ProPR.Api.Extensions;
 using MeisterDev.ProPR.Api.Features.Clients.Controllers;
-using MeisterDev.ProPR.Api.Features.CodeInsights.Support;
-using MeisterDev.ProPR.Api.Features.CodeInsights.Workers;
 using MeisterDev.ProPR.Api.Features.Crawling.Webhooks.Validators;
 using MeisterDev.ProPR.Api.Features.IdentityAndAccess.Authentication;
 using MeisterDev.ProPR.Api.Features.IdentityAndAccess.Validators;
@@ -27,13 +25,14 @@ using MeisterDev.Ai.Providers.Contracts;
 using MeisterDev.ProPR.Application.DTOs;
 using MeisterDev.ProPR.Application.Interfaces;
 using MeisterDev.ProPR.Application.Options;
+using MeisterDev.ProPR.CodeInsights;
+using MeisterDev.ProPR.CodeInsights.Controllers;
 using MeisterDev.ProPR.Domain.Entities;
 using MeisterDev.ProPR.Domain.Enums;
 using MeisterDev.ProPR.Infrastructure.Auth;
 using MeisterDev.ProPR.Infrastructure.Data;
 using MeisterDev.ProPR.Infrastructure.DependencyInjection;
 using MeisterDev.ProPR.Infrastructure.Features.Clients;
-using MeisterDev.ProPR.Infrastructure.Features.CodeInsights;
 using MeisterDev.ProPR.Infrastructure.Features.Crawling;
 using MeisterDev.ProPR.Infrastructure.Features.IdentityAndAccess;
 using MeisterDev.ProPR.Infrastructure.Features.Licensing;
@@ -66,6 +65,9 @@ using Serilog.Formatting.Json;
 using Serilog.Sinks.Grafana.Loki;
 using Swashbuckle.AspNetCore.Swagger;
 using IPNetwork = System.Net.IPNetwork;
+using MeisterDev.ProPR.CodeInsights.Support;
+using MeisterDev.ProPR.CodeInsights.Workers;
+using MeisterDev.ProPR.Web;
 
 Log.Logger = new LoggerConfiguration()
     .MinimumLevel.Override("Microsoft", LogEventLevel.Warning)
@@ -297,6 +299,14 @@ try
     // CodeInsightCatchUpWorker projects roll-ups for findings collected before the projection existed and
     // seals pull requests whose closure the synchronization path never observed. Same gating as its siblings;
     // both sweeps are bounded per cycle and resumable, so a missed cycle costs nothing but latency.
+    // ThreadMemoryKeywordWorker back-fills keywords onto memories stored before extraction existed. It needs a
+    // database like the rest, and does nothing at all until AI_MEMORY_KEYWORD_BACKFILL_MAX is raised above zero.
+    builder.Services.AddSingleton<ThreadMemoryKeywordWorker>();
+    if (hasDatabaseConnectionString && !isTesting && !disableHostedServices)
+    {
+        builder.Services.AddHostedService(sp => sp.GetRequiredService<ThreadMemoryKeywordWorker>());
+    }
+
     builder.Services.AddSingleton<CodeInsightCatchUpWorker>();
     if (hasDatabaseConnectionString && !isTesting && !disableHostedServices)
     {
@@ -376,6 +386,9 @@ try
     });
 
     builder.Services.AddControllers()
+        // Feature projects that ship their own endpoints have to be named here: MVC discovers controllers in the
+        // entry assembly and in referenced assemblies it can see parts for, not in every reference.
+        .AddApplicationPart(typeof(CodeQualityController).Assembly)
         .AddJsonOptions(opts =>
             opts.JsonSerializerOptions.Converters.Add(new JsonStringEnumConverter(JsonNamingPolicy.CamelCase)));
 

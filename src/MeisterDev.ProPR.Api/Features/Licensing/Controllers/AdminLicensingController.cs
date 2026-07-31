@@ -8,6 +8,7 @@ using MeisterDev.ProPR.Application.Features.Licensing.Dtos;
 using MeisterDev.ProPR.Application.Features.Licensing.Models;
 using MeisterDev.ProPR.Application.Features.Licensing.Queries.GetLicensingSummary;
 using Microsoft.AspNetCore.Mvc;
+using MeisterDev.ProPR.Web;
 
 namespace MeisterDev.ProPR.Api.Features.Licensing.Controllers;
 

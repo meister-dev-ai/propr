@@ -5,6 +5,7 @@ using MeisterDev.ProPR.Api.Extensions;
 using MeisterDev.ProPR.Application.Interfaces;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
+using MeisterDev.ProPR.Web;
 
 namespace MeisterDev.ProPR.Api.Controllers;
 

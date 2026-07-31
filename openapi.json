@@ -24231,7 +24231,7 @@
           },
           "periods": {
             "type": "integer",
-            "description": "Buckets that carried enough sample to be tested. Compare against\nMeisterDev.ProPR.Api.Features.CodeInsights.Contracts.CodeInsightQualityResponse.MinimumTrendPeriods to say how far a window is from testable.",
+            "description": "Buckets that carried enough sample to be tested. Compare against\nMeisterDev.ProPR.CodeInsights.Http.CodeInsightQualityResponse.MinimumTrendPeriods to say how far a window is from testable.",
             "format": "int32"
           }
         },

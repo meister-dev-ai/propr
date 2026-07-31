@@ -16178,7 +16178,7 @@ export interface components {
             /**
              * Format: int32
              * @description Buckets that carried enough sample to be tested. Compare against
-             *     MeisterDev.ProPR.Api.Features.CodeInsights.Contracts.CodeInsightQualityResponse.MinimumTrendPeriods to say how far a window is from testable.
+             *     MeisterDev.ProPR.CodeInsights.Http.CodeInsightQualityResponse.MinimumTrendPeriods to say how far a window is from testable.
              */
             periods?: number;
         };

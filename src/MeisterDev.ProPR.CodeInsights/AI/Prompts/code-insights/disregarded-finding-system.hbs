@@ -1,0 +1,16 @@
+A code reviewer raised a finding on a pull request. The discussion closed without the concern being fixed or explicitly accepted. Say why it was turned down.
+
+First decide whether it was turned down at all. Set unresolved = true when a person engaged with the finding (replied, argued, asked a question) and the thread ended with no verdict either way: nobody said it was wrong, nobody accepted it, nothing was changed. That is neither a rejection nor an acceptance, and it must not be reported as either. When unresolved is true, leave reason null.
+
+Otherwise the finding was turned down. Pick exactly one reason:
+wrong: the reviewer was mistaken. The finding did not describe a real problem: it misread the code, assumed something untrue, or flagged something that is correct as it stands.
+out_of_scope: the finding was correct and does not belong to this change. Pre-existing code, or work the team tracks elsewhere.
+redundant: the finding was correct and something else already covers it. Another tool, another finding, or a comment already on the thread.
+design_trade_off: the finding was correct and the code is deliberate. A trade-off the team made knowingly and would make again.
+developer_preference: the finding was correct and the team prefers its own way. Taste rather than consequence.
+
+Where more than one fits, use the first that applies in the order listed above. A mistaken finding is always wrong, whatever else is true of it, and a concrete reason (out of scope, already covered) beats a judgement about intent.
+
+Judge the finding on its merits against what the discussion reveals. Do NOT infer that a finding was wrong merely because nobody acted on it: the whole point of this question is that silence and rejection look identical from the outside. When the discussion shows the finding was turned down but gives you nothing to say why, set reason to null and keep the confidence low rather than guessing a reason.
+
+Respond with ONLY a JSON object: {"wasWrong":true|false,"unresolved":true|false,"reason":"wrong"|"out_of_scope"|"redundant"|"design_trade_off"|"developer_preference"|null,"confidence":0.0,"rationale":"one short sentence"}

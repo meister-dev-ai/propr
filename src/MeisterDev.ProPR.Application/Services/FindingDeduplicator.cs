@@ -25,7 +25,11 @@ public static class FindingDeduplicator
     ///     than <see cref="JaccardThreshold" /> so that distinct findings on different lines of one file are
     ///     preserved and only near-identical restatements collapse.
     /// </summary>
-    internal const double SameFileDuplicateThreshold = 0.72;
+    /// <remarks>
+    ///     Public because the Code Insights overlap rule is stated relative to it: that rule deliberately sits
+    ///     lower, and a reader comparing the two numbers needs both to be reachable from one place.
+    /// </remarks>
+    public const double SameFileDuplicateThreshold = 0.72;
 
     /// <summary>
     ///     Stop words excluded from Jaccard tokenisation so that common grammatical words
@@ -176,7 +180,11 @@ public static class FindingDeduplicator
     /// <param name="a">First string.</param>
     /// <param name="b">Second string.</param>
     /// <returns>Jaccard similarity in [0, 1].</returns>
-    internal static double JaccardSimilarity(string a, string b)
+    /// <remarks>
+    ///     Public so that features measuring the review rather than performing it reuse this notion of "the same
+    ///     finding" instead of inventing a second one.
+    /// </remarks>
+    public static double JaccardSimilarity(string a, string b)
     {
         var setA = Tokenize(a);
         var setB = Tokenize(b);

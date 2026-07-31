@@ -28,6 +28,23 @@ internal sealed class PromptTemplateFileProvider
         return File.ReadAllText(path);
     }
 
+    /// <summary>
+    ///     Reads a template by its path under the prompt root, for callers that address a template directly
+    ///     rather than through a review stage key.
+    /// </summary>
+    internal string ReadTemplate(string relativePath)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(relativePath);
+
+        var path = this.GetAbsolutePath(relativePath);
+        if (!File.Exists(path))
+        {
+            throw new InvalidOperationException($"Prompt template '{relativePath}' was not found.");
+        }
+
+        return File.ReadAllText(path);
+    }
+
     internal IReadOnlyDictionary<string, string> ReadSharedPartials()
     {
         var partialsPath = this.GetAbsolutePath("shared/partials");

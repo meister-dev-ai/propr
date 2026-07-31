@@ -1,6 +1,9 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk.Web">
 
     <ItemGroup>
+        <ProjectReference Include="..\MeisterDev.ProPR.Web\MeisterDev.ProPR.Web.csproj"/>
+        <ProjectReference Include="..\MeisterDev.ProPR.CodeInsights\MeisterDev.ProPR.CodeInsights.csproj"/>
+        <ProjectReference Include="..\MeisterDev.ProPR.CodeInsights.Contracts\MeisterDev.ProPR.CodeInsights.Contracts.csproj"/>
         <ProjectReference Include="..\MeisterDev.Ai.Providers\MeisterDev.Ai.Providers.csproj"/>
         <ProjectReference Include="..\MeisterDev.ProPR.Application\MeisterDev.ProPR.Application.csproj"/>
         <ProjectReference Include="..\MeisterDev.ProPR.Infrastructure\MeisterDev.ProPR.Infrastructure.csproj"/>

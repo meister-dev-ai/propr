@@ -14,6 +14,7 @@ using MeisterDev.ProPR.Domain.Entities;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
+using MeisterDev.ProPR.Web;
 
 namespace MeisterDev.ProPR.Api.Controllers;
 

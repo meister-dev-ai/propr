@@ -1,0 +1,42 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+    <!--
+      Fixtures and factories shared by more than one test project. Not a test project itself: it contains no
+      tests and is never run, it exists so that a second test assembly does not have to copy a container fixture
+      to use one.
+    -->
+    <ItemGroup>
+        <ProjectReference Include="..\..\src\MeisterDev.ProPR.Application\MeisterDev.ProPR.Application.csproj"/>
+        <ProjectReference Include="..\..\src\MeisterDev.ProPR.Domain\MeisterDev.ProPR.Domain.csproj"/>
+        <ProjectReference Include="..\..\src\MeisterDev.ProPR.Infrastructure\MeisterDev.ProPR.Infrastructure.csproj"/>
+    </ItemGroup>
+
+    <ItemGroup>
+        <PackageReference Include="Testcontainers.PostgreSql" Version="4.11.0"/>
+        <!-- Pinned to override a vulnerable transitive, as the other test projects do. -->
+        <PackageReference Include="System.Security.Cryptography.Xml" Version="10.0.10"/>
+        <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="10.0.1"/>
+        <PackageReference Include="Pgvector.EntityFrameworkCore" Version="0.3.0"/>
+        <PackageReference Include="Microsoft.Extensions.Options" Version="10.0.7"/>
+        <PackageReference Include="xunit" Version="2.9.3"/>
+        <PackageReference Include="Xunit.SkippableFact" Version="1.4.13"/>
+    </ItemGroup>
+
+    <ItemGroup>
+        <Using Include="Xunit"/>
+    </ItemGroup>
+
+    <PropertyGroup>
+        <TargetFramework>net10.0</TargetFramework>
+        <ImplicitUsings>enable</ImplicitUsings>
+        <Nullable>enable</Nullable>
+        <IsPackable>false</IsPackable>
+        <!--
+          It references xunit for IAsyncLifetime and the skippable attributes, which is enough for `dotnet test`
+          to treat it as a test assembly and try to run it. It has no test runner, so the testhost then crashes
+          and the whole solution's test run reports failure while every real assembly passed.
+        -->
+        <IsTestProject>false</IsTestProject>
+    </PropertyGroup>
+
+</Project>

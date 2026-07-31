@@ -12,6 +12,7 @@ using Microsoft.EntityFrameworkCore;
 using Pgvector;
 using Pgvector.EntityFrameworkCore;
 using FactAttribute = Xunit.SkippableFactAttribute;
+using MeisterDev.ProPR.TestSupport;
 
 namespace MeisterDev.ProPR.Infrastructure.Tests.Repositories.ProCursor;
 

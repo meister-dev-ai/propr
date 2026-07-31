@@ -5,6 +5,7 @@ using MeisterDev.ProPR.Application.DTOs.ProCursor;
 using MeisterDev.ProPR.Domain.Enums;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
+using MeisterDev.ProPR.TestSupport;
 
 namespace MeisterDev.ProPR.Infrastructure.Tests.Repositories.ProCursor;
 

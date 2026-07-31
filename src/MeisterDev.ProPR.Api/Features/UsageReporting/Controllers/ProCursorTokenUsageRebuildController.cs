@@ -6,6 +6,7 @@ using MeisterDev.ProPR.Application.DTOs.ProCursor;
 using MeisterDev.ProPR.Application.Interfaces;
 using MeisterDev.ProPR.Domain.Enums;
 using Microsoft.AspNetCore.Mvc;
+using MeisterDev.ProPR.Web;
 
 namespace MeisterDev.ProPR.Api.Controllers;
 

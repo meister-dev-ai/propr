@@ -10,6 +10,7 @@ using MeisterDev.ProPR.Domain.Enums;
 using MeisterDev.Ai.Providers.Transport;
 using MeisterDev.Ai.Providers.Drivers;
 using Microsoft.Extensions.DependencyInjection;
+using MeisterDev.ProPR.TestSupport;
 
 namespace MeisterDev.ProPR.Infrastructure.Tests.AI;
 

@@ -14,6 +14,7 @@ using MeisterDev.ProPR.Infrastructure.AI;
 using MeisterDev.Ai.Providers.Drivers;
 using Microsoft.Extensions.AI;
 using NSubstitute;
+using MeisterDev.ProPR.TestSupport;
 
 namespace MeisterDev.ProPR.Infrastructure.Tests.AI;
 

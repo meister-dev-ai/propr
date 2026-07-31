@@ -7,8 +7,6 @@ using System.Text;
 using System.Text.Json;
 using MeisterDev.ProPR.Application.AI;
 using MeisterDev.ProPR.Application.DTOs;
-using MeisterDev.ProPR.Application.Features.CodeInsights;
-using MeisterDev.ProPR.Application.Features.CodeInsights.Ports;
 using MeisterDev.ProPR.Application.Interfaces;
 using MeisterDev.ProPR.Application.Options;
 using MeisterDev.ProPR.Domain.Entities;
@@ -18,6 +16,7 @@ using MeisterDev.ProPR.Domain.ValueObjects;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using MeisterDev.ProPR.CodeInsights.Contracts;
 
 namespace MeisterDev.ProPR.Application.Services;
 
@@ -174,20 +173,21 @@ public sealed partial class ThreadMemoryService(
         ThreadResolvedDomainEvent evt,
         CancellationToken ct)
     {
-        if (codeInsightsCollectionGate is null
-            || (codeInsightFindingStore is null && memoryKeywordExtractor is null))
+        if (codeInsightFindingStore is null && memoryKeywordExtractor is null)
         {
             return;
         }
 
         try
         {
-            if (!await codeInsightsCollectionGate.IsCollectionEnabledAsync(evt.ClientId, ct))
-            {
-                return;
-            }
+            // Two enrichments with different owners. The finding link is Code Insights data and stays behind its
+            // licence and per-client opt-in. Keywords are search metadata on a memory, which is part of the base
+            // product, so they are not gated: gating them meant a commercial licence silently improved memory
+            // search and its absence silently degraded it, with nothing in the product saying so.
+            var collecting = codeInsightsCollectionGate is not null
+                             && await codeInsightsCollectionGate.IsCollectionEnabledAsync(evt.ClientId, ct);
 
-            if (codeInsightFindingStore is not null)
+            if (collecting && codeInsightFindingStore is not null)
             {
                 // Same invariant conversion the disposition path uses: the crawl carries a number, the insight
                 // store holds the provider's own string form.

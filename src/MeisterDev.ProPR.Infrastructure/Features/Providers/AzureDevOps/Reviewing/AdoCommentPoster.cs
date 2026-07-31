@@ -6,7 +6,6 @@ using System.Globalization;
 using System.Text;
 using MeisterDev.ProPR.Application.DTOs;
 using MeisterDev.ProPR.Application.Exceptions;
-using MeisterDev.ProPR.Application.Features.CodeInsights.Misses;
 using MeisterDev.ProPR.Application.Features.Reviewing.Execution.Models;
 using MeisterDev.ProPR.Application.Interfaces;
 using MeisterDev.ProPR.Domain.Enums;
@@ -14,6 +13,7 @@ using MeisterDev.ProPR.Domain.ValueObjects;
 using MeisterDev.ProPR.Infrastructure.Features.Providers.Common;
 using MeisterDev.ProPR.Infrastructure.Utilities;
 using Microsoft.TeamFoundation.SourceControl.WebApi;
+using MeisterDev.ProPR.CodeInsights.Contracts;
 
 namespace MeisterDev.ProPR.Infrastructure.Features.Providers.AzureDevOps.Reviewing;
 

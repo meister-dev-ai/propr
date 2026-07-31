@@ -18,6 +18,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using NSubstitute;
+using MeisterDev.ProPR.Web;
 
 namespace MeisterDev.ProPR.Api.Tests.IdentityAndAccess;
 

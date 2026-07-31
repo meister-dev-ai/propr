@@ -11,6 +11,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using FactAttribute = Xunit.SkippableFactAttribute;
 using TheoryAttribute = Xunit.SkippableTheoryAttribute;
+using MeisterDev.ProPR.TestSupport;
 
 namespace MeisterDev.ProPR.Infrastructure.Tests.Repositories;
 

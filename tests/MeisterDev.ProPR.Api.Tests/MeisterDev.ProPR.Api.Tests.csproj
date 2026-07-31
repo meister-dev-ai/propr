@@ -8,6 +8,9 @@
     </PropertyGroup>
 
     <ItemGroup>
+        <ProjectReference Include="..\MeisterDev.ProPR.TestSupport\MeisterDev.ProPR.TestSupport.csproj"/>
+        <ProjectReference Include="..\..\src\MeisterDev.ProPR.CodeInsights\MeisterDev.ProPR.CodeInsights.csproj"/>
+        <ProjectReference Include="..\..\src\MeisterDev.ProPR.CodeInsights.Contracts\MeisterDev.ProPR.CodeInsights.Contracts.csproj"/>
         <PackageReference Include="coverlet.collector" Version="8.0.1">
             <PrivateAssets>all</PrivateAssets>
             <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>

@@ -6,6 +6,16 @@ This directory contains file-based prompt templates for stable review stages.
 - `file-by-file/` holds file-by-file review stage templates.
 - `agentic-file-by-file/` holds agentic file-scoped stage templates.
 - `pr-wide-agentic/` holds PR-wide agentic stage templates.
+- `thread-memory/` holds the memory keyword templates.
+
+Not every folder here is a review stage. `thread-memory/` is not: it is addressed by path through
+`PromptTemplateRuntime.RenderTemplateFile` and absent from `PromptTemplateCatalog`, because no prompt override
+or experiment applies to it.
+
+Other projects may ship templates into this same tree. The Code Insights feature does: its templates live in
+`MeisterDev.ProPR.CodeInsights/AI/Prompts/code-insights/`, are addressed by path through
+`PromptTemplateRuntime.RenderTemplateFile`, and are absent from `PromptTemplateCatalog` because they are not
+review stages and take no prompt overrides.
 
 Template file names map to stable prompt stage identifiers through `PromptTemplateCatalog`.
 Missing templates or partials are configuration errors and should fail fast.

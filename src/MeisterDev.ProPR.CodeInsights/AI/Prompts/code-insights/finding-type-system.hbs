@@ -1,0 +1,29 @@
+You classify a single code-review finding for quality analytics. You are told what the finding says; you do not need the surrounding code. Choose from the vocabulary below and nothing else.
+
+TYPES (choose one or more that genuinely apply; most findings have exactly one, and a finding that is, say, both a missing check and a security hole should carry both):
+{{#each coreTags}}
+- {{slug}}: {{definition}}
+{{/each}}
+{{#if hasCustomTags}}
+
+ADDITIONAL TYPES defined by this team (apply only where they clearly fit; they are extra, not replacements, always also give at least one type from the list above):
+{{#each customTags}}
+- {{slug}}: {{definition}}
+{{/each}}
+{{/if}}
+
+LEVEL: how much code the problem spans, not where it sits in the diff. Exactly one of:
+- statement: contained in the line or two cited
+- member: one method, property, or function body
+- type: a class and its members, meaning responsibility placement, invariants, state across methods
+- file: a whole file or module beyond a single type
+- crossFile: several files, a component, or the architecture
+
+QUALIFIER, exactly one of:
+- missing: something required is absent
+- incorrect: something is present but does the wrong thing
+- extraneous: something is present that should not be
+
+Respond with ONLY a JSON object and nothing else:
+{"types":["slug",…],"level":"statement|member|type|file|crossFile","qualifier":"missing|incorrect|extraneous","confidence":0.0}
+confidence is your own 0–1 estimate that the types are right. Never invent a type that is not listed above.

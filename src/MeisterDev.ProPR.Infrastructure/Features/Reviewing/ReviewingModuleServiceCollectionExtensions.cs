@@ -7,6 +7,7 @@ using MeisterDev.ProPR.Application.Features.Reviewing.Execution.Models;
 using MeisterDev.ProPR.Application.Features.Reviewing.Execution.Ports;
 using MeisterDev.ProPR.Application.Features.Reviewing.Execution.Strategies.Ports;
 using MeisterDev.ProPR.Application.Interfaces;
+using MeisterDev.ProPR.Infrastructure.Features.Reviewing.ThreadMemory;
 using MeisterDev.ProPR.Application.Options;
 using MeisterDev.ProPR.Application.Services;
 using MeisterDev.ProPR.CodeAnalysis;
@@ -57,6 +58,24 @@ public static class ReviewingModuleServiceCollectionExtensions
     {
         var hasDatabase = configuration.HasDatabaseConnectionString();
 
+        // Bound before the database gate so the back-fill worker resolves its budget even on a host where the
+        // rest of this module stays inert.
+        services.AddOptions<ThreadMemoryKeywordOptions>().Configure(memoryOptions =>
+        {
+            // The back-fill budget used to be CODE_INSIGHTS_MEMORY_KEYWORD_BACKFILL_MAX, from when keyword
+            // extraction lived in that feature. The old name is still read, because an installation that had
+            // set it would otherwise stop back-filling on upgrade with nothing said: an unset key and a
+            // deliberate zero are indistinguishable.
+            memoryOptions.BackfillMax = configuration.GetValue(
+                "AI_MEMORY_KEYWORD_BACKFILL_MAX",
+                configuration.GetValue(
+                    "CODE_INSIGHTS_MEMORY_KEYWORD_BACKFILL_MAX",
+                    memoryOptions.BackfillMax));
+            memoryOptions.SweepIntervalSeconds = configuration.GetValue(
+                "AI_MEMORY_KEYWORD_SWEEP_INTERVAL_SECONDS",
+                memoryOptions.SweepIntervalSeconds);
+        });
+
         if (hasDatabase)
         {
             services.TryAddScoped<IScmProviderRegistry, ScmProviderRegistry>();
@@ -79,6 +98,12 @@ public static class ReviewingModuleServiceCollectionExtensions
         {
             services.AddScoped<IJobRepository, JobRepository>();
             services.AddScoped<IReviewSpendAccumulator, ReviewSpendAccumulator>();
+
+            // Search keywords on resolution memories, extracted from text the memory already carries. The
+            // extractor runs as a memory is stored; the sweeper exists only for memories written before it did,
+            // and its budget is zero unless an installation asks for a back-fill.
+            services.AddScoped<IMemoryKeywordExtractor, AiMemoryKeywordExtractor>();
+            services.AddScoped<IThreadMemoryKeywordSweeper, ThreadMemoryKeywordSweeper>();
             services.AddScoped<IBudgetCapsProvider, BudgetCapsProvider>();
             services.AddScoped<IClientBudgetConsumptionService, ClientBudgetConsumptionService>();
             services.AddScoped<ITenantBudgetOverviewService, TenantBudgetOverviewService>();

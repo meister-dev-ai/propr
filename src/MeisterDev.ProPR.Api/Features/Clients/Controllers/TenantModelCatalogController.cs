@@ -7,6 +7,7 @@ using MeisterDev.ProPR.Application.Exceptions;
 using MeisterDev.ProPR.Application.Interfaces;
 using MeisterDev.ProPR.Domain.Enums;
 using Microsoft.AspNetCore.Mvc;
+using MeisterDev.ProPR.Web;
 
 namespace MeisterDev.ProPR.Api.Features.Clients.Controllers;
 

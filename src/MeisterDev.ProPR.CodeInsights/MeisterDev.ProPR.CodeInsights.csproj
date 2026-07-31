@@ -1,0 +1,45 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+    <!--
+      The Code Insights feature: review-quality analytics, from collection through the metrics it reports.
+      Commercial-only functionality, gated at runtime by licence and per-client opt-in.
+    -->
+    <ItemGroup>
+        <ProjectReference Include="..\MeisterDev.ProPR.Web\MeisterDev.ProPR.Web.csproj"/>
+        <ProjectReference Include="..\MeisterDev.ProPR.Domain\MeisterDev.ProPR.Domain.csproj"/>
+        <ProjectReference Include="..\MeisterDev.ProPR.Application\MeisterDev.ProPR.Application.csproj"/>
+        <ProjectReference Include="..\MeisterDev.ProPR.Infrastructure\MeisterDev.ProPR.Infrastructure.csproj"/>
+        <ProjectReference Include="..\MeisterDev.ProPR.CodeInsights.Contracts\MeisterDev.ProPR.CodeInsights.Contracts.csproj"/>
+    </ItemGroup>
+
+    <!-- Controllers and hosted workers ship with the feature, so it needs the web framework. -->
+    <ItemGroup>
+        <FrameworkReference Include="Microsoft.AspNetCore.App"/>
+    </ItemGroup>
+
+    <ItemGroup>
+        <PackageReference Include="Microsoft.Extensions.AI.Abstractions" Version="10.5.1"/>
+    </ItemGroup>
+
+    <ItemGroup>
+        <InternalsVisibleTo Include="MeisterDev.ProPR.CodeInsights.Tests"/>
+        <InternalsVisibleTo Include="DynamicProxyGenAssembly2"/>
+    </ItemGroup>
+
+    <!-- The prompt templates land in the same AI/Prompts tree the renderer resolves from. -->
+    <ItemGroup>
+        <Content Include="AI/Prompts/**/*">
+            <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+            <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+        </Content>
+    </ItemGroup>
+
+    <PropertyGroup>
+        <TargetFramework>net10.0</TargetFramework>
+        <ImplicitUsings>enable</ImplicitUsings>
+        <Nullable>enable</Nullable>
+        <GenerateDocumentationFile>true</GenerateDocumentationFile>
+        <ServerGarbageCollection>true</ServerGarbageCollection>
+    </PropertyGroup>
+
+</Project>
