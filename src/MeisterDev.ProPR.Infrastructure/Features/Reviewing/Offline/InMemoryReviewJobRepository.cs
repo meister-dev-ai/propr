@@ -590,6 +590,37 @@ public sealed class InMemoryReviewJobRepository : IJobRepository
         return Task.CompletedTask;
     }
 
+    public Task<string?> FindRecordedRepositoryIdAsync(
+        Guid clientId,
+        string organizationUrl,
+        string projectId,
+        string repositoryName,
+        int pullRequestId,
+        CancellationToken ct = default)
+    {
+        var candidates = this._jobs.Values
+            .Where(job =>
+                job.ClientId == clientId
+                && string.Equals(job.OrganizationUrl, organizationUrl, StringComparison.Ordinal)
+                && string.Equals(job.ProjectId, projectId, StringComparison.Ordinal)
+                && job.PullRequestId == pullRequestId)
+            .ToList();
+
+        // A pull request number is unique per repository on GitLab and Forgejo, so the name recorded with
+        // the job is what settles which repository in this project is meant.
+        var named = candidates
+            .Where(job => string.Equals(job.PrRepositoryName, repositoryName, StringComparison.OrdinalIgnoreCase))
+            .ToList();
+
+        var pool = named.Count > 0 ? named : candidates;
+        var identities = pool
+            .Select(job => job.RepositoryId)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        return Task.FromResult(identities.Count == 1 ? identities[0] : null);
+    }
+
     public Task<IReadOnlyList<ReviewJob>> GetByPrAsync(
         Guid clientId,
         string organizationUrl,

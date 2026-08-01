@@ -272,6 +272,17 @@ public sealed class ReviewingDiagnosticsServiceCollectionExtensionsTests
             return Task.FromResult<IReadOnlyList<ReviewJob>>([]);
         }
 
+        public Task<string?> FindRecordedRepositoryIdAsync(
+            Guid clientId,
+            string organizationUrl,
+            string projectId,
+            string repositoryName,
+            int pullRequestId,
+            CancellationToken ct = default)
+        {
+            return Task.FromResult<string?>(null);
+        }
+
         public Task<IReadOnlyList<ReviewJob>> GetByPrAsync(
             Guid clientId,
             string organizationUrl,

@@ -488,17 +488,70 @@ public sealed class ResolvePullRequestHandlerTests
             "local_admin/propr");
     }
 
+    [Fact]
+    public async Task HandleAsync_TakesTheRepositoryIdentityFromAPreviousReview()
+    {
+        // A webhook records a repository by name, so it holds no provider identity for it. A review that
+        // has already run does, and reading that needs no credential and no network call. Discovery is
+        // not registered here, which is the situation that produced a covered-but-not-addressable answer
+        // for a pull request ProPR had demonstrably reviewed.
+        var sut = Handler(
+            SubstituteRepository(),
+            SubstituteWebhookRepository(ForgejoWebhook()),
+            SubstituteRegistry(null),
+            SubstituteJobRepository("4242"));
+
+        var result = await sut.HandleAsync(new ResolvePullRequestQuery([ForgejoClientId], "http://localhost:8091", "local_admin", "propr", 53));
+
+        var match = Assert.Single(result.Matches);
+        Assert.Equal("4242", match.RepositoryId);
+    }
+
+    [Fact]
+    public async Task HandleAsync_AsksTheProviderWhenNoReviewHasRunYet()
+    {
+        // History cannot answer for a pull request ProPR has never seen, so discovery still does.
+        var sut = Handler(
+            SubstituteRepository(),
+            SubstituteWebhookRepository(ForgejoWebhook()),
+            SubstituteRegistry([ForgejoRepository()]),
+            SubstituteJobRepository(null));
+
+        var result = await sut.HandleAsync(new ResolvePullRequestQuery([ForgejoClientId], "http://localhost:8091", "local_admin", "propr", 53));
+
+        var match = Assert.Single(result.Matches);
+        Assert.Equal("4", match.RepositoryId);
+    }
+
     /// <summary>Builds the handler with no webhook coverage and no registered provider, unless given some.</summary>
     private static ResolvePullRequestHandler Handler(
         ICrawlConfigurationRepository crawlConfigurations,
         IWebhookConfigurationRepository? webhookConfigurations = null,
-        IScmProviderRegistry? providerRegistry = null)
+        IScmProviderRegistry? providerRegistry = null,
+        IJobRepository? jobs = null)
     {
         return new ResolvePullRequestHandler(
             crawlConfigurations,
             webhookConfigurations ?? SubstituteWebhookRepository(),
+            jobs ?? SubstituteJobRepository(null),
             providerRegistry ?? SubstituteRegistry(null),
             NullLogger<ResolvePullRequestHandler>.Instance);
+    }
+
+    /// <summary>A job history that recalls one repository identity, or none at all.</summary>
+    private static IJobRepository SubstituteJobRepository(string? recordedRepositoryId)
+    {
+        var jobs = Substitute.For<IJobRepository>();
+        jobs
+            .FindRecordedRepositoryIdAsync(
+                Arg.Any<Guid>(),
+                Arg.Any<string>(),
+                Arg.Any<string>(),
+                Arg.Any<string>(),
+                Arg.Any<int>(),
+                Arg.Any<CancellationToken>())
+            .Returns(recordedRepositoryId);
+        return jobs;
     }
 
     private static IWebhookConfigurationRepository SubstituteWebhookRepository(params WebhookConfigurationDto[] configurations)

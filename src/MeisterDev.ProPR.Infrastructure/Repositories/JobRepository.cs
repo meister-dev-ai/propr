@@ -890,6 +890,49 @@ public sealed partial class JobRepository(
     }
 
     /// <inheritdoc />
+    public async Task<string?> FindRecordedRepositoryIdAsync(
+        Guid clientId,
+        string organizationUrl,
+        string projectId,
+        string repositoryName,
+        int pullRequestId,
+        CancellationToken ct = default)
+    {
+        var candidates = await dbContext.ReviewJobs
+            .AsNoTracking()
+            .Where(j => j.ClientId == clientId &&
+                        j.OrganizationUrl == organizationUrl &&
+                        j.ProjectId == projectId &&
+                        j.PullRequestId == pullRequestId)
+            .Select(j => new { j.RepositoryId, j.PrRepositoryName })
+            .Distinct()
+            .ToListAsync(ct);
+
+        if (candidates.Count == 0)
+        {
+            return null;
+        }
+
+        // A pull request number is unique per repository on GitLab and Forgejo, so two repositories in
+        // one project can both have a number 2. The name recorded with the job settles which is meant.
+        var named = candidates
+            .Where(candidate => string.Equals(
+                candidate.PrRepositoryName,
+                repositoryName,
+                StringComparison.OrdinalIgnoreCase))
+            .ToList();
+
+        var pool = named.Count > 0 ? named : candidates;
+        var identities = pool
+            .Select(candidate => candidate.RepositoryId)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        // Older jobs carry no repository name. Where those are all that is left and they disagree, the
+        // question cannot be answered from history, and saying nothing lets discovery try instead.
+        return identities.Count == 1 ? identities[0] : null;
+    }
+
     public async Task<IReadOnlyList<ReviewJob>> GetByPrAsync(
         Guid clientId,
         string organizationUrl,

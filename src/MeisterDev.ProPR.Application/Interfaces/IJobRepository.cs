@@ -210,6 +210,29 @@ public interface IJobRepository
         CancellationToken ct = default);
 
     /// <summary>
+    ///     The repository identity a previous review of this pull request recorded, or
+    ///     <see langword="null" /> when none has run or the answer would be ambiguous.
+    /// </summary>
+    /// <remarks>
+    ///     Configuration records a repository by name, so a webhook has no reason to hold the provider's
+    ///     identity for it. A review that has already run does hold it, and holds the one the review
+    ///     itself used, which makes history a better source than asking the provider again: no
+    ///     credential, no network call, and nothing to fail.
+    ///     <para>
+    ///         A pull request number is only unique within a repository on GitLab and Forgejo, so the
+    ///         number alone cannot identify one. Jobs carrying the requested repository name are preferred,
+    ///         and an answer is given only when the candidates agree on a single identity.
+    ///     </para>
+    /// </remarks>
+    Task<string?> FindRecordedRepositoryIdAsync(
+        Guid clientId,
+        string organizationUrl,
+        string projectId,
+        string repositoryName,
+        int pullRequestId,
+        CancellationToken ct = default);
+
+    /// <summary>
     ///     Returns jobs for a specific pull request, newest first, with pagination.
     ///     Includes <c>Protocols</c> and <c>Protocols.Events</c> eagerly loaded.
     /// </summary>

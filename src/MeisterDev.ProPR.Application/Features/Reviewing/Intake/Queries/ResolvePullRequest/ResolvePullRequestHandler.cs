@@ -28,15 +28,17 @@ namespace MeisterDev.ProPR.Application.Features.Reviewing.Intake.Queries.Resolve
 ///     </para>
 ///     <para>
 ///         What configuration often lacks is the repository identity: a webhook is registered by name, so it
-///         has no reason to record one. That single value is filled in from the provider's repository
-///         discovery — the same adapter guided configuration uses. Only the identity comes from discovery,
-///         never the scope path or project key, which keeps the authoritative values authoritative and
-///         confines the network call to the one thing it is needed for.
+///         has no reason to record one. Two sources fill it. A review that has already run recorded the
+///         identity it used, which is exact and costs nothing to read, so history is asked first. Failing
+///         that, the provider's repository discovery answers — the same adapter guided configuration uses.
+///         Only the identity comes from either, never the scope path or project key, which keeps the
+///         authoritative values authoritative and confines any network call to the one thing needing it.
 ///     </para>
 /// </remarks>
 public sealed partial class ResolvePullRequestHandler(
     ICrawlConfigurationRepository crawlConfigurationRepository,
     IWebhookConfigurationRepository webhookConfigurationRepository,
+    IJobRepository jobRepository,
     IScmProviderRegistry providerRegistry,
     ILogger<ResolvePullRequestHandler> logger)
 {
@@ -102,7 +104,17 @@ public sealed partial class ResolvePullRequestHandler(
                 continue;
             }
 
+            // History before the network. A pull request ProPR has already reviewed carries the identity
+            // that review used, which is authoritative and free; discovery is the fallback for one it has
+            // not seen, and it needs a credential and a round trip that can fail for unrelated reasons.
             var repositoryId = covered?.ExternalRepositoryId
+                               ?? await jobRepository.FindRecordedRepositoryIdAsync(
+                                   coverage.ClientId,
+                                   coverage.ProviderScopePath,
+                                   coverage.ProviderProjectKey,
+                                   query.RepositoryName,
+                                   query.PullRequestNumber,
+                                   cancellationToken)
                                ?? await this.DiscoverRepositoryIdAsync(
                                    coverage,
                                    query.RepositoryName,
