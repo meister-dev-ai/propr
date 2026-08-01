@@ -25,6 +25,12 @@ export interface ThreadMemoryRecordDto {
   keywords?: string[] | null
   /** The code-insight finding this memory came from, when one is known. */
   codeInsightFindingId?: string | null
+  /** Serialized by JsonStringEnumConverter, so 'threadResolved' | 'adminDismissed'. */
+  source?: string | null
+  /** 'acceptedByHuman' | 'claimsFix', or null for a record stored before the outcome was kept. */
+  resolutionIntent?: string | null
+  /** 'resolvedByChange' | 'acceptedWithoutChange' | 'closedWithoutResolution' | 'undetermined'. */
+  resolutionClarity?: string | null
 }
 
 export interface MemoryActivityLogEntryDto {

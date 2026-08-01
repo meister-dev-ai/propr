@@ -255,7 +255,10 @@ public sealed partial class ThreadMemoryController(
             r.CreatedAt,
             r.UpdatedAt,
             r.Keywords,
-            r.CodeInsightFindingId);
+            r.CodeInsightFindingId,
+            r.MemorySource,
+            r.ResolutionIntent,
+            r.ResolutionClarity);
     }
 
     [LoggerMessage(Level = LogLevel.Information, Message = "Embedding {Id} deleted by admin for client {ClientId}")]
@@ -277,6 +280,18 @@ public sealed partial class ThreadMemoryController(
 /// <param name="ResolutionSummary">AI-generated summary.</param>
 /// <param name="CreatedAt">When the record was first stored.</param>
 /// <param name="UpdatedAt">When the record was last upserted.</param>
+/// <param name="Keywords">Searchable keywords derived for code insights.</param>
+/// <param name="CodeInsightFindingId">The finding this memory came from, when known.</param>
+/// <param name="Source">Whether the record came from a resolved thread or an administrator dismissal.</param>
+/// <param name="ResolutionIntent">
+///     What the reviewer's resolution meant: a rejection of the finding, or a claim that it was fixed.
+///     <see langword="null" /> for a record written before the outcome was kept, and for an administrator
+///     dismissal, which carries no reviewer decision.
+/// </param>
+/// <param name="ResolutionClarity">
+///     How plainly the discussion stated the resolution. Distinguishes a rejection a reviewer made explicit
+///     from one inferred from an unclear thread.
+/// </param>
 public sealed record ThreadMemoryRecordDto(
     Guid Id,
     Guid ClientId,
@@ -288,4 +303,7 @@ public sealed record ThreadMemoryRecordDto(
     DateTimeOffset CreatedAt,
     DateTimeOffset UpdatedAt,
     IReadOnlyList<string>? Keywords = null,
-    Guid? CodeInsightFindingId = null);
+    Guid? CodeInsightFindingId = null,
+    MemorySource Source = MemorySource.ThreadResolved,
+    ThreadResolutionIntent? ResolutionIntent = null,
+    ResolutionClarity? ResolutionClarity = null);

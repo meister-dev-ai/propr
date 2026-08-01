@@ -39,13 +39,30 @@ public sealed record PrJobSummaryDto(
     bool CostIsApproximate = false);
 
 /// <summary>Summary of a thread memory record that originated from this pull request.</summary>
+/// <param name="MemoryRecordId">Record identifier.</param>
+/// <param name="ThreadId">Provider thread identifier.</param>
+/// <param name="FilePath">File the thread was anchored to, if any.</param>
+/// <param name="ResolutionSummaryExcerpt">Opening of the stored resolution summary.</param>
+/// <param name="Source">Whether the record came from a resolved thread or an administrator dismissal.</param>
+/// <param name="StoredAt">When the record was last written.</param>
+/// <param name="ResolutionIntent">
+///     What the reviewer's resolution meant: a rejection of the finding, or a claim that it was fixed.
+///     <see langword="null" /> for a record written before the outcome was kept, and for an administrator
+///     dismissal, which carries no reviewer decision.
+/// </param>
+/// <param name="ResolutionClarity">
+///     How plainly the discussion stated the resolution. Distinguishes a rejection a reviewer made explicit
+///     from one inferred from an unclear thread.
+/// </param>
 public sealed record ThreadMemorySummaryDto(
     Guid MemoryRecordId,
     long ThreadId,
     string? FilePath,
     string ResolutionSummaryExcerpt,
     MemorySource Source,
-    DateTimeOffset StoredAt);
+    DateTimeOffset StoredAt,
+    ThreadResolutionIntent? ResolutionIntent = null,
+    ResolutionClarity? ResolutionClarity = null);
 
 /// <summary>Summary of an external memory record that contributed to a review in this pull request.</summary>
 public sealed record ContributingMemorySummaryDto(

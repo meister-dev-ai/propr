@@ -9708,6 +9708,92 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/pull-requests/resolve": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Resolves which of the caller's clients cover a pull request, and under which coordinates.
+         * @description Review-scoped endpoints are addressed by scope path, project key, repository identity, and number,
+         *     but a pull request's web address carries only a host, an owner segment, a repository name, and a
+         *     number. For Azure DevOps and Forgejo the remaining two are opaque identifiers that appear nowhere
+         *     in the address, so a client that only knows the address cannot construct a request without this
+         *     endpoint. Resolution reads persisted crawl configuration and calls no provider, so it uses no
+         *     source-control credential and returns the same stored coordinates a review job carries.
+         */
+        get: {
+            parameters: {
+                query?: {
+                    /**
+                     * @description Host as it appears in the address, for example `https://dev.azure.com` or
+                     *     `http://forgejo.internal:3000`. Only the scheme and authority are significant.
+                     */
+                    HostBaseUrl?: string;
+                    /**
+                     * @description Owner, namespace, or organization segment from the address, for example `local_admin` or
+                     *     `meister-dev`. Omitting it widens the match to every configured scope on the host.
+                     */
+                    ScopePath?: string;
+                    /** @description Repository name as it appears in the address. */
+                    RepositoryName?: string;
+                    /** @description Pull request number as it appears in the address. */
+                    PullRequestNumber?: number;
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /**
+                 * @description Zero or more matches. An empty list means no client the caller can see covers the repository, which
+                 *     is a normal answer; more than one means the caller must choose.
+                 */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ResolvePullRequestResultDto"];
+                        "application/json": components["schemas"]["ResolvePullRequestResultDto"];
+                        "text/json": components["schemas"]["ResolvePullRequestResultDto"];
+                    };
+                };
+                /** @description Missing or invalid address components. */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Missing or invalid credentials. */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/clients/{clientId}/review-archive/pull-requests/threads": {
         parameters: {
             query?: never;
@@ -17660,6 +17746,59 @@ export interface components {
         RenameLogicalModelRequest: {
             newName?: string | null;
         };
+        /**
+         * @description How clearly a resolved PR review thread expresses an actual resolution, used to decide
+         *     whether the thread is worth storing as memory. Threads whose outcome cannot be tied to a
+         *     genuine resolution are not stored, so speculative or empty "resolutions" never reach a
+         *     future review.
+         * @enum {string}
+         */
+        ResolutionClarity: "resolvedByChange" | "acceptedWithoutChange" | "closedWithoutResolution" | "undetermined";
+        /** @description The full answer for one pull request address. */
+        ResolvePullRequestResultDto: {
+            /**
+             * @description Every client that covers the repository, most precisely matched first. Empty is a normal answer and
+             *     means no client covers it. More than one means the caller must choose.
+             */
+            matches?: components["schemas"]["ResolvedPullRequestDto"][] | null;
+        };
+        /**
+         * @description One client's answer for a pull request, carrying the coordinates every review-scoped endpoint is
+         *     addressed by.
+         */
+        ResolvedPullRequestDto: {
+            /**
+             * Format: uuid
+             * @description The client that covers the repository.
+             */
+            clientId?: string;
+            provider?: components["schemas"]["ScmProvider"];
+            /**
+             * @description Scope path as configured, ready to pass to a review-scoped endpoint unchanged. This is a stored
+             *     value rather than a derived one, which is why it is returned instead of reconstructed by the caller.
+             */
+            providerScopePath?: string | null;
+            /** @description Project, workspace, or namespace key as configured. */
+            providerProjectKey?: string | null;
+            /**
+             * @description Provider repository identity, or null when the covering configuration crawls
+             *     every repository in its scope and therefore names none. A caller holding null
+             *     knows the repository is covered and cannot yet address it.
+             */
+            repositoryId?: string | null;
+            /** @description Repository name recorded alongside the identity, when one is known. */
+            repositoryName?: string | null;
+            /**
+             * Format: int32
+             * @description The pull request number the query asked about, echoed for convenience.
+             */
+            pullRequestId?: number;
+            /**
+             * @description Whether the covering configuration is currently crawling. Resolution deliberately includes inactive
+             *     configurations, because past reviews of the repository remain readable.
+             */
+            isActiveConfiguration?: boolean;
+        };
         /** @description Resolved reviewer-trigger identity candidate returned by provider onboarding APIs. */
         ResolvedReviewerIdentityResponse: {
             /** Format: uuid */
@@ -18441,9 +18580,16 @@ export interface components {
              * @description When the record was last upserted.
              */
             updatedAt?: string;
+            /** @description Searchable keywords derived for code insights. */
             keywords?: string[] | null;
-            /** Format: uuid */
+            /**
+             * Format: uuid
+             * @description The finding this memory came from, when known.
+             */
             codeInsightFindingId?: string | null;
+            source?: components["schemas"]["MemorySource"];
+            resolutionIntent?: components["schemas"]["ThreadResolutionIntent"];
+            resolutionClarity?: components["schemas"]["ResolutionClarity"];
         };
         /** @description Generic paginated result wrapper. */
         ThreadMemoryRecordDtoPagedResult: {
@@ -18457,16 +18603,37 @@ export interface components {
         };
         /** @description Summary of a thread memory record that originated from this pull request. */
         ThreadMemorySummaryDto: {
-            /** Format: uuid */
+            /**
+             * Format: uuid
+             * @description Record identifier.
+             */
             memoryRecordId?: string;
-            /** Format: int64 */
+            /**
+             * Format: int64
+             * @description Provider thread identifier.
+             */
             threadId?: number;
+            /** @description File the thread was anchored to, if any. */
             filePath?: string | null;
+            /** @description Opening of the stored resolution summary. */
             resolutionSummaryExcerpt?: string | null;
             source?: components["schemas"]["MemorySource"];
-            /** Format: date-time */
+            /**
+             * Format: date-time
+             * @description When the record was last written.
+             */
             storedAt?: string;
+            resolutionIntent?: components["schemas"]["ThreadResolutionIntent"];
+            resolutionClarity?: components["schemas"]["ResolutionClarity"];
         };
+        /**
+         * @description Provider-neutral classification of what a reviewer-owned thread's current state means for
+         *     memory, independent of any single SCM's status vocabulary. The crawl state machine maps each
+         *     provider's native thread status onto one of these so downstream logic never branches on
+         *     provider-specific strings.
+         * @enum {string}
+         */
+        ThreadResolutionIntent: "active" | "acceptedByHuman" | "claimsFix";
         /**
          * @description Represents the token cost contribution of a single effort-tier / model-ID combination within a review job.
          *     Stored as a JSONB array in the `review_jobs.token_breakdown` column. The cache and reasoning fields are

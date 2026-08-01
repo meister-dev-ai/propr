@@ -96,7 +96,9 @@ public sealed class PrReviewViewController(
                 r.FilePath,
                 r.ResolutionSummary.Length > 200 ? r.ResolutionSummary[..200] : r.ResolutionSummary,
                 r.MemorySource,
-                r.UpdatedAt))
+                r.UpdatedAt,
+                r.ResolutionIntent,
+                r.ResolutionClarity))
             .ToList()
             .AsReadOnly();
 

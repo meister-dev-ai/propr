@@ -94,6 +94,7 @@
                     <thead>
                       <tr>
                         <th>Context</th>
+                        <th>Outcome</th>
                         <th>File & Repository</th>
                         <th>Resolution Summary</th>
                         <th class="text-right">Actions</th>
@@ -112,6 +113,15 @@
                             <span class="pr-number">#{{ r.pullRequestId }}</span>
                             <span class="thread-id">Thread {{ r.threadId }}</span>
                           </div>
+                        </td>
+                        <td>
+                          <span
+                            class="outcome-badge"
+                            :class="'outcome-' + outcomeOf(r).tone"
+                            :title="outcomeOf(r).description"
+                          >
+                            {{ outcomeOf(r).label }}
+                          </span>
                         </td>
                         <td>
                           <div class="repo-info">
@@ -292,6 +302,19 @@
             </div>
 
             <div class="detail-group">
+              <span class="detail-caption">Outcome</span>
+              <div class="detail-value">
+                <span
+                  class="outcome-badge"
+                  :class="'outcome-' + outcomeOf(selectedEmbedding).tone"
+                >
+                  {{ outcomeOf(selectedEmbedding).label }}
+                </span>
+              </div>
+              <p class="detail-note">{{ outcomeOf(selectedEmbedding).description }}</p>
+            </div>
+
+            <div class="detail-group">
               <span class="detail-caption">Resolution Summary</span>
               <div class="summary-box glass">
                 {{ selectedEmbedding.resolutionSummary }}
@@ -360,6 +383,7 @@ import { ref, computed, onMounted } from 'vue'
 import ProgressOrb from '@/components/ProgressOrb.vue'
 import ConfirmDialog from '@/components/dialogs/ConfirmDialog.vue'
 import { createAdminClient } from '@/services/api'
+import { describeMemoryOutcome } from '@/features/thread-memory/memoryOutcome'
 import {
   fetchStoredEmbeddings,
   deleteEmbedding,
@@ -501,6 +525,10 @@ function actionChipClass(action: number): string {
   if (action === 0) return 'chip-success'
   if (action === 1) return 'chip-warning'
   return 'chip-muted'
+}
+
+function outcomeOf(r: { source?: string | null; resolutionIntent?: string | null; resolutionClarity?: string | null }) {
+  return describeMemoryOutcome(r.source, r.resolutionIntent, r.resolutionClarity)
 }
 
 function truncate(text: string, maxLength: number): string {
@@ -993,4 +1021,40 @@ function formatDateShort(iso: string): string {
 .empty-icon, .error-icon { font-size: 2.5rem; color: rgba(255, 255, 255, 0.05); margin-bottom: 1rem; }
 
 .state-orb { transform: scale(1.5); margin-bottom: 2rem; }
+
+.outcome-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.2rem 0.5rem;
+  border-radius: var(--radius-pill, 999px);
+  font-size: 0.78rem;
+  white-space: nowrap;
+}
+
+.outcome-rejected {
+  background: var(--color-warning-soft, rgba(245, 158, 11, 0.15));
+  color: var(--color-warning, #f59e0b);
+}
+
+.outcome-fixed {
+  background: rgba(34, 197, 94, 0.15);
+  color: var(--color-success, #22c55e);
+}
+
+.outcome-dismissed {
+  background: rgba(139, 92, 246, 0.15);
+  color: #a78bfa;
+}
+
+.outcome-unknown {
+  background: rgba(148, 163, 184, 0.15);
+  color: #94a3b8;
+}
+
+.detail-note {
+  margin: 0.35rem 0 0;
+  font-size: 0.8rem;
+  line-height: 1.4;
+  color: #94a3b8;
+}
 </style>

@@ -187,6 +187,7 @@
                             <tr>
                                 <th>Thread</th>
                                 <th>File</th>
+                                <th>Outcome</th>
                                 <th>Source</th>
                                 <th>Summary</th>
                                 <th>Stored At</th>
@@ -198,10 +199,16 @@
                                 <td class="file-cell">{{ mem.filePath ?? '—' }}</td>
                                 <td>
                                     <span
-                                        class="source-badge"
-                                        :class="mem.source === 1 ? 'source-dismissed' : 'source-resolved'"
+                                        class="outcome-badge"
+                                        :class="'outcome-' + outcomeOf(mem).tone"
+                                        :title="outcomeOf(mem).description"
                                     >
-                                        {{ mem.source === 1 ? 'Admin Dismissed' : 'Thread Resolved' }}
+                                        {{ outcomeOf(mem).label }}
+                                    </span>
+                                </td>
+                                <td>
+                                    <span class="source-badge" :class="isDismissed(mem.source) ? 'source-dismissed' : 'source-resolved'">
+                                        {{ isDismissed(mem.source) ? 'Admin Dismissed' : 'Thread Resolved' }}
                                     </span>
                                 </td>
                                 <td class="summary-cell">{{ mem.resolutionSummaryExcerpt }}</td>
@@ -232,11 +239,8 @@
                                 <td>{{ mem.originPullRequestId != null ? '#' + mem.originPullRequestId : '—' }}</td>
                                 <td class="file-cell">{{ mem.filePath ?? '—' }}</td>
                                 <td>
-                                    <span
-                                        class="source-badge"
-                                        :class="mem.source === 1 ? 'source-dismissed' : 'source-resolved'"
-                                    >
-                                        {{ mem.source === 1 ? 'Admin Dismissed' : 'Thread Resolved' }}
+                                    <span class="source-badge" :class="isDismissed(mem.source) ? 'source-dismissed' : 'source-resolved'">
+                                        {{ isDismissed(mem.source) ? 'Admin Dismissed' : 'Thread Resolved' }}
                                     </span>
                                 </td>
                                 <td class="summary-cell">{{ mem.resolutionSummaryExcerpt }}</td>
@@ -296,6 +300,7 @@ import {
 } from '@/features/reviews/composables/useRetainedPrData'
 import { blockPr, getPrView, listBlockedPrs, unblockPr, type PrReviewViewDto, type PullRequestIdentity } from '@/services/jobsService'
 import { useSession } from '@/composables/useSession'
+import { describeMemoryOutcome } from '@/features/thread-memory/memoryOutcome'
 import { RoleLevel } from '@/composables/roles'
 
 const route = useRoute()
@@ -483,6 +488,14 @@ const usdFormatter = new Intl.NumberFormat('en-US', {
 function formatCost(value: number | null | undefined, approximate: boolean | null | undefined): string {
     if (value == null) return '—'
     return `${approximate ? '≈' : ''}${usdFormatter.format(value)}`
+}
+
+function outcomeOf(mem: { source: string; resolutionIntent?: string | null; resolutionClarity?: string | null }) {
+    return describeMemoryOutcome(mem.source, mem.resolutionIntent, mem.resolutionClarity)
+}
+
+function isDismissed(source: string | number): boolean {
+    return source === 'adminDismissed' || source === 1
 }
 
 function formatDate(iso: string): string {
@@ -767,6 +780,35 @@ function statusBadgeClass(status: number): string {
 .source-resolved {
     background: rgba(34, 197, 94, 0.15);
     color: var(--color-success);
+}
+
+.outcome-badge {
+    display: inline-flex;
+    align-items: center;
+    padding: 0.2rem 0.5rem;
+    border-radius: var(--radius-pill);
+    font-size: 0.8rem;
+    white-space: nowrap;
+}
+
+.outcome-rejected {
+    background: var(--color-warning-soft);
+    color: var(--color-warning);
+}
+
+.outcome-fixed {
+    background: rgba(34, 197, 94, 0.15);
+    color: var(--color-success);
+}
+
+.outcome-dismissed {
+    background: rgba(139, 92, 246, 0.15);
+    color: #a78bfa;
+}
+
+.outcome-unknown {
+    background: rgba(148, 163, 184, 0.15);
+    color: var(--color-text-muted, #94a3b8);
 }
 
 .error {

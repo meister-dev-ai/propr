@@ -28102,6 +28102,16 @@
         "additionalProperties": false,
         "description": "Rename payload."
       },
+      "ResolutionClarity": {
+        "enum": [
+          "resolvedByChange",
+          "acceptedWithoutChange",
+          "closedWithoutResolution",
+          "undetermined"
+        ],
+        "type": "string",
+        "description": "How clearly a resolved PR review thread expresses an actual resolution, used to decide\nwhether the thread is worth storing as memory. Threads whose outcome cannot be tied to a\ngenuine resolution are not stored, so speculative or empty \"resolutions\" never reach a\nfuture review."
+      },
       "ResolvePullRequestResultDto": {
         "type": "object",
         "properties": {
@@ -29674,12 +29684,23 @@
             "items": {
               "type": "string"
             },
+            "description": "Searchable keywords derived for code insights.",
             "nullable": true
           },
           "codeInsightFindingId": {
             "type": "string",
+            "description": "The finding this memory came from, when known.",
             "format": "uuid",
             "nullable": true
+          },
+          "source": {
+            "$ref": "#/components/schemas/MemorySource"
+          },
+          "resolutionIntent": {
+            "$ref": "#/components/schemas/ThreadResolutionIntent"
+          },
+          "resolutionClarity": {
+            "$ref": "#/components/schemas/ResolutionClarity"
           }
         },
         "additionalProperties": false,
@@ -29716,18 +29737,22 @@
         "properties": {
           "memoryRecordId": {
             "type": "string",
+            "description": "Record identifier.",
             "format": "uuid"
           },
           "threadId": {
             "type": "integer",
+            "description": "Provider thread identifier.",
             "format": "int64"
           },
           "filePath": {
             "type": "string",
+            "description": "File the thread was anchored to, if any.",
             "nullable": true
           },
           "resolutionSummaryExcerpt": {
             "type": "string",
+            "description": "Opening of the stored resolution summary.",
             "nullable": true
           },
           "source": {
@@ -29735,11 +29760,27 @@
           },
           "storedAt": {
             "type": "string",
+            "description": "When the record was last written.",
             "format": "date-time"
+          },
+          "resolutionIntent": {
+            "$ref": "#/components/schemas/ThreadResolutionIntent"
+          },
+          "resolutionClarity": {
+            "$ref": "#/components/schemas/ResolutionClarity"
           }
         },
         "additionalProperties": false,
         "description": "Summary of a thread memory record that originated from this pull request."
+      },
+      "ThreadResolutionIntent": {
+        "enum": [
+          "active",
+          "acceptedByHuman",
+          "claimsFix"
+        ],
+        "type": "string",
+        "description": "Provider-neutral classification of what a reviewer-owned thread's current state means for\nmemory, independent of any single SCM's status vocabulary. The crawl state machine maps each\nprovider's native thread status onto one of these so downstream logic never branches on\nprovider-specific strings."
       },
       "TokenBreakdownEntry": {
         "type": "object",

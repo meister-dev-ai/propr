@@ -121,13 +121,18 @@ export interface ThreadMemorySummaryDto {
   threadId: number
   filePath: string | null
   resolutionSummaryExcerpt: string
-  source: number   // MemorySource: 0=ThreadResolved, 1=AdminDismissed
+  /** Serialized by JsonStringEnumConverter, so 'threadResolved' | 'adminDismissed'. */
+  source: string
   storedAt: string
+  /** 'acceptedByHuman' | 'claimsFix', or null for a record stored before the outcome was kept. */
+  resolutionIntent?: string | null
+  /** 'resolvedByChange' | 'acceptedWithoutChange' | 'closedWithoutResolution' | 'undetermined'. */
+  resolutionClarity?: string | null
 }
 
 export interface ContributingMemorySummaryDto {
   memoryRecordId: string
-  source: number
+  source: string
   originRepositoryId: string | null
   originPullRequestId: number | null
   filePath: string | null
