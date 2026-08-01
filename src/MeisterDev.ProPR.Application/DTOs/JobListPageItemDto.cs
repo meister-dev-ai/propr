@@ -22,7 +22,15 @@ namespace MeisterDev.ProPR.Application.DTOs;
 /// <param name="SubmittedAt">When the job was submitted.</param>
 /// <param name="ProcessingStartedAt">When processing started, if it has.</param>
 /// <param name="CompletedAt">When the job completed, if it has.</param>
-/// <param name="ResultSummary">Denormalized review summary; null until the result is finalized.</param>
+/// <param name="ResultSummaryExcerpt">
+///     Leading characters of the finalized review summary, for the list cell. Bounded because the stored
+///     summary averages well over a kilobyte and reaches tens of kilobytes, and carrying it whole made it
+///     the overwhelming majority of the list response.
+/// </param>
+/// <param name="HasResultSummary">
+///     Whether a finalized summary exists at all, so the list can offer to open it without carrying it.
+///     The full text comes from the job detail endpoint when a reader asks for it.
+/// </param>
 /// <param name="ErrorMessage">Failure message, if the job failed.</param>
 /// <param name="TotalInputTokens">Total input tokens (aggregate column, else summed protocol tokens, else 0).</param>
 /// <param name="TotalOutputTokens">Total output tokens (aggregate column, else summed protocol tokens, else 0).</param>
@@ -57,7 +65,8 @@ public sealed record JobListPageItemDto(
     DateTimeOffset SubmittedAt,
     DateTimeOffset? ProcessingStartedAt,
     DateTimeOffset? CompletedAt,
-    string? ResultSummary,
+    string? ResultSummaryExcerpt,
+    bool HasResultSummary,
     string? ErrorMessage,
     long TotalInputTokens,
     long TotalOutputTokens,

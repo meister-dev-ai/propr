@@ -123,17 +123,47 @@ public sealed class JobsControllerTests(JobsControllerTests.JobsApiFactory facto
         var body = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
         var items = body.RootElement.GetProperty("items").EnumerateArray().ToList();
 
+        // The list reports only that a summary exists. The text itself is the largest field on a job and
+        // is not rendered here, so it is fetched from the job detail endpoint when a reader opens a row.
         var completedItem = items.Single(i => i.GetProperty("id").GetString() == completed.Id.ToString());
-        Assert.Equal("api summary", completedItem.GetProperty("resultSummary").GetString());
+        Assert.True(completedItem.GetProperty("hasResultSummary").GetBoolean());
+        Assert.False(completedItem.TryGetProperty("resultSummary", out _));
         Assert.Equal(0L, completedItem.GetProperty("totalInputTokens").GetInt64());
         Assert.Equal(0L, completedItem.GetProperty("totalOutputTokens").GetInt64());
 
         var processingItem = items.Single(i => i.GetProperty("id").GetString() == processing.Id.ToString());
-        Assert.Equal(JsonValueKind.Null, processingItem.GetProperty("resultSummary").ValueKind);
+        Assert.False(processingItem.GetProperty("hasResultSummary").GetBoolean());
 
         var failedItem = items.Single(i => i.GetProperty("id").GetString() == failed.Id.ToString());
-        Assert.Equal(JsonValueKind.Null, failedItem.GetProperty("resultSummary").ValueKind);
+        Assert.False(failedItem.GetProperty("hasResultSummary").GetBoolean());
         Assert.Equal("api error", failedItem.GetProperty("errorMessage").GetString());
+    }
+
+    [Fact]
+    public async Task GetJobDetail_CarriesTheResultSummaryTheListOmits()
+    {
+        var repo = factory.Services.GetRequiredService<IJobRepository>();
+        var job = new ReviewJob(
+            Guid.NewGuid(),
+            Guid.NewGuid(),
+            "https://dev.azure.com/org",
+            "proj",
+            "repo",
+            6100,
+            1);
+        await repo.AddAsync(job);
+        await repo.TryTransitionAsync(job.Id, JobStatus.Pending, JobStatus.Processing);
+        await repo.SetResultAsync(job.Id, new ReviewResult("the full summary text", []));
+
+        var client = factory.CreateClient();
+        using var request = new HttpRequestMessage(HttpMethod.Get, $"/reviewing/jobs/{job.Id}");
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", factory.GenerateAdminToken());
+
+        var response = await client.SendAsync(request);
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+
+        var body = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        Assert.Equal("the full summary text", body.RootElement.GetProperty("resultSummary").GetString());
     }
 
 
@@ -662,6 +692,19 @@ public sealed class JobsJwtTests(JobsJwtTests.JobsJwtApiFactory factory)
                             0,
                             call.ArgAt<int>(2),
                             call.ArgAt<int>(3))));
+                memoryRepository.GetDigestsByIdsAsync(
+                        Arg.Any<Guid>(),
+                        Arg.Any<IReadOnlyCollection<Guid>>(),
+                        Arg.Any<CancellationToken>())
+                    .Returns(Task.FromResult<IReadOnlyList<ThreadMemoryDigestDto>>([]));
+                memoryRepository.GetDigestsForPullRequestAsync(
+                        Arg.Any<Guid>(),
+                        Arg.Any<string>(),
+                        Arg.Any<int>(),
+                        Arg.Any<MemorySource>(),
+                        Arg.Any<int>(),
+                        Arg.Any<CancellationToken>())
+                    .Returns(call => Task.FromResult(new PagedResult<ThreadMemoryDigestDto>([], 0, 1, call.ArgAt<int>(4))));
                 services.AddSingleton(memoryRepository);
             });
         }

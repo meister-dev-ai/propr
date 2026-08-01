@@ -287,6 +287,14 @@ public sealed class ReviewJob
     public int? InScopeChangedFileCount { get; private set; }
 
     /// <summary>
+    ///     How many of this job's files reached a terminal successful review, maintained as each file
+    ///     finishes. Numerator of the "files reviewed" progress metric.
+    ///     Null on a job last written before the count was recorded; readers fall back to counting the
+    ///     file results directly, exactly as they do for the aggregated token totals.
+    /// </summary>
+    public int? ReviewedFileCount { get; private set; }
+
+    /// <summary>
     ///     Per-tier token cost breakdown. Serialised as JSONB.
     ///     Each entry represents one (effort tier, model ID) combination observed across all protocols in this job.
     /// </summary>
@@ -493,6 +501,13 @@ public sealed class ReviewJob
     public void SetInScopeChangedFileCount(int count)
     {
         this.InScopeChangedFileCount = count < 0 ? 0 : count;
+    }
+
+    /// <summary>Records how many of this job's files have completed review.</summary>
+    /// <param name="count">The reviewed-file count; negative inputs are clamped to zero.</param>
+    public void SetReviewedFileCount(int count)
+    {
+        this.ReviewedFileCount = count < 0 ? 0 : count;
     }
 
     /// <summary>Records the PR context snapshot captured from ADO at job-creation time.</summary>

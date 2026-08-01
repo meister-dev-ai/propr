@@ -21,6 +21,15 @@ public sealed class PrReviewViewController(
     IJobRepository jobRepository,
     IThreadMemoryRepository memoryRepository) : ControllerBase
 {
+    /// <summary>How much of a stored resolution summary the PR view renders.</summary>
+    private const int ResolutionSummaryExcerptLength = 200;
+
+    /// <summary>Most memories originating in this pull request that the view lists.</summary>
+    private const int OriginatedMemoryLimit = 50;
+
+    /// <summary>Most external contributing memories the view resolves for display.</summary>
+    private const int ContributingMemoryDetailLimit = 50;
+
     /// <summary>
     ///     Returns an aggregated view of all review jobs, token breakdowns, and memory records for a specific pull request.
     ///     Requires valid user authentication and access to the specified client.
@@ -80,21 +89,19 @@ public sealed class PrReviewViewController(
                                    && aggregation.BreakdownOutput == aggregation.TotalOutput);
         var costRollup = ComputeCostRollup(aggregation.Breakdown);
 
-        var originatedPaged = await memoryRepository.GetPagedAsync(
+        var originatedDigests = await memoryRepository.GetDigestsForPullRequestAsync(
             clientId,
-            null,
-            1,
-            50,
-            MemorySource.ThreadResolved,
             query.RepositoryId,
             query.PullRequestId.Value,
+            MemorySource.ThreadResolved,
+            OriginatedMemoryLimit,
             cancellationToken);
-        var originatedMemories = originatedPaged.Items
+        var originatedMemories = originatedDigests.Items
             .Select(r => new ThreadMemorySummaryDto(
                 r.Id,
                 r.ThreadId,
                 r.FilePath,
-                r.ResolutionSummary.Length > 200 ? r.ResolutionSummary[..200] : r.ResolutionSummary,
+                Excerpt(r.ResolutionSummary),
                 r.MemorySource,
                 r.UpdatedAt,
                 r.ResolutionIntent,
@@ -106,7 +113,7 @@ public sealed class PrReviewViewController(
         var originatedIds = new HashSet<Guid>(originatedMemories.Select(m => m.MemoryRecordId));
         var externalContributingIds = contributingMemoryIds
             .Where(id => !originatedIds.Contains(id))
-            .Take(50)
+            .Take(ContributingMemoryDetailLimit)
             .ToList();
 
         var contributingMemories = await ResolveContributingMemoriesAsync(
@@ -140,7 +147,7 @@ public sealed class PrReviewViewController(
             aggregation.Breakdown.AsReadOnly(),
             breakdownConsistent,
             jobSummaries,
-            originatedPaged.TotalCount,
+            originatedDigests.TotalCount,
             originatedMemories,
             externalContributingIds.Count,
             contributingMemories,
@@ -257,49 +264,33 @@ public sealed class PrReviewViewController(
             return [];
         }
 
-        var remainingIds = new HashSet<Guid>(externalContributingIds);
-        var contributingMemories = new List<ContributingMemorySummaryDto>();
-        var fetchPage = 1;
-        const int fetchPageSize = 200;
+        // These are record identifiers, so one keyed lookup resolves every one of them regardless of
+        // how large the client's memory corpus is, and returns no result for ids that do not belong
+        // to this client. Ids with no surviving record are simply absent; the count reported
+        // alongside this list stays accurate either way.
+        var digests = await memoryRepository.GetDigestsByIdsAsync(
+            clientId,
+            externalContributingIds,
+            cancellationToken);
 
-        // The contributing-memory IDs come from request-scoped protocol JSON, so without a bound a
-        // high-cardinality set could page through the entire client-wide memory corpus in a single
-        // request. Cap the pages scanned; any IDs unresolved within this window are omitted from the
-        // detail list (the count reported above stays accurate.
-        const int maxPagesToScan = 25;
-        while (remainingIds.Count > 0 && fetchPage <= maxPagesToScan)
-        {
-            var batch = await memoryRepository.GetPagedAsync(
-                clientId,
-                null,
-                fetchPage,
-                fetchPageSize,
-                ct: cancellationToken);
-            foreach (var r in batch.Items)
-            {
-                if (remainingIds.Remove(r.Id))
-                {
-                    contributingMemories.Add(
-                        new ContributingMemorySummaryDto(
-                            r.Id,
-                            r.MemorySource,
-                            r.RepositoryId,
-                            r.PullRequestId > 0 ? r.PullRequestId : null,
-                            r.FilePath,
-                            r.ResolutionSummary.Length > 200 ? r.ResolutionSummary[..200] : r.ResolutionSummary,
-                            null));
-                }
-            }
+        return digests
+            .Select(r => new ContributingMemorySummaryDto(
+                r.Id,
+                r.MemorySource,
+                r.RepositoryId,
+                r.PullRequestId > 0 ? r.PullRequestId : null,
+                r.FilePath,
+                Excerpt(r.ResolutionSummary),
+                null))
+            .ToList();
+    }
 
-            if (fetchPage * fetchPageSize >= batch.TotalCount || remainingIds.Count == 0)
-            {
-                break;
-            }
-
-            fetchPage++;
-        }
-
-        return contributingMemories;
+    /// <summary>Caps a stored resolution summary to the length the read surfaces display.</summary>
+    private static string Excerpt(string resolutionSummary)
+    {
+        return resolutionSummary.Length > ResolutionSummaryExcerptLength
+            ? resolutionSummary[..ResolutionSummaryExcerptLength]
+            : resolutionSummary;
     }
 
     private static decimal? SumNullableCost(decimal? left, decimal? right)

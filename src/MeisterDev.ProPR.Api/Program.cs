@@ -1,6 +1,7 @@
 // Copyright (c) Andreas Rain.
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
+using System.IO.Compression;
 using System.Net;
 using System.Text.Json;
 using System.Text.Json.Serialization;
@@ -53,6 +54,7 @@ using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.AspNetCore.RateLimiting;
+using Microsoft.AspNetCore.ResponseCompression;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Diagnostics.HealthChecks;
@@ -391,6 +393,25 @@ try
             });
     });
 
+    // JSON list responses are highly repetitive and compress by roughly six times. Without this the
+    // admin surfaces send every byte uncompressed, which is free on a local network and the dominant
+    // cost of a page load over anything slower.
+    builder.Services.AddResponseCompression(options =>
+    {
+        // Compression over TLS can expose a secret that sits in the same response as attacker-influenced
+        // content (the BREACH class of attack). These are authenticated JSON reads of review data, and
+        // the API returns no CSRF token or secret in a response body, so the exposure does not apply.
+        options.EnableForHttps = true;
+        options.Providers.Add<BrotliCompressionProvider>();
+        options.Providers.Add<GzipCompressionProvider>();
+        options.MimeTypes = ResponseCompressionDefaults.MimeTypes.Concat(["application/json"]);
+    });
+    // Brotli is preferred by browsers when both are offered, so its level decides what most callers get.
+    // At the fastest setting it compresses this API's list responses to roughly twice the size gzip
+    // manages, which would make offering it a regression; Optimal puts it comfortably ahead instead.
+    builder.Services.Configure<BrotliCompressionProviderOptions>(o => o.Level = CompressionLevel.Optimal);
+    builder.Services.Configure<GzipCompressionProviderOptions>(o => o.Level = CompressionLevel.Fastest);
+
     builder.Services.AddControllers()
         // Feature projects that ship their own endpoints have to be named here: MVC discovers controllers in the
         // entry assembly and in referenced assemblies it can see parts for, not in every reference.
@@ -481,6 +502,9 @@ try
     await app.ApplyStartupMaintenanceAsync(hasDatabaseConnectionString);
 
     app.UseForwardedHeaders();
+
+    // Ahead of the endpoints it compresses, and ahead of CORS so preflight replies are left alone.
+    app.UseResponseCompression();
 
     app.UseSerilogRequestLogging(opts =>
     {

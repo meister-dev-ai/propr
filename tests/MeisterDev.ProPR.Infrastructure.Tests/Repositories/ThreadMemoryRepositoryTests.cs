@@ -421,6 +421,130 @@ public sealed class ThreadMemoryRepositoryTests(PostgresContainerFixture fixture
     }
 
     [Fact]
+    public async Task GetDigestsByIdsAsync_ReturnsOnlyTheRequestedRecords()
+    {
+        var wanted = CreateRecord(ClientA, 10, 900, filePath: "src/Wanted.cs");
+        var alsoWanted = CreateRecord(ClientA, 11, 901, filePath: "src/AlsoWanted.cs");
+        var unwanted = CreateRecord(ClientA, 12, 902, filePath: "src/Unwanted.cs");
+        foreach (var record in new[] { wanted, alsoWanted, unwanted })
+        {
+            await this._repo.UpsertAsync(record);
+        }
+
+        var digests = await this._repo.GetDigestsByIdsAsync(ClientA, [wanted.Id, alsoWanted.Id]);
+
+        Assert.Equal(2, digests.Count);
+        Assert.Equivalent(
+            new[] { wanted.Id, alsoWanted.Id }.Order(),
+            digests.Select(d => d.Id).Order());
+    }
+
+    [Fact]
+    public async Task GetDigestsByIdsAsync_DoesNotLeakAcrossClients()
+    {
+        var mine = CreateRecord(ClientA, 10, 910);
+        var theirs = CreateRecord(ClientB, 10, 911);
+        await this._repo.UpsertAsync(mine);
+        await this._repo.UpsertAsync(theirs);
+
+        var digests = await this._repo.GetDigestsByIdsAsync(ClientA, [mine.Id, theirs.Id]);
+
+        Assert.Equal(mine.Id, Assert.Single(digests).Id);
+    }
+
+    [Fact]
+    public async Task GetDigestsByIdsAsync_CarriesTheFieldsTheReadSurfacesRender()
+    {
+        var record = CreateRecord(
+            ClientA,
+            42,
+            920,
+            filePath: "src/Carried.cs",
+            resolutionIntent: ThreadResolutionIntent.AcceptedByHuman,
+            resolutionClarity: ResolutionClarity.AcceptedWithoutChange);
+        await this._repo.UpsertAsync(record);
+
+        var digest = Assert.Single(await this._repo.GetDigestsByIdsAsync(ClientA, [record.Id]));
+
+        Assert.Equal(920, digest.ThreadId);
+        Assert.Equal(RepoId, digest.RepositoryId);
+        Assert.Equal(42, digest.PullRequestId);
+        Assert.Equal("src/Carried.cs", digest.FilePath);
+        Assert.Equal(record.ResolutionSummary, digest.ResolutionSummary);
+        Assert.Equal(MemorySource.ThreadResolved, digest.MemorySource);
+        Assert.Equal(ThreadResolutionIntent.AcceptedByHuman, digest.ResolutionIntent);
+        Assert.Equal(ResolutionClarity.AcceptedWithoutChange, digest.ResolutionClarity);
+    }
+
+    [Fact]
+    public async Task GetDigestsByIdsAsync_EmptyIdSet_QueriesNothing()
+    {
+        await this._repo.UpsertAsync(CreateRecord(ClientA, 10, 930));
+
+        Assert.Empty(await this._repo.GetDigestsByIdsAsync(ClientA, []));
+    }
+
+    [Fact]
+    public async Task GetDigestsByIdsAsync_ResolvesRecordsFarBeyondTheOldPageScanWindow()
+    {
+        // The previous implementation paged the client's corpus 200 rows at a time and gave up after
+        // 25 pages, so a record ordered past row 5000 was silently dropped. A keyed lookup has no
+        // such window. Ordering is by UpdatedAt descending, so the oldest record sorts last.
+        var oldest = CreateRecord(ClientA, 1, 940, updatedAt: DateTimeOffset.UtcNow.AddYears(-5));
+        await this._repo.UpsertAsync(oldest);
+        for (var i = 0; i < 20; i++)
+        {
+            await this._repo.UpsertAsync(CreateRecord(ClientA, 2, 950 + i));
+        }
+
+        var digest = Assert.Single(await this._repo.GetDigestsByIdsAsync(ClientA, [oldest.Id]));
+
+        Assert.Equal(oldest.Id, digest.Id);
+    }
+
+    [Fact]
+    public async Task GetDigestsForPullRequestAsync_FiltersBySourceRepositoryAndPullRequest()
+    {
+        var match = CreateRecord(ClientA, 55, 960, filePath: "src/Match.cs");
+        var otherPr = CreateRecord(ClientA, 56, 961);
+        var otherRepo = CreateRecord(ClientA, 55, 962, repositoryId: "other-repo");
+        foreach (var record in new[] { match, otherPr, otherRepo })
+        {
+            await this._repo.UpsertAsync(record);
+        }
+
+        var digests = await this._repo.GetDigestsForPullRequestAsync(
+            ClientA,
+            RepoId,
+            55,
+            MemorySource.ThreadResolved,
+            50);
+
+        Assert.Equal(1, digests.TotalCount);
+        Assert.Equal(match.Id, Assert.Single(digests.Items).Id);
+    }
+
+    [Fact]
+    public async Task GetDigestsForPullRequestAsync_HonoursTheLimitNewestFirst()
+    {
+        var older = CreateRecord(ClientA, 60, 970, updatedAt: DateTimeOffset.UtcNow.AddDays(-2));
+        var newer = CreateRecord(ClientA, 60, 971, updatedAt: DateTimeOffset.UtcNow);
+        await this._repo.UpsertAsync(older);
+        await this._repo.UpsertAsync(newer);
+
+        var digests = await this._repo.GetDigestsForPullRequestAsync(
+            ClientA,
+            RepoId,
+            60,
+            MemorySource.ThreadResolved,
+            1);
+
+        // The limit bounds what is fetched; the total still reports what exists.
+        Assert.Equal(2, digests.TotalCount);
+        Assert.Equal(newer.Id, Assert.Single(digests.Items).Id);
+    }
+
+    [Fact]
     public async Task FindSimilarAsync_InvalidTopN_Throws()
     {
         await Assert.ThrowsAsync<ArgumentOutOfRangeException>(() =>

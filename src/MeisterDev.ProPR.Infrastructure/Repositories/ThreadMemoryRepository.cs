@@ -23,6 +23,23 @@ public sealed class ThreadMemoryRepository(
 {
     private const int UpsertColumnCount = 15;
 
+    /// <summary>
+    ///     Selects the display fields of a memory record and nothing else. Naming the columns keeps the
+    ///     1536-dimension embedding — the bulk of the stored row — out of the result set entirely.
+    /// </summary>
+    private static readonly System.Linq.Expressions.Expression<Func<ThreadMemoryRecord, ThreadMemoryDigestDto>>
+        DigestProjection = r => new ThreadMemoryDigestDto(
+            r.Id,
+            r.ThreadId,
+            r.MemorySource,
+            r.RepositoryId,
+            r.PullRequestId,
+            r.FilePath,
+            r.ResolutionSummary,
+            r.UpdatedAt,
+            r.ResolutionIntent,
+            r.ResolutionClarity);
+
     /// <inheritdoc />
     public async Task UpsertAsync(ThreadMemoryRecord record, CancellationToken ct = default)
     {
@@ -148,6 +165,66 @@ public sealed class ThreadMemoryRepository(
                 return new PagedResult<ThreadMemoryRecord>(items, total, page, pageSize);
             },
             ct);
+    }
+
+    /// <inheritdoc />
+    public async Task<IReadOnlyList<ThreadMemoryDigestDto>> GetDigestsByIdsAsync(
+        Guid clientId,
+        IReadOnlyCollection<Guid> ids,
+        CancellationToken ct = default)
+    {
+        if (ids.Count == 0)
+        {
+            return [];
+        }
+
+        var distinctIds = ids.Distinct().ToArray();
+
+        return await this.WithDbAsync(
+            async innerDb => (IReadOnlyList<ThreadMemoryDigestDto>)await innerDb.ThreadMemoryRecords
+                .AsNoTracking()
+                .Where(r => r.ClientId == clientId && distinctIds.Contains(r.Id))
+                .Select(DigestProjection)
+                .ToListAsync(ct)
+                .ConfigureAwait(false),
+            ct).ConfigureAwait(false);
+    }
+
+    /// <inheritdoc />
+    public async Task<PagedResult<ThreadMemoryDigestDto>> GetDigestsForPullRequestAsync(
+        Guid clientId,
+        string repositoryId,
+        int pullRequestId,
+        MemorySource source,
+        int limit,
+        CancellationToken ct = default)
+    {
+        if (limit < 1)
+        {
+            throw new ArgumentOutOfRangeException(nameof(limit), limit, "Limit must be at least 1.");
+        }
+
+        return await this.WithDbAsync(
+            async innerDb =>
+            {
+                var query = innerDb.ThreadMemoryRecords
+                    .AsNoTracking()
+                    .Where(r => r.ClientId == clientId
+                                && r.RepositoryId == repositoryId
+                                && r.PullRequestId == pullRequestId
+                                && r.MemorySource == source);
+
+                var total = await query.CountAsync(ct).ConfigureAwait(false);
+                var items = await query
+                    .OrderByDescending(r => r.UpdatedAt)
+                    .Take(limit)
+                    .Select(DigestProjection)
+                    .ToListAsync(ct)
+                    .ConfigureAwait(false);
+
+                return new PagedResult<ThreadMemoryDigestDto>(items, total, 1, limit);
+            },
+            ct).ConfigureAwait(false);
     }
 
     /// <inheritdoc />

@@ -108,7 +108,8 @@ public sealed class JobsController(
                         j.SubmittedAt,
                         j.ProcessingStartedAt,
                         j.CompletedAt,
-                        j.ResultSummary,
+                        j.ResultSummaryExcerpt,
+                        j.HasResultSummary,
                         j.ErrorMessage,
                         j.TotalInputTokens,
                         j.TotalOutputTokens,
@@ -198,7 +199,8 @@ public sealed class JobsController(
                 job.InScopeChangedFileCount,
                 job.TotalEstimatedCostUsd,
                 job.CostIsApproximate,
-                budgetStatus));
+                budgetStatus,
+                job.ResultSummary));
     }
 
     /// <summary>Returns the review result (summary and comments) for a completed job.</summary>
@@ -410,7 +412,8 @@ public sealed class JobsController(
         DateTimeOffset SubmittedAt,
         DateTimeOffset? ProcessingStartedAt,
         DateTimeOffset? CompletedAt,
-        string? ResultSummary,
+        string? ResultSummaryExcerpt,
+        bool HasResultSummary,
         string? ErrorMessage,
         long? TotalInputTokens,
         long? TotalOutputTokens,
@@ -457,7 +460,8 @@ public sealed class JobsController(
         int? FilesInScope = null,
         decimal? TotalEstimatedCostUsd = null,
         bool CostIsApproximate = false,
-        BudgetStatusDto? BudgetStatus = null);
+        BudgetStatusDto? BudgetStatus = null,
+        string? ResultSummary = null);
 
     /// <summary>Response for the job result endpoint, combining status metadata with the review result.</summary>
     public sealed record ReviewJobResultDto(

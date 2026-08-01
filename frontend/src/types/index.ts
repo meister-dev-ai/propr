@@ -16565,6 +16565,7 @@ export interface components {
             totalEstimatedCostUsd?: number | null;
             costIsApproximate?: boolean;
             budgetStatus?: components["schemas"]["BudgetStatusDto"];
+            resultSummary?: string | null;
         };
         /** @description Single job item in the list response. */
         JobListItem: {
@@ -16586,7 +16587,8 @@ export interface components {
             processingStartedAt?: string | null;
             /** Format: date-time */
             completedAt?: string | null;
-            resultSummary?: string | null;
+            resultSummaryExcerpt?: string | null;
+            hasResultSummary?: boolean;
             errorMessage?: string | null;
             /** Format: int64 */
             totalInputTokens?: number | null;

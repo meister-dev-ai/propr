@@ -361,6 +361,87 @@ public sealed class JobRepositoryTests(PostgresContainerFixture fixture) : IAsyn
     }
 
     [Fact]
+    public async Task AddFileResultAsync_RecordsTheReviewedCountOnTheJob()
+    {
+        var job = MakeJob(prId: 9100);
+        await this._repo.AddAsync(job);
+
+        await this._repo.AddFileResultAsync(CreateCompletedFileResult(job.Id, "src/A.cs"));
+        await this._repo.AddFileResultAsync(CreateCompletedFileResult(job.Id, "src/B.cs"));
+
+        var stored = await this._dbContext.ReviewJobs.AsNoTracking().SingleAsync(j => j.Id == job.Id);
+        Assert.Equal(2, stored.ReviewedFileCount);
+    }
+
+    [Fact]
+    public async Task AddFileResultAsync_CountsOnlyFilesThatActuallyCompletedReview()
+    {
+        var job = MakeJob(prId: 9101);
+        await this._repo.AddAsync(job);
+
+        await this._repo.AddFileResultAsync(CreateCompletedFileResult(job.Id, "src/Reviewed.cs"));
+        await this._repo.AddFileResultAsync(FailedFileResult(job.Id, "src/Failed.cs"));
+        await this._repo.AddFileResultAsync(ExcludedFileResult(job.Id, "docs/Excluded.md"));
+
+        var stored = await this._dbContext.ReviewJobs.AsNoTracking().SingleAsync(j => j.Id == job.Id);
+        Assert.Equal(1, stored.ReviewedFileCount);
+    }
+
+    [Fact]
+    public async Task UpdateFileResultAsync_MovesTheCountWhenAFileReachesCompletion()
+    {
+        var job = MakeJob(prId: 9102);
+        await this._repo.AddAsync(job);
+
+        // A file result is written when review starts on it and written again when it finishes, so the
+        // count has to follow the second write rather than the first.
+        var pending = new ReviewFileResult(job.Id, "src/Pending.cs");
+        await this._repo.AddFileResultAsync(pending);
+
+        var beforeCompletion = await this._dbContext.ReviewJobs.AsNoTracking().SingleAsync(j => j.Id == job.Id);
+        Assert.Equal(0, beforeCompletion.ReviewedFileCount);
+
+        pending.MarkCompleted("done", []);
+        await this._repo.UpdateFileResultAsync(pending);
+
+        this._dbContext.ChangeTracker.Clear();
+        var afterCompletion = await this._dbContext.ReviewJobs.AsNoTracking().SingleAsync(j => j.Id == job.Id);
+        Assert.Equal(1, afterCompletion.ReviewedFileCount);
+    }
+
+    [Fact]
+    public async Task GetJobListPageAsync_FallsBackToCountingWhenTheStoredCountIsAbsent()
+    {
+        // Jobs written before the count existed carry null, and the list still has to report their progress.
+        var job = MakeJob(prId: 9103);
+        await this._repo.AddAsync(job);
+        await this._repo.AddFileResultAsync(CreateCompletedFileResult(job.Id, "src/A.cs"));
+        await this._repo.AddFileResultAsync(CreateCompletedFileResult(job.Id, "src/B.cs"));
+
+        await this._dbContext.ReviewJobs
+            .Where(j => j.Id == job.Id)
+            .ExecuteUpdateAsync(s => s.SetProperty(j => j.ReviewedFileCount, (int?)null));
+
+        var (_, items) = await this._repo.GetJobListPageAsync(1000, 0, null, job.ClientId);
+
+        var listed = Assert.Single(items, i => i.Id == job.Id);
+        Assert.Equal(2, listed.FilesReviewed);
+    }
+
+    [Fact]
+    public async Task GetJobListPageAsync_PrefersTheStoredCount()
+    {
+        var job = MakeJob(prId: 9104);
+        await this._repo.AddAsync(job);
+        await this._repo.AddFileResultAsync(CreateCompletedFileResult(job.Id, "src/A.cs"));
+
+        var (_, items) = await this._repo.GetJobListPageAsync(1000, 0, null, job.ClientId);
+
+        var listed = Assert.Single(items, i => i.Id == job.Id);
+        Assert.Equal(1, listed.FilesReviewed);
+    }
+
+    [Fact]
     public async Task GetLatestReusableTerminalJobAsync_ReturnsMostReusableTerminalAtDifferentRevision()
     {
         var currentJob = MakeJob(prId: 720, iterationId: 3);
@@ -1001,7 +1082,14 @@ public sealed class JobRepositoryTests(PostgresContainerFixture fixture) : IAsyn
         foreach (var entity in entities)
         {
             var dto = dtos.Single(d => d.Id == entity.Id);
-            Assert.Equal(entity.Result?.Summary, dto.ResultSummary);
+
+            // The list carries a bounded excerpt of the summary rather than the whole text, plus a flag
+            // saying whether one exists at all. Both have to agree with the full entity.
+            var summary = entity.Result?.Summary;
+            Assert.Equal(!string.IsNullOrEmpty(summary), dto.HasResultSummary);
+            Assert.Equal(
+                summary is { Length: > 200 } ? summary[..200] : summary,
+                dto.ResultSummaryExcerpt);
             Assert.Equal(entity.ErrorMessage, dto.ErrorMessage);
             Assert.Equal(entity.Status, dto.Status);
             Assert.Equal(entity.OrganizationUrl, dto.OrganizationUrl);

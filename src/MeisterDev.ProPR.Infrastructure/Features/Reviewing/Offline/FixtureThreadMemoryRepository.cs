@@ -48,6 +48,25 @@ public sealed class FixtureThreadMemoryRepository(IReviewEvaluationFixtureAccess
         return Task.FromResult(new PagedResult<ThreadMemoryRecord>([], 0, page, pageSize));
     }
 
+    public Task<IReadOnlyList<ThreadMemoryDigestDto>> GetDigestsByIdsAsync(
+        Guid clientId,
+        IReadOnlyCollection<Guid> ids,
+        CancellationToken ct = default)
+    {
+        return Task.FromResult<IReadOnlyList<ThreadMemoryDigestDto>>([]);
+    }
+
+    public Task<PagedResult<ThreadMemoryDigestDto>> GetDigestsForPullRequestAsync(
+        Guid clientId,
+        string repositoryId,
+        int pullRequestId,
+        MemorySource source,
+        int limit,
+        CancellationToken ct = default)
+    {
+        return Task.FromResult(new PagedResult<ThreadMemoryDigestDto>([], 0, 1, limit));
+    }
+
     public Task<IReadOnlyList<ThreadMemoryMatchDto>> FindSimilarAsync(
         Guid clientId,
         float[] queryVector,

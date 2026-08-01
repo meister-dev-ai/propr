@@ -54,6 +54,32 @@ public interface IThreadMemoryRepository
         CancellationToken ct = default);
 
     /// <summary>
+    ///     Returns display digests for the given record ids, scoped to the owning client.
+    ///     Ids that do not exist, or belong to another client, are simply absent from the result.
+    /// </summary>
+    /// <remarks>
+    ///     Resolving records by identifier is a keyed lookup. Reaching them by paging the client's
+    ///     corpus and filtering in memory costs a full scan and sort per page and materializes
+    ///     embedding vectors that are never read.
+    /// </remarks>
+    Task<IReadOnlyList<ThreadMemoryDigestDto>> GetDigestsByIdsAsync(
+        Guid clientId,
+        IReadOnlyCollection<Guid> ids,
+        CancellationToken ct = default);
+
+    /// <summary>
+    ///     Returns up to <paramref name="limit" /> display digests for one pull request, newest first,
+    ///     alongside the total number of matching records so a caller can report a count it did not fetch.
+    /// </summary>
+    Task<PagedResult<ThreadMemoryDigestDto>> GetDigestsForPullRequestAsync(
+        Guid clientId,
+        string repositoryId,
+        int pullRequestId,
+        MemorySource source,
+        int limit,
+        CancellationToken ct = default);
+
+    /// <summary>
     ///     Returns up to <paramref name="topN" /> records with cosine similarity ≥ <paramref name="minSimilarity" />,
     ///     ordered descending by similarity. Only returns records belonging to <paramref name="clientId" />.
     /// </summary>

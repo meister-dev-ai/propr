@@ -142,7 +142,7 @@
                                 </div>
                             </template>
                             <template v-else>
-                                {{ item.resultSummary ?? item.errorMessage ?? '—' }}
+                                {{ item.resultSummaryExcerpt ?? item.errorMessage ?? '—' }}
                             </template>
                         </div>
 
@@ -207,6 +207,7 @@
         <ModalDialog :isOpen="isSummaryModalOpen" @update:isOpen="isSummaryModalOpen = $event" title="Review Summary" size="lg">
             <div class="summary-modal-content markdown-content">
                 <div v-html="renderMarkdown(selectedSummary)"></div>
+                <p v-if="summaryLoading" class="summary-loading">Loading the full summary…</p>
             </div>
         </ModalDialog>
     </div>
@@ -249,6 +250,7 @@ const {
     currentPage,
     isSummaryModalOpen,
     selectedSummary,
+    summaryLoading,
     totalPages,
     paginatedGroups,
     itemsVisibleDefault,
@@ -325,7 +327,7 @@ function statusLabel(status: JobStatus | undefined): string {
 // The summary cell is only clickable when it has real content to show; a bare '—' fallback should not
 // open an empty modal.
 function hasSummaryContent(item: JobListItem): boolean {
-    return Boolean(item.resultSummary || item.errorMessage)
+    return Boolean(item.hasResultSummary || item.errorMessage)
 }
 
 function statusBadgeClass(status: JobStatus | undefined): string {
@@ -761,6 +763,13 @@ function prReviewLink(group: PrGroup): object {
 .markdown-content pre { background: var(--color-bg); border: 1px solid var(--color-border); padding: 1rem; border-radius: var(--radius-md); overflow-x: auto; margin-bottom: 1rem; }
 .markdown-content h1, .markdown-content h2, .markdown-content h3 { margin: 1rem 0 0.5rem 0; font-weight: 600; }
 .markdown-content h2 { font-size: 1.1rem; border-bottom: 1px solid var(--color-border); padding-bottom: 0.25rem; }
+
+.summary-loading {
+    margin: 0.75rem 0 0;
+    font-size: 0.8rem;
+    font-style: italic;
+    color: var(--color-text-muted);
+}
 
 .summary-modal-content {
     white-space: pre-wrap;

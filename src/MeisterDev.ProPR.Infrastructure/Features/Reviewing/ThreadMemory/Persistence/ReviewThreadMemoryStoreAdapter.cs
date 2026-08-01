@@ -51,6 +51,25 @@ public sealed class ReviewThreadMemoryStoreAdapter(IThreadMemoryRepository inner
         return inner.GetPagedAsync(clientId, search, page, pageSize, source, repositoryId, pullRequestId, ct);
     }
 
+    public Task<IReadOnlyList<ThreadMemoryDigestDto>> GetDigestsByIdsAsync(
+        Guid clientId,
+        IReadOnlyCollection<Guid> ids,
+        CancellationToken ct = default)
+    {
+        return inner.GetDigestsByIdsAsync(clientId, ids, ct);
+    }
+
+    public Task<PagedResult<ThreadMemoryDigestDto>> GetDigestsForPullRequestAsync(
+        Guid clientId,
+        string repositoryId,
+        int pullRequestId,
+        MemorySource source,
+        int limit,
+        CancellationToken ct = default)
+    {
+        return inner.GetDigestsForPullRequestAsync(clientId, repositoryId, pullRequestId, source, limit, ct);
+    }
+
     public Task<IReadOnlyList<ThreadMemoryMatchDto>> FindSimilarAsync(
         Guid clientId,
         float[] queryVector,

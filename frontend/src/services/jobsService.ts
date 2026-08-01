@@ -54,7 +54,8 @@ export interface JobListItem {
   submittedAt: string
   processingStartedAt: string | null
   completedAt: string | null
-  resultSummary: string | null
+  resultSummaryExcerpt: string | null
+  hasResultSummary: boolean
   errorMessage: string | null
   totalInputTokens: number | null
   totalOutputTokens: number | null
@@ -97,6 +98,8 @@ export interface JobDetailResponse {
   totalEstimatedCostUsd?: number | null
   costIsApproximate?: boolean
   budgetStatus?: BudgetStatus | null
+  /** Full review summary. The history list carries only an excerpt, so this is the source for the modal. */
+  resultSummary?: string | null
 }
 
 export interface GetJobProtocolOptions {

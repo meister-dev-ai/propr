@@ -207,6 +207,12 @@ internal sealed class ReviewJobEntityTypeConfiguration : IEntityTypeConfiguratio
             .HasColumnName("in_scope_changed_file_count")
             .IsRequired(false);
 
+        // Nullable on purpose. Zero is a real answer — a job whose files have all failed reviewed none of
+        // them — so "not yet recorded" needs a value of its own for readers to fall back on.
+        builder.Property(j => j.ReviewedFileCount)
+            .HasColumnName("reviewed_file_count")
+            .IsRequired(false);
+
         builder.Property(j => j.AiConnectionId)
             .HasColumnName("ai_connection_id")
             .IsRequired(false);
@@ -263,6 +269,13 @@ internal sealed class ReviewJobEntityTypeConfiguration : IEntityTypeConfiguratio
         builder.HasIndex(j => new { j.ClientId, j.SubmittedAt })
             .HasDatabaseName("ix_review_jobs_client_submitted_at")
             .IsDescending(false, true);
+
+        // The same ordering without a client filter, which is what an administrator or a user holding more
+        // than one client role reads. That path has no client predicate to narrow it, so it would otherwise
+        // scan and sort every job in the installation on each request.
+        builder.HasIndex(j => j.SubmittedAt)
+            .HasDatabaseName("ix_review_jobs_submitted_at")
+            .IsDescending(true);
 
         builder.HasIndex(j => new { j.ClientId, j.Provider, j.RepositoryId, j.ExternalCodeReviewId })
             .HasDatabaseName("ix_review_jobs_client_provider_review");

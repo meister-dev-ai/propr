@@ -6,12 +6,14 @@ import { useSession } from '@/composables/useSession'
 import { RoleLevel } from '@/composables/roles'
 import {
   blockPr,
+  getJobDetail,
   listBlockedPrs,
   listJobs,
   restartJob,
   stopJob,
   unblockPr,
   type BlockedPullRequestDto,
+  type JobDetailResponse,
   type PullRequestIdentity,
 } from '@/services/jobsService'
 import type { components } from '@/types'
@@ -40,6 +42,7 @@ export interface PrGroup {
 
 export interface ReviewHistoryService {
   listJobs: (clientId?: string) => Promise<{ items: JobListItem[] }>
+  getJobDetail: (jobId: string) => Promise<JobDetailResponse>
   restartJob: (jobId: string) => Promise<void>
   stopJob: (jobId: string) => Promise<void>
   listBlockedPrs: (clientId: string) => Promise<BlockedPullRequestDto[]>
@@ -57,10 +60,11 @@ export interface ReviewHistoryViewModel {
   currentPage: Ref<number>
   isSummaryModalOpen: Ref<boolean>
   selectedSummary: Ref<string>
+  summaryLoading: Ref<boolean>
   itemsVisibleDefault: number
   totalPages: ComputedRef<number>
   paginatedGroups: ComputedRef<PrGroup[]>
-  openSummaryModal: (item: JobListItem) => void
+  openSummaryModal: (item: JobListItem) => Promise<void>
   toggleGroupExpanded: (key: string) => void
   nextPage: () => void
   previousPage: () => void
@@ -98,6 +102,10 @@ async function defaultListJobs(clientId?: string): Promise<{ items: JobListItem[
   return {
     items: response.items as unknown as JobListItem[],
   }
+}
+
+async function defaultGetJobDetail(jobId: string): Promise<JobDetailResponse> {
+  return getJobDetail(jobId)
 }
 
 async function defaultRestartJob(jobId: string): Promise<void> {
@@ -138,6 +146,7 @@ export function useReviewHistoryViewModel(options: UseReviewHistoryViewModelOpti
   const { hasClientRole } = useSession()
   const clientId = options.clientId
   const listJobsFn = options.reviewHistoryService?.listJobs ?? defaultListJobs
+  const getJobDetailFn = options.reviewHistoryService?.getJobDetail ?? defaultGetJobDetail
   const restartJobFn = options.reviewHistoryService?.restartJob ?? defaultRestartJob
   const stopJobFn = options.reviewHistoryService?.stopJob ?? defaultStopJob
   const listBlockedPrsFn = options.reviewHistoryService?.listBlockedPrs ?? defaultListBlockedPrs
@@ -152,6 +161,7 @@ export function useReviewHistoryViewModel(options: UseReviewHistoryViewModelOpti
   const currentPage = ref(1)
   const isSummaryModalOpen = ref(false)
   const selectedSummary = ref('')
+  const summaryLoading = ref(false)
   const restartingJobs = ref<Set<string>>(new Set())
   const restartError = ref('')
   const stoppingJobs = ref<Set<string>>(new Set())
@@ -171,14 +181,35 @@ export function useReviewHistoryViewModel(options: UseReviewHistoryViewModelOpti
 
   let pollInterval: ReturnType<typeof setInterval> | null = null
 
-  function openSummaryModal(item: JobListItem) {
+  async function openSummaryModal(item: JobListItem) {
     // A processing item has no final summary yet; its summary cell renders the progress chip instead,
     // so a click should never open the (empty) summary modal.
     if (item.status === 'processing') {
       return
     }
 
-    const text = item.resultSummary ?? item.errorMessage
+    // The list carries only an excerpt of the summary, so the modal opens on what is already loaded and
+    // then replaces it with the full text. A reader sees content immediately either way, and the fetch
+    // costs nothing on the rows nobody opens.
+    if (item.hasResultSummary && item.id) {
+      selectedSummary.value = item.resultSummaryExcerpt ?? ''
+      isSummaryModalOpen.value = true
+      summaryLoading.value = true
+      try {
+        const detail = await getJobDetailFn(item.id)
+        if (isSummaryModalOpen.value && detail.resultSummary) {
+          selectedSummary.value = detail.resultSummary
+        }
+      } catch {
+        // Best-effort: the excerpt already on screen stays, rather than blanking what the reader opened.
+      } finally {
+        summaryLoading.value = false
+      }
+
+      return
+    }
+
+    const text = item.errorMessage
     if (text && text.trim() !== '') {
       selectedSummary.value = text
       isSummaryModalOpen.value = true
@@ -382,6 +413,7 @@ export function useReviewHistoryViewModel(options: UseReviewHistoryViewModelOpti
     currentPage,
     isSummaryModalOpen,
     selectedSummary,
+    summaryLoading,
     itemsVisibleDefault: ITEMS_VISIBLE_DEFAULT,
     totalPages,
     paginatedGroups,

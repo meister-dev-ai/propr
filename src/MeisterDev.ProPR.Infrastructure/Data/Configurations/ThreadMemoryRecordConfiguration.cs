@@ -120,6 +120,18 @@ internal sealed class ThreadMemoryRecordConfiguration : IEntityTypeConfiguration
             .IsUnique()
             .HasDatabaseName("uq_thread_memory_records_thread");
 
+        // The management list and the pull-request views read a client's memories newest first. Without a
+        // matching order the read is a full scan of the client's corpus plus a sort large enough to spill to
+        // disk, which is paid again on every page.
+        builder.HasIndex(r => new { r.ClientId, r.UpdatedAt })
+            .IsDescending(false, true)
+            .HasDatabaseName("ix_thread_memory_records_client_updated_at");
+
+        // Memories are also read scoped to one pull request, which is the PR review view's hot path.
+        builder.HasIndex(r => new { r.ClientId, r.RepositoryId, r.PullRequestId, r.UpdatedAt })
+            .IsDescending(false, false, false, true)
+            .HasDatabaseName("ix_thread_memory_records_client_pr_updated_at");
+
         // HNSW index for approximate nearest-neighbour cosine similarity search.
         builder.HasIndex(r => r.EmbeddingVector)
             .HasMethod("hnsw")

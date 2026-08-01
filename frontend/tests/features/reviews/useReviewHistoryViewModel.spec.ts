@@ -48,7 +48,8 @@ describe('useReviewHistoryViewModel', () => {
           submittedAt: '2026-05-01T10:00:00Z',
           processingStartedAt: '2026-05-01T10:01:00Z',
           completedAt: null,
-          resultSummary: null,
+          resultSummaryExcerpt: null,
+          hasResultSummary: false,
           errorMessage: null,
           totalInputTokens: 50,
           totalOutputTokens: 10,
@@ -80,13 +81,16 @@ describe('useReviewHistoryViewModel', () => {
       autoLoad: false,
       reviewHistoryService: {
         listJobs: async () => ({ items: [] }),
+        // The list carries only an excerpt, so opening the modal fetches the full text.
+        getJobDetail: async () => ({ resultSummary: 'Summary text' } as never),
       },
     }))
 
-    vm.openSummaryModal({
+    await vm.openSummaryModal({
       id: 'job-2',
       status: 'completed',
-      resultSummary: 'Summary text',
+      resultSummaryExcerpt: 'Summary',
+      hasResultSummary: true,
       errorMessage: null,
     } as never)
 
@@ -102,10 +106,11 @@ describe('useReviewHistoryViewModel', () => {
       },
     }))
 
-    vm.openSummaryModal({
+    await vm.openSummaryModal({
       id: 'job-3',
       status: 'processing',
-      resultSummary: null,
+      resultSummaryExcerpt: null,
+      hasResultSummary: false,
       errorMessage: 'transient',
     } as never)
 

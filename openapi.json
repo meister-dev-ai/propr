@@ -25186,6 +25186,10 @@
           },
           "budgetStatus": {
             "$ref": "#/components/schemas/BudgetStatusDto"
+          },
+          "resultSummary": {
+            "type": "string",
+            "nullable": true
           }
         },
         "additionalProperties": false,
@@ -25240,9 +25244,12 @@
             "format": "date-time",
             "nullable": true
           },
-          "resultSummary": {
+          "resultSummaryExcerpt": {
             "type": "string",
             "nullable": true
+          },
+          "hasResultSummary": {
+            "type": "boolean"
           },
           "errorMessage": {
             "type": "string",

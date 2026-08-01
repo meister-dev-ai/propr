@@ -21,6 +21,9 @@ public sealed partial class JobRepository(
     IDbContextFactory<MeisterProPRDbContext> contextFactory,
     ILogger<JobRepository> logger) : IJobRepository
 {
+    /// <summary>How much of a review summary the history list carries per row.</summary>
+    private const int ResultSummaryExcerptLength = 200;
+
     // Jobs still live for a pull request — not yet terminal — so a newer push supersedes them, a closed PR
     // cancels them, and intake treats them as an existing job rather than creating a duplicate. Budget-held and
     // budget-exceeded jobs are waiting on a manual restart, so they remain live for these purposes.
@@ -239,7 +242,15 @@ public sealed partial class JobRepository(
                 j.SubmittedAt,
                 j.ProcessingStartedAt,
                 j.CompletedAt,
-                j.ResultSummary,
+                // Bounded server-side. The list cell shows an opening excerpt; carrying the whole summary
+                // made it the overwhelming majority of the response, and a reader who wants the rest opens
+                // the row, which fetches it from the job detail endpoint.
+                j.ResultSummary == null
+                    ? null
+                    : j.ResultSummary.Length > ResultSummaryExcerptLength
+                        ? j.ResultSummary.Substring(0, ResultSummaryExcerptLength)
+                        : j.ResultSummary,
+                j.ResultSummary != null && j.ResultSummary != "",
                 j.ErrorMessage,
                 j.TotalInputTokensAggregated ?? j.Protocols.Sum(p => p.TotalInputTokens) ?? 0L,
                 j.TotalOutputTokensAggregated ?? j.Protocols.Sum(p => p.TotalOutputTokens) ?? 0L,
@@ -248,9 +259,11 @@ public sealed partial class JobRepository(
                 j.PrTargetBranch,
                 j.PrRepositoryName,
                 j.AiModel,
-                // Live numerator: files whose review reached a terminal successful state. Correlated Count
-                // over boolean columns only — no file-result text is materialized. Mirrors the "reviewed"
-                // predicate reused across this repository (excludes excluded, failed, and carried-forward).
+                // Live numerator: files whose review reached a terminal successful state. Read from the
+                // stored count, which each file write keeps current. The correlated Count remains as the
+                // fallback for jobs last written before the column existed, mirroring how the aggregated
+                // token totals fall back to summing their protocols.
+                j.ReviewedFileCount ??
                 j.FileReviewResults.Count(r => r.IsComplete && !r.IsFailed && !r.IsExcluded && !r.IsCarriedForward),
                 j.InScopeChangedFileCount,
                 j.TotalEstimatedCostUsd,
@@ -478,6 +491,7 @@ public sealed partial class JobRepository(
         await using var db = await contextFactory.CreateDbContextAsync(ct);
         db.ReviewFileResults.Add(result);
         await db.SaveChangesAsync(ct);
+        await RefreshReviewedFileCountAsync(db, result.JobId, ct).ConfigureAwait(false);
     }
 
     /// <inheritdoc />
@@ -490,6 +504,35 @@ public sealed partial class JobRepository(
         await using var db = await contextFactory.CreateDbContextAsync(ct);
         db.ReviewFileResults.Update(result);
         await db.SaveChangesAsync(ct);
+        await RefreshReviewedFileCountAsync(db, result.JobId, ct).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    ///     Recomputes the job's reviewed-file count from its file results and stores it on the job row.
+    /// </summary>
+    /// <remarks>
+    ///     Recomputed rather than incremented: a file result is written once when review starts on it and
+    ///     again when it finishes, and parallel file tasks interleave, so an increment would drift. A single
+    ///     statement that assigns the count from a subquery is correct whatever order the writers arrive in.
+    ///     The count is index-backed and paid once per file, off the read path.
+    /// </remarks>
+    private static Task RefreshReviewedFileCountAsync(
+        MeisterProPRDbContext db,
+        Guid jobId,
+        CancellationToken ct)
+    {
+        return db.ReviewJobs
+            .Where(j => j.Id == jobId)
+            .ExecuteUpdateAsync(
+                setters => setters.SetProperty(
+                    j => j.ReviewedFileCount,
+                    j => db.ReviewFileResults.Count(r =>
+                        r.JobId == jobId
+                        && r.IsComplete
+                        && !r.IsFailed
+                        && !r.IsExcluded
+                        && !r.IsCarriedForward)),
+                ct);
     }
 
     /// <inheritdoc />
