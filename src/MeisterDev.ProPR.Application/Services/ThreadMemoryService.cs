@@ -7,8 +7,10 @@ using System.Text;
 using System.Text.Json;
 using MeisterDev.ProPR.Application.AI;
 using MeisterDev.ProPR.Application.DTOs;
+using MeisterDev.ProPR.Application.Features.Reviewing.ThreadMemory.Ports;
 using MeisterDev.ProPR.Application.Interfaces;
 using MeisterDev.ProPR.Application.Options;
+using MeisterDev.ProPR.Application.ValueObjects;
 using MeisterDev.ProPR.Domain.Entities;
 using MeisterDev.ProPR.Domain.Enums;
 using MeisterDev.ProPR.Domain.Events;
@@ -32,6 +34,7 @@ public sealed partial class ThreadMemoryService(
     IMemoryActivityLog activityLog,
     IOptions<AiReviewOptions> options,
     ILogger<ThreadMemoryService> logger,
+    IMemoryReconsiderationPromptBuilder reconsiderationPrompts,
     IChatClient? chatClient = null,
     IAiConnectionRepository? aiConnectionRepository = null,
     IAiChatClientFactory? aiChatClientFactory = null,
@@ -462,7 +465,8 @@ public sealed partial class ThreadMemoryService(
         ReviewResult draftResult,
         Guid? protocolId,
         CancellationToken ct = default,
-        float? temperature = null)
+        float? temperature = null,
+        ReviewSystemContext? reviewContext = null)
     {
         try
         {
@@ -492,6 +496,7 @@ public sealed partial class ThreadMemoryService(
                 effectiveModelId,
                 protocolId,
                 temperature,
+                reviewContext,
                 ct);
 
             await this.RecordReconsiderationProtocolAsync(protocolId, clientId, filePath, draftResult, reconsideredResult, matches, ct);
@@ -952,6 +957,7 @@ public sealed partial class ThreadMemoryService(
         string modelId,
         Guid? protocolId,
         float? temperature,
+        ReviewSystemContext? reviewContext,
         CancellationToken ct)
     {
         var resolved = await this.ResolveReconsiderationChatClientAsync(clientId, modelId, ct);
@@ -962,7 +968,9 @@ public sealed partial class ThreadMemoryService(
 
         try
         {
-            var (systemMsg, userMsg) = this.BuildReconsiderationMessages(draftResult, matches);
+            // Prompt rendering happens inside the try: a template or override that fails to render is treated
+            // like any other reconsideration failure, so the draft findings stand instead of the review aborting.
+            var (systemMsg, userMsg) = this.BuildReconsiderationMessages(draftResult, matches, reviewContext);
 
             var response = await resolved.Value.ChatClient.GetResponseAsync(
                 new[]
@@ -1037,7 +1045,8 @@ public sealed partial class ThreadMemoryService(
 
     private (string SystemMessage, string UserMessage) BuildReconsiderationMessages(
         ReviewResult draftResult,
-        IReadOnlyList<ThreadMemoryMatchDto> matches)
+        IReadOnlyList<ThreadMemoryMatchDto> matches,
+        ReviewSystemContext? reviewContext)
     {
         var draftJson = JsonSerializer.Serialize(
             new
@@ -1052,7 +1061,9 @@ public sealed partial class ThreadMemoryService(
                 }),
             });
 
-        return (BuildReconsiderationSystemPrompt(), BuildReconsiderationUserMessage(draftJson, matches));
+        return (
+            reconsiderationPrompts.BuildSystemPrompt(reviewContext),
+            reconsiderationPrompts.BuildUserMessage(draftJson, matches, reviewContext));
     }
 
     private async Task RecordReconsiderationProtocolIfNeededAsync(
@@ -1101,116 +1112,6 @@ public sealed partial class ThreadMemoryService(
     }
 
     private readonly record struct ResolvedChatClient(IChatClient ChatClient, string ModelId, string? LogicalModelName = null);
-
-    private static string BuildReconsiderationSystemPrompt()
-    {
-        return """
-               You are an expert code reviewer with access to historical memory of past PR review decisions.
-               You are in the RECONSIDERATION phase — you will be given draft findings from an initial review pass
-               alongside records of how similar issues were resolved previously in this codebase.
-
-               Your task: evaluate each draft finding against the historical context and decide whether to:
-                 - RETAIN: The current finding is valid even considering past resolutions (same problem recurs unfixed, or a different instance).
-                 - DOWNGRADE: Lower the severity if history shows the team typically accepts this pattern.
-                 - DISCARD: Remove the finding if a past resolution clearly demonstrates the same concern was intentionally accepted or by design.
-
-               CRITICAL OUTPUT RULE: Your ENTIRE response must be a single raw JSON object using exactly these keys:
-                 "summary" (string), "comments" (array with file_path/line_number/severity/message),
-                 "confidence_evaluations" (array), "investigation_complete" (bool), "loop_complete" (bool).
-               Do NOT wrap in markdown fences. Return only valid JSON.
-               """;
-    }
-
-    private static string BuildReconsiderationUserMessage(
-        string draftFindingsJson,
-        IReadOnlyList<ThreadMemoryMatchDto> matches)
-    {
-        var sb = new StringBuilder();
-        sb.AppendLine("## Draft Findings from Initial Review");
-        sb.AppendLine(draftFindingsJson);
-        sb.AppendLine();
-        sb.AppendLine("## Historical Memory — Past Resolved Threads and Dismissed Patterns");
-
-        for (var i = 0; i < matches.Count; i++)
-        {
-            var m = matches[i];
-            var isDismissed = m.Source == MemorySource.AdminDismissed;
-
-            if (isDismissed)
-            {
-                sb.AppendLine($"### Entry {i + 1} ⚠️ ADMIN-DISMISSED PATTERN (Memory ID: {m.MemoryRecordId})");
-                sb.AppendLine("  The administrator has explicitly dismissed this pattern. **DISCARD** any finding that closely matches it.");
-            }
-            else if (string.Equals(m.MatchSource, "exact_file_fallback", StringComparison.Ordinal))
-            {
-                sb.AppendLine($"### Entry {i + 1} (Exact file fallback, Memory ID: {m.MemoryRecordId})");
-            }
-            else
-            {
-                sb.AppendLine($"### Entry {i + 1} (Similarity: {m.SimilarityScore:F2}, Memory ID: {m.MemoryRecordId})");
-            }
-
-            if (m.FilePath is not null)
-            {
-                sb.AppendLine($"- **File**: {m.FilePath}");
-            }
-
-            if (!isDismissed && DescribeReviewerOutcome(m) is { } outcome)
-            {
-                sb.AppendLine($"- **Reviewer outcome**: {outcome}");
-            }
-
-            sb.AppendLine(
-                isDismissed
-                    ? $"- **Dismissed pattern**: {m.ResolutionSummary}"
-                    : $"- **How it was resolved**: {m.ResolutionSummary}");
-            sb.AppendLine();
-        }
-
-        sb.AppendLine("Reconsider the draft findings above using the historical context. Return your reconsidered findings as a JSON object.");
-        return sb.ToString();
-    }
-
-    /// <summary>
-    ///     States what the reviewer's resolution meant, so the model is not left inferring it from prose. A
-    ///     rejection and a fix imply opposite actions on a recurrence, and an acceptance the discussion never
-    ///     made explicit is worth less than one it did. Returns <see langword="null" /> for a record that
-    ///     carries no reviewer outcome, so nothing is claimed about it.
-    /// </summary>
-    private static string? DescribeReviewerOutcome(ThreadMemoryMatchDto match)
-    {
-        // Only an explicit acceptance without a code change, reached by a content match, reads as a decision
-        // the reviewer stated plainly. Every other clarity, including one this code does not know, and every
-        // memory pulled in only because it sits on the same file, is reported as the weaker signal. A new
-        // clarity value or a file-level coincidence can therefore never become an instruction to drop a
-        // finding.
-        var matchedOnContent = !string.Equals(match.MatchSource, "exact_file_fallback", StringComparison.Ordinal);
-
-        return match switch
-        {
-            { Intent: ThreadResolutionIntent.AcceptedByHuman, Clarity: ResolutionClarity.AcceptedWithoutChange }
-                when matchedOnContent =>
-                "A reviewer rejected this concern and accepted the code as it stands. **DISCARD** a draft "
-                + "finding that raises this same concern about this same code.",
-
-            // Two different weaknesses, and saying the wrong one gives the model a false reason to trust or
-            // distrust the record. A file-path match is a weak link to the draft finding; an unclear
-            // discussion is a weak decision even when the match itself is exact.
-            { Intent: ThreadResolutionIntent.AcceptedByHuman } when !matchedOnContent =>
-                "A reviewer rejected a concern in this file and accepted the code as it stands, but this "
-                + "record was found only because it sits on the same file, not because it matches this "
-                + "finding. Treat it as low confidence and weigh it against the code you see.",
-            { Intent: ThreadResolutionIntent.AcceptedByHuman } =>
-                "A reviewer rejected this concern and accepted the code as it stands, but the discussion did "
-                + "not say so plainly. Treat the decision as low confidence and weigh it against the code "
-                + "you see.",
-            { Intent: ThreadResolutionIntent.ClaimsFix } =>
-                "A reviewer marked a concern here fixed and the code at that spot changed. That is not a "
-                + "decision to accept the concern, so on its own it does not justify discarding a finding "
-                + "that raises it again.",
-            _ => null,
-        };
-    }
 
     private static ReviewResult? ParseReconsiderationResponse(string json, ReviewResult draftResult)
     {

@@ -15162,6 +15162,7 @@ export interface components {
             minimumSeverityToPost?: components["schemas"]["CommentSeverity"];
             autoResolveSeverities?: components["schemas"]["CommentSeverity"][] | null;
             codeInsightsCollectionEnabled?: boolean;
+            outputLanguage?: string | null;
         };
         /** @description Client-scoped review profile response. */
         ClientReviewProfileResponse: {
@@ -16728,6 +16729,7 @@ export interface components {
          * @description Request body for patching a client. All fields are optional; omitted fields are left unchanged.
          *     Set MeisterDev.ProPR.Api.Controllers.PatchClientRequest.CustomSystemMessage to `""` (empty string) to clear an existing value.
          *     Set MeisterDev.ProPR.Api.Controllers.PatchClientRequest.AutoResolveSeverities to an empty array to clear the auto-resolve set.
+         *     MeisterDev.ProPR.Api.Controllers.PatchClientRequest.OutputLanguage is an IETF BCP 47 language tag; a blank value resets it to the default.
          */
         PatchClientRequest: {
             isActive?: boolean | null;
@@ -16745,6 +16747,7 @@ export interface components {
             minimumSeverityToPost?: components["schemas"]["CommentSeverity"];
             autoResolveSeverities?: components["schemas"]["CommentSeverity"][] | null;
             codeInsightsCollectionEnabled?: boolean | null;
+            outputLanguage?: string | null;
         };
         /** @description Patch payload for one premium capability override. */
         PatchPremiumCapabilityOverrideRequest: {

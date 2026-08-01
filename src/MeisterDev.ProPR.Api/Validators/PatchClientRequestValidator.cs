@@ -7,6 +7,7 @@ using MeisterDev.ProPR.Api.Controllers;
 using MeisterDev.ProPR.Application.DTOs;
 using MeisterDev.ProPR.Application.Features.Reviewing.Execution.Models;
 using MeisterDev.ProPR.Domain.Enums;
+using MeisterDev.ProPR.Domain.ValueObjects;
 
 namespace MeisterDev.ProPR.Api.Validators;
 
@@ -55,6 +56,14 @@ public sealed class PatchClientRequestValidator : AbstractValidator<PatchClientR
             .Must(severities => severities!.All(severity => Enum.IsDefined(severity)))
             .WithMessage("AutoResolveSeverities must contain only info, warning, error, or suggestion values.")
             .When(r => r.AutoResolveSeverities is not null);
+
+        // A blank value is accepted and resets the language to the default; anything else must be a language tag.
+        this.RuleFor(r => r.OutputLanguage)
+            .Must(tag => string.IsNullOrWhiteSpace(tag) || ReviewOutputLanguage.IsValidTag(tag))
+            .WithMessage(
+                "OutputLanguage must be an IETF BCP 47 language tag, for example en, de, or pt-BR. "
+                + "Send an empty value to reset it to the default.")
+            .When(r => r.OutputLanguage is not null);
 
         this.RuleFor(r => r.ReviewPasses)
             .Must(BeAValidReviewPassList)

@@ -25,7 +25,7 @@ public sealed class SynthesisResponseParserTests
                                ```
                                """;
 
-        var parsed = SynthesisResponseParser.TryParse(payload, out var summary, out var findings);
+        var parsed = SynthesisResponseParser.TryParse(payload, out var summary, out var findings, out _);
 
         Assert.True(parsed);
         Assert.Equal("Overall summary.", summary);
@@ -52,7 +52,7 @@ public sealed class SynthesisResponseParserTests
                                }
                                """;
 
-        var parsed = SynthesisResponseParser.TryParse(payload, out var summary, out var findings);
+        var parsed = SynthesisResponseParser.TryParse(payload, out var summary, out var findings, out _);
 
         Assert.True(parsed);
         Assert.Equal("{ \"headline\": \"Nested summary\" }", summary);
@@ -72,7 +72,7 @@ public sealed class SynthesisResponseParserTests
                                }
                                """;
 
-        var parsed = SynthesisResponseParser.TryParse(payload, out var summary, out var findings);
+        var parsed = SynthesisResponseParser.TryParse(payload, out var summary, out var findings, out _);
 
         Assert.True(parsed);
         Assert.Equal("Overall summary.", summary);
@@ -90,5 +90,55 @@ public sealed class SynthesisResponseParserTests
 
         Assert.Equal("{\"summary\":\"ok\"}", stripped);
         Assert.True(SynthesisResponseParser.LooksLikeJsonObject(payload));
+    }
+
+    [Fact]
+    public void TryParse_WithSummaryFindingIds_ReturnsTheDeclaredIds()
+    {
+        const string payload = """
+                               {
+                                 "summary": "Overall summary.",
+                                 "summary_finding_ids": ["finding-pf-a-001", "  finding-pf-b-002  ", "", 7],
+                                 "cross_cutting_concerns": []
+                               }
+                               """;
+
+        var parsed = SynthesisResponseParser.TryParse(payload, out _, out _, out var summaryFindingIds);
+
+        Assert.True(parsed);
+        Assert.Equal(["finding-pf-a-001", "finding-pf-b-002"], summaryFindingIds);
+    }
+
+    [Fact]
+    public void TryParse_WithoutSummaryFindingIds_ReturnsAnEmptyList()
+    {
+        const string payload = """
+                               {
+                                 "summary": "Overall summary.",
+                                 "cross_cutting_concerns": []
+                               }
+                               """;
+
+        var parsed = SynthesisResponseParser.TryParse(payload, out _, out _, out var summaryFindingIds);
+
+        Assert.True(parsed);
+        Assert.Empty(summaryFindingIds);
+    }
+
+    [Fact]
+    public void TryParse_WithSummaryFindingIdsThatAreNotAnArray_ReturnsAnEmptyList()
+    {
+        const string payload = """
+                               {
+                                 "summary": "Overall summary.",
+                                 "summary_finding_ids": "finding-pf-a-001",
+                                 "cross_cutting_concerns": []
+                               }
+                               """;
+
+        var parsed = SynthesisResponseParser.TryParse(payload, out _, out _, out var summaryFindingIds);
+
+        Assert.True(parsed);
+        Assert.Empty(summaryFindingIds);
     }
 }

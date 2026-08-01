@@ -495,4 +495,40 @@ public class ReviewOrchestrationServicePromptOverrideTests
                 Arg.Any<CancellationToken>(),
                 Arg.Any<ReviewPublicationContext?>());
     }
+
+    [Fact]
+    public async Task ProcessAsync_ResolvesTheClientOutputLanguageOntoTheContext()
+    {
+        // Arrange
+        var (job, prFetcher, clientRegistry, prScanRepository) = BuildDefaults();
+        clientRegistry.GetOutputLanguageAsync(job.ClientId, Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult("de"));
+
+        var orchestrator = Substitute.For<IFileByFileReviewOrchestrator>();
+        ReviewSystemContext? capturedContext = null;
+        orchestrator
+            .ReviewAsync(
+                Arg.Any<ReviewJob>(),
+                Arg.Any<PullRequest>(),
+                Arg.Do<ReviewSystemContext>(ctx => capturedContext = ctx),
+                Arg.Any<CancellationToken>(),
+                Arg.Any<IChatClient?>())
+            .Returns(new ReviewResult("Summary", new List<ReviewComment>().AsReadOnly()));
+
+        var service = CreateService(
+            Substitute.For<IReviewJobExecutionStore>(),
+            prFetcher,
+            orchestrator,
+            CreatePublicationService(),
+            clientRegistry,
+            prScanRepository,
+            Substitute.For<IPromptOverrideService>());
+
+        // Act
+        await service.ProcessAsync(job, CancellationToken.None);
+
+        // Assert
+        Assert.NotNull(capturedContext);
+        Assert.Equal("de", capturedContext!.OutputLanguage);
+    }
 }

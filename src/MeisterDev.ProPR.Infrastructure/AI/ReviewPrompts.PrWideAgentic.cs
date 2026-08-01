@@ -47,11 +47,15 @@ internal static partial class ReviewPrompts
     {
         if (context?.PromptOverrides.TryGetValue("PrWideInvestigationSystemPrompt", out var overrideText) == true)
         {
-            return ComposePrompt(context, "pr_wide_investigation_system", PromptStageRole.System, overrideText!);
+            return OutputLanguageDirective.Append(
+                ComposePrompt(context, "pr_wide_investigation_system", PromptStageRole.System, overrideText!),
+                context);
         }
 
         var defaultText = PromptTemplateRuntime.RenderStage("pr_wide_investigation_system", new PromptTemplateModels.PrWideInvestigationSystemModel());
-        return ComposePrompt(context, "pr_wide_investigation_system", PromptStageRole.System, defaultText);
+        return OutputLanguageDirective.Append(
+            ComposePrompt(context, "pr_wide_investigation_system", PromptStageRole.System, defaultText),
+            context);
     }
 
     internal static string BuildPrWideInvestigationUserMessage(
@@ -80,11 +84,15 @@ internal static partial class ReviewPrompts
     {
         if (context?.PromptOverrides.TryGetValue("PrWideSynthesisSystemPrompt", out var overrideText) == true)
         {
-            return ComposePrompt(context, "pr_wide_synthesis_system", PromptStageRole.System, overrideText!);
+            return OutputLanguageDirective.Append(
+                ComposePrompt(context, "pr_wide_synthesis_system", PromptStageRole.System, overrideText!),
+                context);
         }
 
         var defaultText = PromptTemplateRuntime.RenderStage("pr_wide_synthesis_system", new PromptTemplateModels.PrWideSynthesisSystemModel());
-        return ComposePrompt(context, "pr_wide_synthesis_system", PromptStageRole.System, defaultText);
+        return OutputLanguageDirective.Append(
+            ComposePrompt(context, "pr_wide_synthesis_system", PromptStageRole.System, defaultText),
+            context);
     }
 
     internal static string BuildPrWideSynthesisUserMessage(

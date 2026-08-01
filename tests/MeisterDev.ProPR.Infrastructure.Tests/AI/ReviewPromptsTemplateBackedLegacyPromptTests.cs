@@ -1,7 +1,6 @@
 // Copyright (c) Andreas Rain.
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
-using MeisterDev.ProPR.Application.DTOs;
 using MeisterDev.ProPR.Domain.Enums;
 using MeisterDev.ProPR.Domain.ValueObjects;
 using MeisterDev.ProPR.Infrastructure.AI;
@@ -10,28 +9,6 @@ namespace MeisterDev.ProPR.Infrastructure.Tests.AI;
 
 public sealed class ReviewPromptsTemplateBackedLegacyPromptTests
 {
-    [Fact]
-    public void BuildMemoryReconsiderationSystemPrompt_UsesTemplateBackedDefault()
-    {
-        var prompt = ReviewPrompts.BuildMemoryReconsiderationSystemPrompt("meister-bot");
-
-        Assert.Contains("You are meister-bot", prompt, StringComparison.Ordinal);
-        Assert.Contains("RECONSIDERATION phase", prompt, StringComparison.OrdinalIgnoreCase);
-        Assert.Contains("confidence_evaluations", prompt, StringComparison.Ordinal);
-    }
-
-    [Fact]
-    public void BuildMemoryReconsiderationUserMessage_UsesTemplateBackedDefault()
-    {
-        var message = ReviewPrompts.BuildMemoryReconsiderationUserMessage(
-            "{\"summary\":\"Draft\"}",
-            [new ThreadMemoryMatchDto(Guid.NewGuid(), 42, "src/Foo.cs", "Previously accepted by design.", 0.92f)]);
-
-        Assert.Contains("## Draft Findings from Initial Review", message, StringComparison.Ordinal);
-        Assert.Contains("Match 1", message, StringComparison.Ordinal);
-        Assert.Contains("Previously accepted by design.", message, StringComparison.Ordinal);
-    }
-
     [Fact]
     public void BuildUserMessage_WithChangedFiles_UsesTemplateBackedDefault()
     {

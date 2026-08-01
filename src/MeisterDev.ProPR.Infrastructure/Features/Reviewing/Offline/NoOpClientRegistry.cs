@@ -39,6 +39,11 @@ public sealed class NoOpClientRegistry : IClientRegistry
         return Task.FromResult<string?>(null);
     }
 
+    public Task<string> GetOutputLanguageAsync(Guid clientId, CancellationToken ct = default)
+    {
+        return Task.FromResult(ReviewOutputLanguage.Default);
+    }
+
     public Task<bool> GetScmCommentPostingEnabledAsync(Guid clientId, CancellationToken ct = default)
     {
         return Task.FromResult(true);

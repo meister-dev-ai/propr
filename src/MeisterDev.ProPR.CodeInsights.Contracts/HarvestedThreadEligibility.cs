@@ -38,6 +38,12 @@ public static class HarvestedThreadEligibility
     ///     existed on a non-Azure-DevOps provider: such a thread is harvested as a human thread ProPR missed.
     ///     Closing that gap means giving every publisher a shared, matchable prefix, which changes what reviewers
     ///     see on the pull request and is therefore a product decision rather than a fix.
+    ///     <para>
+    ///         The literal stays English whatever output language a client configured. It is matched as data against
+    ///         summaries already stored on pull requests, so translating it would make ProPR's own summaries stop
+    ///         matching: they would be harvested as human threads ProPR missed, and the poster would post a second
+    ///         summary alongside the first. The client's language governs the model's prose, not this label.
+    ///     </para>
     /// </remarks>
     public const string SummaryPrefix = "**AI Review Summary**";
 

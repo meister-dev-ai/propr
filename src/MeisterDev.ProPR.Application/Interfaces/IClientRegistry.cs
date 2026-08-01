@@ -53,6 +53,16 @@ public interface IClientRegistry
     Task<string?> GetCustomSystemMessageAsync(Guid clientId, CancellationToken ct = default);
 
     /// <summary>
+    ///     Returns the client's configured output language as an IETF BCP 47 tag. Every prompt that emits
+    ///     reviewer-facing prose states it, so a review reads in one language on all of its surfaces.
+    ///     Falls back to <see cref="ReviewOutputLanguage.Default" /> when the client does not exist or stores
+    ///     nothing usable.
+    /// </summary>
+    /// <param name="clientId">Client identifier.</param>
+    /// <param name="ct">Cancellation token.</param>
+    Task<string> GetOutputLanguageAsync(Guid clientId, CancellationToken ct = default);
+
+    /// <summary>
     ///     Returns whether newly generated review comments should be published back to SCM for the given client.
     ///     Defaults to <see langword="true" /> if the client does not exist.
     /// </summary>

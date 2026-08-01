@@ -268,4 +268,12 @@ public sealed class ReviewSystemContext
     ///     Prepared local repository workspace bound to this review execution when available.
     /// </summary>
     public IReviewRepositoryWorkspace? ReviewWorkspace { get; set; }
+
+    /// <summary>
+    ///     The client's configured output language as an IETF BCP 47 tag, resolved once for the job and stated by
+    ///     every prompt that emits reviewer-facing prose. <see langword="null" /> states no language and leaves the
+    ///     prompts as they were, which is what execution contexts built outside a review job get.
+    ///     See <see cref="MeisterDev.ProPR.Domain.ValueObjects.ReviewOutputLanguage" />.
+    /// </summary>
+    public string? OutputLanguage { get; set; }
 }

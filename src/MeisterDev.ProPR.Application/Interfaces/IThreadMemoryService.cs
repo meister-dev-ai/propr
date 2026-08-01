@@ -2,6 +2,7 @@
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
 using MeisterDev.ProPR.Application.DTOs;
+using MeisterDev.ProPR.Application.ValueObjects;
 using MeisterDev.ProPR.Domain.Entities;
 using MeisterDev.ProPR.Domain.Events;
 using MeisterDev.ProPR.Domain.ValueObjects;
@@ -50,6 +51,10 @@ public interface IThreadMemoryService
     ///     Returns the reconsidered result, or <paramref name="draftResult" /> unchanged if no matches are
     ///     found, the store is unavailable, or any other failure occurs. Never throws.
     /// </summary>
+    /// <param name="reviewContext">
+    ///     The review execution context the reconsideration prompts are built from, carrying the client's
+    ///     prompt overrides. <see langword="null" /> renders the shipped defaults.
+    /// </param>
     Task<ReviewResult> RetrieveAndReconsiderAsync(
         Guid clientId,
         ReviewJob job,
@@ -58,7 +63,8 @@ public interface IThreadMemoryService
         ReviewResult draftResult,
         Guid? protocolId,
         CancellationToken ct = default,
-        float? temperature = null);
+        float? temperature = null,
+        ReviewSystemContext? reviewContext = null);
 
     /// <summary>
     ///     Stores a finding dismissal as an <c>AdminDismissed</c> memory record, generating an embedding

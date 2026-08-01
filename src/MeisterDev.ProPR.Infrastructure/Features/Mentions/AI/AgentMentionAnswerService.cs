@@ -21,7 +21,8 @@ internal sealed partial class AgentMentionAnswerService(
     IAiConnectionRepository aiConnectionRepository,
     IAiChatClientFactory aiChatClientFactory,
     ILogger<AgentMentionAnswerService> logger,
-    IAiRuntimeResolver? aiRuntimeResolver = null) : IMentionAnswerService
+    IAiRuntimeResolver? aiRuntimeResolver = null,
+    IClientRegistry? clientRegistry = null) : IMentionAnswerService
 {
     private const string SystemPrompt =
         "You are a PR review assistant. Answer the developer's question concisely and directly, " +
@@ -71,9 +72,15 @@ internal sealed partial class AgentMentionAnswerService(
             chatClient = aiChatClientFactory.CreateClient(activeConnection.BaseUrl, activeConnection.Secret);
         }
 
+        // A mention answer is not part of a review job, so the language is resolved from the client here rather
+        // than read off a review context.
+        var outputLanguage = clientRegistry is null
+            ? null
+            : await clientRegistry.GetOutputLanguageAsync(clientId, cancellationToken);
+
         var messages = new List<ChatMessage>
         {
-            new(ChatRole.System, SystemPrompt),
+            new(ChatRole.System, OutputLanguageDirective.Append(SystemPrompt, outputLanguage)),
             new(ChatRole.User, userMessage),
         };
 

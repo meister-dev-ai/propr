@@ -26,6 +26,9 @@ const detailTabs = [
 ] as const
 
 export type DetailTab = (typeof detailTabs)[number]
+
+/** The language tag a client falls back to when none is stored. Mirrors the backend default. */
+export const DEFAULT_OUTPUT_LANGUAGE = 'en'
 export type ReviewPassEntry = components['schemas']['ReviewPassEntry']
 export type ReviewReasoningEffort = components['schemas']['ReviewReasoningEffort']
 export type BudgetConfig = components['schemas']['BudgetConfigDto']
@@ -43,6 +46,7 @@ export interface ClientDetailDto {
   enableMultiPassUnion: boolean
   includeLinkedItemsInContext: boolean
   enableLanguageRobustScreening: boolean
+  outputLanguage?: string | null
   reviewPasses?: ReviewPassEntry[] | null
   baselineReasoningEffort?: ReviewReasoningEffort | null
   budgetConfig?: BudgetConfig | null
@@ -81,6 +85,7 @@ export interface ClientDetailViewModel {
   editedEnableMultiPassUnion: Ref<boolean>
   editedIncludeLinkedItemsInContext: Ref<boolean>
   editedEnableLanguageRobustScreening: Ref<boolean>
+  editedOutputLanguage: Ref<string>
   editedReviewPasses: Ref<ReviewPassEntry[]>
   editedBaselineReasoningEffort: Ref<ReviewReasoningEffort>
   editedMinimumSeverityToPost: Ref<CommentSeverity>
@@ -337,6 +342,7 @@ export function useClientDetailViewModel(options: UseClientDetailViewModelOption
   const editedEnableMultiPassUnion = ref(false)
   const editedIncludeLinkedItemsInContext = ref(true)
   const editedEnableLanguageRobustScreening = ref(false)
+  const editedOutputLanguage = ref(DEFAULT_OUTPUT_LANGUAGE)
   const editedReviewPasses = ref<ReviewPassEntry[]>([])
   const editedBaselineReasoningEffort = ref<ReviewReasoningEffort>('none')
   const editedMinimumSeverityToPost = ref<CommentSeverity>('info')
@@ -405,6 +411,7 @@ export function useClientDetailViewModel(options: UseClientDetailViewModelOption
     editedEnableMultiPassUnion.value = Boolean(nextClient.enableMultiPassUnion)
     editedIncludeLinkedItemsInContext.value = Boolean(nextClient.includeLinkedItemsInContext)
     editedEnableLanguageRobustScreening.value = Boolean(nextClient.enableLanguageRobustScreening)
+    editedOutputLanguage.value = nextClient.outputLanguage || DEFAULT_OUTPUT_LANGUAGE
     editedReviewPasses.value = normalizeReviewPasses(nextClient.reviewPasses)
     editedBaselineReasoningEffort.value = nextClient.baselineReasoningEffort ?? 'none'
     editedMinimumSeverityToPost.value = nextClient.minimumSeverityToPost ?? 'info'
@@ -589,6 +596,7 @@ export function useClientDetailViewModel(options: UseClientDetailViewModelOption
         enableMultiPassUnion: editedEnableMultiPassUnion.value,
         includeLinkedItemsInContext: editedIncludeLinkedItemsInContext.value,
         enableLanguageRobustScreening: editedEnableLanguageRobustScreening.value,
+        outputLanguage: editedOutputLanguage.value.trim(),
         baselineReasoningEffort: editedBaselineReasoningEffort.value,
       }
 
@@ -728,6 +736,7 @@ export function useClientDetailViewModel(options: UseClientDetailViewModelOption
         editedEnableMultiPassUnion.value !== Boolean(client.value.enableMultiPassUnion) ||
         editedIncludeLinkedItemsInContext.value !== Boolean(client.value.includeLinkedItemsInContext) ||
         editedEnableLanguageRobustScreening.value !== Boolean(client.value.enableLanguageRobustScreening) ||
+        editedOutputLanguage.value.trim() !== (client.value.outputLanguage || DEFAULT_OUTPUT_LANGUAGE) ||
         editedBaselineReasoningEffort.value !== (client.value.baselineReasoningEffort ?? 'none') ||
         !reviewPassesEqual(editedReviewPasses.value, normalizeReviewPasses(client.value.reviewPasses))
       )
@@ -796,6 +805,7 @@ export function useClientDetailViewModel(options: UseClientDetailViewModelOption
     editedEnableMultiPassUnion,
     editedIncludeLinkedItemsInContext,
     editedEnableLanguageRobustScreening,
+    editedOutputLanguage,
     editedReviewPasses,
     editedBaselineReasoningEffort,
     editedMinimumSeverityToPost,

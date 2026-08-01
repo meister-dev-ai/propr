@@ -14,12 +14,12 @@ internal static class PromptTemplateCatalog
             ["legacy_pr_review_user"] = new("legacy_pr_review_user", PromptStageRole.User, "shared/legacy-pr-review-user.hbs"),
             ["quality_filter_system"] = new("quality_filter_system", PromptStageRole.System, "shared/quality-filter-system.hbs"),
             ["quality_filter_user"] = new("quality_filter_user", PromptStageRole.User, "shared/quality-filter-user.hbs"),
-            ["memory_reconsideration_system"] = new(
-                "memory_reconsideration_system",
+            [PromptStageKeys.MemoryReconsiderationSystem] = new(
+                PromptStageKeys.MemoryReconsiderationSystem,
                 PromptStageRole.System,
                 "shared/memory-reconsideration-system.hbs"),
-            ["memory_reconsideration_user"] = new(
-                "memory_reconsideration_user",
+            [PromptStageKeys.MemoryReconsiderationUser] = new(
+                PromptStageKeys.MemoryReconsiderationUser,
                 PromptStageRole.User,
                 "shared/memory-reconsideration-user.hbs"),
             [PromptStageKeys.PerFileContextSystem] = new(

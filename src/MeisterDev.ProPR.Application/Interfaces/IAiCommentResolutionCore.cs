@@ -21,6 +21,10 @@ public interface IAiCommentResolutionCore
     /// <param name="chatClient">The client-scoped AI chat client to use.</param>
     /// <param name="modelId">The model deployment identifier for the client-scoped AI connection.</param>
     /// <param name="cancellationToken">A token to monitor for cancellation requests.</param>
+    /// <param name="outputLanguage">
+    ///     The client's configured output language as an IETF BCP 47 tag, stated in the system prompt so the reply
+    ///     is written in the same language as the rest of the review. <see langword="null" /> states no language.
+    /// </param>
     /// <returns>
     ///     A <see cref="ThreadResolutionResult" /> indicating whether the issue is resolved and
     ///     an optional reply to post in the thread.
@@ -30,7 +34,8 @@ public interface IAiCommentResolutionCore
         PullRequest pr,
         IChatClient chatClient,
         string modelId,
-        CancellationToken cancellationToken = default);
+        CancellationToken cancellationToken = default,
+        string? outputLanguage = null);
 
     /// <summary>
     ///     Generates a conversational response to new human replies in <paramref name="thread" />,
@@ -40,6 +45,10 @@ public interface IAiCommentResolutionCore
     /// <param name="chatClient">The client-scoped AI chat client to use.</param>
     /// <param name="modelId">The model deployment identifier for the client-scoped AI connection.</param>
     /// <param name="cancellationToken">A token to monitor for cancellation requests.</param>
+    /// <param name="outputLanguage">
+    ///     The client's configured output language as an IETF BCP 47 tag, stated in the system prompt so the reply
+    ///     is written in the same language as the rest of the review. <see langword="null" /> states no language.
+    /// </param>
     /// <returns>
     ///     A <see cref="ThreadResolutionResult" /> with <c>IsResolved = false</c> and
     ///     a <c>ReplyText</c> to post as a conversational follow-up.
@@ -48,5 +57,6 @@ public interface IAiCommentResolutionCore
         PrCommentThread thread,
         IChatClient chatClient,
         string modelId,
-        CancellationToken cancellationToken = default);
+        CancellationToken cancellationToken = default,
+        string? outputLanguage = null);
 }

@@ -323,4 +323,38 @@ public sealed class AgentAiCommentResolutionCoreTests
                 Arg.Any<ChatOptions?>(),
                 Arg.Any<CancellationToken>());
     }
+
+    [Fact]
+    public async Task EvaluateCodeChangeAsync_WithConfiguredOutputLanguage_StatesItInTheSystemPrompt()
+    {
+        var chatClient = BuildChatClient("""{"resolved": false, "replyText": null}""");
+        var sut = new AgentAiCommentResolutionCore();
+        var thread = BuildThread(1, ("Bot", "Null reference on line 10.", null));
+
+        await sut.EvaluateCodeChangeAsync(thread, BuildPr(), chatClient, ModelId, CancellationToken.None, "de");
+
+        await chatClient.Received(1)
+            .GetResponseAsync(
+                Arg.Is<IList<ChatMessage>>(msgs =>
+                    msgs.Any(m => m.Role == ChatRole.System && m.Text != null && m.Text.Contains("`de`"))),
+                Arg.Any<ChatOptions?>(),
+                Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task EvaluateConversationalReplyAsync_WithConfiguredOutputLanguage_StatesItInTheSystemPrompt()
+    {
+        var chatClient = BuildChatClient("""{"resolved": false, "replyText": "Still open."}""");
+        var sut = new AgentAiCommentResolutionCore();
+        var thread = BuildThread(1, ("Dev", "Why is this a problem?", null));
+
+        await sut.EvaluateConversationalReplyAsync(thread, chatClient, ModelId, CancellationToken.None, "de");
+
+        await chatClient.Received(1)
+            .GetResponseAsync(
+                Arg.Is<IList<ChatMessage>>(msgs =>
+                    msgs.Any(m => m.Role == ChatRole.System && m.Text != null && m.Text.Contains("`de`"))),
+                Arg.Any<ChatOptions?>(),
+                Arg.Any<CancellationToken>());
+    }
 }

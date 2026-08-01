@@ -20,6 +20,11 @@ screen; extra [review passes](../concepts/reviews.md#review-passes) pick a logic
 | Memory reconsideration | `memoryReconsideration` | Re-judging an existing comment thread on a re-review |
 | ProRV prefilter | `proRvPrefilter` | Not used by the review path - see below |
 
+A purpose is scoped to the work that asked for it. The High-effort model synthesis resolves applies to the
+synthesis call and nothing else, so the stages that run after it - comment deduplication, the comment quality
+filter, pull-request-level verification - each stay on their own purpose, and their token usage is reported
+against the model they actually ran on.
+
 A purpose resolves in two layers, in this order:
 
 1. **The purpose → logical model map.** Looked up for that one purpose. There is no fall-through inside this

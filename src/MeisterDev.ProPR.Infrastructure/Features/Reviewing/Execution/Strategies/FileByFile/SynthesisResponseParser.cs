@@ -18,10 +18,12 @@ internal static class SynthesisResponseParser
     public static bool TryParse(
         string? responseText,
         out string summary,
-        out IReadOnlyList<CandidateReviewFinding> crossCuttingComments)
+        out IReadOnlyList<CandidateReviewFinding> crossCuttingComments,
+        out IReadOnlyList<string> summaryFindingIds)
     {
         summary = string.Empty;
         crossCuttingComments = [];
+        summaryFindingIds = [];
 
         if (string.IsNullOrWhiteSpace(responseText))
         {
@@ -41,6 +43,7 @@ internal static class SynthesisResponseParser
             summary = summaryEl.ValueKind == JsonValueKind.String
                 ? summaryEl.GetString() ?? string.Empty
                 : summaryEl.GetRawText();
+            summaryFindingIds = ParseSummaryFindingIds(doc.RootElement);
             crossCuttingComments = ParseCrossCuttingConcerns(trimmed);
             return true;
         }
@@ -48,6 +51,36 @@ internal static class SynthesisResponseParser
         {
             return false;
         }
+    }
+
+    /// <summary>
+    ///     Reads the identifiers of the findings the narrative describes. They let summary reconciliation decide
+    ///     whether the published summary still describes a finding verification dropped, without comparing prose.
+    ///     A missing or malformed field yields an empty list, which reconciliation treats as "not declared".
+    /// </summary>
+    private static IReadOnlyList<string> ParseSummaryFindingIds(JsonElement root)
+    {
+        if (!root.TryGetProperty("summary_finding_ids", out var idsElement) || idsElement.ValueKind != JsonValueKind.Array)
+        {
+            return [];
+        }
+
+        var ids = new List<string>();
+        foreach (var item in idsElement.EnumerateArray())
+        {
+            if (item.ValueKind != JsonValueKind.String)
+            {
+                continue;
+            }
+
+            var id = item.GetString();
+            if (!string.IsNullOrWhiteSpace(id))
+            {
+                ids.Add(id.Trim());
+            }
+        }
+
+        return ids;
     }
 
     public static bool LooksLikeJsonObject(string text)

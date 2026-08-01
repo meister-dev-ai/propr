@@ -4,8 +4,10 @@
 using MeisterDev.ProPR.Application.Features.Reviewing.Diagnostics.Ports;
 using MeisterDev.ProPR.Application.Features.Reviewing.Execution.Ports;
 using MeisterDev.ProPR.Application.Features.Reviewing.Intake.Ports;
+using MeisterDev.ProPR.Application.Features.Reviewing.ThreadMemory.Ports;
 using MeisterDev.ProPR.Application.Interfaces;
 using MeisterDev.ProPR.Application.Services;
+using MeisterDev.ProPR.Infrastructure.Features.Reviewing.ThreadMemory;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
@@ -43,6 +45,7 @@ public static class OfflineReviewingServiceCollectionExtensions
         services.TryAddSingleton<IThreadMemoryEmbedder, NoOpThreadMemoryEmbedder>();
         services.TryAddScoped<IThreadMemoryRepository, FixtureThreadMemoryRepository>();
         services.TryAddSingleton<IMemoryActivityLog, NoOpMemoryActivityLog>();
+        services.TryAddSingleton<IMemoryReconsiderationPromptBuilder, MemoryReconsiderationPromptBuilder>();
         services.TryAddScoped<IThreadMemoryService, ThreadMemoryService>();
         services.TryAddSingleton<IReviewJobIntakeStore, OfflineReviewJobIntakeStore>();
         services.TryAddScoped<IReviewEvaluationFixtureValidator, ReviewEvaluationFixtureValidator>();

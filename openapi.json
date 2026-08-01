@@ -22783,6 +22783,10 @@
           },
           "codeInsightsCollectionEnabled": {
             "type": "boolean"
+          },
+          "outputLanguage": {
+            "type": "string",
+            "nullable": true
           }
         },
         "additionalProperties": false,
@@ -25801,10 +25805,14 @@
           "codeInsightsCollectionEnabled": {
             "type": "boolean",
             "nullable": true
+          },
+          "outputLanguage": {
+            "type": "string",
+            "nullable": true
           }
         },
         "additionalProperties": false,
-        "description": "Request body for patching a client. All fields are optional; omitted fields are left unchanged.\nSet MeisterDev.ProPR.Api.Controllers.PatchClientRequest.CustomSystemMessage to `\"\"` (empty string) to clear an existing value.\nSet MeisterDev.ProPR.Api.Controllers.PatchClientRequest.AutoResolveSeverities to an empty array to clear the auto-resolve set."
+        "description": "Request body for patching a client. All fields are optional; omitted fields are left unchanged.\nSet MeisterDev.ProPR.Api.Controllers.PatchClientRequest.CustomSystemMessage to `\"\"` (empty string) to clear an existing value.\nSet MeisterDev.ProPR.Api.Controllers.PatchClientRequest.AutoResolveSeverities to an empty array to clear the auto-resolve set.\nMeisterDev.ProPR.Api.Controllers.PatchClientRequest.OutputLanguage is an IETF BCP 47 language tag; a blank value resets it to the default."
       },
       "PatchPremiumCapabilityOverrideRequest": {
         "type": "object",

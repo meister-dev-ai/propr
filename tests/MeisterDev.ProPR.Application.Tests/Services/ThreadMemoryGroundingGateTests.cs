@@ -2,6 +2,7 @@
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
 using MeisterDev.ProPR.Application.DTOs;
+using MeisterDev.ProPR.Application.Features.Reviewing.ThreadMemory.Ports;
 using MeisterDev.ProPR.Application.Interfaces;
 using MeisterDev.ProPR.Application.Options;
 using MeisterDev.ProPR.Application.Services;
@@ -135,7 +136,14 @@ public sealed class ThreadMemoryGroundingGateTests
         var opts = Microsoft.Extensions.Options.Options.Create(new AiReviewOptions());
         var logger = Substitute.For<ILogger<ThreadMemoryService>>();
 
-        var service = new ThreadMemoryService(embedder, repo, recorder, activityLog, opts, logger);
+        var service = new ThreadMemoryService(
+            embedder,
+            repo,
+            recorder,
+            activityLog,
+            opts,
+            logger,
+            Substitute.For<IMemoryReconsiderationPromptBuilder>());
         return (embedder, repo, activityLog, service);
     }
 }

@@ -621,4 +621,28 @@ public sealed class ClientsValidatorTests
         Assert.False(result.IsValid);
         Assert.Contains(result.Errors, e => e.PropertyName == nameof(PatchClientRequest.ReviewPasses));
     }
+
+    [Theory]
+    [InlineData("en")]
+    [InlineData("de")]
+    [InlineData("pt-BR")]
+    [InlineData("")]
+    public void PatchClient_AcceptedOutputLanguage_Passes(string outputLanguage)
+    {
+        var result = PatchClientValidator.Validate(new PatchClientRequest(OutputLanguage: outputLanguage));
+
+        Assert.True(result.IsValid);
+    }
+
+    [Theory]
+    [InlineData("German please")]
+    [InlineData("de_DE")]
+    [InlineData("x")]
+    public void PatchClient_OutputLanguageThatIsNotALanguageTag_FailsOnOutputLanguage(string outputLanguage)
+    {
+        var result = PatchClientValidator.Validate(new PatchClientRequest(OutputLanguage: outputLanguage));
+
+        Assert.False(result.IsValid);
+        Assert.Contains(result.Errors, error => error.PropertyName == nameof(PatchClientRequest.OutputLanguage));
+    }
 }

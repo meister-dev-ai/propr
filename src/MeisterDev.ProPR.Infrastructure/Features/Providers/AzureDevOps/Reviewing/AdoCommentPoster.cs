@@ -1153,6 +1153,11 @@ public sealed class AdoCommentPoster(
     private static string NormalizeCommentMessage(string message)
     {
         var sanitized = HtmlSanitizer.Sanitize(message).Trim();
+
+        // These four prefixes stay English whatever output language the client configured. They are the severity
+        // labels this poster itself prepends, and stripping them is how a re-review recognizes a comment it already
+        // posted. Translating them would make every previously posted comment stop matching, so duplicate
+        // suppression would silently re-post the same finding.
         foreach (var prefix in new[] { "ERROR:", "WARNING:", "SUGGESTION:", "INFO:" })
         {
             if (sanitized.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))

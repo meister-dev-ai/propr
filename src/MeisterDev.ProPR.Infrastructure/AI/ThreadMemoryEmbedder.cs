@@ -22,7 +22,8 @@ public sealed partial class ThreadMemoryEmbedder(
     IOptions<AiReviewOptions> options,
     IAiRuntimeResolver aiRuntimeResolver,
     IChatClient? chatClient = null,
-    ILogger<ThreadMemoryEmbedder>? logger = null) : IThreadMemoryEmbedder
+    ILogger<ThreadMemoryEmbedder>? logger = null,
+    IClientRegistry? clientRegistry = null) : IThreadMemoryEmbedder
 {
     private const string FallbackSummary = ThreadResolutionSummary.GenerationFailedSummary;
 
@@ -76,24 +77,34 @@ public sealed partial class ThreadMemoryEmbedder(
         try
         {
             var prompt = BuildResolutionSummaryPrompt(filePath, changeExcerpt, commentHistory);
+
+            // A stored resolution summary is re-injected into later review prompts, so it follows the client's
+            // output language too. Otherwise memory quietly carries the language of the thread it summarised into
+            // reviews that are meant to read in one language.
+            var outputLanguage = clientRegistry is null
+                ? null
+                : await clientRegistry.GetOutputLanguageAsync(clientId, ct);
+
             var messages = new[]
             {
                 new ChatMessage(
                     ChatRole.System,
-                    """
-                    You are a code review analyst. Given a resolved PR review thread, classify how it was resolved and write a concise summary.
+                    OutputLanguageDirective.Append(
+                        """
+                        You are a code review analyst. Given a resolved PR review thread, classify how it was resolved and write a concise summary.
 
-                    Respond with ONLY a JSON object, no markdown fences and no surrounding prose, in this exact shape:
-                    {"resolution":"<one of: ResolvedByChange, AcceptedWithoutChange, ClosedWithoutResolution, Undetermined>","summary":"<3-5 sentence factual summary>"}
+                        Respond with ONLY a JSON object, no markdown fences and no surrounding prose, in this exact shape:
+                        {"resolution":"<one of: ResolvedByChange, AcceptedWithoutChange, ClosedWithoutResolution, Undetermined>","summary":"<3-5 sentence factual summary>"}
 
-                    Classify "resolution" as:
-                    - ResolvedByChange: the thread was resolved by a code change. Name the specific change in the summary if determinable.
-                    - AcceptedWithoutChange: the concern was explicitly acknowledged as intentional, by-design, or otherwise accepted without a code change.
-                    - ClosedWithoutResolution: the thread was closed with no actual conclusion (for example closed by a reviewer without a fix or a decision, or with no substantive discussion).
-                    - Undetermined: you cannot tell from the available context how or whether the thread was actually resolved.
+                        Classify "resolution" as:
+                        - ResolvedByChange: the thread was resolved by a code change. Name the specific change in the summary if determinable.
+                        - AcceptedWithoutChange: the concern was explicitly acknowledged as intentional, by-design, or otherwise accepted without a code change.
+                        - ClosedWithoutResolution: the thread was closed with no actual conclusion (for example closed by a reviewer without a fix or a decision, or with no substantive discussion).
+                        - Undetermined: you cannot tell from the available context how or whether the thread was actually resolved.
 
-                    Do not invent information not present in the context. If you cannot find a real resolution, use ClosedWithoutResolution or Undetermined rather than guessing one. The "summary" must address: what problem was raised, how it was resolved (or that it was not), which specific change resolved it if determinable, and why the outcome was accepted.
-                    """),
+                        Do not invent information not present in the context. If you cannot find a real resolution, use ClosedWithoutResolution or Undetermined rather than guessing one. The "summary" must address: what problem was raised, how it was resolved (or that it was not), which specific change resolved it if determinable, and why the outcome was accepted.
+                        """,
+                        outputLanguage)),
                 new ChatMessage(ChatRole.User, prompt),
             };
 

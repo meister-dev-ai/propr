@@ -3,6 +3,7 @@
 // This file implements commercial-only functionality. A commercial license is required to activate or use that functionality.
 
 using MeisterDev.ProPR.Domain.Enums;
+using MeisterDev.ProPR.Domain.ValueObjects;
 using MeisterDev.ProPR.Infrastructure.Data.Models;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.ChangeTracking;
@@ -97,6 +98,12 @@ internal sealed class ClientEntityTypeConfiguration : IEntityTypeConfiguration<C
         builder.Property(c => c.IncludeLinkedItemsInContext)
             .HasColumnName("include_linked_items_in_context")
             .HasDefaultValue(true);
+
+        builder.Property(c => c.OutputLanguage)
+            .HasColumnName("output_language")
+            .HasMaxLength(ReviewOutputLanguage.MaxTagLength)
+            .HasDefaultValue(ReviewOutputLanguage.Default)
+            .IsRequired();
 
         builder.Property(c => c.MinimumSeverityToPost)
             .HasColumnName("minimum_severity_to_post")

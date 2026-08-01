@@ -9,6 +9,7 @@ using MeisterDev.ProPR.Application.Features.Reviewing.Execution.Models;
 using MeisterDev.ProPR.Application.Features.Reviewing.Execution.Strategies.Ports;
 using MeisterDev.ProPR.Application.Interfaces;
 using MeisterDev.ProPR.Domain.Enums;
+using MeisterDev.ProPR.Domain.ValueObjects;
 using MeisterDev.ProPR.Infrastructure.Data;
 using MeisterDev.ProPR.Infrastructure.Data.Models;
 using MeisterDev.ProPR.Infrastructure.Features.IdentityAndAccess;
@@ -78,6 +79,7 @@ public sealed class ClientAdminService(
         CommentSeverity? minimumSeverityToPost = null,
         IReadOnlyList<CommentSeverity>? autoResolveSeverities = null,
         bool? codeInsightsCollectionEnabled = null,
+        string? outputLanguage = null,
         CancellationToken ct = default)
     {
         var isCommunityEdition = await this.IsCommunityEditionAsync(ct);
@@ -108,7 +110,8 @@ public sealed class ClientAdminService(
             includeLinkedItemsInContext,
             baselineReasoningEffort,
             minimumSeverityToPost,
-            codeInsightsCollectionEnabled);
+            codeInsightsCollectionEnabled,
+            outputLanguage);
         ReplaceReviewPassesIfProvided(client, reviewPasses);
         ReplaceBudgetCapsIfProvided(client, budgetConfig);
         ReplaceAutoResolveSeveritiesIfProvided(client, autoResolveSeverities);
@@ -131,7 +134,8 @@ public sealed class ClientAdminService(
         bool? includeLinkedItemsInContext,
         ReviewReasoningEffort? baselineReasoningEffort,
         CommentSeverity? minimumSeverityToPost,
-        bool? codeInsightsCollectionEnabled)
+        bool? codeInsightsCollectionEnabled,
+        string? outputLanguage)
     {
         ApplyIfHasValue(isActive, value => client.IsActive = value);
         ApplyIfNotNull(displayName, value => client.DisplayName = value);
@@ -156,6 +160,10 @@ public sealed class ClientAdminService(
         ApplyIfHasValue(codeInsightsCollectionEnabled, value => client.CodeInsightsCollectionEnabled = value);
         ApplyIfHasValue(includeLinkedItemsInContext, value => client.IncludeLinkedItemsInContext = value);
         ApplyIfHasValue(baselineReasoningEffort, value => client.BaselineReasoningEffort = value);
+
+        // A blank tag reads as the default rather than as "clear it": the column is never empty, because every
+        // prose prompt has to be able to name a language.
+        ApplyIfNotNull(outputLanguage, value => client.OutputLanguage = ReviewOutputLanguage.Normalize(value));
     }
 
     private static void ReplaceReviewPassesIfProvided(ClientRecord client, IReadOnlyList<ReviewPassDto>? reviewPasses)
@@ -449,7 +457,8 @@ public sealed class ClientAdminService(
                 client.IncrementBudgetHardCapUsd),
             client.MinimumSeverityToPost,
             client.AutoResolveSeverities,
-            client.CodeInsightsCollectionEnabled);
+            client.CodeInsightsCollectionEnabled,
+            ReviewOutputLanguage.Normalize(client.OutputLanguage));
     }
 
     private async Task<bool> IsCommunityEditionAsync(CancellationToken ct)

@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<!--
+  Analysis scope and JavaScript/TypeScript settings for the SonarScanner for .NET.
+
+  This file has to be passed explicitly, because the scanner only auto-loads a
+  SonarQube.Analysis.xml that sits next to its own executable:
+
+    dotnet sonarscanner begin /k:propr /s:/absolute/path/to/SonarQube.Analysis.xml ...
+
+  Command line /d:name=value arguments override everything set here, so the
+  begin step must no longer pass /d:sonar.exclusions.
+
+  sonar.projectKey, sonar.projectName and sonar.projectVersion cannot be set in
+  this file; keep passing /k:, /n: and /v:. The host URL and the token stay out
+  of it on purpose.
+-->
+<SonarQubeAnalysisProperties xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns="http://www.sonarsource.com/msbuild/integration/2015/1">
+
+  <!--
+    The scanner indexes every file below the project base directory and does not
+    read .gitignore. Without these patterns, nested git worktrees under
+    .claude/worktrees/ and the installed packages beside them are indexed as
+    additional copies of the repository.
+
+    The .env entries matter beyond scan size: the server keeps a copy of every
+    file it indexes, so an indexed .env puts local secrets into its source store.
+  -->
+  <Property Name="sonar.exclusions">**/Migrations/**,**/bin/**,**/obj/**,**/node_modules/**,**/.env,**/.env.*,**/.claude/**,**/.opencode/**,**/.playwright-mcp/**,**/.sonarqube/**,**/.specify/**,**/.agents/**,**/.vscode/**,**/.zed/**,**/.idea/**,**/.gemini/**,.ignore/**,_bmad/**,_bmad-output/**,specs/**</Property>
+
+  <!--
+    Given no explicit list, the analyzer walks the whole tree for tsconfig files
+    and builds one TypeScript program per file it finds, keeping them all in a
+    single Node heap. frontend/tsconfig.json is a solution-style file (empty
+    "files" plus project references), so name the two configs that carry sources.
+  -->
+  <Property Name="sonar.typescript.tsconfigPaths">frontend/tsconfig.app.json,frontend/tsconfig.node.json</Property>
+
+  <!-- Do not add a further program for files that no config above covers. -->
+  <Property Name="sonar.javascript.createTSProgramForOrphanFiles">false</Property>
+
+  <!-- Headroom over the 4288 MB Node default. -->
+  <Property Name="sonar.javascript.node.maxspace">8192</Property>
+
+</SonarQubeAnalysisProperties>

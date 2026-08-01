@@ -2191,7 +2191,8 @@ public partial class ReviewOrchestrationServiceTests
                 Arg.Any<PrCommentThread>(),
                 Arg.Any<IChatClient>(),
                 Arg.Any<string>(),
-                Arg.Any<CancellationToken>())
+                Arg.Any<CancellationToken>(),
+                Arg.Any<string?>())
             .Returns(new ThreadResolutionResult(false, null));
 
         // Build service with custom resolutionCore
@@ -2219,9 +2220,10 @@ public partial class ReviewOrchestrationServiceTests
                 Arg.Is<PrCommentThread>(t => t.ThreadId == 42),
                 Arg.Any<IChatClient>(),
                 Arg.Any<string>(),
-                Arg.Any<CancellationToken>());
+                Arg.Any<CancellationToken>(),
+                Arg.Any<string?>());
         await resolutionCore.DidNotReceiveWithAnyArgs()
-            .EvaluateCodeChangeAsync(null!, null!, null!, null!, Arg.Any<CancellationToken>());
+            .EvaluateCodeChangeAsync(null!, null!, null!, null!, default, null);
 
         // File-by-file review must NOT run — no new commit was pushed
         await orchestrator.DidNotReceiveWithAnyArgs()
@@ -2292,7 +2294,8 @@ public partial class ReviewOrchestrationServiceTests
                 Arg.Any<PrCommentThread>(),
                 Arg.Any<IChatClient>(),
                 Arg.Any<string>(),
-                Arg.Any<CancellationToken>())
+                Arg.Any<CancellationToken>(),
+                Arg.Any<string?>())
             .Returns(new ThreadResolutionResult(false, null));
 
         var stubToolsFactory = CreateDefaultReviewContextToolsFactory();
@@ -2318,9 +2321,10 @@ public partial class ReviewOrchestrationServiceTests
                 Arg.Is<PrCommentThread>(t => t.ThreadId == 84),
                 Arg.Any<IChatClient>(),
                 Arg.Any<string>(),
-                Arg.Any<CancellationToken>());
+                Arg.Any<CancellationToken>(),
+                Arg.Any<string?>());
         await resolutionCore.DidNotReceiveWithAnyArgs()
-            .EvaluateCodeChangeAsync(null!, null!, null!, null!, Arg.Any<CancellationToken>());
+            .EvaluateCodeChangeAsync(null!, null!, null!, null!, default, null);
         await orchestrator.DidNotReceiveWithAnyArgs()
             .ReviewAsync(null!, null!, null!, Arg.Any<CancellationToken>());
         await jobs.Received(1).DeleteAsync(job.Id, Arg.Any<CancellationToken>());
@@ -2375,7 +2379,8 @@ public partial class ReviewOrchestrationServiceTests
                 Arg.Any<PullRequest>(),
                 Arg.Any<IChatClient>(),
                 Arg.Any<string>(),
-                Arg.Any<CancellationToken>())
+                Arg.Any<CancellationToken>(),
+                Arg.Any<string?>())
             .Returns(new ThreadResolutionResult(true, "Closing - fixed in the latest change."));
 
         var threadReplyPublisher = CreateThreadReplyPublisher();
@@ -2464,7 +2469,8 @@ public partial class ReviewOrchestrationServiceTests
                 Arg.Any<PullRequest>(),
                 Arg.Any<IChatClient>(),
                 Arg.Any<string>(),
-                Arg.Any<CancellationToken>())
+                Arg.Any<CancellationToken>(),
+                Arg.Any<string?>())
             .Returns(new ThreadResolutionResult(true, "Closing - fixed in the latest change."));
 
         var threadReplyPublisher = CreateThreadReplyPublisher();
@@ -2566,7 +2572,7 @@ public partial class ReviewOrchestrationServiceTests
         await service.ProcessAsync(job, CancellationToken.None);
 
         await resolutionCore.DidNotReceiveWithAnyArgs()
-            .EvaluateCodeChangeAsync(null!, null!, null!, null!);
+            .EvaluateCodeChangeAsync(null!, null!, null!, null!, default, null);
         await threadReplyPublisher.DidNotReceiveWithAnyArgs()
             .ReplyAsync(default, default!, default!);
         await threadStatusWriter.DidNotReceiveWithAnyArgs()
@@ -2637,7 +2643,8 @@ public partial class ReviewOrchestrationServiceTests
                 Arg.Any<PullRequest>(),
                 Arg.Any<IChatClient>(),
                 Arg.Any<string>(),
-                Arg.Any<CancellationToken>())
+                Arg.Any<CancellationToken>(),
+                Arg.Any<string?>())
             .Returns(new ThreadResolutionResult(false, null));
 
         var stubToolsFactory2 = CreateDefaultReviewContextToolsFactory();
@@ -2665,7 +2672,8 @@ public partial class ReviewOrchestrationServiceTests
                 Arg.Any<PullRequest>(),
                 Arg.Any<IChatClient>(),
                 Arg.Any<string>(),
-                Arg.Any<CancellationToken>());
+                Arg.Any<CancellationToken>(),
+                Arg.Any<string?>());
 
         // The other author's thread must NOT be evaluated
         await resolutionCore.DidNotReceive()
@@ -2674,7 +2682,8 @@ public partial class ReviewOrchestrationServiceTests
                 Arg.Any<PullRequest>(),
                 Arg.Any<IChatClient>(),
                 Arg.Any<string>(),
-                Arg.Any<CancellationToken>());
+                Arg.Any<CancellationToken>(),
+                Arg.Any<string?>());
     }
 
     [Fact]
@@ -2742,7 +2751,8 @@ public partial class ReviewOrchestrationServiceTests
                 Arg.Any<PullRequest>(),
                 Arg.Any<IChatClient>(),
                 Arg.Any<string>(),
-                Arg.Any<CancellationToken>())
+                Arg.Any<CancellationToken>(),
+                Arg.Any<string?>())
             .Returns(new ThreadResolutionResult(false, null));
 
         var stubToolsFactory = CreateDefaultReviewContextToolsFactory();
@@ -2769,7 +2779,8 @@ public partial class ReviewOrchestrationServiceTests
                 Arg.Any<PullRequest>(),
                 Arg.Any<IChatClient>(),
                 Arg.Any<string>(),
-                Arg.Any<CancellationToken>());
+                Arg.Any<CancellationToken>(),
+                Arg.Any<string?>());
 
         await resolutionCore.DidNotReceive()
             .EvaluateCodeChangeAsync(
@@ -2777,7 +2788,8 @@ public partial class ReviewOrchestrationServiceTests
                 Arg.Any<PullRequest>(),
                 Arg.Any<IChatClient>(),
                 Arg.Any<string>(),
-                Arg.Any<CancellationToken>());
+                Arg.Any<CancellationToken>(),
+                Arg.Any<string?>());
     }
 
     [Fact]
@@ -3230,9 +3242,9 @@ public partial class ReviewOrchestrationServiceTests
 
         // Resolution AI must not be called at all — the thread is already fixed
         await resolutionCore.DidNotReceiveWithAnyArgs()
-            .EvaluateCodeChangeAsync(null!, null!, null!, null!);
+            .EvaluateCodeChangeAsync(null!, null!, null!, null!, default, null);
         await resolutionCore.DidNotReceiveWithAnyArgs()
-            .EvaluateConversationalReplyAsync(null!, null!, null!);
+            .EvaluateConversationalReplyAsync(null!, null!, null!, default, null);
     }
 
     [Theory]
@@ -3301,9 +3313,9 @@ public partial class ReviewOrchestrationServiceTests
         await service.ProcessAsync(job, CancellationToken.None);
 
         await resolutionCore.DidNotReceiveWithAnyArgs()
-            .EvaluateCodeChangeAsync(null!, null!, null!, null!);
+            .EvaluateCodeChangeAsync(null!, null!, null!, null!, default, null);
         await resolutionCore.DidNotReceiveWithAnyArgs()
-            .EvaluateConversationalReplyAsync(null!, null!, null!);
+            .EvaluateConversationalReplyAsync(null!, null!, null!, default, null);
     }
 
     // --- T012: US1 PR Abandonment tests (failing until T019 is implemented) ---

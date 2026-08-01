@@ -265,14 +265,20 @@ internal static partial class ReviewPrompts
     {
         if (context?.PromptOverrides.TryGetValue("SynthesisSystemPrompt", out var overrideText) == true)
         {
-            return ComposePrompt(context, PromptStageKeys.SynthesisSystem, PromptStageRole.System, overrideText!);
+            return OutputLanguageDirective.Append(
+                ComposePrompt(context, PromptStageKeys.SynthesisSystem, PromptStageRole.System, overrideText!),
+                context);
         }
 
         var defaultText = PromptTemplateRuntime.RenderStage(
             PromptStageKeys.SynthesisSystem,
             new PromptTemplateModels.SynthesisSystemModel(jsonMode));
 
-        return ComposePrompt(context, PromptStageKeys.SynthesisSystem, PromptStageRole.System, defaultText);
+        // Synthesis writes the pull request's summary narrative. It is the one stage that never received the
+        // client's assembled brief, so the language rule has to reach it on its own.
+        return OutputLanguageDirective.Append(
+            ComposePrompt(context, PromptStageKeys.SynthesisSystem, PromptStageRole.System, defaultText),
+            context);
     }
 
     internal static string BuildPerFileUserMessage(

@@ -156,6 +156,7 @@ describe('useClientDetailViewModel (FR-007, FR-008, FR-012)', () => {
         enableMultiPassUnion: false,
         includeLinkedItemsInContext: true,
         enableLanguageRobustScreening: false,
+        outputLanguage: 'en',
         baselineReasoningEffort: 'none',
       },
     })

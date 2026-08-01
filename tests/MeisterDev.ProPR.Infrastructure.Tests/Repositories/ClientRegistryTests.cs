@@ -617,6 +617,36 @@ public sealed class ClientRegistryTests(PostgresContainerFixture fixture) : IAsy
         Assert.Null(clearedClient.DefaultReviewPipelineProfileUpdatedAtUtc);
     }
 
+    [Fact]
+    public async Task GetOutputLanguageAsync_NewClient_ReturnsTheDefault()
+    {
+        var client = await this.SeedClientAsync();
+
+        var language = await this._registry.GetOutputLanguageAsync(client.Id);
+
+        Assert.Equal(ReviewOutputLanguage.Default, language);
+    }
+
+    [Fact]
+    public async Task GetOutputLanguageAsync_ConfiguredClient_ReturnsTheStoredTag()
+    {
+        var client = await this.SeedClientAsync();
+        client.OutputLanguage = "de";
+        await this._dbContext.SaveChangesAsync();
+
+        var language = await this._registry.GetOutputLanguageAsync(client.Id);
+
+        Assert.Equal("de", language);
+    }
+
+    [Fact]
+    public async Task GetOutputLanguageAsync_UnknownClient_ReturnsTheDefault()
+    {
+        var language = await this._registry.GetOutputLanguageAsync(Guid.NewGuid());
+
+        Assert.Equal(ReviewOutputLanguage.Default, language);
+    }
+
     private async Task<ClientRecord> SeedClientAsync()
     {
         var record = new ClientRecord

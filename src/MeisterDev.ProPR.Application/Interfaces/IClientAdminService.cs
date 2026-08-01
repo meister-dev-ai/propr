@@ -66,6 +66,9 @@ public interface IClientAdminService
     ///     When non-null, replaces the set of severities whose comments are posted already resolved (an empty list
     ///     clears it).
     /// </param>
+    /// <param name="outputLanguage">
+    ///     When non-null, sets the IETF BCP 47 language tag ProPR writes this client's reviewer-facing prose in.
+    /// </param>
     /// <param name="ct">Cancellation token.</param>
     Task<ClientDto?> PatchAsync(
         Guid clientId,
@@ -85,6 +88,7 @@ public interface IClientAdminService
         CommentSeverity? minimumSeverityToPost = null,
         IReadOnlyList<CommentSeverity>? autoResolveSeverities = null,
         bool? codeInsightsCollectionEnabled = null,
+        string? outputLanguage = null,
         CancellationToken ct = default);
 
     /// <summary>

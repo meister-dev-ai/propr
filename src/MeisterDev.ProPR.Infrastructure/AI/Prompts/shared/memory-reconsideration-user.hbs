@@ -1,13 +1,29 @@
 ## Draft Findings from Initial Review
 {{draftFindingsJson}}
 
-## Historical Memory — Past Resolved Threads
+## Historical Memory — Past Resolved Threads and Dismissed Patterns
 {{#each matches}}
-### Match {{index}} (Similarity: {{similarityScore}}, Memory ID: {{memoryRecordId}})
+{{#if isDismissed}}
+### Entry {{index}} ⚠️ ADMIN-DISMISSED PATTERN (Memory ID: {{memoryRecordId}})
+  The administrator has explicitly dismissed this pattern. **DISCARD** any finding that closely matches it.
+{{else}}
+{{#if isExactFileFallback}}
+### Entry {{index}} (Exact file fallback, Memory ID: {{memoryRecordId}})
+{{else}}
+### Entry {{index}} (Similarity: {{similarityScore}}, Memory ID: {{memoryRecordId}})
+{{/if}}
+{{/if}}
 {{#if filePath}}
 - **File**: {{filePath}}
 {{/if}}
+{{#if reviewerOutcome}}
+- **Reviewer outcome**: {{reviewerOutcome}}
+{{/if}}
+{{#if isDismissed}}
+- **Dismissed pattern**: {{resolutionSummary}}
+{{else}}
 - **How it was resolved**: {{resolutionSummary}}
+{{/if}}
 
 {{/each}}
 Reconsider the draft findings above using the historical context. Return your reconsidered findings as a JSON object.

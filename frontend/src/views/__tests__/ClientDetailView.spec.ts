@@ -147,6 +147,7 @@ describe('ClientDetailView', () => {
     expect(adminWrapper.find('input[name="enableEvidenceBackedVerification"]').exists()).toBe(true)
     expect(adminWrapper.find('input[name="enableMultiPassUnion"]').exists()).toBe(true)
     expect(adminWrapper.find('input[name="enableLanguageRobustScreening"]').exists()).toBe(true)
+    expect(adminWrapper.find('input[name="outputLanguage"]').exists()).toBe(true)
 
     hasClientRoleMock.mockImplementation((_clientId: string, minRole: number) => minRole === 0)
 
@@ -157,6 +158,7 @@ describe('ClientDetailView', () => {
     expect(userWrapper.find('input[name="enableEvidenceBackedVerification"]').exists()).toBe(false)
     expect(userWrapper.find('input[name="enableMultiPassUnion"]').exists()).toBe(false)
     expect(userWrapper.find('input[name="enableLanguageRobustScreening"]').exists()).toBe(false)
+    expect(userWrapper.find('input[name="outputLanguage"]').exists()).toBe(false)
   })
 
   it('sends enableEvidenceBackedVerification when saving advanced settings', async () => {
@@ -177,6 +179,7 @@ describe('ClientDetailView', () => {
         enableMultiPassUnion: false,
         includeLinkedItemsInContext: true,
         enableLanguageRobustScreening: false,
+        outputLanguage: 'en',
         baselineReasoningEffort: 'none',
       },
     })
@@ -200,6 +203,7 @@ describe('ClientDetailView', () => {
         enableMultiPassUnion: true,
         includeLinkedItemsInContext: true,
         enableLanguageRobustScreening: false,
+        outputLanguage: 'en',
         baselineReasoningEffort: 'none',
       },
     })
@@ -223,9 +227,58 @@ describe('ClientDetailView', () => {
         enableMultiPassUnion: false,
         includeLinkedItemsInContext: true,
         enableLanguageRobustScreening: true,
+        outputLanguage: 'en',
         baselineReasoningEffort: 'none',
       },
     })
+  })
+
+  it('sends the configured output language when saving advanced settings', async () => {
+    hasClientRoleMock.mockImplementation((_clientId: string, minRole: number) => minRole <= 1)
+
+    const wrapper = await mountView()
+    await flushPromises()
+
+    await wrapper.find('input[name="outputLanguage"]').setValue('de')
+    await wrapper.find('button.scm-advanced-settings-save-btn').trigger('click')
+    await flushPromises()
+
+    expect(patchClientMock).toHaveBeenCalledWith('/clients/{clientId}', {
+      params: { path: { clientId: 'client-1' } },
+      body: {
+        scmCommentPostingEnabled: true,
+        enableEvidenceBackedVerification: false,
+        enableMultiPassUnion: false,
+        includeLinkedItemsInContext: true,
+        enableLanguageRobustScreening: false,
+        outputLanguage: 'de',
+        baselineReasoningEffort: 'none',
+      },
+    })
+  })
+
+  it('shows the stored output language rather than the default', async () => {
+    hasClientRoleMock.mockImplementation((_clientId: string, minRole: number) => minRole <= 1)
+    getClientMock.mockResolvedValue({
+      data: {
+        id: 'client-1',
+        displayName: 'Acme Review Team',
+        isActive: true,
+        createdAt: '2026-04-25T10:00:00Z',
+        scmCommentPostingEnabled: true,
+        enableEvidenceBackedVerification: false,
+        enableMultiPassUnion: false,
+        includeLinkedItemsInContext: true,
+        enableLanguageRobustScreening: false,
+        outputLanguage: 'pt-BR',
+      },
+      response: { status: 200 },
+    })
+
+    const wrapper = await mountView()
+    await flushPromises()
+
+    expect(wrapper.find<HTMLInputElement>('input[name="outputLanguage"]').element.value).toBe('pt-BR')
   })
 
   it('enables the budget Save button after entering a cap value', async () => {

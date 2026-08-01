@@ -14,6 +14,7 @@ using MeisterDev.ProPR.Application.Features.Licensing.Ports;
 using MeisterDev.ProPR.Application.Features.Licensing.Support;
 using MeisterDev.ProPR.Application.Interfaces;
 using MeisterDev.ProPR.Domain.Enums;
+using MeisterDev.ProPR.Domain.ValueObjects;
 using MeisterDev.ProPR.Infrastructure.Features.IdentityAndAccess;
 using Microsoft.AspNetCore.Mvc;
 using MeisterDev.ProPR.Web;
@@ -57,7 +58,8 @@ public sealed class ClientsController(
             client.BudgetConfigOrEmpty,
             client.MinimumSeverityToPost,
             client.AutoResolveSeveritiesOrEmpty,
-            client.CodeInsightsCollectionEnabled);
+            client.CodeInsightsCollectionEnabled,
+            client.OutputLanguage);
     }
 
     private IActionResult? ValidateRequest(ValidationResult result)
@@ -400,6 +402,7 @@ public sealed class ClientsController(
             request.MinimumSeverityToPost,
             request.AutoResolveSeverities,
             request.CodeInsightsCollectionEnabled,
+            request.OutputLanguage,
             ct);
         return client is null ? this.NotFound() : this.Ok(ToClientResponse(client));
     }
@@ -429,7 +432,8 @@ public sealed record ClientResponse(
     BudgetConfigDto? BudgetConfig = null,
     CommentSeverity MinimumSeverityToPost = CommentSeverity.Info,
     IReadOnlyList<CommentSeverity>? AutoResolveSeverities = null,
-    bool CodeInsightsCollectionEnabled = false);
+    bool CodeInsightsCollectionEnabled = false,
+    string OutputLanguage = ReviewOutputLanguage.Default);
 
 /// <summary>One entry in a client's ordered review-pass list: an additional multi-pass union pass bound to a model.</summary>
 /// <param name="Ordinal">Zero-based position of this pass after the implicit tier baseline pass.</param>
@@ -494,6 +498,7 @@ public sealed record CreateClientRequest(string DisplayName, [property: JsonRequ
 ///     Request body for patching a client. All fields are optional; omitted fields are left unchanged.
 ///     Set <see cref="CustomSystemMessage" /> to <c>""</c> (empty string) to clear an existing value.
 ///     Set <see cref="AutoResolveSeverities" /> to an empty array to clear the auto-resolve set.
+///     <see cref="OutputLanguage" /> is an IETF BCP 47 language tag; a blank value resets it to the default.
 /// </summary>
 public sealed record PatchClientRequest(
     bool? IsActive = null,
@@ -510,4 +515,5 @@ public sealed record PatchClientRequest(
     BudgetConfigDto? BudgetConfig = null,
     CommentSeverity? MinimumSeverityToPost = null,
     IReadOnlyList<CommentSeverity>? AutoResolveSeverities = null,
-    bool? CodeInsightsCollectionEnabled = null);
+    bool? CodeInsightsCollectionEnabled = null,
+    string? OutputLanguage = null);

@@ -65,7 +65,8 @@ public sealed class FileByFileReviewOrchestratorMemoryTests
                 Arg.Any<ReviewResult>(),
                 Arg.Any<Guid?>(),
                 Arg.Any<CancellationToken>(),
-                Arg.Any<float?>())
+                Arg.Any<float?>(),
+                Arg.Any<ReviewSystemContext?>())
             .Returns(reconsidered);
 
         chatClient.GetResponseAsync(
@@ -105,7 +106,8 @@ public sealed class FileByFileReviewOrchestratorMemoryTests
                 Arg.Any<ReviewResult>(),
                 Arg.Any<Guid?>(),
                 Arg.Any<CancellationToken>(),
-                Arg.Any<float?>());
+                Arg.Any<float?>(),
+                Arg.Any<ReviewSystemContext?>());
     }
 
     [Fact]
@@ -294,7 +296,8 @@ public sealed class FileByFileReviewOrchestratorMemoryTests
                 Arg.Any<ReviewResult>(),
                 Arg.Any<Guid?>(),
                 Arg.Any<CancellationToken>(),
-                Arg.Any<float?>());
+                Arg.Any<float?>(),
+                Arg.Any<ReviewSystemContext?>());
     }
 
     [Fact]

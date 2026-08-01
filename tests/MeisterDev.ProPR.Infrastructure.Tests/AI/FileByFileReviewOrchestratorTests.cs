@@ -1768,4 +1768,183 @@ public class FileByFileReviewOrchestratorTests
 
         Assert.NotNull(result);
     }
+
+    [Fact]
+    public async Task ReviewAsync_AfterSynthesis_LeavesTheSharedContextModelIdUnchanged()
+    {
+        // Synthesis binds its own model. The context it is handed is shared with every later stage, so the
+        // selection must not survive on it.
+        var (job, pr, aiCore, defaultChatClient, aiConnectionRepo, aiClientFactory) = ArrangeSynthesisTier();
+        var context = CreateContext();
+        context.ModelId = "review-model";
+
+        var sut = CreateOrchestrator(
+            aiCore,
+            CreateProtocolRecorder(),
+            CreateJobRepoFor(job),
+            defaultChatClient,
+            options: SingleCommentQualityFilterOptions(),
+            aiConnectionRepository: aiConnectionRepo,
+            aiClientFactory: aiClientFactory);
+
+        await sut.ReviewAsync(job, pr, context, CancellationToken.None);
+
+        Assert.Equal("review-model", context.ModelId);
+    }
+
+    [Fact]
+    public async Task ReviewAsync_RunsTheQualityFilterOnItsOwnModelNotTheSynthesisModel()
+    {
+        var (job, pr, aiCore, defaultChatClient, aiConnectionRepo, aiClientFactory) = ArrangeSynthesisTier();
+        var context = CreateContext();
+        context.ModelId = "review-model";
+
+        var sut = CreateOrchestrator(
+            aiCore,
+            CreateProtocolRecorder(),
+            CreateJobRepoFor(job),
+            defaultChatClient,
+            options: SingleCommentQualityFilterOptions(),
+            aiConnectionRepository: aiConnectionRepo,
+            aiClientFactory: aiClientFactory);
+
+        await sut.ReviewAsync(job, pr, context, CancellationToken.None);
+
+        // The quality filter runs on the client-scoped review binding it was configured with, on the client the
+        // caller supplied. Synthesis runs on its own tier client and model.
+        await defaultChatClient.Received()
+            .GetResponseAsync(
+                Arg.Any<IList<ChatMessage>>(),
+                Arg.Is<ChatOptions?>(chatOptions => chatOptions != null && chatOptions.ModelId == "review-model"),
+                Arg.Any<CancellationToken>());
+        await defaultChatClient.DidNotReceive()
+            .GetResponseAsync(
+                Arg.Any<IList<ChatMessage>>(),
+                Arg.Is<ChatOptions?>(chatOptions => chatOptions != null && chatOptions.ModelId == "gpt-4o-high"),
+                Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task ReviewAsync_RunsSynthesisOnTheSynthesisModel()
+    {
+        var (job, pr, aiCore, defaultChatClient, aiConnectionRepo, aiClientFactory) = ArrangeSynthesisTier();
+        var tierClient = aiClientFactory.CreateClient("https://high.openai.azure.com/", null);
+        var context = CreateContext();
+        context.ModelId = "review-model";
+
+        var sut = CreateOrchestrator(
+            aiCore,
+            CreateProtocolRecorder(),
+            CreateJobRepoFor(job),
+            defaultChatClient,
+            options: SingleCommentQualityFilterOptions(),
+            aiConnectionRepository: aiConnectionRepo,
+            aiClientFactory: aiClientFactory);
+
+        await sut.ReviewAsync(job, pr, context, CancellationToken.None);
+
+        await tierClient.Received()
+            .GetResponseAsync(
+                Arg.Any<IList<ChatMessage>>(),
+                Arg.Is<ChatOptions?>(chatOptions => chatOptions != null && chatOptions.ModelId == "gpt-4o-high"),
+                Arg.Any<CancellationToken>());
+    }
+
+    // A high-effort tier connection bound to its own model, plus a per-file review that yields one comment so the
+    // quality filter has something to screen.
+    private static (
+        ReviewJob Job,
+        PullRequest Pr,
+        IAiReviewCore AiCore,
+        IChatClient DefaultChatClient,
+        IAiConnectionRepository AiConnectionRepository,
+        IAiChatClientFactory AiClientFactory) ArrangeSynthesisTier()
+    {
+        var job = CreateJob();
+        var pr = CreatePr(CreateFile("src/Foo.cs"));
+
+        var aiCore = Substitute.For<IAiReviewCore>();
+        aiCore.ReviewAsync(Arg.Any<PullRequest>(), Arg.Any<ReviewSystemContext>(), Arg.Any<CancellationToken>())
+            .Returns(
+                new ReviewResult(
+                    "file summary",
+                    [new ReviewComment("src/Foo.cs", 12, CommentSeverity.Warning, "Confirmed null dereference in ExecuteAsync.")]));
+
+        var defaultChatClient = Substitute.For<IChatClient>();
+        defaultChatClient.GetResponseAsync(
+                Arg.Any<IList<ChatMessage>>(),
+                Arg.Any<ChatOptions?>(),
+                Arg.Any<CancellationToken>())
+            .Returns(new ChatResponse(new ChatMessage(ChatRole.Assistant, """{ "comments": [] }""")));
+
+        var tierClient = Substitute.For<IChatClient>();
+        tierClient.GetResponseAsync(
+                Arg.Any<IList<ChatMessage>>(),
+                Arg.Any<ChatOptions?>(),
+                Arg.Any<CancellationToken>())
+            .Returns(new ChatResponse(new ChatMessage(ChatRole.Assistant, "synthesis narrative")));
+
+        var aiClientFactory = Substitute.For<IAiChatClientFactory>();
+        aiClientFactory.CreateClient(Arg.Any<string>(), Arg.Any<string?>()).Returns(tierClient);
+
+        var tierDto = AiConnectionTestFactory.CreateChatConnection(
+            job.ClientId,
+            "gpt-4o-high",
+            AiPurpose.ReviewHighEffort,
+            baseUrl: "https://high.openai.azure.com/");
+        var aiConnectionRepo = Substitute.For<IAiConnectionRepository>();
+        aiConnectionRepo.GetForTierAsync(
+                job.ClientId,
+                AiConnectionModelCategory.HighEffort,
+                Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<AiConnectionDto?>(tierDto));
+
+        return (job, pr, aiCore, defaultChatClient, aiConnectionRepo, aiClientFactory);
+    }
+
+    private static IOptions<AiReviewOptions> SingleCommentQualityFilterOptions()
+    {
+        return Microsoft.Extensions.Options.Options.Create(
+            new AiReviewOptions
+            {
+                MaxFileReviewConcurrency = 1,
+                ModelId = "fallback-model",
+                QualityFilterThreshold = 1,
+            });
+    }
+
+    private static IJobRepository CreateJobRepoFor(ReviewJob job)
+    {
+        var storedResults = new List<ReviewFileResult>();
+        var repo = Substitute.For<IJobRepository>();
+        repo.GetByIdWithFileResultsAsync(job.Id, Arg.Any<CancellationToken>())
+            .Returns(_ => Task.FromResult<ReviewJob?>(WithFileResults(job, storedResults)));
+        repo.AddFileResultAsync(Arg.Any<ReviewFileResult>(), Arg.Any<CancellationToken>())
+            .Returns(call =>
+            {
+                storedResults.Add(call.Arg<ReviewFileResult>());
+                return Task.CompletedTask;
+            });
+        repo.UpdateFileResultAsync(Arg.Any<ReviewFileResult>(), Arg.Any<CancellationToken>())
+            .Returns(Task.CompletedTask);
+        return repo;
+    }
+
+    private static ReviewJob WithFileResults(ReviewJob original, IEnumerable<ReviewFileResult> results)
+    {
+        var copy = new ReviewJob(
+            original.Id,
+            original.ClientId,
+            original.OrganizationUrl,
+            original.ProjectId,
+            original.RepositoryId,
+            original.PullRequestId,
+            original.IterationId);
+        foreach (var result in results)
+        {
+            copy.FileReviewResults.Add(result);
+        }
+
+        return copy;
+    }
 }

@@ -41,6 +41,12 @@ public static class PromptStageCatalog
             [PromptStageKeys.PrVerificationUser] = new(
                 PromptStageKeys.PrVerificationUser, "PR verification user prompt", "shared-downstream", PromptStageRole.User,
                 "ReviewPrompts.BuildPrVerificationUserMessage"),
+            [PromptStageKeys.MemoryReconsiderationSystem] = new(
+                PromptStageKeys.MemoryReconsiderationSystem, "Memory reconsideration system prompt", "shared-downstream", PromptStageRole.System,
+                "ReviewPrompts.BuildMemoryReconsiderationSystemPrompt"),
+            [PromptStageKeys.MemoryReconsiderationUser] = new(
+                PromptStageKeys.MemoryReconsiderationUser, "Memory reconsideration user prompt", "shared-downstream", PromptStageRole.User,
+                "ReviewPrompts.BuildMemoryReconsiderationUserMessage"),
             ["pr_wide_planning_system"] = new(
                 "pr_wide_planning_system", "PR-wide planning system prompt", "pr-wide-agentic", PromptStageRole.System,
                 "ReviewPrompts.BuildPrWidePlanningSystemPrompt"),

@@ -21,6 +21,7 @@
                         <option value="SynthesisSystemPrompt">SynthesisSystemPrompt</option>
                         <option value="QualityFilterSystemPrompt">QualityFilterSystemPrompt</option>
                         <option value="PerFileContextPrompt">PerFileContextPrompt</option>
+                        <option value="MemoryReconsiderationSystemPrompt">MemoryReconsiderationSystemPrompt</option>
                     </select>
                 </label>
             </div>

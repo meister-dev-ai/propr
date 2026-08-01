@@ -320,7 +320,7 @@ internal sealed partial class FileByFileReviewOrchestrator(
         out string summary,
         out IReadOnlyList<CandidateReviewFinding> crossCuttingComments)
     {
-        return SynthesisResponseParser.TryParse(responseText, out summary, out crossCuttingComments);
+        return SynthesisResponseParser.TryParse(responseText, out summary, out crossCuttingComments, out _);
     }
 
     internal static string BuildPerFileFindingId(ReviewFileResult fileResult, int ordinal)

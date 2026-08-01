@@ -115,6 +115,17 @@ public sealed class DbClientRegistry(
     }
 
     /// <inheritdoc />
+    public async Task<string> GetOutputLanguageAsync(Guid clientId, CancellationToken ct = default)
+    {
+        var stored = await dbContext.Clients
+            .Where(c => c.Id == clientId)
+            .Select(c => c.OutputLanguage)
+            .FirstOrDefaultAsync(ct);
+
+        return ReviewOutputLanguage.Normalize(stored);
+    }
+
+    /// <inheritdoc />
     public async Task<bool> GetScmCommentPostingEnabledAsync(Guid clientId, CancellationToken ct = default)
     {
         return await dbContext.Clients

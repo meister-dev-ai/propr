@@ -2,9 +2,11 @@
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
 using MeisterDev.ProPR.Application.DTOs;
+using MeisterDev.ProPR.Application.Features.Reviewing.ThreadMemory.Ports;
 using MeisterDev.ProPR.Application.Interfaces;
 using MeisterDev.ProPR.Application.Options;
 using MeisterDev.ProPR.Application.Services;
+using MeisterDev.ProPR.Application.ValueObjects;
 using MeisterDev.ProPR.Domain.Entities;
 using MeisterDev.ProPR.Domain.Enums;
 using MeisterDev.ProPR.Domain.Events;
@@ -1671,7 +1673,15 @@ public sealed class ThreadMemoryServiceTests
         var logger = Substitute.For<ILogger<ThreadMemoryService>>();
         chatClient = Substitute.For<IChatClient>();
 
-        var service = new ThreadMemoryService(embedder, repo, recorder, activityLog, opts, logger, chatClient);
+        var reconsiderationPrompts = Substitute.For<IMemoryReconsiderationPromptBuilder>();
+        reconsiderationPrompts.BuildSystemPrompt(Arg.Any<ReviewSystemContext?>()).Returns("reconsideration system prompt");
+        reconsiderationPrompts.BuildUserMessage(
+                Arg.Any<string>(),
+                Arg.Any<IReadOnlyList<ThreadMemoryMatchDto>>(),
+                Arg.Any<ReviewSystemContext?>())
+            .Returns("reconsideration user message");
+
+        var service = new ThreadMemoryService(embedder, repo, recorder, activityLog, opts, logger, reconsiderationPrompts, chatClient);
         return (embedder, repo, recorder, activityLog, service);
     }
 }

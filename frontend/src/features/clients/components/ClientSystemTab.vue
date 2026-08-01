@@ -150,6 +150,22 @@
                 </div>
                 <div class="inline-field-row review-publication-row">
                     <div class="form-field flex-1 review-publication-field">
+                        <label for="outputLanguage">Output language</label>
+                        <input id="outputLanguage"
+                            v-model="editedOutputLanguage"
+                            name="outputLanguage" type="text" maxlength="16"
+                            placeholder="en" />
+                        <p class="muted review-publication-copy">
+                            The language the review writes in, as a language tag such as
+                            <strong>en</strong>, <strong>de</strong> or <strong>pt-BR</strong>. It applies to
+                            finding messages, the pull-request summary, thread replies and mention answers, so
+                            every part of a review reads the same way. Defaults to <strong>en</strong>. Severity
+                            labels and the fixed headings ProPR adds around the text stay English.
+                        </p>
+                    </div>
+                </div>
+                <div class="inline-field-row review-publication-row">
+                    <div class="form-field flex-1 review-publication-field">
                         <label for="baselineReasoningEffort">Baseline reasoning effort</label>
                         <select id="baselineReasoningEffort"
                             v-model="editedBaselineReasoningEffort"
@@ -216,6 +232,7 @@ const {
     editedEnableMultiPassUnion,
     editedIncludeLinkedItemsInContext,
     editedEnableLanguageRobustScreening,
+    editedOutputLanguage,
     editedBaselineReasoningEffort,
     reviewProfiles,
     clientReviewProfile,

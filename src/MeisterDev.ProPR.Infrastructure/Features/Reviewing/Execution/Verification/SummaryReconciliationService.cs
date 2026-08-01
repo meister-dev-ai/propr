@@ -20,7 +20,8 @@ public sealed class SummaryReconciliationService : ISummaryReconciliationService
     public SummaryReconciliationResult Reconcile(
         string originalSummary,
         IReadOnlyList<CandidateReviewFinding> findings,
-        IReadOnlyList<FinalGateDecision> decisions)
+        IReadOnlyList<FinalGateDecision> decisions,
+        IReadOnlyList<string>? summaryFindingIds = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(originalSummary);
         ArgumentNullException.ThrowIfNull(findings);
@@ -37,10 +38,19 @@ public sealed class SummaryReconciliationService : ISummaryReconciliationService
             .Select(decision => decision.FindingId)
             .ToArray();
 
-        var rewriteNeeded = droppedFindingIds
-            .Select(id => findingsById.GetValueOrDefault(id))
-            .Where(finding => finding is not null)
-            .Any(finding => SummaryLikelyMentionsFinding(originalSummary, finding!));
+        var declaredIds = summaryFindingIds?
+            .Where(id => !string.IsNullOrWhiteSpace(id))
+            .ToHashSet(StringComparer.Ordinal) ?? [];
+
+        // Synthesis writes the summary and knows which findings it wrote about, so its identifiers decide this.
+        // They hold whether the summary quotes a finding, paraphrases it, or states it in another language, none
+        // of which a wording comparison survives.
+        var rewriteNeeded = declaredIds.Count > 0
+            ? droppedFindingIds.Any(declaredIds.Contains)
+            : droppedFindingIds
+                .Select(id => findingsById.GetValueOrDefault(id))
+                .Where(finding => finding is not null)
+                .Any(finding => SummaryLikelyMentionsFinding(originalSummary, finding!));
 
         if (!rewriteNeeded)
         {
@@ -71,6 +81,12 @@ public sealed class SummaryReconciliationService : ISummaryReconciliationService
             : $"{dropCount} candidate findings were dropped during verification.";
     }
 
+    /// <summary>
+    ///     Wording comparison, used only when synthesis declared no identifiers: a plain-text summary, a summary
+    ///     assembled from per-file text after a JSON parse failure, or a model that omitted the field. It is
+    ///     deliberately generous, because on those paths a missed mention leaves the summary describing a finding
+    ///     with no thread behind it, while a false positive only costs the narrative.
+    /// </summary>
     private static bool SummaryLikelyMentionsFinding(string summary, CandidateReviewFinding finding)
     {
         var needles = new List<string>();

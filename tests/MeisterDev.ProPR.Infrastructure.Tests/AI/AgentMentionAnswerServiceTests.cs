@@ -26,7 +26,7 @@ public sealed class AgentMentionAnswerServiceTests
             secret: "test-key");
     }
 
-    private static AgentMentionAnswerService CreateSut(IChatClient chatClient)
+    private static AgentMentionAnswerService CreateSut(IChatClient chatClient, IClientRegistry? clientRegistry = null)
     {
         var aiConnectionRepository = Substitute.For<IAiConnectionRepository>();
         aiConnectionRepository.GetActiveForClientAsync(ClientId, Arg.Any<CancellationToken>())
@@ -39,7 +39,8 @@ public sealed class AgentMentionAnswerServiceTests
         return new AgentMentionAnswerService(
             aiConnectionRepository,
             aiChatClientFactory,
-            NullLogger<AgentMentionAnswerService>.Instance);
+            NullLogger<AgentMentionAnswerService>.Instance,
+            clientRegistry: clientRegistry);
     }
 
     private static IChatClient MakeChatClient(string reply = "The answer.")
@@ -152,5 +153,27 @@ public sealed class AgentMentionAnswerServiceTests
 
         // Assert
         Assert.Equal("Certainly, here is the answer.", result);
+    }
+
+    [Fact]
+    public async Task AnswerAsync_WithConfiguredOutputLanguage_StatesItInTheSystemPrompt()
+    {
+        var captured = new List<IEnumerable<ChatMessage>>();
+        var chatClient = Substitute.For<IChatClient>();
+        chatClient
+            .GetResponseAsync(
+                Arg.Do<IEnumerable<ChatMessage>>(m => captured.Add(m)),
+                Arg.Any<ChatOptions?>(),
+                Arg.Any<CancellationToken>())
+            .Returns(new ChatResponse(new ChatMessage(ChatRole.Assistant, "ok")));
+
+        var clientRegistry = Substitute.For<IClientRegistry>();
+        clientRegistry.GetOutputLanguageAsync(ClientId, Arg.Any<CancellationToken>()).Returns("de");
+        var sut = CreateSut(chatClient, clientRegistry);
+
+        await sut.AnswerAsync(MakePr(), ClientId, "Is this safe?", 5);
+
+        var systemMessage = captured.Single().Single(m => m.Role == ChatRole.System).Text!;
+        Assert.Contains("`de`", systemMessage, StringComparison.Ordinal);
     }
 }

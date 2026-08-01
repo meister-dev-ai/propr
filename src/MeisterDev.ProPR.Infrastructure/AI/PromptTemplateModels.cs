@@ -39,8 +39,6 @@ internal static class PromptTemplateModels
 
     internal sealed record QualityFilterUserModel(IReadOnlyList<PromptQualityFilterCommentModel> comments);
 
-    internal sealed record MemoryReconsiderationSystemModel(string reviewerIdentity);
-
     internal sealed record MemoryReconsiderationUserModel(
         string draftFindingsJson,
         IReadOnlyList<PromptMemoryMatchModel> matches);
@@ -182,7 +180,15 @@ internal static class PromptTemplateModels
 
     internal sealed record PromptQualityFilterCommentModel(int index, string filePath, string line, string severity, string message);
 
-    internal sealed record PromptMemoryMatchModel(int index, string similarityScore, string memoryRecordId, string? filePath, string resolutionSummary);
+    internal sealed record PromptMemoryMatchModel(
+        int index,
+        string similarityScore,
+        string memoryRecordId,
+        string? filePath,
+        string resolutionSummary,
+        bool isDismissed,
+        bool isExactFileFallback,
+        string? reviewerOutcome);
 
     internal sealed record PromptSummaryItem(string filePath, string summary);
 

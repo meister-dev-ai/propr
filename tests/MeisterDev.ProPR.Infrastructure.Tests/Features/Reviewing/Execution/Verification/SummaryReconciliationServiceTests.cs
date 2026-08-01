@@ -138,4 +138,109 @@ public sealed class SummaryReconciliationServiceTests
         Assert.True(result.RewritePerformed);
         Assert.Contains("finding-drop-1", result.DroppedFindingIds);
     }
+
+    [Fact]
+    public void Reconcile_WhenTheSummaryParaphrasesADroppedFinding_StillRewrites()
+    {
+        // The narrative describes the dropped finding without reusing any of its wording. Reconciling on
+        // the identifiers synthesis declared catches it; comparing prose would not.
+        var sut = new SummaryReconciliationService();
+
+        var result = sut.Reconcile(
+            "One reviewer concern about how components are wired together could not be substantiated.",
+            [DroppedFinding("Missing DI registration across the pipeline.")],
+            [DropDecision()],
+            ["finding-drop-1"]);
+
+        Assert.True(result.RewritePerformed);
+        Assert.Equal("1 candidate finding was dropped during verification.", result.FinalSummary);
+    }
+
+    [Fact]
+    public void Reconcile_WhenTheSummaryIsInAnotherLanguageThanTheDroppedFinding_StillRewrites()
+    {
+        var sut = new SummaryReconciliationService();
+
+        var result = sut.Reconcile(
+            "Die fehlende Registrierung im Dependency-Container zieht sich durch die gesamte Pipeline.",
+            [DroppedFinding("Missing DI registration across the pipeline.")],
+            [DropDecision()],
+            ["finding-drop-1"]);
+
+        Assert.True(result.RewritePerformed);
+    }
+
+    [Fact]
+    public void Reconcile_WhenTheSummaryDoesNotDeclareTheDroppedFinding_LeavesTheNarrativeAlone()
+    {
+        var sut = new SummaryReconciliationService();
+
+        var result = sut.Reconcile(
+            "The change adds a cache and its tests.",
+            [DroppedFinding("Missing DI registration across the pipeline.")],
+            [DropDecision()],
+            ["finding-publish-7"]);
+
+        Assert.False(result.RewritePerformed);
+        Assert.Equal("The change adds a cache and its tests.", result.FinalSummary);
+        Assert.Equal("deterministic_summary_passthrough", result.RuleSource);
+    }
+
+    [Fact]
+    public void Reconcile_WhenTheSummaryDeclaresIdentifiers_IgnoresAccidentalWordingOverlap()
+    {
+        // A short finding message whose words happen to appear in the narrative must not trigger a rewrite
+        // once synthesis has said which findings the narrative is actually about.
+        var sut = new SummaryReconciliationService();
+
+        var result = sut.Reconcile(
+            "The null check added to the parser looks right.",
+            [DroppedFinding("null check")],
+            [DropDecision()],
+            ["finding-publish-7"]);
+
+        Assert.False(result.RewritePerformed);
+    }
+
+    [Fact]
+    public void Reconcile_WithSeveralDroppedFindings_RewritesWhenOnlySomeAreDeclared()
+    {
+        var sut = new SummaryReconciliationService();
+        var findings = new[]
+        {
+            DroppedFinding("Missing DI registration across the pipeline."),
+            DroppedFinding("Unbounded retry loop.", "finding-drop-2"),
+        };
+
+        var result = sut.Reconcile(
+            "One wiring concern was raised.",
+            findings,
+            [DropDecision(), DropDecision("finding-drop-2")],
+            ["finding-drop-2"]);
+
+        Assert.True(result.RewritePerformed);
+        Assert.Equal("2 candidate findings were dropped during verification.", result.FinalSummary);
+    }
+
+    private static CandidateReviewFinding DroppedFinding(string message, string findingId = "finding-drop-1")
+    {
+        return new CandidateReviewFinding(
+            findingId,
+            new CandidateFindingProvenance(CandidateFindingProvenance.SynthesizedCrossCuttingOrigin, "synthesis"),
+            CommentSeverity.Warning,
+            message,
+            CandidateReviewFinding.CrossCuttingCategory);
+    }
+
+    private static FinalGateDecision DropDecision(string findingId = "finding-drop-1")
+    {
+        return new FinalGateDecision(
+            findingId,
+            FinalGateDecision.DropDisposition,
+            [ReviewFindingGateReasonCodes.InvariantContradiction],
+            "invariant_contradiction_rules",
+            ["review_comment_message_required"],
+            null,
+            null);
+    }
 }

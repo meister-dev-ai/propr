@@ -27,13 +27,15 @@ public sealed class ThreadMemoryEmbedderTests
 
     private static ThreadMemoryEmbedder BuildEmbedder(
         IChatClient? chatClient = null,
-        IAiRuntimeResolver? aiRuntimeResolver = null)
+        IAiRuntimeResolver? aiRuntimeResolver = null,
+        IClientRegistry? clientRegistry = null)
     {
         var opts = Microsoft.Extensions.Options.Options.Create(new AiReviewOptions());
         return new ThreadMemoryEmbedder(
             opts,
             aiRuntimeResolver ?? Substitute.For<IAiRuntimeResolver>(),
-            chatClient ?? Substitute.For<IChatClient>());
+            chatClient ?? Substitute.For<IChatClient>(),
+            clientRegistry: clientRegistry);
     }
 
     [Fact]
@@ -309,5 +311,30 @@ public sealed class ThreadMemoryEmbedderTests
                 Arg.Any<CancellationToken>())
             .Returns(new ChatResponse([new ChatMessage(ChatRole.Assistant, assistantText)]));
         return chatClient;
+    }
+
+    [Fact]
+    public async Task GenerateResolutionSummaryAsync_WithConfiguredOutputLanguage_StatesItInTheSystemPrompt()
+    {
+        var captured = new List<IEnumerable<ChatMessage>>();
+        var chatClient = Substitute.For<IChatClient>();
+        chatClient.GetResponseAsync(
+                Arg.Do<IEnumerable<ChatMessage>>(messages => captured.Add(messages)),
+                Arg.Any<ChatOptions?>(),
+                Arg.Any<CancellationToken>())
+            .Returns(
+                new ChatResponse(
+                    new ChatMessage(
+                        ChatRole.Assistant,
+                        """{"resolution":"AcceptedWithoutChange","summary":"Accepted as intentional."}""")));
+
+        var clientRegistry = Substitute.For<IClientRegistry>();
+        clientRegistry.GetOutputLanguageAsync(ClientId, Arg.Any<CancellationToken>()).Returns("de");
+        var embedder = BuildEmbedder(chatClient, clientRegistry: clientRegistry);
+
+        await embedder.GenerateResolutionSummaryAsync("src/Foo.cs", "diff", "history", ClientId);
+
+        var systemMessage = captured.Single().Single(message => message.Role == ChatRole.System).Text!;
+        Assert.Contains("`de`", systemMessage, StringComparison.Ordinal);
     }
 }

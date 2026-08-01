@@ -66,12 +66,13 @@ public sealed class AgentAiCommentResolutionCore : IAiCommentResolutionCore
         PullRequest pr,
         IChatClient chatClient,
         string modelId,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        string? outputLanguage = null)
     {
         var userMessage = BuildCodeChangeUserMessage(thread, pr);
         var messages = new List<ChatMessage>
         {
-            new(ChatRole.System, CodeChangeSystemPrompt),
+            new(ChatRole.System, OutputLanguageDirective.Append(CodeChangeSystemPrompt, outputLanguage)),
             new(ChatRole.User, userMessage),
         };
 
@@ -88,12 +89,13 @@ public sealed class AgentAiCommentResolutionCore : IAiCommentResolutionCore
         PrCommentThread thread,
         IChatClient chatClient,
         string modelId,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        string? outputLanguage = null)
     {
         var userMessage = BuildConversationalUserMessage(thread);
         var messages = new List<ChatMessage>
         {
-            new(ChatRole.System, ConversationalSystemPrompt),
+            new(ChatRole.System, OutputLanguageDirective.Append(ConversationalSystemPrompt, outputLanguage)),
             new(ChatRole.User, userMessage),
         };
 

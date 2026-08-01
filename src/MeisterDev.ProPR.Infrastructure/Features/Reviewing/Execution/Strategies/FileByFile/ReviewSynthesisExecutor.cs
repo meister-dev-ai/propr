@@ -103,7 +103,7 @@ internal sealed class ReviewSynthesisExecutor(
 
         var synthesisRuntime = await this.ResolveSynthesisRuntimeAsync(job, baseContext, effectiveClient, ct);
 
-        effectiveClient = synthesisRuntime.ChatClient;
+        var synthesisClient = synthesisRuntime.ChatClient;
 
         logger.LogInformation("Starting synthesis for job {JobId}", job.Id);
 
@@ -116,7 +116,8 @@ internal sealed class ReviewSynthesisExecutor(
             freshResults,
             perFileSummaries,
             allComments,
-            effectiveClient,
+            synthesisClient,
+            synthesisRuntime.EffectiveModelId,
             protocolId,
             ct);
 
@@ -227,7 +228,11 @@ internal sealed class ReviewSynthesisExecutor(
                 false,
                 "skipped")
             : ReviewSummaryGrounding.Ground(
-                reconciler.Reconcile(synthesisOutcome.FinalSummary, candidateFindings, gateDecisions),
+                reconciler.Reconcile(
+                    synthesisOutcome.FinalSummary,
+                    candidateFindings,
+                    gateDecisions,
+                    synthesisOutcome.SummaryFindingIds),
                 candidateFindings,
                 gateDecisions);
 
@@ -309,12 +314,15 @@ internal sealed class ReviewSynthesisExecutor(
             }
         }
 
-        baseContext.ModelId = synthesisModelId
-                              ?? baseContext.ModelId
-                              ?? job.AiModel
-                              ?? options.ModelId;
+        // The effective selection is returned rather than written onto baseContext. That context is shared with
+        // every stage after synthesis, so a stage-specific model id left on it makes those stages run, and report
+        // their token usage, against the synthesis model.
+        var effectiveModelId = synthesisModelId
+                               ?? baseContext.ModelId
+                               ?? job.AiModel
+                               ?? options.ModelId;
 
-        return new SynthesisRuntimeSelection(effectiveClient, synthesisModelId, synthesisLogicalModelName);
+        return new SynthesisRuntimeSelection(effectiveClient, synthesisModelId, synthesisLogicalModelName, effectiveModelId);
     }
 
 
@@ -350,12 +358,14 @@ internal sealed class ReviewSynthesisExecutor(
         IReadOnlyList<ReviewFileResult> freshResults,
         IReadOnlyList<(string FilePath, string Summary)> perFileSummaries,
         IReadOnlyList<ReviewComment> allComments,
-        IChatClient effectiveClient,
+        IChatClient synthesisClient,
+        string? synthesisModelId,
         Guid? protocolId,
         CancellationToken ct)
     {
         string finalSummary;
         IReadOnlyList<CandidateReviewFinding> synthesizedFindings;
+        IReadOnlyList<string> summaryFindingIds = [];
         string? synthesisInputSample = null;
         string? synthesisSystemPrompt = null;
 
@@ -381,9 +391,9 @@ internal sealed class ReviewSynthesisExecutor(
             await PromptStageEvidenceRecorder.RecordAsync(baseContext, PromptStageKeys.SynthesisSystem, systemPrompt, null, ct);
             await PromptStageEvidenceRecorder.RecordAsync(baseContext, PromptStageKeys.SynthesisUser, null, userMessage, ct);
 
-            var response = await effectiveClient.GetResponseAsync(
+            var response = await synthesisClient.GetResponseAsync(
                 messages,
-                new ChatOptions { ModelId = baseContext.ModelId, Temperature = baseContext.Temperature },
+                new ChatOptions { ModelId = synthesisModelId, Temperature = baseContext.Temperature },
                 ct);
 
             var responseText = response.Text ?? string.Empty;
@@ -396,10 +406,11 @@ internal sealed class ReviewSynthesisExecutor(
             var aiCallCount = 1;
             var observedCacheUsage = !usage.IsEstimated;
 
-            if (SynthesisResponseParser.TryParse(responseText, out var parsedSummary, out var parsedCrossCuttingFindings))
+            if (SynthesisResponseParser.TryParse(responseText, out var parsedSummary, out var parsedCrossCuttingFindings, out var parsedSummaryFindingIds))
             {
                 finalSummary = parsedSummary;
                 synthesizedFindings = parsedCrossCuttingFindings;
+                summaryFindingIds = parsedSummaryFindingIds;
             }
             else if (expectsJson && SynthesisResponseParser.LooksLikeJsonObject(responseText))
             {
@@ -411,9 +422,9 @@ internal sealed class ReviewSynthesisExecutor(
                     new(ChatRole.User, BuildSynthesisJsonRepairPrompt()),
                 };
 
-                var repairResponse = await effectiveClient.GetResponseAsync(
+                var repairResponse = await synthesisClient.GetResponseAsync(
                     repairMessages,
-                    new ChatOptions { ModelId = baseContext.ModelId, Temperature = baseContext.Temperature },
+                    new ChatOptions { ModelId = synthesisModelId, Temperature = baseContext.Temperature },
                     ct);
 
                 var repairUsage = AiTokenUsageExtractor.FromResponse(repairResponse);
@@ -426,10 +437,11 @@ internal sealed class ReviewSynthesisExecutor(
                 observedCacheUsage |= !repairUsage.IsEstimated;
 
                 var repairedText = repairResponse.Text ?? string.Empty;
-                if (SynthesisResponseParser.TryParse(repairedText, out parsedSummary, out parsedCrossCuttingFindings))
+                if (SynthesisResponseParser.TryParse(repairedText, out parsedSummary, out parsedCrossCuttingFindings, out parsedSummaryFindingIds))
                 {
                     finalSummary = parsedSummary;
                     synthesizedFindings = parsedCrossCuttingFindings;
+                    summaryFindingIds = parsedSummaryFindingIds;
                     logger.LogInformation("Synthesis JSON repair succeeded for job {JobId}", job.Id);
                 }
                 else
@@ -503,7 +515,7 @@ internal sealed class ReviewSynthesisExecutor(
             }
         }
 
-        return new SynthesisExecutionOutcome(finalSummary, synthesizedFindings);
+        return new SynthesisExecutionOutcome(finalSummary, synthesizedFindings, summaryFindingIds);
     }
 
     private async Task RecordFinalGateProtocolAsync(
@@ -696,7 +708,17 @@ internal sealed class ReviewSynthesisExecutor(
                """;
     }
 
-    private sealed record SynthesisRuntimeSelection(IChatClient ChatClient, string? ModelId, string? LogicalModelName);
+    // ModelId is the synthesis-specific selection (null when none is bound), recorded as the protocol's model.
+    // EffectiveModelId is what the synthesis call actually sends, after falling back to the job's or the
+    // installation's model. It is deliberately not written onto the shared review context.
+    private sealed record SynthesisRuntimeSelection(
+        IChatClient ChatClient,
+        string? ModelId,
+        string? LogicalModelName,
+        string? EffectiveModelId);
 
-    private sealed record SynthesisExecutionOutcome(string FinalSummary, IReadOnlyList<CandidateReviewFinding> SynthesizedFindings);
+    private sealed record SynthesisExecutionOutcome(
+        string FinalSummary,
+        IReadOnlyList<CandidateReviewFinding> SynthesizedFindings,
+        IReadOnlyList<string> SummaryFindingIds);
 }

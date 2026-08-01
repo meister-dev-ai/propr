@@ -4,6 +4,7 @@
 using MeisterDev.ProPR.Application.DTOs;
 using MeisterDev.ProPR.Application.Features.Reviewing.ThreadMemory.Ports;
 using MeisterDev.ProPR.Application.Interfaces;
+using MeisterDev.ProPR.Application.ValueObjects;
 using MeisterDev.ProPR.Domain.Entities;
 using MeisterDev.ProPR.Domain.Events;
 using MeisterDev.ProPR.Domain.ValueObjects;
@@ -54,9 +55,19 @@ public sealed class ReviewThreadMemoryServiceAdapter(IThreadMemoryService inner)
         ReviewResult draftResult,
         Guid? protocolId,
         CancellationToken ct = default,
-        float? temperature = null)
+        float? temperature = null,
+        ReviewSystemContext? reviewContext = null)
     {
-        return inner.RetrieveAndReconsiderAsync(clientId, job, filePath, changeExcerpt, draftResult, protocolId, ct, temperature);
+        return inner.RetrieveAndReconsiderAsync(
+            clientId,
+            job,
+            filePath,
+            changeExcerpt,
+            draftResult,
+            protocolId,
+            ct,
+            temperature,
+            reviewContext);
     }
 
     public Task<ThreadMemoryRecord> DismissFindingAsync(

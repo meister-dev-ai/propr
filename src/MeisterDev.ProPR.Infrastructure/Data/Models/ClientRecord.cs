@@ -2,6 +2,7 @@
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
 using MeisterDev.ProPR.Domain.Enums;
+using MeisterDev.ProPR.Domain.ValueObjects;
 
 namespace MeisterDev.ProPR.Infrastructure.Data.Models;
 
@@ -83,6 +84,14 @@ public sealed class ClientRecord
     ///     <see langword="true" /> so the review can judge changes against their intended direction.
     /// </summary>
     public bool IncludeLinkedItemsInContext { get; set; } = true;
+
+    /// <summary>
+    ///     The natural language this client's reviewer-facing prose is written in, as an IETF BCP 47 language tag.
+    ///     Defaults to <see cref="Domain.ValueObjects.ReviewOutputLanguage.Default" />. The language is never
+    ///     detected from the pull request, so every surface of a review reads the same way. Fixed labels ProPR
+    ///     renders around the model's prose stay English.
+    /// </summary>
+    public string OutputLanguage { get; set; } = ReviewOutputLanguage.Default;
 
     /// <summary>
     ///     Minimum severity a review finding must have for its comment to be published to the SCM provider.

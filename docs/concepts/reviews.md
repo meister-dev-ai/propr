@@ -62,6 +62,12 @@ The last step before publication is a deterministic gate. Every finding ends as 
 Two further per-client filters sit after the gate: a **minimum severity to post**, and whether outbound
 SCM commenting is enabled at all - both in [what you can tune](#what-you-can-tune).
 
+A dropped finding also has to leave the summary. The summary is written before the gate runs, so it can
+describe a finding the gate then rules out. To catch that, the summary pass names the findings its
+narrative is about, and a narrative that names a dropped finding is replaced with a short note saying how
+many candidates were dropped. Naming findings rather than comparing wording is what makes this work when
+the summary paraphrases a finding instead of quoting it.
+
 Every one of these decisions is recorded in the review's own protocol, which is where a "why did it say
 that" question is answered - see
 [what to look at when a review misbehaves](../operate/observability.md#what-to-look-at-when-a-review-misbehaves).
@@ -83,6 +89,7 @@ Everything below is set in the management UI. Unless noted, the scope is one cli
 | Review pass list | Per client | Which extra passes run, on which model, and with which lens - see [Review passes](#review-passes) |
 | Evidence-backed verification | Per client | Lets the reviewer read the anchor code to confirm findings the deterministic verifier would otherwise withhold - fewer correct findings lost to caution, at the cost of extra model calls |
 | Language-robust comment screening | Per client | Screens hedged or vague comments by meaning using multilingual embeddings instead of English phrase lists, folding low-confidence ones into the summary. Off by default |
+| Output language | Per client | The language the review writes in - see [Output language](#output-language) |
 | Linked work items and issues | Per client | Pulls the work items or issues linked to the pull request into the review context, so the change is judged against its intended direction. On by default |
 | Exclusion rules | Per repository | Glob patterns read from the repository - see [configuring ProPR from your repository](repository-configuration.md) |
 | Minimum severity to post | Per client | Findings below it stay out of the pull request but remain visible in the ProPR review. Order, high to low: error, warning, suggestion, info |
@@ -97,6 +104,28 @@ running job from scanning further files and concludes it with a summary. A hard 
 calls in all three scopes. The tenant Budget and Spend views are read-only roll-ups over the tenant's
 clients - they report and forecast, they never enforce. Budgeting requires a commercial license; see
 [editions and licensed features](../reference/editions.md).
+
+### Output language
+
+The **Output language** setting on the client's System tab is the language ProPR writes its review prose
+in. It is a language tag such as `en`, `de` or `pt-BR`, and it defaults to `en`.
+
+The setting reaches every place the model writes for a reader: the finding messages posted as threads,
+the pull-request summary, the replies ProPR leaves when it closes or continues a thread, the answers to
+`@propr` mentions, and the thread-memory summaries a later review reads back. All of them state the same
+language, so one review does not arrive part German and part English.
+
+ProPR never guesses the language from the pull request. That is deliberate: a change whose title,
+comments and code are in different languages would otherwise produce a different result on every call,
+and the summary would not match the findings it summarises.
+
+The fixed text ProPR adds around the model's prose stays English whatever you configure. That is the
+severity label on each comment (`ERROR:`, `WARNING:`, `SUGGESTION:`, `INFO:`), the `**AI Review Summary**`
+heading, and the notes about verification, carried-forward files and budget caps. Two of those labels are
+matched as data on pull requests ProPR already commented on: the severity prefix is how a re-review
+recognises its own comment and avoids posting it twice, and the summary heading is how ProPR keeps its own
+summary out of its recall measurements. Translating either would break those checks on every pull request
+that already exists.
 
 ### Review passes
 
@@ -147,6 +176,7 @@ what the model sees in place of the built-in text.
 | `PerFileContextPrompt` | How one changed file and its surrounding context are framed |
 | `QualityFilterSystemPrompt` | The screening call that judges whether a produced comment is worth posting |
 | `SynthesisSystemPrompt` | The cross-file pass that summarises findings and removes duplicates |
+| `MemoryReconsiderationSystemPrompt` | The pass that re-judges draft findings against how similar threads were settled before |
 
 One override per client per key. Saving a second for the same key is refused. Delete an override to
 return that segment to the built-in text.
@@ -156,8 +186,9 @@ Two consequences worth knowing before you use these:
 - Overriding `SystemPrompt` replaces the whole assembled brief, so the repository instruction files, the
   dismissed-finding patterns and the client's own system message are no longer injected into it. If you
   rely on any of those, restate them in the override.
-- Every key except `SynthesisSystemPrompt` is a stage where the client's review-aggressiveness posture is
-  expressed. An override is fixed text, so aggressiveness stops affecting the stage you overrode.
+- Every key except `SynthesisSystemPrompt` and `MemoryReconsiderationSystemPrompt` is a stage where the
+  client's review-aggressiveness posture is expressed. An override is fixed text, so aggressiveness stops
+  affecting the stage you overrode.
 
 This is the heavy instrument, and a poor override degrades every review the client runs. For team
 conventions - "we do not use exceptions for control flow", "be strict about migrations" - prefer

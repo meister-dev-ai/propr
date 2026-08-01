@@ -50,7 +50,8 @@ public sealed class FileByFileReviewOrchestratorCommentRelevanceFilterTests
                 Arg.Any<ReviewResult>(),
                 Arg.Any<Guid?>(),
                 Arg.Any<CancellationToken>(),
-                Arg.Any<float?>())
+                Arg.Any<float?>(),
+                Arg.Any<ReviewSystemContext?>())
             .Returns(callInfo =>
             {
                 memoryInput = callInfo.Arg<ReviewResult>().Comments;

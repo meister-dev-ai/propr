@@ -1,10 +1,12 @@
 // Copyright (c) Andreas Rain.
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
+using System.Globalization;
 using MeisterDev.ProPR.Application.DTOs;
 using MeisterDev.ProPR.Application.Features.Reviewing.Execution.Models;
 using MeisterDev.ProPR.Application.Options;
 using MeisterDev.ProPR.Application.ValueObjects;
+using MeisterDev.ProPR.Domain.Enums;
 using MeisterDev.ProPR.Domain.ValueObjects;
 using MeisterDev.ProPR.Infrastructure.Features.Reviewing.Execution.Strategies.FileByFile;
 
@@ -72,7 +74,11 @@ internal static partial class ReviewPrompts
                     designReviewScope));
         }
 
-        return ComposePrompt(context, PromptStageKeys.GlobalSystem, PromptStageRole.System, baseSystemPrompt);
+        // The language rule is appended after composition so it survives a SystemPrompt override, which replaces
+        // the assembled brief wholesale.
+        return OutputLanguageDirective.Append(
+            ComposePrompt(context, PromptStageKeys.GlobalSystem, PromptStageRole.System, baseSystemPrompt),
+            context);
     }
 
     /// <summary>
@@ -276,33 +282,93 @@ internal static partial class ReviewPrompts
     }
 
     /// <summary>
-    ///     System prompt for the memory-augmented reconsideration step (US3, feature 026).
+    ///     System prompt for the memory-augmented reconsideration step.
     ///     Instructs the AI to review draft findings in light of historical resolved threads.
     /// </summary>
-    internal static string BuildMemoryReconsiderationSystemPrompt(string reviewerIdentity)
+    internal static string BuildMemoryReconsiderationSystemPrompt(ReviewSystemContext? context)
     {
-        return PromptTemplateRuntime.RenderStage(
-            "memory_reconsideration_system",
-            new PromptTemplateModels.MemoryReconsiderationSystemModel(reviewerIdentity));
+        if (context?.PromptOverrides.TryGetValue("MemoryReconsiderationSystemPrompt", out var overrideText) == true)
+        {
+            return OutputLanguageDirective.Append(
+                ComposePrompt(context, PromptStageKeys.MemoryReconsiderationSystem, PromptStageRole.System, overrideText!),
+                context);
+        }
+
+        var defaultText = PromptTemplateRuntime.RenderStage(PromptStageKeys.MemoryReconsiderationSystem);
+
+        return OutputLanguageDirective.Append(
+            ComposePrompt(context, PromptStageKeys.MemoryReconsiderationSystem, PromptStageRole.System, defaultText),
+            context);
     }
 
     /// <summary>
     ///     User message for the memory-augmented reconsideration step.
-    ///     Combines draft findings JSON with formatted historical matches.
+    ///     Combines draft findings JSON with formatted historical matches. An admin-dismissed pattern is
+    ///     labelled as such and carries a discard instruction; an exact-file fallback match is labelled
+    ///     instead of carrying a similarity score, because its score is not a semantic distance.
     /// </summary>
     internal static string BuildMemoryReconsiderationUserMessage(
         string draftFindingsJson,
-        IReadOnlyList<ThreadMemoryMatchDto> matches)
+        IReadOnlyList<ThreadMemoryMatchDto> matches,
+        ReviewSystemContext? context = null)
     {
-        return PromptTemplateRuntime.RenderStage(
-            "memory_reconsideration_user",
+        ArgumentNullException.ThrowIfNull(matches);
+
+        var defaultText = PromptTemplateRuntime.RenderStage(
+            PromptStageKeys.MemoryReconsiderationUser,
             new PromptTemplateModels.MemoryReconsiderationUserModel(
                 draftFindingsJson,
                 matches.Select((match, index) => new PromptTemplateModels.PromptMemoryMatchModel(
                     index + 1,
-                    match.SimilarityScore.ToString("F2"),
+                    match.SimilarityScore.ToString("F2", CultureInfo.InvariantCulture),
                     match.MemoryRecordId.ToString(),
                     match.FilePath,
-                    match.ResolutionSummary)).ToList()));
+                    match.ResolutionSummary,
+                    match.Source == MemorySource.AdminDismissed,
+                    string.Equals(match.MatchSource, "exact_file_fallback", StringComparison.Ordinal),
+                    match.Source == MemorySource.AdminDismissed ? null : DescribeReviewerOutcome(match))).ToList()));
+
+        return ComposePrompt(context, PromptStageKeys.MemoryReconsiderationUser, PromptStageRole.User, defaultText);
+    }
+
+    /// <summary>
+    ///     States what the reviewer's resolution meant, so the model is not left inferring it from prose. A
+    ///     rejection and a fix imply opposite actions on a recurrence, and an acceptance the discussion never
+    ///     made explicit is worth less than one it did. Returns <see langword="null" /> for a record that
+    ///     carries no reviewer outcome, so nothing is claimed about it.
+    /// </summary>
+    private static string? DescribeReviewerOutcome(ThreadMemoryMatchDto match)
+    {
+        // Only an explicit acceptance without a code change, reached by a content match, reads as a decision
+        // the reviewer stated plainly. Every other clarity, including one this code does not know, and every
+        // memory pulled in only because it sits on the same file, is reported as the weaker signal. A new
+        // clarity value or a file-level coincidence can therefore never become an instruction to drop a
+        // finding.
+        var matchedOnContent = !string.Equals(match.MatchSource, "exact_file_fallback", StringComparison.Ordinal);
+
+        return match switch
+        {
+            { Intent: ThreadResolutionIntent.AcceptedByHuman, Clarity: ResolutionClarity.AcceptedWithoutChange }
+                when matchedOnContent =>
+                "A reviewer rejected this concern and accepted the code as it stands. **DISCARD** a draft "
+                + "finding that raises this same concern about this same code.",
+
+            // Two different weaknesses, and saying the wrong one gives the model a false reason to trust or
+            // distrust the record. A file-path match is a weak link to the draft finding; an unclear
+            // discussion is a weak decision even when the match itself is exact.
+            { Intent: ThreadResolutionIntent.AcceptedByHuman } when !matchedOnContent =>
+                "A reviewer rejected a concern in this file and accepted the code as it stands, but this "
+                + "record was found only because it sits on the same file, not because it matches this "
+                + "finding. Treat it as low confidence and weigh it against the code you see.",
+            { Intent: ThreadResolutionIntent.AcceptedByHuman } =>
+                "A reviewer rejected this concern and accepted the code as it stands, but the discussion did "
+                + "not say so plainly. Treat the decision as low confidence and weigh it against the code "
+                + "you see.",
+            { Intent: ThreadResolutionIntent.ClaimsFix } =>
+                "A reviewer marked a concern here fixed and the code at that spot changed. That is not a "
+                + "decision to accept the concern, so on its own it does not justify discarding a finding "
+                + "that raises it again.",
+            _ => null,
+        };
     }
 }

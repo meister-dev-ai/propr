@@ -325,6 +325,7 @@ internal sealed partial class FileReviewer(
             DefaultReviewModelId = baseContext.DefaultReviewModelId,
             ProtocolRecorder = protocolId.HasValue ? protocolRecorder : null,
             PromptOverrides = baseContext.PromptOverrides,
+            OutputLanguage = baseContext.OutputLanguage,
             PerFileHint = new PerFileReviewHint(file.Path, fileIndex, totalFiles, pr.AllPrFileSummaries)
             {
                 ComplexityTier = tier,
@@ -1401,7 +1402,8 @@ internal sealed partial class FileReviewer(
             result,
             state.ProtocolId,
             ct,
-            state.FileContext.Temperature);
+            state.FileContext.Temperature,
+            state.FileContext);
     }
 
     private async Task<ReviewResult> ApplyLocalVerificationStageAsync(

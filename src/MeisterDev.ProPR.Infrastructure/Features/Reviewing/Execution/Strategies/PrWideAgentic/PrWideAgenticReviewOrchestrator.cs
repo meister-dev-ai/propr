@@ -1980,6 +1980,7 @@ public sealed partial class PrWideAgenticReviewOrchestrator(
             SkippedSteps = source.SkippedSteps,
             BaselineReasoningEffort = source.BaselineReasoningEffort,
             ActiveReasoningEffort = source.ActiveReasoningEffort,
+            OutputLanguage = source.OutputLanguage,
         };
     }
 

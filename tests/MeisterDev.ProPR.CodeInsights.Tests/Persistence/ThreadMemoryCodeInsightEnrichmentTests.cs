@@ -2,6 +2,7 @@
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
 using MeisterDev.ProPR.Application.DTOs;
+using MeisterDev.ProPR.Application.Features.Reviewing.ThreadMemory.Ports;
 using MeisterDev.ProPR.Application.Interfaces;
 using MeisterDev.ProPR.Application.Options;
 using MeisterDev.ProPR.Application.Services;
@@ -238,6 +239,7 @@ public sealed class ThreadMemoryCodeInsightEnrichmentTests
                 Substitute.For<IMemoryActivityLog>(),
                 Microsoft.Extensions.Options.Options.Create(new AiReviewOptions()),
                 NullLogger<ThreadMemoryService>.Instance,
+                Substitute.For<IMemoryReconsiderationPromptBuilder>(),
                 codeInsightFindingStore: withCodeInsights ? this.Store : null,
                 memoryKeywordExtractor: withCodeInsights ? this.KeywordExtractor : null,
                 codeInsightsCollectionGate: withCodeInsights ? this.Gate : null);

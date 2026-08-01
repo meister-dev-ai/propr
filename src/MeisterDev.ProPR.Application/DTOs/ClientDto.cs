@@ -2,6 +2,7 @@
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
 using MeisterDev.ProPR.Domain.Enums;
+using MeisterDev.ProPR.Domain.ValueObjects;
 
 namespace MeisterDev.ProPR.Application.DTOs;
 
@@ -31,7 +32,8 @@ public sealed record ClientDto(
     BudgetConfigDto? BudgetConfig = null,
     CommentSeverity MinimumSeverityToPost = CommentSeverity.Info,
     IReadOnlyList<CommentSeverity>? AutoResolveSeverities = null,
-    bool CodeInsightsCollectionEnabled = false)
+    bool CodeInsightsCollectionEnabled = false,
+    string OutputLanguage = ReviewOutputLanguage.Default)
 {
     /// <summary>The ordered review-pass list, or an empty list when none are configured.</summary>
     public IReadOnlyList<ReviewPassDto> ReviewPassesOrEmpty => this.ReviewPasses ?? [];

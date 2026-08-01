@@ -20,6 +20,7 @@ public sealed class PromptOverride
         "SynthesisSystemPrompt",
         "QualityFilterSystemPrompt",
         "PerFileContextPrompt",
+        "MemoryReconsiderationSystemPrompt",
     };
 
     /// <summary>Creates a new <see cref="PromptOverride" />.</summary>
@@ -93,7 +94,7 @@ public sealed class PromptOverride
     /// <summary>
     ///     Named prompt segment this override replaces.
     ///     Valid values: SystemPrompt, AgenticLoopGuidance, SynthesisSystemPrompt, QualityFilterSystemPrompt,
-    ///     PerFileContextPrompt.
+    ///     PerFileContextPrompt, MemoryReconsiderationSystemPrompt.
     /// </summary>
     public string PromptKey { get; private set; }
 

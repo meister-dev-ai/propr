@@ -77,6 +77,24 @@ public static class PromptTemplateRuntime
     ///     resolve correctly before the guidance text is embedded into the global system prompt via
     ///     triple-mustache.
     /// </summary>
+    /// <summary>
+    ///     Renders the <c>output-language</c> shared partial for the given BCP 47 language tag. Every prompt that
+    ///     emits reviewer-facing prose appends this one fragment, so all of them state the same rule.
+    /// </summary>
+    internal static string RenderOutputLanguage(string languageTag)
+    {
+        try
+        {
+            var template = FileProvider.Value.ReadSharedPartial("output-language");
+            var partials = PartialRegistry.Value.GetPartials();
+            return Renderer.Value.Render(template, new { outputLanguage = languageTag }, partials).TrimEnd();
+        }
+        catch (InvalidOperationException ex)
+        {
+            throw new InvalidOperationException($"Failed to render output-language partial: {ex.Message}", ex);
+        }
+    }
+
     internal static string RenderAgenticLoopGuidance(bool assertiveCertaintyGate, bool designReviewScope)
     {
         try

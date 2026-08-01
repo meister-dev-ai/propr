@@ -1251,6 +1251,11 @@ public sealed partial class ReviewOrchestrationService(
         var reviewPasses = await clientRegistry.GetReviewPassesAsync(job.ClientId, ct);
         var baselineReasoningEffort = await clientRegistry.GetBaselineReasoningEffortAsync(job.ClientId, ct);
 
+        // The output language is resolved once for the job and carried on the context, so every prose stage of this
+        // review states the same language rather than each call inheriting whatever language its own input happened
+        // to be in.
+        var outputLanguage = await clientRegistry.GetOutputLanguageAsync(job.ClientId, ct);
+
         var workspacePreparation = preparedWorkspace;
 
         if (!workspacePreparation.Succeeded)
@@ -1305,6 +1310,7 @@ public sealed partial class ReviewOrchestrationService(
             Temperature = job.ReviewTemperature,
             PromptOverrides = await LoadPromptOverridesAsync(job.ClientId, promptOverrideService, logger, ct),
             ReviewWorkspace = workspacePreparation.Workspace,
+            OutputLanguage = outputLanguage,
         };
 
         return (systemContext, carriedForwardPaths);
@@ -2297,9 +2303,10 @@ public sealed partial class ReviewOrchestrationService(
         CancellationToken ct)
     {
         var modelId = job.AiModel ?? this._opts.ModelId;
+        var outputLanguage = await clientRegistry.GetOutputLanguageAsync(job.ClientId, ct);
         return isNewIteration
-            ? await resolutionCore.EvaluateCodeChangeAsync(thread, pr, chatClient, modelId, ct)
-            : await resolutionCore.EvaluateConversationalReplyAsync(thread, chatClient, modelId, ct);
+            ? await resolutionCore.EvaluateCodeChangeAsync(thread, pr, chatClient, modelId, ct, outputLanguage)
+            : await resolutionCore.EvaluateConversationalReplyAsync(thread, chatClient, modelId, ct, outputLanguage);
     }
 
     private async Task RecordEvaluationProtocolIfNeededAsync(

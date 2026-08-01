@@ -6,6 +6,7 @@ using MeisterDev.ProPR.Application.Features.Budgeting;
 using MeisterDev.ProPR.Application.Features.Reviewing.Execution.Models;
 using MeisterDev.ProPR.Application.Features.Reviewing.Execution.Ports;
 using MeisterDev.ProPR.Application.Features.Reviewing.Execution.Strategies.Ports;
+using MeisterDev.ProPR.Application.Features.Reviewing.ThreadMemory.Ports;
 using MeisterDev.ProPR.Application.Interfaces;
 using MeisterDev.ProPR.Infrastructure.Features.Reviewing.ThreadMemory;
 using MeisterDev.ProPR.Application.Options;
@@ -213,6 +214,8 @@ public static class ReviewingModuleServiceCollectionExtensions
         // orchestrator uses to run a pr_wide-scope pass at the job level.
         services.AddScoped<IPrWideCandidateGenerator>(sp => (PrWideAgenticReviewOrchestrator)sp.GetRequiredService<IPrWideAgenticReviewOrchestrator>());
         services.AddSingleton<IAiCommentResolutionCore, AgentAiCommentResolutionCore>();
+
+        services.TryAddSingleton<IMemoryReconsiderationPromptBuilder, MemoryReconsiderationPromptBuilder>();
 
         if (hasDatabase)
         {
