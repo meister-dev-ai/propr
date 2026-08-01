@@ -41,6 +41,27 @@ internal static class BrowserOriginPolicy
                        || uri.Host.EndsWith(".gallerycdn.vsassets.io", StringComparison.OrdinalIgnoreCase)));
     }
 
+    /// <summary>
+    ///     Whether the origin belongs to a browser extension.
+    /// </summary>
+    /// <remarks>
+    ///     <para>
+    ///         Matched by scheme rather than by value because an extension origin cannot be enumerated:
+    ///         Firefox derives <c>moz-extension://</c> from a UUID it randomises for every installation,
+    ///         so no allow-list entry could ever name it.
+    ///     </para>
+    ///     <para>
+    ///         Chromium exempts an extension's own requests from cross-origin checks when it holds the
+    ///         host permission, so this is not needed there. Firefox does not, and enforces them on the
+    ///         extension's background worker as it would on any page.
+    ///     </para>
+    /// </remarks>
+    public static bool IsExtensionOrigin(string origin)
+    {
+        return origin.StartsWith("moz-extension://", StringComparison.OrdinalIgnoreCase)
+               || origin.StartsWith("chrome-extension://", StringComparison.OrdinalIgnoreCase);
+    }
+
     private static string? TryGetPublicUiOrigin(IConfiguration configuration)
     {
         var configuredPublicBaseUrl = PublicApplicationUrlResolver.GetConfiguredPublicBaseUrl(configuration);

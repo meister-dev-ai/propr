@@ -6,6 +6,7 @@ using MeisterDev.ProPR.Application.Features.Reviewing.Intake.Commands.StopReview
 using MeisterDev.ProPR.Application.Features.Reviewing.Intake.Commands.SubmitReviewJob;
 using MeisterDev.ProPR.Application.Features.Reviewing.Intake.Ports;
 using MeisterDev.ProPR.Application.Features.Reviewing.Intake.Queries.GetReviewJobStatus;
+using MeisterDev.ProPR.Application.Features.Reviewing.Intake.Queries.ResolvePullRequest;
 using MeisterDev.ProPR.Application.Interfaces;
 using MeisterDev.ProPR.Infrastructure.Data;
 using MeisterDev.ProPR.Infrastructure.Features.Reviewing.Intake.Persistence;
@@ -47,6 +48,7 @@ public static class ReviewingIntakeServiceCollectionExtensions
         services.AddScoped<RestartReviewJobHandler>();
         services.AddScoped<StopReviewJobHandler>();
         services.AddScoped<GetReviewJobStatusHandler>();
+        services.AddScoped<ResolvePullRequestHandler>();
 
         return services;
     }

@@ -14142,6 +14142,112 @@
         }
       }
     },
+    "/pull-requests/resolve": {
+      "get": {
+        "tags": [
+          "PullRequestResolution"
+        ],
+        "summary": "Resolves which of the caller's clients cover a pull request, and under which coordinates.",
+        "description": "Review-scoped endpoints are addressed by scope path, project key, repository identity, and number,\nbut a pull request's web address carries only a host, an owner segment, a repository name, and a\nnumber. For Azure DevOps and Forgejo the remaining two are opaque identifiers that appear nowhere\nin the address, so a client that only knows the address cannot construct a request without this\nendpoint. Resolution reads persisted crawl configuration and calls no provider, so it uses no\nsource-control credential and returns the same stored coordinates a review job carries.",
+        "parameters": [
+          {
+            "name": "HostBaseUrl",
+            "in": "query",
+            "description": "Host as it appears in the address, for example `https://dev.azure.com` or\n`http://forgejo.internal:3000`. Only the scheme and authority are significant.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "ScopePath",
+            "in": "query",
+            "description": "Owner, namespace, or organization segment from the address, for example `local_admin` or\n`meister-dev`. Omitting it widens the match to every configured scope on the host.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "RepositoryName",
+            "in": "query",
+            "description": "Repository name as it appears in the address.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "PullRequestNumber",
+            "in": "query",
+            "description": "Pull request number as it appears in the address.",
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Zero or more matches. An empty list means no client the caller can see covers the repository, which\nis a normal answer; more than one means the caller must choose.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResolvePullRequestResultDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResolvePullRequestResultDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResolvePullRequestResultDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Missing or invalid address components.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid credentials.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/clients/{clientId}/review-archive/pull-requests/threads": {
       "get": {
         "tags": [
@@ -27988,6 +28094,65 @@
         "additionalProperties": false,
         "description": "Rename payload."
       },
+      "ResolvePullRequestResultDto": {
+        "type": "object",
+        "properties": {
+          "matches": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ResolvedPullRequestDto"
+            },
+            "description": "Every client that covers the repository, most precisely matched first. Empty is a normal answer and\nmeans no client covers it. More than one means the caller must choose.",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false,
+        "description": "The full answer for one pull request address."
+      },
+      "ResolvedPullRequestDto": {
+        "type": "object",
+        "properties": {
+          "clientId": {
+            "type": "string",
+            "description": "The client that covers the repository.",
+            "format": "uuid"
+          },
+          "provider": {
+            "$ref": "#/components/schemas/ScmProvider"
+          },
+          "providerScopePath": {
+            "type": "string",
+            "description": "Scope path as configured, ready to pass to a review-scoped endpoint unchanged. This is a stored\nvalue rather than a derived one, which is why it is returned instead of reconstructed by the caller.",
+            "nullable": true
+          },
+          "providerProjectKey": {
+            "type": "string",
+            "description": "Project, workspace, or namespace key as configured.",
+            "nullable": true
+          },
+          "repositoryId": {
+            "type": "string",
+            "description": "Provider repository identity, or null when the covering configuration crawls\nevery repository in its scope and therefore names none. A caller holding null\nknows the repository is covered and cannot yet address it.",
+            "nullable": true
+          },
+          "repositoryName": {
+            "type": "string",
+            "description": "Repository name recorded alongside the identity, when one is known.",
+            "nullable": true
+          },
+          "pullRequestId": {
+            "type": "integer",
+            "description": "The pull request number the query asked about, echoed for convenience.",
+            "format": "int32"
+          },
+          "isActiveConfiguration": {
+            "type": "boolean",
+            "description": "Whether the covering configuration is currently crawling. Resolution deliberately includes inactive\nconfigurations, because past reviews of the repository remain readable."
+          }
+        },
+        "additionalProperties": false,
+        "description": "One client's answer for a pull request, carrying the coordinates every review-scoped endpoint is\naddressed by."
+      },
       "ResolvedReviewerIdentityResponse": {
         "type": "object",
         "properties": {
@@ -30160,6 +30325,9 @@
     },
     {
       "name": "PrReviewView"
+    },
+    {
+      "name": "PullRequestResolution"
     },
     {
       "name": "RetainedPullRequestData"

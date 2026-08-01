@@ -339,6 +339,12 @@ try
         });
     });
 
+    // Extension callers get a policy of their own, without credentials. Their origin cannot be
+    // enumerated — Firefox randomises it per installation — so it is matched by scheme, and a scheme
+    // match must not carry the refresh-token cookie.
+    builder.Services.AddSingleton<Microsoft.AspNetCore.Cors.Infrastructure.ICorsPolicyProvider,
+        BrowserCorsPolicyProvider>();
+
     // Anti-automation on the credential endpoints: a per-client-IP fixed window. Disabled by default under
     // Testing (the in-memory test server has no per-request client IP, which would collapse every request
     // into one partition). Complemented by the per-account lockout in the login path.

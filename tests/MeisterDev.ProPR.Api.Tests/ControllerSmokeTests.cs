@@ -134,6 +134,13 @@ public sealed class ControllerSmokeTests(ControllerSmokeTests.SmokeFactory facto
                 var crawlRepo = Substitute.For<ICrawlConfigurationRepository>();
                 services.AddSingleton(crawlRepo);
 
+                // Pull-request resolution reads webhook coverage beside crawl coverage, and asks the
+                // provider registry only for a repository identity a configuration did not record.
+                services.AddSingleton(Substitute.For<IWebhookConfigurationRepository>());
+                var providerRegistry = Substitute.For<IScmProviderRegistry>();
+                providerRegistry.IsRegistered(Arg.Any<MeisterDev.ProPR.Domain.Enums.ScmProvider>()).Returns(false);
+                services.AddSingleton(providerRegistry);
+
                 services.AddSingleton(Substitute.For<IClientRegistry>());
 
                 services.AddSingleton(Substitute.For<IClientAdoOrganizationScopeRepository>());
