@@ -16360,6 +16360,209 @@
         }
       }
     },
+    "/clients/{clientId}/reviewing/jobs/by-coordinates": {
+      "post": {
+        "tags": [
+          "ReviewJobs"
+        ],
+        "summary": "Review a pull request identified only by its coordinates.",
+        "description": "For callers that can address a pull request but cannot describe its commits. Review intake is\notherwise addressed by revision, which a caller looking at a pull request page has no way to know\nand, without a source-control credential of its own, no way to find out. This action asks the\nprovider on the client's behalf, so the same request starts a first review or a re-review after\nnew commits. Every answer to a well-formed request is a named outcome the caller shows to a\nperson; a malformed one is refused with the plain validation error the rest of this controller\nuses, because a caller that sent nothing usable has no outcome to render.\n\nThe coordinates must be covered by one of this client's crawl or webhook configurations. That\n    match is an authorization boundary as much as a lookup: it is what stops a caller aiming the\n    client's source-control credential at a repository the client never configured. Any user with\n    at least MeisterDev.ProPR.Domain.Enums.ClientRole.ClientUser for the client may trigger a review, matching\n    restart, which also spends money and is deliberately not administrator-gated.",
+        "parameters": [
+          {
+            "name": "clientId",
+            "in": "path",
+            "description": "ID of the client on whose behalf the review is triggered.",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "description": "The pull request's coordinates.",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SubmitReviewByCoordinatesRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SubmitReviewByCoordinatesRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/SubmitReviewByCoordinatesRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "description": "A review job was queued. The response carries its `jobId`.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReviewByCoordinatesResponse"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReviewByCoordinatesResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReviewByCoordinatesResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "One of the coordinates is missing or empty.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid credentials.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Caller lacks `ClientUser` for the client, or no configuration covers the coordinates.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReviewByCoordinatesResponse"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReviewByCoordinatesResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReviewByCoordinatesResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "The provider reports no such pull request.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReviewByCoordinatesResponse"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReviewByCoordinatesResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReviewByCoordinatesResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "A review is already running at this revision, or the pull request cannot be reviewed.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReviewByCoordinatesResponse"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReviewByCoordinatesResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReviewByCoordinatesResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "The pull request resolved, but queueing the review failed.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReviewByCoordinatesResponse"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReviewByCoordinatesResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReviewByCoordinatesResponse"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "The provider could not be asked for the pull request's current revision.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReviewByCoordinatesResponse"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReviewByCoordinatesResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReviewByCoordinatesResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/reviewing/jobs/{jobId}/restart": {
       "post": {
         "tags": [
@@ -28695,6 +28898,27 @@
         "additionalProperties": false,
         "description": "A retained discussion thread for a pull request, with its comments, for the in-app PR view."
       },
+      "ReviewByCoordinatesResponse": {
+        "type": "object",
+        "properties": {
+          "outcome": {
+            "$ref": "#/components/schemas/SubmitReviewByCoordinatesOutcome"
+          },
+          "jobId": {
+            "type": "string",
+            "description": "The review job to follow, when the request reached one.",
+            "format": "uuid",
+            "nullable": true
+          },
+          "reason": {
+            "type": "string",
+            "description": "A sentence explaining a refusal.",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false,
+        "description": "Response returned by coordinate-addressed review submission, whatever the outcome."
+      },
       "ReviewCodeReviewRefDto": {
         "required": [
           "number",
@@ -29460,6 +29684,47 @@
         },
         "additionalProperties": false,
         "description": "Enable/disable request for a user."
+      },
+      "SubmitReviewByCoordinatesOutcome": {
+        "enum": [
+          "submitted",
+          "duplicateActiveJob",
+          "notAuthorized",
+          "pullRequestNotFound",
+          "revisionUnresolvable",
+          "notSubmittable",
+          "submissionFailed"
+        ],
+        "type": "string",
+        "description": "Why a coordinate-addressed review request did or did not produce a review job."
+      },
+      "SubmitReviewByCoordinatesRequest": {
+        "type": "object",
+        "properties": {
+          "providerScopePath": {
+            "type": "string",
+            "description": "Scope path exactly as the covering configuration stores it.",
+            "nullable": true
+          },
+          "providerProjectKey": {
+            "type": "string",
+            "description": "Project, workspace, or namespace key exactly as the covering configuration stores it.",
+            "nullable": true
+          },
+          "repositoryId": {
+            "type": "string",
+            "description": "Provider repository identity.",
+            "nullable": true
+          },
+          "pullRequestId": {
+            "type": "integer",
+            "description": "Pull request number as the provider numbers it.",
+            "format": "int32",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false,
+        "description": "Request payload identifying a pull request by the coordinates ProPR already stores."
       },
       "SubmitReviewRequest": {
         "type": "object",

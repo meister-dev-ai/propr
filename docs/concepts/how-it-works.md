@@ -55,11 +55,12 @@ aligned; see [running published images](../operate/deploy.md#running-published-i
 
 ## How a review gets triggered
 
-Three ways, and they produce the same review:
+Four ways, and they produce the same review:
 
 1. **Webhook** - your SCM host notifies ProPR when a pull request opens or updates. See [webhooks](../platforms/webhooks.md).
 2. **Crawl** - ProPR polls for open pull requests on a schedule you configure. Crawling requires a commercial license; see [editions and licensed features](../reference/editions.md).
-3. **On demand** - a call to the review API, from CI or an extension. See [trigger a review](../reference/api.md#trigger-a-review).
+3. **On demand** - a call to the review API naming the pull request and the commits to review, from CI. See [trigger a review](../reference/api.md#trigger-a-review).
+4. **From coordinates** - a call naming only the client, repository and pull request, for callers such as a browser extension that know which pull request they mean but not which commits it is at. ProPR reads the current commits from your SCM host, so the same call starts a first review or a re-review after a push. The coordinates must be covered by a crawl or webhook configuration. See [trigger a review from coordinates alone](../reference/api.md#trigger-a-review-from-coordinates-alone).
 
 A pull request that already has a review running will not start a second one; the existing job is
 returned instead.

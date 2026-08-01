@@ -48,7 +48,13 @@ public enum PullRequestSynchronizationLifecycleDecision
 /// <param name="ReviewDecision">The review-intake decision.</param>
 /// <param name="LifecycleDecision">The lifecycle decision.</param>
 /// <param name="ActionSummaries">Operator-visible summaries describing what synchronization did.</param>
+/// <param name="JobId">
+///     The review job this pass settled on: the one it queued, or the active one it declined to duplicate.
+///     A caller that asked for the review has nothing to follow the work with unless it comes back. Null
+///     whenever the pass reached no job at all.
+/// </param>
 public sealed record PullRequestSynchronizationOutcome(
     PullRequestSynchronizationReviewDecision ReviewDecision,
     PullRequestSynchronizationLifecycleDecision LifecycleDecision,
-    IReadOnlyList<string> ActionSummaries);
+    IReadOnlyList<string> ActionSummaries,
+    Guid? JobId = null);

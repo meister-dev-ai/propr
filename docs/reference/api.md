@@ -607,6 +607,57 @@ A successful submission returns `202 Accepted` with `jobId` and `status`. A `409
 either an active job already exists for that revision, the pull request is blocked, or another review
 is still running on an installation that runs them one at a time - see [editions](editions.md).
 
+### Trigger a review from coordinates alone
+
+When you know which pull request you mean but not which commits it is at, post the coordinates and let
+ProPR read the revision from your SCM host:
+
+```bash
+curl -k -X POST https://localhost:5443/api/clients/<client-id>/reviewing/jobs/by-coordinates \
+  -H "Content-Type: application/json" \
+  -H "X-User-Pat: <token>" \
+  -d '{
+    "providerScopePath": "https://dev.azure.com/my-org",
+    "providerProjectKey": "my-project",
+    "repositoryId": "<repository-id>",
+    "pullRequestId": 42
+  }'
+```
+
+All four fields are required, and `providerScopePath` and `providerProjectKey` must match a crawl or
+webhook configuration of that client exactly. That match is how ProPR knows which provider family the
+coordinates belong to, and it is a boundary as much as a lookup: it is what keeps the client's
+source-control credential pointed at repositories the client actually configured. When that
+configuration lists specific repositories and recorded their provider ids, `repositoryId` has to be one
+of them; a configuration that lists none covers its whole scope. Deactivating a configuration stops it
+starting reviews by itself but still lets you ask for one, so a manual-only setup is a configuration
+you switch off. The review runs under that configuration's code-knowledge source scope and review
+temperature, so it is the same review the same pull request would get automatically.
+
+This one request serves both the first review and every re-review after new commits, because the
+revision is read fresh each time. An earlier job at an older revision is retired as superseded. Unlike
+the automatic triggers, an explicit request reviews a revision that has already been reviewed, or that
+a previous review failed at: those guards exist to stop an automatic loop repeating itself, and asking
+is the deliberate action they defer to. A review already running at this exact revision is still not
+started twice.
+
+`ClientUser` is enough, matching restart. Every answer to a complete request carries a named `outcome`,
+because the reason matters more than the code:
+
+| `outcome` | Status | Means |
+|---|---|---|
+| `submitted` | 202 | A job was queued. `jobId` is the one to poll |
+| `duplicateActiveJob` | 409 | A review of this revision is already running. `jobId` is that job |
+| `notSubmittable` | 409 | The pull request is closed, merged, blocked, or its configured source scope no longer resolves. `reason` says which |
+| `notAuthorized` | 403 | No configuration of this client covers the coordinates, or you lack the role |
+| `pullRequestNotFound` | 404 | The provider reports no such pull request |
+| `submissionFailed` | 500 | The pull request resolved, but queueing the review failed inside ProPR. The server logs carry the detail |
+| `revisionUnresolvable` | 502 | The provider could not be asked, or answered without commits. Check the connection and retry |
+
+A request missing one of the four fields is the exception: it is refused with `400` and a plain
+`{"error": "..."}`, the same shape the other endpoints on this page use, because there was nothing
+well-formed enough to have an outcome.
+
 Poll the job, and restart or stop it:
 
 ```bash

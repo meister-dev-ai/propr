@@ -60,6 +60,14 @@ public sealed record PullRequestSynchronizationRequest
     /// <summary>When false, synchronization may perform lifecycle checks but must not queue review work.</summary>
     public bool AllowReviewSubmission { get; init; } = true;
 
+    /// <summary>
+    ///     When true, a revision that has already been reviewed, or that a prior review failed at, is queued
+    ///     again anyway. Those two guards exist to stop the automatic loop repeating itself and burning cost;
+    ///     an explicitly requested review is the deliberate action they defer to. Duplicate detection is
+    ///     unaffected, so a review already running at this revision is still not started twice.
+    /// </summary>
+    public bool AllowUnchangedResubmission { get; init; }
+
     /// <summary>Optional PR title snapshot already fetched by the caller.</summary>
     public string? PrTitle { get; init; }
 

@@ -29,6 +29,17 @@ namespace MeisterDev.ProPR.Application.Features.Reviewing.Intake.Queries.Resolve
 ///     without naming anything in it.
 /// </param>
 /// <param name="Source">Which kind of configuration this came from, for diagnostics.</param>
+/// <param name="ProCursorSourceScopeMode">
+///     Which code-knowledge sources a review started under this configuration may read. A review someone
+///     asks for has to be the review the configuration describes, so these settings travel with the
+///     coverage rather than being defaulted at the point of submission.
+/// </param>
+/// <param name="ProCursorSourceIds">The selected code-knowledge sources, when the scope is a selection.</param>
+/// <param name="InvalidProCursorSourceIds">
+///     Selected sources that no longer resolve. They suppress queuing rather than silently narrowing the
+///     scope, so a review is never quietly run against less context than it was configured for.
+/// </param>
+/// <param name="ReviewTemperature">The review temperature this configuration reviews at, when it sets one.</param>
 internal sealed record PullRequestCoverage(
     Guid ClientId,
     ScmProvider Provider,
@@ -36,7 +47,11 @@ internal sealed record PullRequestCoverage(
     string ProviderProjectKey,
     bool IsActive,
     IReadOnlyList<CoveredRepository> CoveredRepositories,
-    CoverageSource Source)
+    CoverageSource Source,
+    ProCursorSourceScopeMode ProCursorSourceScopeMode = ProCursorSourceScopeMode.AllClientSources,
+    IReadOnlyList<Guid>? ProCursorSourceIds = null,
+    IReadOnlyList<Guid>? InvalidProCursorSourceIds = null,
+    float? ReviewTemperature = null)
 {
     public static PullRequestCoverage FromCrawlConfiguration(CrawlConfigurationDto configuration)
     {
@@ -47,11 +62,17 @@ internal sealed record PullRequestCoverage(
             configuration.ProviderProjectKey,
             configuration.IsActive,
             configuration.RepoFilters.Select(CoveredRepository.FromCrawlFilter).ToList().AsReadOnly(),
-            CoverageSource.CrawlConfiguration);
+            CoverageSource.CrawlConfiguration,
+            configuration.ProCursorSourceScopeMode,
+            configuration.ProCursorSourceIds,
+            configuration.InvalidProCursorSourceIds,
+            configuration.ReviewTemperature);
     }
 
     public static PullRequestCoverage FromWebhookConfiguration(WebhookConfigurationDto configuration)
     {
+        // A webhook configuration carries no code-knowledge source scope of its own, so a review it covers
+        // reads whatever the client has, exactly as a webhook-triggered review does today.
         return new PullRequestCoverage(
             configuration.ClientId,
             MapProvider(configuration.ProviderType),
@@ -59,7 +80,8 @@ internal sealed record PullRequestCoverage(
             configuration.ProjectId,
             configuration.IsActive,
             configuration.RepoFilters.Select(CoveredRepository.FromWebhookFilter).ToList().AsReadOnly(),
-            CoverageSource.WebhookConfiguration);
+            CoverageSource.WebhookConfiguration,
+            ReviewTemperature: configuration.ReviewTemperature);
     }
 
     private static ScmProvider MapProvider(WebhookProviderType providerType)

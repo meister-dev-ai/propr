@@ -3,6 +3,7 @@
 
 using MeisterDev.ProPR.Application.Features.Reviewing.Intake.Commands.RestartReviewJob;
 using MeisterDev.ProPR.Application.Features.Reviewing.Intake.Commands.StopReviewJob;
+using MeisterDev.ProPR.Application.Features.Reviewing.Intake.Commands.SubmitReviewByCoordinates;
 using MeisterDev.ProPR.Application.Features.Reviewing.Intake.Commands.SubmitReviewJob;
 using MeisterDev.ProPR.Application.Features.Reviewing.Intake.Ports;
 using MeisterDev.ProPR.Application.Features.Reviewing.Intake.Queries.GetReviewJobStatus;
@@ -45,6 +46,7 @@ public static class ReviewingIntakeServiceCollectionExtensions
 
         services.AddScoped<IReviewExecutionQueue, ReviewExecutionQueue>();
         services.AddScoped<SubmitReviewJobHandler>();
+        services.AddScoped<SubmitReviewByCoordinatesHandler>();
         services.AddScoped<RestartReviewJobHandler>();
         services.AddScoped<StopReviewJobHandler>();
         services.AddScoped<GetReviewJobStatusHandler>();

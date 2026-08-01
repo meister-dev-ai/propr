@@ -240,7 +240,8 @@ public sealed class PullRequestSynchronizationService(
                 [
                     .. activeJobReconciliation.ActionSummaries,
                     duplicateActionSummary,
-                ]);
+                ],
+                addResult.DuplicateJob?.Id);
         }
 
         if (addResult.CancelledSupersededJobCount > 0
@@ -278,7 +279,8 @@ public sealed class PullRequestSynchronizationService(
             [
                 .. activeJobReconciliation.ActionSummaries,
                 $"Submitted review intake job for PR #{request.PullRequestId} at iteration {iterationId} via {request.SummaryLabel}.",
-            ]);
+            ],
+            job.Id);
     }
 
     private static PullRequestSynchronizationOutcome CompleteOutcome(
@@ -407,7 +409,17 @@ public sealed class PullRequestSynchronizationService(
                 PullRequestSynchronizationLifecycleDecision.None,
                 [
                     $"Skipped duplicate active job for PR #{request.PullRequestId} at iteration {iterationId} via {request.SummaryLabel}.",
-                ]);
+                ],
+                existingJob.Id);
+        }
+
+        // Everything below this point is change detection: heuristics that keep the automatic loop from
+        // reviewing the same revision over and over. A caller that asked for this review explicitly has
+        // already decided it wants the work done, so the heuristics do not apply to it. Duplicate detection
+        // stays above, because two concurrent reviews of one revision are a defect under any trigger.
+        if (request.AllowUnchangedResubmission)
+        {
+            return null;
         }
 
         var completedSameIterationAlreadyReviewed = jobs.FindCompletedJob(
@@ -534,7 +546,8 @@ public sealed class PullRequestSynchronizationService(
             new PullRequestSynchronizationOutcome(
                 PullRequestSynchronizationReviewDecision.DuplicateActiveJob,
                 lifecycleDecision,
-                actionSummaries),
+                actionSummaries,
+                duplicateJob.Id),
             lifecycleDecision,
             actionSummaries);
     }
@@ -554,7 +567,8 @@ public sealed class PullRequestSynchronizationService(
             reconciliation.LifecycleDecision == PullRequestSynchronizationLifecycleDecision.None
                 ? outcome.LifecycleDecision
                 : reconciliation.LifecycleDecision,
-            [.. reconciliation.ActionSummaries, .. outcome.ActionSummaries]);
+            [.. reconciliation.ActionSummaries, .. outcome.ActionSummaries],
+            outcome.JobId);
     }
 
     private static string GetStoredRevisionKey(ReviewJob job)

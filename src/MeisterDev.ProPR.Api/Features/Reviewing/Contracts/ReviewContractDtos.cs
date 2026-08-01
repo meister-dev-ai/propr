@@ -2,6 +2,7 @@
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
 using System.Text.Json.Serialization;
+using MeisterDev.ProPR.Application.Features.Reviewing.Intake.Commands.SubmitReviewByCoordinates;
 using MeisterDev.ProPR.Domain.Enums;
 using MeisterDev.ProPR.Domain.ValueObjects;
 
@@ -42,6 +43,36 @@ public sealed record SubmitReviewRequest(
     /// <summary>Optional normalized reviewer identity preferred for publication and automation.</summary>
     public ReviewReviewerIdentityDto? RequestedReviewerIdentity { get; init; }
 }
+
+/// <summary>Request payload identifying a pull request by the coordinates ProPR already stores.</summary>
+/// <remarks>
+///     These are the values pull-request resolution returns. No commit identity appears here: the revision is
+///     read from the provider when the request arrives, which is what lets the same request start a first
+///     review or a re-review after new commits.
+///     <para>
+///         All four are needed and none is marked required, so an incomplete request reaches the action's own
+///         validation and is refused in one shape, instead of being rejected earlier by the JSON binder in a
+///         different one.
+///     </para>
+/// </remarks>
+/// <param name="ProviderScopePath">Scope path exactly as the covering configuration stores it.</param>
+/// <param name="ProviderProjectKey">Project, workspace, or namespace key exactly as the covering configuration stores it.</param>
+/// <param name="RepositoryId">Provider repository identity.</param>
+/// <param name="PullRequestId">Pull request number as the provider numbers it.</param>
+public sealed record SubmitReviewByCoordinatesRequest(
+    string? ProviderScopePath,
+    string? ProviderProjectKey,
+    string? RepositoryId,
+    int? PullRequestId);
+
+/// <summary>Response returned by coordinate-addressed review submission, whatever the outcome.</summary>
+/// <param name="Outcome">The named outcome, which the caller shows to the person who asked for the review.</param>
+/// <param name="JobId">The review job to follow, when the request reached one.</param>
+/// <param name="Reason">A sentence explaining a refusal.</param>
+public sealed record ReviewByCoordinatesResponse(
+    SubmitReviewByCoordinatesOutcome Outcome,
+    Guid? JobId,
+    string? Reason);
 
 /// <summary>Response returned when a review job is accepted or a duplicate is found.</summary>
 public sealed record ReviewJobAcceptedResponse(

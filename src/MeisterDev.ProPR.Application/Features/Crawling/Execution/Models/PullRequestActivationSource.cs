@@ -11,4 +11,11 @@ public enum PullRequestActivationSource
 
     /// <summary>The pull request was activated by a webhook delivery.</summary>
     Webhook = 1,
+
+    /// <summary>
+    ///     Someone asked for this review explicitly. Telemetry and action summaries have to tell a requested
+    ///     review apart from one an automatic trigger found, because the two answer different questions about
+    ///     what a deployment is spending its review budget on.
+    /// </summary>
+    Manual = 2,
 }

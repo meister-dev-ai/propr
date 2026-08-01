@@ -297,6 +297,16 @@ public sealed class ReviewsControllerPostTests(ReviewsControllerPostTests.Review
                 crawlRepo.GetAllActiveAsync(Arg.Any<CancellationToken>())
                     .Returns(Task.FromResult<IReadOnlyList<CrawlConfigurationDto>>([]));
                 services.AddSingleton(crawlRepo);
+
+                // Review intake also accepts pull-request coordinates. Matching them reads webhook coverage
+                // beside crawl coverage, asks the provider registry for a repository identity no
+                // configuration recorded, and submits through the shared synchronization path, which reaches
+                // the provider through the client's connections.
+                services.AddSingleton(Substitute.For<IWebhookConfigurationRepository>());
+                var providerRegistry = Substitute.For<IScmProviderRegistry>();
+                providerRegistry.IsRegistered(Arg.Any<ScmProvider>()).Returns(false);
+                services.AddSingleton(providerRegistry);
+                services.AddSingleton(Substitute.For<IClientScmConnectionRepository>());
             });
         }
 

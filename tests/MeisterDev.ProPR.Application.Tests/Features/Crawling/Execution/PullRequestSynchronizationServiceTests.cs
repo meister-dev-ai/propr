@@ -623,6 +623,225 @@ public sealed class PullRequestSynchronizationServiceTests
                 Arg.Any<CancellationToken>());
     }
 
+    [Fact]
+    public async Task SynchronizeAsync_WhenResubmissionIsAllowed_ReviewsARevisionThatHasNotChanged()
+    {
+        // The change-detection heuristics exist to stop the automatic loop reviewing the same revision
+        // forever. An explicitly requested review is the action they defer to, so it passes through them.
+        var jobs = Substitute.For<IJobRepository>();
+        var threadStatusFetcher = Substitute.For<IReviewerThreadStatusFetcher>();
+        var scanRepository = Substitute.For<IReviewPrScanRepository>();
+
+        jobs.FindActiveJob("https://dev.azure.com/org", "project", "repo-1", 42, 7).Returns((ReviewJob?)null);
+        jobs.FindCompletedJob("https://dev.azure.com/org", "project", "repo-1", 42, 7)
+            .Returns(new ReviewJob(Guid.NewGuid(), ClientId, "https://dev.azure.com/org", "project", "repo-1", 42, 7));
+        jobs.TryAddIfNoActiveDuplicateAsync(Arg.Any<ReviewJob>(), Arg.Any<CancellationToken>())
+            .Returns(new TryAddReviewJobResult(true, null, 0));
+
+        var scan = new ReviewPrScan(Guid.NewGuid(), ClientId, "repo-1", 42, "7");
+        scanRepository.GetAsync(ClientId, "repo-1", 42, Arg.Any<CancellationToken>()).Returns(scan);
+
+        var sut = new PullRequestSynchronizationService(
+            jobs,
+            NullLogger<PullRequestSynchronizationService>.Instance,
+            Substitute.For<IPullRequestIterationResolver>(),
+            threadStatusFetcher,
+            Substitute.For<IThreadMemoryService>(),
+            scanRepository);
+
+        var outcome = await sut.SynchronizeAsync(
+            CreateRequest(PullRequestActivationSource.Manual, "an explicit review request") with
+            {
+                CandidateIterationId = 7,
+                AllowUnchangedResubmission = true,
+            });
+
+        Assert.Equal(PullRequestSynchronizationReviewDecision.Submitted, outcome.ReviewDecision);
+        await jobs.Received(1)
+            .TryAddIfNoActiveDuplicateAsync(Arg.Is<ReviewJob>(job => job.IterationId == 7), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task SynchronizeAsync_WhenResubmissionIsAllowed_ReviewsARevisionAPriorReviewFailedAt()
+    {
+        // Suppressing automatic re-review after a failure is exactly what a manual restart overrides.
+        var jobs = Substitute.For<IJobRepository>();
+
+        jobs.FindActiveJob("https://dev.azure.com/org", "project", "repo-1", 42, 7).Returns((ReviewJob?)null);
+        jobs.FindCompletedJob("https://dev.azure.com/org", "project", "repo-1", 42, 7).Returns((ReviewJob?)null);
+        jobs.FindFailedJob("https://dev.azure.com/org", "project", "repo-1", 42, 7)
+            .Returns(
+                new ReviewJob(Guid.NewGuid(), ClientId, "https://dev.azure.com/org", "project", "repo-1", 42, 7)
+                {
+                    Status = JobStatus.Failed,
+                });
+        jobs.TryAddIfNoActiveDuplicateAsync(Arg.Any<ReviewJob>(), Arg.Any<CancellationToken>())
+            .Returns(new TryAddReviewJobResult(true, null, 0));
+
+        var sut = new PullRequestSynchronizationService(
+            jobs,
+            NullLogger<PullRequestSynchronizationService>.Instance);
+
+        var outcome = await sut.SynchronizeAsync(
+            CreateRequest(PullRequestActivationSource.Manual, "an explicit review request") with
+            {
+                CandidateIterationId = 7,
+                AllowUnchangedResubmission = true,
+            });
+
+        Assert.Equal(PullRequestSynchronizationReviewDecision.Submitted, outcome.ReviewDecision);
+    }
+
+    [Fact]
+    public async Task SynchronizeAsync_WhenResubmissionIsAllowed_StillSkipsAnActiveDuplicate()
+    {
+        // Bypassing the change-detection heuristics must not bypass duplicate detection: two jobs for the
+        // same revision would review it twice and pay twice.
+        var jobs = Substitute.For<IJobRepository>();
+        var existing = new ReviewJob(Guid.NewGuid(), ClientId, "https://dev.azure.com/org", "project", "repo-1", 42, 7)
+        {
+            Status = JobStatus.Pending,
+        };
+        jobs.FindActiveJob("https://dev.azure.com/org", "project", "repo-1", 42, 7).Returns(existing);
+
+        var sut = new PullRequestSynchronizationService(
+            jobs,
+            NullLogger<PullRequestSynchronizationService>.Instance);
+
+        var outcome = await sut.SynchronizeAsync(
+            CreateRequest(PullRequestActivationSource.Manual, "an explicit review request") with
+            {
+                CandidateIterationId = 7,
+                AllowUnchangedResubmission = true,
+            });
+
+        Assert.Equal(PullRequestSynchronizationReviewDecision.DuplicateActiveJob, outcome.ReviewDecision);
+        Assert.Equal(existing.Id, outcome.JobId);
+        await jobs.DidNotReceive().TryAddIfNoActiveDuplicateAsync(Arg.Any<ReviewJob>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task SynchronizeAsync_WhenAJobIsQueued_ReportsItsIdentifier()
+    {
+        // A caller that triggered the review has nothing to poll unless the queued job's id comes back.
+        var jobs = Substitute.For<IJobRepository>();
+        jobs.FindActiveJob("https://dev.azure.com/org", "project", "repo-1", 42, 7).Returns((ReviewJob?)null);
+        jobs.FindCompletedJob("https://dev.azure.com/org", "project", "repo-1", 42, 7).Returns((ReviewJob?)null);
+        jobs.TryAddIfNoActiveDuplicateAsync(Arg.Any<ReviewJob>(), Arg.Any<CancellationToken>())
+            .Returns(new TryAddReviewJobResult(true, null, 0));
+
+        var sut = new PullRequestSynchronizationService(
+            jobs,
+            NullLogger<PullRequestSynchronizationService>.Instance);
+
+        var outcome = await sut.SynchronizeAsync(CreateRequest(PullRequestActivationSource.Crawl, "crawl discovery") with { CandidateIterationId = 7 });
+
+        Assert.Equal(PullRequestSynchronizationReviewDecision.Submitted, outcome.ReviewDecision);
+        Assert.NotNull(outcome.JobId);
+        await jobs.Received(1)
+            .TryAddIfNoActiveDuplicateAsync(
+                Arg.Is<ReviewJob>(job => job.Id == outcome.JobId),
+                Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task SynchronizeAsync_WhenTheReservationFindsADuplicate_ReportsThatJobsIdentifier()
+    {
+        var jobs = Substitute.For<IJobRepository>();
+        var duplicateJob = new ReviewJob(Guid.NewGuid(), ClientId, "https://dev.azure.com/org", "project", "repo-1", 42, 7)
+        {
+            Status = JobStatus.Pending,
+        };
+
+        jobs.FindActiveJob("https://dev.azure.com/org", "project", "repo-1", 42, 7).Returns((ReviewJob?)null);
+        jobs.FindCompletedJob("https://dev.azure.com/org", "project", "repo-1", 42, 7).Returns((ReviewJob?)null);
+        jobs.TryAddIfNoActiveDuplicateAsync(Arg.Any<ReviewJob>(), Arg.Any<CancellationToken>())
+            .Returns(new TryAddReviewJobResult(false, duplicateJob, 0));
+
+        var sut = new PullRequestSynchronizationService(
+            jobs,
+            NullLogger<PullRequestSynchronizationService>.Instance);
+
+        var outcome = await sut.SynchronizeAsync(
+            CreateRequest(PullRequestActivationSource.Webhook, "pull request updated") with
+            {
+                CandidateIterationId = 7,
+            });
+
+        Assert.Equal(PullRequestSynchronizationReviewDecision.DuplicateActiveJob, outcome.ReviewDecision);
+        Assert.Equal(duplicateJob.Id, outcome.JobId);
+    }
+
+    [Fact]
+    public async Task SynchronizeAsync_WhenAnActiveJobAlreadyHoldsTheRevision_ReportsThatJobsIdentifier()
+    {
+        var jobs = Substitute.For<IJobRepository>();
+        var revision = new ReviewRevision("head-sha", "base-sha", "start-sha", "7", "patch-1");
+        var existing = new ReviewJob(Guid.NewGuid(), ClientId, "https://dev.azure.com/org", "project", "repo-1", 42, 7)
+        {
+            Status = JobStatus.Pending,
+        };
+        existing.SetReviewRevision(revision);
+
+        jobs.GetActiveJobsForConfigAsync("https://dev.azure.com/org", "project", Arg.Any<CancellationToken>())
+            .Returns([existing]);
+
+        var sut = new PullRequestSynchronizationService(
+            jobs,
+            NullLogger<PullRequestSynchronizationService>.Instance);
+
+        var outcome = await sut.SynchronizeAsync(
+            CreateRequest(PullRequestActivationSource.Manual, "an explicit review request") with
+            {
+                CandidateIterationId = 7,
+                ReviewRevision = revision,
+                AllowUnchangedResubmission = true,
+            });
+
+        Assert.Equal(PullRequestSynchronizationReviewDecision.DuplicateActiveJob, outcome.ReviewDecision);
+        Assert.Equal(existing.Id, outcome.JobId);
+    }
+
+    [Fact]
+    public async Task SynchronizeAsync_WhenAJobIsQueued_StoresTheRevisionTheRequestSupplied()
+    {
+        // The commit identity is the whole point of the job: it is what the review runs against, what tells
+        // this revision from the next one, and what a caller supplying coordinates alone came here to have
+        // resolved. A job queued without it would review something nobody named.
+        var jobs = Substitute.For<IJobRepository>();
+        var revision = new ReviewRevision("head-sha", "base-sha", "start-sha", "7", "base-sha...head-sha");
+
+        jobs.FindActiveJob("https://dev.azure.com/org", "project", "repo-1", 42, 7).Returns((ReviewJob?)null);
+        jobs.FindCompletedJob("https://dev.azure.com/org", "project", "repo-1", 42, 7).Returns((ReviewJob?)null);
+        jobs.GetActiveJobsForConfigAsync("https://dev.azure.com/org", "project", Arg.Any<CancellationToken>())
+            .Returns([]);
+        jobs.TryAddIfNoActiveDuplicateAsync(Arg.Any<ReviewJob>(), Arg.Any<CancellationToken>())
+            .Returns(new TryAddReviewJobResult(true, null, 0));
+
+        var sut = new PullRequestSynchronizationService(
+            jobs,
+            NullLogger<PullRequestSynchronizationService>.Instance);
+
+        var outcome = await sut.SynchronizeAsync(
+            CreateRequest(PullRequestActivationSource.Manual, "an explicit review request") with
+            {
+                CandidateIterationId = 7,
+                ReviewRevision = revision,
+                AllowUnchangedResubmission = true,
+            });
+
+        Assert.Equal(PullRequestSynchronizationReviewDecision.Submitted, outcome.ReviewDecision);
+        await jobs.Received(1)
+            .TryAddIfNoActiveDuplicateAsync(
+                Arg.Is<ReviewJob>(job =>
+                    job.ReviewRevisionReference != null
+                    && job.ReviewRevisionReference.HeadSha == "head-sha"
+                    && job.ReviewRevisionReference.BaseSha == "base-sha"
+                    && job.ReviewRevisionReference.StartSha == "start-sha"
+                    && job.ReviewRevisionReference.ProviderRevisionId == "7"),
+                Arg.Any<CancellationToken>());
+    }
+
     private static PullRequestSynchronizationRequest CreateRequest(
         PullRequestActivationSource activationSource,
         string summaryLabel)

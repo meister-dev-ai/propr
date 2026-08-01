@@ -7,6 +7,7 @@ using MeisterDev.ProPR.Api.Features.Reviewing.Contracts;
 using MeisterDev.ProPR.Application.Exceptions;
 using MeisterDev.ProPR.Application.Features.Reviewing.Intake.Commands.RestartReviewJob;
 using MeisterDev.ProPR.Application.Features.Reviewing.Intake.Commands.StopReviewJob;
+using MeisterDev.ProPR.Application.Features.Reviewing.Intake.Commands.SubmitReviewByCoordinates;
 using MeisterDev.ProPR.Application.Features.Reviewing.Intake.Commands.SubmitReviewJob;
 using MeisterDev.ProPR.Application.Features.Reviewing.Intake.Dtos;
 using MeisterDev.ProPR.Application.Features.Reviewing.Intake.Queries.GetReviewJobStatus;
@@ -24,6 +25,7 @@ public sealed partial class ReviewJobsController(
     RestartReviewJobHandler restartReviewJobHandler,
     StopReviewJobHandler stopReviewJobHandler,
     GetReviewJobStatusHandler getReviewJobStatusHandler,
+    SubmitReviewByCoordinatesHandler submitReviewByCoordinatesHandler,
     ILogger<ReviewJobsController> logger) : ControllerBase
 {
     /// <summary>Get the status and result of a review job.</summary>
@@ -122,6 +124,110 @@ public sealed partial class ReviewJobsController(
 
         LogReviewJobCreated(logger, result.JobId, intakeRequest.CodeReview?.Number ?? intakeRequest.PullRequestId);
         return this.Accepted(response);
+    }
+
+    /// <summary>Review a pull request identified only by its coordinates.</summary>
+    /// <remarks>
+    ///     For callers that can address a pull request but cannot describe its commits. Review intake is
+    ///     otherwise addressed by revision, which a caller looking at a pull request page has no way to know
+    ///     and, without a source-control credential of its own, no way to find out. This action asks the
+    ///     provider on the client's behalf, so the same request starts a first review or a re-review after
+    ///     new commits. Every answer to a well-formed request is a named outcome the caller shows to a
+    ///     person; a malformed one is refused with the plain validation error the rest of this controller
+    ///     uses, because a caller that sent nothing usable has no outcome to render.
+    ///     <para>
+    ///         The coordinates must be covered by one of this client's crawl or webhook configurations. That
+    ///         match is an authorization boundary as much as a lookup: it is what stops a caller aiming the
+    ///         client's source-control credential at a repository the client never configured. Any user with
+    ///         at least <see cref="ClientRole.ClientUser" /> for the client may trigger a review, matching
+    ///         restart, which also spends money and is deliberately not administrator-gated.
+    ///     </para>
+    /// </remarks>
+    /// <param name="clientId">ID of the client on whose behalf the review is triggered.</param>
+    /// <param name="request">The pull request's coordinates.</param>
+    /// <param name="ct">Cancellation token.</param>
+    /// <response code="202">A review job was queued. The response carries its <c>jobId</c>.</response>
+    /// <response code="400">One of the coordinates is missing or empty.</response>
+    /// <response code="401">Missing or invalid credentials.</response>
+    /// <response code="403">Caller lacks <c>ClientUser</c> for the client, or no configuration covers the coordinates.</response>
+    /// <response code="404">The provider reports no such pull request.</response>
+    /// <response code="409">A review is already running at this revision, or the pull request cannot be reviewed.</response>
+    /// <response code="500">The pull request resolved, but queueing the review failed.</response>
+    /// <response code="502">The provider could not be asked for the pull request's current revision.</response>
+    [HttpPost("/clients/{clientId:guid}/reviewing/jobs/by-coordinates")]
+    [ProducesResponseType(typeof(ReviewByCoordinatesResponse), StatusCodes.Status202Accepted)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(typeof(ReviewByCoordinatesResponse), StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(typeof(ReviewByCoordinatesResponse), StatusCodes.Status404NotFound)]
+    [ProducesResponseType(typeof(ReviewByCoordinatesResponse), StatusCodes.Status409Conflict)]
+    [ProducesResponseType(typeof(ReviewByCoordinatesResponse), StatusCodes.Status500InternalServerError)]
+    [ProducesResponseType(typeof(ReviewByCoordinatesResponse), StatusCodes.Status502BadGateway)]
+    public async Task<IActionResult> SubmitReviewByCoordinates(
+        Guid clientId,
+        [FromBody] SubmitReviewByCoordinatesRequest request,
+        CancellationToken ct)
+    {
+        var roleCheck = AuthHelpers.RequireClientRole(this.HttpContext, clientId, ClientRole.ClientUser);
+        if (roleCheck is not null)
+        {
+            // Lacking the role and naming coordinates no configuration covers are both refusals this
+            // caller renders, so a 403 from either carries the same named shape. An unauthenticated caller
+            // still gets the shared 401 unchanged, because that is answered before any of this applies.
+            return roleCheck is ObjectResult { StatusCode: StatusCodes.Status403Forbidden }
+                ? this.StatusCode(
+                    StatusCodes.Status403Forbidden,
+                    new ReviewByCoordinatesResponse(
+                        SubmitReviewByCoordinatesOutcome.NotAuthorized,
+                        null,
+                        "You do not have the required role for this client."))
+                : roleCheck;
+        }
+
+        if (request is null ||
+            string.IsNullOrWhiteSpace(request.ProviderScopePath) ||
+            string.IsNullOrWhiteSpace(request.ProviderProjectKey) ||
+            string.IsNullOrWhiteSpace(request.RepositoryId) ||
+            request.PullRequestId is null or < 1)
+        {
+            return this.BadRequest(
+                new
+                {
+                    error = "providerScopePath, providerProjectKey, repositoryId and pullRequestId are required.",
+                });
+        }
+
+        var result = await submitReviewByCoordinatesHandler.HandleAsync(
+            new SubmitReviewByCoordinatesCommand(
+                clientId,
+                request.ProviderScopePath,
+                request.ProviderProjectKey,
+                request.RepositoryId,
+                request.PullRequestId.Value),
+            ct);
+
+        var response = new ReviewByCoordinatesResponse(result.Outcome, result.JobId, result.Reason);
+
+        switch (result.Outcome)
+        {
+            case SubmitReviewByCoordinatesOutcome.NotAuthorized:
+                return this.StatusCode(StatusCodes.Status403Forbidden, response);
+            case SubmitReviewByCoordinatesOutcome.PullRequestNotFound:
+                return this.NotFound(response);
+            case SubmitReviewByCoordinatesOutcome.RevisionUnresolvable:
+                return this.StatusCode(StatusCodes.Status502BadGateway, response);
+            case SubmitReviewByCoordinatesOutcome.DuplicateActiveJob:
+            case SubmitReviewByCoordinatesOutcome.NotSubmittable:
+                return this.Conflict(response);
+            case SubmitReviewByCoordinatesOutcome.Submitted:
+                LogReviewJobCreated(logger, result.JobId ?? Guid.Empty, request.PullRequestId.Value);
+                return this.Accepted(response);
+            case SubmitReviewByCoordinatesOutcome.SubmissionFailed:
+            default:
+                // An outcome this switch was never taught is a gap on our side, not a queued review.
+                // Reporting it as success would hand the caller a job id that does not exist.
+                return this.StatusCode(StatusCodes.Status500InternalServerError, response);
+        }
     }
 
     /// <summary>Manually restart a failed review job.</summary>
