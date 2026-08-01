@@ -31,6 +31,20 @@ public sealed record ReviewCommentPostingDiagnosticsDto
     /// <summary>Per-thread creation failures captured during this posting pass, each carrying the provider error.</summary>
     public IReadOnlyList<ReviewCommentPostingFailure> PostingFailures { get; init; } = [];
 
+    /// <summary>
+    ///     Findings this pass withheld from the pull request, one entry each. A suppressed finding is still a
+    ///     finding the review produced, so it is recorded rather than dropped, and the entry carries what it
+    ///     matched and how closely so a suppression can be judged after the fact.
+    /// </summary>
+    public IReadOnlyList<ReviewCommentSuppressionRecord> SuppressedFindings { get; init; } = [];
+
+    /// <summary>
+    ///     The closest already-posted finding each candidate came to without being withheld, highest first and
+    ///     capped. This is the evidence that a similarity threshold set too high leaves behind: the
+    ///     suppressions alone can only ever show the line is too low.
+    /// </summary>
+    public IReadOnlyList<ReviewCommentSuppressionRecord> PostedFindingNearMisses { get; init; } = [];
+
     /// <summary>Count of candidates skipped because they originated from carried-forward file results.</summary>
     public int CarriedForwardCandidatesSkipped { get; init; }
 
@@ -98,11 +112,52 @@ public sealed record ReviewCommentPostingDiagnosticsDto
 /// <param name="ProviderThreadId">Provider thread identifier, when the provider exposes one.</param>
 /// <param name="FilePath">File the comment was anchored to, when applicable.</param>
 /// <param name="Line">Line the comment was anchored to, when applicable.</param>
+/// <param name="ThreadKind">
+///     Whether this is the pull-request-level review summary or a finding. The summary shares the absent
+///     anchor of a pull-request-level finding, so anything pairing findings to the comments they became has to
+///     tell them apart by something other than the anchor.
+/// </param>
 public sealed record PostedReviewCommentRef(
     string ProviderCommentId,
     string? ProviderThreadId,
     string? FilePath,
-    int? Line);
+    int? Line,
+    PostedReviewCommentKind ThreadKind = PostedReviewCommentKind.Inline);
+
+/// <summary>What a created provider comment represents.</summary>
+public enum PostedReviewCommentKind
+{
+    /// <summary>A review finding.</summary>
+    Inline = 0,
+
+    /// <summary>The pull-request-level review summary, which is not a finding.</summary>
+    Summary = 1,
+}
+
+/// <summary>
+///     One finding a posting pass withheld from the pull request, and why.
+/// </summary>
+/// <param name="Ordinal">
+///     Position of the finding in the review's own comment list. The stable handle that ties this record back to
+///     the persisted finding, which no anchor can do because two findings can share an anchor.
+/// </param>
+/// <param name="FilePath">File the withheld finding was anchored to, when applicable.</param>
+/// <param name="LineNumber">Line the withheld finding was anchored to, when applicable.</param>
+/// <param name="ReasonCode">Canonical reason code for the suppression.</param>
+/// <param name="MatchedProviderThreadId">
+///     Provider thread the finding was judged to repeat, when the reason identifies one.
+/// </param>
+/// <param name="MatchScore">
+///     How close the match was, when the check produced a score. Kept because a suppression threshold cannot be
+///     judged from the decisions alone.
+/// </param>
+public sealed record ReviewCommentSuppressionRecord(
+    int Ordinal,
+    string? FilePath,
+    int? LineNumber,
+    string ReasonCode,
+    long? MatchedProviderThreadId = null,
+    float? MatchScore = null);
 
 /// <summary>
 ///     A single comment-thread creation that the SCM provider rejected during a posting pass. Captured so the

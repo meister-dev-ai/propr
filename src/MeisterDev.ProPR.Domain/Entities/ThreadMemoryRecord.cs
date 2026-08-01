@@ -62,6 +62,23 @@ public sealed class ThreadMemoryRecord
     public MemorySource MemorySource { get; init; } = MemorySource.ThreadResolved;
 
     /// <summary>
+    ///     What the reviewer's resolution meant: a deliberate acceptance of the concern, or a claim that it
+    ///     was fixed. <see langword="null" /> for an administrator dismissal, which carries no reviewer
+    ///     resolution, and for records written before the outcome was recorded.
+    ///     Without it a rejected finding and a fixed finding are the same row, so reconsideration cannot tell
+    ///     an accepted risk from a repaired defect.
+    /// </summary>
+    public ThreadResolutionIntent? ResolutionIntent { get; init; }
+
+    /// <summary>
+    ///     How clearly the thread read as resolved when the memory was written. Qualifies
+    ///     <see cref="ResolutionIntent" />: a human acceptance is stored even when the discussion reads as
+    ///     inconclusive, and that is worth knowing at retrieval rather than presenting it as a crisp
+    ///     decision. <see langword="null" /> where no resolution was classified.
+    /// </summary>
+    public ResolutionClarity? ResolutionClarity { get; init; }
+
+    /// <summary>
     ///     The durable code-insight finding this memory came from, when one is known; <see langword="null" />
     ///     otherwise, for an admin-dismissed record, a thread raised before insight collection was enabled,
     ///     or a client that does not collect insights at all.

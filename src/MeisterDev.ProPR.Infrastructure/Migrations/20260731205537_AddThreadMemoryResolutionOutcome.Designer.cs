@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using MeisterDev.ProPR.Infrastructure.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 using Pgvector;
@@ -13,9 +14,11 @@ using Pgvector;
 namespace MeisterDev.ProPR.Infrastructure.Migrations
 {
     [DbContext(typeof(MeisterProPRDbContext))]
-    partial class MeisterProPRDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260731205537_AddThreadMemoryResolutionOutcome")]
+    partial class AddThreadMemoryResolutionOutcome
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -1285,85 +1288,6 @@ namespace MeisterDev.ProPR.Infrastructure.Migrations
                         .HasDatabaseName("uq_posted_comment_origins_comment");
 
                     b.ToTable("posted_comment_origins", (string)null);
-                });
-
-            modelBuilder.Entity("MeisterDev.ProPR.Domain.Entities.PostedFindingRecord", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .HasColumnType("uuid")
-                        .HasColumnName("id");
-
-                    b.Property<bool>("AutoResolvedByProPr")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("boolean")
-                        .HasDefaultValue(false)
-                        .HasColumnName("auto_resolved_by_propr");
-
-                    b.Property<Guid>("ClientId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("client_id");
-
-                    b.Property<DateTimeOffset>("CreatedAt")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("created_at");
-
-                    b.Property<Vector>("EmbeddingVector")
-                        .IsRequired()
-                        .HasColumnType("vector(1536)")
-                        .HasColumnName("embedding_vector");
-
-                    b.Property<string>("FilePath")
-                        .HasMaxLength(512)
-                        .HasColumnType("character varying(512)")
-                        .HasColumnName("file_path");
-
-                    b.Property<string>("FindingMessage")
-                        .IsRequired()
-                        .HasColumnType("text")
-                        .HasColumnName("finding_message");
-
-                    b.Property<int>("IterationId")
-                        .HasColumnType("integer")
-                        .HasColumnName("iteration_id");
-
-                    b.Property<long>("ProviderThreadId")
-                        .HasColumnType("bigint")
-                        .HasColumnName("provider_thread_id");
-
-                    b.Property<int>("PullRequestId")
-                        .HasColumnType("integer")
-                        .HasColumnName("pull_request_id");
-
-                    b.Property<string>("RepositoryId")
-                        .IsRequired()
-                        .HasMaxLength(256)
-                        .HasColumnType("character varying(256)")
-                        .HasColumnName("repository_id");
-
-                    b.Property<Guid>("ReviewJobId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("review_job_id");
-
-                    b.Property<short>("Severity")
-                        .HasColumnType("smallint")
-                        .HasColumnName("severity");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("EmbeddingVector")
-                        .HasDatabaseName("ix_posted_finding_records_embedding_hnsw");
-
-                    NpgsqlIndexBuilderExtensions.HasMethod(b.HasIndex("EmbeddingVector"), "hnsw");
-                    NpgsqlIndexBuilderExtensions.HasOperators(b.HasIndex("EmbeddingVector"), new[] { "vector_cosine_ops" });
-
-                    b.HasIndex("ClientId", "RepositoryId", "PullRequestId")
-                        .HasDatabaseName("ix_posted_finding_records_pull_request");
-
-                    b.HasIndex("ClientId", "RepositoryId", "PullRequestId", "ProviderThreadId")
-                        .IsUnique()
-                        .HasDatabaseName("uq_posted_finding_records_thread");
-
-                    b.ToTable("posted_finding_records", (string)null);
                 });
 
             modelBuilder.Entity("MeisterDev.ProPR.Domain.Entities.ProCursorKnowledgeSource", b =>
@@ -4809,15 +4733,6 @@ namespace MeisterDev.ProPR.Infrastructure.Migrations
                         .WithMany()
                         .HasForeignKey("ClientId")
                         .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-                });
-
-            modelBuilder.Entity("MeisterDev.ProPR.Domain.Entities.PostedFindingRecord", b =>
-                {
-                    b.HasOne("MeisterDev.ProPR.Infrastructure.Data.Models.ClientRecord", null)
-                        .WithMany()
-                        .HasForeignKey("ClientId")
-                        .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
                 });
 

@@ -60,7 +60,8 @@ public sealed partial class ReviewOrchestrationService(
     IBudgetCapsProvider? budgetCapsProvider = null,
     IReviewSpendAccumulator? spendAccumulator = null,
     IBudgetScopeAccessor? budgetScopeAccessor = null,
-    IBudgetEventPublisher? budgetEventPublisher = null) : IReviewJobProcessor
+    IBudgetEventPublisher? budgetEventPublisher = null,
+    IPostedFindingIndex? postedFindingIndex = null) : IReviewJobProcessor
 {
     private const string LocalWorkspacePreparedEventName = "local_workspace_prepared";
     private const string LocalWorkspaceFailedEventName = "local_workspace_failed";
@@ -542,6 +543,88 @@ public sealed partial class ReviewOrchestrationService(
         }
     }
 
+    /// <summary>
+    ///     Indexes the findings this job actually posted, so a later increment can recognise the same concern
+    ///     coming back and keep it off the pull request.
+    /// </summary>
+    /// <remarks>
+    ///     Written here rather than inside a provider adapter for three reasons: the client, repository, pull
+    ///     request and job identifiers are all in scope; it is already outside the per-thread posting failure
+    ///     isolation, so an index problem cannot be mistaken for a posting problem; and it is provider-neutral.
+    ///     <para>
+    ///         It runs once, after publishing has finished. That ordering is load-bearing: a lookup during the
+    ///         next job can only ever see earlier jobs' rows, so this index is strictly cross-increment and
+    ///         never second-guesses the per-job deduplication that governs one review's own output.
+    ///     </para>
+    ///     <para>
+    ///         The summary thread is excluded. It is not a finding, and pairing it as one would index review
+    ///         prose under a thread that never carried a concern.
+    ///     </para>
+    /// </remarks>
+    private async Task IndexPostedFindingsAsync(
+        ReviewJob job,
+        ReviewResult result,
+        ReviewCommentPostingDiagnosticsDto diagnostics,
+        IReadOnlySet<string> autoResolvedThreadIds,
+        CancellationToken ct)
+    {
+        if (postedFindingIndex is null || diagnostics.PostedComments.Count == 0)
+        {
+            return;
+        }
+
+        try
+        {
+            var unclaimed = diagnostics.PostedComments
+                .Where(posted => posted.ThreadKind == PostedReviewCommentKind.Inline)
+                .ToList();
+            var entries = new List<PostedFindingEntry>(result.Comments.Count);
+
+            foreach (var comment in result.Comments)
+            {
+                var matchIndex = unclaimed.FindIndex(posted =>
+                    string.Equals(posted.FilePath, comment.FilePath, StringComparison.Ordinal)
+                    && posted.Line == comment.LineNumber);
+                if (matchIndex < 0)
+                {
+                    continue;
+                }
+
+                var posted = unclaimed[matchIndex];
+                unclaimed.RemoveAt(matchIndex);
+
+                if (!long.TryParse(posted.ProviderThreadId, out var providerThreadId) || providerThreadId <= 0)
+                {
+                    continue;
+                }
+
+                entries.Add(
+                    new PostedFindingEntry(
+                        job.ClientId,
+                        job.RepositoryId,
+                        job.PullRequestId,
+                        providerThreadId,
+                        job.Id,
+                        job.IterationId,
+                        comment.FilePath,
+                        comment.Severity,
+                        comment.Message,
+                        autoResolvedThreadIds.Contains(posted.ProviderThreadId ?? string.Empty)));
+            }
+
+            if (entries.Count == 0)
+            {
+                return;
+            }
+
+            await postedFindingIndex.RecordPostedFindingsAsync(entries, ct);
+        }
+        catch (Exception ex) when (!ct.IsCancellationRequested)
+        {
+            LogPostedFindingIndexingFailed(logger, job.Id, ex);
+        }
+    }
+
     // Passive code-insight observer: materialise the increment's findings as durable records with stable
     // identifiers, so quality analytics have something to attach tags, dispositions, and roll-ups to. This
     // runs after the review result is persisted and decided, over the UNFILTERED finding set: the
@@ -595,7 +678,12 @@ public sealed partial class ReviewOrchestrationService(
         IReadOnlyList<ReviewComment> comments,
         IReadOnlyList<PostedReviewCommentRef> postedComments)
     {
-        var unclaimed = postedComments.ToList();
+        // The summary thread shares the absent anchor of a pull-request-level finding and is posted first, so
+        // without this filter the first fileless finding claimed the summary's ids and was attributed to a
+        // thread that never carried a concern.
+        var unclaimed = postedComments
+            .Where(posted => posted.ThreadKind == PostedReviewCommentKind.Inline)
+            .ToList();
         var produced = new List<ReviewFindingProduced>(comments.Count);
 
         for (var ordinal = 0; ordinal < comments.Count; ordinal++)
@@ -722,6 +810,7 @@ public sealed partial class ReviewOrchestrationService(
             var minimumSeverityToPost = await clientRegistry.GetMinimumSeverityToPostAsync(job.ClientId, ct);
             var publishResult = FilterCommentsByMinimumSeverity(publicationResult, minimumSeverityToPost);
 
+            IReadOnlySet<string> autoResolvedThreadIds = new HashSet<string>(StringComparer.Ordinal);
             var scmCommentPostingEnabled = await clientRegistry.GetScmCommentPostingEnabledAsync(job.ClientId, ct);
             var publicationIdentity = ResolvePublicationIdentity(job, pr);
             var diagnostics = ReviewCommentPostingDiagnosticsDto.Empty(
@@ -747,18 +836,28 @@ public sealed partial class ReviewOrchestrationService(
                         ct,
                         publicationContext);
 
-                await this.AutoResolvePostedThreadsAsync(job, publishResult, diagnostics, ct);
+                autoResolvedThreadIds = await this.AutoResolvePostedThreadsAsync(job, publishResult, diagnostics, ct);
             }
 
             await jobs.SetResultAsync(job.Id, publicationResult, ct);
 
             await this.RecordPostedCommentOriginsAsync(job, diagnostics, ct);
 
+            // Both take the list the poster actually worked from. Pairing findings to the threads they became,
+            // and reading back the ordinals the poster stamped, are only correct against that same list: the
+            // minimum-severity filter above can drop findings, and every one it drops shifts the alignment.
+            await this.IndexPostedFindingsAsync(job, publishResult, diagnostics, autoResolvedThreadIds, ct);
+
             await this.CollectCodeInsightFindingsAsync(job, pr, publicationResult, diagnostics, ct);
 
             if (protocolId.HasValue)
             {
                 await this.RecordPostingDiagnosticsAsync(protocolId.Value, diagnostics, ct);
+                await this.RecordSuppressedFindingsAsync(
+                    protocolId.Value,
+                    diagnostics,
+                    MapPublishedOrdinalsToPersisted(publicationResult.Comments, publishResult.Comments),
+                    ct);
                 await protocolRecorder.SetCompletedAsync(protocolId.Value, "Completed", 0, 0, 0, 0, null, ct);
             }
 
@@ -1568,6 +1667,93 @@ public sealed partial class ReviewOrchestrationService(
         await protocolRecorder.RecordDedupEventAsync(protocolId, "dedup_degraded_mode", degradedModeDetails, null, ct);
     }
 
+    /// <summary>
+    ///     Records each finding the pass withheld, with what it matched and how closely.
+    /// </summary>
+    /// <remarks>
+    ///     A suppressed duplicate is kept rather than dropped, so it has to be visible somewhere. The counts in
+    ///     the summary event say how many were withheld; this says which ones and on what evidence, which is
+    ///     what makes a badly chosen similarity threshold detectable after the fact instead of invisible.
+    /// </remarks>
+    /// <summary>
+    ///     Maps each position in the list handed to the poster back to its position in the persisted result.
+    /// </summary>
+    /// <remarks>
+    ///     The poster stamps the ordinal it saw, which indexes the published list; everything that later joins
+    ///     to a finding, the persisted result and the insight records alike, indexes the unfiltered one. When
+    ///     the minimum-severity filter drops nothing the two agree, and when it drops anything they do not, so
+    ///     the translation happens once here rather than being assumed away.
+    /// </remarks>
+    private static IReadOnlyList<int> MapPublishedOrdinalsToPersisted(
+        IReadOnlyList<ReviewComment> persisted,
+        IReadOnlyList<ReviewComment> published)
+    {
+        var map = new int[published.Count];
+        var persistedIndex = 0;
+
+        for (var publishedIndex = 0; publishedIndex < published.Count; publishedIndex++)
+        {
+            // The filter preserves order and keeps object identity, so advancing a single cursor pairs them.
+            while (persistedIndex < persisted.Count
+                   && !ReferenceEquals(persisted[persistedIndex], published[publishedIndex]))
+            {
+                persistedIndex++;
+            }
+
+            map[publishedIndex] = persistedIndex < persisted.Count ? persistedIndex : publishedIndex;
+            persistedIndex++;
+        }
+
+        return map;
+    }
+
+    private async Task RecordSuppressedFindingsAsync(
+        Guid protocolId,
+        ReviewCommentPostingDiagnosticsDto diagnostics,
+        IReadOnlyList<int> publishedToPersistedOrdinal,
+        CancellationToken ct)
+    {
+        if (diagnostics.SuppressedFindings.Count == 0 && diagnostics.PostedFindingNearMisses.Count == 0)
+        {
+            return;
+        }
+
+        var details = JsonSerializer.Serialize(
+            new
+            {
+                suppressedCount = diagnostics.SuppressedFindings.Count,
+
+                // The findings that came closest without being withheld, so the threshold can be judged from
+                // both sides of the line rather than only from the decisions it produced.
+                nearMissCount = diagnostics.PostedFindingNearMisses.Count,
+                nearMisses = diagnostics.PostedFindingNearMisses.Select(finding => new
+                    {
+                        ordinal = finding.Ordinal >= 0 && finding.Ordinal < publishedToPersistedOrdinal.Count
+                            ? publishedToPersistedOrdinal[finding.Ordinal]
+                            : finding.Ordinal,
+                        filePath = finding.FilePath,
+                        lineNumber = finding.LineNumber,
+                        matchedProviderThreadId = finding.MatchedProviderThreadId,
+                        matchScore = finding.MatchScore,
+                    })
+                    .ToList(),
+                findings = diagnostics.SuppressedFindings.Select(finding => new
+                    {
+                        ordinal = finding.Ordinal >= 0 && finding.Ordinal < publishedToPersistedOrdinal.Count
+                            ? publishedToPersistedOrdinal[finding.Ordinal]
+                            : finding.Ordinal,
+                        filePath = finding.FilePath,
+                        lineNumber = finding.LineNumber,
+                        reasonCode = finding.ReasonCode,
+                        matchedProviderThreadId = finding.MatchedProviderThreadId,
+                        matchScore = finding.MatchScore,
+                    })
+                    .ToList(),
+            });
+
+        await protocolRecorder.RecordDedupEventAsync(protocolId, "dedup_suppressed_findings", details, null, ct);
+    }
+
     private async Task RecordPostingFailuresAsync(
         Guid protocolId,
         ReviewCommentPostingDiagnosticsDto diagnostics,
@@ -1614,21 +1800,33 @@ public sealed partial class ReviewOrchestrationService(
     // For each thread just posted whose finding severity the client marked for auto-resolution, posts an explanatory
     // reply and resolves the thread. Provider-neutral and best-effort: a provider without resolution support, a thread
     // whose id/anchor the adapter did not surface, or a single failed resolve never fails the review job.
-    private async Task AutoResolvePostedThreadsAsync(
+    /// <summary>
+    ///     Auto-resolves the threads this pass posted whose findings are all at or below the client's
+    ///     auto-resolve severities, and returns the provider thread ids it actually closed.
+    /// </summary>
+    /// <remarks>
+    ///     The returned set is what lets the posted-finding index record that ProPR closed a thread itself.
+    ///     At the provider that is indistinguishable from a reviewer's fix, and the two must lead to opposite
+    ///     suppression decisions. Only threads whose status update succeeded are reported, so a thread left
+    ///     active by a failed update is not later treated as one ProPR closed.
+    /// </remarks>
+    private async Task<IReadOnlySet<string>> AutoResolvePostedThreadsAsync(
         ReviewJob job,
         ReviewResult publishResult,
         ReviewCommentPostingDiagnosticsDto diagnostics,
         CancellationToken ct)
     {
+        var autoResolvedThreadIds = new HashSet<string>(StringComparer.Ordinal);
+
         if (diagnostics.PostedComments.Count == 0)
         {
-            return;
+            return autoResolvedThreadIds;
         }
 
         var autoResolveSeverities = await clientRegistry.GetAutoResolveSeveritiesAsync(job.ClientId, ct);
         if (autoResolveSeverities is not { Count: > 0 })
         {
-            return;
+            return autoResolvedThreadIds;
         }
 
         var autoResolveSet = autoResolveSeverities.ToHashSet();
@@ -1657,7 +1855,7 @@ public sealed partial class ReviewOrchestrationService(
             // The client configured auto-resolve but this provider has no thread-resolution adapter (only Azure
             // DevOps registers one today). Log so the no-op is visible, then degrade without failing the job.
             LogAutoResolveUnsupported(logger, job.Provider, job.Id, ex);
-            return;
+            return autoResolvedThreadIds;
         }
 
         var resolvedThreadIds = new HashSet<string>(StringComparer.Ordinal);
@@ -1695,6 +1893,7 @@ public sealed partial class ReviewOrchestrationService(
                 // Resolve FIRST, then post the note. If the status update fails, the thread is left active with no
                 // reply — never an active thread carrying a note that (falsely) claims it was auto-resolved.
                 await statusWriter.UpdateThreadStatusAsync(job.ClientId, thread, ResolvedThreadStatus, ct);
+                autoResolvedThreadIds.Add(posted.ProviderThreadId);
                 await replyPublisher.ReplyAsync(job.ClientId, thread, AutoResolvedNote, ct);
             }
             catch (Exception ex)
@@ -1703,6 +1902,8 @@ public sealed partial class ReviewOrchestrationService(
                 LogAutoResolveThreadFailed(logger, posted.ProviderThreadId, job.Id, ex);
             }
         }
+
+        return autoResolvedThreadIds;
     }
 
     // Canonical case-insensitive key for a comment's (file, line) anchor, so a posted thread ref matches the

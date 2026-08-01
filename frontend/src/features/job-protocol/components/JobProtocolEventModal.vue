@@ -65,6 +65,36 @@
                             <div class="json-field"><span class="json-key">Coverage / Counts:</span><pre class="json-content">{{ vm.selectedVerificationInput.coverageState ?? 'n/a' }} / claims={{ vm.selectedVerificationInput.claimCount ?? 0 }} / dropped={{ vm.selectedVerificationInput.droppedCount ?? 0 }} / summary-only={{ vm.selectedVerificationInput.summaryOnlyCount ?? 0 }}</pre></div>
                             <div class="json-field"><span class="json-key">Degraded Component:</span><pre class="json-content">{{ vm.selectedVerificationInput.degradedComponent ?? 'None' }}</pre></div>
                         </template>
+                        <template v-else-if="vm.selectedMergedEvent.callDetails.name === 'dedup_suppressed_findings' && typeof vm.parsedInputResult === 'object'">
+                            <div class="json-field">
+                                <span class="json-key">Findings withheld:</span>
+                                <pre class="json-content">{{ vm.parsedInputResult.suppressedCount }}</pre>
+                            </div>
+                            <p class="suppressed-finding-note">
+                                These findings were produced by the review and kept, but not posted to the pull request.
+                            </p>
+                            <div v-if="vm.parsedInputResult.findings?.length" class="json-field">
+                                <span class="json-key">Withheld ({{ vm.parsedInputResult.findings.length }}):</span>
+                                <div class="memory-comment-list">
+                                    <div v-for="(f, i) in vm.parsedInputResult.findings" :key="i" class="memory-comment-row">
+                                        <div class="memory-comment-header">
+                                            <span class="suppressed-finding-reason">{{ f.reasonCode }}</span>
+                                            <span class="monospace-value memory-comment-loc">
+                                                {{ f.filePath ?? 'Pull request level' }}<template v-if="f.lineNumber">:L{{ f.lineNumber }}</template>
+                                            </span>
+                                        </div>
+                                        <p class="memory-comment-msg">
+                                            <template v-if="f.matchedProviderThreadId">
+                                                Duplicates thread {{ f.matchedProviderThreadId }}<template
+                                                    v-if="f.matchScore !== null && f.matchScore !== undefined"
+                                                >, similarity {{ Number(f.matchScore).toFixed(2) }}</template>.
+                                            </template>
+                                            <template v-else>No matching thread was recorded for this reason.</template>
+                                        </p>
+                                    </div>
+                                </div>
+                            </div>
+                        </template>
                         <template v-else-if="vm.selectedMergedEvent.callDetails.kind === 'memoryOperation' && vm.selectedMergedEvent.callDetails.name === 'memory_reconsideration_completed' && typeof vm.parsedInputResult === 'object'">
                             <div class="json-field"><span class="json-key">File:</span><pre class="json-content">{{ vm.parsedInputResult.filePath }}</pre></div>
                             <div class="json-field"><span class="json-key">Comment counts:</span><pre class="json-content">{{ vm.parsedInputResult.originalCommentCount }} original → {{ vm.parsedInputResult.finalCommentCount }} final ({{ vm.parsedInputResult.retainedCount }} retained, {{ vm.parsedInputResult.discardedCount }} discarded, {{ vm.parsedInputResult.downgradedCount }} downgraded)</pre></div>
@@ -495,6 +525,22 @@ defineProps<{ vm: JobProtocolViewModel }>()
     font-size: 0.82rem;
     color: var(--color-text-muted);
     line-height: 1.5;
+}
+
+.suppressed-finding-note {
+    margin: 0 0 0.5rem;
+    font-size: 0.82rem;
+    color: var(--color-text-muted);
+    line-height: 1.5;
+}
+
+.suppressed-finding-reason {
+    font-family: var(--font-mono, monospace);
+    font-size: 0.72rem;
+    padding: 0.1rem 0.4rem;
+    border-radius: 0.25rem;
+    background: var(--color-surface-alt, rgb(0 0 0 / 6%));
+    color: var(--color-text);
 }
 
 .comment-relevance-meta {

@@ -264,6 +264,141 @@ public class AdoCommentPosterDeduplicationTests
     }
 
     [Fact]
+    public void FindDeterministicDuplicateMatch_FilelessCandidateAgainstBotSummaryThread_DoesNotSuppress()
+    {
+        // A candidate with no file anchor has nothing to compare on, so it must not match the
+        // pull-request-level summary thread just because both anchors are absent.
+        var threads = new List<PrCommentThread>
+        {
+            new(
+                7,
+                null,
+                null,
+                new List<PrThreadComment>
+                {
+                    new("Bot", "**AI Review Summary**\n\nLooks good.", BotId),
+                }.AsReadOnly()),
+        };
+
+        var match = AdoCommentPoster.FindDeterministicDuplicateMatch(
+            threads,
+            null,
+            null,
+            "Two callers duplicate the retry policy; extract it into one helper.",
+            BotId);
+
+        Assert.Null(match);
+    }
+
+    [Fact]
+    public void FindDeterministicDuplicateMatch_FilelessCandidateAgainstResolvedPrLevelThread_DoesNotSuppress()
+    {
+        // A resolved pull-request-level thread only suppresses a fileless candidate that repeats its
+        // content. Its status alone cannot stand in for an anchor, or one closed thread silences every
+        // later fileless finding.
+        var threads = new List<PrCommentThread>
+        {
+            new(
+                11,
+                null,
+                null,
+                new List<PrThreadComment>
+                {
+                    new("Bot", "WARNING: The retry policy is duplicated.", BotId),
+                }.AsReadOnly(),
+                "Fixed"),
+        };
+
+        var match = AdoCommentPoster.FindDeterministicDuplicateMatch(
+            threads,
+            null,
+            null,
+            "Configuration is read before validation runs.",
+            BotId);
+
+        Assert.Null(match);
+    }
+
+    [Fact]
+    public void FindDeterministicDuplicateMatch_FilelessCandidateMatchingPriorPrLevelText_Suppresses()
+    {
+        // Content equality is still a legitimate suppression for a fileless candidate.
+        var threads = new List<PrCommentThread>
+        {
+            new(
+                8,
+                null,
+                null,
+                new List<PrThreadComment>
+                {
+                    new("Bot", "WARNING: Two callers duplicate the retry policy.", BotId),
+                }.AsReadOnly()),
+        };
+
+        var match = AdoCommentPoster.FindDeterministicDuplicateMatch(
+            threads,
+            null,
+            null,
+            "Two callers duplicate the retry policy",
+            BotId);
+
+        Assert.NotNull(match);
+        Assert.Equal("normalized_text_match", match.ReasonCode);
+    }
+
+    [Fact]
+    public void FindDeterministicDuplicateMatch_InlineCandidateAtSameFileAndLine_Suppresses()
+    {
+        var threads = new List<PrCommentThread>
+        {
+            new(
+                9,
+                "/src/Foo.cs",
+                42,
+                new List<PrThreadComment>
+                {
+                    new("Bot", "ERROR: Null ref.", BotId),
+                }.AsReadOnly()),
+        };
+
+        var match = AdoCommentPoster.FindDeterministicDuplicateMatch(
+            threads,
+            "src/Foo.cs",
+            42,
+            "A different concern entirely.",
+            BotId);
+
+        Assert.NotNull(match);
+        Assert.Equal("normalized_location_match", match.ReasonCode);
+    }
+
+    [Fact]
+    public void FindDeterministicDuplicateMatch_FileLevelCandidateWithoutLine_Suppresses()
+    {
+        var threads = new List<PrCommentThread>
+        {
+            new(
+                10,
+                "/src/Foo.cs",
+                null,
+                new List<PrThreadComment>
+                {
+                    new("Bot", "WARNING: File-level concern.", BotId),
+                }.AsReadOnly()),
+        };
+
+        var match = AdoCommentPoster.FindDeterministicDuplicateMatch(
+            threads,
+            "src/Foo.cs",
+            null,
+            "An unrelated file-level concern.",
+            BotId);
+
+        Assert.NotNull(match);
+        Assert.Equal("normalized_location_match", match.ReasonCode);
+    }
+
+    [Fact]
     public void FindDeterministicDuplicateMatch_NormalizedTextMatch_IgnoresSeverityPrefixAndWhitespace()
     {
         var threads = new List<PrCommentThread>

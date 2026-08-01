@@ -155,6 +155,9 @@ public sealed class MeisterProPRDbContext(DbContextOptions<MeisterProPRDbContext
     /// <summary>Per-client thread memory records for semantic embedding search.</summary>
     public DbSet<ThreadMemoryRecord> ThreadMemoryRecords => this.Set<ThreadMemoryRecord>();
 
+    /// <summary>Findings already posted on a pull request, so later increments can recognise a repeat.</summary>
+    public DbSet<PostedFindingRecord> PostedFindingRecords => this.Set<PostedFindingRecord>();
+
     /// <summary>Configured ProCursor knowledge sources.</summary>
     public DbSet<ProCursorKnowledgeSource> ProCursorKnowledgeSources => this.Set<ProCursorKnowledgeSource>();
 
@@ -239,6 +242,13 @@ public sealed class MeisterProPRDbContext(DbContextOptions<MeisterProPRDbContext
         {
             modelBuilder.HasPostgresExtension("vector");
             modelBuilder.Entity<ThreadMemoryRecord>()
+                .Property(r => r.EmbeddingVector)
+                .HasColumnType($"vector({GetMemoryEmbeddingDimensions()})")
+                .HasConversion(
+                    v => new Vector(v),
+                    v => v.ToArray());
+
+            modelBuilder.Entity<PostedFindingRecord>()
                 .Property(r => r.EmbeddingVector)
                 .HasColumnType($"vector({GetMemoryEmbeddingDimensions()})")
                 .HasConversion(

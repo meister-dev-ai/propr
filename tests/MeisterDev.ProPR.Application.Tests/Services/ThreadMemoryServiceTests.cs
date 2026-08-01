@@ -17,7 +17,8 @@ using NSubstitute.ExceptionExtensions;
 namespace MeisterDev.ProPR.Application.Tests.Services;
 
 /// <summary>
-///     Unit tests for <see cref="ThreadMemoryService" /> covering US1–US4.
+///     Unit tests for <see cref="ThreadMemoryService" />: storing a resolved thread, removing a reopened
+///     one, review-time retrieval and reconsideration, and publication-time duplicate suppression.
 /// </summary>
 public sealed class ThreadMemoryServiceTests
 {
@@ -181,12 +182,15 @@ public sealed class ThreadMemoryServiceTests
     }
 
     private static ThreadResolvedDomainEvent ResolvedEvent(string commentHistory) =>
+        ResolvedEvent(commentHistory, "src/Foo.cs");
+
+    private static ThreadResolvedDomainEvent ResolvedEvent(string commentHistory, string? filePath) =>
         new(
             ClientId,
             "repo-1",
             42,
             7,
-            "src/Foo.cs",
+            filePath,
             "diff",
             commentHistory,
             DateTimeOffset.UtcNow,
@@ -359,14 +363,14 @@ public sealed class ThreadMemoryServiceTests
                 Arg.Any<float>(),
                 Arg.Any<CancellationToken>())
             .Returns(new List<ThreadMemoryMatchDto>());
-        repo.FindByFilePathAsync(ClientId, "repo", "/package.json", Arg.Any<int>(), Arg.Any<CancellationToken>())
+        repo.FindByFilePathAsync(ClientId, "repo", "package.json", Arg.Any<int>(), Arg.Any<CancellationToken>())
             .Returns(
                 new List<ThreadMemoryMatchDto>
                 {
                     new(
                         Guid.NewGuid(),
                         6023,
-                        "/package.json",
+                        "package.json",
                         "Closed without code change.",
                         0f,
                         "exact_file_fallback"),
@@ -391,8 +395,10 @@ public sealed class ThreadMemoryServiceTests
             ProtocolId);
 
         Assert.Equal("reconsidered", result.Summary);
+
+        // The lookup is made in the canonical stored form, whichever form the caller supplied.
         await repo.Received(1)
-            .FindByFilePathAsync(ClientId, "repo", "/package.json", Arg.Any<int>(), Arg.Any<CancellationToken>());
+            .FindByFilePathAsync(ClientId, "repo", "package.json", Arg.Any<int>(), Arg.Any<CancellationToken>());
         await recorder.Received(1)
             .RecordMemoryEventAsync(
                 ProtocolId,
@@ -403,6 +409,748 @@ public sealed class ThreadMemoryServiceTests
                     d.Contains("\"resultCount\":1") &&
                     d.Contains("6023")),
                 Arg.Is<string?>(e => e == null),
+                Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task HandleThreadResolvedAsync_HumanAcceptance_StoresTheOutcomeAndItsClarity()
+    {
+        var (embedder, repo, _, _, service) = CreateService();
+        embedder.GenerateResolutionSummaryAsync(
+                Arg.Any<string?>(),
+                Arg.Any<string?>(),
+                Arg.Any<string>(),
+                Arg.Any<Guid>(),
+                Arg.Any<CancellationToken>())
+            .Returns(
+                new ThreadResolutionSummary(
+                    "The team accepted the risk without a code change.",
+                    ResolutionClarity.AcceptedWithoutChange));
+        embedder.GenerateEmbeddingAsync(Arg.Any<string>(), Arg.Any<Guid>(), Arg.Any<CancellationToken>())
+            .Returns(new[] { 0.5f });
+
+        var evt = ResolvedEvent("comment history") with { Intent = ThreadResolutionIntent.AcceptedByHuman };
+        await service.HandleThreadResolvedAsync(evt);
+
+        await repo.Received(1)
+            .UpsertAsync(
+                Arg.Is<ThreadMemoryRecord>(r =>
+                    r.ResolutionIntent == ThreadResolutionIntent.AcceptedByHuman &&
+                    r.ResolutionClarity == ResolutionClarity.AcceptedWithoutChange),
+                Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task HandleThreadResolvedAsync_ClaimedFix_StoresTheOutcomeAndItsClarity()
+    {
+        var (embedder, repo, _, _, service) = CreateService();
+        embedder.GenerateResolutionSummaryAsync(
+                Arg.Any<string?>(),
+                Arg.Any<string?>(),
+                Arg.Any<string>(),
+                Arg.Any<Guid>(),
+                Arg.Any<CancellationToken>())
+            .Returns(new ThreadResolutionSummary("Fixed by adding the guard.", ResolutionClarity.ResolvedByChange));
+        embedder.GenerateEmbeddingAsync(Arg.Any<string>(), Arg.Any<Guid>(), Arg.Any<CancellationToken>())
+            .Returns(new[] { 0.5f });
+
+        var evt = ResolvedEvent("comment history") with { Intent = ThreadResolutionIntent.ClaimsFix };
+        await service.HandleThreadResolvedAsync(evt);
+
+        await repo.Received(1)
+            .UpsertAsync(
+                Arg.Is<ThreadMemoryRecord>(r =>
+                    r.ResolutionIntent == ThreadResolutionIntent.ClaimsFix &&
+                    r.ResolutionClarity == ResolutionClarity.ResolvedByChange),
+                Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task DismissFindingAsync_AdminDismissal_LeavesTheReviewerOutcomeAbsent()
+    {
+        var (embedder, repo, _, _, service) = CreateService();
+        embedder.GenerateEmbeddingAsync(Arg.Any<string>(), Arg.Any<Guid>(), Arg.Any<CancellationToken>())
+            .Returns(new[] { 0.5f });
+
+        await service.DismissFindingAsync(ClientId, "src/Foo.cs", "Stop using the deprecated helper.", null);
+
+        await repo.Received(1)
+            .UpsertAsync(
+                Arg.Is<ThreadMemoryRecord>(r => r.ResolutionIntent == null && r.ResolutionClarity == null),
+                Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task RetrieveAndReconsiderAsync_RejectionMemory_LabelsTheOutcomeInThePrompt()
+    {
+        var (embedder, repo, _, _, service) = CreateService(out var chatClient);
+        embedder.GenerateEmbeddingAsync(Arg.Any<string>(), Arg.Any<Guid>(), Arg.Any<CancellationToken>())
+            .Returns(new[] { 0.5f });
+        repo.FindSimilarAsync(
+                Arg.Any<Guid>(),
+                Arg.Any<float[]>(),
+                Arg.Any<int>(),
+                Arg.Any<float>(),
+                Arg.Any<CancellationToken>())
+            .Returns(
+                new List<ThreadMemoryMatchDto>
+                {
+                    new(
+                        Guid.NewGuid(),
+                        5,
+                        "backend/Foo.cs",
+                        "The team accepted the risk without a code change.",
+                        0.92f,
+                        "semantic",
+                        MemorySource.ThreadResolved,
+                        ThreadResolutionIntent.AcceptedByHuman,
+                        ResolutionClarity.AcceptedWithoutChange),
+                });
+        StubReconsiderationResponse(chatClient);
+
+        var job = new ReviewJob(Guid.NewGuid(), ClientId, "https://dev.azure.com/org", "proj", "repo-1", 1, 1);
+        await service.RetrieveAndReconsiderAsync(
+            ClientId,
+            job,
+            "backend/Foo.cs",
+            "diff",
+            new ReviewResult("draft summary", []),
+            ProtocolId);
+
+        // A fragment only the per-memory outcome line produces, so the assertion cannot be satisfied by the
+        // standing instructions in the system prompt.
+        await chatClient.Received(1)
+            .GetResponseAsync(
+                Arg.Is<IEnumerable<ChatMessage>>(messages =>
+                    messages.Any(message =>
+                        message.Text.Contains(
+                            "A reviewer rejected this concern and accepted the code as it stands. **DISCARD**",
+                            StringComparison.Ordinal))),
+                Arg.Any<ChatOptions?>(),
+                Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task RetrieveAndReconsiderAsync_UnclearRejectionMemory_MarksItLowerConfidence()
+    {
+        var (embedder, repo, _, _, service) = CreateService(out var chatClient);
+        embedder.GenerateEmbeddingAsync(Arg.Any<string>(), Arg.Any<Guid>(), Arg.Any<CancellationToken>())
+            .Returns(new[] { 0.5f });
+        repo.FindSimilarAsync(
+                Arg.Any<Guid>(),
+                Arg.Any<float[]>(),
+                Arg.Any<int>(),
+                Arg.Any<float>(),
+                Arg.Any<CancellationToken>())
+            .Returns(
+                new List<ThreadMemoryMatchDto>
+                {
+                    new(
+                        Guid.NewGuid(),
+                        6,
+                        "backend/Foo.cs",
+                        "It is unclear whether the risk was formally accepted.",
+                        0.9f,
+                        "semantic",
+                        MemorySource.ThreadResolved,
+                        ThreadResolutionIntent.AcceptedByHuman,
+                        ResolutionClarity.Undetermined),
+                });
+        StubReconsiderationResponse(chatClient);
+
+        var job = new ReviewJob(Guid.NewGuid(), ClientId, "https://dev.azure.com/org", "proj", "repo-1", 1, 1);
+        await service.RetrieveAndReconsiderAsync(
+            ClientId,
+            job,
+            "backend/Foo.cs",
+            "diff",
+            new ReviewResult("draft summary", []),
+            ProtocolId);
+
+        // The weakness is the decision, not the match, and the confident instruction must be absent.
+        await chatClient.Received(1)
+            .GetResponseAsync(
+                Arg.Is<IEnumerable<ChatMessage>>(messages =>
+                    messages.Any(message =>
+                        message.Text.Contains("the discussion did not say so plainly", StringComparison.Ordinal) &&
+                        message.Text.Contains("decision as low confidence", StringComparison.Ordinal)) &&
+                    messages.All(message =>
+                        !message.Text.Contains(
+                            "accepted the code as it stands. **DISCARD**",
+                            StringComparison.Ordinal))),
+                Arg.Any<ChatOptions?>(),
+                Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task RetrieveAndReconsiderAsync_MixedOutcomes_ShowsReviewerRejectionsBeforeClaimedFixes()
+    {
+        var (embedder, repo, _, _, service) = CreateService(out var chatClient);
+        embedder.GenerateEmbeddingAsync(Arg.Any<string>(), Arg.Any<Guid>(), Arg.Any<CancellationToken>())
+            .Returns(new[] { 0.5f });
+        repo.FindSimilarAsync(
+                Arg.Any<Guid>(),
+                Arg.Any<float[]>(),
+                Arg.Any<int>(),
+                Arg.Any<float>(),
+                Arg.Any<CancellationToken>())
+            .Returns(
+                new List<ThreadMemoryMatchDto>
+                {
+                    new(
+                        Guid.NewGuid(),
+                        7,
+                        "backend/Foo.cs",
+                        "CLAIMED FIX SUMMARY",
+                        0.95f,
+                        "semantic",
+                        MemorySource.ThreadResolved,
+                        ThreadResolutionIntent.ClaimsFix,
+                        ResolutionClarity.ResolvedByChange),
+                    new(
+                        Guid.NewGuid(),
+                        8,
+                        "backend/Foo.cs",
+                        "REVIEWER REJECTION SUMMARY",
+                        0.81f,
+                        "semantic",
+                        MemorySource.ThreadResolved,
+                        ThreadResolutionIntent.AcceptedByHuman,
+                        ResolutionClarity.AcceptedWithoutChange),
+                });
+        StubReconsiderationResponse(chatClient);
+
+        var job = new ReviewJob(Guid.NewGuid(), ClientId, "https://dev.azure.com/org", "proj", "repo-1", 1, 1);
+        await service.RetrieveAndReconsiderAsync(
+            ClientId,
+            job,
+            "backend/Foo.cs",
+            "diff",
+            new ReviewResult("draft summary", []),
+            ProtocolId);
+
+        await chatClient.Received(1)
+            .GetResponseAsync(
+                Arg.Is<IEnumerable<ChatMessage>>(messages =>
+                    messages.Any(message =>
+                        message.Text.IndexOf("REVIEWER REJECTION SUMMARY", StringComparison.Ordinal) >= 0 &&
+                        message.Text.IndexOf("REVIEWER REJECTION SUMMARY", StringComparison.Ordinal) <
+                        message.Text.IndexOf("CLAIMED FIX SUMMARY", StringComparison.Ordinal))),
+                Arg.Any<ChatOptions?>(),
+                Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task RetrieveAndReconsiderAsync_RejectionFoundOnlyByFilePath_DoesNotGetTheConfidentInstruction()
+    {
+        // The file-path route returns every memory on the file with no similarity at all. A rejection about
+        // some other concern in the same file must not turn into an instruction to drop the draft finding.
+        var (embedder, repo, _, _, service) = CreateService(out var chatClient);
+        embedder.GenerateEmbeddingAsync(Arg.Any<string>(), Arg.Any<Guid>(), Arg.Any<CancellationToken>())
+            .Returns(new[] { 0.5f });
+        repo.FindSimilarAsync(
+                Arg.Any<Guid>(),
+                Arg.Any<float[]>(),
+                Arg.Any<int>(),
+                Arg.Any<float>(),
+                Arg.Any<CancellationToken>())
+            .Returns(new List<ThreadMemoryMatchDto>());
+        repo.FindByFilePathAsync(
+                Arg.Any<Guid>(),
+                Arg.Any<string>(),
+                Arg.Any<string>(),
+                Arg.Any<int>(),
+                Arg.Any<CancellationToken>())
+            .Returns(
+                new List<ThreadMemoryMatchDto>
+                {
+                    new(
+                        Guid.NewGuid(),
+                        12,
+                        "backend/Foo.cs",
+                        "The team accepted the risk without a code change.",
+                        0f,
+                        "exact_file_fallback",
+                        MemorySource.ThreadResolved,
+                        ThreadResolutionIntent.AcceptedByHuman,
+                        ResolutionClarity.AcceptedWithoutChange),
+                });
+        StubReconsiderationResponse(chatClient);
+
+        var job = new ReviewJob(Guid.NewGuid(), ClientId, "https://dev.azure.com/org", "proj", "repo-1", 1, 1);
+        await service.RetrieveAndReconsiderAsync(
+            ClientId,
+            job,
+            "backend/Foo.cs",
+            "diff",
+            new ReviewResult("draft summary", []),
+            ProtocolId);
+
+        await chatClient.Received(1)
+            .GetResponseAsync(
+                Arg.Is<IEnumerable<ChatMessage>>(messages =>
+                    messages.Any(message =>
+                        message.Text.Contains("only because it sits on the same file", StringComparison.Ordinal) &&
+                        !message.Text.Contains(
+                            "accepted the code as it stands. **DISCARD**",
+                            StringComparison.Ordinal))),
+                Arg.Any<ChatOptions?>(),
+                Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task RetrieveAndReconsiderAsync_MemoryWithNoRecordedOutcome_StillOutranksAClaimedFix()
+    {
+        // Records written before the outcome was kept hold rejections too, so an unrecorded outcome must not
+        // be treated as if it were a fix.
+        var (embedder, repo, _, _, service) = CreateService(out var chatClient);
+        embedder.GenerateEmbeddingAsync(Arg.Any<string>(), Arg.Any<Guid>(), Arg.Any<CancellationToken>())
+            .Returns(new[] { 0.5f });
+        repo.FindSimilarAsync(
+                Arg.Any<Guid>(),
+                Arg.Any<float[]>(),
+                Arg.Any<int>(),
+                Arg.Any<float>(),
+                Arg.Any<CancellationToken>())
+            .Returns(
+                new List<ThreadMemoryMatchDto>
+                {
+                    new(
+                        Guid.NewGuid(),
+                        9,
+                        "backend/Foo.cs",
+                        "CLAIMED FIX SUMMARY",
+                        0.97f,
+                        "semantic",
+                        MemorySource.ThreadResolved,
+                        ThreadResolutionIntent.ClaimsFix,
+                        ResolutionClarity.ResolvedByChange),
+                    new(Guid.NewGuid(), 10, "backend/Foo.cs", "LEGACY SUMMARY", 0.83f),
+                });
+        StubReconsiderationResponse(chatClient);
+
+        var job = new ReviewJob(Guid.NewGuid(), ClientId, "https://dev.azure.com/org", "proj", "repo-1", 1, 1);
+        await service.RetrieveAndReconsiderAsync(
+            ClientId,
+            job,
+            "backend/Foo.cs",
+            "diff",
+            new ReviewResult("draft summary", []),
+            ProtocolId);
+
+        await chatClient.Received(1)
+            .GetResponseAsync(
+                Arg.Is<IEnumerable<ChatMessage>>(messages =>
+                    messages.Any(message =>
+                        message.Text.IndexOf("LEGACY SUMMARY", StringComparison.Ordinal) >= 0 &&
+                        message.Text.IndexOf("LEGACY SUMMARY", StringComparison.Ordinal) <
+                        message.Text.IndexOf("CLAIMED FIX SUMMARY", StringComparison.Ordinal))),
+                Arg.Any<ChatOptions?>(),
+                Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task RetrieveAndReconsiderAsync_MemoryWithNoRecordedOutcome_ClaimsNothingAboutIt()
+    {
+        var (embedder, repo, _, _, service) = CreateService(out var chatClient);
+        embedder.GenerateEmbeddingAsync(Arg.Any<string>(), Arg.Any<Guid>(), Arg.Any<CancellationToken>())
+            .Returns(new[] { 0.5f });
+        repo.FindSimilarAsync(
+                Arg.Any<Guid>(),
+                Arg.Any<float[]>(),
+                Arg.Any<int>(),
+                Arg.Any<float>(),
+                Arg.Any<CancellationToken>())
+            .Returns(
+                new List<ThreadMemoryMatchDto>
+                {
+                    new(Guid.NewGuid(), 11, "backend/Foo.cs", "LEGACY SUMMARY", 0.9f),
+                });
+        StubReconsiderationResponse(chatClient);
+
+        var job = new ReviewJob(Guid.NewGuid(), ClientId, "https://dev.azure.com/org", "proj", "repo-1", 1, 1);
+        await service.RetrieveAndReconsiderAsync(
+            ClientId,
+            job,
+            "backend/Foo.cs",
+            "diff",
+            new ReviewResult("draft summary", []),
+            ProtocolId);
+
+        await chatClient.Received(1)
+            .GetResponseAsync(
+                Arg.Is<IEnumerable<ChatMessage>>(messages =>
+                    messages.All(message => !message.Text.Contains("Reviewer outcome", StringComparison.Ordinal))),
+                Arg.Any<ChatOptions?>(),
+                Arg.Any<CancellationToken>());
+    }
+
+    private static void StubReconsiderationResponse(IChatClient chatClient)
+    {
+        var responseJson =
+            """{"summary":"reconsidered","comments":[],"confidence_evaluations":[],"investigation_complete":true,"loop_complete":true}""";
+        chatClient.GetResponseAsync(
+                Arg.Any<IEnumerable<ChatMessage>>(),
+                Arg.Any<ChatOptions?>(),
+                Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(new ChatResponse(new ChatMessage(ChatRole.Assistant, responseJson))));
+    }
+
+    [Theory]
+    [InlineData("/backend/Controllers/AgentsController.cs")]
+    [InlineData("backend\\Controllers\\AgentsController.cs")]
+    public async Task HandleThreadResolvedAsync_ProviderThreadPath_StoresCanonicalRepositoryRelativePath(string providerThreadPath)
+    {
+        var (embedder, repo, _, _, service) = CreateService();
+        embedder.GenerateResolutionSummaryAsync(
+                Arg.Any<string?>(),
+                Arg.Any<string?>(),
+                Arg.Any<string>(),
+                Arg.Any<Guid>(),
+                Arg.Any<CancellationToken>())
+            .Returns(new ThreadResolutionSummary("Fixed by adding the guard.", ResolutionClarity.ResolvedByChange));
+        embedder.GenerateEmbeddingAsync(Arg.Any<string>(), Arg.Any<Guid>(), Arg.Any<CancellationToken>())
+            .Returns(new[] { 0.5f });
+
+        await service.HandleThreadResolvedAsync(ResolvedEvent("comment history", providerThreadPath));
+
+        await repo.Received(1)
+            .UpsertAsync(
+                Arg.Is<ThreadMemoryRecord>(r => r.FilePath == "backend/Controllers/AgentsController.cs"),
+                Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task RetrieveAndReconsiderAsync_RecordStoredFromProviderThreadPath_IsFoundByChangedFilePath()
+    {
+        // The round trip that decides whether same-file recall works at all: the crawl stores the provider's
+        // thread path, the reviewer looks the file up by the orchestrator's changed-file path, and the two
+        // forms have to land on the same stored value. The fake repository matches whole strings
+        // case-insensitively, exactly as the database comparison does.
+        var (embedder, repo, recorder, _, service) = CreateService(out var chatClient);
+        ThreadMemoryRecord? stored = null;
+
+        embedder.GenerateResolutionSummaryAsync(
+                Arg.Any<string?>(),
+                Arg.Any<string?>(),
+                Arg.Any<string>(),
+                Arg.Any<Guid>(),
+                Arg.Any<CancellationToken>())
+            .Returns(new ThreadResolutionSummary("Accepted without a change.", ResolutionClarity.AcceptedWithoutChange));
+        embedder.GenerateEmbeddingAsync(Arg.Any<string>(), Arg.Any<Guid>(), Arg.Any<CancellationToken>())
+            .Returns(new[] { 0.5f });
+        repo.When(r => r.UpsertAsync(Arg.Any<ThreadMemoryRecord>(), Arg.Any<CancellationToken>()))
+            .Do(call => stored = call.Arg<ThreadMemoryRecord>());
+        repo.FindSimilarAsync(
+                Arg.Any<Guid>(),
+                Arg.Any<float[]>(),
+                Arg.Any<int>(),
+                Arg.Any<float>(),
+                Arg.Any<CancellationToken>())
+            .Returns(new List<ThreadMemoryMatchDto>());
+        repo.FindByFilePathAsync(
+                ClientId,
+                "repo-1",
+                Arg.Any<string>(),
+                Arg.Any<int>(),
+                Arg.Any<CancellationToken>())
+            .Returns(call =>
+            {
+                var lookupPath = call.ArgAt<string>(2);
+                return stored is not null &&
+                       string.Equals(stored.FilePath, lookupPath, StringComparison.OrdinalIgnoreCase)
+                    ? new List<ThreadMemoryMatchDto>
+                    {
+                        new(
+                            Guid.NewGuid(),
+                            stored.ThreadId,
+                            stored.FilePath,
+                            stored.ResolutionSummary,
+                            0f,
+                            "exact_file_fallback"),
+                    }
+                    : [];
+            });
+
+        var responseJson =
+            """{"summary":"reconsidered","comments":[],"confidence_evaluations":[],"investigation_complete":true,"loop_complete":true}""";
+        chatClient.GetResponseAsync(
+                Arg.Any<IEnumerable<ChatMessage>>(),
+                Arg.Any<ChatOptions?>(),
+                Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(new ChatResponse(new ChatMessage(ChatRole.Assistant, responseJson))));
+
+        await service.HandleThreadResolvedAsync(ResolvedEvent("comment history", "/backend/Controllers/AgentsController.cs"));
+        Assert.NotNull(stored);
+
+        var job = new ReviewJob(Guid.NewGuid(), ClientId, "https://dev.azure.com/org", "proj", "repo-1", 1, 1);
+        await service.RetrieveAndReconsiderAsync(
+            ClientId,
+            job,
+            "backend/Controllers/AgentsController.cs",
+            "diff",
+            new ReviewResult("draft summary", []),
+            ProtocolId);
+
+        await recorder.Received(1)
+            .RecordMemoryEventAsync(
+                ProtocolId,
+                "memory_retrieval_executed",
+                Arg.Is<string?>(d =>
+                    d != null &&
+                    d.Contains("\"retrievalMode\":\"exact_file_fallback\"") &&
+                    d.Contains("\"resultCount\":1")),
+                Arg.Is<string?>(e => e == null),
+                Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task RetrieveAndReconsiderAsync_EmptyRetrieval_RecordsWhatTheLookupConsidered()
+    {
+        var (embedder, repo, recorder, _, service) = CreateService();
+        embedder.GenerateEmbeddingAsync(Arg.Any<string>(), Arg.Any<Guid>(), Arg.Any<CancellationToken>())
+            .Returns(new[] { 0.5f });
+        repo.FindSimilarAsync(
+                Arg.Any<Guid>(),
+                Arg.Any<float[]>(),
+                Arg.Any<int>(),
+                Arg.Is<float>(minSimilarity => minSimilarity > 0f),
+                Arg.Any<CancellationToken>())
+            .Returns(new List<ThreadMemoryMatchDto>());
+        repo.FindSimilarAsync(
+                Arg.Any<Guid>(),
+                Arg.Any<float[]>(),
+                Arg.Any<int>(),
+                0f,
+                Arg.Any<CancellationToken>())
+            .Returns(
+                new List<ThreadMemoryMatchDto>
+                {
+                    new(Guid.NewGuid(), 91, "backend/Other.cs", "Accepted without a change.", 0.31f),
+                });
+        repo.FindByFilePathAsync(
+                Arg.Any<Guid>(),
+                Arg.Any<string>(),
+                Arg.Any<string>(),
+                Arg.Any<int>(),
+                Arg.Any<CancellationToken>())
+            .Returns(new List<ThreadMemoryMatchDto>());
+        repo.GetPagedAsync(
+                ClientId,
+                Arg.Any<string?>(),
+                Arg.Any<int>(),
+                Arg.Any<int>(),
+                Arg.Any<MemorySource?>(),
+                Arg.Any<string?>(),
+                Arg.Any<int?>(),
+                Arg.Any<CancellationToken>())
+            .Returns(new PagedResult<ThreadMemoryRecord>([], 19, 1, 1));
+
+        var job = new ReviewJob(Guid.NewGuid(), ClientId, "https://dev.azure.com/org", "proj", "repo-1", 1, 1);
+        await service.RetrieveAndReconsiderAsync(
+            ClientId,
+            job,
+            "/backend/Controllers/AgentsController.cs",
+            "diff",
+            new ReviewResult("draft summary", []),
+            ProtocolId);
+
+        await recorder.Received(1)
+            .RecordMemoryEventAsync(
+                ProtocolId,
+                "memory_retrieval_executed",
+                Arg.Is<string?>(d =>
+                    d != null &&
+                    d.Contains("\"retrievalMode\":\"no_match\"") &&
+                    d.Contains("\"lookupFilePath\":\"backend/Controllers/AgentsController.cs\"") &&
+                    d.Contains("\"recordsForClient\":19") &&
+                    d.Contains("\"closestAvailableSimilarity\":0.31")),
+                Arg.Is<string?>(e => e == null),
+                Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task RetrieveAndReconsiderAsync_EveryRetrievalEmptyWhileRecordsExist_SignalsSustainedEmptyRetrieval()
+    {
+        var (embedder, repo, recorder, _, service) = CreateService();
+        embedder.GenerateEmbeddingAsync(Arg.Any<string>(), Arg.Any<Guid>(), Arg.Any<CancellationToken>())
+            .Returns(new[] { 0.5f });
+        repo.FindSimilarAsync(
+                Arg.Any<Guid>(),
+                Arg.Any<float[]>(),
+                Arg.Any<int>(),
+                Arg.Any<float>(),
+                Arg.Any<CancellationToken>())
+            .Returns(new List<ThreadMemoryMatchDto>());
+        repo.FindByFilePathAsync(
+                Arg.Any<Guid>(),
+                Arg.Any<string>(),
+                Arg.Any<string>(),
+                Arg.Any<int>(),
+                Arg.Any<CancellationToken>())
+            .Returns(new List<ThreadMemoryMatchDto>());
+        repo.GetPagedAsync(
+                ClientId,
+                Arg.Any<string?>(),
+                Arg.Any<int>(),
+                Arg.Any<int>(),
+                Arg.Any<MemorySource?>(),
+                Arg.Any<string?>(),
+                Arg.Any<int?>(),
+                Arg.Any<CancellationToken>())
+            .Returns(new PagedResult<ThreadMemoryRecord>([], 63, 1, 1));
+
+        // A protocol is opened per reviewed file, so each retrieval carries its own protocol id and only the
+        // job ties them together. One signal for the job, not one per file, and not none.
+        var job = new ReviewJob(Guid.NewGuid(), ClientId, "https://dev.azure.com/org", "proj", "repo-1", 1, 1);
+        for (var index = 0; index < 6; index++)
+        {
+            await service.RetrieveAndReconsiderAsync(
+                ClientId,
+                job,
+                $"backend/File{index}.cs",
+                "diff",
+                new ReviewResult("draft summary", []),
+                Guid.NewGuid());
+        }
+
+        await recorder.Received(1)
+            .RecordMemoryEventAsync(
+                Arg.Any<Guid>(),
+                "memory_retrieval_degraded",
+                Arg.Is<string?>(d =>
+                    d != null &&
+                    d.Contains("\"reason\":\"sustained_empty_retrieval\"") &&
+                    d.Contains("\"recordsForClient\":63")),
+                Arg.Any<string?>(),
+                Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task RetrieveAndReconsiderAsync_NoStoredRecords_DoesNotSignalSustainedEmptyRetrieval()
+    {
+        // An empty store explains its own empty retrievals. Reporting it as degraded would cry wolf on every
+        // client that has not accumulated any memory yet.
+        var (embedder, repo, recorder, _, service) = CreateService();
+        embedder.GenerateEmbeddingAsync(Arg.Any<string>(), Arg.Any<Guid>(), Arg.Any<CancellationToken>())
+            .Returns(new[] { 0.5f });
+        repo.FindSimilarAsync(
+                Arg.Any<Guid>(),
+                Arg.Any<float[]>(),
+                Arg.Any<int>(),
+                Arg.Any<float>(),
+                Arg.Any<CancellationToken>())
+            .Returns(new List<ThreadMemoryMatchDto>());
+        repo.FindByFilePathAsync(
+                Arg.Any<Guid>(),
+                Arg.Any<string>(),
+                Arg.Any<string>(),
+                Arg.Any<int>(),
+                Arg.Any<CancellationToken>())
+            .Returns(new List<ThreadMemoryMatchDto>());
+        repo.GetPagedAsync(
+                ClientId,
+                Arg.Any<string?>(),
+                Arg.Any<int>(),
+                Arg.Any<int>(),
+                Arg.Any<MemorySource?>(),
+                Arg.Any<string?>(),
+                Arg.Any<int?>(),
+                Arg.Any<CancellationToken>())
+            .Returns(new PagedResult<ThreadMemoryRecord>([], 0, 1, 1));
+
+        var job = new ReviewJob(Guid.NewGuid(), ClientId, "https://dev.azure.com/org", "proj", "repo-1", 1, 1);
+        for (var index = 0; index < 6; index++)
+        {
+            await service.RetrieveAndReconsiderAsync(
+                ClientId,
+                job,
+                $"backend/File{index}.cs",
+                "diff",
+                new ReviewResult("draft summary", []),
+                Guid.NewGuid());
+        }
+
+        await recorder.DidNotReceive()
+            .RecordMemoryEventAsync(
+                Arg.Any<Guid>(),
+                "memory_retrieval_degraded",
+                Arg.Any<string?>(),
+                Arg.Any<string?>(),
+                Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task RetrieveAndReconsiderAsync_SomeRetrievalsMatched_DoesNotSignalSustainedEmptyRetrieval()
+    {
+        // The signal is about a rate, not a count. One match in the job proves the route can work.
+        var (embedder, repo, recorder, _, service) = CreateService(out var chatClient);
+        var matched = false;
+        embedder.GenerateEmbeddingAsync(Arg.Any<string>(), Arg.Any<Guid>(), Arg.Any<CancellationToken>())
+            .Returns(new[] { 0.5f });
+        repo.FindSimilarAsync(
+                Arg.Any<Guid>(),
+                Arg.Any<float[]>(),
+                Arg.Any<int>(),
+                Arg.Any<float>(),
+                Arg.Any<CancellationToken>())
+            .Returns(_ =>
+            {
+                if (matched)
+                {
+                    return [];
+                }
+
+                matched = true;
+                return new List<ThreadMemoryMatchDto>
+                {
+                    new(Guid.NewGuid(), 5, "backend/File0.cs", "Fixed by adding the guard.", 0.92f),
+                };
+            });
+        repo.FindByFilePathAsync(
+                Arg.Any<Guid>(),
+                Arg.Any<string>(),
+                Arg.Any<string>(),
+                Arg.Any<int>(),
+                Arg.Any<CancellationToken>())
+            .Returns(new List<ThreadMemoryMatchDto>());
+        repo.GetPagedAsync(
+                ClientId,
+                Arg.Any<string?>(),
+                Arg.Any<int>(),
+                Arg.Any<int>(),
+                Arg.Any<MemorySource?>(),
+                Arg.Any<string?>(),
+                Arg.Any<int?>(),
+                Arg.Any<CancellationToken>())
+            .Returns(new PagedResult<ThreadMemoryRecord>([], 63, 1, 1));
+
+        var responseJson =
+            """{"summary":"reconsidered","comments":[],"confidence_evaluations":[],"investigation_complete":true,"loop_complete":true}""";
+        chatClient.GetResponseAsync(
+                Arg.Any<IEnumerable<ChatMessage>>(),
+                Arg.Any<ChatOptions?>(),
+                Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(new ChatResponse(new ChatMessage(ChatRole.Assistant, responseJson))));
+
+        var job = new ReviewJob(Guid.NewGuid(), ClientId, "https://dev.azure.com/org", "proj", "repo-1", 1, 1);
+        for (var index = 0; index < 6; index++)
+        {
+            await service.RetrieveAndReconsiderAsync(
+                ClientId,
+                job,
+                $"backend/File{index}.cs",
+                "diff",
+                new ReviewResult("draft summary", []),
+                Guid.NewGuid());
+        }
+
+        await recorder.DidNotReceive()
+            .RecordMemoryEventAsync(
+                Arg.Any<Guid>(),
+                "memory_retrieval_degraded",
+                Arg.Any<string?>(),
+                Arg.Any<string?>(),
                 Arg.Any<CancellationToken>());
     }
 
@@ -752,7 +1500,7 @@ public sealed class ThreadMemoryServiceTests
                 ClientId,
                 "repo-1",
                 42,
-                "/src/Foo.cs",
+                "src/Foo.cs",
                 Arg.Any<int>(),
                 Arg.Any<CancellationToken>())
             .Returns(
@@ -792,7 +1540,7 @@ public sealed class ThreadMemoryServiceTests
                 ClientId,
                 "repo-1",
                 42,
-                "/src/Foo.cs",
+                "src/Foo.cs",
                 Arg.Any<int>(),
                 Arg.Any<CancellationToken>())
             .Returns(new List<ThreadMemoryMatchDto>());
@@ -818,7 +1566,44 @@ public sealed class ThreadMemoryServiceTests
                 ClientId,
                 "repo-1",
                 42,
-                "/src/Foo.cs",
+                "src/Foo.cs",
+                Arg.Any<int>(),
+                Arg.Any<CancellationToken>());
+    }
+
+    [Theory]
+    [InlineData("/src/Foo.cs")]
+    [InlineData("src/Foo.cs")]
+    [InlineData("src\\Foo.cs")]
+    public async Task FindDuplicateSuppressionMatchAsync_EitherPathForm_QueriesTheCanonicalStoredForm(string candidateFilePath)
+    {
+        // The suppression lookup and the review-time lookup share one stored form. If they disagree, one of
+        // them silently stops matching.
+        var (embedder, repo, _, _, service) = CreateService();
+        embedder.GenerateEmbeddingAsync(Arg.Any<string>(), ClientId, Arg.Any<CancellationToken>())
+            .ThrowsAsync(new InvalidOperationException("embedding unavailable"));
+        repo.FindByPullRequestFilePathAsync(
+                ClientId,
+                "repo-1",
+                42,
+                Arg.Any<string>(),
+                Arg.Any<int>(),
+                Arg.Any<CancellationToken>())
+            .Returns(new List<ThreadMemoryMatchDto>());
+
+        await service.FindDuplicateSuppressionMatchAsync(
+            ClientId,
+            "repo-1",
+            42,
+            candidateFilePath,
+            "Validate the configuration before using it.");
+
+        await repo.Received(1)
+            .FindByPullRequestFilePathAsync(
+                ClientId,
+                "repo-1",
+                42,
+                "src/Foo.cs",
                 Arg.Any<int>(),
                 Arg.Any<CancellationToken>());
     }
@@ -843,7 +1628,7 @@ public sealed class ThreadMemoryServiceTests
                 ClientId,
                 "repo-1",
                 42,
-                "/src/Foo.cs",
+                "src/Foo.cs",
                 Arg.Any<int>(),
                 Arg.Any<CancellationToken>())
             .ThrowsAsync(new InvalidOperationException("repository unavailable"));

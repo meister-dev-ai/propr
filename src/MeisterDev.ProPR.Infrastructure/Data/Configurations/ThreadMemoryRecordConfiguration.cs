@@ -77,6 +77,19 @@ internal sealed class ThreadMemoryRecordConfiguration : IEntityTypeConfiguration
             .HasDefaultValue(MemorySource.ThreadResolved)
             .IsRequired();
 
+        // Nullable on purpose. An administrator dismissal has no reviewer resolution to classify, and a record
+        // written before the outcome was kept has none either. Defaulting those to any enum value would state
+        // an outcome nobody decided, so absent stays absent.
+        builder.Property(r => r.ResolutionIntent)
+            .HasColumnName("resolution_intent")
+            .HasConversion<short?>()
+            .IsRequired(false);
+
+        builder.Property(r => r.ResolutionClarity)
+            .HasColumnName("resolution_clarity")
+            .HasConversion<short?>()
+            .IsRequired(false);
+
         builder.Property(r => r.CodeInsightFindingId)
             .HasColumnName("code_insight_finding_id")
             .IsRequired(false);

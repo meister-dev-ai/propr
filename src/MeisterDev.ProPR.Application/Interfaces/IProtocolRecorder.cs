@@ -196,10 +196,11 @@ public interface IProtocolRecorder
     ///     Records a memory system operation event. Never throws.
     ///     Valid <paramref name="eventName" /> values: <c>memory_embedding_stored</c>,
     ///     <c>memory_embedding_removed</c>, <c>memory_retrieval_executed</c>,
-    ///     <c>memory_reconsideration_completed</c>, <c>memory_operation_failed</c>.
+    ///     <c>memory_retrieval_degraded</c>, <c>memory_reconsideration_completed</c>,
+    ///     <c>memory_operation_failed</c>.
     /// </summary>
     /// <param name="protocolId">The protocol this event belongs to.</param>
-    /// <param name="eventName">The memory event name (one of the five defined values).</param>
+    /// <param name="eventName">The memory event name (one of the defined values listed above).</param>
     /// <param name="details">JSON-serialised metadata for the event, or <see langword="null" />.</param>
     /// <param name="error">Error message if the operation failed, or <see langword="null" />.</param>
     /// <param name="ct">Cancellation token.</param>

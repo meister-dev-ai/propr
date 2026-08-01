@@ -229,6 +229,7 @@ These sit under the publication gate, not in place of it - see
 | `AI_MEMORY_TOP_N` | Past resolutions retrieved per file review | `3` | 1–20 | yes |
 | `AI_MEMORY_MIN_SIMILARITY` | Minimum similarity for a past resolution to be considered | `0.80` | 0.0–1.0 | yes |
 | `AI_MEMORY_EMBEDDING_DIMENSIONS` | Embedding width; must match the model bound to the embedding purpose | `1536` | 64–4096 | yes |
+| `AI_POSTED_FINDING_MIN_SIMILARITY` | Minimum similarity for a finding to count as a duplicate of one already posted on the pull request | `0.85` | 0.0–1.0 | yes |
 
 The embedding model itself is configured per client, not here - see
 [purposes](../ai/purposes.md).

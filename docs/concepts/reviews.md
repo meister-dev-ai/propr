@@ -31,7 +31,12 @@ that call fails, the filter keeps the comment rather than silently dropping it, 
 degraded.
 
 **Thread memory.** ProPR remembers how a comment thread on this pull request was resolved previously,
-so a point you already rejected does not come back on the next push.
+so a point you already rejected does not come back on the next push. A memory of a thread you resolved
+records which kind of resolution it was: you rejected the concern and accepted the code as it stands, or
+you marked it fixed. Memories from before that was recorded, and ones an administrator created by
+dismissing a pattern, carry no such outcome and claim none.
+The two mean opposite things for a recurrence, so a rejection you made is shown to the model ahead of a
+fix, and a rejection the discussion never stated plainly is marked as the weaker signal it is.
 
 **Verification.** Findings are checked against the actual code before publication - locally per file,
 and then across the whole pull request for anything that spans files.

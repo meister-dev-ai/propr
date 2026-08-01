@@ -21,7 +21,7 @@ public sealed class ThreadMemoryRepository(
     MeisterProPRDbContext db,
     IDbContextFactory<MeisterProPRDbContext>? contextFactory = null) : IThreadMemoryRepository
 {
-    private const int UpsertColumnCount = 13;
+    private const int UpsertColumnCount = 15;
 
     /// <inheritdoc />
     public async Task UpsertAsync(ThreadMemoryRecord record, CancellationToken ct = default)
@@ -173,6 +173,8 @@ public sealed class ThreadMemoryRepository(
                     r.FilePath,
                     r.ResolutionSummary,
                     r.MemorySource,
+                    r.ResolutionIntent,
+                    r.ResolutionClarity,
                     Distance = r.EmbeddingVector.CosineDistance(pgVector),
                 })
                 .Where(r => r.Distance <= maxDistance)
@@ -188,7 +190,9 @@ public sealed class ThreadMemoryRepository(
                 r.FilePath,
                 r.ResolutionSummary,
                 (float)(1.0 - r.Distance),
-                Source: r.MemorySource))
+                Source: r.MemorySource,
+                Intent: r.ResolutionIntent,
+                Clarity: r.ResolutionClarity))
             .ToList()
             .AsReadOnly();
     }
@@ -225,7 +229,9 @@ public sealed class ThreadMemoryRepository(
                     r.ResolutionSummary,
                     0f,
                     "exact_file_fallback",
-                    r.MemorySource))
+                    r.MemorySource,
+                    r.ResolutionIntent,
+                    r.ResolutionClarity))
                 .ToListAsync(ct),
             ct);
     }
@@ -258,6 +264,8 @@ public sealed class ThreadMemoryRepository(
                     r.FilePath,
                     r.ResolutionSummary,
                     r.MemorySource,
+                    r.ResolutionIntent,
+                    r.ResolutionClarity,
                     Distance = r.EmbeddingVector.CosineDistance(pgVector),
                 })
                 .Where(r => r.Distance <= maxDistance)
@@ -273,7 +281,9 @@ public sealed class ThreadMemoryRepository(
                 r.FilePath,
                 r.ResolutionSummary,
                 (float)(1.0 - r.Distance),
-                Source: r.MemorySource))
+                Source: r.MemorySource,
+                Intent: r.ResolutionIntent,
+                Clarity: r.ResolutionClarity))
             .ToList()
             .AsReadOnly();
     }
@@ -312,7 +322,9 @@ public sealed class ThreadMemoryRepository(
                     r.ResolutionSummary,
                     0f,
                     "exact_file_fallback",
-                    r.MemorySource))
+                    r.MemorySource,
+                    r.ResolutionIntent,
+                    r.ResolutionClarity))
                 .ToListAsync(ct),
             ct);
     }
@@ -347,7 +359,7 @@ public sealed class ThreadMemoryRepository(
             INSERT INTO thread_memory_records
                 (id, client_id, thread_id, repository_id, pull_request_id, file_path,
                  change_excerpt, comment_history_digest, resolution_summary, embedding_vector,
-                 memory_source, created_at, updated_at)
+                 memory_source, resolution_intent, resolution_clarity, created_at, updated_at)
             VALUES
             """);
 
@@ -356,7 +368,7 @@ public sealed class ThreadMemoryRepository(
             var record = records[index];
             var parameterOffset = index * UpsertColumnCount;
             valueTuples.Add(
-                $"    ({{{parameterOffset}}}, {{{parameterOffset + 1}}}, {{{parameterOffset + 2}}}, {{{parameterOffset + 3}}}, {{{parameterOffset + 4}}}, {{{parameterOffset + 5}}}, {{{parameterOffset + 6}}}, {{{parameterOffset + 7}}}, {{{parameterOffset + 8}}}, {{{parameterOffset + 9}}}, {{{parameterOffset + 10}}}, {{{parameterOffset + 11}}}, {{{parameterOffset + 12}}})");
+                $"    ({{{parameterOffset}}}, {{{parameterOffset + 1}}}, {{{parameterOffset + 2}}}, {{{parameterOffset + 3}}}, {{{parameterOffset + 4}}}, {{{parameterOffset + 5}}}, {{{parameterOffset + 6}}}, {{{parameterOffset + 7}}}, {{{parameterOffset + 8}}}, {{{parameterOffset + 9}}}, {{{parameterOffset + 10}}}, {{{parameterOffset + 11}}}, {{{parameterOffset + 12}}}, {{{parameterOffset + 13}}}, {{{parameterOffset + 14}}})");
             parameters.AddRange(
             [
                 record.Id,
@@ -370,6 +382,8 @@ public sealed class ThreadMemoryRepository(
                 record.ResolutionSummary,
                 new Vector(record.EmbeddingVector),
                 (short)record.MemorySource,
+                record.ResolutionIntent.HasValue ? (short)record.ResolutionIntent.Value : null,
+                record.ResolutionClarity.HasValue ? (short)record.ResolutionClarity.Value : null,
                 record.CreatedAt,
                 record.UpdatedAt,
             ]);
@@ -386,6 +400,8 @@ public sealed class ThreadMemoryRepository(
                 resolution_summary     = EXCLUDED.resolution_summary,
                 embedding_vector       = EXCLUDED.embedding_vector,
                 memory_source          = EXCLUDED.memory_source,
+                resolution_intent      = EXCLUDED.resolution_intent,
+                resolution_clarity     = EXCLUDED.resolution_clarity,
                 updated_at             = EXCLUDED.updated_at
             """);
 

@@ -242,6 +242,8 @@ public static class InfrastructureServiceExtensions
         opts.MemoryTopN = TryGetInt(configuration, "AI_MEMORY_TOP_N") ?? opts.MemoryTopN;
         opts.MemoryMinSimilarity = TryGetFloat(configuration, "AI_MEMORY_MIN_SIMILARITY") ?? opts.MemoryMinSimilarity;
         opts.MemoryEmbeddingDimensions = TryGetInt(configuration, "AI_MEMORY_EMBEDDING_DIMENSIONS") ?? opts.MemoryEmbeddingDimensions;
+        opts.PostedFindingMinSimilarity =
+            TryGetFloat(configuration, "AI_POSTED_FINDING_MIN_SIMILARITY") ?? opts.PostedFindingMinSimilarity;
 
         // Structural boundary resolution (feature 070).
         opts.EnableStructuralBoundaryResolution =

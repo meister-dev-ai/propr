@@ -78,6 +78,11 @@ public sealed partial class ReviewOrchestrationService
 
     [LoggerMessage(
         Level = LogLevel.Warning,
+        Message = "Indexing the findings posted by job {JobId} failed; a later increment may repeat them")]
+    private static partial void LogPostedFindingIndexingFailed(ILogger logger, Guid jobId, Exception ex);
+
+    [LoggerMessage(
+        Level = LogLevel.Warning,
         Message = "Auto-resolve is configured but provider {Provider} has no thread-resolution adapter — nothing auto-resolved for job {JobId}")]
     private static partial void LogAutoResolveUnsupported(ILogger logger, ScmProvider provider, Guid jobId, Exception ex);
 

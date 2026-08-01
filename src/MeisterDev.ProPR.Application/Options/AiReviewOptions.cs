@@ -238,6 +238,20 @@ public sealed class AiReviewOptions
     public int MemoryEmbeddingDimensions { get; set; } = 1536;
 
     /// <summary>
+    ///     Minimum cosine similarity (0.0–1.0) for a candidate finding to count as a duplicate of a finding
+    ///     already posted on the same pull request. Bound to <c>AI_POSTED_FINDING_MIN_SIMILARITY</c>.
+    /// </summary>
+    /// <remarks>
+    ///     Deliberately separate from <see cref="MemoryMinSimilarity" /> and set higher. That threshold governs
+    ///     what the model is shown for reconsideration, where being wrong costs a little context; this one
+    ///     decides whether a finding reaches the pull request at all, where being wrong loses review output.
+    ///     Suppression must be the more conservative of the two, and sharing one number is how a recall knob
+    ///     turns into a precision incident.
+    /// </remarks>
+    [Range(0.0f, 1.0f, ErrorMessage = "PostedFindingMinSimilarity must be between 0.0 and 1.0.")]
+    public float PostedFindingMinSimilarity { get; set; } = 0.85f;
+
+    /// <summary>
     ///     Kill-switch for the internal Tree-sitter structural boundary resolver (feature 070).
     ///     When <c>false</c>, the prefetch stage uses the existing heuristic everywhere and
     ///     the analyzer is not consulted. Bound to <c>AI_ENABLE_STRUCTURAL_BOUNDARY_RESOLUTION</c>.

@@ -28,6 +28,7 @@ using MeisterDev.ProPR.Infrastructure.Features.Reviewing.Execution.Strategies.Fi
 using MeisterDev.ProPR.Infrastructure.Features.Reviewing.Execution.Strategies.PrWideAgentic;
 using MeisterDev.ProPR.Infrastructure.Features.Reviewing.Execution.Verification;
 using MeisterDev.ProPR.Infrastructure.Features.Reviewing.Intake.DependencyInjection;
+using MeisterDev.ProPR.Infrastructure.Features.Reviewing.PostedFindings;
 using MeisterDev.ProPR.Infrastructure.Features.Reviewing.Offline.DependencyInjection;
 using MeisterDev.ProPR.Infrastructure.Features.Reviewing.ThreadMemory.DependencyInjection;
 using MeisterDev.ProPR.Infrastructure.Repositories;
@@ -115,6 +116,7 @@ public static class ReviewingModuleServiceCollectionExtensions
             services.AddSingleton<IModelPricingResolver, EfModelPricingResolver>();
             services.AddSingleton<IProtocolRecorder, EfProtocolRecorder>();
             services.AddScoped<IThreadMemoryRepository, ThreadMemoryRepository>();
+            services.AddScoped<IPostedFindingRepository, PostedFindingRepository>();
             services.AddScoped<IMemoryActivityLog, MemoryActivityLogRepository>();
         }
         else
@@ -216,6 +218,7 @@ public static class ReviewingModuleServiceCollectionExtensions
         {
             services.AddScoped<IThreadMemoryEmbedder, ThreadMemoryEmbedder>();
             services.AddScoped<IThreadMemoryService, ThreadMemoryService>();
+            services.AddScoped<IPostedFindingIndex, PostedFindingIndex>();
         }
 
         services.TryAddScoped<IReviewerThreadStatusFetcher, ProviderReviewerThreadStatusFetcher>();

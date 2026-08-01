@@ -14,7 +14,12 @@ namespace MeisterDev.ProPR.Application.DTOs;
 /// <param name="ResolutionSummary">AI-generated resolution summary from the stored record.</param>
 /// <param name="SimilarityScore">Cosine similarity score (0–1) between the query vector and the stored vector.</param>
 /// <param name="MatchSource">How the record was selected, for example <c>semantic</c> or <c>exact_file_fallback</c>.</param>
-/// <param name="Source">How the memory was created — resolved thread or admin dismissal.</param>
+/// <param name="Source">How the memory was created, a resolved thread or an admin dismissal.</param>
+/// <param name="Intent">
+///     What the reviewer's resolution meant, a deliberate acceptance or a claimed fix. Null where the record
+///     carries no reviewer resolution, and for records written before the outcome was recorded.
+/// </param>
+/// <param name="Clarity">How clearly the thread read as resolved, which qualifies the intent.</param>
 public sealed record ThreadMemoryMatchDto(
     Guid MemoryRecordId,
     long ThreadId,
@@ -22,4 +27,6 @@ public sealed record ThreadMemoryMatchDto(
     string ResolutionSummary,
     float SimilarityScore,
     string MatchSource = "semantic",
-    MemorySource Source = MemorySource.ThreadResolved);
+    MemorySource Source = MemorySource.ThreadResolved,
+    ThreadResolutionIntent? Intent = null,
+    ResolutionClarity? Clarity = null);

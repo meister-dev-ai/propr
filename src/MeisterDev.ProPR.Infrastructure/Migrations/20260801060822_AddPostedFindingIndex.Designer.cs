@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using MeisterDev.ProPR.Infrastructure.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 using Pgvector;
@@ -13,9 +14,11 @@ using Pgvector;
 namespace MeisterDev.ProPR.Infrastructure.Migrations
 {
     [DbContext(typeof(MeisterProPRDbContext))]
-    partial class MeisterProPRDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260801060822_AddPostedFindingIndex")]
+    partial class AddPostedFindingIndex
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -1292,12 +1295,6 @@ namespace MeisterDev.ProPR.Infrastructure.Migrations
                     b.Property<Guid>("Id")
                         .HasColumnType("uuid")
                         .HasColumnName("id");
-
-                    b.Property<bool>("AutoResolvedByProPr")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("boolean")
-                        .HasDefaultValue(false)
-                        .HasColumnName("auto_resolved_by_propr");
 
                     b.Property<Guid>("ClientId")
                         .HasColumnType("uuid")

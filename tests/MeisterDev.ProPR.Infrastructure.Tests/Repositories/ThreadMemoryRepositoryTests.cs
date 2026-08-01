@@ -2,6 +2,7 @@
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
 using MeisterDev.ProPR.Domain.Entities;
+using MeisterDev.ProPR.Domain.Enums;
 using MeisterDev.ProPR.Infrastructure.Data;
 using MeisterDev.ProPR.Infrastructure.Data.Models;
 using MeisterDev.ProPR.Infrastructure.Features.IdentityAndAccess;
@@ -17,7 +18,6 @@ namespace MeisterDev.ProPR.Infrastructure.Tests.Repositories;
 
 /// <summary>
 ///     Integration tests for <see cref="ThreadMemoryRepository" /> against a real PostgreSQL instance with pgvector.
-///     Tests cover T018 (US1), T024 (US2), T029 (US3).
 /// </summary>
 [Collection("PostgresIntegration")]
 public sealed class ThreadMemoryRepositoryTests(PostgresContainerFixture fixture) : IAsyncLifetime
@@ -82,6 +82,111 @@ public sealed class ThreadMemoryRepositoryTests(PostgresContainerFixture fixture
             .FirstOrDefaultAsync(r => r.ClientId == ClientA && r.ThreadId == 101);
         Assert.NotNull(stored);
         Assert.Equal("src/Foo.cs", stored.FilePath);
+    }
+
+    [Fact]
+    public async Task UpsertAsync_RecordWithResolutionOutcome_RoundTripsBothClassifications()
+    {
+        var record = CreateRecord(
+            ClientA,
+            1,
+            110,
+            resolutionIntent: ThreadResolutionIntent.AcceptedByHuman,
+            resolutionClarity: ResolutionClarity.AcceptedWithoutChange);
+
+        await this._repo.UpsertAsync(record);
+
+        var stored = await this._db.ThreadMemoryRecords
+            .AsNoTracking()
+            .FirstOrDefaultAsync(r => r.ClientId == ClientA && r.ThreadId == 110);
+        Assert.NotNull(stored);
+        Assert.Equal(ThreadResolutionIntent.AcceptedByHuman, stored.ResolutionIntent);
+        Assert.Equal(ResolutionClarity.AcceptedWithoutChange, stored.ResolutionClarity);
+    }
+
+    [Fact]
+    public async Task UpsertAsync_ReclassifiedResolution_ReplacesTheStoredOutcome()
+    {
+        // A reviewer can reopen a thread and close it differently, and the resolution pipeline can re-run for
+        // the same thread. The stored outcome has to follow the latest write rather than stay at the first.
+        var claimedFix = CreateRecord(
+            ClientA,
+            1,
+            113,
+            resolutionIntent: ThreadResolutionIntent.ClaimsFix,
+            resolutionClarity: ResolutionClarity.ResolvedByChange);
+        await this._repo.UpsertAsync(claimedFix);
+
+        var reclassified = CreateRecord(
+            ClientA,
+            1,
+            113,
+            resolutionIntent: ThreadResolutionIntent.AcceptedByHuman,
+            resolutionClarity: ResolutionClarity.AcceptedWithoutChange);
+        await this._repo.UpsertAsync(reclassified);
+
+        var stored = await this._db.ThreadMemoryRecords
+            .AsNoTracking()
+            .SingleAsync(r => r.ClientId == ClientA && r.ThreadId == 113);
+        Assert.Equal(ThreadResolutionIntent.AcceptedByHuman, stored.ResolutionIntent);
+        Assert.Equal(ResolutionClarity.AcceptedWithoutChange, stored.ResolutionClarity);
+    }
+
+    [Fact]
+    public async Task UpsertAsync_RecordWithoutResolutionOutcome_StoresItAsAbsent()
+    {
+        var record = CreateRecord(ClientA, 1, 111);
+
+        await this._repo.UpsertAsync(record);
+
+        var stored = await this._db.ThreadMemoryRecords
+            .AsNoTracking()
+            .FirstOrDefaultAsync(r => r.ClientId == ClientA && r.ThreadId == 111);
+        Assert.NotNull(stored);
+        Assert.Null(stored.ResolutionIntent);
+        Assert.Null(stored.ResolutionClarity);
+    }
+
+    [Fact]
+    public async Task FindSimilarAsync_RecordWithResolutionOutcome_CarriesItIntoTheMatch()
+    {
+        var record = CreateRecord(
+            ClientA,
+            1,
+            112,
+            resolutionIntent: ThreadResolutionIntent.AcceptedByHuman,
+            resolutionClarity: ResolutionClarity.Undetermined);
+        await this._repo.UpsertAsync(record);
+
+        var matches = await this._repo.FindSimilarAsync(ClientA, V(1f), 5, 0.5f);
+
+        var match = Assert.Single(matches, m => m.ThreadId == 112);
+        Assert.Equal(ThreadResolutionIntent.AcceptedByHuman, match.Intent);
+        Assert.Equal(ResolutionClarity.Undetermined, match.Clarity);
+    }
+
+    [Fact]
+    public async Task PullRequestScopedLookups_RecordWithResolutionOutcome_CarryItIntoTheMatch()
+    {
+        var record = CreateRecord(
+            ClientA,
+            88,
+            114,
+            filePath: "src/Outcome.cs",
+            resolutionIntent: ThreadResolutionIntent.AcceptedByHuman,
+            resolutionClarity: ResolutionClarity.AcceptedWithoutChange);
+        await this._repo.UpsertAsync(record);
+
+        var semantic = await this._repo.FindSimilarInPullRequestAsync(ClientA, RepoId, 88, V(1f), 5, 0.5f);
+        var byPath = await this._repo.FindByPullRequestFilePathAsync(ClientA, RepoId, 88, "src/Outcome.cs", 5);
+
+        var semanticMatch = Assert.Single(semantic, m => m.ThreadId == 114);
+        Assert.Equal(ThreadResolutionIntent.AcceptedByHuman, semanticMatch.Intent);
+        Assert.Equal(ResolutionClarity.AcceptedWithoutChange, semanticMatch.Clarity);
+
+        var pathMatch = Assert.Single(byPath, m => m.ThreadId == 114);
+        Assert.Equal(ThreadResolutionIntent.AcceptedByHuman, pathMatch.Intent);
+        Assert.Equal(ResolutionClarity.AcceptedWithoutChange, pathMatch.Clarity);
     }
 
     [Fact]
@@ -242,21 +347,21 @@ public sealed class ThreadMemoryRepositoryTests(PostgresContainerFixture fixture
             ClientA,
             1,
             801,
-            filePath: "/package.json",
+            filePath: "package.json",
             updatedAt: DateTimeOffset.UtcNow.AddMinutes(-10));
-        var newer = CreateRecord(ClientA, 1, 802, filePath: "/package.json", updatedAt: DateTimeOffset.UtcNow);
+        var newer = CreateRecord(ClientA, 1, 802, filePath: "package.json", updatedAt: DateTimeOffset.UtcNow);
         var otherRepo = CreateRecord(
             ClientA,
             1,
             803,
-            filePath: "/package.json",
+            filePath: "package.json",
             repositoryId: "other-repo",
             updatedAt: DateTimeOffset.UtcNow.AddMinutes(5));
         var otherPath = CreateRecord(
             ClientA,
             1,
             804,
-            filePath: "/vite.config.js",
+            filePath: "vite.config.js",
             updatedAt: DateTimeOffset.UtcNow.AddMinutes(6));
 
         await this._repo.UpsertAsync(older);
@@ -264,7 +369,7 @@ public sealed class ThreadMemoryRepositoryTests(PostgresContainerFixture fixture
         await this._repo.UpsertAsync(otherRepo);
         await this._repo.UpsertAsync(otherPath);
 
-        var results = await this._repo.FindByFilePathAsync(ClientA, RepoId, "/package.json", 5);
+        var results = await this._repo.FindByFilePathAsync(ClientA, RepoId, "package.json", 5);
 
         Assert.Collection(
             results,
@@ -278,17 +383,17 @@ public sealed class ThreadMemoryRepositoryTests(PostgresContainerFixture fixture
                 Assert.Equal(801, second.ThreadId);
                 Assert.Equal("exact_file_fallback", second.MatchSource);
             });
-        Assert.All(results, r => Assert.Equal("/package.json", r.FilePath));
+        Assert.All(results, r => Assert.Equal("package.json", r.FilePath));
         Assert.DoesNotContain(results, r => r.ThreadId == 803 || r.ThreadId == 804);
     }
 
     [Fact]
     public async Task FindByFilePathAsync_IsCaseInsensitive()
     {
-        var record = CreateRecord(ClientA, 1, 805, filePath: "/SRC/Package.JSON");
+        var record = CreateRecord(ClientA, 1, 805, filePath: "SRC/Package.JSON");
         await this._repo.UpsertAsync(record);
 
-        var results = await this._repo.FindByFilePathAsync(ClientA, RepoId, "/src/package.json", 5);
+        var results = await this._repo.FindByFilePathAsync(ClientA, RepoId, "src/package.json", 5);
 
         Assert.Single(results);
         Assert.Equal(805, results[0].ThreadId);
@@ -297,10 +402,10 @@ public sealed class ThreadMemoryRepositoryTests(PostgresContainerFixture fixture
     [Fact]
     public async Task FindByPullRequestFilePathAsync_IsCaseInsensitive()
     {
-        var record = CreateRecord(ClientA, 77, 806, filePath: "/SRC/Package.JSON");
+        var record = CreateRecord(ClientA, 77, 806, filePath: "SRC/Package.JSON");
         await this._repo.UpsertAsync(record);
 
-        var results = await this._repo.FindByPullRequestFilePathAsync(ClientA, RepoId, 77, "/src/package.json", 5);
+        var results = await this._repo.FindByPullRequestFilePathAsync(ClientA, RepoId, 77, "src/package.json", 5);
 
         Assert.Single(results);
         Assert.Equal(806, results[0].ThreadId);
@@ -360,7 +465,9 @@ public sealed class ThreadMemoryRepositoryTests(PostgresContainerFixture fixture
         float[]? vector = null,
         string filePath = "src/Foo.cs",
         string repositoryId = RepoId,
-        DateTimeOffset? updatedAt = null)
+        DateTimeOffset? updatedAt = null,
+        ThreadResolutionIntent? resolutionIntent = null,
+        ResolutionClarity? resolutionClarity = null)
     {
         var timestamp = updatedAt ?? DateTimeOffset.UtcNow;
 
@@ -376,6 +483,8 @@ public sealed class ThreadMemoryRepositoryTests(PostgresContainerFixture fixture
             CommentHistoryDigest = "Reviewer: fix this please\nAuthor: done",
             ResolutionSummary = "The issue was resolved by changing X.",
             EmbeddingVector = vector ?? V(1f),
+            ResolutionIntent = resolutionIntent,
+            ResolutionClarity = resolutionClarity,
             CreatedAt = timestamp,
             UpdatedAt = timestamp,
         };

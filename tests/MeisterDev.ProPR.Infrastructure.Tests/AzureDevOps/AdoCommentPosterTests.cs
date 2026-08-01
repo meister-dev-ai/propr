@@ -614,7 +614,7 @@ public class AdoCommentPosterTests
                 new("/src/A.cs", 1, CommentSeverity.Error, "one"),
             }.AsReadOnly());
 
-        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => PostAsync(result, factory, cts.Token));
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => PostAsync(result, factory, cancellationToken: cts.Token));
     }
 
     [Fact]
@@ -648,9 +648,117 @@ public class AdoCommentPosterTests
         Assert.Equal("/src/B.cs", failure.FilePath);
     }
 
+    [Fact]
+    public async Task PostResolvedThreadsAsync_FilelessFindingWithExistingBotSummary_PostsInsteadOfSuppressing()
+    {
+        // A later review increment already carries the bot's pull-request-level summary thread. A finding
+        // without a file anchor must still reach the provider instead of being counted as a duplicate.
+        var invocations = new List<string>();
+        AdoCommentPoster.AdoThreadFactory factory = (message, _, _, _) =>
+        {
+            invocations.Add(message);
+            return Task.FromResult(CreatedThread(invocations.Count, message));
+        };
+
+        var existingThreads = new List<PrCommentThread>
+        {
+            new(
+                101,
+                null,
+                null,
+                new List<PrThreadComment>
+                {
+                    new("Bot", "**AI Review Summary**\n\nEarlier increment.", PosterBotId),
+                }.AsReadOnly()),
+        };
+
+        var result = new ReviewResult(
+            "Second increment.",
+            new List<ReviewComment>
+            {
+                new(null, null, CommentSeverity.Warning, "Two callers duplicate the retry policy."),
+            }.AsReadOnly());
+
+        var diagnostics = await PostAsync(result, factory, existingThreads: existingThreads);
+
+        // The summary is skipped because one already exists, so the only creation is the fileless finding.
+        var posted = Assert.Single(invocations);
+        Assert.Contains("Two callers duplicate the retry policy.", posted, StringComparison.Ordinal);
+        Assert.Equal(1, diagnostics.PostedCount);
+        Assert.Equal(0, diagnostics.SuppressedCount);
+        Assert.Empty(diagnostics.SuppressionReasons);
+    }
+
+    [Fact]
+    public async Task PostResolvedThreadsAsync_FirstIncrementFilelessFinding_PostsSummaryAndFinding()
+    {
+        // On the first increment the summary thread is created during this same pass, so it is absent from
+        // the fetched thread list and cannot suppress anything.
+        var invocations = new List<string>();
+        AdoCommentPoster.AdoThreadFactory factory = (message, _, _, _) =>
+        {
+            invocations.Add(message);
+            return Task.FromResult(CreatedThread(invocations.Count, message));
+        };
+
+        var result = new ReviewResult(
+            "First increment.",
+            new List<ReviewComment>
+            {
+                new(null, null, CommentSeverity.Warning, "Two callers duplicate the retry policy."),
+            }.AsReadOnly());
+
+        var diagnostics = await PostAsync(result, factory, existingThreads: []);
+
+        Assert.Equal(2, invocations.Count);
+        Assert.Equal(1, diagnostics.PostedCount);
+        Assert.Equal(0, diagnostics.SuppressedCount);
+    }
+
+    [Fact]
+    public async Task PostResolvedThreadsAsync_FilelessFindingWithHumanRepliedSummary_StillPosts()
+    {
+        // A human reply on the summary thread does not make it a match for an unrelated fileless finding.
+        var invocations = new List<string>();
+        AdoCommentPoster.AdoThreadFactory factory = (message, _, _, _) =>
+        {
+            invocations.Add(message);
+            return Task.FromResult(CreatedThread(invocations.Count, message));
+        };
+
+        var existingThreads = new List<PrCommentThread>
+        {
+            new(
+                102,
+                null,
+                null,
+                new List<PrThreadComment>
+                {
+                    new("Bot", "**AI Review Summary**\n\nEarlier increment.", PosterBotId),
+                    new("Alice", "Thanks, looking at this now.", Guid.NewGuid()),
+                }.AsReadOnly(),
+                "Closed"),
+        };
+
+        var result = new ReviewResult(
+            "Second increment.",
+            new List<ReviewComment>
+            {
+                new(null, null, CommentSeverity.Warning, "Two callers duplicate the retry policy."),
+            }.AsReadOnly());
+
+        var diagnostics = await PostAsync(result, factory, existingThreads: existingThreads);
+
+        var posted = Assert.Single(invocations);
+        Assert.Contains("Two callers duplicate the retry policy.", posted, StringComparison.Ordinal);
+        Assert.Equal(1, diagnostics.PostedCount);
+        Assert.Equal(0, diagnostics.SuppressedCount);
+    }
+
     private static Task<ReviewCommentPostingDiagnosticsDto> PostAsync(
         ReviewResult result,
         AdoCommentPoster.AdoThreadFactory factory,
+        IReadOnlyList<PrCommentThread>? existingThreads = null,
         CancellationToken cancellationToken = default)
     {
         var poster = new AdoCommentPoster(null!, null!);
@@ -664,7 +772,7 @@ public class AdoCommentPosterTests
             iterationId: 1,
             compareToIterationId: null,
             changeTrackingIds: new Dictionary<string, int>(),
-            existingThreads: null,
+            existingThreads: existingThreads,
             publicationIdentity: null,
             cancellationToken);
     }

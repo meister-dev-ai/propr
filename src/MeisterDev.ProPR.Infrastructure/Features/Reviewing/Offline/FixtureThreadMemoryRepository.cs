@@ -102,7 +102,9 @@ public sealed class FixtureThreadMemoryRepository(IReviewEvaluationFixtureAccess
             match.ResolutionSummary,
             match.SimilarityScore,
             match.MatchSource,
-            match.Source));
+            match.Source,
+            match.Intent,
+            match.Clarity));
 
         if (!string.IsNullOrWhiteSpace(filePath))
         {

@@ -44,7 +44,22 @@ public sealed partial class ThreadMemoryService(
     private const string EmbeddingDegradedComponent = "thread_memory_embedding";
     private const string RepositoryDegradedComponent = "thread_memory_repository";
     private const string FilePathFallbackCheck = "pull_request_file_path_memory";
+
+    /// <summary>
+    ///     How many retrievals a job may make, all of them empty, before the emptiness itself is reported.
+    ///     A single empty retrieval is ordinary; every retrieval in a job coming back empty while the client
+    ///     holds records means the check could not have worked. It also bounds how many files in one job pay
+    ///     for the closest-distance probe, so the signal always carries a measured distance.
+    /// </summary>
+    private const int SustainedEmptyRetrievalAttempts = 5;
+
     private readonly ConcurrentDictionary<Guid, byte> _embeddingLookupFailuresByClient = new();
+
+    // Keyed by job, not by protocol: a protocol is opened per reviewed file, so a per-protocol tally would
+    // only ever count one retrieval. Keying by job also keeps two jobs and two clients apart whatever the
+    // lifetime of this instance turns out to be. Files are reviewed in parallel against one instance.
+    private readonly ConcurrentDictionary<Guid, EmptyRetrievalTally> _retrievalTalliesByJob = new();
+    private readonly ConcurrentDictionary<Guid, int> _clientRecordCountsByJob = new();
 
     private readonly AiReviewOptions _opts = options.Value;
 
@@ -75,10 +90,15 @@ public sealed partial class ThreadMemoryService(
             return;
         }
 
+        // The store keeps one canonical path form, so a record written from a provider thread path stays
+        // retrievable by the orchestrator's changed-file path. The two producers disagree: Azure DevOps
+        // thread contexts are repository-root-absolute, the rest of the pipeline is repository-relative.
+        var canonicalFilePath = CanonicalizeFilePath(evt.FilePath);
+
         try
         {
             var resolution = await embedder.GenerateResolutionSummaryAsync(
-                evt.FilePath,
+                canonicalFilePath,
                 evt.ChangeExcerpt,
                 evt.CommentHistory,
                 evt.ClientId,
@@ -101,7 +121,7 @@ public sealed partial class ThreadMemoryService(
             }
 
             var compositeText = BuildCompositeText(
-                evt.FilePath,
+                canonicalFilePath,
                 evt.ChangeExcerpt,
                 evt.CommentHistory,
                 resolution.Summary);
@@ -115,11 +135,19 @@ public sealed partial class ThreadMemoryService(
                 ThreadId = evt.ThreadId,
                 RepositoryId = evt.RepositoryId,
                 PullRequestId = evt.PullRequestId,
-                FilePath = evt.FilePath,
+                FilePath = canonicalFilePath,
                 ChangeExcerpt = TruncateExcerpt(evt.ChangeExcerpt),
                 CommentHistoryDigest = evt.CommentHistory,
                 ResolutionSummary = resolution.Summary,
                 EmbeddingVector = vector,
+
+                // Both classifications decided whether this memory is worth keeping. Keeping them on the
+                // record is what lets a later review tell a rejected concern from a repaired one without
+                // reading the prose, and tell a crisp acceptance from an inconclusive one. An unresolved
+                // intent is stored as absent rather than as itself, so absent stays the one and only way a
+                // record says "no reviewer decided anything here".
+                ResolutionIntent = evt.Intent == ThreadResolutionIntent.Active ? null : evt.Intent,
+                ResolutionClarity = resolution.Clarity,
                 CreatedAt = now,
                 UpdatedAt = now,
             };
@@ -330,9 +358,10 @@ public sealed partial class ThreadMemoryService(
         string? label,
         CancellationToken ct = default)
     {
-        var compositeText = string.IsNullOrWhiteSpace(filePath)
+        var canonicalFilePath = CanonicalizeFilePath(filePath);
+        var compositeText = canonicalFilePath is null
             ? findingMessage
-            : $"{filePath}\n{findingMessage}";
+            : $"{canonicalFilePath}\n{findingMessage}";
 
         var vector = await embedder.GenerateEmbeddingAsync(compositeText, clientId, ct);
 
@@ -344,7 +373,7 @@ public sealed partial class ThreadMemoryService(
             ThreadId = 0,
             RepositoryId = string.Empty,
             PullRequestId = 0,
-            FilePath = filePath ?? string.Empty,
+            FilePath = canonicalFilePath ?? string.Empty,
             ChangeExcerpt = null,
             CommentHistoryDigest = label ?? findingMessage,
             ResolutionSummary = findingMessage,
@@ -376,7 +405,7 @@ public sealed partial class ThreadMemoryService(
 
         var degradedComponents = new HashSet<string>(StringComparer.Ordinal);
         var fallbackChecks = new HashSet<string>(StringComparer.Ordinal);
-        var normalizedFilePath = NormalizeFilePathForLookup(filePath);
+        var normalizedFilePath = CanonicalizeFilePath(filePath);
 
         var queryVector = await this.TryGetDuplicateSuppressionQueryVectorAsync(clientId, normalizedFilePath, findingMessage, degradedComponents, ct);
 
@@ -437,8 +466,18 @@ public sealed partial class ThreadMemoryService(
     {
         try
         {
-            var (matches, retrievalMode) = await this.RetrieveMemoryMatchesAsync(clientId, job, filePath, changeExcerpt, draftResult, ct);
-            await this.RecordRetrievalProtocolAsync(protocolId, filePath, matches, retrievalMode, ct);
+            var retrieval = await this.RetrieveMemoryMatchesAsync(
+                clientId,
+                job,
+                filePath,
+                changeExcerpt,
+                draftResult,
+                protocolId,
+                ct);
+            var matches = retrieval.Matches;
+
+            await this.RecordRetrievalProtocolAsync(protocolId, filePath, retrieval, ct);
+            await this.SignalSustainedEmptyRetrievalAsync(protocolId, job.Id, retrieval, ct);
 
             if (matches.Count == 0)
             {
@@ -467,16 +506,19 @@ public sealed partial class ThreadMemoryService(
         }
     }
 
-    private async Task<(IReadOnlyList<ThreadMemoryMatchDto> Matches, string RetrievalMode)> RetrieveMemoryMatchesAsync(
+    private async Task<MemoryRetrieval> RetrieveMemoryMatchesAsync(
         Guid clientId,
         ReviewJob job,
         string filePath,
         string? changeExcerpt,
         ReviewResult draftResult,
+        Guid? protocolId,
         CancellationToken ct)
     {
+        var lookupFilePath = CanonicalizeFilePath(filePath);
+
         // Build query composite text from file path + change excerpt + draft findings summary.
-        var queryText = BuildQueryText(filePath, changeExcerpt, draftResult.Summary);
+        var queryText = BuildQueryText(lookupFilePath, changeExcerpt, draftResult.Summary);
         var queryVector = await embedder.GenerateEmbeddingAsync(queryText, clientId, ct);
 
         var semanticMatches = await repository.FindSimilarAsync(
@@ -488,26 +530,108 @@ public sealed partial class ThreadMemoryService(
 
         if (semanticMatches.Count > 0)
         {
-            return (semanticMatches, "semantic_similarity");
+            return new MemoryRetrieval(
+                PreferDecidedOutcomes(semanticMatches),
+                "semantic_similarity",
+                lookupFilePath,
+                null);
         }
 
-        var exactFileMatches = await repository.FindByFilePathAsync(
-            clientId,
-            job.RepositoryId,
-            filePath,
-            this._opts.MemoryTopN,
-            ct) ?? [];
+        IReadOnlyList<ThreadMemoryMatchDto> exactFileMatches = lookupFilePath is null
+            ? []
+            : await repository.FindByFilePathAsync(
+                clientId,
+                job.RepositoryId,
+                lookupFilePath,
+                this._opts.MemoryTopN,
+                ct) ?? [];
 
-        return exactFileMatches.Count > 0
-            ? (exactFileMatches, "exact_file_fallback")
-            : (semanticMatches, "no_match");
+        if (exactFileMatches.Count > 0)
+        {
+            return new MemoryRetrieval(
+                PreferDecidedOutcomes(exactFileMatches),
+                "exact_file_fallback",
+                lookupFilePath,
+                null);
+        }
+
+        var emptiness = protocolId.HasValue
+            ? await this.DescribeEmptyRetrievalAsync(clientId, job.Id, queryVector, ct)
+            : null;
+
+        return new MemoryRetrieval(semanticMatches, "no_match", lookupFilePath, emptiness);
     }
 
-    private async Task RecordRetrievalProtocolAsync(
+    /// <summary>
+    ///     Explains an empty retrieval with the two facts that decide whether it could have matched at all:
+    ///     how many records the client holds, which is the population the similarity search covers, and how
+    ///     close the closest of them came. Purely descriptive and best-effort, so a failed probe leaves the
+    ///     retrieval itself untouched.
+    /// </summary>
+    /// <remarks>
+    ///     Both probes are bounded per job, because this runs on the review hot path for every file that
+    ///     finds nothing. The count is asked once and reused, since it does not move while a job runs. The
+    ///     distance probe repeats the search that just ran with the threshold removed, so it costs one more
+    ///     vector query, and only the first few files in a job pay it: a sample answers the question, and a
+    ///     large pull request must not double its vector queries to produce one diagnostic.
+    /// </remarks>
+    private async Task<MemoryRetrievalEmptiness?> DescribeEmptyRetrievalAsync(
+        Guid clientId,
+        Guid jobId,
+        float[] queryVector,
+        CancellationToken ct)
+    {
+        try
+        {
+            if (!this._clientRecordCountsByJob.TryGetValue(jobId, out var recordsForClient))
+            {
+                var page = await repository.GetPagedAsync(clientId, null, 1, 1, null, null, null, ct);
+                if (page is null)
+                {
+                    return null;
+                }
+
+                recordsForClient = page.TotalCount;
+                this._clientRecordCountsByJob[jobId] = recordsForClient;
+            }
+
+            if (recordsForClient == 0)
+            {
+                return new MemoryRetrievalEmptiness(0, null);
+            }
+
+            var tally = this._retrievalTalliesByJob.GetOrAdd(jobId, _ => new EmptyRetrievalTally());
+            if (!tally.TryClaimDistanceProbe(SustainedEmptyRetrievalAttempts))
+            {
+                return new MemoryRetrievalEmptiness(recordsForClient, null);
+            }
+
+            var closest = await repository.FindSimilarAsync(clientId, queryVector, 1, 0f, ct);
+            return new MemoryRetrievalEmptiness(
+                recordsForClient,
+                closest is { Count: > 0 } ? closest[0].SimilarityScore : null);
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            LogEmptyRetrievalProbeFailed(logger, clientId, ex);
+            return null;
+        }
+    }
+
+    /// <summary>
+    ///     Reports an empty-retrieval rate that has stopped being plausible. An empty retrieval is a healthy
+    ///     zero on its own, so nothing about a single one is worth an event; every retrieval in a job coming
+    ///     back empty while the client holds records is not. The tally is the job's, because a protocol is
+    ///     opened per file, and the event is attached to whichever file's protocol crossed the line.
+    /// </summary>
+    private async Task SignalSustainedEmptyRetrievalAsync(
         Guid? protocolId,
-        string filePath,
-        IReadOnlyList<ThreadMemoryMatchDto> matches,
-        string retrievalMode,
+        Guid jobId,
+        MemoryRetrieval retrieval,
         CancellationToken ct)
     {
         if (!protocolId.HasValue)
@@ -515,16 +639,69 @@ public sealed partial class ThreadMemoryService(
             return;
         }
 
+        var tally = this._retrievalTalliesByJob.GetOrAdd(jobId, _ => new EmptyRetrievalTally());
+        var (attempts, emptyResults) = tally.Record(retrieval.Matches.Count == 0);
+
+        if (attempts < SustainedEmptyRetrievalAttempts ||
+            emptyResults < attempts ||
+            retrieval.Emptiness is null ||
+            retrieval.Emptiness.RecordsForClient == 0)
+        {
+            return;
+        }
+
+        if (!tally.TryClaimSignal())
+        {
+            return;
+        }
+
+        var details = JsonSerializer.Serialize(
+            new
+            {
+                reason = "sustained_empty_retrieval",
+                attempts,
+                emptyResults,
+                recordsForClient = retrieval.Emptiness.RecordsForClient,
+                closestAvailableSimilarity = retrieval.Emptiness.ClosestAvailableSimilarity,
+                minSimilarity = this._opts.MemoryMinSimilarity,
+            });
+
+        LogSustainedEmptyRetrieval(logger, attempts, retrieval.Emptiness.RecordsForClient);
+        await protocolRecorder.RecordMemoryEventAsync(
+            protocolId.Value,
+            "memory_retrieval_degraded",
+            details,
+            null,
+            ct);
+    }
+
+    private async Task RecordRetrievalProtocolAsync(
+        Guid? protocolId,
+        string filePath,
+        MemoryRetrieval retrieval,
+        CancellationToken ct)
+    {
+        if (!protocolId.HasValue)
+        {
+            return;
+        }
+
+        var matches = retrieval.Matches;
         var similarityScores = matches.Select(m => m.SimilarityScore).ToList();
         var retrievalDetails = JsonSerializer.Serialize(
             new
             {
                 filePath,
+                lookupFilePath = retrieval.LookupFilePath,
                 resultCount = matches.Count,
                 topN = this._opts.MemoryTopN,
                 minSimilarity = this._opts.MemoryMinSimilarity,
-                retrievalMode,
+                retrievalMode = retrieval.RetrievalMode,
+                recordsForClient = retrieval.Emptiness?.RecordsForClient,
+                closestAvailableSimilarity = retrieval.Emptiness?.ClosestAvailableSimilarity,
                 similarityScores,
+                // In the order the model reads them, with the outcome that decided that order, so the trace
+                // explains why a memory came first instead of leaving it to be inferred from the scores.
                 matchSources = matches.Select(m => new
                     {
                         m.MemoryRecordId,
@@ -532,6 +709,8 @@ public sealed partial class ThreadMemoryService(
                         m.FilePath,
                         m.SimilarityScore,
                         m.MatchSource,
+                        resolutionIntent = m.Intent?.ToString(),
+                        resolutionClarity = m.Clarity?.ToString(),
                     })
                     .ToList(),
             });
@@ -976,6 +1155,11 @@ public sealed partial class ThreadMemoryService(
                 sb.AppendLine($"- **File**: {m.FilePath}");
             }
 
+            if (!isDismissed && DescribeReviewerOutcome(m) is { } outcome)
+            {
+                sb.AppendLine($"- **Reviewer outcome**: {outcome}");
+            }
+
             sb.AppendLine(
                 isDismissed
                     ? $"- **Dismissed pattern**: {m.ResolutionSummary}"
@@ -985,6 +1169,47 @@ public sealed partial class ThreadMemoryService(
 
         sb.AppendLine("Reconsider the draft findings above using the historical context. Return your reconsidered findings as a JSON object.");
         return sb.ToString();
+    }
+
+    /// <summary>
+    ///     States what the reviewer's resolution meant, so the model is not left inferring it from prose. A
+    ///     rejection and a fix imply opposite actions on a recurrence, and an acceptance the discussion never
+    ///     made explicit is worth less than one it did. Returns <see langword="null" /> for a record that
+    ///     carries no reviewer outcome, so nothing is claimed about it.
+    /// </summary>
+    private static string? DescribeReviewerOutcome(ThreadMemoryMatchDto match)
+    {
+        // Only an explicit acceptance without a code change, reached by a content match, reads as a decision
+        // the reviewer stated plainly. Every other clarity, including one this code does not know, and every
+        // memory pulled in only because it sits on the same file, is reported as the weaker signal. A new
+        // clarity value or a file-level coincidence can therefore never become an instruction to drop a
+        // finding.
+        var matchedOnContent = !string.Equals(match.MatchSource, "exact_file_fallback", StringComparison.Ordinal);
+
+        return match switch
+        {
+            { Intent: ThreadResolutionIntent.AcceptedByHuman, Clarity: ResolutionClarity.AcceptedWithoutChange }
+                when matchedOnContent =>
+                "A reviewer rejected this concern and accepted the code as it stands. **DISCARD** a draft "
+                + "finding that raises this same concern about this same code.",
+
+            // Two different weaknesses, and saying the wrong one gives the model a false reason to trust or
+            // distrust the record. A file-path match is a weak link to the draft finding; an unclear
+            // discussion is a weak decision even when the match itself is exact.
+            { Intent: ThreadResolutionIntent.AcceptedByHuman } when !matchedOnContent =>
+                "A reviewer rejected a concern in this file and accepted the code as it stands, but this "
+                + "record was found only because it sits on the same file, not because it matches this "
+                + "finding. Treat it as low confidence and weigh it against the code you see.",
+            { Intent: ThreadResolutionIntent.AcceptedByHuman } =>
+                "A reviewer rejected this concern and accepted the code as it stands, but the discussion did "
+                + "not say so plainly. Treat the decision as low confidence and weigh it against the code "
+                + "you see.",
+            { Intent: ThreadResolutionIntent.ClaimsFix } =>
+                "A reviewer marked a concern here fixed and the code at that spot changed. That is not a "
+                + "decision to accept the concern, so on its own it does not justify discarding a finding "
+                + "that raises it again.",
+            _ => null,
+        };
     }
 
     private static ReviewResult? ParseReconsiderationResponse(string json, ReviewResult draftResult)
@@ -1043,9 +1268,10 @@ public sealed partial class ThreadMemoryService(
                $"Resolution: {resolutionSummary}";
     }
 
-    private static string BuildQueryText(string filePath, string? changeExcerpt, string draftSummary)
+    private static string BuildQueryText(string? filePath, string? changeExcerpt, string draftSummary)
     {
-        return $"File: {filePath}\n" +
+        // The same absent-path wording the stored composite uses, so the two documents stay comparable.
+        return $"File: {filePath ?? "(PR level)"}\n" +
                $"Change: {TruncateExcerpt(changeExcerpt) ?? "(not available)"}\n" +
                $"Finding: {draftSummary}";
     }
@@ -1056,15 +1282,49 @@ public sealed partial class ThreadMemoryService(
                $"Finding: {findingMessage}";
     }
 
-    private static string? NormalizeFilePathForLookup(string? filePath)
+    /// <summary>
+    ///     Puts the memories that record a decision in front of the ones that record a repair. An
+    ///     administrator dismissal and a reviewer's acceptance both say "this concern is settled here", which
+    ///     is what a recurrence has to be judged against; a claimed fix says the opposite, that the code
+    ///     moved. The sort is stable, so similarity still orders each group. It reorders what the model reads
+    ///     first within an already-retrieved set, and does not change which records the store returned.
+    /// </summary>
+    private static IReadOnlyList<ThreadMemoryMatchDto> PreferDecidedOutcomes(IReadOnlyList<ThreadMemoryMatchDto> matches)
+    {
+        return matches.Count < 2
+            ? matches
+            : matches.OrderBy(RankOutcome).ToList().AsReadOnly();
+
+        static int RankOutcome(ThreadMemoryMatchDto match)
+        {
+            // An unrecorded outcome ranks between the two, never with the fixes. Records written before the
+            // outcome was kept hold rejections and fixes alike, and demoting them all as if they were fixes
+            // would push a genuine past rejection out of the model's view on every install that has history.
+            return match switch
+            {
+                { Source: MemorySource.AdminDismissed } => 0,
+                { Intent: ThreadResolutionIntent.AcceptedByHuman } => 1,
+                { Intent: null } => 2,
+                _ => 3,
+            };
+        }
+    }
+
+    /// <summary>
+    ///     Reduces a file path to the one form the memory store keeps: repository-relative, forward slashes,
+    ///     no leading slash. Every write and every read goes through this, so a record is retrievable by
+    ///     whichever producer supplies the path. Returns <see langword="null" /> for a path that carries no
+    ///     file, which is what a pull-request-level thread has.
+    /// </summary>
+    private static string? CanonicalizeFilePath(string? filePath)
     {
         if (string.IsNullOrWhiteSpace(filePath))
         {
             return null;
         }
 
-        var normalized = filePath.Replace('\\', '/').Trim();
-        return normalized.StartsWith('/') ? normalized : "/" + normalized;
+        var canonical = filePath.Replace('\\', '/').Trim().TrimStart('/');
+        return canonical.Length == 0 ? null : canonical;
     }
 
     private static string? BuildDuplicateSuppressionDegradedCause(IReadOnlyCollection<string> degradedComponents)
@@ -1142,6 +1402,80 @@ public sealed partial class ThreadMemoryService(
     }
 
     private sealed record TextSimilarityMatch(ThreadMemoryMatchDto Match, double Score);
+
+    /// <summary>
+    ///     One review-time retrieval: what it found, which route found it, the canonical path it looked up,
+    ///     and, when it found nothing, what it had to work with.
+    /// </summary>
+    private sealed record MemoryRetrieval(
+        IReadOnlyList<ThreadMemoryMatchDto> Matches,
+        string RetrievalMode,
+        string? LookupFilePath,
+        MemoryRetrievalEmptiness? Emptiness);
+
+    /// <summary>
+    ///     What an empty retrieval considered: the records the client holds, which is the population the
+    ///     similarity search covers, and the highest similarity any of them reached without having to clear
+    ///     the configured threshold. That similarity is absent when the probe was not run for this file, or
+    ///     when nothing in the corpus reached even zero similarity.
+    /// </summary>
+    private sealed record MemoryRetrievalEmptiness(int RecordsForClient, float? ClosestAvailableSimilarity);
+
+    /// <summary>
+    ///     One job's retrieval tally. Both counters move together under one lock, so the pair a caller
+    ///     observes is a consistent snapshot even while files are retrieved in parallel, and both the signal
+    ///     and the bounded distance-probe budget are claimed at most once each.
+    /// </summary>
+    private sealed class EmptyRetrievalTally
+    {
+        private readonly object _gate = new();
+        private int _attempts;
+        private int _emptyResults;
+        private int _distanceProbes;
+        private bool _signalled;
+
+        public (int Attempts, int EmptyResults) Record(bool empty)
+        {
+            lock (this._gate)
+            {
+                this._attempts++;
+                if (empty)
+                {
+                    this._emptyResults++;
+                }
+
+                return (this._attempts, this._emptyResults);
+            }
+        }
+
+        public bool TryClaimSignal()
+        {
+            lock (this._gate)
+            {
+                if (this._signalled)
+                {
+                    return false;
+                }
+
+                this._signalled = true;
+                return true;
+            }
+        }
+
+        public bool TryClaimDistanceProbe(int budget)
+        {
+            lock (this._gate)
+            {
+                if (this._distanceProbes >= budget)
+                {
+                    return false;
+                }
+
+                this._distanceProbes++;
+                return true;
+            }
+        }
+    }
 
     private sealed record FilePathFallbackInputs(
         Guid ClientId,

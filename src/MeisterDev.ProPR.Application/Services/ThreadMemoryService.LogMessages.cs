@@ -100,6 +100,25 @@ public sealed partial class ThreadMemoryService
         int pullRequestId,
         Guid clientId);
 
+    [LoggerMessage(
+        Level = LogLevel.Debug,
+        Message = "Empty memory retrieval could not be explained for client {ClientId}")]
+    private static partial void LogEmptyRetrievalProbeFailedCore(
+        ILogger logger,
+        Exception exception,
+        Guid clientId);
+
+    [LoggerMessage(
+        Level = LogLevel.Warning,
+        Message = "All {Attempts} memory retrievals in this job returned nothing while the client holds "
+                  + "{RecordsForClient} records")]
+    private static partial void LogSustainedEmptyRetrieval(ILogger logger, int attempts, int recordsForClient);
+
+    private static void LogEmptyRetrievalProbeFailed(ILogger logger, Guid clientId, Exception exception)
+    {
+        LogEmptyRetrievalProbeFailedCore(logger, exception, clientId);
+    }
+
     private static void LogCodeInsightEnrichmentFailed(
         ILogger logger,
         long threadId,

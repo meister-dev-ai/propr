@@ -104,7 +104,9 @@ public sealed record FixtureThreadMemoryMatch(
     string ResolutionSummary,
     float SimilarityScore,
     string MatchSource = "semantic",
-    MemorySource Source = MemorySource.ThreadResolved);
+    MemorySource Source = MemorySource.ThreadResolved,
+    ThreadResolutionIntent? Intent = null,
+    ResolutionClarity? Clarity = null);
 
 /// <summary>
 ///     Optional expected outcomes used to evaluate whether a generated review hit the intended positives,

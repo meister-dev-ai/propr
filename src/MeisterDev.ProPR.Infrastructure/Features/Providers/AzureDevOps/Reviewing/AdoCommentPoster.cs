@@ -6,6 +6,7 @@ using System.Globalization;
 using System.Text;
 using MeisterDev.ProPR.Application.DTOs;
 using MeisterDev.ProPR.Application.Exceptions;
+using MeisterDev.ProPR.Application.Features.Crawling.Execution.Services;
 using MeisterDev.ProPR.Application.Features.Reviewing.Execution.Models;
 using MeisterDev.ProPR.Application.Interfaces;
 using MeisterDev.ProPR.Domain.Enums;
@@ -20,8 +21,17 @@ namespace MeisterDev.ProPR.Infrastructure.Features.Providers.AzureDevOps.Reviewi
 public sealed class AdoCommentPoster(
     VssConnectionFactory connectionFactory,
     IClientScmConnectionRepository connectionRepository,
-    IThreadMemoryService? threadMemoryService = null) : IAdoCommentPoster
+    IThreadMemoryService? threadMemoryService = null,
+    IPostedFindingIndex? postedFindingIndex = null) : IAdoCommentPoster
 {
+    private const string PostedFindingIndexComponent = "posted_finding_index";
+    private const string PostedFindingDuplicateReason = "posted_finding_duplicate";
+    private const string PostedFindingNearMissReason = "posted_finding_near_miss";
+
+    /// <summary>How many near misses one posting pass reports. A sample calibrates a threshold; a transcript
+    /// of every candidate on a very large pull request is what the diagnostic must not become.</summary>
+    private const int MaxRecordedNearMisses = 25;
+
     /// <summary>Maximum number of characters allowed in a single ADO PR comment to stay safely below API limits.</summary>
     internal const int MaxCommentLength = 30_000;
 
@@ -150,10 +160,11 @@ public sealed class AdoCommentPoster(
             state,
             cancellationToken);
 
-        foreach (var comment in result.Comments)
+        for (var ordinal = 0; ordinal < result.Comments.Count; ordinal++)
         {
             await this.PostInlineCommentIfNotSuppressedAsync(
-                comment,
+                result.Comments[ordinal],
+                ordinal,
                 existingThreads,
                 botId,
                 clientId,
@@ -198,7 +209,7 @@ public sealed class AdoCommentPoster(
         try
         {
             var createdSummary = await threadFactory(BuildSummaryText(result), null, null, cancellationToken);
-            diagnostics.RecordPostedComments(CaptureCreatedComments(createdSummary, null, null));
+            diagnostics.RecordPostedComments(CaptureCreatedComments(createdSummary, null, null, PostedReviewCommentKind.Summary));
             state.PostedThreadCount++;
         }
 
@@ -214,6 +225,7 @@ public sealed class AdoCommentPoster(
 
     private async Task PostInlineCommentIfNotSuppressedAsync(
         ReviewComment comment,
+        int ordinal,
         IReadOnlyList<PrCommentThread>? existingThreads,
         Guid? botId,
         Guid? clientId,
@@ -237,6 +249,7 @@ public sealed class AdoCommentPoster(
 
         var suppression = await this.ResolveInlineCommentSuppressionAsync(
             comment,
+            ordinal,
             existingThreads,
             normalizedFilePath,
             botId,
@@ -266,6 +279,7 @@ public sealed class AdoCommentPoster(
 
     private async Task<string?> ResolveInlineCommentSuppressionAsync(
         ReviewComment comment,
+        int ordinal,
         IReadOnlyList<PrCommentThread>? existingThreads,
         string? normalizedFilePath,
         Guid? botId,
@@ -283,8 +297,31 @@ public sealed class AdoCommentPoster(
             botId);
         if (duplicateMatch is not null)
         {
-            diagnostics.RecordSuppression(duplicateMatch.ReasonCode);
+            RecordSuppressed(diagnostics, comment, ordinal, duplicateMatch.ReasonCode, duplicateMatch.ThreadId);
             return duplicateMatch.ReasonCode;
+        }
+
+        // Cross-increment duplicate protection. It runs ahead of the thread-memory arm because it is the check
+        // built for this case: it compares finding text to finding text, with no anchor, no severity and no file
+        // in the key, which is what survives the drift observed between increments.
+        var postedFindingMatch = await this.FindPostedFindingDuplicateAsync(
+            clientId,
+            repositoryId,
+            pullRequestId,
+            comment.Message,
+            cancellationToken);
+        diagnostics.RecordPostedFindingEvaluation(postedFindingMatch, comment, ordinal);
+
+        if (ShouldSuppressAgainstPostedFinding(postedFindingMatch, existingThreads))
+        {
+            RecordSuppressed(
+                diagnostics,
+                comment,
+                ordinal,
+                PostedFindingDuplicateReason,
+                postedFindingMatch.ProviderThreadId,
+                postedFindingMatch.SimilarityScore);
+            return PostedFindingDuplicateReason;
         }
 
         var historicalMatch = await this.FindHistoricalDuplicateMatchAsync(
@@ -295,10 +332,16 @@ public sealed class AdoCommentPoster(
             comment.Message,
             cancellationToken);
 
-        diagnostics.RecordHistoricalEvaluation(historicalMatch);
+        diagnostics.RecordHistoricalEvaluation(historicalMatch, ordinal);
         if (historicalMatch.IsDuplicate && historicalMatch.ReasonCode is not null)
         {
-            diagnostics.RecordSuppression(historicalMatch.ReasonCode);
+            RecordSuppressed(
+                diagnostics,
+                comment,
+                ordinal,
+                historicalMatch.ReasonCode,
+                historicalMatch.ThreadId,
+                historicalMatch.SimilarityScore);
             return historicalMatch.ReasonCode;
         }
 
@@ -316,11 +359,139 @@ public sealed class AdoCommentPoster(
             botId);
         if (fallbackMatch is not null)
         {
-            diagnostics.RecordSuppression(fallbackMatch.ReasonCode);
+            RecordSuppressed(diagnostics, comment, ordinal, fallbackMatch.ReasonCode, fallbackMatch.ThreadId);
             return fallbackMatch.ReasonCode;
         }
 
         return null;
+    }
+
+    /// <summary>
+    ///     Counts a suppression and keeps the finding it withheld. A finding kept off the pull request is still a
+    ///     finding the review produced, so what was withheld, what it matched and how closely all survive the pass.
+    /// </summary>
+    private static void RecordSuppressed(
+        PostingDiagnosticsBuilder diagnostics,
+        ReviewComment comment,
+        int ordinal,
+        string reasonCode,
+        long? matchedThreadId = null,
+        float? matchScore = null)
+    {
+        diagnostics.RecordSuppression(reasonCode);
+        diagnostics.RecordSuppressedFinding(
+            new ReviewCommentSuppressionRecord(
+                ordinal,
+                comment.FilePath,
+                comment.LineNumber,
+                reasonCode,
+                matchedThreadId,
+                matchScore));
+    }
+
+    /// <summary>
+    ///     Asks the posted-finding index whether an earlier increment already raised this concern. Never throws:
+    ///     an index that cannot answer degrades the check and the finding is posted, because losing a duplicate
+    ///     is cheaper than losing a finding.
+    /// </summary>
+    private async Task<PostedFindingMatchDto> FindPostedFindingDuplicateAsync(
+        Guid? clientId,
+        string repositoryId,
+        int pullRequestId,
+        string message,
+        CancellationToken cancellationToken)
+    {
+        if (postedFindingIndex is null || !clientId.HasValue || string.IsNullOrWhiteSpace(message))
+        {
+            return PostedFindingMatchDto.NoMatch();
+        }
+
+        try
+        {
+            return await postedFindingIndex.FindDuplicateAsync(
+                clientId.Value,
+                repositoryId,
+                pullRequestId,
+                message,
+                cancellationToken);
+        }
+        catch (Exception) when (!cancellationToken.IsCancellationRequested)
+        {
+            return PostedFindingMatchDto.NoMatch(
+                [PostedFindingIndexComponent],
+                "Cross-increment duplicate protection ran without the posted-finding index.");
+        }
+    }
+
+    /// <summary>
+    ///     Decides whether a matched earlier finding still justifies withholding this one.
+    /// </summary>
+    /// <remarks>
+    ///     An open thread is the case the index exists for: the concern is already on the pull request waiting for
+    ///     an answer. A thread the reviewer closed as won't-fix or by-design is a decision, and re-raising a decided
+    ///     concern is exactly what makes reviewers stop trusting the tool.
+    ///     <para>
+    ///         A thread closed as fixed is the opposite. It says the code moved, so the same concern appearing again
+    ///         may be a real recurrence rather than a repeat, and it is posted.
+    ///     </para>
+    ///     <para>
+    ///         A matched thread that is no longer on the pull request is posted too: with the earlier comment gone,
+    ///         suppressing would take the concern off the pull request altogether.
+    ///     </para>
+    /// </remarks>
+    private static bool ShouldSuppressAgainstPostedFinding(
+        PostedFindingMatchDto match,
+        IReadOnlyList<PrCommentThread>? existingThreads)
+    {
+        if (!match.IsDuplicate || !match.ProviderThreadId.HasValue)
+        {
+            return false;
+        }
+
+        var matchedThread = (existingThreads ?? [])
+            .FirstOrDefault(thread => thread.ThreadId == match.ProviderThreadId.Value);
+        if (matchedThread is null)
+        {
+            return false;
+        }
+
+        // A thread whose comments have all been deleted no longer shows the concern to anyone, so treating it
+        // as "already raised" would retire the finding while leaving nothing on the pull request to read.
+        if (matchedThread.Comments.Count == 0)
+        {
+            return false;
+        }
+
+        // ProPR closing its own thread through auto-resolve leaves exactly the status a reviewer's fix leaves.
+        // Only the index row can tell them apart, and it must, or auto-resolve silently disables this check.
+        if (match.AutoResolvedByProPr)
+        {
+            return true;
+        }
+
+        return !IsReviewerClaimedFix(matchedThread.Status);
+    }
+
+    /// <summary>
+    ///     Whether a thread status means a reviewer said the code was changed to address the concern.
+    /// </summary>
+    /// <remarks>
+    ///     Deliberately local to this decision rather than shared with
+    ///     <see cref="ThreadResolutionStatusInterpreter" />, which reads both <c>Fixed</c> and <c>Closed</c> as
+    ///     claiming a fix. That reading is right where it is used, gating what becomes suppression memory,
+    ///     because a thread closed before the code changed must not teach a later review to drop a still-valid
+    ///     finding. The question here is the opposite one, whether the concern was already put to the reviewer,
+    ///     and only <c>Fixed</c> asserts a change. Azure DevOps <c>Closed</c> is how a thread is dismissed, and
+    ///     reading that as a fix is what lets a dismissed concern come back every increment.
+    ///     <para>
+    ///         Residual risk, stated plainly: a reviewer who closes rather than marks fixed after a real repair
+    ///         will have a genuine recurrence withheld. Nothing at this point in the pipeline knows whether the
+    ///         anchored code moved, so the ambiguity cannot be resolved here.
+    ///     </para>
+    /// </remarks>
+    private static bool IsReviewerClaimedFix(string? status)
+    {
+        return string.Equals(status, "Fixed", StringComparison.OrdinalIgnoreCase);
     }
 
     private async Task<bool> PostSingleInlineCommentAsync(
@@ -642,7 +813,8 @@ public sealed class AdoCommentPoster(
     internal static IReadOnlyList<PostedReviewCommentRef> CaptureCreatedComments(
         GitPullRequestCommentThread? createdThread,
         string? filePath,
-        int? line)
+        int? line,
+        PostedReviewCommentKind threadKind = PostedReviewCommentKind.Inline)
     {
         if (createdThread?.Comments is not { Count: > 0 } comments)
         {
@@ -656,7 +828,8 @@ public sealed class AdoCommentPoster(
                 comment.Id.ToString(CultureInfo.InvariantCulture),
                 threadId,
                 filePath,
-                line))
+                line,
+                threadKind))
             .ToList();
     }
 
@@ -850,6 +1023,16 @@ public sealed class AdoCommentPoster(
         Guid? botId)
     {
         var normalizedFilePath = NormalizeOptionalPath(filePath);
+
+        // A location match needs a location. A candidate without a file anchor would otherwise match the
+        // pull-request-level summary thread, because two absent paths and two absent line numbers compare
+        // equal, and every fileless finding would be discarded from the second review increment onward.
+        // Those candidates are compared on their content by the text tiers instead.
+        if (normalizedFilePath is null)
+        {
+            return null;
+        }
+
         var normalizedLine = NormalizeLineNumber(lineNumber);
 
         foreach (var thread in threads ?? [])
@@ -912,6 +1095,12 @@ public sealed class AdoCommentPoster(
         return lineNumber is > 0 ? lineNumber : null;
     }
 
+    /// <summary>
+    ///     Compares two anchors for equivalence after normalizing the thread side.
+    ///     <paramref name="filePath" /> must already be normalized and must be present: two absent paths
+    ///     compare equal here, which is why callers refuse an anchor match for a candidate that carries no
+    ///     file path rather than relying on this predicate to reject it.
+    /// </summary>
     private static bool AreEquivalentAnchors(
         string? filePath,
         int? lineNumber,
@@ -1043,6 +1232,9 @@ public sealed class AdoCommentPoster(
         private readonly HashSet<string> _fallbackChecks = new(StringComparer.Ordinal);
         private readonly List<ReviewCommentPostingFailure> _postingFailures = [];
         private readonly List<PostedReviewCommentRef> _postedComments = [];
+        private readonly List<ReviewCommentSuppressionRecord> _suppressedFindings = [];
+        private readonly List<ReviewCommentSuppressionRecord> _postedFindingNearMisses = [];
+        private readonly HashSet<int> _affectedCandidateOrdinals = [];
         private readonly Dictionary<string, int> _suppressionReasons = new(StringComparer.Ordinal);
         private readonly bool _consideredOpenThreads;
         private readonly bool _consideredResolvedThreads;
@@ -1087,7 +1279,7 @@ public sealed class AdoCommentPoster(
             this._suppressionReasons[reasonCode] = this._suppressionReasons.GetValueOrDefault(reasonCode) + count;
         }
 
-        public void RecordHistoricalEvaluation(HistoricalDuplicateSuppressionMatchDto match)
+        public void RecordHistoricalEvaluation(HistoricalDuplicateSuppressionMatchDto match, int ordinal)
         {
             foreach (var component in match.DegradedComponents)
             {
@@ -1101,7 +1293,7 @@ public sealed class AdoCommentPoster(
 
             if (match.IsDegraded)
             {
-                this._affectedCandidateCount++;
+                this.RecordAffectedCandidate(ordinal);
                 this._degradedCause ??= match.DegradedCause;
             }
         }
@@ -1109,6 +1301,63 @@ public sealed class AdoCommentPoster(
         public void RecordFallbackCheck(string fallbackCheck)
         {
             this._fallbackChecks.Add(fallbackCheck);
+        }
+
+        /// <summary>
+        ///     Records the degraded state of a posted-finding index lookup without treating it as a suppression.
+        ///     A lookup that could not run means cross-increment protection did not happen for this candidate,
+        ///     which has to reach the job telemetry rather than pass as a clean miss.
+        /// </summary>
+        public void RecordPostedFindingEvaluation(
+            PostedFindingMatchDto match,
+            ReviewComment comment,
+            int ordinal)
+        {
+            // A near miss is recorded whether or not the lookup degraded, and capped: this runs once per
+            // candidate, and a very large pull request must not turn a diagnostic into a flood.
+            if (match is { NearMissScore: not null, NearMissProviderThreadId: not null }
+                && this._postedFindingNearMisses.Count < MaxRecordedNearMisses)
+            {
+                this._postedFindingNearMisses.Add(
+                    new ReviewCommentSuppressionRecord(
+                        ordinal,
+                        comment.FilePath,
+                        comment.LineNumber,
+                        PostedFindingNearMissReason,
+                        match.NearMissProviderThreadId,
+                        match.NearMissScore));
+            }
+
+            foreach (var component in match.DegradedComponents)
+            {
+                this._degradedComponents.Add(component);
+            }
+
+            if (!match.IsDegraded)
+            {
+                return;
+            }
+
+            this.RecordAffectedCandidate(ordinal);
+            this._degradedCause ??= match.DegradedCause;
+        }
+
+        /// <summary>
+        ///     Counts a candidate whose duplicate protection ran degraded, at most once. Several tiers can
+        ///     report the same candidate, and counting each report would put the affected count above the
+        ///     number of candidates the review produced.
+        /// </summary>
+        public void RecordAffectedCandidate(int ordinal)
+        {
+            if (this._affectedCandidateOrdinals.Add(ordinal))
+            {
+                this._affectedCandidateCount++;
+            }
+        }
+
+        public void RecordSuppressedFinding(ReviewCommentSuppressionRecord record)
+        {
+            this._suppressedFindings.Add(record);
         }
 
         public void RecordFailure(ReviewCommentPostingFailure failure)
@@ -1138,6 +1387,11 @@ public sealed class AdoCommentPoster(
                 AffectedCandidateCount = this._affectedCandidateCount,
                 PostedComments = this._postedComments.AsReadOnly(),
                 PostingFailures = this._postingFailures.AsReadOnly(),
+                SuppressedFindings = this._suppressedFindings.AsReadOnly(),
+                PostedFindingNearMisses = this._postedFindingNearMisses
+                    .OrderByDescending(record => record.MatchScore ?? 0f)
+                    .ToList()
+                    .AsReadOnly(),
             };
         }
     }
