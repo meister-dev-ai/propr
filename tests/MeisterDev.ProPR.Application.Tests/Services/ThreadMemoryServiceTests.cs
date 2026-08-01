@@ -483,7 +483,6 @@ public sealed class ThreadMemoryServiceTests
     }
 
 
-
     [Fact]
     public async Task RetrieveAndReconsiderAsync_MixedOutcomes_ShowsReviewerRejectionsBeforeClaimedFixes()
     {
@@ -1515,8 +1514,8 @@ public sealed class ThreadMemoryServiceTests
         IProtocolRecorder recorder,
         IMemoryActivityLog activityLog,
         ThreadMemoryService service) CreateService(
-        out IChatClient chatClient,
-        out IMemoryReconsiderationPromptBuilder reconsiderationPromptBuilder)
+            out IChatClient chatClient,
+            out IMemoryReconsiderationPromptBuilder reconsiderationPromptBuilder)
     {
         var embedder = Substitute.For<IThreadMemoryEmbedder>();
         var repo = Substitute.For<IThreadMemoryRepository>();
