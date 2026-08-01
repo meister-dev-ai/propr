@@ -14,8 +14,8 @@ using Pgvector;
 namespace MeisterDev.ProPR.Infrastructure.Migrations
 {
     [DbContext(typeof(MeisterProPRDbContext))]
-    [Migration("20260801060822_AddPostedFindingIndex")]
-    partial class AddPostedFindingIndex
+    [Migration("20260801073153_ReviewQualityIntegration")]
+    partial class ReviewQualityIntegration
     {
         /// <inheritdoc />
         protected override void BuildTargetModel(ModelBuilder modelBuilder)
@@ -1295,6 +1295,12 @@ namespace MeisterDev.ProPR.Infrastructure.Migrations
                     b.Property<Guid>("Id")
                         .HasColumnType("uuid")
                         .HasColumnName("id");
+
+                    b.Property<bool>("AutoResolvedByProPr")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false)
+                        .HasColumnName("auto_resolved_by_propr");
 
                     b.Property<Guid>("ClientId")
                         .HasColumnType("uuid")
@@ -3238,6 +3244,14 @@ namespace MeisterDev.ProPR.Infrastructure.Migrations
                         .HasPrecision(18, 6)
                         .HasColumnType("numeric(18,6)")
                         .HasColumnName("monthly_budget_soft_cap_usd");
+
+                    b.Property<string>("OutputLanguage")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)")
+                        .HasDefaultValue("en")
+                        .HasColumnName("output_language");
 
                     b.Property<decimal?>("PullRequestBudgetHardCapUsd")
                         .HasPrecision(18, 6)

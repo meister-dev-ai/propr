@@ -482,112 +482,12 @@ public sealed class ThreadMemoryServiceTests
                 Arg.Any<CancellationToken>());
     }
 
-    [Fact]
-    public async Task RetrieveAndReconsiderAsync_RejectionMemory_LabelsTheOutcomeInThePrompt()
-    {
-        var (embedder, repo, _, _, service) = CreateService(out var chatClient);
-        embedder.GenerateEmbeddingAsync(Arg.Any<string>(), Arg.Any<Guid>(), Arg.Any<CancellationToken>())
-            .Returns(new[] { 0.5f });
-        repo.FindSimilarAsync(
-                Arg.Any<Guid>(),
-                Arg.Any<float[]>(),
-                Arg.Any<int>(),
-                Arg.Any<float>(),
-                Arg.Any<CancellationToken>())
-            .Returns(
-                new List<ThreadMemoryMatchDto>
-                {
-                    new(
-                        Guid.NewGuid(),
-                        5,
-                        "backend/Foo.cs",
-                        "The team accepted the risk without a code change.",
-                        0.92f,
-                        "semantic",
-                        MemorySource.ThreadResolved,
-                        ThreadResolutionIntent.AcceptedByHuman,
-                        ResolutionClarity.AcceptedWithoutChange),
-                });
-        StubReconsiderationResponse(chatClient);
 
-        var job = new ReviewJob(Guid.NewGuid(), ClientId, "https://dev.azure.com/org", "proj", "repo-1", 1, 1);
-        await service.RetrieveAndReconsiderAsync(
-            ClientId,
-            job,
-            "backend/Foo.cs",
-            "diff",
-            new ReviewResult("draft summary", []),
-            ProtocolId);
-
-        // A fragment only the per-memory outcome line produces, so the assertion cannot be satisfied by the
-        // standing instructions in the system prompt.
-        await chatClient.Received(1)
-            .GetResponseAsync(
-                Arg.Is<IEnumerable<ChatMessage>>(messages =>
-                    messages.Any(message =>
-                        message.Text.Contains(
-                            "A reviewer rejected this concern and accepted the code as it stands. **DISCARD**",
-                            StringComparison.Ordinal))),
-                Arg.Any<ChatOptions?>(),
-                Arg.Any<CancellationToken>());
-    }
-
-    [Fact]
-    public async Task RetrieveAndReconsiderAsync_UnclearRejectionMemory_MarksItLowerConfidence()
-    {
-        var (embedder, repo, _, _, service) = CreateService(out var chatClient);
-        embedder.GenerateEmbeddingAsync(Arg.Any<string>(), Arg.Any<Guid>(), Arg.Any<CancellationToken>())
-            .Returns(new[] { 0.5f });
-        repo.FindSimilarAsync(
-                Arg.Any<Guid>(),
-                Arg.Any<float[]>(),
-                Arg.Any<int>(),
-                Arg.Any<float>(),
-                Arg.Any<CancellationToken>())
-            .Returns(
-                new List<ThreadMemoryMatchDto>
-                {
-                    new(
-                        Guid.NewGuid(),
-                        6,
-                        "backend/Foo.cs",
-                        "It is unclear whether the risk was formally accepted.",
-                        0.9f,
-                        "semantic",
-                        MemorySource.ThreadResolved,
-                        ThreadResolutionIntent.AcceptedByHuman,
-                        ResolutionClarity.Undetermined),
-                });
-        StubReconsiderationResponse(chatClient);
-
-        var job = new ReviewJob(Guid.NewGuid(), ClientId, "https://dev.azure.com/org", "proj", "repo-1", 1, 1);
-        await service.RetrieveAndReconsiderAsync(
-            ClientId,
-            job,
-            "backend/Foo.cs",
-            "diff",
-            new ReviewResult("draft summary", []),
-            ProtocolId);
-
-        // The weakness is the decision, not the match, and the confident instruction must be absent.
-        await chatClient.Received(1)
-            .GetResponseAsync(
-                Arg.Is<IEnumerable<ChatMessage>>(messages =>
-                    messages.Any(message =>
-                        message.Text.Contains("the discussion did not say so plainly", StringComparison.Ordinal) &&
-                        message.Text.Contains("decision as low confidence", StringComparison.Ordinal)) &&
-                    messages.All(message =>
-                        !message.Text.Contains(
-                            "accepted the code as it stands. **DISCARD**",
-                            StringComparison.Ordinal))),
-                Arg.Any<ChatOptions?>(),
-                Arg.Any<CancellationToken>());
-    }
 
     [Fact]
     public async Task RetrieveAndReconsiderAsync_MixedOutcomes_ShowsReviewerRejectionsBeforeClaimedFixes()
     {
-        var (embedder, repo, _, _, service) = CreateService(out var chatClient);
+        var (embedder, repo, _, _, service) = CreateService(out var chatClient, out var prompts);
         embedder.GenerateEmbeddingAsync(Arg.Any<string>(), Arg.Any<Guid>(), Arg.Any<CancellationToken>())
             .Returns(new[] { 0.5f });
         repo.FindSimilarAsync(
@@ -631,81 +531,23 @@ public sealed class ThreadMemoryServiceTests
             new ReviewResult("draft summary", []),
             ProtocolId);
 
-        await chatClient.Received(1)
-            .GetResponseAsync(
-                Arg.Is<IEnumerable<ChatMessage>>(messages =>
-                    messages.Any(message =>
-                        message.Text.IndexOf("REVIEWER REJECTION SUMMARY", StringComparison.Ordinal) >= 0 &&
-                        message.Text.IndexOf("REVIEWER REJECTION SUMMARY", StringComparison.Ordinal) <
-                        message.Text.IndexOf("CLAIMED FIX SUMMARY", StringComparison.Ordinal))),
-                Arg.Any<ChatOptions?>(),
-                Arg.Any<CancellationToken>());
+        // Ordering is decided here and rendered elsewhere, so assert on the order handed to the prompt
+        // builder rather than on substring positions in the composed message.
+        var presented = prompts.ReceivedCalls()
+            .Single(call => call.GetMethodInfo().Name == nameof(IMemoryReconsiderationPromptBuilder.BuildUserMessage))
+            .GetArguments()[1] as IReadOnlyList<ThreadMemoryMatchDto>;
+        Assert.NotNull(presented);
+        Assert.Equal("REVIEWER REJECTION SUMMARY", presented![0].ResolutionSummary);
+        Assert.Equal("CLAIMED FIX SUMMARY", presented[1].ResolutionSummary);
     }
 
-    [Fact]
-    public async Task RetrieveAndReconsiderAsync_RejectionFoundOnlyByFilePath_DoesNotGetTheConfidentInstruction()
-    {
-        // The file-path route returns every memory on the file with no similarity at all. A rejection about
-        // some other concern in the same file must not turn into an instruction to drop the draft finding.
-        var (embedder, repo, _, _, service) = CreateService(out var chatClient);
-        embedder.GenerateEmbeddingAsync(Arg.Any<string>(), Arg.Any<Guid>(), Arg.Any<CancellationToken>())
-            .Returns(new[] { 0.5f });
-        repo.FindSimilarAsync(
-                Arg.Any<Guid>(),
-                Arg.Any<float[]>(),
-                Arg.Any<int>(),
-                Arg.Any<float>(),
-                Arg.Any<CancellationToken>())
-            .Returns(new List<ThreadMemoryMatchDto>());
-        repo.FindByFilePathAsync(
-                Arg.Any<Guid>(),
-                Arg.Any<string>(),
-                Arg.Any<string>(),
-                Arg.Any<int>(),
-                Arg.Any<CancellationToken>())
-            .Returns(
-                new List<ThreadMemoryMatchDto>
-                {
-                    new(
-                        Guid.NewGuid(),
-                        12,
-                        "backend/Foo.cs",
-                        "The team accepted the risk without a code change.",
-                        0f,
-                        "exact_file_fallback",
-                        MemorySource.ThreadResolved,
-                        ThreadResolutionIntent.AcceptedByHuman,
-                        ResolutionClarity.AcceptedWithoutChange),
-                });
-        StubReconsiderationResponse(chatClient);
-
-        var job = new ReviewJob(Guid.NewGuid(), ClientId, "https://dev.azure.com/org", "proj", "repo-1", 1, 1);
-        await service.RetrieveAndReconsiderAsync(
-            ClientId,
-            job,
-            "backend/Foo.cs",
-            "diff",
-            new ReviewResult("draft summary", []),
-            ProtocolId);
-
-        await chatClient.Received(1)
-            .GetResponseAsync(
-                Arg.Is<IEnumerable<ChatMessage>>(messages =>
-                    messages.Any(message =>
-                        message.Text.Contains("only because it sits on the same file", StringComparison.Ordinal) &&
-                        !message.Text.Contains(
-                            "accepted the code as it stands. **DISCARD**",
-                            StringComparison.Ordinal))),
-                Arg.Any<ChatOptions?>(),
-                Arg.Any<CancellationToken>());
-    }
 
     [Fact]
     public async Task RetrieveAndReconsiderAsync_MemoryWithNoRecordedOutcome_StillOutranksAClaimedFix()
     {
         // Records written before the outcome was kept hold rejections too, so an unrecorded outcome must not
         // be treated as if it were a fix.
-        var (embedder, repo, _, _, service) = CreateService(out var chatClient);
+        var (embedder, repo, _, _, service) = CreateService(out var chatClient, out var prompts);
         embedder.GenerateEmbeddingAsync(Arg.Any<string>(), Arg.Any<Guid>(), Arg.Any<CancellationToken>())
             .Returns(new[] { 0.5f });
         repo.FindSimilarAsync(
@@ -740,15 +582,14 @@ public sealed class ThreadMemoryServiceTests
             new ReviewResult("draft summary", []),
             ProtocolId);
 
-        await chatClient.Received(1)
-            .GetResponseAsync(
-                Arg.Is<IEnumerable<ChatMessage>>(messages =>
-                    messages.Any(message =>
-                        message.Text.IndexOf("LEGACY SUMMARY", StringComparison.Ordinal) >= 0 &&
-                        message.Text.IndexOf("LEGACY SUMMARY", StringComparison.Ordinal) <
-                        message.Text.IndexOf("CLAIMED FIX SUMMARY", StringComparison.Ordinal))),
-                Arg.Any<ChatOptions?>(),
-                Arg.Any<CancellationToken>());
+        // Ordering is decided here and rendered elsewhere, so assert on the order handed to the prompt
+        // builder rather than on substring positions in the composed message.
+        var presented = prompts.ReceivedCalls()
+            .Single(call => call.GetMethodInfo().Name == nameof(IMemoryReconsiderationPromptBuilder.BuildUserMessage))
+            .GetArguments()[1] as IReadOnlyList<ThreadMemoryMatchDto>;
+        Assert.NotNull(presented);
+        Assert.Equal("LEGACY SUMMARY", presented![0].ResolutionSummary);
+        Assert.Equal("CLAIMED FIX SUMMARY", presented[1].ResolutionSummary);
     }
 
     [Fact]
@@ -1665,6 +1506,18 @@ public sealed class ThreadMemoryServiceTests
         IMemoryActivityLog activityLog,
         ThreadMemoryService service) CreateService(out IChatClient chatClient)
     {
+        return CreateService(out chatClient, out _);
+    }
+
+    private static (
+        IThreadMemoryEmbedder embedder,
+        IThreadMemoryRepository repo,
+        IProtocolRecorder recorder,
+        IMemoryActivityLog activityLog,
+        ThreadMemoryService service) CreateService(
+        out IChatClient chatClient,
+        out IMemoryReconsiderationPromptBuilder reconsiderationPromptBuilder)
+    {
         var embedder = Substitute.For<IThreadMemoryEmbedder>();
         var repo = Substitute.For<IThreadMemoryRepository>();
         var recorder = Substitute.For<IProtocolRecorder>();
@@ -1680,6 +1533,8 @@ public sealed class ThreadMemoryServiceTests
                 Arg.Any<IReadOnlyList<ThreadMemoryMatchDto>>(),
                 Arg.Any<ReviewSystemContext?>())
             .Returns("reconsideration user message");
+
+        reconsiderationPromptBuilder = reconsiderationPrompts;
 
         var service = new ThreadMemoryService(embedder, repo, recorder, activityLog, opts, logger, reconsiderationPrompts, chatClient);
         return (embedder, repo, recorder, activityLog, service);
