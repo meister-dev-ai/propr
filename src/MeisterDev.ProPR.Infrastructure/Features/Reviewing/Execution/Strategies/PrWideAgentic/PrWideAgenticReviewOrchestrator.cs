@@ -1958,30 +1958,10 @@ public sealed partial class PrWideAgenticReviewOrchestrator(
         Guid? activeProtocolId,
         IProtocolRecorder? protocolRecorder)
     {
-        return new ReviewSystemContext(source.ClientSystemMessage, source.RepositoryInstructions, source.ReviewTools)
-        {
-            LoopMetrics = source.LoopMetrics,
-            ActiveProtocolId = activeProtocolId,
-            PerFileHint = source.PerFileHint,
-            ProtocolRecorder = protocolRecorder,
-            ExclusionRules = source.ExclusionRules,
-            DismissedPatterns = source.DismissedPatterns,
-            PromptOverrides = source.PromptOverrides,
-            TierChatClient = source.TierChatClient,
-            ModelId = source.ModelId,
-            LogicalModelName = source.LogicalModelName,
-            DefaultReviewChatClient = source.DefaultReviewChatClient,
-            DefaultReviewModelId = source.DefaultReviewModelId,
-            RuntimeCapabilities = source.RuntimeCapabilities,
-            ReviewSession = source.ReviewSession,
-            Temperature = source.Temperature,
-            PassKind = source.PassKind,
-            PromptExperiment = source.PromptExperiment,
-            SkippedSteps = source.SkippedSteps,
-            BaselineReasoningEffort = source.BaselineReasoningEffort,
-            ActiveReasoningEffort = source.ActiveReasoningEffort,
-            OutputLanguage = source.OutputLanguage,
-        };
+        var clone = source.CloneForPass();
+        clone.ActiveProtocolId = activeProtocolId;
+        clone.ProtocolRecorder = protocolRecorder;
+        return clone;
     }
 
     private static string BuildConcern(string filePath)

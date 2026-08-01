@@ -276,4 +276,34 @@ public sealed class ReviewSystemContext
     ///     See <see cref="MeisterDev.ProPR.Domain.ValueObjects.ReviewOutputLanguage" />.
     /// </summary>
     public string? OutputLanguage { get; set; }
+
+    /// <summary>
+    ///     Returns a copy of this context for a pass that runs under its own protocol, carrying the review's
+    ///     configuration across.
+    ///     <para>
+    ///         The copy is taken field by field by the runtime rather than written out here, so a setting added to
+    ///         this class is carried automatically. A hand-written copy silently drops whatever it forgets, and a
+    ///         dropped per-client setting does not fail: the pass simply runs with the default, which is
+    ///         indistinguishable from the client not having configured it.
+    ///     </para>
+    ///     <para>
+    ///         Reference-typed members are shared with the original rather than deep-copied, which is what the
+    ///         collections, the tool provider, the workspace and the chat clients are for: one review's state,
+    ///         observed by each of its passes.
+    ///     </para>
+    ///     <para>
+    ///         The two members that describe a pass rather than the review are reset, because the copy starts a
+    ///         new pass: <see cref="ContextBudgetOutcome" />, which reports how the last file fared against the
+    ///         model window, and <see cref="ActiveLens" />, which marks a specialist pass. Inheriting either would
+    ///         attribute the previous pass's circumstances to this one. The protocol members stay as they are so
+    ///         the caller can bind the copy to its own protocol.
+    ///     </para>
+    /// </summary>
+    public ReviewSystemContext CloneForPass()
+    {
+        var clone = (ReviewSystemContext)this.MemberwiseClone();
+        clone.ContextBudgetOutcome = ReviewContextBudgetOutcome.Normal;
+        clone.ActiveLens = null;
+        return clone;
+    }
 }
