@@ -137,6 +137,16 @@ public sealed class ReviewingDiagnosticsServiceCollectionExtensionsTests
             return Task.FromResult((0, (IReadOnlyList<JobListPageItemDto>)[]));
         }
 
+        public Task<(int total, IReadOnlyList<PullRequestHistoryGroupDto> items)> GetPullRequestHistoryPageAsync(
+            int limit,
+            int offset,
+            JobStatus? status,
+            Guid? clientId = null,
+            CancellationToken ct = default)
+        {
+            return Task.FromResult((0, (IReadOnlyList<PullRequestHistoryGroupDto>)[]));
+        }
+
         public ReviewJob? GetById(Guid id)
         {
             return null;

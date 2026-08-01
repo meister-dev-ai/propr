@@ -140,6 +140,72 @@ public sealed class JobsControllerTests(JobsControllerTests.JobsApiFactory facto
     }
 
     [Fact]
+    public async Task GetPullRequestHistory_PagesOverPullRequestsAndCarriesTheirRuns()
+    {
+        var clientId = Guid.NewGuid();
+        var repo = factory.Services.GetRequiredService<IJobRepository>();
+
+        // Two runs against one pull request, one against another: paging over pull requests must return
+        // two groups, not three rows.
+        foreach (var (pr, iteration) in new[] { (7100, 1), (7100, 2), (7101, 1) })
+        {
+            await repo.AddAsync(new ReviewJob(Guid.NewGuid(), clientId, "https://dev.azure.com/org", "proj", "repo", pr, iteration));
+        }
+
+        var client = factory.CreateClient();
+        using var request = new HttpRequestMessage(
+            HttpMethod.Get,
+            $"/reviewing/jobs/pull-requests?clientId={clientId}&limit=10");
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", factory.GenerateAdminToken());
+
+        var response = await client.SendAsync(request);
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+
+        var body = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        Assert.Equal(2, body.RootElement.GetProperty("total").GetInt32());
+
+        var items = body.RootElement.GetProperty("items").EnumerateArray().ToList();
+        Assert.Equal(2, items.Count);
+
+        var twiceReviewed = items.Single(i => i.GetProperty("pullRequestId").GetInt32() == 7100);
+        Assert.Equal(2, twiceReviewed.GetProperty("jobs").GetArrayLength());
+        Assert.Equal("repo", twiceReviewed.GetProperty("repositoryId").GetString());
+    }
+
+    [Fact]
+    public async Task GetPullRequestHistory_ReachesPastTheOldFiveHundredJobCeiling()
+    {
+        // The previous surface fetched a fixed five hundred jobs and grouped them in the browser, so history
+        // beyond that was unreachable. Paging over pull requests has no such bound.
+        var clientId = Guid.NewGuid();
+        using var scope = factory.Services.CreateScope();
+        var dbContextFactory = scope.ServiceProvider.GetRequiredService<IDbContextFactory<MeisterProPRDbContext>>();
+        await using var dbContext = await dbContextFactory.CreateDbContextAsync();
+
+        var jobs = new List<ReviewJob>(600);
+        for (var i = 0; i < 600; i++)
+        {
+            jobs.Add(new ReviewJob(Guid.NewGuid(), clientId, "https://dev.azure.com/org", "proj", "repo", 20_000 + i, 1));
+        }
+
+        await dbContext.ReviewJobs.AddRangeAsync(jobs);
+        await dbContext.SaveChangesAsync();
+
+        var client = factory.CreateClient();
+        using var request = new HttpRequestMessage(
+            HttpMethod.Get,
+            $"/reviewing/jobs/pull-requests?clientId={clientId}&limit=10&offset=550");
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", factory.GenerateAdminToken());
+
+        var response = await client.SendAsync(request);
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+
+        var body = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        Assert.Equal(600, body.RootElement.GetProperty("total").GetInt32());
+        Assert.Equal(10, body.RootElement.GetProperty("items").GetArrayLength());
+    }
+
+    [Fact]
     public async Task GetJobDetail_CarriesTheResultSummaryTheListOmits()
     {
         var repo = factory.Services.GetRequiredService<IJobRepository>();

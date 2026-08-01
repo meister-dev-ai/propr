@@ -56,30 +56,15 @@ public sealed class JobsController(
             return auth;
         }
 
-        var isAdmin = AuthHelpers.IsAdmin(this.HttpContext);
-
-        if (!isAdmin)
+        var scope = ResolveClientScope(this.HttpContext, clientId);
+        if (scope.Denied is not null)
         {
-            var clientRoles = AuthHelpers.GetClientRoles(this.HttpContext);
-            if (clientId.HasValue)
-            {
-                if (!clientRoles.ContainsKey(clientId.Value))
-                {
-                    return this.StatusCode(StatusCodes.Status403Forbidden, new { error = "Access denied." });
-                }
-            }
-            else
-            {
-                if (clientRoles.Count == 0)
-                {
-                    return this.Ok(new JobListResponse(0, []));
-                }
+            return scope.Denied;
+        }
 
-                if (clientRoles.Count == 1)
-                {
-                    clientId = clientRoles.Keys.First();
-                }
-            }
+        if (scope.NoAccessibleClients)
+        {
+            return this.Ok(new JobListResponse(0, []));
         }
 
         limit = Math.Clamp(limit, 1, 1000);
@@ -89,40 +74,160 @@ public sealed class JobsController(
             limit,
             offset,
             status,
-            clientId,
+            scope.ClientId,
             pullRequestId,
             cancellationToken);
 
+        return this.Ok(new JobListResponse(total, items.Select(ToListItem).ToList()));
+    }
+
+    /// <summary>
+    ///     Narrows a listing to the clients the caller may read.
+    ///     An administrator reads everything. A caller holding exactly one client is pinned to it. A caller
+    ///     naming a client they do not hold is refused.
+    /// </summary>
+    /// <remarks>
+    ///     A caller holding more than one client and naming none is left unfiltered, which reads across every
+    ///     client rather than only theirs. That is the behaviour this endpoint has always had and it is
+    ///     preserved here deliberately rather than changed as a side effect of a performance change; narrowing
+    ///     it needs a repository filter that takes a set of clients.
+    /// </remarks>
+    private static ClientScope ResolveClientScope(HttpContext httpContext, Guid? requestedClientId)
+    {
+        if (AuthHelpers.IsAdmin(httpContext))
+        {
+            return new ClientScope(requestedClientId, false, null);
+        }
+
+        var clientRoles = AuthHelpers.GetClientRoles(httpContext);
+        if (requestedClientId.HasValue)
+        {
+            return clientRoles.ContainsKey(requestedClientId.Value)
+                ? new ClientScope(requestedClientId, false, null)
+                : new ClientScope(
+                    null,
+                    false,
+                    new ObjectResult(new { error = "Access denied." }) { StatusCode = StatusCodes.Status403Forbidden });
+        }
+
+        return clientRoles.Count switch
+        {
+            0 => new ClientScope(null, true, null),
+            1 => new ClientScope(clientRoles.Keys.First(), false, null),
+            _ => new ClientScope(null, false, null),
+        };
+    }
+
+    private static JobListItem ToListItem(JobListPageItemDto j)
+    {
+        return new JobListItem(
+            j.Id,
+            j.ClientId,
+            j.OrganizationUrl,
+            j.ProjectId,
+            j.RepositoryId,
+            j.PullRequestId,
+            j.IterationId,
+            j.Status,
+            j.SubmittedAt,
+            j.ProcessingStartedAt,
+            j.CompletedAt,
+            j.ResultSummaryExcerpt,
+            j.HasResultSummary,
+            j.ErrorMessage,
+            j.TotalInputTokens,
+            j.TotalOutputTokens,
+            j.PrTitle,
+            j.PrSourceBranch,
+            j.PrTargetBranch,
+            j.PrRepositoryName,
+            j.AiModel,
+            j.FilesReviewed,
+            j.FilesInScope,
+            j.TotalEstimatedCostUsd,
+            j.CostIsApproximate,
+            j.BudgetSoftCapped);
+    }
+
+    /// <param name="ClientId">The client to filter by, or null to read across clients.</param>
+    /// <param name="NoAccessibleClients">True when the caller holds no client at all, so the answer is empty.</param>
+    /// <param name="Denied">A populated result when the caller asked for a client they may not read.</param>
+    private sealed record ClientScope(Guid? ClientId, bool NoAccessibleClients, IActionResult? Denied);
+
+    /// <summary>
+    ///     Returns the review history grouped by pull request, most recently active first.
+    ///     Requires an Admin JWT or <c>X-User-Pat</c> for unrestricted access, or valid user authentication for
+    ///     scoped client access.
+    /// </summary>
+    /// <param name="limit">Maximum number of pull requests to return (1–100, default 10).</param>
+    /// <param name="offset">Number of pull requests to skip for pagination (default 0).</param>
+    /// <param name="status">Optional status filter applied to the runs before grouping.</param>
+    /// <param name="clientId">Optional client filter: only return pull requests for this client.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>A page of pull requests with their review runs, and the total number of pull requests.</returns>
+    /// <response code="200">History page returned.</response>
+    /// <response code="401">Missing or invalid credentials.</response>
+    /// <response code="403">Caller has no access to the requested client.</response>
+    [HttpGet("pull-requests")]
+    [HttpGet("/jobs/pull-requests")]
+    [ProducesResponseType(typeof(PullRequestHistoryResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    public async Task<IActionResult> GetPullRequestHistory(
+        [FromQuery] int limit = 10,
+        [FromQuery] int offset = 0,
+        [FromQuery] JobStatus? status = null,
+        [FromQuery] Guid? clientId = null,
+        CancellationToken cancellationToken = default)
+    {
+        var auth = AuthHelpers.RequireAuthenticated(this.HttpContext);
+        if (auth is not null)
+        {
+            return auth;
+        }
+
+        var scope = ResolveClientScope(this.HttpContext, clientId);
+        if (scope.Denied is not null)
+        {
+            return scope.Denied;
+        }
+
+        if (scope.NoAccessibleClients)
+        {
+            return this.Ok(new PullRequestHistoryResponse(0, []));
+        }
+
+        // A page holds pull requests, and every run of each one travels with it, so the ceiling is lower
+        // than the flat list's: ten pull requests is already tens of runs.
+        limit = Math.Clamp(limit, 1, 100);
+        offset = Math.Max(offset, 0);
+
+        var (total, groups) = await jobRepository.GetPullRequestHistoryPageAsync(
+            limit,
+            offset,
+            status,
+            scope.ClientId,
+            cancellationToken);
+
         return this.Ok(
-            new JobListResponse(
+            new PullRequestHistoryResponse(
                 total,
-                items.Select(j => new JobListItem(
-                        j.Id,
-                        j.ClientId,
-                        j.OrganizationUrl,
-                        j.ProjectId,
-                        j.RepositoryId,
-                        j.PullRequestId,
-                        j.IterationId,
-                        j.Status,
-                        j.SubmittedAt,
-                        j.ProcessingStartedAt,
-                        j.CompletedAt,
-                        j.ResultSummaryExcerpt,
-                        j.HasResultSummary,
-                        j.ErrorMessage,
-                        j.TotalInputTokens,
-                        j.TotalOutputTokens,
-                        j.PrTitle,
-                        j.PrSourceBranch,
-                        j.PrTargetBranch,
-                        j.PrRepositoryName,
-                        j.AiModel,
-                        j.FilesReviewed,
-                        j.FilesInScope,
-                        j.TotalEstimatedCostUsd,
-                        j.CostIsApproximate,
-                        j.BudgetSoftCapped))
+                groups.Select(g => new PullRequestHistoryItem(
+                        g.ProviderScopePath,
+                        g.ProviderProjectKey,
+                        g.RepositoryId,
+                        g.PullRequestId,
+                        g.ClientId,
+                        g.PrTitle,
+                        g.PrRepositoryName,
+                        g.PrSourceBranch,
+                        g.PrTargetBranch,
+                        g.LatestActivityAt,
+                        g.TotalInputTokens,
+                        g.TotalOutputTokens,
+                        g.TotalEstimatedCostUsd,
+                        g.CostIsApproximate,
+                        g.Jobs.Select(ToListItem).ToList()))
                     .ToList()));
     }
 
@@ -430,6 +535,44 @@ public sealed class JobsController(
 
     /// <summary>Response for the job list endpoint.</summary>
     public sealed record JobListResponse(int Total, IReadOnlyList<JobListItem> Items);
+
+    /// <summary>One pull request in the grouped review history, with every review run against it.</summary>
+    /// <param name="ProviderScopePath">Provider scope (organization or host) the pull request belongs to.</param>
+    /// <param name="ProviderProjectKey">Provider project key.</param>
+    /// <param name="RepositoryId">Repository identifier.</param>
+    /// <param name="PullRequestId">Pull request number within the repository.</param>
+    /// <param name="ClientId">Owning client, taken from the most recent run.</param>
+    /// <param name="PrTitle">Pull request title as captured by the most recent run.</param>
+    /// <param name="PrRepositoryName">Repository display name as captured by the most recent run.</param>
+    /// <param name="PrSourceBranch">Source branch as captured by the most recent run.</param>
+    /// <param name="PrTargetBranch">Target branch as captured by the most recent run.</param>
+    /// <param name="LatestActivityAt">Most recent activity across the runs; the ordering key.</param>
+    /// <param name="TotalInputTokens">Input tokens summed across the runs.</param>
+    /// <param name="TotalOutputTokens">Output tokens summed across the runs.</param>
+    /// <param name="TotalEstimatedCostUsd">Cost summed across the runs, or null when none of them is priced.</param>
+    /// <param name="CostIsApproximate">True when a run is approximate or the pull request mixes priced and unpriced runs.</param>
+    /// <param name="Jobs">Every run against this pull request, running work first, then most recent first.</param>
+    public sealed record PullRequestHistoryItem(
+        string ProviderScopePath,
+        string ProviderProjectKey,
+        string RepositoryId,
+        int PullRequestId,
+        Guid? ClientId,
+        string? PrTitle,
+        string? PrRepositoryName,
+        string? PrSourceBranch,
+        string? PrTargetBranch,
+        DateTimeOffset LatestActivityAt,
+        long TotalInputTokens,
+        long TotalOutputTokens,
+        decimal? TotalEstimatedCostUsd,
+        bool CostIsApproximate,
+        IReadOnlyList<JobListItem> Jobs);
+
+    /// <summary>Response for the pull-request-grouped review history endpoint.</summary>
+    /// <param name="Total">Total number of pull requests matching the filters, across all pages.</param>
+    /// <param name="Items">The pull requests on this page.</param>
+    public sealed record PullRequestHistoryResponse(int Total, IReadOnlyList<PullRequestHistoryItem> Items);
 
     /// <summary>
     ///     Why a budget held or stopped a review: the binding scope, whether the soft or hard cap was reached, the

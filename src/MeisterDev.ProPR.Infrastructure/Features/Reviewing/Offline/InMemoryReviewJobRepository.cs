@@ -231,6 +231,52 @@ public sealed class InMemoryReviewJobRepository : IJobRepository
         return Task.FromResult<(int total, IReadOnlyList<JobListPageItemDto> items)>((ordered.Count, page));
     }
 
+    public async Task<(int total, IReadOnlyList<PullRequestHistoryGroupDto> items)> GetPullRequestHistoryPageAsync(
+        int limit,
+        int offset,
+        JobStatus? status,
+        Guid? clientId = null,
+        CancellationToken ct = default)
+    {
+        // Reuses the flat projection so the offline repository groups exactly what the list would have shown.
+        var (_, all) = await this.GetJobListPageAsync(int.MaxValue, 0, status, clientId, null, ct);
+
+        var groups = all
+            .GroupBy(j => (j.OrganizationUrl, j.ProjectId, j.RepositoryId, j.PullRequestId))
+            .Select(g =>
+            {
+                var jobs = g
+                    .OrderByDescending(j => j.Status is JobStatus.Processing or JobStatus.Pending)
+                    .ThenByDescending(j => j.CompletedAt ?? j.ProcessingStartedAt ?? j.SubmittedAt)
+                    .ToList();
+                var newest = jobs[0];
+                var anyPriced = jobs.Exists(j => j.TotalEstimatedCostUsd is not null);
+                var anyUnpriced = jobs.Exists(j => j.TotalEstimatedCostUsd is null);
+
+                return new PullRequestHistoryGroupDto(
+                    g.Key.OrganizationUrl,
+                    g.Key.ProjectId,
+                    g.Key.RepositoryId,
+                    g.Key.PullRequestId,
+                    newest.ClientId,
+                    newest.PrTitle,
+                    newest.PrRepositoryName,
+                    newest.PrSourceBranch,
+                    newest.PrTargetBranch,
+                    jobs.Max(j => j.CompletedAt ?? j.ProcessingStartedAt ?? j.SubmittedAt),
+                    jobs.Sum(j => j.TotalInputTokens),
+                    jobs.Sum(j => j.TotalOutputTokens),
+                    anyPriced ? jobs.Sum(j => j.TotalEstimatedCostUsd ?? 0m) : null,
+                    jobs.Exists(j => j.CostIsApproximate) || (anyPriced && anyUnpriced),
+                    jobs);
+            })
+            .OrderByDescending(g => g.LatestActivityAt)
+            .ToList();
+
+        var pageItems = groups.Skip(offset).Take(limit).ToList().AsReadOnly();
+        return (groups.Count, pageItems);
+    }
+
     public ReviewJob? GetById(Guid id)
     {
         return this._jobs.TryGetValue(id, out var job) ? job : null;

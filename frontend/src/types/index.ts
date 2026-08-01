@@ -7030,6 +7030,152 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/reviewing/jobs/pull-requests": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Returns the review history grouped by pull request, most recently active first.
+         *     Requires an Admin JWT or `X-User-Pat` for unrestricted access, or valid user authentication for
+         *     scoped client access.
+         */
+        get: {
+            parameters: {
+                query?: {
+                    /** @description Maximum number of pull requests to return (1–100, default 10). */
+                    limit?: number;
+                    /** @description Number of pull requests to skip for pagination (default 0). */
+                    offset?: number;
+                    /** @description Optional status filter applied to the runs before grouping. */
+                    status?: components["schemas"]["JobStatus"];
+                    /** @description Optional client filter: only return pull requests for this client. */
+                    clientId?: string;
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description History page returned. */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["PullRequestHistoryResponse"];
+                        "application/json": components["schemas"]["PullRequestHistoryResponse"];
+                        "text/json": components["schemas"]["PullRequestHistoryResponse"];
+                    };
+                };
+                /** @description Missing or invalid credentials. */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Caller has no access to the requested client. */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/jobs/pull-requests": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Returns the review history grouped by pull request, most recently active first.
+         *     Requires an Admin JWT or `X-User-Pat` for unrestricted access, or valid user authentication for
+         *     scoped client access.
+         */
+        get: {
+            parameters: {
+                query?: {
+                    /** @description Maximum number of pull requests to return (1–100, default 10). */
+                    limit?: number;
+                    /** @description Number of pull requests to skip for pagination (default 0). */
+                    offset?: number;
+                    /** @description Optional status filter applied to the runs before grouping. */
+                    status?: components["schemas"]["JobStatus"];
+                    /** @description Optional client filter: only return pull requests for this client. */
+                    clientId?: string;
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description History page returned. */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["PullRequestHistoryResponse"];
+                        "application/json": components["schemas"]["PullRequestHistoryResponse"];
+                        "text/json": components["schemas"]["PullRequestHistoryResponse"];
+                    };
+                };
+                /** @description Missing or invalid credentials. */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Caller has no access to the requested client. */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/reviewing/jobs/{id}": {
         parameters: {
             query?: never;
@@ -17735,6 +17881,67 @@ export interface components {
         ProviderOperationalStatusDto: {
             connections?: components["schemas"]["ProviderConnectionOperationalStatusDto"][] | null;
             providerFamilies?: components["schemas"]["ProviderFamilyOperationalStatusDto"][] | null;
+        };
+        /** @description One pull request in the grouped review history, with every review run against it. */
+        PullRequestHistoryItem: {
+            /** @description Provider scope (organization or host) the pull request belongs to. */
+            providerScopePath?: string | null;
+            /** @description Provider project key. */
+            providerProjectKey?: string | null;
+            /** @description Repository identifier. */
+            repositoryId?: string | null;
+            /**
+             * Format: int32
+             * @description Pull request number within the repository.
+             */
+            pullRequestId?: number;
+            /**
+             * Format: uuid
+             * @description Owning client, taken from the most recent run.
+             */
+            clientId?: string | null;
+            /** @description Pull request title as captured by the most recent run. */
+            prTitle?: string | null;
+            /** @description Repository display name as captured by the most recent run. */
+            prRepositoryName?: string | null;
+            /** @description Source branch as captured by the most recent run. */
+            prSourceBranch?: string | null;
+            /** @description Target branch as captured by the most recent run. */
+            prTargetBranch?: string | null;
+            /**
+             * Format: date-time
+             * @description Most recent activity across the runs; the ordering key.
+             */
+            latestActivityAt?: string;
+            /**
+             * Format: int64
+             * @description Input tokens summed across the runs.
+             */
+            totalInputTokens?: number;
+            /**
+             * Format: int64
+             * @description Output tokens summed across the runs.
+             */
+            totalOutputTokens?: number;
+            /**
+             * Format: double
+             * @description Cost summed across the runs, or null when none of them is priced.
+             */
+            totalEstimatedCostUsd?: number | null;
+            /** @description True when a run is approximate or the pull request mixes priced and unpriced runs. */
+            costIsApproximate?: boolean;
+            /** @description Every run against this pull request, running work first, then most recent first. */
+            jobs?: components["schemas"]["JobListItem"][] | null;
+        };
+        /** @description Response for the pull-request-grouped review history endpoint. */
+        PullRequestHistoryResponse: {
+            /**
+             * Format: int32
+             * @description Total number of pull requests matching the filters, across all pages.
+             */
+            total?: number;
+            /** @description The pull requests on this page. */
+            items?: components["schemas"]["PullRequestHistoryItem"][] | null;
         };
         /** @description One purpose → logical-model mapping row. */
         PurposeRoleResponse: {

@@ -361,6 +361,101 @@ public sealed class JobRepositoryTests(PostgresContainerFixture fixture) : IAsyn
     }
 
     [Fact]
+    public async Task GetPullRequestHistoryPageAsync_GroupsRunsByPullRequestAndPagesOverPullRequests()
+    {
+        var clientId = Guid.NewGuid();
+        // Three pull requests, one of them reviewed twice, so paging over pull requests differs from
+        // paging over runs.
+        var prA1 = MakeJob(clientId, "https://dev.azure.com/org", "proj", "repo", 9200, 1);
+        var prA2 = MakeJob(clientId, "https://dev.azure.com/org", "proj", "repo", 9200, 2);
+        var prB = MakeJob(clientId, "https://dev.azure.com/org", "proj", "repo", 9201, 1);
+        var prC = MakeJob(clientId, "https://dev.azure.com/org", "proj", "repo", 9202, 1);
+        foreach (var job in new[] { prA1, prA2, prB, prC })
+        {
+            await this._repo.AddAsync(job);
+        }
+
+        var (total, page) = await this._repo.GetPullRequestHistoryPageAsync(2, 0, null, clientId);
+
+        Assert.Equal(3, total);
+        Assert.Equal(2, page.Count);
+        Assert.All(page, g => Assert.Equal("repo", g.RepositoryId));
+
+        var grouped = await this._repo.GetPullRequestHistoryPageAsync(10, 0, null, clientId);
+        var twiceReviewed = Assert.Single(grouped.items, g => g.PullRequestId == 9200);
+        Assert.Equal(2, twiceReviewed.Jobs.Count);
+    }
+
+    [Fact]
+    public async Task GetPullRequestHistoryPageAsync_OrdersByMostRecentActivity()
+    {
+        var clientId = Guid.NewGuid();
+        var older = MakeJob(clientId, "https://dev.azure.com/org", "proj", "repo", 9210, 1);
+        await this._repo.AddAsync(older);
+        var newer = MakeJob(clientId, "https://dev.azure.com/org", "proj", "repo", 9211, 1);
+        await this._repo.AddAsync(newer);
+        await this._repo.TryTransitionAsync(newer.Id, JobStatus.Pending, JobStatus.Processing);
+        await this._repo.SetResultAsync(newer.Id, new ReviewResult("done", []));
+
+        var (_, page) = await this._repo.GetPullRequestHistoryPageAsync(10, 0, null, clientId);
+
+        Assert.Equal(9211, page[0].PullRequestId);
+    }
+
+    [Fact]
+    public async Task GetPullRequestHistoryPageAsync_RollsUpTokensAndCostAcrossRuns()
+    {
+        var clientId = Guid.NewGuid();
+        var first = MakeJob(clientId, "https://dev.azure.com/org", "proj", "repo", 9220, 1);
+        first.AccumulateTokens(100, 10);
+        var second = MakeJob(clientId, "https://dev.azure.com/org", "proj", "repo", 9220, 2);
+        second.AccumulateTokens(250, 25);
+        await this._repo.AddAsync(first);
+        await this._repo.AddAsync(second);
+
+        var (_, page) = await this._repo.GetPullRequestHistoryPageAsync(10, 0, null, clientId);
+
+        var group = Assert.Single(page);
+        Assert.Equal(350, group.TotalInputTokens);
+        Assert.Equal(35, group.TotalOutputTokens);
+        // No run carried a price, so the pull request reads as unpriced rather than free.
+        Assert.Null(group.TotalEstimatedCostUsd);
+    }
+
+    [Fact]
+    public async Task GetPullRequestHistoryPageAsync_PutsRunningWorkFirstWithinAPullRequest()
+    {
+        var clientId = Guid.NewGuid();
+        var finished = MakeJob(clientId, "https://dev.azure.com/org", "proj", "repo", 9230, 1);
+        await this._repo.AddAsync(finished);
+        await this._repo.TryTransitionAsync(finished.Id, JobStatus.Pending, JobStatus.Processing);
+        await this._repo.SetResultAsync(finished.Id, new ReviewResult("done", []));
+
+        var running = MakeJob(clientId, "https://dev.azure.com/org", "proj", "repo", 9230, 2);
+        await this._repo.AddAsync(running);
+        await this._repo.TryTransitionAsync(running.Id, JobStatus.Pending, JobStatus.Processing);
+
+        var (_, page) = await this._repo.GetPullRequestHistoryPageAsync(10, 0, null, clientId);
+
+        var group = Assert.Single(page);
+        Assert.Equal(running.Id, group.Jobs[0].Id);
+    }
+
+    [Fact]
+    public async Task GetPullRequestHistoryPageAsync_ScopesToTheRequestedClient()
+    {
+        var mine = Guid.NewGuid();
+        var theirs = Guid.NewGuid();
+        await this._repo.AddAsync(MakeJob(mine, "https://dev.azure.com/org", "proj", "repo", 9240, 1));
+        await this._repo.AddAsync(MakeJob(theirs, "https://dev.azure.com/org", "proj", "repo", 9241, 1));
+
+        var (total, page) = await this._repo.GetPullRequestHistoryPageAsync(10, 0, null, mine);
+
+        Assert.Equal(1, total);
+        Assert.Equal(9240, Assert.Single(page).PullRequestId);
+    }
+
+    [Fact]
     public async Task AddFileResultAsync_RecordsTheReviewedCountOnTheJob()
     {
         var job = MakeJob(prId: 9100);

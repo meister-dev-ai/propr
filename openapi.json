@@ -10324,6 +10324,224 @@
         }
       }
     },
+    "/reviewing/jobs/pull-requests": {
+      "get": {
+        "tags": [
+          "Jobs"
+        ],
+        "summary": "Returns the review history grouped by pull request, most recently active first.\nRequires an Admin JWT or `X-User-Pat` for unrestricted access, or valid user authentication for\nscoped client access.",
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "description": "Maximum number of pull requests to return (1–100, default 10).",
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "default": 10
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "description": "Number of pull requests to skip for pagination (default 0).",
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "default": 0
+            }
+          },
+          {
+            "name": "status",
+            "in": "query",
+            "description": "Optional status filter applied to the runs before grouping.",
+            "schema": {
+              "$ref": "#/components/schemas/JobStatus"
+            }
+          },
+          {
+            "name": "clientId",
+            "in": "query",
+            "description": "Optional client filter: only return pull requests for this client.",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "History page returned.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/PullRequestHistoryResponse"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PullRequestHistoryResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PullRequestHistoryResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid credentials.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Caller has no access to the requested client.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/jobs/pull-requests": {
+      "get": {
+        "tags": [
+          "Jobs"
+        ],
+        "summary": "Returns the review history grouped by pull request, most recently active first.\nRequires an Admin JWT or `X-User-Pat` for unrestricted access, or valid user authentication for\nscoped client access.",
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "description": "Maximum number of pull requests to return (1–100, default 10).",
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "default": 10
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "description": "Number of pull requests to skip for pagination (default 0).",
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "default": 0
+            }
+          },
+          {
+            "name": "status",
+            "in": "query",
+            "description": "Optional status filter applied to the runs before grouping.",
+            "schema": {
+              "$ref": "#/components/schemas/JobStatus"
+            }
+          },
+          {
+            "name": "clientId",
+            "in": "query",
+            "description": "Optional client filter: only return pull requests for this client.",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "History page returned.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/PullRequestHistoryResponse"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PullRequestHistoryResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PullRequestHistoryResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid credentials.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Caller has no access to the requested client.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/reviewing/jobs/{id}": {
       "get": {
         "tags": [
@@ -28076,6 +28294,112 @@
         },
         "additionalProperties": false,
         "description": "Operator-facing provider operational status response."
+      },
+      "PullRequestHistoryItem": {
+        "type": "object",
+        "properties": {
+          "providerScopePath": {
+            "type": "string",
+            "description": "Provider scope (organization or host) the pull request belongs to.",
+            "nullable": true
+          },
+          "providerProjectKey": {
+            "type": "string",
+            "description": "Provider project key.",
+            "nullable": true
+          },
+          "repositoryId": {
+            "type": "string",
+            "description": "Repository identifier.",
+            "nullable": true
+          },
+          "pullRequestId": {
+            "type": "integer",
+            "description": "Pull request number within the repository.",
+            "format": "int32"
+          },
+          "clientId": {
+            "type": "string",
+            "description": "Owning client, taken from the most recent run.",
+            "format": "uuid",
+            "nullable": true
+          },
+          "prTitle": {
+            "type": "string",
+            "description": "Pull request title as captured by the most recent run.",
+            "nullable": true
+          },
+          "prRepositoryName": {
+            "type": "string",
+            "description": "Repository display name as captured by the most recent run.",
+            "nullable": true
+          },
+          "prSourceBranch": {
+            "type": "string",
+            "description": "Source branch as captured by the most recent run.",
+            "nullable": true
+          },
+          "prTargetBranch": {
+            "type": "string",
+            "description": "Target branch as captured by the most recent run.",
+            "nullable": true
+          },
+          "latestActivityAt": {
+            "type": "string",
+            "description": "Most recent activity across the runs; the ordering key.",
+            "format": "date-time"
+          },
+          "totalInputTokens": {
+            "type": "integer",
+            "description": "Input tokens summed across the runs.",
+            "format": "int64"
+          },
+          "totalOutputTokens": {
+            "type": "integer",
+            "description": "Output tokens summed across the runs.",
+            "format": "int64"
+          },
+          "totalEstimatedCostUsd": {
+            "type": "number",
+            "description": "Cost summed across the runs, or null when none of them is priced.",
+            "format": "double",
+            "nullable": true
+          },
+          "costIsApproximate": {
+            "type": "boolean",
+            "description": "True when a run is approximate or the pull request mixes priced and unpriced runs."
+          },
+          "jobs": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/JobListItem"
+            },
+            "description": "Every run against this pull request, running work first, then most recent first.",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false,
+        "description": "One pull request in the grouped review history, with every review run against it."
+      },
+      "PullRequestHistoryResponse": {
+        "type": "object",
+        "properties": {
+          "total": {
+            "type": "integer",
+            "description": "Total number of pull requests matching the filters, across all pages.",
+            "format": "int32"
+          },
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PullRequestHistoryItem"
+            },
+            "description": "The pull requests on this page.",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false,
+        "description": "Response for the pull-request-grouped review history endpoint."
       },
       "PurposeRoleResponse": {
         "type": "object",

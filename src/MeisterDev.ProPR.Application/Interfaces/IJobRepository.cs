@@ -80,6 +80,23 @@ public interface IJobRepository
         int? pullRequestId = null,
         CancellationToken ct = default);
 
+    /// <summary>
+    ///     Returns a page of the review history grouped by pull request, most recently active first, together
+    ///     with the total number of pull requests that match. Each group carries every run against that pull
+    ///     request and the rollups shown beside it.
+    /// </summary>
+    /// <remarks>
+    ///     <paramref name="limit" /> and <paramref name="offset" /> page over pull requests, not runs, which is
+    ///     the grain the history is read at. A caller that pages over runs instead has to hold the whole history
+    ///     to group it, and so can never show a complete history without fetching one.
+    /// </remarks>
+    Task<(int total, IReadOnlyList<PullRequestHistoryGroupDto> items)> GetPullRequestHistoryPageAsync(
+        int limit,
+        int offset,
+        JobStatus? status,
+        Guid? clientId = null,
+        CancellationToken ct = default);
+
     /// <summary>Gets a job by id, or null if not found.</summary>
     ReviewJob? GetById(Guid id);
 

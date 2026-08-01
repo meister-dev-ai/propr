@@ -2,6 +2,7 @@
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 // This file implements commercial-only functionality. A commercial license is required to activate or use that functionality.
 
+using System.Linq.Expressions;
 using MeisterDev.ProPR.Application.DTOs;
 using MeisterDev.ProPR.Application.Interfaces;
 using MeisterDev.ProPR.Application.Support;
@@ -23,6 +24,54 @@ public sealed partial class JobRepository(
 {
     /// <summary>How much of a review summary the history list carries per row.</summary>
     private const int ResultSummaryExcerptLength = 200;
+
+    /// <summary>
+    ///     Projects a job onto the row the history surfaces render. Selects scalar columns only — the summary
+    ///     as a bounded excerpt from <c>result_summary</c>, never <c>result_json</c> — and is untracked by
+    ///     construction. Shared by the flat list and the pull-request-grouped page so both agree on how token
+    ///     totals and the reviewed-file count fall back when their stored values are absent.
+    /// </summary>
+    private static readonly Expression<Func<ReviewJob, JobListPageItemDto>> ListItemProjection =
+        j => new JobListPageItemDto(
+            j.Id,
+            j.ClientId,
+            j.OrganizationUrl,
+            j.ProjectId,
+            j.RepositoryId,
+            j.PullRequestId,
+            j.IterationId,
+            j.Status,
+            j.SubmittedAt,
+            j.ProcessingStartedAt,
+            j.CompletedAt,
+            // Bounded server-side. The list cell shows an opening excerpt; carrying the whole summary
+            // made it the overwhelming majority of the response, and a reader who wants the rest opens
+            // the row, which fetches it from the job detail endpoint.
+            j.ResultSummary == null
+                ? null
+                : j.ResultSummary.Length > ResultSummaryExcerptLength
+                    ? j.ResultSummary.Substring(0, ResultSummaryExcerptLength)
+                    : j.ResultSummary,
+            j.ResultSummary != null && j.ResultSummary != "",
+            j.ErrorMessage,
+            j.TotalInputTokensAggregated ?? j.Protocols.Sum(p => p.TotalInputTokens) ?? 0L,
+            j.TotalOutputTokensAggregated ?? j.Protocols.Sum(p => p.TotalOutputTokens) ?? 0L,
+            j.PrTitle,
+            j.PrSourceBranch,
+            j.PrTargetBranch,
+            j.PrRepositoryName,
+            j.AiModel,
+            // Live numerator: files whose review reached a terminal successful state. Read from the
+            // stored count, which each file write keeps current. The correlated Count remains as the
+            // fallback for jobs last written before the column existed, mirroring how the aggregated
+            // token totals fall back to summing their protocols.
+            j.ReviewedFileCount ??
+            j.FileReviewResults.Count(r => r.IsComplete && !r.IsFailed && !r.IsExcluded && !r.IsCarriedForward),
+            j.InScopeChangedFileCount,
+            j.TotalEstimatedCostUsd,
+            j.CostIsApproximate,
+            // A completed job carries a budget block only when the per-increment soft cap stopped it early.
+            j.Status == JobStatus.Completed && j.BudgetBlockCapKind == BudgetCapKind.Soft);
 
     // Jobs still live for a pull request — not yet terminal — so a newer push supersedes them, a closed PR
     // cancels them, and intake treats them as an existing job rather than creating a duplicate. Budget-held and
@@ -223,57 +272,165 @@ public sealed partial class JobRepository(
 
         var total = await query.CountAsync(ct).ConfigureAwait(false);
 
-        // Project to a non-entity DTO: selects only scalar columns (the summary from result_summary, never
-        // result_json), sums protocol tokens as a correlated subquery coalesced to 0, and is untracked by
-        // construction. No source-scope hydration — the overview never renders it.
         var items = await query
             .OrderByDescending(j => j.SubmittedAt)
             .Skip(offset)
             .Take(limit)
-            .Select(j => new JobListPageItemDto(
-                j.Id,
-                j.ClientId,
-                j.OrganizationUrl,
-                j.ProjectId,
-                j.RepositoryId,
-                j.PullRequestId,
-                j.IterationId,
-                j.Status,
-                j.SubmittedAt,
-                j.ProcessingStartedAt,
-                j.CompletedAt,
-                // Bounded server-side. The list cell shows an opening excerpt; carrying the whole summary
-                // made it the overwhelming majority of the response, and a reader who wants the rest opens
-                // the row, which fetches it from the job detail endpoint.
-                j.ResultSummary == null
-                    ? null
-                    : j.ResultSummary.Length > ResultSummaryExcerptLength
-                        ? j.ResultSummary.Substring(0, ResultSummaryExcerptLength)
-                        : j.ResultSummary,
-                j.ResultSummary != null && j.ResultSummary != "",
-                j.ErrorMessage,
-                j.TotalInputTokensAggregated ?? j.Protocols.Sum(p => p.TotalInputTokens) ?? 0L,
-                j.TotalOutputTokensAggregated ?? j.Protocols.Sum(p => p.TotalOutputTokens) ?? 0L,
-                j.PrTitle,
-                j.PrSourceBranch,
-                j.PrTargetBranch,
-                j.PrRepositoryName,
-                j.AiModel,
-                // Live numerator: files whose review reached a terminal successful state. Read from the
-                // stored count, which each file write keeps current. The correlated Count remains as the
-                // fallback for jobs last written before the column existed, mirroring how the aggregated
-                // token totals fall back to summing their protocols.
-                j.ReviewedFileCount ??
-                j.FileReviewResults.Count(r => r.IsComplete && !r.IsFailed && !r.IsExcluded && !r.IsCarriedForward),
-                j.InScopeChangedFileCount,
-                j.TotalEstimatedCostUsd,
-                j.CostIsApproximate,
-                // A completed job carries a budget block only when the per-increment soft cap stopped it early.
-                j.Status == JobStatus.Completed && j.BudgetBlockCapKind == BudgetCapKind.Soft))
+            .Select(ListItemProjection)
             .ToListAsync(ct)
             .ConfigureAwait(false);
 
         return (total, items);
+    }
+
+    /// <inheritdoc />
+    public async Task<(int total, IReadOnlyList<PullRequestHistoryGroupDto> items)> GetPullRequestHistoryPageAsync(
+        int limit,
+        int offset,
+        JobStatus? status,
+        Guid? clientId = null,
+        CancellationToken ct = default)
+    {
+        var query = dbContext.ReviewJobs.AsNoTracking();
+        if (status.HasValue)
+        {
+            query = query.Where(j => j.Status == status.Value);
+        }
+
+        if (clientId.HasValue)
+        {
+            query = query.Where(j => j.ClientId == clientId.Value);
+        }
+
+        // Which pull requests belong on this page, and how many exist in total. Aggregating over scalar
+        // columns and taking the count from the same pass keeps this one scan rather than two.
+        var page = await query
+            .GroupBy(j => new { j.OrganizationUrl, j.ProjectId, j.RepositoryId, j.PullRequestId })
+            .Select(g => new
+            {
+                g.Key,
+                LatestActivityAt = g.Max(j => j.CompletedAt ?? j.ProcessingStartedAt ?? j.SubmittedAt),
+            })
+            .OrderByDescending(g => g.LatestActivityAt)
+            .Skip(offset)
+            .Take(limit)
+            .ToListAsync(ct)
+            .ConfigureAwait(false);
+
+        var totalGroups = await CountPullRequestGroupsAsync(query, ct).ConfigureAwait(false);
+        if (page.Count == 0)
+        {
+            return (totalGroups, []);
+        }
+
+        // Every run for the pull requests on this page. Matching each key in full lets the pull-request
+        // identity index serve the lookup; a page holds a handful of pull requests, so this stays small.
+        var keyFilter = BuildPullRequestKeyFilter(page.Select(p => (p.Key.OrganizationUrl, p.Key.ProjectId, p.Key.RepositoryId, p.Key.PullRequestId)).ToList());
+
+        var jobs = await query
+            .Where(keyFilter)
+            .Select(ListItemProjection)
+            .ToListAsync(ct)
+            .ConfigureAwait(false);
+
+        var jobsByKey = jobs
+            .GroupBy(j => (j.OrganizationUrl, j.ProjectId, j.RepositoryId, j.PullRequestId))
+            .ToDictionary(g => g.Key, g => g.ToList());
+
+        var groups = new List<PullRequestHistoryGroupDto>(page.Count);
+        foreach (var entry in page)
+        {
+            var key = (entry.Key.OrganizationUrl, entry.Key.ProjectId, entry.Key.RepositoryId, entry.Key.PullRequestId);
+            if (!jobsByKey.TryGetValue(key, out var groupJobs) || groupJobs.Count == 0)
+            {
+                // A run finishing between the two reads can move a pull request off this page. Skipping it
+                // is better than emitting a group with no runs in it.
+                continue;
+            }
+
+            // Running work first, then most recent, so a pull request being reviewed right now leads.
+            groupJobs.Sort(CompareJobsForDisplay);
+
+            var newest = groupJobs[0];
+            var anyPriced = groupJobs.Exists(j => j.TotalEstimatedCostUsd is not null);
+            var anyUnpriced = groupJobs.Exists(j => j.TotalEstimatedCostUsd is null);
+
+            groups.Add(
+                new PullRequestHistoryGroupDto(
+                    entry.Key.OrganizationUrl,
+                    entry.Key.ProjectId,
+                    entry.Key.RepositoryId,
+                    entry.Key.PullRequestId,
+                    newest.ClientId,
+                    newest.PrTitle,
+                    newest.PrRepositoryName,
+                    newest.PrSourceBranch,
+                    newest.PrTargetBranch,
+                    entry.LatestActivityAt,
+                    groupJobs.Sum(j => j.TotalInputTokens),
+                    groupJobs.Sum(j => j.TotalOutputTokens),
+                    anyPriced ? groupJobs.Sum(j => j.TotalEstimatedCostUsd ?? 0m) : null,
+                    groupJobs.Exists(j => j.CostIsApproximate) || (anyPriced && anyUnpriced),
+                    groupJobs));
+        }
+
+        return (totalGroups, groups);
+    }
+
+    private static Task<int> CountPullRequestGroupsAsync(IQueryable<ReviewJob> query, CancellationToken ct)
+    {
+        return query
+            .GroupBy(j => new { j.OrganizationUrl, j.ProjectId, j.RepositoryId, j.PullRequestId })
+            .CountAsync(ct);
+    }
+
+    /// <summary>Orders a pull request's runs for display: running work first, then most recent first.</summary>
+    private static int CompareJobsForDisplay(JobListPageItemDto left, JobListPageItemDto right)
+    {
+        var leftActive = left.Status is JobStatus.Processing or JobStatus.Pending;
+        var rightActive = right.Status is JobStatus.Processing or JobStatus.Pending;
+        if (leftActive != rightActive)
+        {
+            return leftActive ? -1 : 1;
+        }
+
+        var leftAt = left.CompletedAt ?? left.ProcessingStartedAt ?? left.SubmittedAt;
+        var rightAt = right.CompletedAt ?? right.ProcessingStartedAt ?? right.SubmittedAt;
+        return rightAt.CompareTo(leftAt);
+    }
+
+    /// <summary>
+    ///     Builds <c>key = a OR key = b OR …</c> over the four columns that identify a pull request, so each
+    ///     disjunct can be served by the pull-request identity index.
+    /// </summary>
+    private static Expression<Func<ReviewJob, bool>> BuildPullRequestKeyFilter(
+        IReadOnlyList<(string OrganizationUrl, string ProjectId, string RepositoryId, int PullRequestId)> keys)
+    {
+        var job = Expression.Parameter(typeof(ReviewJob), "j");
+        Expression? any = null;
+
+        foreach (var key in keys)
+        {
+            var matches = Expression.AndAlso(
+                Expression.AndAlso(
+                    Expression.Equal(
+                        Expression.Property(job, nameof(ReviewJob.OrganizationUrl)),
+                        Expression.Constant(key.OrganizationUrl)),
+                    Expression.Equal(
+                        Expression.Property(job, nameof(ReviewJob.ProjectId)),
+                        Expression.Constant(key.ProjectId))),
+                Expression.AndAlso(
+                    Expression.Equal(
+                        Expression.Property(job, nameof(ReviewJob.RepositoryId)),
+                        Expression.Constant(key.RepositoryId)),
+                    Expression.Equal(
+                        Expression.Property(job, nameof(ReviewJob.PullRequestId)),
+                        Expression.Constant(key.PullRequestId))));
+
+            any = any is null ? matches : Expression.OrElse(any, matches);
+        }
+
+        return Expression.Lambda<Func<ReviewJob, bool>>(any ?? Expression.Constant(false), job);
     }
 
     /// <inheritdoc />
