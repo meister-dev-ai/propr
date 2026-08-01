@@ -74,7 +74,7 @@ public sealed class JobsController(
             limit,
             offset,
             status,
-            scope.ClientId,
+            scope.ClientIds,
             pullRequestId,
             cancellationToken);
 
@@ -83,27 +83,24 @@ public sealed class JobsController(
 
     /// <summary>
     ///     Narrows a listing to the clients the caller may read.
-    ///     An administrator reads everything. A caller holding exactly one client is pinned to it. A caller
+    ///     An administrator reads everything. A caller holding one or more clients is pinned to those. A caller
     ///     naming a client they do not hold is refused.
     /// </summary>
-    /// <remarks>
-    ///     A caller holding more than one client and naming none is left unfiltered, which reads across every
-    ///     client rather than only theirs. That is the behaviour this endpoint has always had and it is
-    ///     preserved here deliberately rather than changed as a side effect of a performance change; narrowing
-    ///     it needs a repository filter that takes a set of clients.
-    /// </remarks>
     private static ClientScope ResolveClientScope(HttpContext httpContext, Guid? requestedClientId)
     {
         if (AuthHelpers.IsAdmin(httpContext))
         {
-            return new ClientScope(requestedClientId, false, null);
+            return new ClientScope(
+                requestedClientId.HasValue ? (IReadOnlyList<Guid>)[requestedClientId.Value] : null,
+                false,
+                null);
         }
 
         var clientRoles = AuthHelpers.GetClientRoles(httpContext);
         if (requestedClientId.HasValue)
         {
             return clientRoles.ContainsKey(requestedClientId.Value)
-                ? new ClientScope(requestedClientId, false, null)
+                ? new ClientScope((IReadOnlyList<Guid>)[requestedClientId.Value], false, null)
                 : new ClientScope(
                     null,
                     false,
@@ -113,8 +110,7 @@ public sealed class JobsController(
         return clientRoles.Count switch
         {
             0 => new ClientScope(null, true, null),
-            1 => new ClientScope(clientRoles.Keys.First(), false, null),
-            _ => new ClientScope(null, false, null),
+            _ => new ClientScope(clientRoles.Keys.ToList(), false, null),
         };
     }
 
@@ -149,10 +145,10 @@ public sealed class JobsController(
             j.BudgetSoftCapped);
     }
 
-    /// <param name="ClientId">The client to filter by, or null to read across clients.</param>
+    /// <param name="ClientIds">The clients to filter by, or null to read across all clients.</param>
     /// <param name="NoAccessibleClients">True when the caller holds no client at all, so the answer is empty.</param>
     /// <param name="Denied">A populated result when the caller asked for a client they may not read.</param>
-    private sealed record ClientScope(Guid? ClientId, bool NoAccessibleClients, IActionResult? Denied);
+    private sealed record ClientScope(IReadOnlyList<Guid>? ClientIds, bool NoAccessibleClients, IActionResult? Denied);
 
     /// <summary>
     ///     Returns the review history grouped by pull request, most recently active first.
@@ -206,7 +202,7 @@ public sealed class JobsController(
             limit,
             offset,
             status,
-            scope.ClientId,
+            scope.ClientIds,
             cancellationToken);
 
         return this.Ok(

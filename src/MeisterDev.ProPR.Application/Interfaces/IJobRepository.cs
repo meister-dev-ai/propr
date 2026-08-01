@@ -81,6 +81,20 @@ public interface IJobRepository
         CancellationToken ct = default);
 
     /// <summary>
+    ///     Returns a projected page of the review overview list, newest first, restricted to the given client
+    ///     identifiers. Pass <see langword="null" /> for <paramref name="clientIds" /> to skip the client filter
+    ///     entirely, an empty collection to force an empty result, and a populated collection to read across
+    ///     several clients in one query.
+    /// </summary>
+    Task<(int total, IReadOnlyList<JobListPageItemDto> items)> GetJobListPageAsync(
+        int limit,
+        int offset,
+        JobStatus? status,
+        IEnumerable<Guid>? clientIds,
+        int? pullRequestId = null,
+        CancellationToken ct = default);
+
+    /// <summary>
     ///     Returns a page of the review history grouped by pull request, most recently active first, together
     ///     with the total number of pull requests that match. Each group carries every run against that pull
     ///     request and the rollups shown beside it.
@@ -95,6 +109,19 @@ public interface IJobRepository
         int offset,
         JobStatus? status,
         Guid? clientId = null,
+        CancellationToken ct = default);
+
+    /// <summary>
+    ///     Returns a page of the review history grouped by pull request, restricted to the given client
+    ///     identifiers. Pass <see langword="null" /> for <paramref name="clientIds" /> to skip the client filter,
+    ///     an empty collection to force an empty result, and a populated collection to read across several
+    ///     clients in one query.
+    /// </summary>
+    Task<(int total, IReadOnlyList<PullRequestHistoryGroupDto> items)> GetPullRequestHistoryPageAsync(
+        int limit,
+        int offset,
+        JobStatus? status,
+        IEnumerable<Guid>? clientIds,
         CancellationToken ct = default);
 
     /// <summary>Gets a job by id, or null if not found.</summary>

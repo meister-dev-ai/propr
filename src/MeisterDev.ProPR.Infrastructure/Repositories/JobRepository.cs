@@ -246,11 +246,29 @@ public sealed partial class JobRepository(
     }
 
     /// <inheritdoc />
-    public async Task<(int total, IReadOnlyList<JobListPageItemDto> items)> GetJobListPageAsync(
+    public Task<(int total, IReadOnlyList<JobListPageItemDto> items)> GetJobListPageAsync(
         int limit,
         int offset,
         JobStatus? status,
         Guid? clientId = null,
+        int? pullRequestId = null,
+        CancellationToken ct = default)
+    {
+        return this.GetJobListPageAsync(
+            limit,
+            offset,
+            status,
+            clientId.HasValue ? [clientId.Value] : null,
+            pullRequestId,
+            ct);
+    }
+
+    /// <inheritdoc />
+    public async Task<(int total, IReadOnlyList<JobListPageItemDto> items)> GetJobListPageAsync(
+        int limit,
+        int offset,
+        JobStatus? status,
+        IEnumerable<Guid>? clientIds,
         int? pullRequestId = null,
         CancellationToken ct = default)
     {
@@ -260,9 +278,12 @@ public sealed partial class JobRepository(
             query = query.Where(j => j.Status == status.Value);
         }
 
-        if (clientId.HasValue)
+        if (clientIds is not null)
         {
-            query = query.Where(j => j.ClientId == clientId.Value);
+            var idList = clientIds as IList<Guid> ?? clientIds.ToList();
+            query = idList.Count == 0
+                ? query.Where(j => false)
+                : query.Where(j => idList.Contains(j.ClientId));
         }
 
         if (pullRequestId.HasValue)
@@ -284,11 +305,27 @@ public sealed partial class JobRepository(
     }
 
     /// <inheritdoc />
-    public async Task<(int total, IReadOnlyList<PullRequestHistoryGroupDto> items)> GetPullRequestHistoryPageAsync(
+    public Task<(int total, IReadOnlyList<PullRequestHistoryGroupDto> items)> GetPullRequestHistoryPageAsync(
         int limit,
         int offset,
         JobStatus? status,
         Guid? clientId = null,
+        CancellationToken ct = default)
+    {
+        return this.GetPullRequestHistoryPageAsync(
+            limit,
+            offset,
+            status,
+            clientId.HasValue ? [clientId.Value] : null,
+            ct);
+    }
+
+    /// <inheritdoc />
+    public async Task<(int total, IReadOnlyList<PullRequestHistoryGroupDto> items)> GetPullRequestHistoryPageAsync(
+        int limit,
+        int offset,
+        JobStatus? status,
+        IEnumerable<Guid>? clientIds,
         CancellationToken ct = default)
     {
         var query = dbContext.ReviewJobs.AsNoTracking();
@@ -297,9 +334,12 @@ public sealed partial class JobRepository(
             query = query.Where(j => j.Status == status.Value);
         }
 
-        if (clientId.HasValue)
+        if (clientIds is not null)
         {
-            query = query.Where(j => j.ClientId == clientId.Value);
+            var idList = clientIds as IList<Guid> ?? clientIds.ToList();
+            query = idList.Count == 0
+                ? query.Where(j => false)
+                : query.Where(j => idList.Contains(j.ClientId));
         }
 
         // Which pull requests belong on this page, and how many exist in total. Aggregating over scalar

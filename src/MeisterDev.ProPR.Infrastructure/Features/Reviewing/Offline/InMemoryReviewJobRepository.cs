@@ -178,6 +178,23 @@ public sealed class InMemoryReviewJobRepository : IJobRepository
         int? pullRequestId = null,
         CancellationToken ct = default)
     {
+        return this.GetJobListPageAsync(
+            limit,
+            offset,
+            status,
+            clientId.HasValue ? [clientId.Value] : null,
+            pullRequestId,
+            ct);
+    }
+
+    public Task<(int total, IReadOnlyList<JobListPageItemDto> items)> GetJobListPageAsync(
+        int limit,
+        int offset,
+        JobStatus? status,
+        IEnumerable<Guid>? clientIds,
+        int? pullRequestId = null,
+        CancellationToken ct = default)
+    {
         var query = this._jobs.Values.AsEnumerable();
 
         if (status.HasValue)
@@ -185,9 +202,12 @@ public sealed class InMemoryReviewJobRepository : IJobRepository
             query = query.Where(job => job.Status == status.Value);
         }
 
-        if (clientId.HasValue)
+        if (clientIds is not null)
         {
-            query = query.Where(job => job.ClientId == clientId.Value);
+            var idList = clientIds as IList<Guid> ?? clientIds.ToList();
+            query = idList.Count == 0
+                ? query.Where(_ => false)
+                : query.Where(job => idList.Contains(job.ClientId));
         }
 
         if (pullRequestId.HasValue)
@@ -238,8 +258,22 @@ public sealed class InMemoryReviewJobRepository : IJobRepository
         Guid? clientId = null,
         CancellationToken ct = default)
     {
-        // Reuses the flat projection so the offline repository groups exactly what the list would have shown.
-        var (_, all) = await this.GetJobListPageAsync(int.MaxValue, 0, status, clientId, null, ct);
+        return await this.GetPullRequestHistoryPageAsync(
+            limit,
+            offset,
+            status,
+            clientId.HasValue ? [clientId.Value] : null,
+            ct);
+    }
+
+    public async Task<(int total, IReadOnlyList<PullRequestHistoryGroupDto> items)> GetPullRequestHistoryPageAsync(
+        int limit,
+        int offset,
+        JobStatus? status,
+        IEnumerable<Guid>? clientIds,
+        CancellationToken ct = default)
+    {
+        var (_, all) = await this.GetJobListPageAsync(int.MaxValue, 0, status, clientIds, null, ct);
 
         var groups = all
             .GroupBy(j => (j.OrganizationUrl, j.ProjectId, j.RepositoryId, j.PullRequestId))

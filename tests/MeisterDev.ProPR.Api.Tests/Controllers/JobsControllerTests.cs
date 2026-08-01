@@ -776,3 +776,174 @@ public sealed class JobsJwtTests(JobsJwtTests.JobsJwtApiFactory factory)
         }
     }
 }
+
+/// <summary>
+///     Verifies that a non-admin user holding multiple client roles sees only jobs belonging to those
+///     clients, not jobs from unrelated clients.
+/// </summary>
+public sealed class JobsMultiClientJwtTests(JobsMultiClientJwtTests.MultiClientJwtApiFactory factory)
+    : IClassFixture<JobsMultiClientJwtTests.MultiClientJwtApiFactory>
+{
+    [Fact]
+    public async Task MultiClientUser_SeesOnlyOwnClients_Returns200WithFilteredJobs()
+    {
+        using var scope = factory.Services.CreateScope();
+        var jobRepo = scope.ServiceProvider.GetRequiredService<IJobRepository>();
+
+        var ownedJobA = new ReviewJob(
+            Guid.NewGuid(),
+            factory.ClientA,
+            "https://dev.azure.com/org",
+            "proj",
+            "repo",
+            901,
+            1);
+        var ownedJobB = new ReviewJob(
+            Guid.NewGuid(),
+            factory.ClientB,
+            "https://dev.azure.com/org",
+            "proj",
+            "repo",
+            902,
+            1);
+        var unownedJob = new ReviewJob(
+            Guid.NewGuid(),
+            factory.ClientC,
+            "https://dev.azure.com/org",
+            "proj",
+            "repo",
+            903,
+            1);
+        await jobRepo.AddAsync(ownedJobA);
+        await jobRepo.AddAsync(ownedJobB);
+        await jobRepo.AddAsync(unownedJob);
+
+        var token = factory.GenerateMultiClientUserToken(factory.TestUserId);
+        var http = factory.CreateClient();
+        using var request = new HttpRequestMessage(HttpMethod.Get, "/reviewing/jobs");
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
+
+        var response = await http.SendAsync(request);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+
+        var body = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        var items = body.RootElement.GetProperty("items");
+        var total = body.RootElement.GetProperty("total").GetInt32();
+
+        Assert.Equal(2, total);
+        var clientIds = items.EnumerateArray()
+            .Select(i => Guid.Parse(i.GetProperty("clientId").GetString()!))
+            .ToHashSet();
+        Assert.Contains(factory.ClientA, clientIds);
+        Assert.Contains(factory.ClientB, clientIds);
+        Assert.DoesNotContain(factory.ClientC, clientIds);
+    }
+
+    public sealed class MultiClientJwtApiFactory : WebApplicationFactory<Program>
+    {
+        private const string TestJwtSecret = "test-jwt-secret-multi-client-xyz012!";
+        private readonly string _dbName = $"TestDb_JobsMultiClientJwt_{Guid.NewGuid()}";
+        private readonly InMemoryDatabaseRoot _dbRoot = new();
+
+        public Guid TestUserId { get; } = Guid.NewGuid();
+        public Guid ClientA { get; } = Guid.NewGuid();
+        public Guid ClientB { get; } = Guid.NewGuid();
+        public Guid ClientC { get; } = Guid.NewGuid();
+
+        public string GenerateMultiClientUserToken(Guid userId)
+        {
+            var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(TestJwtSecret));
+            var handler = new JwtSecurityTokenHandler { MapInboundClaims = false };
+            var descriptor = new SecurityTokenDescriptor
+            {
+                Subject = new ClaimsIdentity(
+                [
+                    new Claim("sub", userId.ToString()),
+                    new Claim("global_role", "User"),
+                ]),
+                Expires = DateTime.UtcNow.AddHours(1),
+                SigningCredentials = new SigningCredentials(key, SecurityAlgorithms.HmacSha256),
+                Issuer = "meisterpropr",
+                Audience = "meisterpropr",
+            };
+            return handler.WriteToken(handler.CreateToken(descriptor));
+        }
+
+        protected override void ConfigureWebHost(IWebHostBuilder builder)
+        {
+            builder.UseEnvironment("Testing");
+            builder.UseSetting("MEISTER_DISABLE_HOSTED_SERVICES", "true");
+            builder.UseSetting("AI_ENDPOINT", "https://fake.openai.azure.com/");
+            builder.UseSetting("AI_DEPLOYMENT", "gpt-4o");
+            builder.UseSetting("MEISTER_JWT_SECRET", TestJwtSecret);
+
+            var clientA = this.ClientA;
+            var clientB = this.ClientB;
+            var testUserId = this.TestUserId;
+
+            builder.ConfigureServices(services =>
+            {
+                services.AddSingleton<IJwtTokenService, JwtTokenService>();
+
+                var dbName = this._dbName;
+                var dbRoot = this._dbRoot;
+                services.AddDbContextFactory<MeisterProPRDbContext>(opts =>
+                    opts.UseInMemoryDatabase(dbName, dbRoot));
+                services.AddScoped<IJobRepository, JobRepository>();
+
+                services.AddSingleton(Substitute.For<IPullRequestFetcher>());
+                services.AddSingleton(Substitute.For<IAdoCommentPoster>());
+                services.AddSingleton(Substitute.For<IAssignedReviewDiscoveryService>());
+
+                var userRepo = Substitute.For<IUserRepository>();
+                userRepo.GetUserClientRolesAsync(testUserId, Arg.Any<CancellationToken>())
+                    .Returns(
+                        Task.FromResult(
+                            new Dictionary<Guid, ClientRole>
+                            {
+                                { clientA, ClientRole.ClientUser },
+                                { clientB, ClientRole.ClientUser },
+                            }));
+                userRepo.GetUserClientRolesAsync(
+                        Arg.Is<Guid>(id => id != testUserId),
+                        Arg.Any<CancellationToken>())
+                    .Returns(Task.FromResult(new Dictionary<Guid, ClientRole>()));
+                userRepo.GetByIdWithAssignmentsAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
+                    .Returns(Task.FromResult<AppUser?>(null));
+                services.AddSingleton(userRepo);
+
+                var memoryRepository = Substitute.For<IThreadMemoryRepository>();
+                memoryRepository.GetPagedAsync(
+                        Arg.Any<Guid>(),
+                        Arg.Any<string?>(),
+                        Arg.Any<int>(),
+                        Arg.Any<int>(),
+                        Arg.Any<MemorySource?>(),
+                        Arg.Any<string?>(),
+                        Arg.Any<int?>(),
+                        Arg.Any<CancellationToken>())
+                    .Returns(call => Task.FromResult(
+                        new PagedResult<ThreadMemoryRecord>(
+                            [],
+                            0,
+                            call.ArgAt<int>(2),
+                            call.ArgAt<int>(3))));
+                memoryRepository.GetDigestsByIdsAsync(
+                        Arg.Any<Guid>(),
+                        Arg.Any<IReadOnlyCollection<Guid>>(),
+                        Arg.Any<CancellationToken>())
+                    .Returns(Task.FromResult<IReadOnlyList<ThreadMemoryDigestDto>>([]));
+                memoryRepository.GetDigestsForPullRequestAsync(
+                        Arg.Any<Guid>(),
+                        Arg.Any<string>(),
+                        Arg.Any<int>(),
+                        Arg.Any<MemorySource>(),
+                        Arg.Any<int>(),
+                        Arg.Any<CancellationToken>())
+                    .Returns(call => Task.FromResult(new PagedResult<ThreadMemoryDigestDto>([], 0, 1, call.ArgAt<int>(4))));
+                services.AddSingleton(memoryRepository);
+            });
+        }
+    }
+}
