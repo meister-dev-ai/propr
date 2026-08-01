@@ -22,6 +22,13 @@ namespace MeisterDev.ProPR.Application.AI;
 ///         vendor's rate — the browse-and-pick surface exists for exactly that case, and it knows which provider
 ///         the operator meant.
 ///     </para>
+///     <para>
+///         An operator's own rate is exempt from that, because it is not another opinion to weigh against the
+///         catalog's: it is the answer to which rate applies. When a client or tenant override is present for a
+///         model, the layers beneath it are discarded before ambiguity is considered at all. Treating a negotiated
+///         rate as merely one more conflicting candidate left the model unpriced, which made recording the rate
+///         pointless in exactly the case it was entered for.
+///     </para>
 /// </remarks>
 public static class DiscoveredModelCatalogEnricher
 {
@@ -53,12 +60,13 @@ public static class DiscoveredModelCatalogEnricher
 
         foreach (var model in discovered.Models)
         {
-            if (!byModelId.TryGetValue(model.RemoteModelId, out var candidates))
+            if (!byModelId.TryGetValue(model.RemoteModelId, out var offered))
             {
                 models.Add(model);
                 continue;
             }
 
+            var candidates = ModelCatalogLayerPrecedence.NarrowToMostSpecific(offered);
             var distinct = candidates.DistinctBy(Fingerprint).ToList();
             if (distinct.Count > 1)
             {
@@ -68,7 +76,7 @@ public static class DiscoveredModelCatalogEnricher
             }
 
             models.Add(Merge(model, candidates[0]));
-            priced.Add($"{model.RemoteModelId} from '{candidates[0].ProviderId}'");
+            priced.Add(Describe(model.RemoteModelId, candidates[0]));
         }
 
         var warnings = discovered.Warnings.ToList();
@@ -87,6 +95,17 @@ public static class DiscoveredModelCatalogEnricher
         }
 
         return discovered with { Models = models, Warnings = warnings };
+    }
+
+    /// <summary>Names where a price came from, since a rate is only right if it came from the right place.</summary>
+    private static string Describe(string remoteModelId, AiModelCatalogEntryDto entry)
+    {
+        return entry.PricingLayer switch
+        {
+            AiModelCatalogLayer.ClientOverride => $"{remoteModelId} at this client's own rate for '{entry.ProviderId}'",
+            AiModelCatalogLayer.TenantOverride => $"{remoteModelId} at the tenant's negotiated rate for '{entry.ProviderId}'",
+            _ => $"{remoteModelId} from '{entry.ProviderId}'",
+        };
     }
 
     // Two catalog entries are interchangeable for this purpose when they agree on everything being copied over.

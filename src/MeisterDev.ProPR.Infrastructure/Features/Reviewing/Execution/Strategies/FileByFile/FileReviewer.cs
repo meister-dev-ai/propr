@@ -1672,6 +1672,24 @@ internal sealed partial class FileReviewer(
             null,
             null,
             ct);
+
+        // Triage decides which model reviews the file, so it runs before the file has a protocol to bill against.
+        // Attributing it here, once one exists, is what keeps the job's own total honest: without it the review
+        // reports less than it spent, by an amount that grows with the file count.
+        if (verdict.Spend is { } spend)
+        {
+            await protocolRecorder.AddTokensAsync(
+                protocolId.Value,
+                spend.InputTokens,
+                spend.OutputTokens,
+                AiConnectionModelCategory.Default,
+                spend.ModelId,
+                ct,
+                spend.CachedInputTokens,
+                spend.CacheWriteTokens,
+                spend.ReasoningTokens,
+                spend.LogicalModelName);
+        }
     }
 
     private static AiPurpose GetTierPurpose(FileComplexityTier tier)

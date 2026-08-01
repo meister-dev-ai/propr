@@ -1,6 +1,7 @@
 // Copyright (c) Andreas Rain.
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
+using System.Text;
 using MeisterDev.ProPR.Application.Features.Reviewing.Execution.Models;
 using MeisterDev.ProPR.Domain.Enums;
 using MeisterDev.ProPR.Domain.ValueObjects;
@@ -29,7 +30,15 @@ internal sealed class GitLabReviewWorkspaceRemoteResolver(GitLabConnectionVerifi
             $"gitlab:{context.Connection.Id:D}:{context.Connection.AuthenticationKind}",
             true,
             request.Repository.OwnerOrNamespace,
-            $"PRIVATE-TOKEN: {context.Connection.Secret}");
+            $"AUTHORIZATION: Basic {BuildBasicCredentials(context.Connection.Secret)}");
+    }
+
+    // GitLab's git-over-HTTP endpoint only accepts basic credentials; PRIVATE-TOKEN authenticates
+    // REST calls but is ignored here, leaving git to fall back to an empty askpass credential.
+    // The username is ignored as long as the password carries the token, so use GitLab's convention.
+    private static string BuildBasicCredentials(string token)
+    {
+        return Convert.ToBase64String(Encoding.UTF8.GetBytes($"oauth2:{token}"));
     }
 
     private static IReadOnlyList<string> BuildFetchRefSpecs(int pullRequestNumber, string sourceBranch, string targetBranch)

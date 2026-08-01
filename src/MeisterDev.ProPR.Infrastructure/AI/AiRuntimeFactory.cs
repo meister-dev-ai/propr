@@ -115,6 +115,7 @@ public sealed class AiRuntimeFactory(
         var decorators = new List<IProviderChatClientDecorator>
         {
             new ProviderRetryChatClientDecorator(driver, this.RetryPolicy(), connection.DisplayName, timeProvider, logger),
+            new ReasoningModelSamplingDecorator(),
         };
 
         if (metrics is not null)

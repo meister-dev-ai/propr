@@ -445,14 +445,19 @@ export function useClientAiConnectionsTab(props: { clientId: string }) {
 
   const normalizePurposeBindings = () => {
     const modelLookup = new Map(editor.models.map((model) => [model.localId, model]))
-    return editor.bindings.map((binding) => ({
-      id: binding.id || undefined,
-      purpose: binding.purpose,
-      configuredModelId: modelLookup.get(binding.configuredModelId)?.existingId || undefined,
-      remoteModelId: modelLookup.get(binding.configuredModelId)?.remoteModelId || undefined,
-      protocolMode: binding.protocolMode,
-      isEnabled: binding.isEnabled,
-    }))
+    // Every purpose gets a row in the editor, pre-enabled for the common ones, so a profile that binds nothing
+    // directly still carries rows with no model chosen. Those are placeholders rather than bindings, and sending
+    // them asks the server to bind a purpose to nothing.
+    return editor.bindings
+      .filter((binding) => modelLookup.has(binding.configuredModelId))
+      .map((binding) => ({
+        id: binding.id || undefined,
+        purpose: binding.purpose,
+        configuredModelId: modelLookup.get(binding.configuredModelId)?.existingId || undefined,
+        remoteModelId: modelLookup.get(binding.configuredModelId)?.remoteModelId || undefined,
+        protocolMode: binding.protocolMode,
+        isEnabled: binding.isEnabled,
+      }))
   }
 
   const validateEditor = () => {

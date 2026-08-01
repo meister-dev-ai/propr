@@ -22,6 +22,32 @@ public class ReviewReasoningRequestTests
         Assert.Null(result.RawRepresentationFactory);
     }
 
+    // OpenAI rejects the whole request with HTTP 400 when a reasoning model is sent a temperature, so a
+    // configured effort has to clear it. Every review call carries a temperature, so this failed all of them.
+    [Theory]
+    [InlineData(ReviewReasoningEffort.Low)]
+    [InlineData(ReviewReasoningEffort.Medium)]
+    [InlineData(ReviewReasoningEffort.High)]
+    public void ApplyReasoning_WithAnEffort_DropsTheSamplingTemperature(ReviewReasoningEffort effort)
+    {
+        var options = new ChatOptions { Temperature = 0.2f };
+
+        var result = options.ApplyReasoning(captureReasoning: false, effort);
+
+        Assert.Null(result.Temperature);
+    }
+
+    // An ordinary sampling model is not asked to reason, so its configured temperature has to survive.
+    [Fact]
+    public void ApplyReasoning_WithNoEffort_KeepsTheSamplingTemperature()
+    {
+        var options = new ChatOptions { Temperature = 0.2f };
+
+        var result = options.ApplyReasoning(captureReasoning: true, ReviewReasoningEffort.None);
+
+        Assert.Equal(0.2f, result.Temperature);
+    }
+
     [Fact]
     public void ApplyReasoning_CaptureOnAndEffortNone_RequestsSummaryButNoEffort()
     {

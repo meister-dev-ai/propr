@@ -175,8 +175,13 @@ public static class InfrastructureServiceExtensions
         // The reasoning round-trip sits above the egress guard: it rewrites bodies, which is only meaningful for
         // a request that is allowed out in the first place. It configures itself from the wire, so providers that
         // never send the field pay one substring check per response.
+        // The finish-reason repair sits below it, nearest the wire, so the response is already readable by the time
+        // anything else inspects it. It applies to every OpenAI-shaped provider on purpose: the value it corrects is
+        // one the client library cannot parse at all, so a conforming provider never reaches its rewrite, and a
+        // proxy that starts forwarding a non-conforming upstream is covered without needing to be enumerated here.
         services.AddHttpClient("AiProviderRuntime", client => client.Timeout = Timeout.InfiniteTimeSpan)
             .AddHttpMessageHandler(() => new ReasoningContentRoundTripHandler())
+            .AddHttpMessageHandler(() => new FinishReasonNormalizingHandler())
             .ConfigurePrimaryHttpMessageHandler(() => GuardedEgressHttpHandler.Create(allowPrivateEgress));
         services.AddSingleton<OpenAiCompatibleRequestFactory>();
         services.AddSingleton<OpenAiCompatibleTransport>();

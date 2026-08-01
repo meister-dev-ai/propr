@@ -158,6 +158,45 @@ public sealed class AiFindingTypeClassifierTests
         Assert.Null((await sut.ClassifyAsync(CreateRequest())).Verdict);
     }
 
+    // Findings are classified concurrently, and resolution reads several repositories over one scoped DbContext.
+    // Overlapping those reads threw "a second operation was started on this context instance", which this class
+    // caught and reported as a fault, so findings went unclassified for a reason unrelated to the model.
+    // Resolving once is what removes the overlap, so the count is the regression guard.
+    [Fact]
+    public async Task ClassifyAsync_ConcurrentFindings_ResolveTheRuntimeOnlyOnce()
+    {
+        var resolutions = 0;
+        var chatClient = Substitute.For<IChatClient>();
+        chatClient.GetResponseAsync(
+                Arg.Any<IEnumerable<ChatMessage>>(),
+                Arg.Any<ChatOptions?>(),
+                Arg.Any<CancellationToken>())
+            .Returns(
+                new ChatResponse(
+                    new ChatMessage(
+                        ChatRole.Assistant,
+                        """{"types":["logic-error"],"level":"member","qualifier":"incorrect","confidence":0.7}""")));
+
+        var runtime = Substitute.For<IResolvedAiChatRuntime>();
+        runtime.ChatClient.Returns(chatClient);
+        var resolver = Substitute.For<IAiRuntimeResolver>();
+        resolver.ResolveChatRuntimeAsync(ClientId, AiPurpose.InsightsClassification, Arg.Any<CancellationToken>())
+            .Returns(_ =>
+            {
+                Interlocked.Increment(ref resolutions);
+                return Task.FromResult(runtime);
+            });
+
+        using var sut = new AiFindingTypeClassifier(
+            resolver,
+            Substitute.For<IModelUsageRecorder>(),
+            NullLogger<AiFindingTypeClassifier>.Instance);
+
+        await Task.WhenAll(Enumerable.Range(0, 16).Select(_ => sut.ClassifyAsync(CreateRequest())));
+
+        Assert.Equal(1, resolutions);
+    }
+
     [Fact]
     public async Task ClassifyAsync_WhenTheCallFails_ReportsNothingAndDoesNotThrow()
     {

@@ -306,6 +306,154 @@ public sealed class ClientAiConnectionsControllerTests(ClientsControllerTests.Cl
         Assert.Contains("Azure AI host", body, StringComparison.OrdinalIgnoreCase);
     }
 
+    // Every pricing and capability field the model editor collects has to survive the round trip. The request
+    // record silently ignores JSON it has no property for, so a field the form offers but the contract omits is
+    // accepted by the UI, sent, and dropped without a word.
+    [Fact]
+    public async Task CreateAiConnection_EveryPricingAndCapabilityFieldTheFormCollects_IsPersisted()
+    {
+        var client = this.CreateAuthorizedClient();
+
+        var response = await client.PostAsJsonAsync(
+            $"/clients/{ClientId}/ai-connections",
+            new
+            {
+                displayName = "Priced Profile",
+                providerKind = "openAiCompatible",
+                baseUrl = "https://opencode.ai/zen/v1",
+                auth = new { mode = "apiKey", apiKey = "secret" },
+                discoveryMode = "manualOnly",
+                configuredModels = new[]
+                {
+                    new
+                    {
+                        remoteModelId = "gpt-5.6-luna",
+                        displayName = "gpt-5.6-luna",
+                        operationKinds = new[] { "chat" },
+                        supportedProtocolModes = new[] { "auto", "chatCompletions" },
+                        supportsStructuredOutput = true,
+                        supportsToolUse = true,
+                        source = "manual",
+                        inputCostPer1MUsd = 0.2m,
+                        outputCostPer1MUsd = 1.2m,
+                        cachedInputCostPer1MUsd = 0.05m,
+                        cacheWriteCostPer1MUsd = 0.25m,
+                        supportsReasoning = true,
+                        supportsPromptCaching = true,
+                        reasoningContentField = "reasoning_content",
+                    },
+                    BuildConfiguredModel("text-embedding-3-large", true),
+                },
+                purposeBindings = BuildBindings("gpt-5.6-luna", "text-embedding-3-large"),
+            });
+
+        Assert.Equal(HttpStatusCode.Created, response.StatusCode);
+        var created = await response.Content.ReadFromJsonAsync<AiConnectionDto>(ApiJsonOptions);
+
+        var model = Assert.Single(created!.ConfiguredModels, m => m.RemoteModelId == "gpt-5.6-luna");
+        Assert.Equal(0.2m, model.InputCostPer1MUsd);
+        Assert.Equal(1.2m, model.OutputCostPer1MUsd);
+        Assert.Equal(0.05m, model.CachedInputCostPer1MUsd);
+        Assert.Equal(0.25m, model.CacheWriteCostPer1MUsd);
+        Assert.True(model.SupportsReasoning);
+        Assert.True(model.SupportsPromptCaching);
+        Assert.Equal("reasoning_content", model.ReasoningContentField);
+    }
+
+    // An update that names no models restates the stored ones from the response shape. Anything the restatement
+    // drops is written back as null, so an unrelated edit silently erases what was configured.
+    [Fact]
+    public async Task UpdateAiConnection_ThatNamesNoModels_LeavesTheirPricingIntact()
+    {
+        var client = this.CreateAuthorizedClient();
+        var createResponse = await client.PostAsJsonAsync(
+            $"/clients/{ClientId}/ai-connections",
+            new
+            {
+                displayName = "Priced Profile",
+                providerKind = "openAiCompatible",
+                baseUrl = "https://opencode.ai/zen/v1",
+                auth = new { mode = "apiKey", apiKey = "secret" },
+                discoveryMode = "manualOnly",
+                configuredModels = new[]
+                {
+                    new
+                    {
+                        remoteModelId = "gpt-5.6-luna",
+                        displayName = "gpt-5.6-luna",
+                        operationKinds = new[] { "chat" },
+                        supportedProtocolModes = new[] { "auto", "chatCompletions" },
+                        supportsStructuredOutput = true,
+                        supportsToolUse = true,
+                        source = "manual",
+                        inputCostPer1MUsd = 0.2m,
+                        outputCostPer1MUsd = 1.2m,
+                        cacheWriteCostPer1MUsd = 0.25m,
+                        supportsReasoning = true,
+                        reasoningContentField = "reasoning_content",
+                    },
+                    BuildConfiguredModel("text-embedding-3-large", true),
+                },
+                purposeBindings = BuildBindings("gpt-5.6-luna", "text-embedding-3-large"),
+            });
+
+        var created = await createResponse.Content.ReadFromJsonAsync<AiConnectionDto>(ApiJsonOptions);
+
+        var response = await client.PatchAsJsonAsync(
+            $"/clients/{ClientId}/ai-connections/{created!.Id}",
+            new { displayName = "Renamed Profile" });
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var updated = await response.Content.ReadFromJsonAsync<AiConnectionDto>(ApiJsonOptions);
+
+        var model = Assert.Single(updated!.ConfiguredModels, m => m.RemoteModelId == "gpt-5.6-luna");
+        Assert.Equal(0.2m, model.InputCostPer1MUsd);
+        Assert.Equal(1.2m, model.OutputCostPer1MUsd);
+        Assert.Equal(0.25m, model.CacheWriteCostPer1MUsd);
+        Assert.True(model.SupportsReasoning);
+        Assert.Equal("reasoning_content", model.ReasoningContentField);
+    }
+
+    // A client that selects its models through logical models binds no purpose to the connection itself, so its
+    // profile legitimately carries no bindings. Refusing that shape made the profile unsavable: every edit came
+    // back 400 about bindings the operator had deliberately not created, and the pricing they entered was lost.
+    [Fact]
+    public async Task UpdateAiConnection_OnAProfileWithNoPurposeBindings_SavesTheModelPricing()
+    {
+        var created = await this.SeedConnectionAsync("Logical Model Profile", ["gpt-5.6-luna"]);
+        var client = this.CreateAuthorizedClient();
+
+        var response = await client.PatchAsJsonAsync(
+            $"/clients/{ClientId}/ai-connections/{created.Id}",
+            new
+            {
+                configuredModels = new[]
+                {
+                    new
+                    {
+                        remoteModelId = "gpt-5.6-luna",
+                        displayName = "gpt-5.6-luna",
+                        operationKinds = new[] { "chat" },
+                        supportedProtocolModes = new[] { "auto", "responses", "chatCompletions" },
+                        supportsStructuredOutput = true,
+                        supportsToolUse = true,
+                        source = "manual",
+                        inputCostPer1MUsd = 0.2m,
+                        outputCostPer1MUsd = 1.2m,
+                    },
+                },
+                purposeBindings = Array.Empty<object>(),
+            });
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var updated = await response.Content.ReadFromJsonAsync<AiConnectionDto>(ApiJsonOptions);
+
+        var model = Assert.Single(updated!.ConfiguredModels, m => m.RemoteModelId == "gpt-5.6-luna");
+        Assert.Equal(0.2m, model.InputCostPer1MUsd);
+        Assert.Equal(1.2m, model.OutputCostPer1MUsd);
+        Assert.Empty(updated.PurposeBindings);
+    }
+
     [Fact]
     public async Task UpdateAiConnection_WithProviderNeutralPayload_UpdatesConnection()
     {

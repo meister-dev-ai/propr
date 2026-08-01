@@ -13,6 +13,8 @@ internal static class PromptTemplateCatalog
             [PromptStageKeys.GlobalSystem] = new(PromptStageKeys.GlobalSystem, PromptStageRole.System, "shared/global-system.hbs"),
             ["legacy_pr_review_user"] = new("legacy_pr_review_user", PromptStageRole.User, "shared/legacy-pr-review-user.hbs"),
             ["quality_filter_system"] = new("quality_filter_system", PromptStageRole.System, "shared/quality-filter-system.hbs"),
+            ["triage_system"] = new("triage_system", PromptStageRole.System, "file-by-file/triage-system.hbs"),
+            ["triage_user"] = new("triage_user", PromptStageRole.User, "file-by-file/triage-user.hbs"),
             ["quality_filter_user"] = new("quality_filter_user", PromptStageRole.User, "shared/quality-filter-user.hbs"),
             [PromptStageKeys.MemoryReconsiderationSystem] = new(
                 PromptStageKeys.MemoryReconsiderationSystem,

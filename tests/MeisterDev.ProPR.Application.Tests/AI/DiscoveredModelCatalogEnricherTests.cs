@@ -99,6 +99,67 @@ public sealed class DiscoveredModelCatalogEnricherTests
         Assert.Same(discovery, DiscoveredModelCatalogEnricher.Enrich(discovery, []));
     }
 
+    // The case that made a negotiated rate pointless: an operator prices a model their tenant buys through a
+    // gateway, the snapshot still lists the same id under the upstream vendors at list price, and treating the
+    // operator's rate as one more conflicting candidate left the model unpriced. Their rate is the answer.
+    [Fact]
+    public void ATenantsNegotiatedRateSettlesWhatTheSnapshotDisagreesAbout()
+    {
+        var result = DiscoveredModelCatalogEnricher.Enrich(
+            Discovery(Discovered("gpt-5.6-luna")),
+            [
+                Catalog("openai", "gpt-5.6-luna", input: 0.2m, output: 1.2m, layer: AiModelCatalogLayer.TenantOverride),
+                Catalog("openai", "gpt-5.6-luna", input: 1m, output: 6m),
+                Catalog("azure", "gpt-5.6-luna", input: 1m, output: 6m),
+            ]);
+
+        var model = Assert.Single(result.Models);
+        Assert.Equal(0.2m, model.InputCostPer1MUsd);
+        Assert.Equal(1.2m, model.OutputCostPer1MUsd);
+        Assert.DoesNotContain(result.Warnings, warning => warning.Contains("left unpriced", StringComparison.Ordinal));
+    }
+
+    // A client's own rate is narrower than its tenant's, so it wins where both exist.
+    [Fact]
+    public void AClientsOwnRateOutranksItsTenants()
+    {
+        var result = DiscoveredModelCatalogEnricher.Enrich(
+            Discovery(Discovered("gpt-5.6-luna")),
+            [
+                Catalog("openai", "gpt-5.6-luna", input: 0.2m, output: 1.2m, layer: AiModelCatalogLayer.TenantOverride),
+                Catalog("openai", "gpt-5.6-luna", input: 0.1m, output: 0.6m, layer: AiModelCatalogLayer.ClientOverride),
+            ]);
+
+        Assert.Equal(0.1m, Assert.Single(result.Models).InputCostPer1MUsd);
+    }
+
+    // Narrowing to the operator's layer is not a licence to guess within it: two overrides naming different
+    // providers at different rates are as ambiguous as two snapshot providers would be.
+    [Fact]
+    public void TwoOverridesAtDifferentRatesAreStillAmbiguous()
+    {
+        var result = DiscoveredModelCatalogEnricher.Enrich(
+            Discovery(Discovered("gpt-5.6-luna")),
+            [
+                Catalog("openai", "gpt-5.6-luna", input: 0.2m, output: 1.2m, layer: AiModelCatalogLayer.TenantOverride),
+                Catalog("azure", "gpt-5.6-luna", input: 0.9m, output: 4m, layer: AiModelCatalogLayer.TenantOverride),
+            ]);
+
+        Assert.Null(Assert.Single(result.Models).InputCostPer1MUsd);
+        Assert.Contains(result.Warnings, warning => warning.Contains("left unpriced", StringComparison.Ordinal));
+    }
+
+    // Where the rate came from is reported, because a price is only right if it came from the right place.
+    [Fact]
+    public void ANegotiatedRateIsReportedAsSuch()
+    {
+        var result = DiscoveredModelCatalogEnricher.Enrich(
+            Discovery(Discovered("gpt-5.6-luna")),
+            [Catalog("openai", "gpt-5.6-luna", input: 0.2m, output: 1.2m, layer: AiModelCatalogLayer.TenantOverride)]);
+
+        Assert.Contains(result.Warnings, warning => warning.Contains("negotiated rate", StringComparison.Ordinal));
+    }
+
     private static AiModelDiscoveryResultDto Discovery(params AiConfiguredModelDto[] models)
     {
         return new AiModelDiscoveryResultDto("succeeded", true, [], models);
@@ -119,7 +180,8 @@ public sealed class DiscoveredModelCatalogEnricherTests
         string remoteModelId,
         decimal? input = null,
         decimal? output = null,
-        int? context = null)
+        int? context = null,
+        AiModelCatalogLayer layer = AiModelCatalogLayer.Global)
     {
         return new AiModelCatalogEntryDto(
             providerId,
@@ -140,6 +202,6 @@ public sealed class DiscoveredModelCatalogEnricherTests
             null,
             false,
             null,
-            AiModelCatalogLayer.Global);
+            layer);
     }
 }

@@ -55,7 +55,8 @@ public static class ProviderContractMapping
             model.RemoteModelId,
             model.SupportedProtocolModes,
             model.ReasoningContentField,
-            model.SupportsPromptCaching);
+            model.SupportsPromptCaching,
+            model.SupportsReasoning);
     }
 
     /// <summary>Adopts a driver's verification outcome as the product's own snapshot.</summary>

@@ -30,11 +30,14 @@ public sealed class EfProtocolRecorderCostTests
             .Options;
     }
 
-    private static async Task<(Guid JobId, Guid ProtocolId, Guid ClientId)> SeedJobAndProtocolAsync(DbContextOptions<MeisterProPRDbContext> options)
+    private static async Task<(Guid JobId, Guid ProtocolId, Guid ClientId)> SeedJobAndProtocolAsync(
+        DbContextOptions<MeisterProPRDbContext> options,
+        string? protocolModelId = "gpt-4o",
+        string? jobModelId = "gpt-4o")
     {
         var clientId = Guid.NewGuid();
         var job = new ReviewJob(Guid.NewGuid(), clientId, "https://dev.azure.com/test", "proj", "repo", 1, 1);
-        job.SetAiConfig(ConnectionId, "gpt-4o");
+        job.SetAiConfig(ConnectionId, jobModelId);
 
         await using var seed = new MeisterProPRDbContext(options);
         seed.ReviewJobs.Add(job);
@@ -45,12 +48,63 @@ public sealed class EfProtocolRecorderCostTests
             AttemptNumber = 1,
             StartedAt = DateTimeOffset.UtcNow,
             AiConnectionCategory = AiConnectionModelCategory.HighEffort,
-            ModelId = "gpt-4o",
+            ModelId = protocolModelId,
         };
         seed.ReviewJobProtocols.Add(protocol);
         await seed.SaveChangesAsync();
 
         return (job.Id, protocol.Id, clientId);
+    }
+
+    // A protocol that never recorded which model it used was filed under "(default)", which matches no configured
+    // model, so its tokens were counted and its cost was not. On one real job that silently dropped 21% of the
+    // input from the total. The job knows the model it ran, so it is used rather than throwing the spend away.
+    [Fact]
+    public async Task SetCompletedAsync_WhenTheProtocolNamedNoModel_PricesItAgainstTheJobsModel()
+    {
+        var options = CreateOptions();
+        var (jobId, protocolId, _) = await SeedJobAndProtocolAsync(options, protocolModelId: null);
+
+        var resolver = Substitute.For<IModelPricingResolver>();
+        resolver.ResolveAsync(ConnectionId, Arg.Any<AiConnectionModelCategory>(), "gpt-4o", Arg.Any<CancellationToken>())
+            .Returns(new ModelPricing(2m, 10m, 1m));
+
+        var recorder = new EfProtocolRecorder(new TestDbContextFactory(options), NullLogger<EfProtocolRecorder>.Instance, resolver);
+
+        await recorder.SetCompletedAsync(protocolId, "Completed", 1_000_000, 500_000, 2, 1, null);
+
+        await using var verify = new MeisterProPRDbContext(options);
+        var storedJob = await verify.ReviewJobs.FirstAsync(j => j.Id == jobId);
+        var entry = Assert.Single(storedJob.TokenBreakdown);
+
+        Assert.Equal("gpt-4o", entry.ModelId);
+        Assert.Equal(7m, entry.EstimatedCostUsd);
+        // Priced against a model the call did not name, so it is an attribution rather than a measurement.
+        Assert.True(entry.CostIsApproximate);
+        Assert.True(storedJob.CostIsApproximate);
+    }
+
+    // Only when the job cannot name a model either is the spend genuinely unattributable.
+    [Fact]
+    public async Task SetCompletedAsync_WhenNeitherProtocolNorJobNamesAModel_LeavesItUnpriced()
+    {
+        var options = CreateOptions();
+        var (jobId, protocolId, _) = await SeedJobAndProtocolAsync(options, protocolModelId: null, jobModelId: null);
+
+        var resolver = Substitute.For<IModelPricingResolver>();
+        resolver.ResolveAsync(Arg.Any<Guid>(), Arg.Any<AiConnectionModelCategory>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns((ModelPricing?)null);
+
+        var recorder = new EfProtocolRecorder(new TestDbContextFactory(options), NullLogger<EfProtocolRecorder>.Instance, resolver);
+
+        await recorder.SetCompletedAsync(protocolId, "Completed", 1_000_000, 500_000, 2, 1, null);
+
+        await using var verify = new MeisterProPRDbContext(options);
+        var entry = Assert.Single((await verify.ReviewJobs.FirstAsync(j => j.Id == jobId)).TokenBreakdown);
+
+        Assert.Equal("(default)", entry.ModelId);
+        Assert.Null(entry.EstimatedCostUsd);
+        Assert.Equal(1_000_000, entry.TotalInputTokens);
     }
 
     [Fact]

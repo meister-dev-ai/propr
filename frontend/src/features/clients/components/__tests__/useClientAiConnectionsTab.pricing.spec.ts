@@ -122,6 +122,31 @@ describe('useClientAiConnectionsTab per-model USD pricing', () => {
     expect(model.cachedInputCostPer1MUsd).toBe(1.25)
   })
 
+  // The editor lists every purpose it knows and pre-enables the common ones, so a profile that binds nothing
+  // directly carries rows with no model chosen. Sending those asks the server to bind a purpose to nothing, which
+  // it refuses, and the refusal took the whole save down with it including the pricing entered alongside.
+  it('omits purpose rows that name no model, so the pricing still saves', async () => {
+    vi.mocked(updateAiConnection).mockResolvedValue({ id: 'profile-1' } as AiConnectionDto)
+    await mountComposable()
+
+    primeValidEditor({ mode: 'edit', profileId: 'profile-1' })
+    const model = chatModel({ inputCostPer1MUsd: '0.2', outputCostPer1MUsd: '1.2', cachedInputCostPer1MUsd: '' })
+    api.editor.models = [model]
+    api.editor.bindings = [
+      { id: null, purpose: 'reviewDefault', configuredModelId: '', protocolMode: 'auto', isEnabled: true },
+      { id: null, purpose: 'embeddingDefault', configuredModelId: '', protocolMode: 'embeddings', isEnabled: true },
+      { id: null, purpose: 'reviewLowEffort', configuredModelId: model.localId, protocolMode: 'auto', isEnabled: true },
+    ]
+
+    await api.saveProfile()
+    await flushPromises()
+
+    const [, , request] = vi.mocked(updateAiConnection).mock.calls[0]
+    expect(request.purposeBindings).toHaveLength(1)
+    expect(request.purposeBindings![0].purpose).toBe('reviewLowEffort')
+    expect(request.configuredModels![0].inputCostPer1MUsd).toBe(0.2)
+  })
+
   it('serializes a blank cost to undefined and a literal zero to 0 on create', async () => {
     vi.mocked(createAiConnection).mockResolvedValue({ id: 'profile-2' } as AiConnectionDto)
     await mountComposable()

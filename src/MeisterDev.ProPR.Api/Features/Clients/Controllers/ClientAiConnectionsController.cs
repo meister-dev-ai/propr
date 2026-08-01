@@ -700,7 +700,11 @@ public sealed partial class ClientAiConnectionsController(
             requestModel.InputCostPer1MUsd,
             requestModel.OutputCostPer1MUsd,
             requestModel.MaxContextTokens,
-            requestModel.CachedInputCostPer1MUsd);
+            requestModel.CachedInputCostPer1MUsd,
+            requestModel.CacheWriteCostPer1MUsd,
+            requestModel.SupportsReasoning,
+            requestModel.SupportsPromptCaching,
+            string.IsNullOrWhiteSpace(requestModel.ReasoningContentField) ? null : requestModel.ReasoningContentField.Trim());
     }
 
     private void AddEmbeddingModelErrors(AiConfiguredModelRequest requestModel, string remoteModelId)
@@ -727,9 +731,13 @@ public sealed partial class ClientAiConnectionsController(
         IReadOnlyList<AiPurposeBindingRequest>? requestBindings,
         IReadOnlyList<AiConfiguredModelDto> configuredModels)
     {
+        // A profile with no purpose bindings is legitimate: a client that selects its models through logical
+        // models never binds a purpose to a connection directly, so requiring one here made every such profile
+        // permanently unsavable. Editing anything on it, including a model's pricing, was refused with a message
+        // about bindings the operator had deliberately not created. Whether a profile is usable is decided at
+        // activation, which has its own rules, rather than by forbidding the shape at rest.
         if (requestBindings is null || requestBindings.Count == 0)
         {
-            this.ModelState.AddModelError(nameof(requestBindings), "purposeBindings must contain at least one binding.");
             return [];
         }
 
@@ -868,6 +876,11 @@ public sealed partial class ClientAiConnectionsController(
                 .ToDictionary(group => group.First().Key.Trim(), group => group.First().Value.Trim(), StringComparer.OrdinalIgnoreCase);
     }
 
+    /// <summary>
+    ///     Restates a stored model as the request that would produce it, for an update that names no models of its
+    ///     own. Every field the model carries has to survive the trip: a value dropped here is not merely absent
+    ///     from the request, it is written back as null over what was stored.
+    /// </summary>
     private static AiConfiguredModelRequest ToConfiguredModelRequest(AiConfiguredModelDto model)
     {
         return new AiConfiguredModelRequest(
@@ -886,7 +899,11 @@ public sealed partial class ClientAiConnectionsController(
             model.InputCostPer1MUsd,
             model.OutputCostPer1MUsd,
             model.MaxContextTokens,
-            model.CachedInputCostPer1MUsd);
+            model.CachedInputCostPer1MUsd,
+            model.CacheWriteCostPer1MUsd,
+            model.SupportsReasoning,
+            model.SupportsPromptCaching,
+            model.ReasoningContentField);
     }
 
     private static AiPurposeBindingRequest ToBindingRequest(AiPurposeBindingDto binding)
@@ -976,7 +993,11 @@ public sealed record AiConfiguredModelRequest(
     decimal? InputCostPer1MUsd = null,
     decimal? OutputCostPer1MUsd = null,
     int? MaxContextTokens = null,
-    decimal? CachedInputCostPer1MUsd = null);
+    decimal? CachedInputCostPer1MUsd = null,
+    decimal? CacheWriteCostPer1MUsd = null,
+    bool SupportsReasoning = false,
+    bool SupportsPromptCaching = false,
+    string? ReasoningContentField = null);
 
 /// <summary>Purpose binding payload item for create and update flows.</summary>
 public sealed record AiPurposeBindingRequest(

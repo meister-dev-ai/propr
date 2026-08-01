@@ -28,6 +28,13 @@ public sealed class EfProtocolRecorder(
     ILogger<EfProtocolRecorder> logger,
     IModelPricingResolver? pricingResolver = null) : IProtocolRecorder
 {
+    /// <summary>
+    ///     Stands in for a model the call never named, once the job's own model has been tried as well. Tokens
+    ///     recorded under it cannot be priced, because nothing identifies the rate they were bought at, so this
+    ///     name appearing in a breakdown means real spend went uncounted rather than that it was free.
+    /// </summary>
+    private const string UnknownModelId = "(default)";
+
     /// <inheritdoc />
     public async Task<Guid> BeginAsync(
         Guid jobId,
@@ -272,7 +279,8 @@ public sealed class EfProtocolRecorder(
             {
                 // Always accumulate into breakdown, using Default category if none specified
                 var category = protocol.AiConnectionCategory ?? AiConnectionModelCategory.Default;
-                var modelId = protocol.ModelId ?? "(default)";
+                var modelId = protocol.ModelId ?? job.AiModel ?? UnknownModelId;
+                var modelInferred = protocol.ModelId is null && job.AiModel is not null;
                 var logicalModelName = protocol.LogicalModelName;
                 var cachedInputTokens = totalCachedInputTokens ?? 0;
                 var cacheWriteTokens = totalCacheWriteTokens ?? 0;
@@ -301,7 +309,8 @@ public sealed class EfProtocolRecorder(
                     cacheWriteTokens,
                     reasoningTokens,
                     ct,
-                    logicalModelName);
+                    logicalModelName,
+                    modelInferred);
 
                 // Upsert daily token usage aggregate for the client owning this job.
                 if (totalInputTokens > 0
@@ -379,7 +388,8 @@ public sealed class EfProtocolRecorder(
             {
                 // Always accumulate into breakdown, using provided category or Default if none
                 var category = connectionCategory ?? AiConnectionModelCategory.Default;
-                var effectiveModelId = modelId ?? "(default)";
+                var effectiveModelId = modelId ?? job.AiModel ?? UnknownModelId;
+                var modelInferred = modelId is null && job.AiModel is not null;
                 // Prefer the caller's logical model (an out-of-loop call may use a different role than the pass);
                 // fall back to the pass's role when the caller reused the pass runtime and didn't specify one.
                 var effectiveLogicalModelName = logicalModelName ?? protocol.LogicalModelName;
@@ -407,7 +417,8 @@ public sealed class EfProtocolRecorder(
                     cacheWriteTokens,
                     reasoningTokens,
                     ct,
-                    effectiveLogicalModelName);
+                    effectiveLogicalModelName,
+                    modelInferred);
             }
         }
         catch (Exception ex)
@@ -458,7 +469,8 @@ public sealed class EfProtocolRecorder(
         long passCacheWriteTokens,
         long passReasoningTokens,
         CancellationToken ct,
-        string? logicalModelName = null)
+        string? logicalModelName = null,
+        bool modelInferred = false)
     {
         if (pricingResolver is null)
         {
@@ -486,7 +498,9 @@ public sealed class EfProtocolRecorder(
                         tierEntry.TotalCacheWriteTokens,
                         tierEntry.TotalReasoningTokens),
                     pricing);
-                job.SetTierCost(category, modelId, cumulative.Usd, cumulative.IsApproximate, logicalModelName);
+                // A cost priced against a model the call did not name is an attribution, not a measurement, so it
+                // is reported as approximate even when every rate behind it was configured exactly.
+                job.SetTierCost(category, modelId, cumulative.Usd, cumulative.IsApproximate || modelInferred, logicalModelName);
                 await db.SaveChangesAsync(ct);
             }
 

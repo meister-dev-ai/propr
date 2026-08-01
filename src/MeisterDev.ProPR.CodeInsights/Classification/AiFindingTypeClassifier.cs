@@ -39,8 +39,17 @@ namespace MeisterDev.ProPR.CodeInsights.Classification;
 internal sealed partial class AiFindingTypeClassifier(
     IAiRuntimeResolver aiRuntimeResolver,
     IModelUsageRecorder usageRecorder,
-    ILogger<AiFindingTypeClassifier> logger) : IFindingTypeClassifier
+    ILogger<AiFindingTypeClassifier> logger) : IFindingTypeClassifier, IDisposable
 {
+    private readonly SemaphoreSlim _resolutionGate = new(1, 1);
+    private IResolvedAiChatRuntime? _resolvedRuntime;
+    private Guid _resolvedClientId;
+
+    public void Dispose()
+    {
+        this._resolutionGate.Dispose();
+    }
+
     /// <summary>
     ///     Bounds the finding text handed to the model. A finding message is prose and normally far shorter
     ///     than this; the ceiling exists so one pathological finding cannot cost many times what the others do.
@@ -61,9 +70,7 @@ internal sealed partial class AiFindingTypeClassifier(
         IResolvedAiChatRuntime runtime;
         try
         {
-            runtime = await aiRuntimeResolver
-                .ResolveChatRuntimeAsync(request.ClientId, AiPurpose.InsightsClassification, ct)
-                .ConfigureAwait(false);
+            runtime = await this.ResolveRuntimeAsync(request.ClientId, ct).ConfigureAwait(false);
         }
         catch (OperationCanceledException)
         {
@@ -114,6 +121,41 @@ internal sealed partial class AiFindingTypeClassifier(
         {
             LogCallFailed(logger, request.FindingId, ex);
             return FindingClassificationResult.Unusable();
+        }
+    }
+
+    /// <summary>
+    ///     Resolves the classification runtime once and shares it across the findings being classified.
+    /// </summary>
+    /// <remarks>
+    ///     Findings are classified concurrently, and resolution reads the logical-model catalog, the connection,
+    ///     and the client through repositories that share one scoped <c>DbContext</c>. Letting those reads overlap
+    ///     threw "a second operation was started on this context instance", which this class caught and reported
+    ///     as a fault, so findings went unclassified for a reason that had nothing to do with the model. The gate
+    ///     removes the overlap and the cache means a run pays for resolution once rather than once per finding.
+    ///     A failure is not cached: it is reported per finding, and a transient fault must not disable
+    ///     classification for the rest of the run.
+    /// </remarks>
+    private async Task<IResolvedAiChatRuntime> ResolveRuntimeAsync(Guid clientId, CancellationToken ct)
+    {
+        await this._resolutionGate.WaitAsync(ct).ConfigureAwait(false);
+        try
+        {
+            if (this._resolvedRuntime is not null && this._resolvedClientId == clientId)
+            {
+                return this._resolvedRuntime;
+            }
+
+            var runtime = await aiRuntimeResolver
+                .ResolveChatRuntimeAsync(clientId, AiPurpose.InsightsClassification, ct)
+                .ConfigureAwait(false);
+            this._resolvedRuntime = runtime;
+            this._resolvedClientId = clientId;
+            return runtime;
+        }
+        finally
+        {
+            this._resolutionGate.Release();
         }
     }
 

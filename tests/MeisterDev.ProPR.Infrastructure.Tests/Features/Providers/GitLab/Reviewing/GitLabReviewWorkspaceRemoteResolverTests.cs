@@ -17,7 +17,7 @@ namespace MeisterDev.ProPR.Infrastructure.Tests.Features.Providers.GitLab.Review
 public sealed class GitLabReviewWorkspaceRemoteResolverTests
 {
     [Fact]
-    public async Task ResolveAsync_ReturnsMergeRequestRefAndPrivateTokenHeader()
+    public async Task ResolveAsync_ReturnsMergeRequestRefAndBasicAuthorizationHeader()
     {
         var clientId = Guid.NewGuid();
         var host = new ProviderHostRef(ScmProvider.GitLab, "https://gitlab.example.com");
@@ -40,7 +40,8 @@ public sealed class GitLabReviewWorkspaceRemoteResolverTests
         var result = await sut.ResolveAsync(CreateRequest(host, clientId), CancellationToken.None);
 
         Assert.Contains("refs/merge-requests/42/head", string.Join(' ', result.FetchRefSpecs), StringComparison.Ordinal);
-        Assert.Equal("PRIVATE-TOKEN: token", result.AuthorizationHeader);
+        // Base64 of "oauth2:token" - git-over-HTTP against GitLab rejects a PRIVATE-TOKEN header.
+        Assert.Equal("AUTHORIZATION: Basic b2F1dGgyOnRva2Vu", result.AuthorizationHeader);
     }
 
     private static ReviewRepositoryWorkspaceRequest CreateRequest(ProviderHostRef host, Guid clientId)

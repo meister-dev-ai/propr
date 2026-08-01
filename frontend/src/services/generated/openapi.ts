@@ -14556,6 +14556,11 @@ export interface components {
             maxContextTokens?: number | null;
             /** Format: double */
             cachedInputCostPer1MUsd?: number | null;
+            /** Format: double */
+            cacheWriteCostPer1MUsd?: number | null;
+            supportsReasoning?: boolean;
+            supportsPromptCaching?: boolean;
+            reasoningContentField?: string | null;
         };
         /**
          * @description Origin of a configured model entry.

@@ -229,7 +229,11 @@ public sealed class TenantAiConnectionsController(
                     model.InputCostPer1MUsd,
                     model.OutputCostPer1MUsd,
                     model.MaxContextTokens,
-                    model.CachedInputCostPer1MUsd));
+                    model.CachedInputCostPer1MUsd,
+                    model.CacheWriteCostPer1MUsd,
+                    model.SupportsReasoning,
+                    model.SupportsPromptCaching,
+                    string.IsNullOrWhiteSpace(model.ReasoningContentField) ? null : model.ReasoningContentField.Trim()));
         }
 
         return models.AsReadOnly();

@@ -30,4 +30,5 @@ public sealed record ProviderModelDescriptor(
     string RemoteModelId,
     IReadOnlyList<AiProtocolMode> SupportedProtocolModes,
     string? ReasoningContentField = null,
-    bool SupportsPromptCaching = false);
+    bool SupportsPromptCaching = false,
+    bool SupportsReasoning = false);

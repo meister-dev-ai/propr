@@ -48,6 +48,17 @@ internal static class ReviewReasoningRequest
             return chatOptions;
         }
 
+        if (effortLevel is not null)
+        {
+            // A model asked to reason does not take a sampling temperature, and OpenAI rejects the whole request
+            // rather than ignoring the parameter: "Unsupported parameter: 'temperature' is not supported with this
+            // model", HTTP 400, on every call. The Anthropic client already drops temperature once a thinking
+            // budget is set, for the same reason; doing it here covers the OpenAI adapter, which passes whatever
+            // it is given straight through. An effort of None leaves temperature alone, so an ordinary sampling
+            // model keeps the configured value.
+            chatOptions.Temperature = null;
+        }
+
         chatOptions.RawRepresentationFactory = client =>
         {
             // Two arms, and both are load-bearing. A client speaking a provider's own protocol is handed the
