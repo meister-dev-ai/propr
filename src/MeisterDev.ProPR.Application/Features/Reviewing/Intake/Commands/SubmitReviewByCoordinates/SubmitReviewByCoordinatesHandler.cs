@@ -285,16 +285,26 @@ public sealed partial class SubmitReviewByCoordinatesHandler(
     }
 
     /// <summary>
-    ///     Fills in the repository identity the coordinates cannot carry.
+    ///     Fills in the repository name the coordinates may not carry, and the project path that is built
+    ///     from it.
     /// </summary>
     /// <remarks>
-    ///     Azure DevOps and GitLab address a repository by the identity and project the coordinates already
-    ///     hold, but GitHub and Forgejo address it as <c>owner/name</c> and their stored identity is a
-    ///     number, so a request built from coordinates alone would ask those hosts for <c>owner/12345</c> and
-    ///     be told, correctly, that no such repository exists. The name is therefore resolved cheapest-first:
-    ///     from the covering configuration, which often recorded it; then from repository discovery, whose
-    ///     answer is the adapter's own and is taken whole; and finally from the project key, which is right
-    ///     for the two families that never needed a name.
+    ///     <para>
+    ///         There is no single shape for "the repository identity". Azure DevOps stores a GUID and reads
+    ///         the project path as the project itself. GitHub, Forgejo and GitLab all address a repository as
+    ///         <c>owner/name</c> and derive it from the project path, but what they store as the identity
+    ///         differs even within one provider: GitHub and Forgejo store a number, GitLab's discovery
+    ///         reports a number while a GitLab review job records the namespaced path. A request that assumed
+    ///         any one of those shapes would ask some host for <c>owner/12345</c>, or drop the name entirely
+    ///         and produce a clone URL with no repository in it.
+    ///     </para>
+    ///     <para>
+    ///         So the name is resolved cheapest-first, and every rung has to tolerate all three shapes: the
+    ///         covering configuration, which often recorded the name; the identity itself when it is already
+    ///         a path, which needs no lookup and cannot be wrong; repository discovery, whose answer is the
+    ///         adapter's own and is taken whole; and finally the project key alone, which is right for Azure
+    ///         DevOps and is the best remaining answer elsewhere.
+    ///     </para>
     /// </remarks>
     private async Task<RepositoryRef> ResolveRepositoryAsync(
         PullRequestCoverage coverage,
@@ -306,6 +316,14 @@ public sealed partial class SubmitReviewByCoordinatesHandler(
         if (named is not null && !string.IsNullOrWhiteSpace(named.Name))
         {
             return BuildRepositoryRef(coverage, host, command.RepositoryId, named.Name.Trim());
+        }
+
+        // An identity that is already a path carries the name in its last segment, which is what GitLab
+        // records on a review job. Reading it costs nothing and cannot miss, so it comes before asking the
+        // provider. Identities that are a GUID or a number contain no slash and fall through untouched.
+        if (command.RepositoryId.Contains('/', StringComparison.Ordinal))
+        {
+            return BuildRepositoryRef(coverage, host, command.RepositoryId, command.RepositoryId);
         }
 
         var discovered = await this.TryDiscoverRepositoryAsync(coverage, host, command.RepositoryId, cancellationToken);
@@ -364,8 +382,20 @@ public sealed partial class SubmitReviewByCoordinatesHandler(
                 coverage.ProviderProjectKey,
                 cancellationToken);
 
-            return repositories.FirstOrDefault(repository =>
-                string.Equals(repository.ExternalRepositoryId, repositoryId, StringComparison.OrdinalIgnoreCase));
+            // Match on more than the identity, most specific first. Providers disagree about what they
+            // store as one — GitLab discovery answers with a numeric project id while a GitLab review job
+            // records the namespaced path — so comparing identities alone finds nothing for the very
+            // repository that was asked about, and the caller then falls back to an answer carrying no
+            // repository name at all.
+            return Match(repositories, repository => repository.ExternalRepositoryId)
+                   ?? Match(repositories, repository => repository.ProjectPath)
+                   ?? Match(repositories, repository => LastSegment(repository.ProjectPath));
+
+            RepositoryRef? Match(IReadOnlyList<RepositoryRef> candidates, Func<RepositoryRef, string> identity)
+            {
+                return candidates.FirstOrDefault(candidate =>
+                    string.Equals(identity(candidate), repositoryId, StringComparison.OrdinalIgnoreCase));
+            }
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {

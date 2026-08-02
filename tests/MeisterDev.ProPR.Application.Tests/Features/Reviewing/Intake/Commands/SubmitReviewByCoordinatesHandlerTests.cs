@@ -357,6 +357,77 @@ public sealed class SubmitReviewByCoordinatesHandlerTests
     }
 
     [Fact]
+    public async Task HandleAsync_ForAPathStyleRepositoryId_KeepsThePathAndTakesTheNameFromItsLastSegment()
+    {
+        // What GitLab records as a repository identity is the namespaced path, and that is what pull-request
+        // resolution hands back for one. The path already contains the name, so it is used as it stands:
+        // dropping to the project key would leave a project path with no repository in it, which reaches the
+        // provider intact and only fails later, when the clone URL built from it cannot be fetched.
+        var queryService = SubstituteQueryService(OpenPullRequest());
+        var registry = SubstituteRegistry(queryService, [GitHubRepository()]);
+        var sut = Handler(
+            crawlConfigurations: SubstituteCrawlRepository(),
+            webhookConfigurations: SubstituteWebhookRepository(GitLabWebhook()),
+            providerRegistry: registry,
+            queryService: queryService);
+
+        var result = await sut.HandleAsync(
+            Command() with
+            {
+                ProviderScopePath = "http://localhost:8090",
+                ProviderProjectKey = "meister-dev",
+                RepositoryId = "meister-dev/propr-review-demo-csharp",
+            });
+
+        Assert.Equal(SubmitReviewByCoordinatesOutcome.Submitted, result.Outcome);
+        await queryService.Received(1).GetReviewAsync(
+            ClientId,
+            Arg.Is<CodeReviewRef>(review =>
+                review.Repository.ExternalRepositoryId == "meister-dev/propr-review-demo-csharp"
+                && review.Repository.OwnerOrNamespace == "meister-dev"
+                && review.Repository.ProjectPath == "meister-dev/propr-review-demo-csharp"
+                && review.Repository.RepositoryName == "propr-review-demo-csharp"),
+            Arg.Any<CancellationToken>());
+
+        // The path answered the question outright, so nothing was asked of the provider to find it out.
+        registry.DidNotReceive().GetRepositoryDiscoveryProvider(Arg.Any<ScmProvider>());
+    }
+
+    [Fact]
+    public async Task HandleAsync_WhenDiscoveryReportsADifferentIdentityShape_StillMatchesOnTheProjectPath()
+    {
+        // GitLab discovery answers with a numeric project id while a GitLab review job records the path, so
+        // an identity-only comparison finds nothing for the very repository that was asked about.
+        var discovered = new RepositoryRef(
+            new ProviderHostRef(ScmProvider.GitLab, "http://localhost:8090"),
+            "4242",
+            "meister-dev",
+            "meister-dev/propr-review-demo-csharp");
+        var queryService = SubstituteQueryService(OpenPullRequest());
+        var sut = Handler(
+            crawlConfigurations: SubstituteCrawlRepository(),
+            webhookConfigurations: SubstituteWebhookRepository(GitLabWebhook()),
+            providerRegistry: SubstituteRegistry(queryService, [discovered]),
+            queryService: queryService);
+
+        var result = await sut.HandleAsync(
+            Command() with
+            {
+                ProviderScopePath = "http://localhost:8090",
+                ProviderProjectKey = "meister-dev",
+                RepositoryId = "propr-review-demo-csharp",
+            });
+
+        Assert.Equal(SubmitReviewByCoordinatesOutcome.Submitted, result.Outcome);
+        await queryService.Received(1).GetReviewAsync(
+            ClientId,
+            Arg.Is<CodeReviewRef>(review =>
+                review.Repository.ExternalRepositoryId == "4242"
+                && review.Repository.ProjectPath == "meister-dev/propr-review-demo-csharp"),
+            Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
     public async Task HandleAsync_ForAzureDevOps_KeepsTheProjectAloneInTheProjectPath()
     {
         // Azure DevOps reads the project path as the project itself, both for its API calls and for the
@@ -654,6 +725,29 @@ public sealed class SubmitReviewByCoordinatesHandlerTests
                     [],
                     new CanonicalSourceReferenceDto("azureDevOps", "c39fd3f3-e84b-4d01-84df-57964de91bc8"),
                     "meister-propr"),
+            ]);
+    }
+
+    /// <summary>A GitLab webhook covering the demo namespace, registered by name and recording no identity.</summary>
+    private static WebhookConfigurationDto GitLabWebhook()
+    {
+        return new WebhookConfigurationDto(
+            Guid.Parse("88888888-8888-8888-8888-888888888888"),
+            ClientId,
+            WebhookProviderType.GitLab,
+            "path-key",
+            "http://localhost:8090",
+            "meister-dev",
+            true,
+            DateTimeOffset.UnixEpoch,
+            [WebhookEventType.PullRequestCreated],
+            [
+                new WebhookRepoFilterDto(
+                    Guid.Parse("99999999-9999-9999-9999-999999999999"),
+                    "propr-review-demo-csharp",
+                    [],
+                    null,
+                    "propr-review-demo-csharp"),
             ]);
     }
 
