@@ -268,6 +268,18 @@ public sealed class ReviewJob
     /// </summary>
     public bool CostIsApproximate { get; private set; }
 
+    /// <summary>
+    ///     True when someone asked for this review explicitly, so it must run even though the revision has
+    ///     already been reviewed or a prior review of it failed.
+    /// </summary>
+    /// <remarks>
+    ///     The rule that stops a revision being reviewed twice is applied both when a job is queued and again
+    ///     when it executes, and the two have to agree. Intake alone cannot decide it: a job that passes
+    ///     intake is still dropped at execution unless the request that created it travels with it, which is
+    ///     what this flag is for.
+    /// </remarks>
+    public bool AllowUnchangedResubmission { get; private set; }
+
     /// <summary>The budget scope whose cap held or stopped this job, or null when no budget blocked it.</summary>
     public BudgetScopeKind? BudgetBlockScope { get; private set; }
 
@@ -508,6 +520,16 @@ public sealed class ReviewJob
     public void SetReviewedFileCount(int count)
     {
         this.ReviewedFileCount = count < 0 ? 0 : count;
+    }
+
+    /// <summary>
+    ///     Records that this review was asked for explicitly, so execution reviews the revision even when
+    ///     nothing about it has changed since the last review.
+    /// </summary>
+    /// <param name="allowUnchangedResubmission">Whether the request that created this job was an explicit one.</param>
+    public void SetAllowUnchangedResubmission(bool allowUnchangedResubmission)
+    {
+        this.AllowUnchangedResubmission = allowUnchangedResubmission;
     }
 
     /// <summary>Records the PR context snapshot captured from ADO at job-creation time.</summary>

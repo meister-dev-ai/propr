@@ -65,6 +65,11 @@ public sealed partial class RestartReviewJobHandler(
         restarted.SetProCursorSourceScope(source.ProCursorSourceScopeMode, source.ProCursorSourceIds);
         restarted.SetPrContext(source.PrTitle, source.PrRepositoryName, source.PrSourceBranch, source.PrTargetBranch);
 
+        // A restart inherits why the source job existed. Without this, restarting a review that was asked
+        // for explicitly would queue a job the unchanged-revision rule deletes on sight at execution, which
+        // is the one thing a restart must never do.
+        restarted.SetAllowUnchangedResubmission(source.AllowUnchangedResubmission);
+
         var addResult = await jobs.TryAddIfNoActiveDuplicateAsync(restarted, cancellationToken);
         if (!addResult.WasAdded)
         {

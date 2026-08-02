@@ -183,6 +183,13 @@ internal sealed class ReviewJobEntityTypeConfiguration : IEntityTypeConfiguratio
             .IsRequired()
             .HasDefaultValue(false);
 
+        // Every job written before this column existed came from an automatic trigger, and every job the
+        // crawler and webhooks write still does, so false is both the historical truth and the default.
+        builder.Property(j => j.AllowUnchangedResubmission)
+            .HasColumnName("allow_unchanged_resubmission")
+            .IsRequired()
+            .HasDefaultValue(false);
+
         builder.Property(j => j.BudgetBlockScope)
             .HasColumnName("budget_block_scope")
             .HasConversion<int?>()

@@ -205,6 +205,11 @@ public sealed class PullRequestSynchronizationService(
 
         job.SetReviewPipelineProfile(await this.ResolveReviewPipelineProfileIdAsync(request, ct));
 
+        // The same "nothing has changed here" rule runs again when the job executes, where it deletes the
+        // job rather than recording a skip. Clearing only the intake copy would leave an explicit request
+        // accepted, acknowledged with a job id, and then silently dropped, so the intent travels with the job.
+        job.SetAllowUnchangedResubmission(request.AllowUnchangedResubmission);
+
         if (request.ReviewTemperature.HasValue)
         {
             job.SetAiConfig(job.AiConnectionId, job.AiModel, request.ReviewTemperature);

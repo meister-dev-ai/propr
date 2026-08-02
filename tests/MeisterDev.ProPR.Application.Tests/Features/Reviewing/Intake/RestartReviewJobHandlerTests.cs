@@ -156,6 +156,32 @@ public sealed class RestartReviewJobHandlerTests
         await queue.DidNotReceive().EnqueueAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>());
     }
 
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task HandleAsync_WhenFailed_ClonesWhetherTheReviewWasAskedForExplicitly(bool allowUnchangedResubmission)
+    {
+        // Restarting a review someone asked for must not produce a job that execution deletes on sight for
+        // having nothing new to review, which is exactly what a clone that dropped this would be.
+        var jobs = Substitute.For<IJobRepository>();
+        var queue = Substitute.For<IReviewExecutionQueue>();
+        var job = MakeJob();
+        job.Status = JobStatus.Failed;
+        job.SetAllowUnchangedResubmission(allowUnchangedResubmission);
+        jobs.GetById(job.Id).Returns(job);
+        jobs.TryAddIfNoActiveDuplicateAsync(Arg.Any<ReviewJob>(), Arg.Any<CancellationToken>())
+            .Returns(new TryAddReviewJobResult(true, null, 0));
+
+        var sut = new RestartReviewJobHandler(jobs, queue, NullLogger<RestartReviewJobHandler>.Instance);
+
+        var result = await sut.HandleAsync(new RestartReviewJobCommand(job.Id));
+
+        Assert.Equal(RestartReviewJobOutcome.Restarted, result.Outcome);
+        await jobs.Received(1).TryAddIfNoActiveDuplicateAsync(
+            Arg.Is<ReviewJob>(clone => clone.AllowUnchangedResubmission == allowUnchangedResubmission),
+            Arg.Any<CancellationToken>());
+    }
+
     private static ReviewJob MakeJob()
     {
         return new ReviewJob(

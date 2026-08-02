@@ -244,7 +244,13 @@ public sealed partial class ReviewOrchestrationService(
         var reviewerThreads = GetReviewerThreads(pr, reviewerId);
         var providerCapabilities = providerRegistry.GetRegisteredCapabilities(job.Provider) ?? [];
 
-        if (!isNewIteration && !HasNewThreadReplies(reviewerThreads, scan!, reviewerId, pr.AuthorizedIdentityId, pr.AuthorizedIdentityName))
+        // This is the execution-side copy of the rule intake also applies before queueing anything, and the
+        // two have to agree: this one deletes the job rather than recording a skip, so a review intake let
+        // through would otherwise vanish here with nothing said. A job that carries an explicit request
+        // passes both.
+        if (!isNewIteration
+            && !job.AllowUnchangedResubmission
+            && !HasNewThreadReplies(reviewerThreads, scan!, reviewerId, pr.AuthorizedIdentityId, pr.AuthorizedIdentityName))
         {
             return await this.DisposeSkipAndFinalizeAsync(
                 job,
@@ -269,7 +275,11 @@ public sealed partial class ReviewOrchestrationService(
             overrideChatClient,
             ct);
 
-        if (!isNewIteration)
+        // The second half of the same rule: replies alone are answered above, and without new commits there
+        // is nothing left to review. An explicitly requested review is the exception, and reaches here with
+        // the full current scope, because a revision that is not new has neither a delta to compare against
+        // nor a carry-forward baseline.
+        if (!isNewIteration && !job.AllowUnchangedResubmission)
         {
             return await this.DisposeSkipAndFinalizeAsync(
                 job,
@@ -985,7 +995,14 @@ public sealed partial class ReviewOrchestrationService(
         var iterationKey = ReviewRevisionKeys.GetStoredKey(job.ReviewRevisionReference, job.IterationId);
         var isNewIteration = scan is null || scan.LastProcessedCommitId != iterationKey;
 
-        var resumeJob = await this.FindResumeJobIfAnyAsync(job, ct);
+        // Resume exists so work already done at this revision is not redone after an interruption, and it
+        // adopts a prior job's finished files wholesale. On an explicitly requested review of a revision
+        // already reviewed, that prior job is the completed review itself, so every file would be adopted
+        // and none re-reviewed: the request would report success having reviewed nothing. Redoing the work
+        // is the whole point of asking, so resume stands down for exactly that case and no other.
+        var resumeJob = isNewIteration || !job.AllowUnchangedResubmission
+            ? await this.FindResumeJobIfAnyAsync(job, ct)
+            : null;
 
         var (baselineJob, baselineIsFullCoverage, compareToIterationId, compareToReviewRevision) =
             await this.ResolveCarryForwardBaselineAsync(job, isNewIteration, iterationKey, ct);

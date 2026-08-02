@@ -802,6 +802,37 @@ public sealed class PullRequestSynchronizationServiceTests
         Assert.Equal(existing.Id, outcome.JobId);
     }
 
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task SynchronizeAsync_StampsTheQueuedJobWithWhetherTheReviewWasAskedForExplicitly(bool allowUnchangedResubmission)
+    {
+        // The same rule runs again when the job executes, where it deletes the job rather than recording a
+        // skip. Execution can only honour an explicit request if the job itself carries it.
+        var jobs = Substitute.For<IJobRepository>();
+        jobs.FindActiveJob("https://dev.azure.com/org", "project", "repo-1", 42, 7).Returns((ReviewJob?)null);
+        jobs.FindCompletedJob("https://dev.azure.com/org", "project", "repo-1", 42, 7).Returns((ReviewJob?)null);
+        jobs.TryAddIfNoActiveDuplicateAsync(Arg.Any<ReviewJob>(), Arg.Any<CancellationToken>())
+            .Returns(new TryAddReviewJobResult(true, null, 0));
+
+        var sut = new PullRequestSynchronizationService(
+            jobs,
+            NullLogger<PullRequestSynchronizationService>.Instance);
+
+        var outcome = await sut.SynchronizeAsync(
+            CreateRequest(PullRequestActivationSource.Manual, "an explicit review request") with
+            {
+                CandidateIterationId = 7,
+                AllowUnchangedResubmission = allowUnchangedResubmission,
+            });
+
+        Assert.Equal(PullRequestSynchronizationReviewDecision.Submitted, outcome.ReviewDecision);
+        await jobs.Received(1)
+            .TryAddIfNoActiveDuplicateAsync(
+                Arg.Is<ReviewJob>(job => job.AllowUnchangedResubmission == allowUnchangedResubmission),
+                Arg.Any<CancellationToken>());
+    }
+
     [Fact]
     public async Task SynchronizeAsync_WhenAJobIsQueued_StoresTheRevisionTheRequestSupplied()
     {

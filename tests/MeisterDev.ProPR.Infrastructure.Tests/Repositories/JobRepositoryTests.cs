@@ -105,6 +105,24 @@ public sealed class JobRepositoryTests(PostgresContainerFixture fixture) : IAsyn
     }
 
     [Fact]
+    public async Task Add_ThenGetById_RoundTripsAnExplicitlyRequestedReview()
+    {
+        // Execution reads this flag to decide whether to review a revision that has already been reviewed.
+        // It is written at intake and read back in another pass, so it is only load-bearing if it survives
+        // the round trip; a job written by an automatic trigger must come back without it.
+        var requested = MakeJob();
+        requested.SetAllowUnchangedResubmission(true);
+        var automatic = MakeJob();
+
+        await this._repo.AddAsync(requested);
+        await this._repo.AddAsync(automatic);
+        this._dbContext.ChangeTracker.Clear();
+
+        Assert.True(this._repo.GetById(requested.Id)!.AllowUnchangedResubmission);
+        Assert.False(this._repo.GetById(automatic.Id)!.AllowUnchangedResubmission);
+    }
+
+    [Fact]
     public async Task Add_WithSelectedProCursorSourceScope_PersistsAndHydratesSnapshot()
     {
         var sourceA = Guid.NewGuid();
