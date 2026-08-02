@@ -957,7 +957,7 @@ export function useJobProtocolViewModel() {
     // is surfaced too. Null when the active pass is not a resample or the completion event is unavailable.
     const activePassUnionContribution = computed<{ passIndex: number; catchCount: number; model: string | null } | null>(() => {
         const pass = activePass.value
-        if (!pass || pass.passKind !== 'MultiPassUnion') {
+        if (pass?.passKind !== 'MultiPassUnion') {
             return null
         }
 

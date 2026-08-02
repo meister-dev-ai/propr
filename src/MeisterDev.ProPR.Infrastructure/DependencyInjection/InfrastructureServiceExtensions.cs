@@ -73,8 +73,8 @@ public static class InfrastructureServiceExtensions
                 options =>
                     options
                         .UseNpgsql(dbConnectionString, o => o.UseVector())
-                        // EF tools 9.x generate snapshots that EF runtime 10.x flags as pending;
-                        // the schema is correct — suppress the spurious warning.
+                        // NOSONAR — EF tools 9.x generate snapshots that EF runtime 10.x flags as pending.
+                        // The schema is correct, so the spurious warning is suppressed.
                         .ConfigureWarnings(w => w.Ignore(RelationalEventId.PendingModelChangesWarning)),
                 ServiceLifetime.Scoped,
                 ServiceLifetime.Singleton);

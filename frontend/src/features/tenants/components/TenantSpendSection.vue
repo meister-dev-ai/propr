@@ -169,7 +169,7 @@ function formatDate(value: string | null | undefined): string {
 
 onMounted(() => {
     if (isBudgetingAvailable.value) {
-        void vm.loadSpend()
+        vm.loadSpend().catch(console.error)
     }
 })
 </script>

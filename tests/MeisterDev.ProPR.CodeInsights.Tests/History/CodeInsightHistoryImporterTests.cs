@@ -219,7 +219,7 @@ public sealed class CodeInsightHistoryImporterTests
         // Keeping only the first thread at a position would leave the second finding permanently unresolvable.
         Assert.Equal(0, result.FindingsWithoutThread);
         Assert.Equal(
-            ["5001", "5002"],
+            new[] { "5001", "5002" },
             harness.Ingested.Single().Findings.Select(finding => finding.ProviderThreadId).ToArray());
     }
 

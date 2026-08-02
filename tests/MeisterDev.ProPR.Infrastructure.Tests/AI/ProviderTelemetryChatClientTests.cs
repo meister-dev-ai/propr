@@ -97,7 +97,7 @@ public sealed class ProviderTelemetryChatClientTests : IDisposable
         Assert.Equal(400L, activity.GetTagItem("ai_cached_input_tokens"));
         Assert.Equal(100L, activity.GetTagItem("ai_cache_write_tokens"));
         Assert.Equal(150L, activity.GetTagItem("ai_reasoning_tokens"));
-        Assert.Equal(true, activity.GetTagItem("ai_usage_measured"));
+        Assert.True((bool?)activity.GetTagItem("ai_usage_measured") ?? false);
         Assert.NotNull(activity.GetTagItem("ai_cost_usd"));
     }
 
@@ -110,7 +110,7 @@ public sealed class ProviderTelemetryChatClientTests : IDisposable
         await client.GetResponseAsync([new ChatMessage(ChatRole.User, "hello")]);
 
         var activity = Assert.Single(this.Activities);
-        Assert.Equal(false, activity.GetTagItem("ai_usage_measured"));
+        Assert.False((bool?)activity.GetTagItem("ai_usage_measured") ?? true);
     }
 
     [Fact]

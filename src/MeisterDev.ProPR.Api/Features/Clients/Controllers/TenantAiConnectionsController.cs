@@ -206,11 +206,7 @@ public sealed class TenantAiConnectionsController(
                 continue;
             }
 
-            var protocolModes = model.SupportedProtocolModes is { Count: > 0 }
-                ? model.SupportedProtocolModes.Distinct().ToList().AsReadOnly()
-                : (isEmbedding
-                    ? new List<AiProtocolMode> { AiProtocolMode.Auto, AiProtocolMode.Embeddings }.AsReadOnly()
-                    : new List<AiProtocolMode> { AiProtocolMode.Auto, AiProtocolMode.Responses, AiProtocolMode.ChatCompletions }.AsReadOnly());
+            var protocolModes = ResolveProtocolModes(model, isEmbedding);
 
             models.Add(
                 new AiConfiguredModelDto(
@@ -237,5 +233,17 @@ public sealed class TenantAiConnectionsController(
         }
 
         return models.AsReadOnly();
+    }
+
+    private static IReadOnlyList<AiProtocolMode> ResolveProtocolModes(AiConfiguredModelRequest model, bool isEmbedding)
+    {
+        if (model.SupportedProtocolModes is { Count: > 0 })
+        {
+            return model.SupportedProtocolModes.Distinct().ToList().AsReadOnly();
+        }
+
+        return isEmbedding
+            ? new List<AiProtocolMode> { AiProtocolMode.Auto, AiProtocolMode.Embeddings }.AsReadOnly()
+            : new List<AiProtocolMode> { AiProtocolMode.Auto, AiProtocolMode.Responses, AiProtocolMode.ChatCompletions }.AsReadOnly();
     }
 }

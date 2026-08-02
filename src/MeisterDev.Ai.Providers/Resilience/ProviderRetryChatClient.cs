@@ -104,9 +104,7 @@ public sealed partial class ProviderRetryChatClient : DelegatingChatClient
         ChatOptions? options = null,
         [EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
-        ArgumentNullException.ThrowIfNull(messages);
-
-        var conversation = messages as IList<ChatMessage> ?? messages.ToList();
+        var conversation = RequireConversation(messages);
 
         for (var attempt = 1; attempt <= this._policy.MaxAttempts; attempt++)
         {
@@ -139,6 +137,17 @@ public sealed partial class ProviderRetryChatClient : DelegatingChatClient
         }
 
         throw new UnreachableException(LoopEndedWithoutOutcome);
+    }
+
+    /// <summary>
+    ///     Validates the streaming caller's message sequence and materialises it into a list the retry loop can
+    ///     walk through on each attempt. Pulling this out keeps <see cref="GetStreamingResponseAsync" /> a pure
+    ///     iterator over attempts and lets the failure-handling path stay inside the loop.
+    /// </summary>
+    private static IList<ChatMessage> RequireConversation(IEnumerable<ChatMessage> messages)
+    {
+        ArgumentNullException.ThrowIfNull(messages);
+        return messages as IList<ChatMessage> ?? messages.ToList();
     }
 
     /// <summary>

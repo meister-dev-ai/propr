@@ -332,8 +332,8 @@ try
         {
             policy
                 .WithOrigins(allowedOrigins)
-                // *.visualstudio.com cannot be expressed as a static origin string;
-                // use a predicate so any subdomain is matched.
+                // NOSONAR — a predicate is needed because *.visualstudio.com cannot be expressed as a
+                // static origin string, so any subdomain is matched here instead.
                 .SetIsOriginAllowed(origin => BrowserOriginPolicy.IsAllowedOrigin(origin, allowedOrigins))
                 .AllowAnyHeader()
                 .AllowAnyMethod()

@@ -168,20 +168,20 @@ function value(event: Event): string {
 }
 
 function onDispositionDrill(disposition: CodeInsightDisposition): void {
-  void vm.openDrill(DISPOSITION_TITLES[disposition], disposition)
+  vm.openDrill(DISPOSITION_TITLES[disposition], disposition).catch(console.error)
 }
 
 function onReasonDrill(reason: CodeInsightRejectionReason, label: string): void {
-  void vm.openReasonDrill(`Findings turned down: ${label.toLowerCase()}`, reason)
+  vm.openReasonDrill(`Findings turned down: ${label.toLowerCase()}`, reason).catch(console.error)
 }
 
 function onScopeGrainChange(grain: ReviewerPerformanceGrain): void {
   vm.scopeGrain.value = grain
-  void vm.loadByScope()
+  vm.loadByScope().catch(console.error)
 }
 
 onMounted(() => {
-  void vm.load()
+  vm.load().catch(console.error)
 })
 </script>
 

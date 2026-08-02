@@ -390,8 +390,9 @@ public sealed class EfProtocolRecorder(
                 var category = connectionCategory ?? AiConnectionModelCategory.Default;
                 var effectiveModelId = modelId ?? job.AiModel ?? UnknownModelId;
                 var modelInferred = modelId is null && job.AiModel is not null;
-                // Prefer the caller's logical model (an out-of-loop call may use a different role than the pass);
-                // fall back to the pass's role when the caller reused the pass runtime and didn't specify one.
+                // NOSONAR — the caller's logical model wins, because an out-of-loop call may use a different
+                // role than the pass. The pass's role is the fallback when the caller reused the pass
+                // runtime without naming one.
                 var effectiveLogicalModelName = logicalModelName ?? protocol.LogicalModelName;
                 job.AccumulateTierTokens(
                     category,

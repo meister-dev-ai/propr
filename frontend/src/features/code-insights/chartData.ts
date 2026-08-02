@@ -47,10 +47,10 @@ export function formatRatio(value: number | null | undefined): string {
  * single type is followable across periods, which a band in a stack is not.
  */
 export function buildTypeChartData(series: CodeInsightTypeSeries, kind: 'bar' | 'line' = 'bar'): ChartData {
-  const labels = Array.from(new Set(series.points.map((point) => point.bucketStart))).sort()
+  const labels = Array.from(new Set(series.points.map((point) => point.bucketStart))).sort((a, b) => a.localeCompare(b))
   const keys = series.keys.length > 0
     ? series.keys
-    : Array.from(new Set(series.points.map((point) => point.key))).sort()
+    : Array.from(new Set(series.points.map((point) => point.key))).sort((a, b) => a.localeCompare(b))
 
   const byKey = new Map<string, Map<string, number>>()
   for (const point of series.points) {

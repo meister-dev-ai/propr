@@ -256,7 +256,7 @@ function extractValidationMessage(error: unknown, fallback: string): string {
 /** True when a patch response did not yield a client to apply (network error, 4xx, or empty body).
  * Typed loosely so it accepts both the service-interface shape and openapi-fetch's raw response. */
 function isFailedPatch(result: { data?: unknown; error?: unknown; response?: Response | { status?: number; ok?: boolean } }): boolean {
-  return !!result.error || !result.data || (result.response !== undefined && result.response.ok === false)
+  return !!result.error || !result.data || result.response?.ok === false
 }
 
 /** Two pass lists are equal when they carry the same ordered (configured-model id, lens, scope, shadow,

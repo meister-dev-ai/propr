@@ -166,7 +166,7 @@ const route = useRoute()
 const router = useRouter()
 const vm = useTenantSettingsViewModel()
 
-const { getCapability, isCapabilityAvailable } = useSession()
+const { isCapabilityAvailable } = useSession()
 const isBudgetingAvailable = computed(() => isCapabilityAvailable('budgeting'))
 
 // The System tenant owns no connections, catalog or policy of its own, so those sections are not offered for it
@@ -259,9 +259,6 @@ watch(activeSection, (section) => {
   const navigate = typeof router.replace === 'function' ? router.replace : router.push
   navigate({ query })
 })
-
-// Referenced for the capability message the overview shows when SSO is unavailable.
-void getCapability
 </script>
 
 <style scoped>

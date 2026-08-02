@@ -184,46 +184,47 @@ function value(event: Event): string {
 
 function onRepositoryChange(event: Event): void {
   const id = value(event)
-  void (id ? vm.selectRepository(id) : vm.clearRepository())
+  const pending = id ? vm.selectRepository(id) : vm.clearRepository()
+  pending.catch(console.error)
 }
 
 function onTypeDrill(coreType: string): void {
-  void vm.openDrill({ title: `Findings typed “${coreType || 'untyped'}”`, coreType })
+  vm.openDrill({ title: `Findings typed “${coreType || 'untyped'}”`, coreType }).catch(console.error)
 }
 
 function onScopeDrill(row: CodeInsightConcentrationRow): void {
   const label = row.filePath ?? (row.pullRequestId ? `#${row.pullRequestId}` : row.repositoryId ?? 'this client')
-  void vm.openDrill({
+  vm.openDrill({
     title: `Findings in ${label}`,
     repositoryId: row.repositoryId,
     filePath: row.filePath,
     pullRequestId: row.pullRequestId,
-  })
+  }).catch(console.error)
 }
 
 function onHotspotDrill(target: { filePath: string; symbolName: string | null }): void {
   // The hotspot number is a whole history, so the findings behind it are too, including inside one review.
   const where = target.symbolName ? `${target.symbolName} (${target.filePath})` : target.filePath
-  void vm.openDrill({
+  vm.openDrill({
     title: `Findings in ${where} across every pull request`,
     filePath: target.filePath,
     symbolName: target.symbolName,
     acrossPullRequests: true,
-  })
+  }).catch(console.error)
 }
 
 function onHotspotGroupingChange(grouping: CodeInsightHotspotGrouping): void {
   vm.hotspotGrouping.value = grouping
-  void vm.loadHotspots()
+  vm.loadHotspots().catch(console.error)
 }
 
 function onGrainChange(grain: CodeInsightGrain): void {
   vm.concentrationGrain.value = grain
-  void vm.loadConcentration()
+  vm.loadConcentration().catch(console.error)
 }
 
 onMounted(() => {
-  void vm.load()
+  vm.load().catch(console.error)
 })
 </script>
 

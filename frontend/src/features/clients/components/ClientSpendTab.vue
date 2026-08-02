@@ -293,8 +293,8 @@ function formatDate(value: string | null | undefined): string {
 
 onMounted(() => {
     if (isBudgetingAvailable.value) {
-        void spend.loadConsumption()
-        void spend.loadHistory()
+        spend.loadConsumption().catch(console.error)
+        spend.loadHistory().catch(console.error)
     }
 })
 </script>

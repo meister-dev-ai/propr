@@ -460,6 +460,24 @@ function grantMockSpendReset(clientId: string): MockSpendReset | null {
 // Builds a representative budget-consumption payload for a period (the current month by default). Dates track the
 // real calendar so the picker + forecast read sensibly on any day; a past month returns full-month actuals with no
 // forecast.
+function mockSpentToDate(
+  elapsedDays: number,
+  projectedTargetUsd: number,
+  isCurrent: boolean,
+  month: number,
+  daysInMonth: number,
+): number {
+  if (elapsedDays === 0) {
+    return 0
+  }
+
+  if (isCurrent) {
+    return Math.round(((projectedTargetUsd * elapsedDays) / daysInMonth) * 100) / 100
+  }
+
+  return Math.round((40 + ((month * 7) % 55)) * 100) / 100
+}
+
 function buildMockBudgetConsumption(clientId: string, period?: string | null) {
   const now = new Date()
   const currentYear = now.getUTCFullYear()
@@ -490,11 +508,7 @@ function buildMockBudgetConsumption(clientId: string, period?: string | null) {
 
   const elapsedDays = isCurrent ? now.getUTCDate() : isPast ? daysInMonth : 0
   const projectedTargetUsd = noBudget ? 55 : 90
-  const spentToDateUsd = elapsedDays === 0
-    ? 0
-    : isCurrent
-      ? Math.round(((projectedTargetUsd * elapsedDays) / daysInMonth) * 100) / 100
-      : Math.round((40 + ((month * 7) % 55)) * 100) / 100
+  const spentToDateUsd = mockSpentToDate(elapsedDays, projectedTargetUsd, isCurrent, month, daysInMonth)
 
   const weights = Array.from({ length: elapsedDays }, (_, i) => 1 + (i % 4) * 0.5)
   const weightSum = weights.reduce((sum, w) => sum + w, 0) || 1
@@ -670,7 +684,7 @@ function buildMockTenantSpend(tenantId: string, months = 12) {
   const currentResets = clientIds.flatMap((id) => mockResetsFor(id, year, month))
   const lastResetAt = currentResets.length === 0
     ? null
-    : currentResets.map((reset) => reset.performedAt).sort().at(-1) ?? null
+    : currentResets.map((reset) => reset.performedAt).sort((a, b) => a.localeCompare(b)).at(-1) ?? null
   const projectedPeriodSpendUsd = Math.round(((spentToDateUsd / Math.max(day, 1)) * daysInMonth) * 100) / 100
 
   return {

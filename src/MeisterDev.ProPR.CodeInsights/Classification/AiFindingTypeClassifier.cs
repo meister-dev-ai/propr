@@ -180,11 +180,7 @@ internal sealed partial class AiFindingTypeClassifier(
             ? string.Concat(request.Message.AsSpan(0, MaxMessageChars), "\n…(truncated)")
             : request.Message;
 
-        var anchor = request.FilePath is null
-            ? "the pull request as a whole (no single file)"
-            : request.LineNumber is null
-                ? request.FilePath
-                : $"{request.FilePath}:{request.LineNumber.Value.ToString(CultureInfo.InvariantCulture)}";
+        var anchor = BuildAnchor(request);
 
         // Which pass produced the finding is the strongest available signal for the level axis: a
         // pull-request-wide pass looks across files by construction, so its findings are rarely statement-level.
@@ -345,5 +341,20 @@ internal sealed partial class AiFindingTypeClassifier(
         var start = text.IndexOf('{', StringComparison.Ordinal);
         var end = text.LastIndexOf('}');
         return start >= 0 && end > start ? text[start..(end + 1)] : null;
+    }
+
+    private static string BuildAnchor(FindingClassificationRequest request)
+    {
+        if (request.FilePath is null)
+        {
+            return "the pull request as a whole (no single file)";
+        }
+
+        if (request.LineNumber is null)
+        {
+            return request.FilePath;
+        }
+
+        return $"{request.FilePath}:{request.LineNumber.Value.ToString(CultureInfo.InvariantCulture)}";
     }
 }

@@ -107,7 +107,7 @@ defineExpose({ open, close })
 }
 
 /* Style slotted menu items (owned by the parent, so reach them via :slotted). */
-.overflow-menu-list :slotted(.overflow-menu-item) {
+.overflow-menu-list :slotted(.overflow-menu-item) { /* NOSONAR */
     display: flex;
     align-items: center;
     gap: 0.5rem;
@@ -123,11 +123,11 @@ defineExpose({ open, close })
     white-space: nowrap;
 }
 
-.overflow-menu-list :slotted(.overflow-menu-item:hover:not(:disabled)) {
+.overflow-menu-list :slotted(.overflow-menu-item:hover:not(:disabled)) { /* NOSONAR */
     background: rgba(255, 255, 255, 0.06);
 }
 
-.overflow-menu-list :slotted(.overflow-menu-item:disabled) {
+.overflow-menu-list :slotted(.overflow-menu-item:disabled) { /* NOSONAR */
     opacity: 0.6;
     cursor: not-allowed;
 }

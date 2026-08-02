@@ -183,7 +183,7 @@ public sealed class ModelCatalogRepositoryTests(PostgresContainerFixture fixture
         second.RemoteModelId = "second-model";
         await this.Seed(Global(input: 10m), second, TenantOverride(this._tenantId, input: 4m));
 
-        var provider = Assert.Single((await this.Sut().GetProvidersAsync()).Where(p => p.ProviderId == this._providerId));
+        var provider = Assert.Single(await this.Sut().GetProvidersAsync(), p => p.ProviderId == this._providerId);
 
         // Two global models; the override is a scoped view of one of them, not a third model.
         Assert.Equal(2, provider.ModelCount);

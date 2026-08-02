@@ -107,7 +107,9 @@ public sealed class CodeInsightModelUsageRecorderTests
 
         // The tokens are already spent. Failing the classification that spent them would trade a wrong number
         // for lost work.
-        await recorder.RecordAsync(ClientId, CreateRuntime(), CreateResponse(10, 5));
+        var exception = await Record.ExceptionAsync(() =>
+            recorder.RecordAsync(ClientId, CreateRuntime(), CreateResponse(10, 5)));
+        Assert.Null(exception);
     }
 
     private static ModelUsageRecorder CreateRecorder(DbContextOptions<MeisterProPRDbContext> options)

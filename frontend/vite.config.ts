@@ -63,6 +63,11 @@ export default defineConfig(({ mode }) => {
       environment: 'jsdom',
       globals: true,
       setupFiles: ['tests/setup.ts'],
+      // Mounting a view costs more than exercising it, so per-test wall time tracks how many jsdom
+      // environments are competing rather than how much work the test does. At the 5s default a test
+      // that passes on its own times out when the suite runs alongside a build, and it is a different
+      // test each time. Give the budget enough headroom that a timeout means a hang, not a busy machine.
+      testTimeout: 15000,
       exclude: [...configDefaults.exclude, 'tests/e2e/**'],
       server: {
         deps: {

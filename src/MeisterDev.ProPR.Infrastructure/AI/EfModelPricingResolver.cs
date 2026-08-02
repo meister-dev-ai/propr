@@ -2,6 +2,7 @@
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
 using MeisterDev.ProPR.Application.AI;
+using MeisterDev.ProPR.Application.DTOs;
 using MeisterDev.ProPR.Application.Interfaces;
 using MeisterDev.ProPR.Domain.Enums;
 using MeisterDev.ProPR.Domain.ValueObjects;
@@ -115,7 +116,8 @@ public sealed class EfModelPricingResolver(
         var scope = await db.AiConnectionProfiles
             .AsNoTracking()
             .Where(profile => profile.Id == connectionId)
-            .Select(profile => new { profile.ClientId, profile.TenantId })
+            .Select(profile => new ClientAndTenantIds(profile.ClientId, profile.TenantId))
+            .Cast<ClientAndTenantIds?>()
             .FirstOrDefaultAsync(ct)
             .ConfigureAwait(false);
 
@@ -128,11 +130,7 @@ public sealed class EfModelPricingResolver(
 
         // A profile belongs to a client or to a tenant. Either resolves the same three layers; which one is
         // asked simply follows who owns the connection the tokens were bought through.
-        var entries = scope.ClientId is { } clientId
-            ? await catalog.GetEffectiveForClientAsync(clientId, ct: ct).ConfigureAwait(false)
-            : scope.TenantId is { } tenantId
-                ? await catalog.GetEffectiveForTenantAsync(tenantId, ct: ct).ConfigureAwait(false)
-                : [];
+        var entries = await ResolveScopeEntriesAsync(catalog, scope, ct).ConfigureAwait(false);
 
         var candidates = ModelCatalogLayerPrecedence.NarrowToMostSpecific(
             entries.Where(entry => string.Equals(entry.RemoteModelId, remoteModelId, StringComparison.OrdinalIgnoreCase)));
@@ -173,4 +171,24 @@ public sealed class EfModelPricingResolver(
             _ => AiPurpose.ReviewDefault,
         };
     }
+
+    private static async Task<IReadOnlyList<AiModelCatalogEntryDto>> ResolveScopeEntriesAsync(
+        ModelCatalogRepository catalog,
+        ClientAndTenantIds scope,
+        CancellationToken ct)
+    {
+        if (scope.ClientId is { } clientId)
+        {
+            return await catalog.GetEffectiveForClientAsync(clientId, ct: ct).ConfigureAwait(false);
+        }
+
+        if (scope.TenantId is { } tenantId)
+        {
+            return await catalog.GetEffectiveForTenantAsync(tenantId, ct: ct).ConfigureAwait(false);
+        }
+
+        return [];
+    }
+
+    private sealed record ClientAndTenantIds(Guid? ClientId, Guid? TenantId);
 }

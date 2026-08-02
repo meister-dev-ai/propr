@@ -2,6 +2,7 @@
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
 using System.ClientModel;
+using System.Globalization;
 using System.Net;
 using System.Net.Sockets;
 using MeisterDev.Ai.Providers.Contracts;
@@ -169,7 +170,7 @@ public static class DriverFailureMapper
         }
 
         // The header also allows an HTTP date. A date already in the past yields no wait rather than a negative one.
-        return DateTimeOffset.TryParse(value, out var until)
+        return DateTimeOffset.TryParse(value, CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal, out var until)
             ? Max(until - DateTimeOffset.UtcNow, TimeSpan.Zero)
             : null;
     }

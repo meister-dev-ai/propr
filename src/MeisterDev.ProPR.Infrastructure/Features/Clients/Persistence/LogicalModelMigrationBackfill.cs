@@ -217,7 +217,8 @@ public sealed class LogicalModelMigrationBackfill(
             return preferred;
         }
 
-        for (var suffix = 2;; suffix++)
+        var suffix = 2;
+        while (true)
         {
             var candidate = $"{preferred}-{suffix}";
             if (candidate.Length > 100)
@@ -229,6 +230,8 @@ public sealed class LogicalModelMigrationBackfill(
             {
                 return candidate;
             }
+
+            suffix++;
         }
     }
 }

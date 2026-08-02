@@ -58,7 +58,7 @@ public sealed class ClientBudgetConsumptionService(
         // month, no forecast. Future month: nothing has been spent yet.
         var isCurrentMonth = periodStart == currentMonthStart;
         var isFutureMonth = periodStart > currentMonthStart;
-        var asOf = isCurrentMonth ? today : isFutureMonth ? periodStart : periodEnd;
+        var asOf = ResolveAsOf(periodStart, currentMonthStart, today, periodEnd);
 
         IReadOnlyList<ClientTokenUsageSample> samples = isFutureMonth
             ? []
@@ -188,5 +188,20 @@ public sealed class ClientBudgetConsumptionService(
         }
 
         return new ClientBudgetHistoryDto(clientId, caps.MonthlySoftCapUsd, caps.MonthlyHardCapUsd, months);
+    }
+
+    private static DateOnly ResolveAsOf(DateOnly periodStart, DateOnly currentMonthStart, DateOnly today, DateOnly periodEnd)
+    {
+        if (periodStart == currentMonthStart)
+        {
+            return today;
+        }
+
+        if (periodStart > currentMonthStart)
+        {
+            return periodStart;
+        }
+
+        return periodEnd;
     }
 }

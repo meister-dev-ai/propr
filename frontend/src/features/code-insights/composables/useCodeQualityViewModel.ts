@@ -184,11 +184,7 @@ export function useCodeQualityViewModel(pinned: CodeQualityScope = {}) {
       id: row.repositoryId,
       // The name a person recognises, falling back to the provider's identifier, which for several providers is
       // a bare number, so it is the last resort rather than the default.
-      label: row.repositoryName
-        ? (nameCounts.get(row.repositoryName) ?? 0) > 1
-          ? `${row.repositoryName} (${row.repositoryId})`
-          : row.repositoryName
-        : row.repositoryId,
+      label: repositoryLabel(row, nameCounts),
       count: row.count,
       clientId: row.clientId,
       clientName: row.clientName,
@@ -356,4 +352,17 @@ export function useCodeQualityViewModel(pinned: CodeQualityScope = {}) {
     openDrill,
     closeDrill,
   }
+}
+
+function repositoryLabel(
+  row: { repositoryId: string; repositoryName: string | null },
+  nameCounts: Map<string, number>,
+): string {
+  if (!row.repositoryName) {
+    return row.repositoryId
+  }
+
+  return (nameCounts.get(row.repositoryName) ?? 0) > 1
+    ? `${row.repositoryName} (${row.repositoryId})`
+    : row.repositoryName
 }

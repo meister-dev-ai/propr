@@ -306,7 +306,9 @@ public sealed class CodeInsightDispositionServiceTests
             .ThrowsAsync(new InvalidOperationException("the database is unreachable"));
 
         // No exception reaches the caller: this is a side-write on the crawl's thread.
-        await harness.Service.HandleThreadResolvedAsync(Resolved(ThreadResolutionIntent.ClaimsFix, ThreadAnchorCodeChange.Changed));
+        var exception = await Record.ExceptionAsync(() =>
+            harness.Service.HandleThreadResolvedAsync(Resolved(ThreadResolutionIntent.ClaimsFix, ThreadAnchorCodeChange.Changed)));
+        Assert.Null(exception);
     }
 
     private static ThreadResolvedDomainEvent Resolved(

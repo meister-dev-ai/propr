@@ -161,7 +161,7 @@ public static class CodeInsightMetricCalculator
     }
 
     /// <summary>
-    ///     Harmonic mean of two ratios. Undefined when either input is undefined; zero when both are zero,
+    ///     Harmonic mean of two ratios. Undefined when either input is undefined; zero when either is zero,
     ///     which is a real result (the reviewer was wrong about everything and missed things) rather than an
     ///     absence of one.
     /// </summary>
@@ -172,7 +172,13 @@ public static class CodeInsightMetricCalculator
             return null;
         }
 
-        var sum = left.Value + right.Value;
-        return sum == 0d ? 0d : 2d * left.Value * right.Value / sum;
+        // Precision and recall are non-negative, so either one being zero drives the harmonic mean to zero.
+        // Taking that branch first keeps the divisor away from zero without comparing a double for equality.
+        if (left.Value <= 0d || right.Value <= 0d)
+        {
+            return 0d;
+        }
+
+        return 2d * left.Value * right.Value / (left.Value + right.Value);
     }
 }

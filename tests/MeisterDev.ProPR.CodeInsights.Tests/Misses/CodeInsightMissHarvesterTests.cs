@@ -274,7 +274,9 @@ public sealed class CodeInsightMissHarvesterTests
                 Arg.Any<CancellationToken>())
             .ThrowsAsync(new InvalidOperationException("the database is unreachable"));
 
-        await harness.Harvester.HandleThreadObservedAsync(HumanThread());
+        var exception = await Record.ExceptionAsync(() =>
+            harness.Harvester.HandleThreadObservedAsync(HumanThread()));
+        Assert.Null(exception);
     }
 
     private static ThreadUpdatedEvent BlankThread(bool withComments = true)

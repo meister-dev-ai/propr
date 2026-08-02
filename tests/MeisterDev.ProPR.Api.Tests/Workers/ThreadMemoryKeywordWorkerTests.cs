@@ -59,7 +59,9 @@ public sealed class ThreadMemoryKeywordWorkerTests
     {
         // The sweeper lives behind the same database gate as the rest of its module. A host with a budget set
         // but no sweeper registered must log and carry on, not fail to start.
-        await RunAsync(new ThreadMemoryKeywordOptions { BackfillMax = 5 }, ScopeFactoryFor(sweeper: null), signal: null);
+        var exception = await Record.ExceptionAsync(() =>
+            RunAsync(new ThreadMemoryKeywordOptions { BackfillMax = 5 }, ScopeFactoryFor(sweeper: null), signal: null));
+        Assert.Null(exception);
     }
 
     [Fact]

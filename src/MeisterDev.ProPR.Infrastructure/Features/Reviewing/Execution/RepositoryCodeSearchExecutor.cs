@@ -42,9 +42,9 @@ internal static class RepositoryCodeSearchExecutor
         }
 
         var regexOutcome = await TryBuildSearchRegexAsync(queryText, searchMode, ct);
-        if (regexOutcome.InvalidRequest is not null)
+        if (regexOutcome.ErrorMessage is not null)
         {
-            return InvalidRequest(request, searchMode, filters, regexOutcome.InvalidRequest);
+            return InvalidRequest(request, searchMode, filters, regexOutcome.ErrorMessage);
         }
 
         if (regexOutcome.UnsupportedMode)
@@ -88,7 +88,7 @@ internal static class RepositoryCodeSearchExecutor
             state,
             searchMode,
             queryText,
-            regexOutcome.Regex,
+            regexOutcome.Pattern,
             candidateResolution.Branch,
             maxFileSizeBytes,
             confirmRelatedSymbolStructurally,
@@ -399,7 +399,7 @@ internal static class RepositoryCodeSearchExecutor
         Terminated,
     }
 
-    private sealed record RegexBuildOutcome(Regex? Regex, string? InvalidRequest, bool UnsupportedMode);
+    private sealed record RegexBuildOutcome(Regex? Pattern, string? ErrorMessage, bool UnsupportedMode);
 
     private static CodeSearchResult InvalidRequest(
         CodeSearchRequest request,

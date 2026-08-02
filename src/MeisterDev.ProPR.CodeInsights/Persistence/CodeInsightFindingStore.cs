@@ -109,7 +109,7 @@ public sealed class CodeInsightFindingStore(
 
                     if (existing.TryGetValue(finding.Ordinal, out var current))
                     {
-                        // The provider identifiers are the only fields a re-post can legitimately fill in;
+                        // The provider identifiers are the only fields a re-post can legitimately fill in; // NOSONAR
                         // the rest of the record is fixed by the increment that produced it. Never overwrite a
                         // known id with null: a later pass that posted nothing must not erase the join key a
                         // disposition consumer depends on.

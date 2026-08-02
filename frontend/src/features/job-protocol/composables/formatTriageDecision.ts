@@ -13,15 +13,14 @@ export function formatTriageDecision(details: TriageDecisionEventDetails): Triag
         tier: (details.tier ?? '').trim() || 'Unknown',
         why: (details.why ?? '').trim() || '—',
         security: details.securityFlagged ? 'Security-flagged' : 'Not flagged',
-        blastRadius: formatBlastRadius(details.fanOutKind, details.fanOutCount),
+        blastRadius: formatBlastRadius(details.fanOutKind, details.fanOutCount ?? 0),
     }
 }
 
-function formatBlastRadius(kind: string | null | undefined, count: number | null | undefined): string {
+function formatBlastRadius(kind: string | null | undefined, count: number = 0): string {
     switch (kind) {
         case 'Measured': {
-            const n = count ?? 0
-            return `${n} caller${n === 1 ? '' : 's'}`
+            return `${count} caller${count === 1 ? '' : 's'}`
         }
         case 'Truncated':
             return 'many callers (truncated)'

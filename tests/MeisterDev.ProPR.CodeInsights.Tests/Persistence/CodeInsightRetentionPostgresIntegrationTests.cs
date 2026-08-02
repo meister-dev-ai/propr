@@ -17,7 +17,6 @@ using NSubstitute;
 using FactAttribute = Xunit.SkippableFactAttribute;
 using MeisterDev.ProPR.CodeInsights.Contracts;
 using MeisterDev.ProPR.CodeInsights.Persistence;
-using MeisterDev.ProPR.TestSupport;
 
 namespace MeisterDev.ProPR.CodeInsights.Tests.Persistence;
 

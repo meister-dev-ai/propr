@@ -575,7 +575,12 @@ public sealed class AiConnectionRepository(
         }
 
         var envelope = ProviderSecretEnvelope.Decode(secretProtectionCodec.Unprotect(secret, SecretPurpose), authMode);
-        return envelope.SingleValue ?? (envelope.Fields.Count == 0 ? null : envelope.Encode());
+        return envelope.SingleValue ?? ResolveFallbackSecret(envelope);
+    }
+
+    private static string? ResolveFallbackSecret(ProviderSecretEnvelope envelope)
+    {
+        return envelope.Fields.Count == 0 ? null : envelope.Encode();
     }
 
     private async Task<TResult> WithReadDbAsync<TResult>(
@@ -809,31 +814,6 @@ public sealed class AiConnectionRepository(
         // One shared definition of the chain: it is consulted here and by the logical-model role lookup, and two
         // copies would drift into a purpose silently running on a different model than an operator was told.
         return AiPurposeFallbacks.Next(purpose);
-    }
-
-    private static bool IsBindingValid(AiPurpose purpose, AiConfiguredModelRecord model, AiPurposeBindingRecord binding)
-    {
-        var supportsChat = model.OperationKinds.Contains(AiOperationKind.Chat.ToString(), StringComparer.Ordinal);
-        var supportsEmbedding = model.OperationKinds.Contains(AiOperationKind.Embedding.ToString(), StringComparer.Ordinal);
-
-        if (purpose == AiPurpose.EmbeddingDefault)
-        {
-            if (!supportsEmbedding || !model.EmbeddingDimensions.HasValue || model.EmbeddingDimensions.Value <= 0)
-            {
-                return false;
-            }
-
-            return string.Equals(binding.ProtocolMode, AiProtocolMode.Auto.ToString(), StringComparison.Ordinal) ||
-                   string.Equals(binding.ProtocolMode, AiProtocolMode.Embeddings.ToString(), StringComparison.Ordinal);
-        }
-
-        if (!supportsChat)
-        {
-            return false;
-        }
-
-        return string.Equals(binding.ProtocolMode, AiProtocolMode.Auto.ToString(), StringComparison.Ordinal) ||
-               model.SupportedProtocolModes.Contains(binding.ProtocolMode, StringComparer.Ordinal);
     }
 
     private bool RequiresVerificationReset(

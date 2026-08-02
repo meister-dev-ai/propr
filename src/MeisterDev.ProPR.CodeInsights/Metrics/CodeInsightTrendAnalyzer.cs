@@ -144,13 +144,7 @@ public static class CodeInsightTrendAnalyzer
         var pairs = values.Count * (values.Count - 1) / 2.0;
         var pValue = PValue(s, values);
 
-        var verdict = pValue > SignificanceLevel
-            ? CodeInsightTrendVerdict.Flat
-            : s > 0
-                ? CodeInsightTrendVerdict.Rising
-                : s < 0
-                    ? CodeInsightTrendVerdict.Falling
-                    : CodeInsightTrendVerdict.Flat;
+        var verdict = ClassifyTrend(pValue, s);
 
         return new CodeInsightTrend(verdict, s / pairs, pValue, SensSlope(values), values.Count);
     }
@@ -170,13 +164,44 @@ public static class CodeInsightTrendAnalyzer
         }
 
         // The continuity correction: S is a discrete statistic being read off a continuous distribution.
-        var z = s > 0
-            ? (s - 1) / Math.Sqrt(variance)
-            : s < 0
-                ? (s + 1) / Math.Sqrt(variance)
-                : 0;
+        var z = ContinuityCorrectedZ(s, variance);
 
         return Math.Clamp(2 * (1 - StandardNormalCdf(Math.Abs(z))), 0, 1);
+    }
+
+    private static double ContinuityCorrectedZ(int s, double variance)
+    {
+        if (s > 0)
+        {
+            return (s - 1) / Math.Sqrt(variance);
+        }
+
+        if (s < 0)
+        {
+            return (s + 1) / Math.Sqrt(variance);
+        }
+
+        return 0;
+    }
+
+    private static CodeInsightTrendVerdict ClassifyTrend(double pValue, int s)
+    {
+        if (pValue > SignificanceLevel)
+        {
+            return CodeInsightTrendVerdict.Flat;
+        }
+
+        if (s > 0)
+        {
+            return CodeInsightTrendVerdict.Rising;
+        }
+
+        if (s < 0)
+        {
+            return CodeInsightTrendVerdict.Falling;
+        }
+
+        return CodeInsightTrendVerdict.Flat;
     }
 
     private static double TieCorrection(IReadOnlyList<double> values)

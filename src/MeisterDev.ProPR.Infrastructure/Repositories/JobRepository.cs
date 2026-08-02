@@ -47,11 +47,9 @@ public sealed partial class JobRepository(
             // Bounded server-side. The list cell shows an opening excerpt; carrying the whole summary
             // made it the overwhelming majority of the response, and a reader who wants the rest opens
             // the row, which fetches it from the job detail endpoint.
-            j.ResultSummary == null
-                ? null
-                : j.ResultSummary.Length > ResultSummaryExcerptLength
-                    ? j.ResultSummary.Substring(0, ResultSummaryExcerptLength)
-                    : j.ResultSummary,
+            j.ResultSummary == null || j.ResultSummary.Length <= ResultSummaryExcerptLength
+                ? j.ResultSummary
+                : j.ResultSummary.Substring(0, ResultSummaryExcerptLength),
             j.ResultSummary != null && j.ResultSummary != "",
             j.ErrorMessage,
             j.TotalInputTokensAggregated ?? j.Protocols.Sum(p => p.TotalInputTokens) ?? 0L,

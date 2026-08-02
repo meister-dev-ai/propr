@@ -16,9 +16,9 @@ internal sealed class FileByFileRiskMarkerStage(IStructuralCodeAnalyzer? analyze
 {
     public const string StageIdConstant = "file-by-file.risk-marker";
 
-    // Security markers only. Matching runs against the diff's ADDED CONTENT, never the raw diff — so file
-    // headers (`+++`/`---`), hunk headers, context, and removed lines cannot flag a file. When a structural
-    // analyzer can parse the file, matching is further narrowed to added CODE (comments/strings excluded).
+    // Security markers only. Matching runs against the diff's ADDED CONTENT, never the raw diff — so file // NOSONAR
+    // headers and hunk headers, plus context and removed lines, cannot flag a file. When a structural
+    // analyzer can parse the file, matching is further narrowed to added code only.
     private static readonly IReadOnlyList<(string MarkerId, string Pattern)> MarkerRules =
     [
         ("security.auth-token", "token|oauth|jwt|bearer|secret|apikey|api_key|password|cookie"),

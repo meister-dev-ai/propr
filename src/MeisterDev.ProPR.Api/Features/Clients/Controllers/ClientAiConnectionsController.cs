@@ -468,17 +468,6 @@ public sealed partial class ClientAiConnectionsController(
         }
     }
 
-    private static AiConnectionProbeOptionsDto ToProbeOptions(AiConnectionDto connection)
-    {
-        return new AiConnectionProbeOptionsDto(
-            connection.ProviderKind,
-            connection.BaseUrl,
-            connection.AuthMode,
-            connection.Secret,
-            connection.DefaultHeaders,
-            connection.DefaultQueryParams);
-    }
-
     private AiConnectionWriteRequestDto? TryBuildWriteRequest(CreateAiConnectionRequest request)
     {
         var probeOptions = this.TryBuildProbeOptions(

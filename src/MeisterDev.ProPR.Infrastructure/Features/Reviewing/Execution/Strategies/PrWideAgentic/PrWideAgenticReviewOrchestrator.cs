@@ -83,7 +83,7 @@ public sealed partial class PrWideAgenticReviewOrchestrator(
         {
             var (plan, planInputTokens, planOutputTokens, planAiCalls, planCachedInputTokens, planCacheWriteTokens, planReasoningTokens) =
                 await this.CreatePlanAsync(job, pr, prWideContext, overrideClient, ct);
-            tokens.AddPlan(planInputTokens, planOutputTokens, planAiCalls, planCachedInputTokens, planCacheWriteTokens, planReasoningTokens);
+            tokens.AddStage(planInputTokens, planOutputTokens, planAiCalls, planCachedInputTokens, planCacheWriteTokens, planReasoningTokens);
 
             var (investigations, investigationInputTokens, investigationOutputTokens, investigationAiCalls, investigationToolCalls,
                     investigationCachedInputTokens, investigationCacheWriteTokens, investigationReasoningTokens) =
@@ -95,7 +95,7 @@ public sealed partial class PrWideAgenticReviewOrchestrator(
             var (synthesis, synthesisInputTokens, synthesisOutputTokens, synthesisAiCalls, synthesisCachedInputTokens, synthesisCacheWriteTokens,
                     synthesisReasoningTokens) =
                 await this.RecordSynthesisAsync(job, prWideContext, plan, investigations, overrideClient, ct);
-            tokens.AddSynthesis(
+            tokens.AddStage(
                 synthesisInputTokens, synthesisOutputTokens, synthesisAiCalls, synthesisCachedInputTokens, synthesisCacheWriteTokens,
                 synthesisReasoningTokens);
 
@@ -201,7 +201,7 @@ public sealed partial class PrWideAgenticReviewOrchestrator(
         public int AiCalls;
         public int ToolCalls;
 
-        public void AddPlan(long inputTokens, long outputTokens, int aiCalls, long cachedInputTokens, long cacheWriteTokens, long reasoningTokens)
+        public void AddStage(long inputTokens, long outputTokens, int aiCalls, long cachedInputTokens, long cacheWriteTokens, long reasoningTokens)
         {
             InputTokens += inputTokens;
             OutputTokens += outputTokens;
@@ -222,16 +222,6 @@ public sealed partial class PrWideAgenticReviewOrchestrator(
             ReasoningTokens += reasoningTokens;
             AiCalls += aiCalls;
             ToolCalls += toolCalls;
-        }
-
-        public void AddSynthesis(long inputTokens, long outputTokens, int aiCalls, long cachedInputTokens, long cacheWriteTokens, long reasoningTokens)
-        {
-            InputTokens += inputTokens;
-            OutputTokens += outputTokens;
-            CachedInputTokens += cachedInputTokens;
-            CacheWriteTokens += cacheWriteTokens;
-            ReasoningTokens += reasoningTokens;
-            AiCalls += aiCalls;
         }
     }
 
@@ -1770,9 +1760,14 @@ public sealed partial class PrWideAgenticReviewOrchestrator(
         }
 
         var totalLines = CountLines(changedFile.FullContent);
-        return totalLines > 0 && finding.LineNumber.Value > totalLines
+        return ShouldStripAnchor(finding.LineNumber.Value, totalLines)
             ? WithPublicationAnchor(finding, null, null)
             : finding;
+    }
+
+    private static bool ShouldStripAnchor(int lineNumber, int totalLines)
+    {
+        return totalLines > 0 && lineNumber > totalLines;
     }
 
     private static ChangedFile ResolveRequestFile(CandidateReviewFinding finding, PullRequest pr, ChangedFile fallbackFile)

@@ -377,11 +377,6 @@ internal sealed partial class ToolAwareAiReviewCore(
             ApplySessionModeToOptions(setup.ChatOptions, state);
             var messagesToSend = BuildMessagesForCurrentTurn(state);
 
-            // Capture input sample BEFORE AddRange so we get the last message that was sent to the AI.
-            // Tool result messages have FunctionResultContent (no .Text), so serialize them explicitly.
-            var inputSample = GetInputSample(messagesToSend);
-            var systemPrompt = GetSystemPrompt(messagesToSend);
-
             var response = await ExecuteSingleTurnAsync(
                 state,
                 systemContext,
@@ -392,10 +387,12 @@ internal sealed partial class ToolAwareAiReviewCore(
                 getResponse,
                 cancellationToken);
 
-            // Re-capture input sample + system prompt in case the downgrade path rebuilt
-            // the message list inside ExecuteSingleTurnAsync.
-            inputSample = GetInputSample(messagesToSend);
-            systemPrompt = GetSystemPrompt(messagesToSend);
+            // Sampled after the turn rather than before it, because the downgrade path can rebuild the
+            // message list inside ExecuteSingleTurnAsync and what the protocol has to show is what actually
+            // reached the model. Tool result messages carry FunctionResultContent instead of .Text, so
+            // GetInputSample serialises them explicitly.
+            var inputSample = GetInputSample(messagesToSend);
+            var systemPrompt = GetSystemPrompt(messagesToSend);
 
             var turnOutcome = await ProcessTurnResponseAsync(
                 state,
@@ -415,12 +412,11 @@ internal sealed partial class ToolAwareAiReviewCore(
                 break;
             }
 
-            // Both the tool-call branch (state.Iteration advanced inside HandleToolCallsIfAnyAsync's
-            // pre-refactor shape) and the "still investigating" branch (low confidence, no loop_complete)
-            // need to advance state.Iteration so the while condition eventually fires. The pre-refactor
-            // ReviewAsync had state.Iteration++ at the end of the while body; restoring that here keeps
-            // a stuck "still investigating" response from spinning the loop forever at the same iteration
-            // and growing state.Messages / state.TurnHistory / state.ConfidenceSnapshots without bound.
+            // Both the tool-call branch and the "still investigating" branch (low confidence, no loop_complete) // NOSONAR
+            // need to advance the iteration counter so the while condition eventually fires. The pre-refactor
+            // shape bumped the iteration at the end of the while body; restoring that here keeps a stuck
+            // "still investigating" response from spinning the loop forever at the same iteration and
+            // growing messages, turn history, and confidence snapshots without bound.
             state.Iteration++;
         }
 

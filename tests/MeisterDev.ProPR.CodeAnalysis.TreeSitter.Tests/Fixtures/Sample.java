@@ -6,7 +6,7 @@ import java.util.List;
 
 public class Sample {
 
-    private static final String PREAMBLE_MARKER = "preamble-marker";
+    private static final String PREAMBLE_MARKER = "preamble-marker"; // NOSONAR — the fixture is parsed, never compiled, so nothing reads this field; it mirrors the preamble marker every other fixture carries.
 
     public static int shallowUtility() {
         return 1;

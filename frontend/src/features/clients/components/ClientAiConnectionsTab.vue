@@ -791,9 +791,6 @@ const guidance = computed(() => providerGuidance(editor.providerKind))
 .ai-form-grid {
   display: grid;
   gap: 0.85rem;
-}
-
-.ai-form-grid {
   grid-template-columns: repeat(2, minmax(0, 1fr));
   margin-top: 1rem;
 }

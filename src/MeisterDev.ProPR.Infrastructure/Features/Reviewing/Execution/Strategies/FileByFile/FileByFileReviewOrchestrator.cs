@@ -211,7 +211,7 @@ internal sealed partial class FileByFileReviewOrchestrator(
             ReviewReasoningEffort effort;
             try
             {
-                // A pass that names a logical model resolves through the catalog (effort comes from the role);
+                // A pass that names a logical model resolves through the catalog (effort comes from the role) // NOSONAR
                 // legacy passes bind a concrete model and carry their own per-pass effort.
                 if (!string.IsNullOrEmpty(pass.LogicalModelName) && logicalModelResolver is not null)
                 {
@@ -446,7 +446,7 @@ internal sealed partial class FileByFileReviewOrchestrator(
             var first = line[0];
             if (first is '+' or '-')
             {
-                // Exclude +++ / --- diff-header lines
+                // Exclude +++ / --- diff-header lines // NOSONAR
                 if (line.Length >= 3 && line[1] == first && line[2] == first)
                 {
                     continue;

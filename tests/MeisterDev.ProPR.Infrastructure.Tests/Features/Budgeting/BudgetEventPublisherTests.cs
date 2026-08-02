@@ -65,13 +65,14 @@ public sealed class BudgetEventPublisherTests
         var publisher = this.CreatePublisher();
 
         // Must not throw.
-        await publisher.PublishAsync(
+        var exception = await Record.ExceptionAsync(() => publisher.PublishAsync(
             new BudgetEventNotification(
                 Guid.NewGuid(),
                 BudgetEventType.SoftCapReached,
                 BudgetScopeKind.ClientMonthly,
                 80m,
-                80m));
+                80m)));
+        Assert.Null(exception);
     }
 
     private sealed class FixedTimeProvider(DateTimeOffset now) : TimeProvider
