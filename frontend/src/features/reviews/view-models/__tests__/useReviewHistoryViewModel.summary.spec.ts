@@ -13,6 +13,33 @@ vi.mock('@/composables/useSession', () => ({
 import { useReviewHistoryViewModel } from '@/features/reviews/view-models/useReviewHistoryViewModel'
 
 type JobListItem = components['schemas']['JobListItem']
+type PullRequestHistoryResponse = components['schemas']['PullRequestHistoryResponse']
+
+/** Wraps job rows into the single server-grouped pull request they belong to. */
+function historyPage(items: JobListItem[], total = 1): PullRequestHistoryResponse {
+  const first = items[0]
+  return {
+    total,
+    items: items.length === 0 ? [] : [{
+      providerScopePath: first.providerScopePath ?? 'https://dev.azure.com/org',
+      providerProjectKey: first.providerProjectKey ?? 'proj',
+      repositoryId: first.repositoryId ?? 'repo-1',
+      pullRequestId: first.pullRequestId ?? 42,
+      clientId: first.clientId ?? 'client-1',
+      prTitle: first.prTitle ?? null,
+      prRepositoryName: first.prRepositoryName ?? null,
+      prSourceBranch: first.prSourceBranch ?? null,
+      prTargetBranch: first.prTargetBranch ?? null,
+      latestActivityAt: first.submittedAt ?? '2026-05-01T10:00:00Z',
+      totalInputTokens: 0,
+      totalOutputTokens: 0,
+      totalEstimatedCostUsd: null,
+      costIsApproximate: false,
+      jobs: items,
+    }],
+  } as PullRequestHistoryResponse
+}
+
 
 function completedItem(overrides: Partial<JobListItem> = {}): JobListItem {
   return {
@@ -41,7 +68,7 @@ describe('useReviewHistoryViewModel summary modal', () => {
     const vm = useReviewHistoryViewModel({
       autoLoad: false,
       reviewHistoryService: {
-        listJobs: vi.fn().mockResolvedValue({ items: [completedItem()] }),
+        listPullRequestHistory: vi.fn().mockResolvedValue(historyPage([completedItem()])),
         getJobDetail,
       },
     })
@@ -59,7 +86,7 @@ describe('useReviewHistoryViewModel summary modal', () => {
     const vm = useReviewHistoryViewModel({
       autoLoad: false,
       reviewHistoryService: {
-        listJobs: vi.fn().mockResolvedValue({ items: [completedItem()] }),
+        listPullRequestHistory: vi.fn().mockResolvedValue(historyPage([completedItem()])),
         getJobDetail: vi.fn().mockRejectedValue(new Error('offline')),
       },
     })
@@ -77,14 +104,14 @@ describe('useReviewHistoryViewModel summary modal', () => {
     const vm = useReviewHistoryViewModel({
       autoLoad: false,
       reviewHistoryService: {
-        listJobs: vi.fn().mockResolvedValue({
-          items: [completedItem({
+        listPullRequestHistory: vi.fn().mockResolvedValue(historyPage([
+          completedItem({
             status: 'failed',
             hasResultSummary: false,
             resultSummaryExcerpt: null,
             errorMessage: 'the provider returned 429',
-          })],
-        }),
+          }),
+        ])),
         getJobDetail,
       },
     })
@@ -101,9 +128,9 @@ describe('useReviewHistoryViewModel summary modal', () => {
     const vm = useReviewHistoryViewModel({
       autoLoad: false,
       reviewHistoryService: {
-        listJobs: vi.fn().mockResolvedValue({
-          items: [completedItem({ status: 'processing', hasResultSummary: false, resultSummaryExcerpt: null })],
-        }),
+        listPullRequestHistory: vi.fn().mockResolvedValue(historyPage([
+          completedItem({ status: 'processing', hasResultSummary: false, resultSummaryExcerpt: null }),
+        ])),
         getJobDetail,
       },
     })

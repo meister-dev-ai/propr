@@ -180,6 +180,7 @@
             <div v-if="totalPages > 1" class="pagination-controls">
                 <div class="pagination-info">
                     Page {{ currentPage }} of {{ totalPages }}
+                    <span class="pagination-total">{{ totalGroups.toLocaleString() }} pull requests</span>
                 </div>
                 <div class="pagination-buttons">
                     <button 
@@ -248,6 +249,7 @@ const {
     groups,
     expandedGroups,
     currentPage,
+    totalGroups,
     isSummaryModalOpen,
     selectedSummary,
     summaryLoading,
@@ -795,6 +797,11 @@ function prReviewLink(group: PrGroup): object {
     border: 1px solid var(--color-border);
     border-radius: var(--radius-lg);
     background: var(--color-surface);
+}
+
+.pagination-total {
+    margin-left: 0.5rem;
+    opacity: 0.7;
 }
 
 .pagination-info {

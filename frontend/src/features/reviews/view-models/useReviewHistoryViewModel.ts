@@ -8,12 +8,15 @@ import {
   blockPr,
   getJobDetail,
   listBlockedPrs,
-  listJobs,
+  listPullRequestHistory,
   restartJob,
   stopJob,
   unblockPr,
   type BlockedPullRequestDto,
   type JobDetailResponse,
+  type ListPullRequestHistoryParams,
+  type PullRequestHistoryItem,
+  type PullRequestHistoryResponse,
   type PullRequestIdentity,
 } from '@/services/jobsService'
 import type { components } from '@/types'
@@ -41,7 +44,7 @@ export interface PrGroup {
 }
 
 export interface ReviewHistoryService {
-  listJobs: (clientId?: string) => Promise<{ items: JobListItem[] }>
+  listPullRequestHistory: (params: ListPullRequestHistoryParams) => Promise<PullRequestHistoryResponse>
   getJobDetail: (jobId: string) => Promise<JobDetailResponse>
   restartJob: (jobId: string) => Promise<void>
   stopJob: (jobId: string) => Promise<void>
@@ -58,6 +61,7 @@ export interface ReviewHistoryViewModel {
   groups: Ref<PrGroup[]>
   expandedGroups: Ref<Set<string>>
   currentPage: Ref<number>
+  totalGroups: Ref<number>
   isSummaryModalOpen: Ref<boolean>
   selectedSummary: Ref<string>
   summaryLoading: Ref<boolean>
@@ -66,8 +70,8 @@ export interface ReviewHistoryViewModel {
   paginatedGroups: ComputedRef<PrGroup[]>
   openSummaryModal: (item: JobListItem) => Promise<void>
   toggleGroupExpanded: (key: string) => void
-  nextPage: () => void
-  previousPage: () => void
+  nextPage: () => Promise<void>
+  previousPage: () => Promise<void>
   refresh: () => Promise<void>
   visibleItems: (group: PrGroup) => JobListItem[]
   canInspectClient: (clientId: string | null | undefined) => boolean
@@ -93,15 +97,10 @@ export interface UseReviewHistoryViewModelOptions {
 const ITEMS_VISIBLE_DEFAULT = 3
 const ITEMS_PER_PAGE = 10
 
-async function defaultListJobs(clientId?: string): Promise<{ items: JobListItem[] }> {
-  const response = await listJobs({
-    limit: 500,
-    ...(clientId ? { clientId } : {}),
-  })
-
-  return {
-    items: response.items as unknown as JobListItem[],
-  }
+async function defaultListPullRequestHistory(
+  params: ListPullRequestHistoryParams,
+): Promise<PullRequestHistoryResponse> {
+  return listPullRequestHistory(params)
 }
 
 async function defaultGetJobDetail(jobId: string): Promise<JobDetailResponse> {
@@ -145,7 +144,8 @@ function identityForGroup(group: PrGroup): PullRequestIdentity {
 export function useReviewHistoryViewModel(options: UseReviewHistoryViewModelOptions = {}): ReviewHistoryViewModel {
   const { hasClientRole } = useSession()
   const clientId = options.clientId
-  const listJobsFn = options.reviewHistoryService?.listJobs ?? defaultListJobs
+  const listPullRequestHistoryFn =
+    options.reviewHistoryService?.listPullRequestHistory ?? defaultListPullRequestHistory
   const getJobDetailFn = options.reviewHistoryService?.getJobDetail ?? defaultGetJobDetail
   const restartJobFn = options.reviewHistoryService?.restartJob ?? defaultRestartJob
   const stopJobFn = options.reviewHistoryService?.stopJob ?? defaultStopJob
@@ -172,14 +172,14 @@ export function useReviewHistoryViewModel(options: UseReviewHistoryViewModelOpti
   const blockedByClient = ref<Record<string, string[]>>({})
   const loadedBlockedClients = new Set<string>()
 
-  const totalPages = computed(() => Math.ceil(groups.value.length / ITEMS_PER_PAGE))
-  const paginatedGroups = computed(() => {
-    const start = (currentPage.value - 1) * ITEMS_PER_PAGE
-    const end = start + ITEMS_PER_PAGE
-    return groups.value.slice(start, end)
-  })
+  // The server pages over pull requests, so a page is exactly what it returned and the pager is
+  // driven by the total it reported rather than by how much happens to be loaded.
+  const totalGroups = ref(0)
+  const totalPages = computed(() => Math.max(1, Math.ceil(totalGroups.value / ITEMS_PER_PAGE)))
+  const paginatedGroups = computed(() => groups.value)
 
   let pollInterval: ReturnType<typeof setInterval> | null = null
+  let loadInFlight = false
 
   async function openSummaryModal(item: JobListItem) {
     // A processing item has no final summary yet; its summary cell renders the progress chip instead,
@@ -217,15 +217,28 @@ export function useReviewHistoryViewModel(options: UseReviewHistoryViewModelOpti
   }
 
   async function loadJobs(showLoadingIndicator = false) {
+    // A poll tick is skipped while a load is still outstanding. Without this, a response slower than
+    // the poll interval leaves requests overlapping and stacking, each one making the next slower.
+    // An explicit load still proceeds, because a reader who asked for fresh data should get it.
+    if (loadInFlight && !showLoadingIndicator) {
+      return
+    }
+
     if (showLoadingIndicator) {
       loading.value = true
       error.value = ''
     }
 
+    loadInFlight = true
     try {
-      const response = await listJobsFn(clientId)
-      const items = response.items ?? []
-      groups.value = buildGroups(items)
+      const response = await listPullRequestHistoryFn({
+        limit: ITEMS_PER_PAGE,
+        offset: (currentPage.value - 1) * ITEMS_PER_PAGE,
+        ...(clientId ? { clientId } : {}),
+      })
+
+      totalGroups.value = response.total ?? 0
+      groups.value = (response.items ?? []).map(toPrGroup)
 
       // Load the blocked-PR state for each distinct inspectable client (once per client).
       const distinctClientIds = new Set(groups.value.map((group) => group.clientId).filter(Boolean))
@@ -233,7 +246,8 @@ export function useReviewHistoryViewModel(options: UseReviewHistoryViewModelOpti
         void loadBlockedPrsForClient(groupClientId)
       }
 
-      const isProcessing = items.some((item) => item.status === 'processing' || item.status === 'pending')
+      const isProcessing = groups.value.some((group) =>
+        group.items.some((item) => item.status === 'processing' || item.status === 'pending'))
       if (isProcessing) {
         if (!pollInterval) {
           pollInterval = setInterval(() => {
@@ -249,6 +263,7 @@ export function useReviewHistoryViewModel(options: UseReviewHistoryViewModelOpti
         error.value = 'Failed to load review history.'
       }
     } finally {
+      loadInFlight = false
       if (showLoadingIndicator) {
         loading.value = false
       }
@@ -265,15 +280,17 @@ export function useReviewHistoryViewModel(options: UseReviewHistoryViewModelOpti
     expandedGroups.value = new Set(expandedGroups.value)
   }
 
-  function nextPage() {
+  async function nextPage() {
     if (currentPage.value < totalPages.value) {
       currentPage.value++
+      await loadJobs(true)
     }
   }
 
-  function previousPage() {
+  async function previousPage() {
     if (currentPage.value > 1) {
       currentPage.value--
+      await loadJobs(true)
     }
   }
 
@@ -411,6 +428,7 @@ export function useReviewHistoryViewModel(options: UseReviewHistoryViewModelOpti
     groups,
     expandedGroups,
     currentPage,
+    totalGroups,
     isSummaryModalOpen,
     selectedSummary,
     summaryLoading,
@@ -438,77 +456,33 @@ export function useReviewHistoryViewModel(options: UseReviewHistoryViewModelOpti
   }
 }
 
-function buildGroups(items: JobListItem[]): PrGroup[] {
-  const map = new Map<string, PrGroup>()
+/**
+ * Maps one server-grouped pull request onto the shape the view renders. The grouping, ordering and
+ * rollups are the server's; nothing is recomputed here, so a page cannot disagree with its own pager.
+ */
+function toPrGroup(item: PullRequestHistoryItem): PrGroup {
+  const providerScopePath = item.providerScopePath ?? ''
+  const providerProjectKey = item.providerProjectKey ?? ''
+  const repositoryId = item.repositoryId ?? ''
+  const pullRequestId = item.pullRequestId ?? 0
 
-  for (const item of items) {
-    const providerScopePath = item.providerScopePath ?? ''
-    const providerProjectKey = item.providerProjectKey ?? ''
-    const repositoryId = item.repositoryId ?? ''
-    const pullRequestId = item.pullRequestId ?? 0
-
-    const key = `${providerScopePath}|${providerProjectKey}|${repositoryId}|${pullRequestId}`
-    const prUrl = `${providerScopePath}/${providerProjectKey}/_git/${repositoryId}/pullrequest/${pullRequestId}`
-
-    if (!map.has(key)) {
-      map.set(key, {
-        key,
-        pullRequestId,
-        providerScopePath,
-        providerProjectKey,
-        repositoryId,
-        prTitle: item.prTitle ?? null,
-        prRepositoryName: item.prRepositoryName ?? null,
-        prSourceBranch: item.prSourceBranch ?? null,
-        prTargetBranch: item.prTargetBranch ?? null,
-        prUrl,
-        latestActivityAt: item.submittedAt ?? '',
-        totalInTokens: 0,
-        totalOutTokens: 0,
-        totalEstimatedCostUsd: null,
-        costIsApproximate: false,
-        clientId: item.clientId ?? '',
-        items: [],
-      })
-    }
-
-    const group = map.get(key)
-    if (!group) {
-      continue
-    }
-
-    group.items.push(item)
-    group.totalInTokens += item.totalInputTokens ?? 0
-    group.totalOutTokens += item.totalOutputTokens ?? 0
-
-    const itemDate = item.completedAt ?? item.processingStartedAt ?? item.submittedAt ?? ''
-    if (itemDate > group.latestActivityAt) {
-      group.latestActivityAt = itemDate
-    }
+  return {
+    key: `${providerScopePath}|${providerProjectKey}|${repositoryId}|${pullRequestId}`,
+    pullRequestId,
+    providerScopePath,
+    providerProjectKey,
+    repositoryId,
+    prTitle: item.prTitle ?? null,
+    prRepositoryName: item.prRepositoryName ?? null,
+    prSourceBranch: item.prSourceBranch ?? null,
+    prTargetBranch: item.prTargetBranch ?? null,
+    prUrl: `${providerScopePath}/${providerProjectKey}/_git/${repositoryId}/pullrequest/${pullRequestId}`,
+    latestActivityAt: item.latestActivityAt ?? '',
+    totalInTokens: item.totalInputTokens ?? 0,
+    totalOutTokens: item.totalOutputTokens ?? 0,
+    totalEstimatedCostUsd: item.totalEstimatedCostUsd ?? null,
+    costIsApproximate: item.costIsApproximate ?? false,
+    clientId: item.clientId ?? '',
+    items: (item.jobs ?? []) as JobListItem[],
   }
-
-  for (const group of map.values()) {
-    group.items.sort((left, right) => {
-      const leftActive = left.status === 'processing' || left.status === 'pending'
-      const rightActive = right.status === 'processing' || right.status === 'pending'
-      if (leftActive !== rightActive) {
-        return leftActive ? -1 : 1
-      }
-
-      const leftDate = left.completedAt ?? left.processingStartedAt ?? left.submittedAt ?? ''
-      const rightDate = right.completedAt ?? right.processingStartedAt ?? right.submittedAt ?? ''
-      return rightDate.localeCompare(leftDate)
-    })
-
-    // Null-aware cost rollup across the PR's jobs: total is null unless at least one job is priced;
-    // approximate when any job is approximate or the group mixes priced and unpriced jobs.
-    const anyPriced = group.items.some((item) => item.totalEstimatedCostUsd != null)
-    const anyUnpriced = group.items.some((item) => item.totalEstimatedCostUsd == null)
-    group.totalEstimatedCostUsd = anyPriced
-      ? group.items.reduce((sum, item) => sum + (item.totalEstimatedCostUsd ?? 0), 0)
-      : null
-    group.costIsApproximate = group.items.some((item) => item.costIsApproximate) || (anyPriced && anyUnpriced)
-  }
-
-  return [...map.values()].sort((left, right) => right.latestActivityAt.localeCompare(left.latestActivityAt))
 }

@@ -6,6 +6,36 @@ import type { ReviewHistoryService } from '@/features/reviews/view-models/useRev
 import { flushPromises } from '@vue/test-utils'
 import { createApp, defineComponent } from 'vue'
 import { useReviewHistoryViewModel } from '@/features/reviews/view-models/useReviewHistoryViewModel'
+import type { components } from '@/types'
+
+type JobListItem = components['schemas']['JobListItem']
+type PullRequestHistoryResponse = components['schemas']['PullRequestHistoryResponse']
+
+/** Wraps job rows into the single server-grouped pull request they belong to. */
+function historyPage(items: JobListItem[], total = 1): PullRequestHistoryResponse {
+  const first = items[0]
+  return {
+    total,
+    items: items.length === 0 ? [] : [{
+      providerScopePath: first.providerScopePath ?? 'https://dev.azure.com/org',
+      providerProjectKey: first.providerProjectKey ?? 'proj',
+      repositoryId: first.repositoryId ?? 'repo-a',
+      pullRequestId: first.pullRequestId ?? 42,
+      clientId: first.clientId ?? 'client-1',
+      prTitle: first.prTitle ?? null,
+      prRepositoryName: first.prRepositoryName ?? null,
+      prSourceBranch: first.prSourceBranch ?? null,
+      prTargetBranch: first.prTargetBranch ?? null,
+      latestActivityAt: first.submittedAt ?? '2026-05-01T10:00:00Z',
+      totalInputTokens: 0,
+      totalOutputTokens: 0,
+      totalEstimatedCostUsd: null,
+      costIsApproximate: false,
+      jobs: items,
+    }],
+  } as PullRequestHistoryResponse
+}
+
 
 async function mountViewModel(
   factory: () => ReturnType<typeof useReviewHistoryViewModel>,
@@ -34,8 +64,7 @@ describe('useReviewHistoryViewModel', () => {
   })
 
   it('loads and groups processing items from the list projection alone (no per-job protocol fetch)', async () => {
-    const listJobs = vi.fn(async () => ({
-      items: [
+    const listPullRequestHistory = vi.fn(async () => historyPage([
         {
           id: 'job-1',
           clientId: 'client-1',
@@ -58,15 +87,16 @@ describe('useReviewHistoryViewModel', () => {
           prSourceBranch: 'feature/runtime',
           prTargetBranch: 'main',
         },
-      ],
-    }))
+      ] as never))
 
     const vm = await mountViewModel(() => useReviewHistoryViewModel({
       clientId: 'client-1',
-      reviewHistoryService: { listJobs } as unknown as Partial<ReviewHistoryService>,
+      reviewHistoryService: { listPullRequestHistory } as unknown as Partial<ReviewHistoryService>,
     }))
 
-    expect(listJobs).toHaveBeenCalledWith('client-1')
+    // The history is paged on the server now, so the call carries a page window and the client.
+    expect(listPullRequestHistory).toHaveBeenCalledWith(
+      expect.objectContaining({ clientId: 'client-1', limit: 10, offset: 0 }))
     expect(vm.groups.value).toHaveLength(1)
     expect(vm.groups.value[0]?.items).toHaveLength(1)
     expect(vm.groups.value[0]?.items[0]?.status).toBe('processing')
@@ -80,7 +110,7 @@ describe('useReviewHistoryViewModel', () => {
     const vm = await mountViewModel(() => useReviewHistoryViewModel({
       autoLoad: false,
       reviewHistoryService: {
-        listJobs: async () => ({ items: [] }),
+        listPullRequestHistory: async () => historyPage([]),
         // The list carries only an excerpt, so opening the modal fetches the full text.
         getJobDetail: async () => ({ resultSummary: 'Summary text' } as never),
       },
@@ -102,7 +132,7 @@ describe('useReviewHistoryViewModel', () => {
     const vm = await mountViewModel(() => useReviewHistoryViewModel({
       autoLoad: false,
       reviewHistoryService: {
-        listJobs: async () => ({ items: [] }),
+        listPullRequestHistory: async () => historyPage([]),
       },
     }))
 

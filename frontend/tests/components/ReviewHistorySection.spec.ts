@@ -4,7 +4,8 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
 
-const listJobsMock = vi.fn()
+const listPullRequestHistoryMock = vi.fn()
+const getJobDetailMock = vi.fn()
 const restartJobMock = vi.fn()
 const stopJobMock = vi.fn()
 const listBlockedPrsMock = vi.fn()
@@ -13,7 +14,8 @@ const unblockPrMock = vi.fn()
 let assignedRole: 0 | 1 | null = 0
 
 vi.mock('@/services/jobsService', () => ({
-  listJobs: listJobsMock,
+  listPullRequestHistory: listPullRequestHistoryMock,
+  getJobDetail: getJobDetailMock,
   restartJob: restartJobMock,
   stopJob: stopJobMock,
   listBlockedPrs: listBlockedPrsMock,
@@ -101,6 +103,32 @@ const blockedDto = {
   reason: null,
 }
 
+/** Wraps job rows into the single server-grouped pull request the component renders. */
+function historyPage(payload: { items: Array<Record<string, unknown>> }) {
+  const items = payload.items
+  const first = (items[0] ?? {}) as Record<string, unknown>
+  return {
+    total: items.length === 0 ? 0 : 1,
+    items: items.length === 0 ? [] : [{
+      providerScopePath: first.providerScopePath ?? 'https://dev.azure.com/example',
+      providerProjectKey: first.providerProjectKey ?? 'project-a',
+      repositoryId: first.repositoryId ?? 'repo-a',
+      pullRequestId: first.pullRequestId ?? 42,
+      clientId: first.clientId ?? 'client-1',
+      prTitle: first.prTitle ?? null,
+      prRepositoryName: first.prRepositoryName ?? null,
+      prSourceBranch: first.prSourceBranch ?? null,
+      prTargetBranch: first.prTargetBranch ?? null,
+      latestActivityAt: first.submittedAt ?? '2026-04-02T10:00:00Z',
+      totalInputTokens: 0,
+      totalOutputTokens: 0,
+      totalEstimatedCostUsd: null,
+      costIsApproximate: false,
+      jobs: items,
+    }],
+  }
+}
+
 async function mountSection() {
   const { default: ReviewHistorySection } = await import('@/features/reviews/components/ReviewHistorySection.vue')
   return mount(ReviewHistorySection, {
@@ -117,7 +145,7 @@ describe('ReviewHistorySection', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     assignedRole = 0
-    listJobsMock.mockResolvedValue(jobsPayload)
+    listPullRequestHistoryMock.mockResolvedValue(historyPage(jobsPayload))
     restartJobMock.mockResolvedValue(undefined)
     stopJobMock.mockResolvedValue(undefined)
     listBlockedPrsMock.mockResolvedValue([])
@@ -156,7 +184,7 @@ describe('ReviewHistorySection', () => {
   describe('Stop button', () => {
     it('shows the Stop button for administrators on a running job', async () => {
       assignedRole = 1
-      listJobsMock.mockResolvedValue({ items: [identifiedJob({ status: 'processing' })] })
+      listPullRequestHistoryMock.mockResolvedValue(historyPage({ items: [identifiedJob({ status: 'processing' })] }))
 
       const wrapper = await mountSection()
       await flushPromises()
@@ -166,7 +194,7 @@ describe('ReviewHistorySection', () => {
 
     it('shows the Stop button for a queued (pending) job', async () => {
       assignedRole = 1
-      listJobsMock.mockResolvedValue({ items: [identifiedJob({ status: 'pending', processingStartedAt: null })] })
+      listPullRequestHistoryMock.mockResolvedValue(historyPage({ items: [identifiedJob({ status: 'pending', processingStartedAt: null })] }))
 
       const wrapper = await mountSection()
       await flushPromises()
@@ -176,7 +204,7 @@ describe('ReviewHistorySection', () => {
 
     it('hides the Stop button for non-administrators', async () => {
       assignedRole = 0
-      listJobsMock.mockResolvedValue({ items: [identifiedJob({ status: 'processing' })] })
+      listPullRequestHistoryMock.mockResolvedValue(historyPage({ items: [identifiedJob({ status: 'processing' })] }))
 
       const wrapper = await mountSection()
       await flushPromises()
@@ -186,7 +214,7 @@ describe('ReviewHistorySection', () => {
 
     it('hides the Stop button for terminal jobs', async () => {
       assignedRole = 1
-      listJobsMock.mockResolvedValue({ items: [identifiedJob({ status: 'completed', completedAt: '2026-04-02T10:02:00Z' })] })
+      listPullRequestHistoryMock.mockResolvedValue(historyPage({ items: [identifiedJob({ status: 'completed', completedAt: '2026-04-02T10:02:00Z' })] }))
 
       const wrapper = await mountSection()
       await flushPromises()
@@ -196,24 +224,24 @@ describe('ReviewHistorySection', () => {
 
     it('calls the stop service and reloads when clicked', async () => {
       assignedRole = 1
-      listJobsMock.mockResolvedValue({ items: [identifiedJob({ status: 'processing' })] })
+      listPullRequestHistoryMock.mockResolvedValue(historyPage({ items: [identifiedJob({ status: 'processing' })] }))
 
       const wrapper = await mountSection()
       await flushPromises()
-      listJobsMock.mockClear()
+      listPullRequestHistoryMock.mockClear()
 
       await wrapper.find('.stop-btn').trigger('click')
       await flushPromises()
 
       expect(stopJobMock).toHaveBeenCalledWith('job-1')
-      expect(listJobsMock).toHaveBeenCalled() // reloaded after stop
+      expect(listPullRequestHistoryMock).toHaveBeenCalled() // reloaded after stop
     })
   })
 
   describe('Block menu', () => {
     it('shows the block overflow menu for administrators', async () => {
       assignedRole = 1
-      listJobsMock.mockResolvedValue({ items: [identifiedJob()] })
+      listPullRequestHistoryMock.mockResolvedValue(historyPage({ items: [identifiedJob()] }))
 
       const wrapper = await mountSection()
       await flushPromises()
@@ -223,7 +251,7 @@ describe('ReviewHistorySection', () => {
 
     it('hides the block overflow menu for non-administrators', async () => {
       assignedRole = 0
-      listJobsMock.mockResolvedValue({ items: [identifiedJob()] })
+      listPullRequestHistoryMock.mockResolvedValue(historyPage({ items: [identifiedJob()] }))
 
       const wrapper = await mountSection()
       await flushPromises()
@@ -233,7 +261,7 @@ describe('ReviewHistorySection', () => {
 
     it('labels the item "Block PR" when the PR is not blocked', async () => {
       assignedRole = 1
-      listJobsMock.mockResolvedValue({ items: [identifiedJob()] })
+      listPullRequestHistoryMock.mockResolvedValue(historyPage({ items: [identifiedJob()] }))
       listBlockedPrsMock.mockResolvedValue([])
 
       const wrapper = await mountSection()
@@ -247,7 +275,7 @@ describe('ReviewHistorySection', () => {
 
     it('labels the item "Unblock PR" when the PR is already blocked', async () => {
       assignedRole = 1
-      listJobsMock.mockResolvedValue({ items: [identifiedJob()] })
+      listPullRequestHistoryMock.mockResolvedValue(historyPage({ items: [identifiedJob()] }))
       listBlockedPrsMock.mockResolvedValue([blockedDto])
 
       const wrapper = await mountSection()
@@ -262,7 +290,7 @@ describe('ReviewHistorySection', () => {
 
     it('shows a Blocked badge on a blocked PR', async () => {
       assignedRole = 1
-      listJobsMock.mockResolvedValue({ items: [identifiedJob()] })
+      listPullRequestHistoryMock.mockResolvedValue(historyPage({ items: [identifiedJob()] }))
       listBlockedPrsMock.mockResolvedValue([blockedDto])
 
       const wrapper = await mountSection()
@@ -275,7 +303,7 @@ describe('ReviewHistorySection', () => {
 
     it('shows the Blocked badge to non-administrators but still hides the block menu', async () => {
       assignedRole = 0
-      listJobsMock.mockResolvedValue({ items: [identifiedJob()] })
+      listPullRequestHistoryMock.mockResolvedValue(historyPage({ items: [identifiedJob()] }))
       listBlockedPrsMock.mockResolvedValue([blockedDto])
 
       const wrapper = await mountSection()
@@ -288,7 +316,7 @@ describe('ReviewHistorySection', () => {
 
     it('calls block and refreshes state when an unblocked PR is blocked', async () => {
       assignedRole = 1
-      listJobsMock.mockResolvedValue({ items: [identifiedJob()] })
+      listPullRequestHistoryMock.mockResolvedValue(historyPage({ items: [identifiedJob()] }))
       listBlockedPrsMock.mockResolvedValue([])
 
       const wrapper = await mountSection()
@@ -311,7 +339,7 @@ describe('ReviewHistorySection', () => {
 
     it('calls unblock when a blocked PR is unblocked', async () => {
       assignedRole = 1
-      listJobsMock.mockResolvedValue({ items: [identifiedJob()] })
+      listPullRequestHistoryMock.mockResolvedValue(historyPage({ items: [identifiedJob()] }))
       listBlockedPrsMock.mockResolvedValue([blockedDto])
 
       const wrapper = await mountSection()

@@ -166,6 +166,16 @@ export interface PrReviewViewDto {
 // API calls
 // ──────────────────────────────────────────────────────────────────────────────
 
+/** Query for one page of the pull-request-grouped review history. Pages over pull requests, not runs. */
+export interface ListPullRequestHistoryParams {
+  limit?: number
+  offset?: number
+  clientId?: string
+}
+
+export type PullRequestHistoryItem = components['schemas']['PullRequestHistoryItem']
+export type PullRequestHistoryResponse = components['schemas']['PullRequestHistoryResponse']
+
 export interface ListJobsParams {
   limit?: number
   offset?: number
@@ -193,6 +203,30 @@ async function listJobsInternal(params: ListJobsParams = {}): Promise<JobListRes
     return res.json() as Promise<JobListResponse>
   } catch (error) {
     throw new Error(sanitizeErrorMessage(error, 'Failed to load jobs.'))
+  }
+}
+
+/** Returns one page of the review history grouped by pull request, most recently active first. */
+export async function listPullRequestHistory(
+  params: ListPullRequestHistoryParams = {},
+): Promise<PullRequestHistoryResponse> {
+  return resolveJobsService().listPullRequestHistory(params)
+}
+
+async function listPullRequestHistoryInternal(
+  params: ListPullRequestHistoryParams = {},
+): Promise<PullRequestHistoryResponse> {
+  const q = new URLSearchParams()
+  if (params.limit != null) q.set('limit', String(params.limit))
+  if (params.offset != null) q.set('offset', String(params.offset))
+  if (params.clientId) q.set('clientId', params.clientId)
+
+  try {
+    const res = await authedFetch(`${getJobsBaseUrl()}/jobs/pull-requests?${q}`)
+    if (!res.ok) throw new Error(`GET /jobs/pull-requests: ${res.status}`)
+    return res.json() as Promise<PullRequestHistoryResponse>
+  } catch (error) {
+    throw new Error(sanitizeErrorMessage(error, 'Failed to load review history.'))
   }
 }
 
@@ -364,6 +398,7 @@ export async function unblockPr(clientId: string, identity: PullRequestIdentity)
 export interface JobsService {
   runtimeMode: RuntimeMode
   listJobs: (params?: ListJobsParams) => Promise<JobListResponse>
+  listPullRequestHistory: (params?: ListPullRequestHistoryParams) => Promise<PullRequestHistoryResponse>
   getJobDetail: (id: string) => Promise<JobDetailResponse>
   getJobProtocol: (
     id: string,
@@ -377,6 +412,7 @@ function createJobsService(runtimeMode: RuntimeMode): JobsService {
   return {
     runtimeMode,
     listJobs: listJobsInternal,
+    listPullRequestHistory: listPullRequestHistoryInternal,
     getJobDetail: getJobDetailInternal,
     getJobProtocol: getJobProtocolInternal,
     getPrView: getPrViewInternal,
