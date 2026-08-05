@@ -21,8 +21,12 @@ internal static class AzureDevOpsProCursorServiceCollectionExtensions
             return services;
         }
 
-        services.TryAddScoped<IProCursorMaterializer, AdoRepositoryMaterializer>();
-        services.TryAddScoped<IProCursorMaterializer, AdoWikiMaterializer>();
+        // Materializers are consumed as IEnumerable<IProCursorMaterializer> and selected by source kind,
+        // so every implementation has to reach the container. TryAddScoped keys on the service type alone
+        // and would silently drop every registration after the first, leaving the later source kinds with
+        // no materializer at all; TryAddEnumerable de-duplicates by implementation type instead.
+        services.TryAddEnumerable(ServiceDescriptor.Scoped<IProCursorMaterializer, AdoRepositoryMaterializer>());
+        services.TryAddEnumerable(ServiceDescriptor.Scoped<IProCursorMaterializer, AdoWikiMaterializer>());
         services.TryAddScoped<IProCursorTrackedBranchChangeDetector, AdoTrackedBranchChangeDetector>();
 
         return services;

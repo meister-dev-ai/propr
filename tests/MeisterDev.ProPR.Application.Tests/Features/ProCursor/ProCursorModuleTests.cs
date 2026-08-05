@@ -64,6 +64,26 @@ public sealed class ProCursorModuleTests
     }
 
     [Fact]
+    public void AddProCursorModule_RegistersAMaterializerForEverySourceKind()
+    {
+        var services = new ServiceCollection();
+        services.AddLogging();
+
+        services.AddProCursorModule(BuildConfiguration(true, false));
+
+        using var provider = services.BuildServiceProvider();
+        using var scope = provider.CreateScope();
+        var materializers = scope.ServiceProvider.GetServices<IProCursorMaterializer>().ToList();
+
+        var coveredKinds = materializers.Select(materializer => materializer.SourceKind).ToList();
+        var expectedKinds = Enum.GetValues<ProCursorSourceKind>();
+
+        // The index coordinator picks a materializer by source kind, so a kind with no registration
+        // fails every job for that source with no way to recover through configuration.
+        Assert.Equal(expectedKinds.Order().ToList(), coveredKinds.Order().ToList());
+    }
+
+    [Fact]
     public void ProCursorTokenUsageCaptureRequest_PreservesSafeMetadataContract()
     {
         var clientId = Guid.NewGuid();
