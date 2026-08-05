@@ -278,6 +278,20 @@ export function useJobProtocolViewModel() {
     const dismissingIds = ref<Set<string>>(new Set())
     const dismissToast = ref<{ message: string; isError: boolean } | null>(null)
 
+    /**
+     * Whether this reader may dismiss a finding at all.
+     *
+     * Dismissing writes a memory record that suppresses similar findings for the whole client, so the
+     * endpoint takes the client-administrator role. Offering the control to everyone meant a reader who
+     * pressed it got "Failed to dismiss finding" and no way to tell a refusal from a fault.
+     */
+    const canDismissFindings = computed(() => {
+        const clientId = routeClientId.value
+        return typeof clientId === 'string'
+            && clientId.length > 0
+            && hasClientRole(clientId, RoleLevel.Administrator)
+    })
+
     async function dismissComment(comment: CommentGroupComment) {
         const clientId = routeClientId.value
         if (!clientId) {
@@ -285,6 +299,12 @@ export function useJobProtocolViewModel() {
             setTimeout(() => {
                 dismissToast.value = null
             }, 3000)
+            return
+        }
+
+        // The control is not offered without the role, so a click here comes from a render that predates
+        // the role being known. Refused rather than sent, to keep the request the endpoint would reject.
+        if (!canDismissFindings.value) {
             return
         }
 
@@ -2343,6 +2363,7 @@ export function useJobProtocolViewModel() {
         jobShortId,
         prReviewLink,
         backToReviewsLink,
+        canDismissFindings,
         dismissingIds,
         dismissToast,
         globalSearchQuery,

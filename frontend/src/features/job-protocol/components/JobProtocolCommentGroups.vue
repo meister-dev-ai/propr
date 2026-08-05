@@ -16,7 +16,7 @@
                         <strong class="comment-sev">{{ (comment.severity ?? 'note').toUpperCase() }}</strong>
                         <span class="monospace-value">{{ comment.filePath ?? comment.file_path }}:L{{ comment.lineNumber ?? comment.line_number }}</span>
                         <button
-                            v-if="showDismiss && vm.routeClientId"
+                            v-if="showDismiss && vm.canDismissFindings"
                             class="dismiss-btn"
                             :disabled="vm.dismissingIds.has(vm.commentKey(comment))"
                             title="Dismiss this finding"
