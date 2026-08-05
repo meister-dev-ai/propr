@@ -76,6 +76,27 @@ public sealed class EfThreadPassJobRepositoryTests(PostgresContainerFixture fixt
     }
 
     [Fact]
+    public async Task TryClaimAsync_ContenderAlreadyCommitted_RefusesWithoutAskingTheDatabaseToRefuse()
+    {
+        // A pass stays in flight for as long as it takes to answer, and every crawl tick in between arrives
+        // here. Losing by exception writes a failed command and a failed save at error level on each of those
+        // ticks, which is how a pass that is merely running comes to read as a database fault. A contender that
+        // is already committed can be seen, so it is answered without an insert the database has to reject.
+        await this._repository.TryClaimAsync(CreatePass("7|aaa"));
+
+        var secondWriterContext = this.CreateDbContext();
+        var saveFailures = 0;
+        secondWriterContext.SaveChangesFailed += (_, _) => saveFailures++;
+        var secondWriter = new EfThreadPassJobRepository(secondWriterContext);
+
+        var second = await secondWriter.TryClaimAsync(CreatePass("8|bbb"));
+
+        Assert.False(second.WasClaimed);
+        Assert.NotNull(second.BlockingJob);
+        Assert.Equal(0, saveFailures);
+    }
+
+    [Fact]
     public async Task TryClaimAsync_TriggerStateAlreadyRun_RefusesToRepeatTheWork()
     {
         var job = CreatePass("7|aaa");

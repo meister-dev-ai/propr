@@ -14,11 +14,17 @@ namespace MeisterDev.ProPR.Infrastructure.Features.Reviewing.Threads.Persistence
 ///     EF Core implementation of <see cref="IThreadPassJobRepository" />, backed by PostgreSQL.
 /// </summary>
 /// <remarks>
-///     Every claim this repository offers is decided by the database, never by a read the caller then acts on:
+///     Every claim this repository grants is decided by the database, never by a read the caller then acts on:
 ///     the in-flight claim by a partial unique index over the pull request, the repeat-trigger claim by a
 ///     unique index on the trigger state, and the per-thread record by a unique index on the thread, the
 ///     comment count and the revision. Two crawl configurations over one repository and two deployed instances
 ///     therefore cannot both act, whatever trigger state each of them arrived with.
+///     <para>
+///         Granted, rather than answered: a claim may be <em>refused</em> by a read, because a contender the
+///         read can already see is one the index would refuse anyway. That shortcut is worth taking only
+///         because a refusal cannot be wrong in the direction that matters. A read that finds nothing grants
+///         nothing.
+///     </para>
 /// </remarks>
 public sealed class EfThreadPassJobRepository(MeisterProPRDbContext dbContext) : IThreadPassJobRepository
 {
@@ -33,10 +39,21 @@ public sealed class EfThreadPassJobRepository(MeisterProPRDbContext dbContext) :
     {
         ArgumentNullException.ThrowIfNull(job);
 
-        // The insert is the claim. A read taken first and acted on afterwards decides nothing: two writers
-        // arriving with different trigger states both read no contender, both insert, and both answer the
-        // pull request. Only the unique indexes can settle that, so the loser is the writer whose insert the
-        // database refuses.
+        // A contender that is already committed is the ordinary case, not a race: a pass in flight stays in
+        // flight for as long as it takes to answer, and every crawl tick in between arrives here. Skipping the
+        // insert for one we can already see spares the log an exception per tick, which is the difference
+        // between an error meaning something and an error meaning a pass is running.
+        //
+        // This read decides nothing. It cannot: two writers arriving together both see no contender, and a
+        // reply cannot be unposted afterwards. The insert below is still the claim, and the unique indexes are
+        // still what settle a genuine race, so the only thing the read changes is how often the loser has to
+        // find out by exception.
+        var committedContender = await this.FindBlockingPassAsync(job, ct);
+        if (committedContender is not null)
+        {
+            return new TryClaimThreadPassResult(false, committedContender);
+        }
+
         dbContext.ThreadPassJobs.Add(job);
 
         try
