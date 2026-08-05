@@ -110,13 +110,14 @@ public sealed class AiReviewOptions
     public int MaxToolResultReplayCharacters { get; set; } = 32000;
 
     /// <summary>
-    ///     EXPERIMENTAL / A-B ONLY. When <see langword="true" />, tool evidence (e.g. fetched file contents) is
-    ///     retained across agentic-loop compaction and re-injected as a stable, deduplicated block so the model
-    ///     does not re-fetch the same content on later iterations. This changes both the token profile AND the
-    ///     review's convergence behaviour, so it must be validated on the evaluation harness before it ships;
-    ///     the default keeps the existing drop-on-compaction behaviour. Bound to <c>AI_ENABLE_RETAINED_TOOL_EVIDENCE</c>.
+    ///     When <see langword="true" /> (the default), tool evidence (e.g. fetched file contents) is retained across
+    ///     agentic-loop compaction and re-injected as a stable, deduplicated block so the model does not re-fetch
+    ///     content it already holds. Without it, every tool result except the most recent is dropped whenever the
+    ///     transcript is compacted, which drives the agent to read the same ranges over and over. Set to
+    ///     <see langword="false" /> to restore the drop-on-compaction behaviour. Bound to
+    ///     <c>AI_ENABLE_RETAINED_TOOL_EVIDENCE</c>.
     /// </summary>
-    public bool EnableRetainedToolEvidence { get; set; } = false;
+    public bool EnableRetainedToolEvidence { get; set; } = true;
 
     /// <summary>
     ///     Maximum number of distinct tool-evidence entries retained across compaction when

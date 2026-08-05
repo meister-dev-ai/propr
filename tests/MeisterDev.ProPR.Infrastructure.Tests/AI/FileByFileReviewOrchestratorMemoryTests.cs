@@ -346,7 +346,9 @@ public sealed class FileByFileReviewOrchestratorMemoryTests
                                             """)),
                 _ => new ChatResponse(new ChatMessage(ChatRole.Assistant, "synthesis summary")));
 
-        var bulkyFileContent = string.Join('\n', Enumerable.Range(1, 160).Select(index => $"line {index}: some bulky repository content"));
+        // Bulky enough to claim a substantial share of the narrow context window configured below, which is what
+        // makes the transcript worth compacting in the first place.
+        var bulkyFileContent = string.Join('\n', Enumerable.Range(1, 2_000).Select(index => $"line {index}: some bulky repository content"));
         var tools = Substitute.For<IReviewContextTools>();
         tools.GetFileContentAsync("src/Foo.cs", "feature/x", 1, 200, Arg.Any<CancellationToken>())
             .Returns(bulkyFileContent);
@@ -361,9 +363,17 @@ public sealed class FileByFileReviewOrchestratorMemoryTests
                     [],
                     false));
 
+        // Evidence retention off, so this covers the drop-on-compaction path: bulky evidence that is compacted
+        // away is replaced by the working-memory summary rather than replayed.
         var aiCore = new ToolAwareAiReviewCore(
             mockClient,
-            Microsoft.Extensions.Options.Options.Create(new AiReviewOptions()),
+            Microsoft.Extensions.Options.Options.Create(
+                new AiReviewOptions
+                {
+                    EnableRetainedToolEvidence = false,
+                    MaxOutputTokensHigh = 4096,
+                    MaxToolResultReplayCharacters = 120_000,
+                }),
             Substitute.For<ILogger<ToolAwareAiReviewCore>>());
 
         var protocolRecorder = Substitute.For<IProtocolRecorder>();
@@ -403,7 +413,10 @@ public sealed class FileByFileReviewOrchestratorMemoryTests
             Substitute.For<ILogger<FileByFileReviewOrchestrator>>());
 
         var pr = CreatePullRequest([new ChangedFile("src/Foo.cs", ChangeType.Edit, "content", "+ new content")]);
-        var context = new ReviewSystemContext(null, [], tools);
+        var context = new ReviewSystemContext(null, [], tools)
+        {
+            MaxContextTokens = 40_000,
+        };
 
         var result = await orchestrator.ReviewAsync(job, pr, context, CancellationToken.None);
 

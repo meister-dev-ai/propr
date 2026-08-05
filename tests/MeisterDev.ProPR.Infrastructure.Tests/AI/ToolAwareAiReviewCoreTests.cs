@@ -78,6 +78,50 @@ public class ToolAwareAiReviewCoreTests
             });
     }
 
+    // Replay compaction only fires once the transient transcript takes up a substantial share of the model's
+    // input budget. These helpers pin a narrow context window and an oversized tool result so tests that need
+    // compaction actually trigger it, while the assembled turn still fits the budget (no per-turn trimming).
+    private const int CompactionForcingContextTokens = 40_000;
+
+    private const string DiffMarker = "RISKY_CHANGE_UNDER_REVIEW";
+
+    private static readonly string BulkyFileBody = new('x', 90_000);
+
+    private static IOptions<AiReviewOptions> CompactionForcingOptions(
+        int maxIterations = 5,
+        bool retainToolEvidence = true)
+    {
+        return Microsoft.Extensions.Options.Options.Create(
+            new AiReviewOptions
+            {
+                MaxIterations = maxIterations,
+                MaxOutputTokensHigh = 4096,
+                MaxToolResultReplayCharacters = 120_000,
+                EnableRetainedToolEvidence = retainToolEvidence,
+            });
+    }
+
+    private static PullRequest CreateDiffCarryingPullRequest(string filePath = "src/Foo.cs")
+    {
+        var file = new ChangedFile(
+            filePath,
+            ChangeType.Edit,
+            "code",
+            $"@@ -1,2 +1,3 @@\n unchanged\n+var {DiffMarker} = Compute();");
+        return new PullRequest(
+            "https://dev.azure.com/org",
+            "proj",
+            "repo",
+            "repo",
+            1,
+            1,
+            "PR",
+            null,
+            "feature/x",
+            "main",
+            new List<ChangedFile> { file }.AsReadOnly());
+    }
+
     private static PullRequest CreatePullRequest()
     {
         return new PullRequest(
@@ -820,8 +864,10 @@ public class ToolAwareAiReviewCoreTests
         Assert.Null(capturedConversationIds[1]);
     }
 
+    // Compaction rebuilds the transcript from the durable baseline, so the baseline has to carry the diff:
+    // otherwise every turn after the first tool round reviews the file without knowing what changed in it.
     [Fact]
-    public async Task ReviewAsync_PerFileSession_CompactsReplayAndUsesWorkingMemorySummary()
+    public async Task ReviewAsync_PerFileSession_CompactsReplayKeepingDiffAndUsesWorkingMemorySummary()
     {
         var capturedMessages = new List<List<ChatMessage>>();
         var mockClient = Substitute.For<IChatClient>();
@@ -831,26 +877,87 @@ public class ToolAwareAiReviewCoreTests
                 Arg.Any<ChatOptions?>(),
                 Arg.Any<CancellationToken>())
             .Returns(
-                CreateFunctionCallResponse("call-1", "get_changed_files", "{}"),
+                CreateFunctionCallResponse(
+                    "call-1",
+                    "get_file_content",
+                    "{\"path\":\"src/Foo.cs\",\"branch\":\"feature/x\",\"startLine\":1,\"endLine\":1}"),
                 CreateFinalReviewResponse("Done."));
 
         var mockTools = Substitute.For<IReviewContextTools>();
-        mockTools.GetChangedFilesAsync(Arg.Any<CancellationToken>())
-            .Returns([new ChangedFileSummary("src/Foo.cs", ChangeType.Edit)]);
+        mockTools
+            .GetFileContentAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<int>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
+            .Returns(BulkyFileBody);
 
-        var file = new ChangedFile("src/Foo.cs", ChangeType.Edit, "code", "+code");
-        var pr = new PullRequest(
-            "https://dev.azure.com/org",
-            "proj",
-            "repo",
-            "repo",
-            1,
-            1,
-            "PR",
-            null,
-            "feature/x",
-            "main",
-            [file]);
+        var pr = CreateDiffCarryingPullRequest();
+        var context = new ReviewSystemContext(null, [], mockTools)
+        {
+            PerFileHint = new PerFileReviewHint("src/Foo.cs", 1, 1, pr.AllPrFileSummaries),
+            MaxContextTokens = CompactionForcingContextTokens,
+        };
+
+        var sut = new ToolAwareAiReviewCore(
+            mockClient,
+            CompactionForcingOptions(),
+            Substitute.For<ILogger<ToolAwareAiReviewCore>>());
+
+        await sut.ReviewAsync(pr, context);
+
+        Assert.Equal(2, capturedMessages.Count);
+        var secondTurnMessages = capturedMessages[1];
+        Assert.Contains(
+            secondTurnMessages,
+            message => message.Role == ChatRole.System &&
+                       (message.Text?.Contains("Working memory summary for prior bulky context:", StringComparison.Ordinal) ?? false));
+
+        // The change under review, and the source branch the file-content tool needs, both survive compaction.
+        Assert.Contains(
+            secondTurnMessages,
+            message => message.Role == ChatRole.User &&
+                       (message.Text?.Contains(DiffMarker, StringComparison.Ordinal) ?? false));
+        Assert.Contains(
+            secondTurnMessages,
+            message => message.Role == ChatRole.User &&
+                       (message.Text?.Contains("feature/x", StringComparison.Ordinal) ?? false));
+
+        Assert.Contains(
+            secondTurnMessages,
+            message => message.Role == ChatRole.Assistant && message.Contents.OfType<FunctionCallContent>().Any());
+        Assert.Contains(
+            secondTurnMessages,
+            message => message.Role == ChatRole.Tool);
+        Assert.NotNull(context.ReviewSession);
+        Assert.Equal(AgentReviewSessionMode.LocalManagedSession, context.ReviewSession!.Mode);
+        Assert.NotEmpty(context.ReviewSession.WorkingMemory);
+        Assert.NotNull(context.LoopMetrics);
+        Assert.Equal(AgentReviewSessionMode.LocalManagedSession, context.LoopMetrics!.SessionMode);
+        Assert.Contains("DeltaContext", context.LoopMetrics.TurnsJson, StringComparison.Ordinal);
+    }
+
+    // A transcript that still fits comfortably inside the model's input budget is not worth compacting:
+    // discarding it would only cost the agent the evidence it just gathered.
+    [Fact]
+    public async Task ReviewAsync_PerFileSession_TranscriptWellWithinBudget_IsNotCompacted()
+    {
+        var capturedMessages = new List<List<ChatMessage>>();
+        var mockClient = Substitute.For<IChatClient>();
+        mockClient
+            .GetResponseAsync(
+                Arg.Do<IEnumerable<ChatMessage>>(messages => capturedMessages.Add(messages.ToList())),
+                Arg.Any<ChatOptions?>(),
+                Arg.Any<CancellationToken>())
+            .Returns(
+                CreateFunctionCallResponse(
+                    "call-1",
+                    "get_file_content",
+                    "{\"path\":\"src/Foo.cs\",\"branch\":\"feature/x\",\"startLine\":1,\"endLine\":1}"),
+                CreateFinalReviewResponse("Done."));
+
+        var mockTools = Substitute.For<IReviewContextTools>();
+        mockTools
+            .GetFileContentAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<int>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
+            .Returns("SMALL_FILE_BODY");
+
+        var pr = CreateDiffCarryingPullRequest();
         var context = new ReviewSystemContext(null, [], mockTools)
         {
             PerFileHint = new PerFileReviewHint("src/Foo.cs", 1, 1, pr.AllPrFileSummaries),
@@ -865,22 +972,14 @@ public class ToolAwareAiReviewCoreTests
 
         Assert.Equal(2, capturedMessages.Count);
         var secondTurnMessages = capturedMessages[1];
+        Assert.DoesNotContain(
+            secondTurnMessages,
+            message => message.Text?.Contains("Working memory summary for prior bulky context:", StringComparison.Ordinal) ?? false);
         Assert.Contains(
             secondTurnMessages,
-            message => message.Role == ChatRole.System &&
-                       (message.Text?.Contains("Working memory summary for prior bulky context:", StringComparison.Ordinal) ?? false));
-        Assert.Contains(
-            secondTurnMessages,
-            message => message.Role == ChatRole.Assistant && message.Contents.OfType<FunctionCallContent>().Any());
-        Assert.Contains(
-            secondTurnMessages,
-            message => message.Role == ChatRole.Tool);
-        Assert.NotNull(context.ReviewSession);
-        Assert.Equal(AgentReviewSessionMode.LocalManagedSession, context.ReviewSession!.Mode);
-        Assert.NotEmpty(context.ReviewSession.WorkingMemory);
-        Assert.NotNull(context.LoopMetrics);
-        Assert.Equal(AgentReviewSessionMode.LocalManagedSession, context.LoopMetrics!.SessionMode);
-        Assert.Contains("DeltaContext", context.LoopMetrics.TurnsJson, StringComparison.Ordinal);
+            message => message.Role == ChatRole.User &&
+                       (message.Text?.Contains(DiffMarker, StringComparison.Ordinal) ?? false));
+        Assert.Empty(context.ReviewSession!.WorkingMemory);
     }
 
     // A plain-string tool result (e.g. file contents) is replayed to the model as raw text, not a
@@ -952,29 +1051,18 @@ public class ToolAwareAiReviewCoreTests
         var mockTools = Substitute.For<IReviewContextTools>();
         mockTools
             .GetFileContentAsync("src/Alpha.cs", Arg.Any<string>(), Arg.Any<int>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
-            .Returns("ALPHA_FILE_BODY");
+            .Returns("ALPHA_FILE_BODY" + BulkyFileBody);
         mockTools
             .GetFileContentAsync("src/Beta.cs", Arg.Any<string>(), Arg.Any<int>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
             .Returns("BETA_FILE_BODY");
 
-        var file = new ChangedFile("src/Alpha.cs", ChangeType.Edit, "code", "+code");
-        var pr = new PullRequest(
-            "https://dev.azure.com/org",
-            "proj",
-            "repo",
-            "repo",
-            1,
-            1,
-            "PR",
-            null,
-            "feature/x",
-            "main",
-            new List<ChangedFile> { file }.AsReadOnly());
+        var pr = CreateDiffCarryingPullRequest("src/Alpha.cs");
 
-        var options = Microsoft.Extensions.Options.Options.Create(new AiReviewOptions { MaxIterations = 10, EnableRetainedToolEvidence = true });
+        var options = CompactionForcingOptions(10);
         var context = new ReviewSystemContext(null, [], mockTools)
         {
             PerFileHint = new PerFileReviewHint("src/Alpha.cs", 1, 1, pr.AllPrFileSummaries),
+            MaxContextTokens = CompactionForcingContextTokens,
         };
 
         var sut = new ToolAwareAiReviewCore(
@@ -993,6 +1081,100 @@ public class ToolAwareAiReviewCoreTests
         Assert.DoesNotContain(
             finalTurn,
             message => message.Text?.Contains("Working memory summary for prior bulky context:", StringComparison.Ordinal) ?? false);
+    }
+
+    // Compaction replaces the transcript with the durable baseline plus the last exchange, so a baseline that
+    // carries the diff keeps the change under review available on every later turn.
+    [Fact]
+    public void CompactReplayHistory_KeepsDurableBaselineIncludingTheDiff()
+    {
+        var state = new ReviewLoopState();
+        state.Messages.Add(new ChatMessage(ChatRole.System, "persona"));
+        state.Messages.Add(new ChatMessage(ChatRole.User, $"diff: +var {DiffMarker} = Compute();"));
+        state.SetPersistentMessages(state.Messages);
+        state.Messages.Add(
+            new ChatMessage(
+                ChatRole.Assistant, [new FunctionCallContent("c1", "get_file_content", new Dictionary<string, object?> { ["path"] = "src/Foo.cs" })]));
+        state.Messages.Add(new ChatMessage(ChatRole.Tool, [new FunctionResultContent("c1", "FILE_BODY")]));
+
+        state.CompactReplayHistory();
+
+        Assert.Contains(
+            state.Messages,
+            message => message.Role == ChatRole.User && (message.Text?.Contains(DiffMarker, StringComparison.Ordinal) ?? false));
+    }
+
+    // Downgrading a provider-managed session re-seeds the baseline from the baseline itself. Copying out of the
+    // very list being replaced must not wipe it, or the loop continues with no system prompts and no diff.
+    [Fact]
+    public void SetPersistentMessages_ReseededFromItsOwnBaseline_KeepsTheBaseline()
+    {
+        var state = new ReviewLoopState();
+        state.Messages.Add(new ChatMessage(ChatRole.System, "persona"));
+        state.Messages.Add(new ChatMessage(ChatRole.User, $"diff: +var {DiffMarker} = Compute();"));
+        state.SetPersistentMessages(state.Messages);
+
+        state.SetPersistentMessages(state.PersistentMessages);
+
+        Assert.Equal(2, state.PersistentMessages.Count);
+        Assert.Contains(
+            state.PersistentMessages,
+            message => message.Text?.Contains(DiffMarker, StringComparison.Ordinal) ?? false);
+    }
+
+    // Below the budget share, compacting buys nothing and costs the agent the evidence it just gathered.
+    [Fact]
+    public void CompactReplayHistory_TranscriptWellWithinBudget_KeepsFullTranscript()
+    {
+        var state = CreateStateWithToolRound(toolResultChars: 400, inputBudgetTokens: 10_000);
+
+        state.CompactReplayHistory();
+
+        Assert.Equal(4, state.Messages.Count);
+        Assert.Contains(
+            state.Messages,
+            message => message.Contents.OfType<FunctionResultContent>().Any());
+        Assert.Empty(state.Session.WorkingMemory);
+        Assert.Null(state.CompactedPayloadSummary);
+    }
+
+    // Once the transcript claims a substantial share of the input budget it is compacted to the baseline plus
+    // the last exchange, keeping the assembled turn inside the model's context window.
+    [Fact]
+    public void CompactReplayHistory_TranscriptOverBudgetShare_CompactsToBaselineAndTail()
+    {
+        var state = CreateStateWithToolRound(toolResultChars: 40_000, inputBudgetTokens: 10_000);
+
+        state.CompactReplayHistory();
+
+        Assert.NotEmpty(state.Session.WorkingMemory);
+        Assert.NotNull(state.CompactedPayloadSummary);
+        Assert.Equal(AgentReviewSessionStatus.Compacted, state.Session.Status);
+    }
+
+    // Without a resolved budget the loop keeps its previous behaviour of compacting after every tool round.
+    [Fact]
+    public void CompactReplayHistory_UnknownBudget_Compacts()
+    {
+        var state = CreateStateWithToolRound(toolResultChars: 400, inputBudgetTokens: 0);
+
+        state.CompactReplayHistory();
+
+        Assert.NotEmpty(state.Session.WorkingMemory);
+    }
+
+    private static ReviewLoopState CreateStateWithToolRound(int toolResultChars, int inputBudgetTokens)
+    {
+        var state = new ReviewLoopState { InputBudgetTokens = inputBudgetTokens };
+        state.Messages.Add(new ChatMessage(ChatRole.System, "persona"));
+        state.Messages.Add(new ChatMessage(ChatRole.User, "diff"));
+        state.SetPersistentMessages(state.Messages);
+        state.Messages.Add(
+            new ChatMessage(
+                ChatRole.Assistant,
+                [new FunctionCallContent("c1", "get_file_content", new Dictionary<string, object?> { ["path"] = "src/Foo.cs" })]));
+        state.Messages.Add(new ChatMessage(ChatRole.Tool, [new FunctionResultContent("c1", new string('x', toolResultChars))]));
+        return state;
     }
 
     // Truncating an oversized retained-evidence entry must keep the accumulated store within its character budget:
@@ -2333,14 +2515,14 @@ public class ToolAwareAiReviewCoreTests
         Assert.Equal(2, iter1SystemMsgs.Count);
         Assert.Contains(expectedGlobalSystemPrompt, iter1SystemMsgs[0].Text ?? "");
 
-        // On iteration 2+, the global persona message is still present and first (stable prefix),
-        // followed by the per-file context and the working-memory summary of compacted evidence.
+        // On iteration 2+, the global persona message is still present and first (stable prefix), followed by
+        // the per-file context. This transcript stays well inside the input budget, so it is not compacted and
+        // no working-memory summary is appended.
         var iter2Messages = capturedCallArgs[1];
         var iter2SystemMsgs = iter2Messages.Where(m => m.Role == ChatRole.System).ToList();
-        Assert.Equal(3, iter2SystemMsgs.Count);
+        Assert.Equal(2, iter2SystemMsgs.Count);
         Assert.Contains(expectedGlobalSystemPrompt, iter2SystemMsgs[0].Text ?? "");
         Assert.Contains("src/Foo.cs", iter2SystemMsgs[1].Text ?? "");
-        Assert.Contains("Working memory summary for prior bulky context:", iter2SystemMsgs[2].Text ?? "", StringComparison.Ordinal);
     }
 
     // T017 — RecordToolCallAsync receives iteration equal to current loop count

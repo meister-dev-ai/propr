@@ -166,18 +166,22 @@ internal sealed partial class ToolAwareAiReviewCore(
                     pullRequest.TargetBranch,
                     systemContext)
                 : ReviewPrompts.BuildUserMessage(pullRequest);
-
-            state.SetPersistentMessages(state.Messages);
         }
         else
         {
             // Whole-PR review path (default)
             state.Messages.Add(new ChatMessage(ChatRole.System, ReviewPrompts.BuildSystemPrompt(systemContext)));
             userMessage = ReviewPrompts.BuildUserMessage(pullRequest);
-            state.SetPersistentMessages(state.Messages);
         }
 
         state.Messages.Add(new ChatMessage(ChatRole.User, userMessage));
+
+        // The durable baseline is snapshotted only once the diff is in place. It carries the change under review
+        // (and the source-branch hint the tools need), so every later turn still knows what changed after
+        // compaction rebuilds the transcript from this baseline. Snapshotting before this point left the agent
+        // reviewing the file blind to its diff from the first tool round onwards. The message is byte-stable, so
+        // it stays inside the cacheable prefix.
+        state.SetPersistentMessages(state.Messages);
 
         if (systemContext.PerFileHint is not null)
         {
@@ -236,6 +240,11 @@ internal sealed partial class ToolAwareAiReviewCore(
         var inputBudget = ReviewContextBudget.ComputeInputBudget(maxContextTokens, reservedOutputTokens);
         var budgetTokenizer = systemContext.TokenizerName;
         var budgetFileLabel = systemContext.PerFileHint?.FilePath ?? "whole-pr";
+
+        // Hand the resolved budget to the loop state so replay compaction can size the transcript against it
+        // instead of firing after every tool round regardless of how small the transcript still is.
+        state.InputBudgetTokens = inputBudget;
+        state.TokenizerName = budgetTokenizer;
 
         var preflight = ReviewContextBudget.ClassifyInitialPayload(state.Messages, budgetTokenizer, inputBudget, maxContextTokens);
         var skipped = await this.HandlePreflightSkipAsync(
@@ -1202,7 +1211,7 @@ internal sealed partial class ToolAwareAiReviewCore(
                 if (ReviewContextBudget.EstimateMessagesTokens(tokenizerName, candidate) <= inputBudget)
                 {
                     state.Messages[secondSystemIndex] = candidate[secondSystemIndex];
-                    state.SetPersistentMessages(state.Messages.Where(message => message.Role == ChatRole.System));
+                    state.SetPersistentMessages(ToDurableBaseline(state.Messages));
                     return;
                 }
             }
@@ -1213,7 +1222,17 @@ internal sealed partial class ToolAwareAiReviewCore(
         var diffOnly = ReviewContextBudget.ToDiffOnly(state.Messages);
         state.Messages.Clear();
         state.Messages.AddRange(diffOnly);
-        state.SetPersistentMessages(diffOnly.Where(message => message.Role == ChatRole.System));
+        state.SetPersistentMessages(ToDurableBaseline(diffOnly));
+    }
+
+    /// <summary>
+    ///     Selects the messages that form the durable replay baseline: the system prefix plus the user message
+    ///     carrying the diff. Anything the loop produces later (assistant turns and tool results) is transient and
+    ///     must stay out of the baseline, since compaction replaces it with the working-memory summary.
+    /// </summary>
+    private static IEnumerable<ChatMessage> ToDurableBaseline(IEnumerable<ChatMessage> messages)
+    {
+        return messages.Where(message => message.Role == ChatRole.System || message.Role == ChatRole.User);
     }
 
     private async Task RecordContextBudgetEventAsync(

@@ -250,7 +250,7 @@ work one lookup may do before it returns what it has, marked truncated.
 | `AI_MAX_REFERENCE_RESULTS` | Confirmed sites returned per lookup | `50` | 1–1000 | no |
 | `AI_MAX_REFERENCE_RESULT_CHARS` | Character budget for one lookup result | `8000` | 256–64000 | no |
 | `AI_REFERENCE_RESOLUTION_TIMEOUT_MS` | Wall-clock budget for one lookup | `4000` | 50–30000 | no |
-| `AI_ENABLE_RETAINED_TOOL_EVIDENCE` | Experimental. Keeps fetched file content across context compaction instead of dropping it, changing both token profile and review behaviour | `false` | `true`, `false` | no |
+| `AI_ENABLE_RETAINED_TOOL_EVIDENCE` | Keeps fetched file content across context compaction instead of dropping it, so the reviewer does not re-read content it already holds. Set to `false` to drop it | `true` | `true`, `false` | no |
 
 ## Linked work items and issues
 

@@ -18,6 +18,13 @@ internal sealed class ReviewLoopState
     /// </summary>
     private static readonly string[] PathArgumentNames = ["path", "filePath", "file_path", "file"];
 
+    /// <summary>
+    ///     Share of the model's input budget the transient transcript may occupy before compaction is worth its
+    ///     cost. Compacting a transcript that still fits comfortably buys nothing and destroys the tool results the
+    ///     agent just gathered, which makes it re-fetch content it already holds.
+    /// </summary>
+    private const double CompactionBudgetFraction = 0.5;
+
     private readonly Dictionary<string, string> retainedEvidence = new(StringComparer.Ordinal);
     private readonly List<string> retainedEvidenceOrder = [];
     private int retainedEvidenceChars;
@@ -100,8 +107,8 @@ internal sealed class ReviewLoopState
 
     /// <summary>
     ///     Gets or sets whether tool evidence fetched during the loop is retained across compaction and
-    ///     re-injected as a deduplicated block, rather than dropped. Experimental / A-B only — this alters the
-    ///     token profile and the review's convergence behaviour and must be validated on the evaluation harness.
+    ///     re-injected as a deduplicated block, rather than dropped. Retaining it stops the agent from re-reading
+    ///     ranges it already fetched earlier in the same pass.
     /// </summary>
     public bool RetainToolEvidence { get; set; }
 
@@ -116,6 +123,16 @@ internal sealed class ReviewLoopState
 
     /// <summary>Gets the total characters currently held across the retained tool-evidence store.</summary>
     public int RetainedEvidenceChars => this.retainedEvidenceChars;
+
+    /// <summary>
+    ///     Gets or sets the per-request input token budget resolved for the model, used to decide whether the
+    ///     transient transcript has grown enough to be worth compacting. Zero means unknown, in which case
+    ///     compaction runs on every tool round.
+    /// </summary>
+    public int InputBudgetTokens { get; set; }
+
+    /// <summary>Gets or sets the tokenizer used to size the transcript against <see cref="InputBudgetTokens" />.</summary>
+    public string? TokenizerName { get; set; }
 
     /// <summary>Records a single tool invocation.</summary>
     /// <param name="toolName">Name of the tool called.</param>
@@ -231,8 +248,11 @@ internal sealed class ReviewLoopState
     /// <summary>Sets the durable replay baseline used for later stateless fallback or compaction.</summary>
     public void SetPersistentMessages(IEnumerable<ChatMessage> messages)
     {
+        // Materialize before clearing: callers may pass the baseline itself (session downgrade) or a lazy query
+        // over it, and clearing first would leave nothing to copy back.
+        var snapshot = messages.ToList();
         this.PersistentMessages.Clear();
-        this.PersistentMessages.AddRange(messages);
+        this.PersistentMessages.AddRange(snapshot);
         this.ReplayedPayloadSummary = DescribeReplay(this.PersistentMessages);
     }
 
@@ -263,7 +283,7 @@ internal sealed class ReviewLoopState
         }
 
         var messagesToCompact = this.Messages.Skip(this.PersistentMessages.Count).ToList();
-        if (messagesToCompact.Count == 0)
+        if (messagesToCompact.Count == 0 || !this.ShouldCompact(messagesToCompact))
         {
             return;
         }
@@ -328,6 +348,22 @@ internal sealed class ReviewLoopState
             LastUpdatedAt = DateTimeOffset.UtcNow,
         };
         this.ReplayedPayloadSummary = DescribeReplay(this.Messages);
+    }
+
+    /// <summary>
+    ///     Decides whether the transient transcript has grown far enough into the model's input budget to be worth
+    ///     compacting. Without a known budget the loop keeps its previous behaviour of compacting every round.
+    /// </summary>
+    private bool ShouldCompact(IReadOnlyList<ChatMessage> messagesToCompact)
+    {
+        if (this.InputBudgetTokens <= 0)
+        {
+            return true;
+        }
+
+        var threshold = (int)(this.InputBudgetTokens * CompactionBudgetFraction);
+        var transcriptTokens = ReviewContextBudget.EstimateMessagesTokens(this.TokenizerName, messagesToCompact);
+        return transcriptTokens > threshold;
     }
 
     /// <summary>
