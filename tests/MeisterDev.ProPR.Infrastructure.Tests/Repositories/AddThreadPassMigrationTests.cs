@@ -87,12 +87,13 @@ public sealed class AddThreadPassMigrationTests(PostgresContainerFixture fixture
             {
                 await MigrateToAsync(afterUpgrade, ThreadPassMigration);
 
-                var scan = await afterUpgrade.ReviewPrScans
-                    .AsNoTracking()
-                    .FirstAsync(candidate => candidate.ClientId == clientId);
+                // Read through raw SQL for the same reason the row was written that way: the entity carries
+                // every column the table ever grows, and this database stops at the migration under test.
+                var (lastProcessedCommitId, lastThreadPassRevisionKey) =
+                    await ReadScanWatermarksAsync(scratch, clientId);
 
-                Assert.Equal("iteration-11", scan.LastProcessedCommitId);
-                Assert.Equal("iteration-11", scan.LastThreadPassRevisionKey);
+                Assert.Equal("iteration-11", lastProcessedCommitId);
+                Assert.Equal("iteration-11", lastThreadPassRevisionKey);
             }
         }
         finally
@@ -116,6 +117,22 @@ public sealed class AddThreadPassMigrationTests(PostgresContainerFixture fixture
     private static Task MigrateToAsync(MeisterProPRDbContext dbContext, string targetMigration)
     {
         return dbContext.GetInfrastructure().GetRequiredService<IMigrator>().MigrateAsync(targetMigration);
+    }
+
+    private static async Task<(string LastProcessedCommitId, string LastThreadPassRevisionKey)>
+        ReadScanWatermarksAsync(string connectionString, Guid clientId)
+    {
+        await using var connection = new NpgsqlConnection(connectionString);
+        await connection.OpenAsync();
+        await using var command = new NpgsqlCommand(
+            "SELECT last_processed_commit_id, last_thread_pass_revision_key FROM review_pr_scans WHERE client_id = @clientId;",
+            connection);
+        command.Parameters.AddWithValue("clientId", clientId);
+
+        await using var reader = await command.ExecuteReaderAsync();
+        Assert.True(await reader.ReadAsync(), "The seeded scan row is missing after the upgrade.");
+
+        return (reader.GetString(0), reader.GetString(1));
     }
 
     private static async Task ExecuteOnServerAsync(string connectionString, string sql)
