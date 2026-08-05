@@ -203,6 +203,19 @@ public sealed class MentionReplyJob
     /// <summary>When the job finished (success or failure), if available.</summary>
     public DateTimeOffset? CompletedAt { get; set; }
 
+    /// <summary>
+    ///     Provider-native identifier of the reply comment this job posted, recorded by the same update that
+    ///     completes the job. Null while the job has not posted, and for an adapter that could not report one.
+    /// </summary>
+    /// <remarks>
+    ///     The answer's provenance has to be reconstructable from persisted state alone. The comment id is only
+    ///     known in the posting process, and a crash between completing the job and writing the provenance row
+    ///     used to lose it for good: the reply stays on the pull request, the job is complete, and nothing knows
+    ///     an origin row is missing. Carrying the id on the job means the missing row is derivable afterwards,
+    ///     and it costs no extra write, because it rides along on the completion update.
+    /// </remarks>
+    public string? PostedReplyCommentId { get; set; }
+
     /// <summary>Error details if the job failed.</summary>
     public string? ErrorMessage { get; set; }
 

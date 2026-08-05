@@ -162,7 +162,7 @@ public sealed class MentionReplyServiceTests
                 job.ReviewThreadReference,
                 answer,
                 Arg.Any<CancellationToken>());
-        await this._jobRepository.Received(1).SetCompletedAsync(job.Id, Arg.Any<CancellationToken>());
+        await this._jobRepository.Received(1).SetCompletedAsync(job.Id, Arg.Any<string?>(), Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -286,7 +286,23 @@ public sealed class MentionReplyServiceTests
                 && entries[0].ProviderCommentId == "answer-comment-5"
                 && entries[0].JobId == job.Id),
             Arg.Any<CancellationToken>());
-        await this._jobRepository.Received(1).SetCompletedAsync(job.Id, Arg.Any<CancellationToken>());
+        await this._jobRepository.Received(1).SetCompletedAsync(job.Id, Arg.Any<string?>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task ProcessAsync_HappyPath_CompletesTheJobWithTheCommentIdItPosted()
+    {
+        // The completion update is the only write guaranteed to happen after the answer is posted, so it is
+        // where the comment id has to land. Without it on the job, a crash before the provenance row is written
+        // loses the attribution for good: the answer stays on the pull request and nothing can say who posted it.
+        var job = MakeJob();
+        SetupAnsweredMention(job, "An answer.");
+        this.SetupPostedCommentId("answer-comment-5");
+
+        await this._sut.ProcessAsync(job);
+
+        await this._jobRepository.Received(1)
+            .SetCompletedAsync(job.Id, "answer-comment-5", Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -301,7 +317,7 @@ public sealed class MentionReplyServiceTests
         await this._originStore.DidNotReceive().RecordAsync(
             Arg.Any<IReadOnlyList<PostedCommentOriginEntry>>(),
             Arg.Any<CancellationToken>());
-        await this._jobRepository.Received(1).SetCompletedAsync(job.Id, Arg.Any<CancellationToken>());
+        await this._jobRepository.Received(1).SetCompletedAsync(job.Id, Arg.Any<string?>(), Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -317,7 +333,7 @@ public sealed class MentionReplyServiceTests
 
         await this._sut.ProcessAsync(job);
 
-        await this._jobRepository.Received(1).SetCompletedAsync(job.Id, Arg.Any<CancellationToken>());
+        await this._jobRepository.Received(1).SetCompletedAsync(job.Id, Arg.Any<string?>(), Arg.Any<CancellationToken>());
         await this._jobRepository.DidNotReceiveWithAnyArgs().SetFailedAsync(default, default!);
     }
 
@@ -326,8 +342,8 @@ public sealed class MentionReplyServiceTests
     {
         // The recorder rethrows on cancellation rather than claiming a row it never wrote, and the outer
         // handler lets a cancellation through. So the recording has to run after the job is completed: in
-        // front of it, a cancellation would leave the answer posted and the job stuck in Processing, where
-        // nothing retries it and nothing reports it failed.
+        // front of it, a cancellation would leave the answer posted and the job stuck in Processing, which the
+        // next startup resets to Pending and works again, posting the same answer a second time.
         using var cancellation = new CancellationTokenSource();
         var job = MakeJob();
         SetupAnsweredMention(job, "An answer.");
@@ -355,7 +371,7 @@ public sealed class MentionReplyServiceTests
 
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() => this._sut.ProcessAsync(job, cancellation.Token));
 
-        await this._jobRepository.Received(1).SetCompletedAsync(job.Id, Arg.Any<CancellationToken>());
+        await this._jobRepository.Received(1).SetCompletedAsync(job.Id, Arg.Any<string?>(), Arg.Any<CancellationToken>());
     }
 
     [Fact]

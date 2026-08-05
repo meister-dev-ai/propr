@@ -74,12 +74,16 @@ public sealed partial class MentionReplyService(
             var replyCommentId = await providerRegistry.GetReviewThreadReplyPublisher(job.Provider)
                 .ReplyAsync(job.ClientId, job.ReviewThreadReference, answer, cancellationToken);
 
-            await jobRepository.SetCompletedAsync(job.Id, cancellationToken);
+            // Completing the job carries the comment id that was just posted. Nothing that can throw may sit
+            // between posting the answer and completing the job: a cancellation in that gap leaves the answer
+            // on the pull request and the job back in Pending at the next startup, which posts it a second
+            // time. So the id rides along on the completion update rather than travelling in a write of its own.
+            await jobRepository.SetCompletedAsync(job.Id, replyCommentId, cancellationToken);
             LogJobCompleted(logger, job.Id);
 
-            // Provenance last. It is bookkeeping, and nothing that can throw may sit between posting the
-            // answer and completing the job: a cancellation in that gap leaves the answer on the pull request
-            // and the job stuck in Processing, where nothing retries it and nothing reports it failed.
+            // Provenance last, because it is bookkeeping and the gap above must stay empty. It is no longer the
+            // only chance to record it: the id is on the completed job, so a provenance row lost to a crash
+            // here is derivable from persisted state and IMentionReplyProvenanceReconciler rewrites it.
             await this.RecordPostedReplyOriginAsync(job, replyCommentId, cancellationToken);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
@@ -98,7 +102,11 @@ public sealed partial class MentionReplyService(
     // misattributed. The mention job is the originating job, so its own id is what the row records.
     //
     // Strictly best-effort: the answer is already on the pull request by the time this runs, and a recording
-    // failure must neither undo it nor fail the job. An adapter that reported no comment id records nothing.
+    // failure must neither undo it nor fail the job. An adapter that reported no comment id records nothing,
+    // and has nothing to recover either: there is no id to attribute the comment by.
+    //
+    // Best-effort no longer means one attempt. The completed job carries the comment id, so a failure here, or
+    // a process death before it runs, leaves the row derivable rather than lost, and the reconciler writes it.
     private async Task RecordPostedReplyOriginAsync(
         MentionReplyJob job,
         string? providerCommentId,

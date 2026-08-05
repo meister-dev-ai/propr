@@ -136,6 +136,11 @@ internal sealed class MentionReplyJobConfiguration : IEntityTypeConfiguration<Me
             .HasColumnName("error_message")
             .IsRequired(false);
 
+        builder.Property(j => j.PostedReplyCommentId)
+            .HasColumnName("posted_reply_comment_id")
+            .HasMaxLength(256)
+            .IsRequired(false);
+
         builder.HasOne<ClientRecord>()
             .WithMany()
             .HasForeignKey(j => j.ClientId)

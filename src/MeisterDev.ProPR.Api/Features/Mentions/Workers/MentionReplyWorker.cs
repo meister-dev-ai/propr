@@ -77,10 +77,34 @@ public sealed partial class MentionReplyWorker(
             }
 
             LogHydrated(logger, pending.Count);
+
+            await this.ReconcileReplyProvenanceAsync(scope, cancellationToken);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
             LogHydrationError(logger, ex);
+        }
+    }
+
+    // The startup counterpart to resetting stuck jobs: a process that died between completing a mention job and
+    // recording who posted its answer left the answer attributable to nobody, and this restart is the event that
+    // follows. Its own try/catch because it is recovery bookkeeping: failing to rewrite an old provenance row
+    // must never stop the pending jobs above from being worked.
+    private async Task ReconcileReplyProvenanceAsync(AsyncServiceScope scope, CancellationToken cancellationToken)
+    {
+        var reconciler = scope.ServiceProvider.GetService<IMentionReplyProvenanceReconciler>();
+        if (reconciler is null)
+        {
+            return;
+        }
+
+        try
+        {
+            await reconciler.ReconcileAsync(cancellationToken);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            LogProvenanceReconciliationError(logger, ex);
         }
     }
 
@@ -136,6 +160,11 @@ public sealed partial class MentionReplyWorker(
         Level = LogLevel.Debug,
         Message = "MentionReplyWorker: IMentionReplyService not registered — job skipped")]
     private static partial void LogReplyServiceUnavailable(ILogger logger);
+
+    [LoggerMessage(
+        Level = LogLevel.Error,
+        Message = "MentionReplyWorker: rewriting missing mention-answer provenance failed")]
+    private static partial void LogProvenanceReconciliationError(ILogger logger, Exception ex);
 
     [LoggerMessage(
         Level = LogLevel.Error,

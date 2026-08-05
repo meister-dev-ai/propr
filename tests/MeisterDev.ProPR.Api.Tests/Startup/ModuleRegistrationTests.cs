@@ -91,6 +91,7 @@ public sealed class ModuleRegistrationTests
         Assert.NotNull(FindService<IProCursorTokenUsageRecorder>(services));
         Assert.NotNull(FindService<ProCursorOperationalDbContext>(services));
         Assert.NotNull(FindService<IMentionAnswerService>(services));
+        Assert.NotNull(FindService<IMentionReplyProvenanceReconciler>(services));
         Assert.NotNull(FindService<IPrCrawlService>(services));
         Assert.NotNull(FindService<IFileByFileReviewOrchestrator>(services));
         Assert.NotNull(FindService<IScmProviderRegistry>(services));

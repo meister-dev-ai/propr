@@ -166,6 +166,34 @@ public sealed class PostedCommentOriginStore(
             ct);
     }
 
+    public Task<IReadOnlyList<Guid>> GetJobIdsWithOriginsAsync(
+        IReadOnlyList<Guid> jobIds,
+        CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(jobIds);
+
+        if (jobIds.Count == 0)
+        {
+            return Task.FromResult<IReadOnlyList<Guid>>([]);
+        }
+
+        var distinctJobIds = jobIds.Distinct().ToList();
+
+        return this.WithDbAsync<IReadOnlyList<Guid>>(
+            async db =>
+            {
+                var recorded = await db.PostedCommentOrigins
+                    .AsNoTracking()
+                    .Where(origin => distinctJobIds.Contains(origin.JobId))
+                    .Select(origin => origin.JobId)
+                    .Distinct()
+                    .ToListAsync(ct);
+
+                return recorded;
+            },
+            ct);
+    }
+
     public Task<int> PurgeForPullRequestAsync(
         Guid clientId,
         string repositoryId,

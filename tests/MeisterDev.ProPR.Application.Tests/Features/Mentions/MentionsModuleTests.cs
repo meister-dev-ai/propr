@@ -186,6 +186,6 @@ public sealed class MentionsModuleTests
 
         await threadReplier.Received(1)
             .ReplyAsync(job.ClientId, job.ReviewThreadReference, "Here is the answer.", Arg.Any<CancellationToken>());
-        await jobRepository.Received(1).SetCompletedAsync(job.Id, Arg.Any<CancellationToken>());
+        await jobRepository.Received(1).SetCompletedAsync(job.Id, Arg.Any<string?>(), Arg.Any<CancellationToken>());
     }
 }

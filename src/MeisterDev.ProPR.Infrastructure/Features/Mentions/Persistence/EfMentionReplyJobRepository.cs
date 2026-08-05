@@ -1,6 +1,7 @@
 // Copyright (c) Andreas Rain.
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
+using MeisterDev.ProPR.Application.Features.Mentions.Models;
 using MeisterDev.ProPR.Application.Interfaces;
 using MeisterDev.ProPR.Domain.Entities;
 using MeisterDev.ProPR.Domain.Enums;
@@ -100,7 +101,7 @@ public sealed class EfMentionReplyJobRepository(MeisterProPRDbContext dbContext)
     }
 
     /// <inheritdoc />
-    public async Task SetCompletedAsync(Guid jobId, CancellationToken ct = default)
+    public async Task SetCompletedAsync(Guid jobId, string? postedReplyCommentId, CancellationToken ct = default)
     {
         var job = await dbContext.MentionReplyJobs.FindAsync([jobId], ct);
         if (job is null)
@@ -110,7 +111,35 @@ public sealed class EfMentionReplyJobRepository(MeisterProPRDbContext dbContext)
 
         job.Status = MentionJobStatus.Completed;
         job.CompletedAt = DateTimeOffset.UtcNow;
+        job.PostedReplyCommentId = NormalizeCommentId(postedReplyCommentId);
         await dbContext.SaveChangesAsync(ct);
+    }
+
+    /// <inheritdoc />
+    public async Task<IReadOnlyList<PostedMentionReply>> GetPostedRepliesAsync(
+        DateTimeOffset completedAtOrAfter,
+        int maxResults,
+        CancellationToken ct = default)
+    {
+        ArgumentOutOfRangeException.ThrowIfLessThan(maxResults, 1);
+
+        return await dbContext.MentionReplyJobs
+            .AsNoTracking()
+            .Where(j => j.Status == MentionJobStatus.Completed
+                        && j.PostedReplyCommentId != null
+                        && j.CompletedAt != null
+                        && j.CompletedAt >= completedAtOrAfter)
+            .OrderByDescending(j => j.CompletedAt)
+            .Take(maxResults)
+            .Select(j => new PostedMentionReply(
+                j.Id,
+                j.ClientId,
+                j.RepositoryId,
+                j.PullRequestId,
+                j.ThreadId,
+                j.PostedReplyCommentId!,
+                j.CompletedAt!.Value))
+            .ToListAsync(ct);
     }
 
     /// <inheritdoc />
@@ -122,5 +151,12 @@ public sealed class EfMentionReplyJobRepository(MeisterProPRDbContext dbContext)
                 s => s.SetProperty(j => j.Status, MentionJobStatus.Pending)
                     .SetProperty(j => j.ProcessingStartedAt, (DateTimeOffset?)null),
                 ct);
+    }
+
+    // An adapter that reported no comment id, or reported whitespace, has told us nothing to attribute. Store
+    // null for both so the recovery sweep's "knows its own comment id" filter means exactly that.
+    private static string? NormalizeCommentId(string? postedReplyCommentId)
+    {
+        return string.IsNullOrWhiteSpace(postedReplyCommentId) ? null : postedReplyCommentId.Trim();
     }
 }

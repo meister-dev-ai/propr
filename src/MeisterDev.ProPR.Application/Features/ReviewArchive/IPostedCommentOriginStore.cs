@@ -58,6 +58,16 @@ public interface IPostedCommentOriginStore
         CancellationToken ct = default);
 
     /// <summary>
+    ///     Returns which of the supplied <paramref name="jobIds" /> already have a provenance row, so a caller
+    ///     rebuilding lost attribution can tell what is genuinely missing from what is merely already there.
+    ///     Answers for the whole set in one query. Job ids with no row are absent from the result rather than
+    ///     reported as anything.
+    /// </summary>
+    Task<IReadOnlyList<Guid>> GetJobIdsWithOriginsAsync(
+        IReadOnlyList<Guid> jobIds,
+        CancellationToken ct = default);
+
+    /// <summary>
     ///     Deletes every provenance row for the supplied pull request. Returns the number of rows removed.
     /// </summary>
     Task<int> PurgeForPullRequestAsync(

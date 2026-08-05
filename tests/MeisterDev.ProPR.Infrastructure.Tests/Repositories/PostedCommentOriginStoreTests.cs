@@ -244,6 +244,50 @@ public sealed class PostedCommentOriginStoreTests : IDisposable
         Assert.Null(await this._store.GetJobIdForCommentAsync(clientId, "repo-2", 300, null, "comment-d"));
         Assert.Equal(jobId, await this._store.GetJobIdForCommentAsync(clientId, "repo-3", 400, null, "comment-e"));
     }
+
+    [Fact]
+    public async Task GetJobIdsWithOriginsAsync_ReportsOnlyTheJobsThatHaveARow()
+    {
+        var clientId = Guid.NewGuid();
+        var recorded = Guid.NewGuid();
+        var unrecorded = Guid.NewGuid();
+
+        await this._store.RecordAsync(
+        [
+            new PostedCommentOriginEntry(clientId, "repo-1", 100, null, "comment-a", recorded, DateTimeOffset.UtcNow),
+        ]);
+
+        var withOrigins = await this._store.GetJobIdsWithOriginsAsync([recorded, unrecorded]);
+
+        Assert.Equal([recorded], withOrigins);
+    }
+
+    [Fact]
+    public async Task GetJobIdsWithOriginsAsync_JobWithSeveralRows_IsReportedOnce()
+    {
+        // One review job posts many comments, so the answer is a set membership rather than a count.
+        var clientId = Guid.NewGuid();
+        var jobId = Guid.NewGuid();
+        var now = DateTimeOffset.UtcNow;
+
+        await this._store.RecordAsync(
+        [
+            new PostedCommentOriginEntry(clientId, "repo-1", 100, null, "comment-a", jobId, now),
+            new PostedCommentOriginEntry(clientId, "repo-1", 100, null, "comment-b", jobId, now),
+        ]);
+
+        var withOrigins = await this._store.GetJobIdsWithOriginsAsync([jobId]);
+
+        Assert.Equal([jobId], withOrigins);
+    }
+
+    [Fact]
+    public async Task GetJobIdsWithOriginsAsync_NothingAsked_QueriesNothing()
+    {
+        var withOrigins = await this._store.GetJobIdsWithOriginsAsync([]);
+
+        Assert.Empty(withOrigins);
+    }
 }
 
 /// <summary>

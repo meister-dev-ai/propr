@@ -1,6 +1,7 @@
 // Copyright (c) Andreas Rain.
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
+using MeisterDev.ProPR.Application.Features.Mentions.Models;
 using MeisterDev.ProPR.Domain.Entities;
 using MeisterDev.ProPR.Domain.Enums;
 
@@ -58,10 +59,32 @@ public interface IMentionReplyJobRepository
     /// <param name="ct">A token to monitor for cancellation requests.</param>
     Task SetFailedAsync(Guid jobId, string errorMessage, CancellationToken ct = default);
 
-    /// <summary>Marks a job as successfully completed.</summary>
+    /// <summary>Marks a job as successfully completed, recording the reply it posted.</summary>
     /// <param name="jobId">The job identifier.</param>
+    /// <param name="postedReplyCommentId">
+    ///     Provider-native identifier of the reply comment the job posted, or null when the adapter reported
+    ///     none. It travels on the completion update rather than in a write of its own, because a second write
+    ///     is a second chance to lose it: a crash between the two leaves an answer on the pull request that
+    ///     nothing can attribute afterwards.
+    /// </param>
     /// <param name="ct">A token to monitor for cancellation requests.</param>
-    Task SetCompletedAsync(Guid jobId, CancellationToken ct = default);
+    Task SetCompletedAsync(Guid jobId, string? postedReplyCommentId, CancellationToken ct = default);
+
+    /// <summary>
+    ///     Returns the answers that reached a pull request and know their own comment id, most recently
+    ///     completed first, so provenance missing for any of them can be rewritten from persisted state.
+    /// </summary>
+    /// <param name="completedAtOrAfter">
+    ///     Oldest completion to consider. Bounds the sweep: an answer old enough that its pull request's
+    ///     retained data has been purged has nothing left to attribute, and a job whose reply can never be
+    ///     recorded must not be reconsidered forever.
+    /// </param>
+    /// <param name="maxResults">Upper bound on rows returned, a backstop rather than an expected limit.</param>
+    /// <param name="ct">A token to monitor for cancellation requests.</param>
+    Task<IReadOnlyList<PostedMentionReply>> GetPostedRepliesAsync(
+        DateTimeOffset completedAtOrAfter,
+        int maxResults,
+        CancellationToken ct = default);
 
     /// <summary>
     ///     Transitions all <see cref="MentionJobStatus.Processing" /> jobs back to

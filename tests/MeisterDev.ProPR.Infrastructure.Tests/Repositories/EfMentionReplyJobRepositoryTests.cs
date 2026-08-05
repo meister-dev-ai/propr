@@ -160,7 +160,7 @@ public sealed class EfMentionReplyJobRepositoryTests(PostgresContainerFixture fi
         await this._repo.AddAsync(job);
         await this._repo.TryTransitionAsync(job.Id, MentionJobStatus.Pending, MentionJobStatus.Processing);
 
-        await this._repo.SetCompletedAsync(job.Id);
+        await this._repo.SetCompletedAsync(job.Id, "4711");
 
         var pending = await this._repo.GetPendingAsync();
         Assert.Empty(pending);
@@ -205,5 +205,91 @@ public sealed class EfMentionReplyJobRepositoryTests(PostgresContainerFixture fi
         // Same (clientId, prId, threadId, commentId) → should fail on unique constraint
         var job2 = MakeJob(prId: 2, threadId: "30", commentId: 300);
         await Assert.ThrowsAnyAsync<Exception>(() => this._repo.AddAsync(job2));
+    }
+
+    [Fact]
+    public async Task GetPostedRepliesAsync_ReturnsTheAnswerWithEveryCoordinateItsProvenanceNeeds()
+    {
+        // The point of persisting the comment id: a lost provenance row is rebuildable from the job alone.
+        var job = MakeJob(prId: 7, threadId: "70", commentId: 700);
+        await this._repo.AddAsync(job);
+        await this._repo.TryTransitionAsync(job.Id, MentionJobStatus.Pending, MentionJobStatus.Processing);
+        await this._repo.SetCompletedAsync(job.Id, "answer-comment-5");
+
+        var posted = await this._repo.GetPostedRepliesAsync(DateTimeOffset.UtcNow.AddHours(-1), 100);
+
+        var reply = Assert.Single(posted);
+        Assert.Equal(job.Id, reply.JobId);
+        Assert.Equal(ClientId, reply.ClientId);
+        Assert.Equal("repo", reply.RepositoryId);
+        Assert.Equal(7, reply.PullRequestId);
+        Assert.Equal("70", reply.ProviderThreadId);
+        Assert.Equal("answer-comment-5", reply.ProviderCommentId);
+        Assert.NotEqual(default, reply.PostedAt);
+    }
+
+    [Fact]
+    public async Task GetPostedRepliesAsync_JobThatPostedNothingIdentifiable_IsNotReturned()
+    {
+        // An adapter that reported no comment id leaves nothing to attribute the comment by, so the job is not
+        // a recovery candidate. It is a job whose answer can never carry provenance either way.
+        var job = MakeJob(prId: 8, threadId: "80", commentId: 800);
+        await this._repo.AddAsync(job);
+        await this._repo.TryTransitionAsync(job.Id, MentionJobStatus.Pending, MentionJobStatus.Processing);
+        await this._repo.SetCompletedAsync(job.Id, null);
+
+        var posted = await this._repo.GetPostedRepliesAsync(DateTimeOffset.UtcNow.AddHours(-1), 100);
+
+        Assert.Empty(posted);
+    }
+
+    [Fact]
+    public async Task GetPostedRepliesAsync_AnswerOlderThanTheWindow_IsNotReturned()
+    {
+        var job = MakeJob(prId: 9, threadId: "90", commentId: 900);
+        await this._repo.AddAsync(job);
+        await this._repo.TryTransitionAsync(job.Id, MentionJobStatus.Pending, MentionJobStatus.Processing);
+        await this._repo.SetCompletedAsync(job.Id, "answer-comment-9");
+
+        var posted = await this._repo.GetPostedRepliesAsync(DateTimeOffset.UtcNow.AddHours(1), 100);
+
+        Assert.Empty(posted);
+    }
+
+    [Fact]
+    public async Task GetPostedRepliesAsync_UnfinishedJob_IsNotReturned()
+    {
+        var job = MakeJob(prId: 11, threadId: "110", commentId: 1100);
+        await this._repo.AddAsync(job);
+        await this._repo.TryTransitionAsync(job.Id, MentionJobStatus.Pending, MentionJobStatus.Processing);
+
+        var posted = await this._repo.GetPostedRepliesAsync(DateTimeOffset.UtcNow.AddHours(-1), 100);
+
+        Assert.Empty(posted);
+    }
+
+    [Fact]
+    public async Task GetPostedRepliesAsync_MoreAnswersThanTheCap_ReturnsTheMostRecentOnes()
+    {
+        var older = MakeJob(prId: 12, threadId: "120", commentId: 1200);
+        await this._repo.AddAsync(older);
+        await this._repo.TryTransitionAsync(older.Id, MentionJobStatus.Pending, MentionJobStatus.Processing);
+        await this._repo.SetCompletedAsync(older.Id, "answer-comment-older");
+
+        var newer = MakeJob(prId: 13, threadId: "130", commentId: 1300);
+        await this._repo.AddAsync(newer);
+        await this._repo.TryTransitionAsync(newer.Id, MentionJobStatus.Pending, MentionJobStatus.Processing);
+        await this._repo.SetCompletedAsync(newer.Id, "answer-comment-newer");
+
+        // Space the two apart explicitly rather than trusting two clock reads a few milliseconds apart to
+        // order the way the assertion needs.
+        await this._dbContext.MentionReplyJobs
+            .Where(j => j.Id == older.Id)
+            .ExecuteUpdateAsync(s => s.SetProperty(j => j.CompletedAt, DateTimeOffset.UtcNow.AddMinutes(-10)));
+
+        var posted = await this._repo.GetPostedRepliesAsync(DateTimeOffset.UtcNow.AddHours(-1), 1);
+
+        var reply = Assert.Single(posted);
+        Assert.Equal(newer.Id, reply.JobId);
     }
 }

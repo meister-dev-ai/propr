@@ -144,8 +144,12 @@ public sealed class ProviderNativeThreadIdentityMigrationTests(PostgresContainer
                         .SingleAsync(row => row.Id == activityId)).ThreadId);
                 Assert.Equal(
                     longer,
-                    (await afterUpgrade.MentionReplyJobs.AsNoTracking()
-                        .SingleAsync(row => row.Id == mentionId)).ThreadId);
+                    // Read as a projection, not as an entity: the schema here stops at this migration, while the
+                    // entity carries every column added since, and materializing it would select those too.
+                    await afterUpgrade.MentionReplyJobs.AsNoTracking()
+                        .Where(row => row.Id == mentionId)
+                        .Select(row => row.ThreadId)
+                        .SingleAsync());
                 Assert.Equal(
                     longer,
                     (await afterUpgrade.PostedFindingRecords.AsNoTracking()

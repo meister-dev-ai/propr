@@ -30,6 +30,11 @@ public static class MentionsModuleServiceCollectionExtensions
         {
             services.AddScoped<IMentionReplyJobRepository, EfMentionReplyJobRepository>();
             services.AddScoped<IMentionScanRepository, EfMentionScanRepository>();
+
+            // Rebuilds provenance a crash left unwritten. Registered under the same gate as the job repository
+            // it reads, and as the provenance store the review-archive module registers, so it exists exactly
+            // when both of its inputs do.
+            services.AddScoped<IMentionReplyProvenanceReconciler, MentionReplyProvenanceReconciler>();
         }
 
         services.AddScoped<IMentionScanService, MentionScanService>();
