@@ -37,7 +37,7 @@ public class ReviewPromptsExistingThreadsTests
         var threads = new List<PrCommentThread>
         {
             new(
-                2,
+                "2",
                 null,
                 null,
                 new List<PrThreadComment>
@@ -57,7 +57,7 @@ public class ReviewPromptsExistingThreadsTests
         var threads = new List<PrCommentThread>
         {
             new(
-                1,
+                "1",
                 "/src/Bar.cs",
                 10,
                 new List<PrThreadComment>
@@ -81,7 +81,7 @@ public class ReviewPromptsExistingThreadsTests
         var threads = new List<PrCommentThread>
         {
             new(
-                1,
+                "1",
                 "/src/Foo.cs",
                 42,
                 new List<PrThreadComment>

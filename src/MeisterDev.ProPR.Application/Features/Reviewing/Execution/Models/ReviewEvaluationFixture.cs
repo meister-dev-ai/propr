@@ -99,7 +99,7 @@ public sealed record FixtureThreadMemory(IReadOnlyList<FixtureThreadMemoryMatch>
 /// </summary>
 public sealed record FixtureThreadMemoryMatch(
     Guid? MemoryRecordId,
-    long ThreadId,
+    string ThreadId,
     string? FilePath,
     string ResolutionSummary,
     float SimilarityScore,
@@ -248,7 +248,7 @@ public sealed record FixtureChangedFile(
 ///     Prior discussion thread supplied with the offline fixture.
 /// </summary>
 public sealed record FixtureThread(
-    long ThreadId,
+    string ThreadId,
     string? FilePath,
     int? LineNumber,
     string? Status,

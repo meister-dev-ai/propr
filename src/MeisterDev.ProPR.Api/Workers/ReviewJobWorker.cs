@@ -171,7 +171,10 @@ public sealed partial class ReviewJobWorker(
             return null;
         }
 
-        var baseline = await spendAccumulator.GetBaselineAsync(job, DateOnly.FromDateTime(DateTime.UtcNow), ct);
+        var baseline = await spendAccumulator.GetBaselineAsync(
+            ReviewSpendSubject.For(job),
+            DateOnly.FromDateTime(DateTime.UtcNow),
+            ct);
         return BudgetEvaluator.FindAdmissionBreach(
             caps,
             baseline.ClientMonthToDate.KnownUsd,

@@ -10875,12 +10875,13 @@
         "tags": [
           "Jobs"
         ],
-        "summary": "Returns the protocol (agentic trace) for a single review job.",
+        "summary": "Returns the protocol (agentic trace) for a single unit of work: a review job, or a thread pass over\nthe same pull request's conversation.",
+        "description": "One route serves both because an operator inspecting a pull request reads one trace view. A thread\npass records one protocol per thread it evaluated, in the same shape a review pass records one per\nfile.",
         "parameters": [
           {
             "name": "id",
             "in": "path",
-            "description": "The review job identifier.",
+            "description": "The review job or thread pass identifier.",
             "required": true,
             "schema": {
               "type": "string",
@@ -10975,12 +10976,13 @@
         "tags": [
           "Jobs"
         ],
-        "summary": "Returns the protocol (agentic trace) for a single review job.",
+        "summary": "Returns the protocol (agentic trace) for a single unit of work: a review job, or a thread pass over\nthe same pull request's conversation.",
+        "description": "One route serves both because an operator inspecting a pull request reads one trace view. A thread\npass records one protocol per thread it evaluated, in the same shape a review pass records one per\nfile.",
         "parameters": [
           {
             "name": "id",
             "in": "path",
-            "description": "The review job identifier.",
+            "description": "The review job or thread pass identifier.",
             "required": true,
             "schema": {
               "type": "string",
@@ -11075,12 +11077,12 @@
         "tags": [
           "Jobs"
         ],
-        "summary": "Returns one full protocol pass (including captured event bodies) for a single review job.",
+        "summary": "Returns one full protocol pass (including captured event bodies) for a single review job or thread pass.",
         "parameters": [
           {
             "name": "id",
             "in": "path",
-            "description": "The review job identifier.",
+            "description": "The review job or thread pass identifier.",
             "required": true,
             "schema": {
               "type": "string",
@@ -11167,12 +11169,12 @@
         "tags": [
           "Jobs"
         ],
-        "summary": "Returns one full protocol pass (including captured event bodies) for a single review job.",
+        "summary": "Returns one full protocol pass (including captured event bodies) for a single review job or thread pass.",
         "parameters": [
           {
             "name": "id",
             "in": "path",
-            "description": "The review job identifier.",
+            "description": "The review job or thread pass identifier.",
             "required": true,
             "schema": {
               "type": "string",
@@ -16568,13 +16570,13 @@
         "tags": [
           "ReviewJobs"
         ],
-        "summary": "Manually restart a failed review job.",
-        "description": "Failed reviews are not auto-continued (to avoid looping on deterministic failures), so a restart must be\ntriggered explicitly. Any user with at least MeisterDev.ProPR.Domain.Enums.ClientRole.ClientUser for the job's owning client\nmay restart it — administrator rights are not required.",
+        "summary": "Manually restart a failed or budget-blocked review job or thread pass.",
+        "description": "Failed reviews are not auto-continued (to avoid looping on deterministic failures), and budget recovery\nis deliberately an operator decision, so a restart must be triggered explicitly. Any user with at least\nMeisterDev.ProPR.Domain.Enums.ClientRole.ClientUser for the owning client may restart it, and administrator rights are not\nrequired. A thread pass restarts through the same route, because both are units of work over one pull\nrequest and an operator recovers them the same way.",
         "parameters": [
           {
             "name": "jobId",
             "in": "path",
-            "description": "The identifier of the failed review job to restart.",
+            "description": "The identifier of the review job or thread pass to restart.",
             "required": true,
             "schema": {
               "type": "string",
@@ -16584,7 +16586,7 @@
         ],
         "responses": {
           "202": {
-            "description": "Restart accepted; a new pending review job was queued.",
+            "description": "Restart accepted; the work was queued again.",
             "content": {
               "text/plain": {
                 "schema": {
@@ -16664,7 +16666,7 @@
             }
           },
           "409": {
-            "description": "Job is not in a failed state, or an active job already exists for this PR revision.",
+            "description": "Job is not in a restartable state, or an active job already exists for this PR revision.",
             "content": {
               "text/plain": {
                 "schema": {
@@ -16691,13 +16693,13 @@
         "tags": [
           "ReviewJobs"
         ],
-        "summary": "Manually restart a failed review job.",
-        "description": "Failed reviews are not auto-continued (to avoid looping on deterministic failures), so a restart must be\ntriggered explicitly. Any user with at least MeisterDev.ProPR.Domain.Enums.ClientRole.ClientUser for the job's owning client\nmay restart it — administrator rights are not required.",
+        "summary": "Manually restart a failed or budget-blocked review job or thread pass.",
+        "description": "Failed reviews are not auto-continued (to avoid looping on deterministic failures), and budget recovery\nis deliberately an operator decision, so a restart must be triggered explicitly. Any user with at least\nMeisterDev.ProPR.Domain.Enums.ClientRole.ClientUser for the owning client may restart it, and administrator rights are not\nrequired. A thread pass restarts through the same route, because both are units of work over one pull\nrequest and an operator recovers them the same way.",
         "parameters": [
           {
             "name": "jobId",
             "in": "path",
-            "description": "The identifier of the failed review job to restart.",
+            "description": "The identifier of the review job or thread pass to restart.",
             "required": true,
             "schema": {
               "type": "string",
@@ -16707,7 +16709,7 @@
         ],
         "responses": {
           "202": {
-            "description": "Restart accepted; a new pending review job was queued.",
+            "description": "Restart accepted; the work was queued again.",
             "content": {
               "text/plain": {
                 "schema": {
@@ -16787,7 +16789,7 @@
             }
           },
           "409": {
-            "description": "Job is not in a failed state, or an active job already exists for this PR revision.",
+            "description": "Job is not in a restartable state, or an active job already exists for this PR revision.",
             "content": {
               "text/plain": {
                 "schema": {
@@ -21208,8 +21210,7 @@
             "in": "query",
             "description": "Optional: filter by thread ID.",
             "schema": {
-              "type": "integer",
-              "format": "int64"
+              "type": "string"
             }
           },
           {
@@ -21341,8 +21342,7 @@
             "in": "query",
             "description": "Optional: filter by thread ID.",
             "schema": {
-              "type": "integer",
-              "format": "int64"
+              "type": "string"
             }
           },
           {
@@ -23223,6 +23223,9 @@
           "outputLanguage": {
             "type": "string",
             "nullable": true
+          },
+          "reviewEveryIncrementEnabled": {
+            "type": "boolean"
           }
         },
         "additionalProperties": false,
@@ -24215,11 +24218,6 @@
           "findingsAlreadyHeld": {
             "type": "integer",
             "description": "Findings the collection already held for these jobs, so this run plus what was there can be compared\nagainst what coverage says the reviews produced.",
-            "format": "int32"
-          },
-          "threadsNotReplayable": {
-            "type": "integer",
-            "description": "Threads that could not be replayed because their provider thread id is not numeric.",
             "format": "int32"
           }
         },
@@ -25887,9 +25885,9 @@
             "format": "uuid"
           },
           "threadId": {
-            "type": "integer",
-            "description": "ADO thread identifier.",
-            "format": "int64"
+            "type": "string",
+            "description": "Provider-native thread identifier, as the provider itself writes it.",
+            "nullable": true
           },
           "repositoryId": {
             "type": "string",
@@ -26252,6 +26250,10 @@
           "outputLanguage": {
             "type": "string",
             "nullable": true
+          },
+          "reviewEveryIncrementEnabled": {
+            "type": "boolean",
+            "nullable": true
           }
         },
         "additionalProperties": false,
@@ -26270,6 +26272,29 @@
         },
         "additionalProperties": false,
         "description": "Patch payload for one premium capability override."
+      },
+      "PendingReviewDto": {
+        "type": "object",
+        "properties": {
+          "revisionKey": {
+            "type": "string",
+            "description": "The revision the pull request sits at, unreviewed.",
+            "nullable": true
+          },
+          "reviewedRevisionKey": {
+            "type": "string",
+            "description": "The revision the files were last reviewed at, or null when no review has recorded one.",
+            "nullable": true
+          },
+          "detectedAt": {
+            "type": "string",
+            "description": "When the unreviewed revision was first seen, so a reader can say how long ago.",
+            "format": "date-time",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false,
+        "description": "Says that the pull request has moved past the revision it was reviewed at, and was left there because\nthe client reviews only a pull request's first increment."
       },
       "PermittedProviderDescriptor": {
         "type": "object",
@@ -26442,10 +26467,102 @@
           },
           "costIsApproximate": {
             "type": "boolean"
+          },
+          "threadPasses": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PrThreadPassSummaryDto"
+            },
+            "nullable": true
+          },
+          "threadPassTotalEstimatedCostUsd": {
+            "type": "number",
+            "format": "double",
+            "nullable": true
+          },
+          "threadPassCostIsApproximate": {
+            "type": "boolean"
+          },
+          "pendingReview": {
+            "$ref": "#/components/schemas/PendingReviewDto"
           }
         },
         "additionalProperties": false,
         "description": "Aggregated view of all review activity for a specific pull request."
+      },
+      "PrThreadPassSummaryDto": {
+        "type": "object",
+        "properties": {
+          "threadPassId": {
+            "type": "string",
+            "description": "Identifier of the pass, and of its trace.",
+            "format": "uuid"
+          },
+          "status": {
+            "$ref": "#/components/schemas/ThreadPassJobStatus"
+          },
+          "createdAt": {
+            "type": "string",
+            "description": "When the pass was queued.",
+            "format": "date-time"
+          },
+          "completedAt": {
+            "type": "string",
+            "description": "When the pass reached a terminal status, if it has.",
+            "format": "date-time",
+            "nullable": true
+          },
+          "threadCount": {
+            "type": "integer",
+            "description": "How many threads the pass acted on.",
+            "format": "int32"
+          },
+          "totalInputTokens": {
+            "type": "integer",
+            "description": "Input tokens the pass spent.",
+            "format": "int64"
+          },
+          "totalOutputTokens": {
+            "type": "integer",
+            "description": "Output tokens the pass spent.",
+            "format": "int64"
+          },
+          "totalEstimatedCostUsd": {
+            "type": "number",
+            "description": "What the pass cost, or null when nothing priced was recorded.",
+            "format": "double",
+            "nullable": true
+          },
+          "costIsApproximate": {
+            "type": "boolean",
+            "description": "True when some of the pass's spend had no known price."
+          },
+          "errorMessage": {
+            "type": "string",
+            "description": "Why the last attempt failed, if it did.",
+            "nullable": true
+          },
+          "budgetBlockScope": {
+            "$ref": "#/components/schemas/BudgetScopeKind"
+          },
+          "budgetBlockCapKind": {
+            "$ref": "#/components/schemas/BudgetCapKind"
+          },
+          "budgetBlockThresholdUsd": {
+            "type": "number",
+            "description": "The cap the blocked scope was measured against.",
+            "format": "double",
+            "nullable": true
+          },
+          "budgetBlockSpentUsd": {
+            "type": "number",
+            "description": "What the blocked scope had already spent.",
+            "format": "double",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false,
+        "description": "Summary of one thread pass over this pull request's conversation."
       },
       "PrefixEligibilityStatus": {
         "enum": [
@@ -28782,7 +28899,7 @@
           },
           "originatingJobId": {
             "type": "string",
-            "description": "The review job that produced this comment, when its provenance is retained; null otherwise.",
+            "description": "The job that produced this comment: a review job, or a mention-reply job. Null when no provenance is retained.",
             "format": "uuid",
             "nullable": true
           }
@@ -30256,9 +30373,9 @@
             "format": "uuid"
           },
           "threadId": {
-            "type": "integer",
-            "description": "ADO thread ID.",
-            "format": "int64"
+            "type": "string",
+            "description": "Provider-native thread identifier.",
+            "nullable": true
           },
           "repositoryId": {
             "type": "string",
@@ -30352,9 +30469,9 @@
             "format": "uuid"
           },
           "threadId": {
-            "type": "integer",
+            "type": "string",
             "description": "Provider thread identifier.",
-            "format": "int64"
+            "nullable": true
           },
           "filePath": {
             "type": "string",
@@ -30383,6 +30500,20 @@
         },
         "additionalProperties": false,
         "description": "Summary of a thread memory record that originated from this pull request."
+      },
+      "ThreadPassJobStatus": {
+        "enum": [
+          "pending",
+          "processing",
+          "completed",
+          "failed",
+          "cancelled",
+          "budgetHeld",
+          "budgetExceeded",
+          "skipped"
+        ],
+        "type": "string",
+        "description": "Lifecycle of one thread pass over a pull request's reviewer-owned comment threads."
       },
       "ThreadResolutionIntent": {
         "enum": [

@@ -1053,6 +1053,63 @@ public sealed partial class JobRepository(
     }
 
     /// <inheritdoc />
+    public async Task<EngagedReviewRevision?> GetLatestEngagedRevisionAsync(
+        Guid clientId,
+        string organizationUrl,
+        string projectId,
+        string repositoryId,
+        int pullRequestId,
+        CancellationToken ct = default)
+    {
+        // Only the revision columns are read. This runs on the crawl hot path for every pull request of every
+        // client that reviews only the first increment, and materializing the entity would deserialize each past
+        // review's whole finding payload from the jsonb result column to compare one string.
+        var latest = await dbContext.ReviewJobs
+            .AsNoTracking()
+            .Where(j => j.ClientId == clientId &&
+                        j.OrganizationUrl == organizationUrl &&
+                        j.ProjectId == projectId &&
+                        j.RepositoryId == repositoryId &&
+                        j.PullRequestId == pullRequestId &&
+                        j.Status != JobStatus.BudgetHeld &&
+                        j.Status != JobStatus.BudgetExceeded)
+            .OrderByDescending(j => j.SubmittedAt)
+            .ThenByDescending(j => j.IterationId)
+            .Select(j => new
+            {
+                j.RevisionHeadSha,
+                j.RevisionBaseSha,
+                j.RevisionStartSha,
+                j.ProviderRevisionId,
+                j.ReviewPatchIdentity,
+                j.IterationId,
+            })
+            .FirstOrDefaultAsync(ct);
+
+        if (latest is null)
+        {
+            return null;
+        }
+
+        // Mirrors ReviewJob.ReviewRevisionReference: a revision without both shas was never recorded, and the
+        // iteration id carries the whole identity.
+        var revision = string.IsNullOrWhiteSpace(latest.RevisionHeadSha)
+                       || string.IsNullOrWhiteSpace(latest.RevisionBaseSha)
+            ? null
+            : new ReviewRevision(
+                latest.RevisionHeadSha,
+                latest.RevisionBaseSha,
+                latest.RevisionStartSha,
+                latest.ProviderRevisionId,
+                latest.ReviewPatchIdentity);
+
+        return new EngagedReviewRevision(
+            ReviewRevisionKeys.GetStoredKey(revision, latest.IterationId),
+            revision,
+            latest.IterationId);
+    }
+
+    /// <inheritdoc />
     public async Task<ReviewJob?> GetBestTerminalJobWithFileResultsByStoredRevisionAsync(
         string organizationUrl,
         string projectId,

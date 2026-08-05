@@ -1013,8 +1013,10 @@ namespace MeisterDev.ProPR.Infrastructure.Migrations
                         .HasColumnType("character varying(256)")
                         .HasColumnName("repository_id");
 
-                    b.Property<long>("ThreadId")
-                        .HasColumnType("bigint")
+                    b.Property<string>("ThreadId")
+                        .IsRequired()
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)")
                         .HasColumnName("thread_id");
 
                     b.HasKey("Id");
@@ -1213,8 +1215,10 @@ namespace MeisterDev.ProPR.Infrastructure.Migrations
                         .HasColumnType("character varying(512)")
                         .HasColumnName("thread_file_path");
 
-                    b.Property<long>("ThreadId")
-                        .HasColumnType("bigint")
+                    b.Property<string>("ThreadId")
+                        .IsRequired()
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)")
                         .HasColumnName("thread_id");
 
                     b.Property<int?>("ThreadLineNumber")
@@ -1326,8 +1330,10 @@ namespace MeisterDev.ProPR.Infrastructure.Migrations
                         .HasColumnType("integer")
                         .HasColumnName("iteration_id");
 
-                    b.Property<long>("ProviderThreadId")
-                        .HasColumnType("bigint")
+                    b.Property<string>("ProviderThreadId")
+                        .IsRequired()
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)")
                         .HasColumnName("provider_thread_id");
 
                     b.Property<int>("PullRequestId")
@@ -2271,7 +2277,7 @@ namespace MeisterDev.ProPR.Infrastructure.Migrations
                         .HasColumnType("integer")
                         .HasColumnName("iteration_count");
 
-                    b.Property<Guid>("JobId")
+                    b.Property<Guid?>("JobId")
                         .HasColumnType("uuid")
                         .HasColumnName("job_id");
 
@@ -2309,6 +2315,10 @@ namespace MeisterDev.ProPR.Infrastructure.Migrations
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("started_at");
 
+                    b.Property<Guid?>("ThreadPassJobId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("thread_pass_job_id");
+
                     b.Property<int?>("ToolCallCount")
                         .HasColumnType("integer")
                         .HasColumnName("tool_call_count");
@@ -2341,7 +2351,13 @@ namespace MeisterDev.ProPR.Infrastructure.Migrations
                     b.HasIndex("JobId")
                         .HasDatabaseName("ix_review_job_protocols_job_id");
 
-                    b.ToTable("review_job_protocols", (string)null);
+                    b.HasIndex("ThreadPassJobId")
+                        .HasDatabaseName("ix_review_job_protocols_thread_pass_job_id");
+
+                    b.ToTable("review_job_protocols", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_review_job_protocols_single_owner", "(job_id IS NULL) <> (thread_pass_job_id IS NULL)");
+                        });
                 });
 
             modelBuilder.Entity("MeisterDev.ProPR.Domain.Entities.ReviewPrScan", b =>
@@ -2358,6 +2374,24 @@ namespace MeisterDev.ProPR.Infrastructure.Migrations
                         .IsRequired()
                         .HasColumnType("text")
                         .HasColumnName("last_processed_commit_id");
+
+                    b.Property<string>("LastThreadPassRevisionKey")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("text")
+                        .HasDefaultValue("")
+                        .HasColumnName("last_thread_pass_revision_key");
+
+                    b.Property<DateTimeOffset?>("PendingReviewDetectedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("pending_review_detected_at");
+
+                    b.Property<string>("PendingReviewRevisionKey")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("text")
+                        .HasDefaultValue("")
+                        .HasColumnName("pending_review_revision_key");
 
                     b.Property<int>("PullRequestId")
                         .HasColumnType("integer")
@@ -2387,8 +2421,9 @@ namespace MeisterDev.ProPR.Infrastructure.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("review_pr_scan_id");
 
-                    b.Property<long>("ThreadId")
-                        .HasColumnType("bigint")
+                    b.Property<string>("ThreadId")
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)")
                         .HasColumnName("thread_id");
 
                     b.Property<int>("LastSeenReplyCount")
@@ -2480,8 +2515,10 @@ namespace MeisterDev.ProPR.Infrastructure.Migrations
                         .HasColumnType("text")
                         .HasColumnName("resolution_summary");
 
-                    b.Property<long>("ThreadId")
-                        .HasColumnType("bigint")
+                    b.Property<string>("ThreadId")
+                        .IsRequired()
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)")
                         .HasColumnName("thread_id");
 
                     b.Property<DateTimeOffset>("UpdatedAt")
@@ -2517,6 +2554,240 @@ namespace MeisterDev.ProPR.Infrastructure.Migrations
                         .HasDatabaseName("ix_thread_memory_records_client_pr_updated_at");
 
                     b.ToTable("thread_memory_records", (string)null);
+                });
+
+            modelBuilder.Entity("MeisterDev.ProPR.Domain.Entities.ThreadPassHandledThread", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<Guid>("ClientId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("client_id");
+
+                    b.Property<int>("ObservedReplyCount")
+                        .HasColumnType("integer")
+                        .HasColumnName("observed_reply_count");
+
+                    b.Property<int>("PullRequestId")
+                        .HasColumnType("integer")
+                        .HasColumnName("pull_request_id");
+
+                    b.Property<DateTimeOffset>("RecordedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("recorded_at");
+
+                    b.Property<string>("RepositoryId")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("repository_id");
+
+                    b.Property<string>("RevisionKey")
+                        .IsRequired()
+                        .HasMaxLength(512)
+                        .HasColumnType("character varying(512)")
+                        .HasColumnName("revision_key");
+
+                    b.Property<string>("ThreadId")
+                        .IsRequired()
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)")
+                        .HasColumnName("thread_id");
+
+                    b.Property<Guid>("ThreadPassJobId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("thread_pass_job_id");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ThreadPassJobId");
+
+                    b.HasIndex("ClientId", "RepositoryId", "PullRequestId", "ThreadId", "ObservedReplyCount", "RevisionKey")
+                        .IsUnique()
+                        .HasDatabaseName("uq_thread_pass_handled_threads_key");
+
+                    b.ToTable("thread_pass_handled_threads", (string)null);
+                });
+
+            modelBuilder.Entity("MeisterDev.ProPR.Domain.Entities.ThreadPassJob", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<Guid?>("AiConnectionId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("ai_connection_id");
+
+                    b.Property<string>("AiModel")
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)")
+                        .HasColumnName("ai_model");
+
+                    b.Property<int>("AttemptCount")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(0)
+                        .HasColumnName("attempt_count");
+
+                    b.Property<int?>("BudgetBlockCapKind")
+                        .HasColumnType("integer")
+                        .HasColumnName("budget_block_cap_kind");
+
+                    b.Property<int?>("BudgetBlockScope")
+                        .HasColumnType("integer")
+                        .HasColumnName("budget_block_scope");
+
+                    b.Property<decimal?>("BudgetBlockSpentUsd")
+                        .HasPrecision(18, 6)
+                        .HasColumnType("numeric(18,6)")
+                        .HasColumnName("budget_block_spent_usd");
+
+                    b.Property<decimal?>("BudgetBlockThresholdUsd")
+                        .HasPrecision(18, 6)
+                        .HasColumnType("numeric(18,6)")
+                        .HasColumnName("budget_block_threshold_usd");
+
+                    b.Property<Guid>("ClientId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("client_id");
+
+                    b.Property<int>("CodeReviewPlatformKind")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(0)
+                        .HasColumnName("code_review_platform_kind");
+
+                    b.Property<DateTimeOffset?>("CompletedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("completed_at");
+
+                    b.Property<bool>("CostIsApproximate")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false)
+                        .HasColumnName("cost_is_approximate");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<string>("ErrorMessage")
+                        .HasColumnType("text")
+                        .HasColumnName("error_message");
+
+                    b.Property<string>("ExternalCodeReviewId")
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)")
+                        .HasColumnName("external_code_review_id");
+
+                    b.Property<string>("HostBaseUrl")
+                        .HasMaxLength(512)
+                        .HasColumnType("character varying(512)")
+                        .HasColumnName("host_base_url");
+
+                    b.Property<int>("IterationId")
+                        .HasColumnType("integer")
+                        .HasColumnName("iteration_id");
+
+                    b.Property<DateTimeOffset?>("NextAttemptAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("next_attempt_at");
+
+                    b.Property<string>("OrganizationUrl")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("organization_url");
+
+                    b.Property<DateTimeOffset?>("ProcessingStartedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("processing_started_at");
+
+                    b.Property<string>("ProjectId")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("project_id");
+
+                    b.Property<int>("Provider")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(0)
+                        .HasColumnName("provider");
+
+                    b.Property<int>("PullRequestId")
+                        .HasColumnType("integer")
+                        .HasColumnName("pull_request_id");
+
+                    b.Property<string>("RepositoryId")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("repository_id");
+
+                    b.Property<string>("RepositoryOwnerOrNamespace")
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)")
+                        .HasColumnName("repository_owner_or_namespace");
+
+                    b.Property<string>("RepositoryProjectPath")
+                        .HasMaxLength(512)
+                        .HasColumnType("character varying(512)")
+                        .HasColumnName("repository_project_path");
+
+                    b.Property<string>("RevisionKey")
+                        .IsRequired()
+                        .HasMaxLength(512)
+                        .HasColumnType("character varying(512)")
+                        .HasColumnName("revision_key");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)")
+                        .HasColumnName("status");
+
+                    b.Property<decimal?>("TotalEstimatedCostUsd")
+                        .HasPrecision(18, 6)
+                        .HasColumnType("numeric(18,6)")
+                        .HasColumnName("total_estimated_cost_usd");
+
+                    b.Property<long>("TotalInputTokens")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint")
+                        .HasDefaultValue(0L)
+                        .HasColumnName("total_input_tokens");
+
+                    b.Property<long>("TotalOutputTokens")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint")
+                        .HasDefaultValue(0L)
+                        .HasColumnName("total_output_tokens");
+
+                    b.Property<string>("TriggerKey")
+                        .IsRequired()
+                        .HasMaxLength(600)
+                        .HasColumnType("character varying(600)")
+                        .HasColumnName("trigger_key");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Status")
+                        .HasDatabaseName("ix_thread_pass_jobs_status");
+
+                    b.HasIndex("ClientId", "RepositoryId", "PullRequestId")
+                        .IsUnique()
+                        .HasDatabaseName("uq_thread_pass_jobs_in_flight")
+                        .HasFilter("status IN ('Pending', 'Processing')");
+
+                    b.HasIndex("ClientId", "RepositoryId", "PullRequestId", "Status")
+                        .HasDatabaseName("ix_thread_pass_jobs_pr_status");
+
+                    b.HasIndex("ClientId", "RepositoryId", "PullRequestId", "TriggerKey")
+                        .IsUnique()
+                        .HasDatabaseName("uq_thread_pass_jobs_trigger")
+                        .HasFilter("status <> 'Skipped'");
+
+                    b.ToTable("thread_pass_jobs", (string)null);
                 });
 
             modelBuilder.Entity("MeisterDev.ProPR.Infrastructure.Data.Models.AiConfiguredModelRecord", b =>
@@ -3281,6 +3552,12 @@ namespace MeisterDev.ProPR.Infrastructure.Migrations
                         .HasPrecision(18, 6)
                         .HasColumnType("numeric(18,6)")
                         .HasColumnName("pull_request_budget_soft_cap_usd");
+
+                    b.Property<bool>("ReviewEveryIncrementEnabled")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false)
+                        .HasColumnName("review_every_increment_enabled");
 
                     b.Property<bool>("ScmCommentPostingEnabled")
                         .ValueGeneratedOnAdd()
@@ -4935,8 +5212,12 @@ namespace MeisterDev.ProPR.Infrastructure.Migrations
                     b.HasOne("MeisterDev.ProPR.Domain.Entities.ReviewJob", null)
                         .WithMany("Protocols")
                         .HasForeignKey("JobId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
+                        .OnDelete(DeleteBehavior.Cascade);
+
+                    b.HasOne("MeisterDev.ProPR.Domain.Entities.ThreadPassJob", null)
+                        .WithMany()
+                        .HasForeignKey("ThreadPassJobId")
+                        .OnDelete(DeleteBehavior.Cascade);
                 });
 
             modelBuilder.Entity("MeisterDev.ProPR.Domain.Entities.ReviewPrScan", b =>
@@ -4960,6 +5241,26 @@ namespace MeisterDev.ProPR.Infrastructure.Migrations
                 });
 
             modelBuilder.Entity("MeisterDev.ProPR.Domain.Entities.ThreadMemoryRecord", b =>
+                {
+                    b.HasOne("MeisterDev.ProPR.Infrastructure.Data.Models.ClientRecord", null)
+                        .WithMany()
+                        .HasForeignKey("ClientId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("MeisterDev.ProPR.Domain.Entities.ThreadPassHandledThread", b =>
+                {
+                    b.HasOne("MeisterDev.ProPR.Domain.Entities.ThreadPassJob", "ThreadPassJob")
+                        .WithMany("HandledThreads")
+                        .HasForeignKey("ThreadPassJobId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("ThreadPassJob");
+                });
+
+            modelBuilder.Entity("MeisterDev.ProPR.Domain.Entities.ThreadPassJob", b =>
                 {
                     b.HasOne("MeisterDev.ProPR.Infrastructure.Data.Models.ClientRecord", null)
                         .WithMany()
@@ -5419,6 +5720,11 @@ namespace MeisterDev.ProPR.Infrastructure.Migrations
             modelBuilder.Entity("MeisterDev.ProPR.Domain.Entities.ReviewPrScan", b =>
                 {
                     b.Navigation("Threads");
+                });
+
+            modelBuilder.Entity("MeisterDev.ProPR.Domain.Entities.ThreadPassJob", b =>
+                {
+                    b.Navigation("HandledThreads");
                 });
 
             modelBuilder.Entity("MeisterDev.ProPR.Infrastructure.Data.Models.AiConfiguredModelRecord", b =>

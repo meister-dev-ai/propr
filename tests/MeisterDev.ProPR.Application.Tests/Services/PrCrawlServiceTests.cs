@@ -5,6 +5,7 @@ using MeisterDev.ProPR.Application.DTOs;
 using MeisterDev.ProPR.Application.Features.Crawling.Execution.Models;
 using MeisterDev.ProPR.Application.Features.Crawling.Execution.Ports;
 using MeisterDev.ProPR.Application.Features.Reviewing.Execution.Models;
+using MeisterDev.ProPR.Application.Features.ThreadOwnership;
 using MeisterDev.ProPR.Application.Interfaces;
 using MeisterDev.ProPR.Application.Services;
 using MeisterDev.ProPR.Domain.Entities;
@@ -386,19 +387,19 @@ public sealed class PrCrawlServiceTests
                     MakeScan(
                         pr.CodeReview.Number,
                         pr.RevisionId,
-                        new ReviewPrScanThread { ThreadId = 7, LastSeenReplyCount = 1, LastSeenStatus = "Active" })));
+                        new ReviewPrScanThread { ThreadId = "7", LastSeenReplyCount = 1, LastSeenStatus = "Active" })));
         this._threadStatusFetcher.GetReviewerThreadStatusesAsync(
                 DefaultConfig.ProviderScopePath,
                 pr.Repository.ProjectPath,
                 pr.Repository.ExternalRepositoryId,
                 pr.CodeReview.Number,
-                DefaultReviewerId,
+                Arg.Any<ThreadOwnershipResolver>(),
                 DefaultConfig.ClientId,
                 Arg.Any<CancellationToken>())
             .Returns(
                 Task.FromResult<IReadOnlyList<PrThreadStatusEntry>>(
                 [
-                    new PrThreadStatusEntry(7, "Active", "/src/file.ts", "Bot: initial comment\nUser: follow-up", 1),
+                    new PrThreadStatusEntry("7", "Active", "/src/file.ts", "Bot: initial comment\nUser: follow-up", 1),
                 ]));
 
         // Act
@@ -409,8 +410,11 @@ public sealed class PrCrawlServiceTests
     }
 
     [Fact]
-    public async Task CrawlAsync_SameIterationWithoutLegacyReviewerId_UsesConfiguredProviderReviewerIdentity()
+    public async Task CrawlAsync_WithoutLegacyReviewerId_FetchesThreadsWithAResolverThatDoesNotOwnTheConfiguredReviewer()
     {
+        // The pull request carries no legacy reviewer id, so the configured provider reviewer identity is what
+        // says this pull request is ProPR's to review. It says nothing about whose threads are ProPR's, and the
+        // resolver handed to the thread fetch is what has to show that.
         var sut = this.CreateSutWithScanDependencies();
         var providerReviewerId = Guid.NewGuid();
         var config = DefaultConfig;
@@ -446,19 +450,19 @@ public sealed class PrCrawlServiceTests
                     MakeScan(
                         pr.CodeReview.Number,
                         pr.RevisionId,
-                        new ReviewPrScanThread { ThreadId = 7, LastSeenReplyCount = 1, LastSeenStatus = "Active" })));
+                        new ReviewPrScanThread { ThreadId = "7", LastSeenReplyCount = 1, LastSeenStatus = "Active" })));
         this._threadStatusFetcher.GetReviewerThreadStatusesAsync(
                 config.ProviderScopePath,
                 pr.Repository.ProjectPath,
                 pr.Repository.ExternalRepositoryId,
                 pr.CodeReview.Number,
-                providerReviewerId,
+                Arg.Any<ThreadOwnershipResolver>(),
                 config.ClientId,
                 Arg.Any<CancellationToken>())
             .Returns(
                 Task.FromResult<IReadOnlyList<PrThreadStatusEntry>>(
                 [
-                    new PrThreadStatusEntry(7, "Active", "/src/file.ts", "Bot: initial comment\nUser: follow-up", 1),
+                    new PrThreadStatusEntry("7", "Active", "/src/file.ts", "Bot: initial comment\nUser: follow-up", 1),
                 ]));
 
         await sut.CrawlAsync();
@@ -470,7 +474,11 @@ public sealed class PrCrawlServiceTests
                 pr.Repository.ProjectPath,
                 pr.Repository.ExternalRepositoryId,
                 pr.CodeReview.Number,
-                providerReviewerId,
+                // Nothing is recorded against this pull request and nothing here holds a connection, so the
+                // resolver has neither provenance nor an identity: a thread the configured reviewer raised is
+                // not ProPR's, which is the deliberate narrowing.
+                Arg.Is<ThreadOwnershipResolver>(ownership =>
+                    !ownership.OwnsThread(new ThreadCommentRef("7", "1", providerReviewerId, "review-bot"))),
                 config.ClientId,
                 Arg.Any<CancellationToken>());
     }
@@ -499,19 +507,19 @@ public sealed class PrCrawlServiceTests
                     MakeScan(
                         pr.CodeReview.Number,
                         pr.RevisionId,
-                        new ReviewPrScanThread { ThreadId = 7, LastSeenReplyCount = 1, LastSeenStatus = "Active" })));
+                        new ReviewPrScanThread { ThreadId = "7", LastSeenReplyCount = 1, LastSeenStatus = "Active" })));
         this._threadStatusFetcher.GetReviewerThreadStatusesAsync(
                 DefaultConfig.ProviderScopePath,
                 pr.Repository.ProjectPath,
                 pr.Repository.ExternalRepositoryId,
                 pr.CodeReview.Number,
-                DefaultReviewerId,
+                Arg.Any<ThreadOwnershipResolver>(),
                 DefaultConfig.ClientId,
                 Arg.Any<CancellationToken>())
             .Returns(
                 Task.FromResult<IReadOnlyList<PrThreadStatusEntry>>(
                 [
-                    new PrThreadStatusEntry(7, "Active", "/src/file.ts", "Bot: initial comment\nUser: follow-up", 1),
+                    new PrThreadStatusEntry("7", "Active", "/src/file.ts", "Bot: initial comment\nUser: follow-up", 1),
                 ]));
 
         await sut.CrawlAsync();
@@ -521,7 +529,7 @@ public sealed class PrCrawlServiceTests
                 Arg.Any<Guid>(),
                 Arg.Any<string>(),
                 Arg.Any<int>(),
-                Arg.Any<long>(),
+                Arg.Any<string>(),
                 Arg.Any<string?>(),
                 Arg.Any<string>(),
                 Arg.Any<string>(),
@@ -561,7 +569,7 @@ public sealed class PrCrawlServiceTests
                 pr.Repository.ProjectPath,
                 pr.Repository.ExternalRepositoryId,
                 pr.CodeReview.Number,
-                DefaultReviewerId,
+                Arg.Any<ThreadOwnershipResolver>(),
                 DefaultConfig.ClientId,
                 Arg.Any<CancellationToken>())
             .Returns(Task.FromResult<IReadOnlyList<PrThreadStatusEntry>>([]));
@@ -622,19 +630,19 @@ public sealed class PrCrawlServiceTests
                     MakeScan(
                         pr.CodeReview.Number,
                         pr.RevisionId,
-                        new ReviewPrScanThread { ThreadId = 8, LastSeenReplyCount = 0, LastSeenStatus = "Active" })));
+                        new ReviewPrScanThread { ThreadId = "8", LastSeenReplyCount = 0, LastSeenStatus = "Active" })));
         this._threadStatusFetcher.GetReviewerThreadStatusesAsync(
                 DefaultConfig.ProviderScopePath,
                 pr.Repository.ProjectPath,
                 pr.Repository.ExternalRepositoryId,
                 pr.CodeReview.Number,
-                DefaultReviewerId,
+                Arg.Any<ThreadOwnershipResolver>(),
                 DefaultConfig.ClientId,
                 Arg.Any<CancellationToken>())
             .Returns(
                 Task.FromResult<IReadOnlyList<PrThreadStatusEntry>>(
                 [
-                    new PrThreadStatusEntry(8, "Active", "/src/file.ts", "Bot: initial comment\nUser: new reply", 1),
+                    new PrThreadStatusEntry("8", "Active", "/src/file.ts", "Bot: initial comment\nUser: new reply", 1),
                 ]));
 
         // Act
@@ -799,19 +807,19 @@ public sealed class PrCrawlServiceTests
                     MakeScan(
                         pr.CodeReview.Number,
                         pr.RevisionId,
-                        new ReviewPrScanThread { ThreadId = 9, LastSeenReplyCount = 0, LastSeenStatus = "Active" })));
+                        new ReviewPrScanThread { ThreadId = "9", LastSeenReplyCount = 0, LastSeenStatus = "Active" })));
         this._threadStatusFetcher.GetReviewerThreadStatusesAsync(
                 DefaultConfig.ProviderScopePath,
                 pr.Repository.ProjectPath,
                 pr.Repository.ExternalRepositoryId,
                 pr.CodeReview.Number,
-                DefaultReviewerId,
+                Arg.Any<ThreadOwnershipResolver>(),
                 DefaultConfig.ClientId,
                 Arg.Any<CancellationToken>())
             .Returns(
                 Task.FromResult<IReadOnlyList<PrThreadStatusEntry>>(
                 [
-                    new PrThreadStatusEntry(9, "Active", "/src/file.ts", "Bot: initial comment\nUser: new reply", 1),
+                    new PrThreadStatusEntry("9", "Active", "/src/file.ts", "Bot: initial comment\nUser: new reply", 1),
                 ]));
 
         // Act

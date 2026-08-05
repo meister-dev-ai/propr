@@ -147,6 +147,7 @@ const sampleClient = {
   scmCommentPostingEnabled: true,
   enableEvidenceBackedVerification: false,
   enableMultiPassUnion: false,
+  reviewEveryIncrementEnabled: false,
   includeLinkedItemsInContext: true,
 }
 
@@ -267,7 +268,7 @@ describe('ClientDetailView', () => {
       '/clients/{clientId}',
         expect.objectContaining({
           params: { path: { clientId: 'client-1' } },
-          body: { scmCommentPostingEnabled: false, enableEvidenceBackedVerification: false, enableMultiPassUnion: false, includeLinkedItemsInContext: true, enableLanguageRobustScreening: false, outputLanguage: 'en', baselineReasoningEffort: 'none' },
+          body: { scmCommentPostingEnabled: false, enableEvidenceBackedVerification: false, enableMultiPassUnion: false, reviewEveryIncrementEnabled: false, commentResolutionBehavior: 'silent', includeLinkedItemsInContext: true, enableLanguageRobustScreening: false, outputLanguage: 'en', baselineReasoningEffort: 'none' },
         })
     )
   })
@@ -295,7 +296,7 @@ describe('ClientDetailView', () => {
       '/clients/{clientId}',
         expect.objectContaining({
           params: { path: { clientId: 'client-1' } },
-          body: { scmCommentPostingEnabled: true, enableEvidenceBackedVerification: false, enableMultiPassUnion: false, includeLinkedItemsInContext: true, enableLanguageRobustScreening: false, outputLanguage: 'en', baselineReasoningEffort: 'none' },
+          body: { scmCommentPostingEnabled: true, enableEvidenceBackedVerification: false, enableMultiPassUnion: false, reviewEveryIncrementEnabled: false, commentResolutionBehavior: 'silent', includeLinkedItemsInContext: true, enableLanguageRobustScreening: false, outputLanguage: 'en', baselineReasoningEffort: 'none' },
         })
     )
   })

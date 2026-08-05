@@ -153,6 +153,7 @@ Why this wants a mounted volume: [review workspace](deploy.md#review-workspace).
 |---|---|---|---|---|
 | `PR_CRAWL_INTERVAL_SECONDS` | How often the crawler polls for open pull requests | `60` | clamped to at least 10 | no |
 | `MENTION_CRAWL_INTERVAL_SECONDS` | How often ProPR scans for @-mentions to answer | `60` | clamped to at least 10 | no |
+| `THREAD_PASS_SCAN_INTERVAL_SECONDS` | How often queued thread passes are picked up and run | `30` | clamped to at least 5 | no |
 | `REVIEW_ARCHIVE_PURGE_INTERVAL_SECONDS` | How often the retention purge sweeps archived pull-request content | `3600` | clamped to at least 60 | no |
 
 Crawling and @-mention scanning need a commercial license ([editions](../reference/editions.md)); the

@@ -224,6 +224,7 @@ public sealed class GitHubCodeReviewQueryServiceTests
                                     {
                                         new
                                         {
+                                            id = "PRRT_501",
                                             isResolved = false,
                                             path = "src/Fetcher.cs",
                                             line = 18,
@@ -271,7 +272,7 @@ public sealed class GitHubCodeReviewQueryServiceTests
         Assert.Equal("src/LegacyProvider.cs", result.ChangedFiles[0].OriginalPath);
         Assert.Equal("src/Fetcher.cs", result.ChangedFiles[1].Path);
         var thread = Assert.Single(result.ExistingThreads!);
-        Assert.Equal(501, thread.ThreadId);
+        Assert.Equal("PRRT_501", thread.ThreadId);
         Assert.Equal("src/Fetcher.cs", thread.FilePath);
     }
 
@@ -531,7 +532,7 @@ public sealed class GitHubCodeReviewQueryServiceTests
     }
 
     [Fact]
-    public async Task PullRequestFetcher_AllowsNullGraphQlCommentDatabaseIds()
+    public async Task PullRequestFetcher_NullCommentDatabaseIds_StillCarriesTheThreadNodeId()
     {
         var clientId = Guid.NewGuid();
         var host = new ProviderHostRef(ScmProvider.GitHub, "https://github.com");
@@ -566,6 +567,7 @@ public sealed class GitHubCodeReviewQueryServiceTests
                                     {
                                         new
                                         {
+                                            id = "PRRT_n2",
                                             isResolved = false,
                                             path = "src/Fetcher.cs",
                                             line = 18,
@@ -606,12 +608,12 @@ public sealed class GitHubCodeReviewQueryServiceTests
             cancellationToken: CancellationToken.None);
 
         var thread = Assert.Single(result.ExistingThreads!);
-        Assert.Equal(0, thread.ThreadId);
+        Assert.Equal("PRRT_n2", thread.ThreadId);
         Assert.Equal(0, Assert.Single(thread.Comments).CommentId);
     }
 
     [Fact]
-    public async Task PullRequestFetcher_AllowsLargeGraphQlCommentDatabaseIds()
+    public async Task PullRequestFetcher_LargeCommentDatabaseIds_StillCarriesTheThreadNodeId()
     {
         var clientId = Guid.NewGuid();
         var host = new ProviderHostRef(ScmProvider.GitHub, "https://github.com");
@@ -646,6 +648,7 @@ public sealed class GitHubCodeReviewQueryServiceTests
                                     {
                                         new
                                         {
+                                            id = "PRRT_3197004556",
                                             isResolved = false,
                                             path = "src/Fetcher.cs",
                                             line = 18,
@@ -686,7 +689,7 @@ public sealed class GitHubCodeReviewQueryServiceTests
             cancellationToken: CancellationToken.None);
 
         var thread = Assert.Single(result.ExistingThreads!);
-        Assert.Equal(3197004556L, thread.ThreadId);
+        Assert.Equal("PRRT_3197004556", thread.ThreadId);
         Assert.Equal(3197004556L, Assert.Single(thread.Comments).CommentId);
     }
 

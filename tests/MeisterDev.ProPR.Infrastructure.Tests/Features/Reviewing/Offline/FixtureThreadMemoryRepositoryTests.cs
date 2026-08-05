@@ -78,14 +78,14 @@ public sealed class FixtureThreadMemoryRepositoryTests
                     [
                         new FixtureThreadMemoryMatch(
                             null,
-                            101,
+                            "101",
                             "Program.cs",
                             "Article routes still need to be included in the sitemap output.",
                             0.95f,
                             Source: MemorySource.ThreadResolved),
                         new FixtureThreadMemoryMatch(
                             null,
-                            102,
+                            "102",
                             "Program.cs",
                             "A similar sitemap change previously missed generated article pages.",
                             0.82f,

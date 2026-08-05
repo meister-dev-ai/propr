@@ -188,7 +188,7 @@ public sealed class EfReviewDiagnosticsReader(
             matchingFileResult,
             true,
             new ProtocolInheritanceDto(
-                sourceProtocol.JobId,
+                matchingFileResult.ResumedFromJobId!.Value,
                 matchingFileResult.ResumedFromFileResultId,
                 sourceProtocol.Id,
                 sourceProtocol.CompletedAt));
@@ -432,6 +432,110 @@ public sealed class EfReviewDiagnosticsReader(
             .OrderByDescending(protocol => protocol.CompletedAt ?? DateTimeOffset.MinValue)
             .ThenByDescending(protocol => protocol.StartedAt)
             .FirstOrDefault(protocol => string.Equals(protocol.Outcome, "Completed", StringComparison.OrdinalIgnoreCase));
+    }
+
+    public async Task<GetReviewJobProtocolResult?> GetThreadPassProtocolAsync(
+        Guid threadPassJobId,
+        bool includeEvents = true,
+        CancellationToken ct = default)
+    {
+        if (dbContextFactory is null)
+        {
+            return null;
+        }
+
+        await using var db = await dbContextFactory.CreateDbContextAsync(ct);
+        var pass = await db.ThreadPassJobs
+            .AsNoTracking()
+            .FirstOrDefaultAsync(candidate => candidate.Id == threadPassJobId, ct);
+        if (pass is null)
+        {
+            return null;
+        }
+
+        var protocols = await db.ReviewJobProtocols
+            .AsNoTracking()
+            .Where(protocol => protocol.ThreadPassJobId == threadPassJobId)
+            .Include(protocol => protocol.Events.OrderBy(evt => evt.OccurredAt))
+            .OrderBy(protocol => protocol.StartedAt)
+            .ToListAsync(ct);
+
+        return new GetReviewJobProtocolResult(
+            pass.ClientId,
+            protocols
+                .Select(protocol => CreateThreadPassProtocolDto(pass, protocol, includeEvents))
+                .ToList()
+                .AsReadOnly());
+    }
+
+    public async Task<ReviewJobProtocolDto?> GetThreadPassProtocolPassAsync(
+        Guid threadPassJobId,
+        Guid protocolId,
+        CancellationToken ct = default)
+    {
+        if (dbContextFactory is null)
+        {
+            return null;
+        }
+
+        await using var db = await dbContextFactory.CreateDbContextAsync(ct);
+        var pass = await db.ThreadPassJobs
+            .AsNoTracking()
+            .FirstOrDefaultAsync(candidate => candidate.Id == threadPassJobId, ct);
+        if (pass is null)
+        {
+            return null;
+        }
+
+        var protocol = await db.ReviewJobProtocols
+            .AsNoTracking()
+            .Where(candidate => candidate.ThreadPassJobId == threadPassJobId && candidate.Id == protocolId)
+            .Include(candidate => candidate.Events.OrderBy(evt => evt.OccurredAt))
+            .FirstOrDefaultAsync(ct);
+
+        return protocol is null ? null : CreateThreadPassProtocolDto(pass, protocol, includeEvents: true);
+    }
+
+    /// <summary>
+    ///     Projects one thread-pass trace record into the same shape a review pass takes, so the trace viewer
+    ///     needs no second notion of what a pass is. The fields a file review contributes stay empty: a thread
+    ///     pass reviews a conversation, not a file.
+    /// </summary>
+    private static ReviewJobProtocolDto CreateThreadPassProtocolDto(
+        ThreadPassJob pass,
+        ReviewJobProtocol protocol,
+        bool includeEvents)
+    {
+        return new ReviewJobProtocolDto(
+            protocol.Id,
+            pass.Id,
+            protocol.AttemptNumber,
+            protocol.Label,
+            null,
+            protocol.StartedAt,
+            protocol.CompletedAt,
+            protocol.Outcome,
+            protocol.TotalInputTokens,
+            protocol.TotalOutputTokens,
+            protocol.IterationCount,
+            protocol.ToolCallCount,
+            protocol.FinalConfidence,
+            protocol.AiConnectionCategory,
+            protocol.ModelId,
+            null,
+            null,
+            CreateEventDtos(protocol, includeEvents, isInherited: false))
+        {
+            Provider = pass.Provider,
+            ProviderScopePath = pass.OrganizationUrl,
+            ProviderProjectKey = pass.RepositoryOwnerOrNamespace ?? pass.ProjectId,
+            RepositoryId = pass.RepositoryId,
+            PullRequestId = pass.PullRequestId,
+            TotalCachedInputTokens = protocol.TotalCachedInputTokens,
+            TotalCacheWriteTokens = protocol.TotalCacheWriteTokens,
+            TotalReasoningTokens = protocol.TotalReasoningTokens,
+            CacheObservability = protocol.CacheObservability,
+        };
     }
 
     private static ReviewJobProtocolDto CreateProtocolDto(

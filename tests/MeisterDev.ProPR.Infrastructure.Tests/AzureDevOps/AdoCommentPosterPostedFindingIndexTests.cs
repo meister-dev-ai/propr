@@ -42,12 +42,12 @@ public sealed class AdoCommentPosterPostedFindingIndexTests
                 7,
                 Arg.Any<string>(),
                 Arg.Any<CancellationToken>())
-            .Returns(PostedFindingMatchDto.Match(4242, PostedFindingId, 0.93f));
+            .Returns(PostedFindingMatchDto.Match("4242", PostedFindingId, 0.93f));
 
         var invocations = new List<string>();
         var result = SingleFinding("The delete path re-checks ownership after the fetch.");
 
-        var diagnostics = await PostAsync(result, invocations, index, ExistingThreads(4242, status));
+        var diagnostics = await PostAsync(result, invocations, index, ExistingThreads("4242", status));
 
         Assert.Empty(invocations);
         Assert.Equal(0, diagnostics.PostedCount);
@@ -67,12 +67,12 @@ public sealed class AdoCommentPosterPostedFindingIndexTests
                 7,
                 Arg.Any<string>(),
                 Arg.Any<CancellationToken>())
-            .Returns(PostedFindingMatchDto.Match(4242, PostedFindingId, 0.93f));
+            .Returns(PostedFindingMatchDto.Match("4242", PostedFindingId, 0.93f));
 
         var invocations = new List<string>();
         var result = SingleFinding("The delete path re-checks ownership after the fetch.");
 
-        var diagnostics = await PostAsync(result, invocations, index, ExistingThreads(4242, "Fixed"));
+        var diagnostics = await PostAsync(result, invocations, index, ExistingThreads("4242", "Fixed"));
 
         Assert.Single(invocations);
         Assert.Equal(1, diagnostics.PostedCount);
@@ -91,12 +91,12 @@ public sealed class AdoCommentPosterPostedFindingIndexTests
                 7,
                 Arg.Any<string>(),
                 Arg.Any<CancellationToken>())
-            .Returns(PostedFindingMatchDto.Match(4242, PostedFindingId, 0.93f, autoResolvedByProPr: true));
+            .Returns(PostedFindingMatchDto.Match("4242", PostedFindingId, 0.93f, autoResolvedByProPr: true));
 
         var invocations = new List<string>();
         var result = SingleFinding("The delete path re-checks ownership after the fetch.");
 
-        var diagnostics = await PostAsync(result, invocations, index, ExistingThreads(4242, "Fixed"));
+        var diagnostics = await PostAsync(result, invocations, index, ExistingThreads("4242", "Fixed"));
 
         Assert.Empty(invocations);
         Assert.Equal(1, diagnostics.SuppressedCount);
@@ -115,12 +115,12 @@ public sealed class AdoCommentPosterPostedFindingIndexTests
                 7,
                 Arg.Any<string>(),
                 Arg.Any<CancellationToken>())
-            .Returns(PostedFindingMatchDto.Match(4242, PostedFindingId, 0.93f));
+            .Returns(PostedFindingMatchDto.Match("4242", PostedFindingId, 0.93f));
 
         var invocations = new List<string>();
         var result = SingleFinding("The delete path re-checks ownership after the fetch.");
 
-        var diagnostics = await PostAsync(result, invocations, index, ExistingThreads(4242, "Closed"));
+        var diagnostics = await PostAsync(result, invocations, index, ExistingThreads("4242", "Closed"));
 
         Assert.Empty(invocations);
         Assert.Equal(1, diagnostics.SuppressedCount);
@@ -138,18 +138,18 @@ public sealed class AdoCommentPosterPostedFindingIndexTests
                 7,
                 Arg.Any<string>(),
                 Arg.Any<CancellationToken>())
-            .Returns(PostedFindingMatchDto.NearMiss(4242, 0.82f));
+            .Returns(PostedFindingMatchDto.NearMiss("4242", 0.82f));
 
         var invocations = new List<string>();
         var result = SingleFinding("The delete path re-checks ownership after the fetch.");
 
-        var diagnostics = await PostAsync(result, invocations, index, ExistingThreads(4242, "Active"));
+        var diagnostics = await PostAsync(result, invocations, index, ExistingThreads("4242", "Active"));
 
         Assert.Single(invocations);
         Assert.Equal(0, diagnostics.SuppressedCount);
         var nearMiss = Assert.Single(diagnostics.PostedFindingNearMisses);
         Assert.Equal(0, nearMiss.Ordinal);
-        Assert.Equal(4242, nearMiss.MatchedProviderThreadId);
+        Assert.Equal("4242", nearMiss.MatchedProviderThreadId);
         Assert.Equal(0.82f, nearMiss.MatchScore);
     }
 
@@ -173,7 +173,7 @@ public sealed class AdoCommentPosterPostedFindingIndexTests
         var invocations = new List<string>();
         var result = SingleFinding("The delete path re-checks ownership after the fetch.");
 
-        var diagnostics = await PostAsync(result, invocations, index, ExistingThreads(4242, "Active"));
+        var diagnostics = await PostAsync(result, invocations, index, ExistingThreads("4242", "Active"));
 
         Assert.True(
             diagnostics.AffectedCandidateCount <= diagnostics.CandidateCount,
@@ -192,12 +192,12 @@ public sealed class AdoCommentPosterPostedFindingIndexTests
                 7,
                 Arg.Any<string>(),
                 Arg.Any<CancellationToken>())
-            .Returns(PostedFindingMatchDto.Match(4242, PostedFindingId, 0.93f));
+            .Returns(PostedFindingMatchDto.Match("4242", PostedFindingId, 0.93f));
 
         var invocations = new List<string>();
         var result = SingleFinding("The delete path re-checks ownership after the fetch.");
 
-        var diagnostics = await PostAsync(result, invocations, index, ExistingThreads(9999, "Active"));
+        var diagnostics = await PostAsync(result, invocations, index, ExistingThreads("9999", "Active"));
 
         Assert.Single(invocations);
         Assert.Equal(1, diagnostics.PostedCount);
@@ -216,13 +216,13 @@ public sealed class AdoCommentPosterPostedFindingIndexTests
                 7,
                 Arg.Any<string>(),
                 Arg.Any<CancellationToken>())
-            .Returns(PostedFindingMatchDto.Match(4242, PostedFindingId, 0.93f));
+            .Returns(PostedFindingMatchDto.Match("4242", PostedFindingId, 0.93f));
 
         var invocations = new List<string>();
         var existingThreads = new List<PrCommentThread>
         {
             SummaryThread(),
-            new(4242, "/src/Agents.cs", 999, new List<PrThreadComment>().AsReadOnly(), "Active"),
+            new("4242", "/src/Agents.cs", 999, new List<PrThreadComment>().AsReadOnly(), "Active"),
         };
 
         var diagnostics = await PostAsync(
@@ -252,7 +252,7 @@ public sealed class AdoCommentPosterPostedFindingIndexTests
         var invocations = new List<string>();
         var result = SingleFinding("This loop allocates inside the hot path.");
 
-        var diagnostics = await PostAsync(result, invocations, index, ExistingThreads(4242, "Active"));
+        var diagnostics = await PostAsync(result, invocations, index, ExistingThreads("4242", "Active"));
 
         var posted = Assert.Single(invocations);
         Assert.Contains("This loop allocates inside the hot path.", posted, StringComparison.Ordinal);
@@ -282,7 +282,7 @@ public sealed class AdoCommentPosterPostedFindingIndexTests
                 new("/src/Other.cs", 278, CommentSeverity.Suggestion, "The delete path re-checks ownership after the fetch."),
             }.AsReadOnly());
 
-        await PostAsync(result, invocations, index, ExistingThreads(4242, "Active"));
+        await PostAsync(result, invocations, index, ExistingThreads("4242", "Active"));
 
         await index.Received(1)
             .FindDuplicateAsync(
@@ -311,7 +311,7 @@ public sealed class AdoCommentPosterPostedFindingIndexTests
         var invocations = new List<string>();
         var result = SingleFinding("The delete path re-checks ownership after the fetch.");
 
-        var diagnostics = await PostAsync(result, invocations, index, ExistingThreads(4242, "Active"));
+        var diagnostics = await PostAsync(result, invocations, index, ExistingThreads("4242", "Active"));
 
         Assert.Single(invocations);
         Assert.True(diagnostics.IsDegraded);
@@ -333,7 +333,7 @@ public sealed class AdoCommentPosterPostedFindingIndexTests
         var invocations = new List<string>();
         var result = SingleFinding("The delete path re-checks ownership after the fetch.");
 
-        var diagnostics = await PostAsync(result, invocations, index, ExistingThreads(4242, "Active"));
+        var diagnostics = await PostAsync(result, invocations, index, ExistingThreads("4242", "Active"));
 
         Assert.Single(invocations);
         Assert.Equal(1, diagnostics.PostedCount);
@@ -352,7 +352,7 @@ public sealed class AdoCommentPosterPostedFindingIndexTests
                 7,
                 Arg.Any<string>(),
                 Arg.Any<CancellationToken>())
-            .Returns(PostedFindingMatchDto.Match(4242, PostedFindingId, 0.93f));
+            .Returns(PostedFindingMatchDto.Match("4242", PostedFindingId, 0.93f));
 
         var invocations = new List<string>();
         var result = new ReviewResult(
@@ -362,12 +362,12 @@ public sealed class AdoCommentPosterPostedFindingIndexTests
                 new("/src/Agents.cs", 142, CommentSeverity.Error, "The delete path re-checks ownership after the fetch."),
             }.AsReadOnly());
 
-        var diagnostics = await PostAsync(result, invocations, index, ExistingThreads(4242, "Active"));
+        var diagnostics = await PostAsync(result, invocations, index, ExistingThreads("4242", "Active"));
 
         var suppression = Assert.Single(diagnostics.SuppressedFindings);
         Assert.Equal(0, suppression.Ordinal);
         Assert.Equal("posted_finding_duplicate", suppression.ReasonCode);
-        Assert.Equal(4242, suppression.MatchedProviderThreadId);
+        Assert.Equal("4242", suppression.MatchedProviderThreadId);
         Assert.Equal(0.93f, suppression.MatchScore);
         Assert.Equal("/src/Agents.cs", suppression.FilePath);
         Assert.Equal(142, suppression.LineNumber);
@@ -379,7 +379,7 @@ public sealed class AdoCommentPosterPostedFindingIndexTests
         var invocations = new List<string>();
         var result = SingleFinding("The delete path re-checks ownership after the fetch.");
 
-        var diagnostics = await PostAsync(result, invocations, index: null, ExistingThreads(4242, "Active"));
+        var diagnostics = await PostAsync(result, invocations, index: null, ExistingThreads("4242", "Active"));
 
         Assert.Single(invocations);
         Assert.Equal(1, diagnostics.PostedCount);
@@ -402,7 +402,7 @@ public sealed class AdoCommentPosterPostedFindingIndexTests
     private static PrCommentThread SummaryThread()
     {
         return new PrCommentThread(
-            1,
+            "1",
             null,
             null,
             new List<PrThreadComment>
@@ -411,7 +411,7 @@ public sealed class AdoCommentPosterPostedFindingIndexTests
             }.AsReadOnly());
     }
 
-    private static IReadOnlyList<PrCommentThread> ExistingThreads(long threadId, string? status)
+    private static IReadOnlyList<PrCommentThread> ExistingThreads(string threadId, string? status)
     {
         return
         [

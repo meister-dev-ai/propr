@@ -227,7 +227,7 @@ public sealed class ReviewJobsControllerTests
     {
         var controller = CreateController(Substitute.For<IReviewJobIntakeStore>(), null, null);
 
-        var result = await controller.RestartReview(Guid.NewGuid(), CancellationToken.None);
+        var result = await controller.RestartReview(Guid.NewGuid(), Substitute.For<IThreadPassJobRepository>(), CancellationToken.None);
 
         var objectResult = Assert.IsType<ObjectResult>(result);
         Assert.Equal(StatusCodes.Status401Unauthorized, objectResult.StatusCode);
@@ -244,7 +244,7 @@ public sealed class ReviewJobsControllerTests
         var controller = CreateController(store, null, null);
         controller.HttpContext.Items["UserId"] = Guid.NewGuid().ToString();
 
-        var result = await controller.RestartReview(jobId, CancellationToken.None);
+        var result = await controller.RestartReview(jobId, Substitute.For<IThreadPassJobRepository>(), CancellationToken.None);
 
         var objectResult = Assert.IsType<ObjectResult>(result);
         Assert.Equal(StatusCodes.Status403Forbidden, objectResult.StatusCode);
@@ -270,7 +270,7 @@ public sealed class ReviewJobsControllerTests
         // ClientUser is sufficient — administrator rights are not required.
         var controller = CreateController(store, clientId, ClientRole.ClientUser, jobRepository: jobRepository);
 
-        var result = await controller.RestartReview(jobId, CancellationToken.None);
+        var result = await controller.RestartReview(jobId, Substitute.For<IThreadPassJobRepository>(), CancellationToken.None);
 
         Assert.IsType<ConflictObjectResult>(result);
     }
@@ -297,13 +297,77 @@ public sealed class ReviewJobsControllerTests
         var queue = Substitute.For<IReviewExecutionQueue>();
         var controller = CreateController(store, clientId, ClientRole.ClientUser, queue, jobRepository);
 
-        var result = await controller.RestartReview(jobId, CancellationToken.None);
+        var result = await controller.RestartReview(jobId, Substitute.For<IThreadPassJobRepository>(), CancellationToken.None);
 
         var accepted = Assert.IsType<AcceptedResult>(result);
         var payload = Assert.IsType<ReviewJobRestartResponse>(accepted.Value);
         Assert.Equal(jobId, payload.SourceJobId);
         Assert.NotEqual(Guid.Empty, payload.JobId);
         await queue.Received(1).EnqueueAsync(payload.JobId, Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task RestartReview_BudgetHeldThreadPass_QueuesItAgainUnderItsOwnIdentity()
+    {
+        var passId = Guid.NewGuid();
+        var clientId = Guid.NewGuid();
+        var store = Substitute.For<IReviewJobIntakeStore>();
+        store.GetByIdAsync(passId, Arg.Any<CancellationToken>()).Returns((ReviewJob?)null);
+
+        var threadPasses = Substitute.For<IThreadPassJobRepository>();
+        threadPasses.GetByIdAsync(passId, Arg.Any<CancellationToken>())
+            .Returns(
+                new ThreadPassJob(
+                    passId,
+                    clientId,
+                    "https://dev.azure.com/org",
+                    "proj",
+                    "repo",
+                    42,
+                    1,
+                    "1",
+                    "1|abc"));
+        threadPasses.TryRestartAsync(passId, Arg.Any<CancellationToken>()).Returns(true);
+
+        var controller = CreateController(store, clientId, ClientRole.ClientUser);
+
+        var result = await controller.RestartReview(passId, threadPasses, CancellationToken.None);
+
+        var accepted = Assert.IsType<AcceptedResult>(result);
+        var payload = Assert.IsType<ReviewJobRestartResponse>(accepted.Value);
+        Assert.Equal(passId, payload.SourceJobId);
+        Assert.Equal(passId, payload.JobId);
+        await threadPasses.Received(1).TryRestartAsync(passId, Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task RestartReview_CompletedThreadPass_ReturnsConflict()
+    {
+        var passId = Guid.NewGuid();
+        var clientId = Guid.NewGuid();
+        var store = Substitute.For<IReviewJobIntakeStore>();
+        store.GetByIdAsync(passId, Arg.Any<CancellationToken>()).Returns((ReviewJob?)null);
+
+        var threadPasses = Substitute.For<IThreadPassJobRepository>();
+        threadPasses.GetByIdAsync(passId, Arg.Any<CancellationToken>())
+            .Returns(
+                new ThreadPassJob(
+                    passId,
+                    clientId,
+                    "https://dev.azure.com/org",
+                    "proj",
+                    "repo",
+                    42,
+                    1,
+                    "1",
+                    "1|abc"));
+        threadPasses.TryRestartAsync(passId, Arg.Any<CancellationToken>()).Returns(false);
+
+        var controller = CreateController(store, clientId, ClientRole.ClientUser);
+
+        var result = await controller.RestartReview(passId, threadPasses, CancellationToken.None);
+
+        Assert.IsType<ConflictObjectResult>(result);
     }
 
     [Fact]

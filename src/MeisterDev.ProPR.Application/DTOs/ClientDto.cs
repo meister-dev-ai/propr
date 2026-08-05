@@ -33,7 +33,8 @@ public sealed record ClientDto(
     CommentSeverity MinimumSeverityToPost = CommentSeverity.Info,
     IReadOnlyList<CommentSeverity>? AutoResolveSeverities = null,
     bool CodeInsightsCollectionEnabled = false,
-    string OutputLanguage = ReviewOutputLanguage.Default)
+    string OutputLanguage = ReviewOutputLanguage.Default,
+    bool ReviewEveryIncrementEnabled = false)
 {
     /// <summary>The ordered review-pass list, or an empty list when none are configured.</summary>
     public IReadOnlyList<ReviewPassDto> ReviewPassesOrEmpty => this.ReviewPasses ?? [];

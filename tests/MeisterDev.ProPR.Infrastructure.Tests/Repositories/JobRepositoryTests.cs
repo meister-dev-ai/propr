@@ -589,6 +589,195 @@ public sealed class JobRepositoryTests(PostgresContainerFixture fixture) : IAsyn
     }
 
     [Fact]
+    public async Task GetLatestEngagedRevisionAsync_JobStillRunningAtAnEarlierRevision_ReturnsThatRevision()
+    {
+        var running = MakeJob(prId: 730, iterationId: 1);
+        running.SetReviewRevision(new ReviewRevision("first-head", "base", null, "first", "base...first"));
+        await this._repo.AddAsync(running);
+
+        var engaged = await this._repo.GetLatestEngagedRevisionAsync(
+            running.ClientId,
+            running.OrganizationUrl,
+            running.ProjectId,
+            running.RepositoryId,
+            running.PullRequestId);
+
+        Assert.NotNull(engaged);
+        Assert.Equal("first", engaged!.StoredRevisionKey);
+        Assert.Equal(1, engaged.IterationId);
+        Assert.Equal("first-head", engaged.ReviewRevision?.HeadSha);
+    }
+
+    [Fact]
+    public async Task GetLatestEngagedRevisionAsync_NoJobForThePullRequest_ReturnsNull()
+    {
+        var otherPullRequest = MakeJob(prId: 732, iterationId: 1);
+        otherPullRequest.SetReviewRevision(new ReviewRevision("other-head", "base", null, "other", "base...other"));
+        await this._repo.AddAsync(otherPullRequest);
+
+        var engaged = await this._repo.GetLatestEngagedRevisionAsync(
+            otherPullRequest.ClientId,
+            otherPullRequest.OrganizationUrl,
+            otherPullRequest.ProjectId,
+            otherPullRequest.RepositoryId,
+            733);
+
+        Assert.Null(engaged);
+    }
+
+    [Fact]
+    public async Task GetLatestEngagedRevisionAsync_JobBelongsToAnotherClient_ReturnsNull()
+    {
+        // Two clients configured against the same repository engage independently: one client's review must not
+        // suppress the other client's first review of the same pull request.
+        var otherClientsJob = MakeJob(prId: 733, iterationId: 1);
+        otherClientsJob.SetReviewRevision(new ReviewRevision("their-head", "base", null, "theirs", "base...theirs"));
+        await this._repo.AddAsync(otherClientsJob);
+
+        var engaged = await this._repo.GetLatestEngagedRevisionAsync(
+            Guid.NewGuid(),
+            otherClientsJob.OrganizationUrl,
+            otherClientsJob.ProjectId,
+            otherClientsJob.RepositoryId,
+            otherClientsJob.PullRequestId);
+
+        Assert.Null(engaged);
+    }
+
+    [Fact]
+    public async Task GetLatestEngagedRevisionAsync_FailedJob_CountsAsEngagement()
+    {
+        // A review that failed still ran at its revision, so the pull request is not fresh ground.
+        var failed = MakeJob(prId: 734, iterationId: 1);
+        failed.SetReviewRevision(new ReviewRevision("failed-head", "base", null, "failed", "base...failed"));
+        await this._repo.AddAsync(failed);
+        await this._repo.SetFailedAsync(failed.Id, "boom");
+
+        var engaged = await this._repo.GetLatestEngagedRevisionAsync(
+            failed.ClientId,
+            failed.OrganizationUrl,
+            failed.ProjectId,
+            failed.RepositoryId,
+            failed.PullRequestId);
+
+        Assert.NotNull(engaged);
+        Assert.Equal("failed", engaged!.StoredRevisionKey);
+    }
+
+    [Fact]
+    public async Task GetLatestEngagedRevisionAsync_CancelledJob_CountsAsEngagement()
+    {
+        // A cancelled review was halted deliberately, which is a decision about the revision rather than a reason
+        // to review it again.
+        var cancelled = MakeJob(prId: 737, iterationId: 2);
+        cancelled.SetReviewRevision(new ReviewRevision("cancelled-head", "base", null, "cancelled", "base...cancelled"));
+        await this._repo.AddAsync(cancelled);
+        await this._repo.SetCancelledAsync(cancelled.Id);
+
+        var engaged = await this._repo.GetLatestEngagedRevisionAsync(
+            cancelled.ClientId,
+            cancelled.OrganizationUrl,
+            cancelled.ProjectId,
+            cancelled.RepositoryId,
+            cancelled.PullRequestId);
+
+        Assert.NotNull(engaged);
+        Assert.Equal("cancelled", engaged!.StoredRevisionKey);
+    }
+
+    [Fact]
+    public async Task GetLatestEngagedRevisionAsync_SeveralJobs_ReturnsTheMostRecentlySubmitted()
+    {
+        var earlier = MakeJob(prId: 738, iterationId: 1);
+        earlier.SetReviewRevision(new ReviewRevision("earlier-head", "base", null, "earlier", "base...earlier"));
+        await this._repo.AddAsync(earlier);
+        await this._repo.SetResultAsync(earlier.Id, new ReviewResult("summary", []));
+
+        await Task.Delay(10);
+
+        var later = MakeJob(
+            earlier.ClientId,
+            earlier.OrganizationUrl,
+            earlier.ProjectId,
+            earlier.RepositoryId,
+            earlier.PullRequestId,
+            2);
+        later.SetReviewRevision(new ReviewRevision("later-head", "base", null, "later", "base...later"));
+        await this._repo.AddAsync(later);
+
+        var engaged = await this._repo.GetLatestEngagedRevisionAsync(
+            earlier.ClientId,
+            earlier.OrganizationUrl,
+            earlier.ProjectId,
+            earlier.RepositoryId,
+            earlier.PullRequestId);
+
+        Assert.NotNull(engaged);
+        Assert.Equal("later", engaged!.StoredRevisionKey);
+        Assert.Equal(2, engaged.IterationId);
+    }
+
+    [Fact]
+    public async Task GetLatestEngagedRevisionAsync_OnlyJobIsHeldAtTheBudgetCap_ReturnsNull()
+    {
+        // A held job never ran, so it must not disable the pull request for good; once the cap frees, the next
+        // push is reviewed.
+        var held = MakeJob(prId: 735, iterationId: 1);
+        held.SetReviewRevision(new ReviewRevision("held-head", "base", null, "held", "base...held"));
+        await this._repo.AddAsync(held);
+        await this._repo.SetBudgetHeldAsync(held.Id, BudgetScopeKind.ClientMonthly, BudgetCapKind.Soft, 10m, 12m);
+
+        var engaged = await this._repo.GetLatestEngagedRevisionAsync(
+            held.ClientId,
+            held.OrganizationUrl,
+            held.ProjectId,
+            held.RepositoryId,
+            held.PullRequestId);
+
+        Assert.Null(engaged);
+    }
+
+    [Fact]
+    public async Task GetLatestEngagedRevisionAsync_OnlyJobWasCutAtTheBudgetCap_ReturnsNull()
+    {
+        // A job cut off when spending passed a hard cap produced no review either, and it is resumed by a
+        // restart rather than by itself, so it must not stand as this client's engagement with the revision.
+        var exceeded = MakeJob(prId: 739, iterationId: 1);
+        exceeded.SetReviewRevision(new ReviewRevision("exceeded-head", "base", null, "exceeded", "base...exceeded"));
+        await this._repo.AddAsync(exceeded);
+        await this._repo.TryTransitionAsync(exceeded.Id, JobStatus.Pending, JobStatus.Processing);
+        await this._repo.SetBudgetExceededAsync(exceeded.Id, BudgetScopeKind.Increment, BudgetCapKind.Hard, 5m, 6m);
+
+        var engaged = await this._repo.GetLatestEngagedRevisionAsync(
+            exceeded.ClientId,
+            exceeded.OrganizationUrl,
+            exceeded.ProjectId,
+            exceeded.RepositoryId,
+            exceeded.PullRequestId);
+
+        Assert.Null(engaged);
+    }
+
+    [Fact]
+    public async Task GetLatestEngagedRevisionAsync_JobWithoutARecordedRevision_FallsBackToTheIterationId()
+    {
+        var withoutRevision = MakeJob(prId: 736, iterationId: 9);
+        await this._repo.AddAsync(withoutRevision);
+
+        var engaged = await this._repo.GetLatestEngagedRevisionAsync(
+            withoutRevision.ClientId,
+            withoutRevision.OrganizationUrl,
+            withoutRevision.ProjectId,
+            withoutRevision.RepositoryId,
+            withoutRevision.PullRequestId);
+
+        Assert.NotNull(engaged);
+        Assert.Equal("9", engaged!.StoredRevisionKey);
+        Assert.Null(engaged.ReviewRevision);
+        Assert.Equal(9, engaged.IterationId);
+    }
+
+    [Fact]
     public async Task GetLatestReusableTerminalJobAsync_ExcludesSameRevisionAndDeprioritizesCancelled()
     {
         var currentJob = MakeJob(prId: 721, iterationId: 5);

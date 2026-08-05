@@ -26,4 +26,26 @@ public interface IReviewDiagnosticsReader
         Guid jobId,
         Guid protocolId,
         CancellationToken ct = default);
+
+    /// <summary>
+    ///     Returns the protocol history for a thread pass, one record per thread it evaluated, or
+    ///     <see langword="null" /> when the pass does not exist.
+    /// </summary>
+    /// <remarks>
+    ///     Shaped as review-job protocols on purpose: an operator inspecting a pull request reads one trace view,
+    ///     and the pass answers the same conversation the review used to.
+    /// </remarks>
+    Task<GetReviewJobProtocolResult?> GetThreadPassProtocolAsync(
+        Guid threadPassJobId,
+        bool includeEvents = true,
+        CancellationToken ct = default);
+
+    /// <summary>
+    ///     Returns one protocol pass for a thread pass, or <see langword="null" /> when the pass or protocol does
+    ///     not exist.
+    /// </summary>
+    Task<ReviewJobProtocolDto?> GetThreadPassProtocolPassAsync(
+        Guid threadPassJobId,
+        Guid protocolId,
+        CancellationToken ct = default);
 }

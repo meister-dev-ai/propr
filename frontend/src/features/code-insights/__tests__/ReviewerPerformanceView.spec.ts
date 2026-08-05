@@ -267,7 +267,6 @@ describe('ReviewerPerformanceView', () => {
       collectionDisabled: false,
       reachedLimit: false,
       findingsAlreadyHeld: 7,
-      threadsNotReplayable: 0,
     })
   })
 

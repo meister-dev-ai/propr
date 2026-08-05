@@ -23,7 +23,7 @@ public sealed record ThreadResolvedDomainEvent(
     Guid ClientId,
     string RepositoryId,
     int PullRequestId,
-    long ThreadId,
+    string ThreadId,
     string? FilePath,
     string? ChangeExcerpt,
     string CommentHistory,

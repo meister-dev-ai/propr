@@ -137,7 +137,7 @@ public sealed class CodeInsightHistoryImporterTests
         Assert.Equal(1, result.HumanThreadsReplayed);
 
         await harness.Dispositions.Received(1).HandleThreadResolvedAsync(
-            Arg.Is<ThreadResolvedDomainEvent>(evt => evt.ThreadId == 5001),
+            Arg.Is<ThreadResolvedDomainEvent>(evt => evt.ThreadId == "5001"),
             Arg.Any<CancellationToken>());
 
         // A thread ProPR never posted goes to the harvester, which decides for itself whether it was a miss.
@@ -224,7 +224,7 @@ public sealed class CodeInsightHistoryImporterTests
     }
 
     [Fact]
-    public async Task ThreadsWhoseIdIsNotNumericAreCountedRatherThanDroppedInSilence()
+    public async Task AThreadWhoseIdIsNotNumericIsReplayedLikeAnyOther()
     {
         var harness = new Harness();
         var jobId = harness.SeedJob(findings: [("src/A.cs", 10)]);
@@ -232,9 +232,10 @@ public sealed class CodeInsightHistoryImporterTests
 
         var result = await harness.Importer.ImportAsync(new CodeInsightImportRequest(ClientId, From, To, IncludeOutcomes: true));
 
-        // A provider whose discussion ids are hashes gets an explained zero instead of an unexplained one.
-        Assert.Equal(0, result.OutcomeThreadsReplayed);
-        Assert.Equal(1, result.ThreadsNotReplayable);
+        Assert.Equal(1, result.OutcomeThreadsReplayed);
+        await harness.Dispositions.Received(1).HandleThreadResolvedAsync(
+            Arg.Is<ThreadResolvedDomainEvent>(evt => evt.ThreadId == "8f3c1a2e"),
+            Arg.Any<CancellationToken>());
     }
 
     [Fact]

@@ -150,6 +150,44 @@
                 </div>
                 <div class="inline-field-row review-publication-row">
                     <div class="form-field flex-1 review-publication-field">
+                        <label class="checkbox-field" for="reviewEveryIncrementEnabled">
+                            <input id="reviewEveryIncrementEnabled"
+                                v-model="editedReviewEveryIncrementEnabled"
+                                name="reviewEveryIncrementEnabled" type="checkbox" />
+                            <strong>Review every pushed update</strong>
+                            <p class="muted review-publication-copy">
+                                When this is off, ProPR reviews a pull request once, at the first revision
+                                it sees, and later pushes wait for a requested review. Turn it on to start
+                                a new review for every pushed update, which cancels any review still running
+                                for an older revision. Off by default.
+                            </p>
+                        </label>
+                    </div>
+                </div>
+                <div class="inline-field-row review-publication-row">
+                    <div class="form-field flex-1 review-publication-field">
+                        <label for="commentResolutionBehavior">Resolving comment threads</label>
+                        <select id="commentResolutionBehavior"
+                            v-model="editedCommentResolutionBehavior"
+                            name="commentResolutionBehavior">
+                            <option v-for="option in COMMENT_RESOLUTION_OPTIONS" :key="option.value" :value="option.value">
+                                {{ option.label }}
+                            </option>
+                        </select>
+                        <p class="muted review-publication-copy">
+                            What ProPR does with its own comment threads once the developer has acted on them.
+                            This is checked on every pushed update, whether or not the files are reviewed again.
+                            <strong>Resolve quietly</strong> (default) closes a thread whose finding was fixed
+                            without adding a comment. <strong>Resolve with an explanation</strong> posts why it
+                            closed first. <strong>Leave threads alone</strong> turns the whole thing off, so
+                            nothing is resolved and nothing is answered. Either resolving option still answers a
+                            developer who asks a question in a thread. Azure DevOps, GitHub and GitLab only; on
+                            Forgejo there is no thread to address and the setting does nothing.
+                        </p>
+                    </div>
+                </div>
+                <div class="inline-field-row review-publication-row">
+                    <div class="form-field flex-1 review-publication-field">
                         <label for="outputLanguage">Output language</label>
                         <input id="outputLanguage"
                             v-model="editedOutputLanguage"
@@ -230,6 +268,8 @@ const {
     editedScmCommentPostingEnabled,
     editedEnableEvidenceBackedVerification,
     editedEnableMultiPassUnion,
+    editedReviewEveryIncrementEnabled,
+    editedCommentResolutionBehavior,
     editedIncludeLinkedItemsInContext,
     editedEnableLanguageRobustScreening,
     editedOutputLanguage,
@@ -245,6 +285,16 @@ const {
     handleDelete,
     handleOverviewNavigate,
 } = vm;
+
+// What ProPR does with its own threads once a finding has been acted on. Mirrors the backend
+// CommentResolutionBehavior enum. Named for what a reader sees happen rather than after the enum:
+// "silent" describes the absence of a comment, which is not what someone scanning a settings page is
+// looking for.
+const COMMENT_RESOLUTION_OPTIONS: { value: string; label: string }[] = [
+    { value: "silent", label: "Resolve quietly (default)" },
+    { value: "withReply", label: "Resolve with an explanation" },
+    { value: "disabled", label: "Leave threads alone" },
+];
 
 // The reasoning-effort levels offered for the baseline (tier) pass. Mirrors the backend
 // ReviewReasoningEffort enum; 'none' (default) sends no effort so behavior/cost stay unchanged.

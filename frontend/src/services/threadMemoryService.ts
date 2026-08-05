@@ -14,7 +14,7 @@ const BASE = API_BASE_URL
 export interface ThreadMemoryRecordDto {
   id: string
   clientId: string
-  threadId: number
+  threadId: string
   repositoryId: string
   pullRequestId: number
   filePath: string | null
@@ -36,7 +36,7 @@ export interface ThreadMemoryRecordDto {
 export interface MemoryActivityLogEntryDto {
   id: string
   clientId: string
-  threadId: number
+  threadId: string
   repositoryId: string
   pullRequestId: number
   action: number        // 0=Stored, 1=Removed, 2=NoOp
@@ -81,7 +81,7 @@ export async function deleteEmbedding(id: string, clientId: string): Promise<voi
 export async function fetchActivityLog(
   clientId: string,
   opts: {
-    threadId?: number
+    threadId?: string
     pullRequestId?: number
     repositoryId?: string
     action?: number
@@ -92,7 +92,7 @@ export async function fetchActivityLog(
   } = {},
 ): Promise<PagedResult<MemoryActivityLogEntryDto>> {
   const params = new URLSearchParams({ clientId })
-  if (opts.threadId != null) params.set('threadId', String(opts.threadId))
+  if (opts.threadId) params.set('threadId', opts.threadId)
   if (opts.pullRequestId != null) params.set('pullRequestId', String(opts.pullRequestId))
   if (opts.repositoryId) params.set('repositoryId', opts.repositoryId)
   if (opts.action != null) params.set('action', String(opts.action))

@@ -74,6 +74,11 @@ public sealed class NoOpClientRegistry : IClientRegistry
         return Task.FromResult(true);
     }
 
+    public Task<bool> GetReviewEveryIncrementEnabledAsync(Guid clientId, CancellationToken ct = default)
+    {
+        return Task.FromResult(false);
+    }
+
     public Task<CommentSeverity> GetMinimumSeverityToPostAsync(Guid clientId, CancellationToken ct = default)
     {
         return Task.FromResult(CommentSeverity.Info);

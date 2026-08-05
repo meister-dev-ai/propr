@@ -16,17 +16,18 @@ internal sealed partial class StubAdoThreadReplier(ILogger<StubAdoThreadReplier>
 {
     public ScmProvider Provider => ScmProvider.AzureDevOps;
 
-    public Task ReplyAsync(
+    // Nothing is posted, so there is no provider comment to report and provenance recording is skipped.
+    public Task<string?> ReplyAsync(
         Guid clientId,
         ReviewThreadRef thread,
         string replyText,
         CancellationToken ct = default)
     {
-        return Task.CompletedTask;
+        return Task.FromResult<string?>(null);
     }
 
-    /// <inheritdoc />
-    public Task ReplyAsync(
+    /// <inheritdoc cref="ReplyAsync(Guid, ReviewThreadRef, string, CancellationToken)" />
+    public Task<string?> ReplyAsync(
         string organizationUrl,
         string projectId,
         string repositoryId,
@@ -37,7 +38,7 @@ internal sealed partial class StubAdoThreadReplier(ILogger<StubAdoThreadReplier>
         CancellationToken cancellationToken = default)
     {
         LogStubReply(logger, organizationUrl, projectId, repositoryId, pullRequestId, threadId, replyText);
-        return Task.CompletedTask;
+        return Task.FromResult<string?>(null);
     }
 
     [LoggerMessage(

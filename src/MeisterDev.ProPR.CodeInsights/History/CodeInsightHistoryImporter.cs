@@ -90,7 +90,6 @@ public sealed partial class CodeInsightHistoryImporter(
         var pullRequests = new HashSet<(string RepositoryId, long PullRequestId)>();
 
         var pendingJobIds = pending.Select(job => job.JobId).ToHashSet();
-        var unreplayableThreads = 0;
 
         // Grouped by pull request because the provenance and retained-thread reads are per pull request: a pull
         // request reviewed ten times reads them once rather than ten times. Grouped over every job read rather
@@ -145,7 +144,7 @@ public sealed partial class CodeInsightHistoryImporter(
 
             if (request.IncludeOutcomes)
             {
-                var (outcomes, humans, unreplayable) = await this.ReplayThreadsAsync(
+                var (outcomes, humans) = await this.ReplayThreadsAsync(
                     request.ClientId,
                     group.Key.RepositoryId,
                     group.Key.PullRequestId,
@@ -153,7 +152,6 @@ public sealed partial class CodeInsightHistoryImporter(
                     ct);
                 outcomeThreads += outcomes;
                 humanThreads += humans;
-                unreplayableThreads += unreplayable;
                 touched |= outcomes > 0 || humans > 0;
             }
 
@@ -178,8 +176,7 @@ public sealed partial class CodeInsightHistoryImporter(
             humanThreads,
             false,
             reachedLimit,
-            collectedCounts.Values.Sum(),
-            unreplayableThreads);
+            collectedCounts.Values.Sum());
     }
 
     /// <summary>
@@ -370,7 +367,7 @@ public sealed partial class CodeInsightHistoryImporter(
     ///     path; everything else goes to the harvester, which decides for itself whether it was a miss. Both are
     ///     the live consumers, so both apply their own gate, their own idempotence and their own model bounds.
     /// </summary>
-    private async Task<(int Outcomes, int Human, int Unreplayable)> ReplayThreadsAsync(
+    private async Task<(int Outcomes, int Human)> ReplayThreadsAsync(
         Guid clientId,
         string repositoryId,
         long pullRequestId,
@@ -379,7 +376,6 @@ public sealed partial class CodeInsightHistoryImporter(
     {
         var outcomes = 0;
         var humans = 0;
-        var unreplayable = 0;
 
         foreach (var thread in anchors.Threads)
         {
@@ -390,22 +386,12 @@ public sealed partial class CodeInsightHistoryImporter(
                     continue;
                 }
 
-                // The outcome path keys on a numeric provider thread id, as the live crawl does. A provider whose
-                // thread ids are not numeric is left alone rather than matched against a fabricated id.
-                if (!long.TryParse(thread.ThreadId, out var numericThreadId))
-                {
-                    // Counted rather than dropped in silence, so a provider whose thread ids are not numeric shows
-                    // up as an explained zero instead of an unexplained one.
-                    unreplayable++;
-                    continue;
-                }
-
                 await dispositionService.HandleThreadResolvedAsync(
                     new ThreadResolvedDomainEvent(
                         clientId,
                         repositoryId,
                         (int)pullRequestId,
-                        numericThreadId,
+                        thread.ThreadId,
                         thread.FilePath,
                         null,
                         BuildCommentHistory(thread),
@@ -449,7 +435,7 @@ public sealed partial class CodeInsightHistoryImporter(
             humans++;
         }
 
-        return (outcomes, humans, unreplayable);
+        return (outcomes, humans);
     }
 
     private static string BuildCommentHistory(RetainedThreadView thread)

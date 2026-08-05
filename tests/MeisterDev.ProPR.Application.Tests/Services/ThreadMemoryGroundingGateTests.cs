@@ -46,7 +46,7 @@ public sealed class ThreadMemoryGroundingGateTests
         await repo.DidNotReceive().UpsertAsync(Arg.Any<ThreadMemoryRecord>(), Arg.Any<CancellationToken>());
         await activityLog.Received(1).AppendAsync(
             Arg.Is<MemoryActivityLogEntry>(e =>
-                e.ThreadId == 7 && e.Action == MemoryActivityAction.NoOp && e.Reason == expectedReason),
+                e.ThreadId == "7" && e.Action == MemoryActivityAction.NoOp && e.Reason == expectedReason),
             Arg.Any<CancellationToken>());
     }
 
@@ -68,7 +68,7 @@ public sealed class ThreadMemoryGroundingGateTests
         await service.HandleThreadResolvedAsync(evt);
 
         await repo.Received(1).UpsertAsync(
-            Arg.Is<ThreadMemoryRecord>(r => r.ThreadId == 7 && r.ResolutionSummary == "Fixed by adding the guard clause."),
+            Arg.Is<ThreadMemoryRecord>(r => r.ThreadId == "7" && r.ResolutionSummary == "Fixed by adding the guard clause."),
             Arg.Any<CancellationToken>());
     }
 
@@ -92,7 +92,7 @@ public sealed class ThreadMemoryGroundingGateTests
         await service.HandleThreadResolvedAsync(evt);
 
         await repo.Received(1).UpsertAsync(
-            Arg.Is<ThreadMemoryRecord>(r => r.ThreadId == 7 && r.ResolutionSummary == "Accepted as by-design."),
+            Arg.Is<ThreadMemoryRecord>(r => r.ThreadId == "7" && r.ResolutionSummary == "Accepted as by-design."),
             Arg.Any<CancellationToken>());
     }
 
@@ -121,7 +121,7 @@ public sealed class ThreadMemoryGroundingGateTests
         ThreadResolutionIntent intent,
         ThreadAnchorCodeChange codeChange,
         string commentHistory) =>
-        new(ClientId, "repo-1", 42, 7, "src/Foo.cs", null, commentHistory, DateTimeOffset.UtcNow, intent, codeChange);
+        new(ClientId, "repo-1", 42, "7", "src/Foo.cs", null, commentHistory, DateTimeOffset.UtcNow, intent, codeChange);
 
     private static (
         IThreadMemoryEmbedder embedder,

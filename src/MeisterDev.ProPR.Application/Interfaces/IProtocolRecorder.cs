@@ -48,6 +48,31 @@ public interface IProtocolRecorder
         string? logicalModelName = null);
 
     /// <summary>
+    ///     Creates a new protocol record owned by a thread pass rather than a review job, and returns its
+    ///     identifier. Allowed to throw, exactly as <see cref="BeginAsync" /> is; the caller decides whether to
+    ///     continue without a protocol.
+    /// </summary>
+    /// <remarks>
+    ///     A thread pass evaluates one thread per protocol, so the label names the thread and what was asked of
+    ///     the model. Closing the protocol with <see cref="SetCompletedAsync" /> is what moves the tokens onto the
+    ///     pass's own totals and the client's daily usage sample, the same route a review pass takes.
+    /// </remarks>
+    /// <param name="threadPassJobId">The thread pass this protocol belongs to.</param>
+    /// <param name="attemptNumber">Attempt ordinal (1-based).</param>
+    /// <param name="label">Human-readable label for this protocol pass.</param>
+    /// <param name="modelId">The effective AI model deployment name used for this pass.</param>
+    /// <param name="ct">Cancellation token.</param>
+    /// <param name="logicalModelName">The logical-model role that resolved this pass's runtime, captured at the time.</param>
+    /// <returns>The new protocol record's <see cref="Guid" />.</returns>
+    Task<Guid> BeginForThreadPassAsync(
+        Guid threadPassJobId,
+        int attemptNumber,
+        string? label = null,
+        string? modelId = null,
+        CancellationToken ct = default,
+        string? logicalModelName = null);
+
+    /// <summary>
     ///     Records a single AI call event. Never throws.
     /// </summary>
     /// <param name="protocolId">The protocol this event belongs to.</param>

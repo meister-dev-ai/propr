@@ -12,6 +12,10 @@ namespace MeisterDev.ProPR.Infrastructure.Repositories;
 ///     EF Core implementation of <see cref="IReviewPrScanRepository" />.
 ///     Provides persistent watermark storage backed by PostgreSQL.
 /// </summary>
+/// <remarks>
+///     Each operation loads the record, changes only the columns its fact owns, and saves. Nothing is
+///     deleted and re-added, so a write of one fact cannot roll back a concurrent write of another.
+/// </remarks>
 public sealed class EfReviewPrScanRepository(MeisterProPRDbContext dbContext) : IReviewPrScanRepository
 {
     /// <inheritdoc />
@@ -33,43 +37,209 @@ public sealed class EfReviewPrScanRepository(MeisterProPRDbContext dbContext) : 
     }
 
     /// <inheritdoc />
-    public async Task UpsertAsync(ReviewPrScan record, CancellationToken ct = default)
+    public async Task SetReviewWatermarkAsync(
+        Guid clientId,
+        string repositoryId,
+        int pullRequestId,
+        string revisionKey,
+        CancellationToken ct = default)
     {
-        var existing = await dbContext.ReviewPrScans
-            .Include(s => s.Threads)
-            .FirstOrDefaultAsync(
-                s =>
-                    s.ClientId == record.ClientId &&
-                    s.RepositoryId == record.RepositoryId &&
-                    s.PullRequestId == record.PullRequestId,
-                ct);
+        var scan = await TrackScanAsync(dbContext, clientId, repositoryId, pullRequestId, ct);
 
-        if (existing is null)
+        if (scan is null)
         {
-            record.UpdatedAt = DateTimeOffset.UtcNow;
-            await dbContext.ReviewPrScans.AddAsync(record, ct);
+            await dbContext.ReviewPrScans.AddAsync(
+                new ReviewPrScan(Guid.NewGuid(), clientId, repositoryId, pullRequestId, revisionKey),
+                ct);
         }
         else
         {
-            existing.LastProcessedCommitId = record.LastProcessedCommitId;
-            existing.UpdatedAt = DateTimeOffset.UtcNow;
-
-            // Replace child thread records.
-            dbContext.ReviewPrScanThreads.RemoveRange(existing.Threads);
-
-            foreach (var thread in record.Threads)
-            {
-                existing.Threads.Add(
-                    new ReviewPrScanThread
-                    {
-                        ReviewPrScanId = existing.Id,
-                        ThreadId = thread.ThreadId,
-                        LastSeenReplyCount = thread.LastSeenReplyCount,
-                        LastSeenStatus = thread.LastSeenStatus,
-                    });
-            }
+            scan.LastProcessedCommitId = revisionKey;
+            scan.UpdatedAt = DateTimeOffset.UtcNow;
         }
 
         await dbContext.SaveChangesAsync(ct);
+    }
+
+    /// <inheritdoc />
+    public async Task SetPendingReviewRevisionAsync(
+        Guid clientId,
+        string repositoryId,
+        int pullRequestId,
+        string revisionKey,
+        CancellationToken ct = default)
+    {
+        var scan = await TrackScanAsync(dbContext, clientId, repositoryId, pullRequestId, ct);
+
+        if (scan is null)
+        {
+            await dbContext.ReviewPrScans.AddAsync(
+                ReviewPrScan.ForPendingReview(
+                    Guid.NewGuid(),
+                    clientId,
+                    repositoryId,
+                    pullRequestId,
+                    revisionKey,
+                    DateTimeOffset.UtcNow),
+                ct);
+        }
+        else if (!string.Equals(scan.PendingReviewRevisionKey, revisionKey, StringComparison.Ordinal))
+        {
+            // Only a change of revision restamps the clock. Re-declining the same revision every crawl tick
+            // would otherwise keep resetting it, and the surface that reports how long a pull request has
+            // been waiting would report how recently it was last looked at instead.
+            scan.PendingReviewRevisionKey = revisionKey;
+            scan.PendingReviewDetectedAt = DateTimeOffset.UtcNow;
+            scan.UpdatedAt = DateTimeOffset.UtcNow;
+        }
+        else
+        {
+            return;
+        }
+
+        await dbContext.SaveChangesAsync(ct);
+    }
+
+    /// <inheritdoc />
+    public async Task SetThreadPassWatermarkAsync(
+        Guid clientId,
+        string repositoryId,
+        int pullRequestId,
+        string revisionKey,
+        CancellationToken ct = default)
+    {
+        var scan = await TrackScanAsync(dbContext, clientId, repositoryId, pullRequestId, ct);
+
+        if (scan is null)
+        {
+            await dbContext.ReviewPrScans.AddAsync(
+                ReviewPrScan.ForThreadPass(Guid.NewGuid(), clientId, repositoryId, pullRequestId, revisionKey),
+                ct);
+        }
+        else
+        {
+            scan.LastThreadPassRevisionKey = revisionKey;
+            scan.UpdatedAt = DateTimeOffset.UtcNow;
+        }
+
+        await dbContext.SaveChangesAsync(ct);
+    }
+
+    /// <inheritdoc />
+    public async Task SetLastSeenReplyCountsAsync(
+        Guid clientId,
+        string repositoryId,
+        int pullRequestId,
+        IReadOnlyDictionary<string, int> replyCountByThreadId,
+        CancellationToken ct = default)
+    {
+        if (replyCountByThreadId.Count == 0)
+        {
+            return;
+        }
+
+        var scan = await TrackScanAsync(dbContext, clientId, repositoryId, pullRequestId, ct);
+        if (scan is null)
+        {
+            return;
+        }
+
+        foreach (var (threadId, replyCount) in replyCountByThreadId)
+        {
+            MergeThread(scan, threadId).LastSeenReplyCount = replyCount;
+        }
+
+        scan.UpdatedAt = DateTimeOffset.UtcNow;
+        await dbContext.SaveChangesAsync(ct);
+    }
+
+    /// <inheritdoc />
+    public async Task SetLastSeenStatusesAsync(
+        Guid clientId,
+        string repositoryId,
+        int pullRequestId,
+        IReadOnlyDictionary<string, string?> statusByThreadId,
+        CancellationToken ct = default)
+    {
+        if (statusByThreadId.Count == 0)
+        {
+            return;
+        }
+
+        var scan = await TrackScanAsync(dbContext, clientId, repositoryId, pullRequestId, ct);
+        if (scan is null)
+        {
+            return;
+        }
+
+        foreach (var (threadId, status) in statusByThreadId)
+        {
+            MergeThread(scan, threadId).LastSeenStatus = status;
+        }
+
+        scan.UpdatedAt = DateTimeOffset.UtcNow;
+        await dbContext.SaveChangesAsync(ct);
+    }
+
+    /// <inheritdoc />
+    public async Task RetainOnlyThreadsAsync(
+        Guid clientId,
+        string repositoryId,
+        int pullRequestId,
+        IReadOnlyCollection<string> threadIds,
+        CancellationToken ct = default)
+    {
+        var scan = await TrackScanAsync(dbContext, clientId, repositoryId, pullRequestId, ct);
+        if (scan is null)
+        {
+            return;
+        }
+
+        var retained = threadIds.ToHashSet(StringComparer.Ordinal);
+        var stale = scan.Threads.Where(thread => !retained.Contains(thread.ThreadId)).ToList();
+        if (stale.Count == 0)
+        {
+            return;
+        }
+
+        dbContext.ReviewPrScanThreads.RemoveRange(stale);
+        scan.UpdatedAt = DateTimeOffset.UtcNow;
+        await dbContext.SaveChangesAsync(ct);
+    }
+
+    private static async Task<ReviewPrScan?> TrackScanAsync(
+        MeisterProPRDbContext dbContext,
+        Guid clientId,
+        string repositoryId,
+        int pullRequestId,
+        CancellationToken ct)
+    {
+        return await dbContext.ReviewPrScans
+            .Include(s => s.Threads)
+            .FirstOrDefaultAsync(
+                s =>
+                    s.ClientId == clientId &&
+                    s.RepositoryId == repositoryId &&
+                    s.PullRequestId == pullRequestId,
+                ct);
+    }
+
+    private static ReviewPrScanThread MergeThread(ReviewPrScan scan, string threadId)
+    {
+        var existing = scan.Threads.FirstOrDefault(thread =>
+            string.Equals(thread.ThreadId, threadId, StringComparison.Ordinal));
+        if (existing is not null)
+        {
+            return existing;
+        }
+
+        var added = new ReviewPrScanThread
+        {
+            ReviewPrScanId = scan.Id,
+            ThreadId = threadId,
+        };
+
+        scan.Threads.Add(added);
+        return added;
     }
 }

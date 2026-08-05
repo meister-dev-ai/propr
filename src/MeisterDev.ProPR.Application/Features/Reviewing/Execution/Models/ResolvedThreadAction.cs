@@ -9,7 +9,7 @@ namespace MeisterDev.ProPR.Application.Features.Reviewing.Execution.Models;
 ///     Final resolution action applied to an AI-owned thread.
 /// </summary>
 public sealed record ResolvedThreadAction(
-    long ThreadId,
+    string ThreadId,
     CommentResolutionBehavior Behavior,
     bool IsResolved,
     string? ReplyText,

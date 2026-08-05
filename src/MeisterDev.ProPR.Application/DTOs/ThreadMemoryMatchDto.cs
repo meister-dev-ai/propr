@@ -9,7 +9,7 @@ namespace MeisterDev.ProPR.Application.DTOs;
 ///     Transfer object returned by a similarity query against the thread memory store.
 /// </summary>
 /// <param name="MemoryRecordId">Source <see cref="MeisterDev.ProPR.Domain.Entities.ThreadMemoryRecord" /> identifier.</param>
-/// <param name="ThreadId">Source ADO thread identifier.</param>
+/// <param name="ThreadId">Source provider thread identifier.</param>
 /// <param name="FilePath">File path from the historical thread. Null for PR-level threads.</param>
 /// <param name="ResolutionSummary">AI-generated resolution summary from the stored record.</param>
 /// <param name="SimilarityScore">Cosine similarity score (0–1) between the query vector and the stored vector.</param>
@@ -22,7 +22,7 @@ namespace MeisterDev.ProPR.Application.DTOs;
 /// <param name="Clarity">How clearly the thread read as resolved, which qualifies the intent.</param>
 public sealed record ThreadMemoryMatchDto(
     Guid MemoryRecordId,
-    long ThreadId,
+    string ThreadId,
     string? FilePath,
     string ResolutionSummary,
     float SimilarityScore,

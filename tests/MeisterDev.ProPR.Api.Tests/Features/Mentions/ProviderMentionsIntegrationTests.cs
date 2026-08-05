@@ -63,7 +63,7 @@ public sealed class ProviderMentionsIntegrationTests
             "proj",
             "repo-gh-1",
             7,
-            3,
+            "3",
             11,
             "@meister-dev-bot please help");
 

@@ -4,11 +4,17 @@
 namespace MeisterDev.ProPR.Application.Features.ReviewArchive;
 
 /// <summary>
-///     Persistence boundary for posted-comment provenance: a mapping from each provider-native comment
-///     a review job posted back to that job. A later ingestion step uses this to stamp the originating
-///     job onto retained comments. The store keeps no foreign keys to review or memory tables; its rows
-///     share the lifecycle of the retained pull-request data and are purged alongside it.
+///     Persistence boundary for posted-comment provenance: a mapping from each provider-native comment ProPR
+///     posted back to the job that posted it. A later ingestion step uses this to stamp the originating job
+///     onto retained comments. The store keeps no foreign keys to review or memory tables; its rows share the
+///     lifecycle of the retained pull-request data and are purged alongside it.
 /// </summary>
+/// <remarks>
+///     The recorded job is a review job for everything a review posts, and a mention-reply job for an answer
+///     to a mention. The two id spaces are distinct, and nothing here tells them apart: a reader that needs to
+///     know which kind it holds has to look the id up in both. Ownership, the one thing every reader uses this
+///     for, does not care.
+/// </remarks>
 public interface IPostedCommentOriginStore
 {
     /// <summary>
@@ -20,7 +26,7 @@ public interface IPostedCommentOriginStore
     Task RecordAsync(IReadOnlyList<PostedCommentOriginEntry> entries, CancellationToken ct = default);
 
     /// <summary>
-    ///     Returns the review job that posted the comment identified by
+    ///     Returns the job that posted the comment identified by
     ///     (<paramref name="clientId" />, <paramref name="repositoryId" />, <paramref name="pullRequestId" />,
     ///     <paramref name="providerCommentId" />), or null when no provenance row is retained for it.
     ///     Resolution is comment-id-primary: among the pull request's origins with this comment id, a single
@@ -90,7 +96,9 @@ public sealed record PostedCommentOriginPullRequestRef(
 /// </summary>
 /// <param name="ProviderThreadId">Provider thread identifier, or null when the provider exposes none.</param>
 /// <param name="ProviderCommentId">Provider-native comment identifier.</param>
-/// <param name="JobId">Review job that posted the comment.</param>
+/// <param name="JobId">
+///     The job that posted the comment: a review job, or a mention-reply job when ProPR answered a mention.
+/// </param>
 public readonly record struct PostedCommentOriginRow(
     string? ProviderThreadId,
     string ProviderCommentId,

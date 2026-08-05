@@ -239,7 +239,7 @@ public sealed class ReviewArchiveIngestionIntegrationTests : IDisposable
         {
             Id = Guid.NewGuid(),
             ClientId = clientId,
-            ThreadId = 999,
+            ThreadId = "999",
             RepositoryId = repositoryId,
             PullRequestId = 1,
             FilePath = "src/Stale.cs",

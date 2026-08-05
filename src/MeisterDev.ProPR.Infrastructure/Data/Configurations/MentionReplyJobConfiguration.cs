@@ -104,7 +104,8 @@ internal sealed class MentionReplyJobConfiguration : IEntityTypeConfiguration<Me
 
         builder.Property(j => j.ThreadId)
             .HasColumnName("thread_id")
-            .HasColumnType("bigint");
+            .HasMaxLength(256)
+            .IsRequired();
 
         builder.Property(j => j.CommentId)
             .HasColumnName("comment_id")

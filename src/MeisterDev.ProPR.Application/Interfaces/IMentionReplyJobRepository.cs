@@ -34,7 +34,7 @@ public interface IMentionReplyJobRepository
         Guid clientId,
         string repositoryId,
         int pullRequestId,
-        long threadId,
+        string threadId,
         long commentId,
         CancellationToken ct = default);
 

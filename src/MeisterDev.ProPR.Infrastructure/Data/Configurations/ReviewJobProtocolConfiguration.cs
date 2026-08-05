@@ -16,7 +16,8 @@ internal sealed class ReviewJobProtocolConfiguration : IEntityTypeConfiguration<
         builder.HasKey(p => p.Id);
         builder.Property(p => p.Id).HasColumnName("id").ValueGeneratedNever();
 
-        builder.Property(p => p.JobId).HasColumnName("job_id").IsRequired();
+        builder.Property(p => p.JobId).HasColumnName("job_id").IsRequired(false);
+        builder.Property(p => p.ThreadPassJobId).HasColumnName("thread_pass_job_id").IsRequired(false);
         builder.Property(p => p.AttemptNumber).HasColumnName("attempt_number").IsRequired();
         builder.Property(p => p.Label).HasColumnName("label").HasMaxLength(2048).IsRequired(false);
         builder.Property(p => p.FileResultId).HasColumnName("file_result_id").IsRequired(false);
@@ -71,7 +72,19 @@ internal sealed class ReviewJobProtocolConfiguration : IEntityTypeConfiguration<
             .HasForeignKey(p => p.FileResultId)
             .OnDelete(DeleteBehavior.SetNull);
 
+        builder.HasOne<ThreadPassJob>()
+            .WithMany()
+            .HasForeignKey(p => p.ThreadPassJobId)
+            .OnDelete(DeleteBehavior.Cascade);
+
         builder.HasIndex(p => p.JobId).HasDatabaseName("ix_review_job_protocols_job_id");
+        builder.HasIndex(p => p.ThreadPassJobId).HasDatabaseName("ix_review_job_protocols_thread_pass_job_id");
         builder.HasIndex(p => p.FileResultId).HasDatabaseName("ix_review_job_protocols_file_result_id");
+
+        // Exactly one owner, enforced where it cannot be worked around: a trace row with neither owner is
+        // unreachable from any read path, and one with both would be counted against two units of work.
+        builder.ToTable(table => table.HasCheckConstraint(
+            "ck_review_job_protocols_single_owner",
+            "(job_id IS NULL) <> (thread_pass_job_id IS NULL)"));
     }
 }

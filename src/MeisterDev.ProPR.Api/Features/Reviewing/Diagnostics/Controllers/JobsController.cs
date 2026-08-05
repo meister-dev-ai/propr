@@ -357,12 +357,19 @@ public sealed class JobsController(
     }
 
     /// <summary>
-    ///     Returns the protocol (agentic trace) for a single review job.
+    ///     Returns the protocol (agentic trace) for a single unit of work: a review job, or a thread pass over
+    ///     the same pull request's conversation.
     /// </summary>
-    /// <param name="id">The review job identifier.</param>
+    /// <remarks>
+    ///     One route serves both because an operator inspecting a pull request reads one trace view. A thread
+    ///     pass records one protocol per thread it evaluated, in the same shape a review pass records one per
+    ///     file.
+    /// </remarks>
+    /// <param name="id">The review job or thread pass identifier.</param>
+    /// <param name="diagnosticsReader">Diagnostics reader used to load a thread pass's trace.</param>
     /// <param name="includeEvents">When false, omits heavy per-event bodies from the list response while retaining event rows and metadata.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
-    /// <returns>The protocol records with all captured events, or 404 if the job has no protocols.</returns>
+    /// <returns>The protocol records with all captured events, or 404 if there are no protocols.</returns>
     /// <response code="200">Protocols returned.</response>
     /// <response code="401">Missing or invalid credentials.</response>
     /// <response code="404">Job not found.</response>
@@ -373,6 +380,7 @@ public sealed class JobsController(
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> GetJobProtocol(
         Guid id,
+        [FromServices] IReviewDiagnosticsReader diagnosticsReader,
         [FromQuery] bool includeEvents = true,
         CancellationToken cancellationToken = default)
     {
@@ -383,8 +391,9 @@ public sealed class JobsController(
         }
 
         var protocolResult = await getReviewJobProtocolHandler.HandleAsync(
-            new GetReviewJobProtocolQuery(id, includeEvents),
-            cancellationToken);
+                                 new GetReviewJobProtocolQuery(id, includeEvents),
+                                 cancellationToken)
+                             ?? await diagnosticsReader.GetThreadPassProtocolAsync(id, includeEvents, cancellationToken);
         if (protocolResult is null)
         {
             return this.NotFound();
@@ -405,11 +414,12 @@ public sealed class JobsController(
     }
 
     /// <summary>
-    ///     Returns one full protocol pass (including captured event bodies) for a single review job.
+    ///     Returns one full protocol pass (including captured event bodies) for a single review job or thread pass.
     /// </summary>
-    /// <param name="id">The review job identifier.</param>
+    /// <param name="id">The review job or thread pass identifier.</param>
     /// <param name="protocolId">The protocol-pass identifier.</param>
     /// <param name="diagnosticsReader">Diagnostics reader used to load the captured protocol pass.</param>
+    /// <param name="threadPasses">Repository used to resolve the owning client when the identifier is a thread pass.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <response code="200">Protocol pass returned.</response>
     /// <response code="401">Missing or invalid credentials.</response>
@@ -423,6 +433,7 @@ public sealed class JobsController(
         Guid id,
         Guid protocolId,
         [FromServices] IReviewDiagnosticsReader diagnosticsReader,
+        [FromServices] IThreadPassJobRepository threadPasses,
         CancellationToken cancellationToken = default)
     {
         var auth = AuthHelpers.RequireAuthenticated(this.HttpContext);
@@ -432,18 +443,22 @@ public sealed class JobsController(
         }
 
         var job = jobRepository.GetById(id);
-        if (job is null)
+        var owningClientId = job?.ClientId
+                             ?? (await threadPasses.GetByIdAsync(id, cancellationToken))?.ClientId;
+        if (owningClientId is not { } clientId)
         {
             return this.NotFound();
         }
 
-        var roleCheck = AuthHelpers.RequireClientRole(this.HttpContext, job.ClientId, ClientRole.ClientUser);
+        var roleCheck = AuthHelpers.RequireClientRole(this.HttpContext, clientId, ClientRole.ClientUser);
         if (roleCheck is not null)
         {
             return roleCheck;
         }
 
-        var protocolPass = await diagnosticsReader.GetJobProtocolPassAsync(id, protocolId, cancellationToken);
+        var protocolPass = job is null
+            ? await diagnosticsReader.GetThreadPassProtocolPassAsync(id, protocolId, cancellationToken)
+            : await diagnosticsReader.GetJobProtocolPassAsync(id, protocolId, cancellationToken);
         return protocolPass is null ? this.NotFound() : this.Ok(protocolPass);
     }
 

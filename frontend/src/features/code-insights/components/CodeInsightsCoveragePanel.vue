@@ -217,9 +217,6 @@ const summary = computed(() => {
     // collection holds only part of cannot be repaired by importing over it.
     parts.push(`${result.findingsAlreadyHeld} findings were already held`)
   }
-  if (result.threadsNotReplayable > 0) {
-    parts.push(`${result.threadsNotReplayable} thread${result.threadsNotReplayable === 1 ? '' : 's'} could not be replayed, because this provider's thread ids are not numeric`)
-  }
   if (result.outcomeThreadsReplayed > 0 || result.humanThreadsReplayed > 0) {
     parts.push(
       `${result.outcomeThreadsReplayed} resolved and ${result.humanThreadsReplayed} human thread${result.humanThreadsReplayed === 1 ? '' : 's'} replayed`,

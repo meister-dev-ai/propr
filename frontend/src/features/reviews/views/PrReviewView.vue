@@ -31,6 +31,31 @@
                 </span>
             </div>
             <p v-if="blockError" class="error block-error">{{ blockError }}</p>
+
+            <!--
+                The one place a person is told the pull request has moved on. Automatic triggers review only
+                the first increment, so without this the branch sits ahead of its review with nothing saying so.
+            -->
+            <div v-if="pendingReview" class="pending-review" role="status">
+                <div class="pending-review__text">
+                    <strong>New commits since the last review.</strong>
+                    <span>
+                        {{ pendingReviewDescription }}
+                    </span>
+                </div>
+                <button
+                    v-if="canRequestReview"
+                    type="button"
+                    class="pending-review__action"
+                    :disabled="requestingReview"
+                    @click="requestReview()"
+                >
+                    <i class="fi fi-rr-play"></i>
+                    {{ requestingReview ? 'Requesting…' : 'Review current state' }}
+                </button>
+            </div>
+            <p v-if="requestReviewMessage" class="pending-review__result">{{ requestReviewMessage }}</p>
+            <p v-if="requestReviewError" class="error">{{ requestReviewError }}</p>
         </div>
 
         <p v-if="loading" class="loading">Loading…</p>
@@ -157,6 +182,47 @@
                         </div>
                     </details>
                 </div>
+            </section>
+
+            <section class="section-card">
+                <h3 class="section-title">Thread Passes</h3>
+                <p class="section-hint">
+                    Answers to the developer's replies, and thread resolutions. These run on their own cadence
+                    beside the file reviews, and their spend counts toward the same budgets.
+                </p>
+                <p v-if="threadPasses.length === 0" class="empty-state">No thread passes have run for this PR.</p>
+                <div v-else class="jobs-list">
+                    <div
+                        v-for="pass in threadPasses"
+                        :key="pass.threadPassId"
+                        class="job-summary-row thread-pass-row"
+                    >
+                        <span :class="threadPassBadgeClass(pass.status)">{{ threadPassStatusLabel(pass.status) }}</span>
+                        <span class="job-date">{{ formatDate(pass.createdAt) }}</span>
+                        <span class="job-tokens">{{ pass.threadCount }} thread(s)</span>
+                        <span class="job-tokens">
+                            {{ formatTokens(pass.totalInputTokens) }} in / {{ formatTokens(pass.totalOutputTokens) }} out
+                        </span>
+                        <span class="job-tokens">
+                            {{ formatCost(pass.totalEstimatedCostUsd, pass.costIsApproximate) }}
+                        </span>
+                        <RouterLink :to="protocolLink(pass.threadPassId)" class="btn-ghost protocol-btn">
+                            Protocol ↗
+                        </RouterLink>
+                        <button
+                            v-if="canRestartThreadPass(pass.status)"
+                            class="btn-ghost protocol-btn"
+                            :disabled="restartingThreadPassId === pass.threadPassId"
+                            @click="restartThreadPass(pass.threadPassId)"
+                        >
+                            {{ restartingThreadPassId === pass.threadPassId ? 'Restarting…' : 'Restart ↻' }}
+                        </button>
+                        <span v-if="threadPassBlockReason(pass)" class="thread-pass-note">
+                            {{ threadPassBlockReason(pass) }}
+                        </span>
+                    </div>
+                </div>
+                <p v-if="threadPassError" class="empty-state-small">{{ threadPassError }}</p>
             </section>
 
             <section class="section-card">
@@ -298,7 +364,18 @@ import {
     type RetainedPrIdentity,
     type UseRetainedPrData,
 } from '@/features/reviews/composables/useRetainedPrData'
-import { blockPr, getPrView, listBlockedPrs, unblockPr, type PrReviewViewDto, type PullRequestIdentity } from '@/services/jobsService'
+import {
+    blockPr,
+    getPrView,
+    listBlockedPrs,
+    restartJob,
+    submitReviewByCoordinates,
+    unblockPr,
+    type PrReviewViewDto,
+    type PrThreadPassSummaryDto,
+    type PullRequestIdentity,
+    type SubmitReviewByCoordinatesOutcome,
+} from '@/services/jobsService'
 import { useSession } from '@/composables/useSession'
 import { describeMemoryOutcome } from '@/features/thread-memory/memoryOutcome'
 import { RoleLevel } from '@/composables/roles'
@@ -363,6 +440,67 @@ async function loadBlockedState() {
         )
     } catch {
         // Best-effort: leave the PR presented as unblocked when the state cannot be loaded.
+    }
+}
+
+// Whether the pull request is waiting is the backend's answer, not a comparison made here, so this view
+// and the browser extension offer the action on the same terms.
+const pendingReview = computed(() => data.value?.pendingReview ?? null)
+
+const canRequestReview = computed(() => canInspect.value && !isBlocked.value)
+
+const pendingReviewDescription = computed(() => {
+    const pending = pendingReview.value
+    if (!pending) {
+        return ''
+    }
+
+    const reviewed = pending.reviewedRevisionKey
+        ? `The files were last reviewed at revision ${pending.reviewedRevisionKey}.`
+        : 'The files have not been reviewed yet.'
+    const since = pending.detectedAt
+        ? ` Waiting since ${new Date(pending.detectedAt).toLocaleString()}.`
+        : ''
+
+    return `${reviewed}${since} Comment threads are still being answered on every push.`
+})
+
+const requestingReview = ref(false)
+const requestReviewMessage = ref('')
+const requestReviewError = ref('')
+
+/** What each named outcome means to the person who asked for the review. */
+const requestReviewOutcomes: Record<SubmitReviewByCoordinatesOutcome, string> = {
+    submitted: 'Review requested. It will appear in the list below once it starts.',
+    duplicateActiveJob: 'A review of this revision is already running.',
+    notAuthorized: 'You do not have permission to request a review for this client.',
+    pullRequestNotFound: 'The provider reports no such pull request.',
+    revisionUnresolvable: 'The provider could not be asked which revision this pull request is at.',
+    notSubmittable: 'This pull request cannot be reviewed right now.',
+    submissionFailed: 'The pull request resolved, but queueing the review failed.',
+}
+
+async function requestReview() {
+    if (!canRequestReview.value || requestingReview.value || !clientId.value || !prIdentity.value) {
+        return
+    }
+
+    requestingReview.value = true
+    requestReviewMessage.value = ''
+    requestReviewError.value = ''
+    try {
+        const result = await submitReviewByCoordinates(clientId.value, prIdentity.value)
+        requestReviewMessage.value = result.reason || requestReviewOutcomes[result.outcome]
+
+        // Only a queued review changes what this page shows. Reloading after a refusal would replace the
+        // explanation with an unchanged page and leave the person wondering whether anything happened.
+        if (result.outcome === 'submitted') {
+            await loadData()
+        }
+    } catch (err) {
+        requestReviewError.value = err instanceof Error ? err.message : 'Failed to request a review.'
+    } finally {
+        requestingReview.value = false
     }
 }
 
@@ -525,6 +663,60 @@ function statusBadgeClass(status: number): string {
         default: return 'badge'
     }
 }
+
+const threadPasses = computed<PrThreadPassSummaryDto[]>(() => data.value?.threadPasses ?? [])
+const restartingThreadPassId = ref<string | null>(null)
+const threadPassError = ref('')
+
+// ThreadPassJobStatus, which adds the two budget states and the did-nothing state after the lifecycle ones.
+function threadPassStatusLabel(status: number): string {
+    switch (status) {
+        case 5: return 'Budget held'
+        case 6: return 'Budget exceeded'
+        case 7: return 'Nothing to do'
+        default: return statusLabel(status)
+    }
+}
+
+function threadPassBadgeClass(status: number): string {
+    if (status === 7) {
+        return 'badge badge-cancelled'
+    }
+
+    return status === 5 || status === 6 ? 'badge badge-failed' : statusBadgeClass(status)
+}
+
+/** A budget-blocked or exhausted pass waits on an operator; nothing resumes it on its own. */
+function canRestartThreadPass(status: number): boolean {
+    return status === 3 || status === 5 || status === 6
+}
+
+function threadPassBlockReason(pass: PrThreadPassSummaryDto): string {
+    if (pass.budgetBlockThresholdUsd == null) {
+        return ''
+    }
+
+    const spent = formatCost(pass.budgetBlockSpentUsd, false)
+    const cap = formatCost(pass.budgetBlockThresholdUsd, false)
+    return `Stopped at ${spent} of a ${cap} cap. Restart it after freeing budget.`
+}
+
+async function restartThreadPass(threadPassId: string): Promise<void> {
+    if (restartingThreadPassId.value) {
+        return
+    }
+
+    restartingThreadPassId.value = threadPassId
+    threadPassError.value = ''
+    try {
+        await restartJob(threadPassId)
+        await loadData()
+    } catch (err) {
+        threadPassError.value = err instanceof Error ? err.message : 'Failed to restart the thread pass.'
+    } finally {
+        restartingThreadPassId.value = null
+    }
+}
 </script>
 
 <style scoped>
@@ -554,6 +746,63 @@ function statusBadgeClass(status: number): string {
     align-items: center;
     gap: 0.6rem;
     flex-wrap: wrap;
+}
+
+.pending-review {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    flex-wrap: wrap;
+    margin-top: 0.75rem;
+    padding: 0.65rem 0.9rem;
+    border: 1px solid var(--color-border);
+    border-left: 3px solid var(--color-accent, #6366f1);
+    border-radius: var(--radius-xs);
+    background: var(--color-surface-raised, rgba(99, 102, 241, 0.06));
+}
+
+.pending-review__text {
+    display: flex;
+    flex-direction: column;
+    gap: 0.15rem;
+    font-size: 0.85rem;
+}
+
+.pending-review__text span {
+    color: var(--color-text-muted);
+    font-size: 0.8rem;
+}
+
+.pending-review__action {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    font: inherit;
+    font-size: 0.82rem;
+    font-weight: 600;
+    padding: 0.4rem 0.85rem;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-xs);
+    background: var(--color-surface);
+    color: var(--color-text);
+    cursor: pointer;
+    white-space: nowrap;
+}
+
+.pending-review__action:hover:not(:disabled) {
+    border-color: var(--color-accent, #6366f1);
+}
+
+.pending-review__action:disabled {
+    opacity: 0.55;
+    cursor: not-allowed;
+}
+
+.pending-review__result {
+    margin: 0.5rem 0 0;
+    font-size: 0.82rem;
+    color: var(--color-text-muted);
 }
 
 .blocked-badge {
@@ -711,6 +960,24 @@ function statusBadgeClass(status: number): string {
 
 .job-breakdown-content {
     padding: 0 1rem 1rem;
+}
+
+.section-hint {
+    margin: -0.5rem 0 1rem 0;
+    color: var(--color-text-muted);
+    font-size: 0.85rem;
+}
+
+.thread-pass-row {
+    border: 1px solid var(--color-border);
+    border-radius: 0.5rem;
+    cursor: default;
+    flex-wrap: wrap;
+}
+
+.thread-pass-note {
+    color: var(--color-text-muted);
+    font-size: 0.85rem;
 }
 
 .detail-tabs {

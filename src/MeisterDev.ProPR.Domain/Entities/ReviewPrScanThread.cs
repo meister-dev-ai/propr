@@ -14,8 +14,8 @@ public sealed class ReviewPrScanThread
     /// <summary>FK to the owning <see cref="ReviewPrScan" />.</summary>
     public Guid ReviewPrScanId { get; set; }
 
-    /// <summary>ADO thread identifier within the pull request.</summary>
-    public long ThreadId { get; set; }
+    /// <summary>Provider-native thread identifier within the pull request.</summary>
+    public string ThreadId { get; set; } = string.Empty;
 
     /// <summary>
     ///     The number of comments observed in this thread when it was last processed.

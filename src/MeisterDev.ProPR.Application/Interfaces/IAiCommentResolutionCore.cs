@@ -13,7 +13,8 @@ namespace MeisterDev.ProPR.Application.Interfaces;
 public interface IAiCommentResolutionCore
 {
     /// <summary>
-    ///     Evaluates whether a code change addresses the issue raised in <paramref name="thread" />.
+    ///     Evaluates whether a code change addresses the issue raised in <paramref name="thread" />, and, when
+    ///     the developer has also replied there, answers them in the same evaluation.
     ///     Called when a new PR iteration (commit) has been detected since the thread was last processed.
     /// </summary>
     /// <param name="thread">The reviewer-owned comment thread to evaluate.</param>
@@ -25,6 +26,12 @@ public interface IAiCommentResolutionCore
     ///     The client's configured output language as an IETF BCP 47 tag, stated in the system prompt so the reply
     ///     is written in the same language as the rest of the review. <see langword="null" /> states no language.
     /// </param>
+    /// <param name="hasNewReplies">
+    ///     <see langword="true" /> when the thread has gained a reply nobody has answered yet, which puts the
+    ///     conversation and the code change in front of the model together and obliges it to answer the person
+    ///     as well as judge the finding. A thread can gain a reply and move to a new revision at the same time,
+    ///     and one evaluation covers both: two evaluations would cost twice and could contradict each other.
+    /// </param>
     /// <returns>
     ///     A <see cref="ThreadResolutionResult" /> indicating whether the issue is resolved and
     ///     an optional reply to post in the thread.
@@ -35,7 +42,8 @@ public interface IAiCommentResolutionCore
         IChatClient chatClient,
         string modelId,
         CancellationToken cancellationToken = default,
-        string? outputLanguage = null);
+        string? outputLanguage = null,
+        bool hasNewReplies = false);
 
     /// <summary>
     ///     Generates a conversational response to new human replies in <paramref name="thread" />,

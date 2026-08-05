@@ -83,7 +83,7 @@ public sealed class MentionReplyWorkerTests
                     "proj",
                     "repo",
                     7,
-                    3,
+                    "3",
                     11,
                     "@bot please help"));
             await processingAttempted.Task.WaitAsync(TimeSpan.FromSeconds(1));

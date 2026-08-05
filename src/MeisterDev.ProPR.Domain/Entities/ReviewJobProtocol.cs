@@ -6,17 +6,25 @@ using MeisterDev.ProPR.Domain.Enums;
 namespace MeisterDev.ProPR.Domain.Entities;
 
 /// <summary>
-///     Carries the full execution trace for one attempt of a <see cref="ReviewJob" />.
-///     Child entity of <see cref="ReviewJob" /> (the aggregate root); accessed only through
-///     <c>ReviewJob.Protocol</c>, never queried independently.
+///     Carries the full execution trace for one pass of one unit of work: an attempt of a
+///     <see cref="ReviewJob" />, or one thread a <see cref="ThreadPassJob" /> evaluated.
 /// </summary>
+/// <remarks>
+///     Exactly one owner is set. A single trace record serving both kinds of job is what keeps the operator's
+///     view of a pull request whole: the thread pass answers the same conversation the review used to, and
+///     splitting it into a second record shape would fork the trace read paths, the search index, and the
+///     viewer for no gain in what is actually stored.
+/// </remarks>
 public sealed class ReviewJobProtocol
 {
     /// <summary>Unique identifier for this protocol record.</summary>
     public Guid Id { get; init; }
 
-    /// <summary>The review job this protocol belongs to.</summary>
-    public Guid JobId { get; init; }
+    /// <summary>The review job this protocol belongs to, or <see langword="null" /> when a thread pass owns it.</summary>
+    public Guid? JobId { get; init; }
+
+    /// <summary>The thread pass this protocol belongs to, or <see langword="null" /> when a review job owns it.</summary>
+    public Guid? ThreadPassJobId { get; init; }
 
     /// <summary>Attempt ordinal (1-based). Always 1 for the initial attempt.</summary>
     public int AttemptNumber { get; init; }

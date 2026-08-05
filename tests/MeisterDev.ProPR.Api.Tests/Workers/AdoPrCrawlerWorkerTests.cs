@@ -83,15 +83,16 @@ public sealed class AdoPrCrawlerWorkerTests
 
         var worker = BuildWorker(scopeFactory);
 
-        // Act: start and let it run briefly then cancel
-        using var cts = new CancellationTokenSource(TimeSpan.FromMilliseconds(150));
+        // Act: run until the first crawl actually happens, then stop.
+        //
+        // This used to cancel on a 150ms timer and swallow the cancellation, so the assertion raced the
+        // worker's first tick and lost whenever the suite was under load — failing for reasons that had
+        // nothing to do with the behaviour under test. Waiting on the signal the worker itself raises is
+        // deterministic, and a worker that never crawls still fails, on the timeout.
+        await worker.StartAsync(CancellationToken.None);
         try
         {
-            await worker.StartAsync(cts.Token);
-            await crawlInvoked.Task.WaitAsync(TimeSpan.FromSeconds(1));
-        }
-        catch (OperationCanceledException)
-        {
+            await crawlInvoked.Task.WaitAsync(TimeSpan.FromSeconds(10));
         }
         finally
         {

@@ -107,7 +107,7 @@ public sealed partial class PrCrawlService
     private static partial void LogStateMachineNoOp(
         ILogger logger,
         int prId,
-        long threadId,
+        string threadId,
         string? previousStatus,
         string currentStatus);
 
@@ -137,4 +137,14 @@ public sealed partial class PrCrawlService
         Level = LogLevel.Warning,
         Message = "Thread memory state machine failed for PR #{PrId} (client {ClientId})")]
     private static partial void LogStateMachineFailed(ILogger logger, int prId, Guid clientId, Exception ex);
+
+    [LoggerMessage(
+        Level = LogLevel.Warning,
+        Message =
+            "Reading posted-comment provenance failed for PR #{PrId} (client {ClientId}); thread ownership falls back to the authenticated identity alone")]
+    private static partial void LogThreadOwnershipProvenanceLookupFailed(
+        ILogger logger,
+        int prId,
+        Guid clientId,
+        Exception ex);
 }

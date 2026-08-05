@@ -108,6 +108,15 @@ public interface IClientRegistry
     Task<bool> GetIncludeLinkedItemsInContextEnabledAsync(Guid clientId, CancellationToken ct = default);
 
     /// <summary>
+    ///     Returns whether an automatic trigger reviews every pushed update to a pull request for the given client.
+    ///     Defaults to <see langword="false" /> if the client does not exist, so an unknown client is reviewed at the
+    ///     first revision seen and no further.
+    /// </summary>
+    /// <param name="clientId">Client identifier.</param>
+    /// <param name="ct">Cancellation token.</param>
+    Task<bool> GetReviewEveryIncrementEnabledAsync(Guid clientId, CancellationToken ct = default);
+
+    /// <summary>
     ///     Returns the minimum severity a finding must have for its comment to be published to the SCM provider.
     ///     Findings ranked below it are retained in the persisted review result but not posted. Defaults to
     ///     <see cref="CommentSeverity.Info" /> (publish everything) if the client does not exist.

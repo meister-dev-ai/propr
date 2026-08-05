@@ -20,6 +20,7 @@ public sealed class MentionReplyJob
         this.ProjectId = string.Empty;
         this.RepositoryId = string.Empty;
         this.MentionText = string.Empty;
+        this.ThreadId = string.Empty;
     }
 
     /// <summary>
@@ -32,7 +33,7 @@ public sealed class MentionReplyJob
         string projectId,
         string repositoryId,
         int pullRequestId,
-        long threadId,
+        string threadId,
         long commentId,
         string mentionText,
         string? threadFilePath = null,
@@ -55,7 +56,7 @@ public sealed class MentionReplyJob
         ArgumentException.ThrowIfNullOrWhiteSpace(projectId);
         ArgumentException.ThrowIfNullOrWhiteSpace(repositoryId);
         ArgumentOutOfRangeException.ThrowIfLessThan(pullRequestId, 1);
-        ArgumentOutOfRangeException.ThrowIfLessThan(threadId, 1);
+        ArgumentException.ThrowIfNullOrWhiteSpace(threadId);
         ArgumentOutOfRangeException.ThrowIfLessThan(commentId, 1);
         ArgumentException.ThrowIfNullOrWhiteSpace(mentionText);
 
@@ -149,7 +150,7 @@ public sealed class MentionReplyJob
     /// <summary>Normalized review thread reference for this job.</summary>
     public ReviewThreadRef ReviewThreadReference => new(
         this.CodeReviewReference,
-        this.ThreadId.ToString(),
+        this.ThreadId,
         this.ThreadFilePath,
         this.ThreadLineNumber,
         false);
@@ -181,8 +182,8 @@ public sealed class MentionReplyJob
     /// <summary>ADO pull request number.</summary>
     public int PullRequestId { get; init; }
 
-    /// <summary>ADO thread ID containing the mention.</summary>
-    public long ThreadId { get; init; }
+    /// <summary>Provider-native identifier of the thread containing the mention.</summary>
+    public string ThreadId { get; init; }
 
     /// <summary>ADO comment ID of the mention comment.</summary>
     public long CommentId { get; init; }

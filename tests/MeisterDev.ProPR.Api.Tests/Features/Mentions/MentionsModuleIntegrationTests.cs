@@ -28,7 +28,7 @@ public sealed class MentionsModuleIntegrationTests
             "proj",
             "repo",
             7,
-            3,
+            "3",
             11,
             "@bot please help");
 
@@ -68,7 +68,7 @@ public sealed class MentionsModuleIntegrationTests
             "proj",
             "repo",
             7,
-            3,
+            "3",
             11,
             "@bot please help");
 

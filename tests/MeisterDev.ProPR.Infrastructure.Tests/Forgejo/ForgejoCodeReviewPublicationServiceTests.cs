@@ -53,7 +53,7 @@ public sealed class ForgejoPublicationContextContractTests
             review,
             revision,
             reviewer,
-            [new PrCommentThread(1, null, null, [new PrThreadComment("Bot", "Summary")])]);
+            [new PrCommentThread("1", null, null, [new PrThreadComment("Bot", "Summary")])]);
         var connectionRepository = ForgejoTestHelpers.CreateConnectionRepository(clientId, host);
         var httpClientFactory = ForgejoTestHelpers.CreateHttpClientFactory(request =>
             request.RequestUri!.AbsoluteUri switch

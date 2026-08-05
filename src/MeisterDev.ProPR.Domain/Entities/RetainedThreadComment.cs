@@ -32,9 +32,11 @@ public sealed class RetainedThreadComment
     public string EncryptedText { get; set; } = string.Empty;
 
     /// <summary>
-    ///     The review job that produced this comment, when the comment was posted by the AI reviewer and
-    ///     its provenance is retained; null for comments with no recorded originating job (human comments,
-    ///     or AI comments whose provenance has been purged or was never recorded).
+    ///     The job that produced this comment, when the comment was posted by the AI reviewer and its
+    ///     provenance is retained; null for comments with no recorded originating job (human comments, or AI
+    ///     comments whose provenance has been purged or was never recorded). Usually a review job, and a
+    ///     mention-reply job for an answer to a mention: the two id spaces are distinct and this column does
+    ///     not say which one it holds.
     /// </summary>
     public Guid? OriginatingJobId { get; set; }
 

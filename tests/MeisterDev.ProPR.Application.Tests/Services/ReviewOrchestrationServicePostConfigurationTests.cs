@@ -2,6 +2,7 @@
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
 using MeisterDev.ProPR.Application.DTOs;
+using MeisterDev.ProPR.Application.Features.ReviewArchive;
 using MeisterDev.ProPR.Application.Features.Reviewing.Execution.Models;
 using MeisterDev.ProPR.Application.Features.Reviewing.Execution.Ports;
 using MeisterDev.ProPR.Application.Interfaces;
@@ -15,6 +16,7 @@ using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using NSubstitute;
+using NSubstitute.ExceptionExtensions;
 
 namespace MeisterDev.ProPR.Application.Tests.Services;
 
@@ -118,6 +120,84 @@ public class ReviewOrchestrationServicePostConfigurationTests
             Arg.Any<Guid>(),
             Arg.Is<ReviewThreadRef>(thread => thread.ExternalThreadId == "thread-suggestion"),
             Arg.Any<string>(),
+            Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task PostedFindingIndex_ThreadIdIsNotANumber_StillIndexesTheFinding()
+    {
+        // GitLab names a discussion with a hexadecimal string and GitHub with a node id. Either one must reach
+        // the cross-increment index, or the next increment posts the same concern again on those providers.
+        var jobs = Substitute.For<IReviewJobExecutionStore>();
+        var clientRegistry = CreateClientRegistry(out var job);
+        var postedFindingIndex = Substitute.For<IPostedFindingIndex>();
+
+        var orchestratorResult = new ReviewResult(
+            "Summary.",
+            new List<ReviewComment>
+            {
+                new(WarningFile, 1, CommentSeverity.Warning, "The delete path races."),
+                new(SuggestionFile, 2, CommentSeverity.Suggestion, "This name reads oddly."),
+            }.AsReadOnly());
+
+        var commentPoster = CreatePublicationService(result => ReviewCommentPostingDiagnosticsDto
+                .Empty(result.Comments.Count) with
+            {
+                PostedComments =
+                [
+                    new PostedReviewCommentRef("c1", "3f2b1c9dbe4a", WarningFile, 1),
+                    new PostedReviewCommentRef("c2", "PRRT_kwDOAbc123", SuggestionFile, 2),
+                ],
+            });
+
+        var (service, _) = CreateService(
+            jobs,
+            clientRegistry,
+            orchestratorResult,
+            commentPoster,
+            postedFindingIndex: postedFindingIndex);
+
+        await service.ProcessAsync(job, CancellationToken.None);
+
+        await postedFindingIndex.Received(1).RecordPostedFindingsAsync(
+            Arg.Is<IReadOnlyList<PostedFindingEntry>>(entries =>
+                entries.Count == 2
+                && entries.Any(entry => entry.ProviderThreadId == "3f2b1c9dbe4a")
+                && entries.Any(entry => entry.ProviderThreadId == "PRRT_kwDOAbc123")),
+            Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task PostedFindingIndex_ProviderNamedNoThread_IndexesNothingForThatFinding()
+    {
+        var jobs = Substitute.For<IReviewJobExecutionStore>();
+        var clientRegistry = CreateClientRegistry(out var job);
+        var postedFindingIndex = Substitute.For<IPostedFindingIndex>();
+
+        var orchestratorResult = new ReviewResult(
+            "Summary.",
+            new List<ReviewComment>
+            {
+                new(WarningFile, 1, CommentSeverity.Warning, "The delete path races."),
+            }.AsReadOnly());
+
+        var commentPoster = CreatePublicationService(result => ReviewCommentPostingDiagnosticsDto
+                .Empty(result.Comments.Count) with
+            {
+                PostedComments = [new PostedReviewCommentRef("c1", null, WarningFile, 1)],
+            });
+
+        var (service, _) = CreateService(
+            jobs,
+            clientRegistry,
+            orchestratorResult,
+            commentPoster,
+            postedFindingIndex: postedFindingIndex);
+
+        await service.ProcessAsync(job, CancellationToken.None);
+
+        await postedFindingIndex.DidNotReceive().RecordPostedFindingsAsync(
+            Arg.Any<IReadOnlyList<PostedFindingEntry>>(),
             Arg.Any<CancellationToken>());
     }
 
@@ -293,6 +373,109 @@ public class ReviewOrchestrationServicePostConfigurationTests
             job.ClientId, Arg.Is<ReviewThreadRef>(thread => thread.ExternalThreadId == "thread-warning"), Arg.Any<string>(), Arg.Any<CancellationToken>());
     }
 
+    [Fact]
+    public async Task AutoResolve_Note_RecordsTheCommentItPosted()
+    {
+        // The auto-resolved note is a comment ProPR authored, so it carries provenance like everything else
+        // it posts. Nothing else identifies it once no token identity is resolvable.
+        var jobs = Substitute.For<IReviewJobExecutionStore>();
+        var clientRegistry = CreateClientRegistry(out var job);
+        clientRegistry.GetAutoResolveSeveritiesAsync(job.ClientId, Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<IReadOnlyList<CommentSeverity>>([CommentSeverity.Warning]));
+
+        var orchestratorResult = new ReviewResult(
+            "Summary.",
+            new List<ReviewComment> { new(WarningFile, 1, CommentSeverity.Warning, "A warning to auto-resolve.") }
+                .AsReadOnly());
+
+        var commentPoster = CreatePublicationService(result => ReviewCommentPostingDiagnosticsDto
+                .Empty(result.Comments.Count) with
+            {
+                PostedComments = [new PostedReviewCommentRef("c1", "thread-warning", WarningFile, 1)],
+            });
+
+        var originStore = CreateOriginStore();
+        var (service, _) = CreateService(
+            jobs,
+            clientRegistry,
+            orchestratorResult,
+            commentPoster,
+            postedCommentOriginStore: originStore,
+            autoResolveNoteCommentId: "note-comment-3");
+
+        await service.ProcessAsync(job, CancellationToken.None);
+
+        await originStore.Received(1).RecordAsync(
+            Arg.Is<IReadOnlyList<PostedCommentOriginEntry>>(entries =>
+                entries.Count == 1
+                && entries[0].ClientId == job.ClientId
+                && entries[0].RepositoryId == job.RepositoryId
+                && entries[0].PullRequestId == job.PullRequestId
+                && entries[0].ProviderThreadId == "thread-warning"
+                && entries[0].ProviderCommentId == "note-comment-3"
+                && entries[0].JobId == job.Id),
+            Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task AutoResolve_NotePublisherReportsNoCommentId_ResolvesAndRecordsNothing()
+    {
+        var jobs = Substitute.For<IReviewJobExecutionStore>();
+        var clientRegistry = CreateClientRegistry(out var job);
+        clientRegistry.GetAutoResolveSeveritiesAsync(job.ClientId, Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<IReadOnlyList<CommentSeverity>>([CommentSeverity.Warning]));
+
+        var orchestratorResult = new ReviewResult(
+            "Summary.",
+            new List<ReviewComment> { new(WarningFile, 1, CommentSeverity.Warning, "A warning to auto-resolve.") }
+                .AsReadOnly());
+
+        var commentPoster = CreatePublicationService(result => ReviewCommentPostingDiagnosticsDto
+                .Empty(result.Comments.Count) with
+            {
+                PostedComments = [new PostedReviewCommentRef("c1", "thread-warning", WarningFile, 1)],
+            });
+
+        var originStore = CreateOriginStore();
+        var (service, providerRegistry) = CreateService(
+            jobs,
+            clientRegistry,
+            orchestratorResult,
+            commentPoster,
+            postedCommentOriginStore: originStore);
+
+        await service.ProcessAsync(job, CancellationToken.None);
+
+        var replyPublisher = providerRegistry.GetReviewThreadReplyPublisher(ScmProvider.AzureDevOps);
+        await replyPublisher.Received(1).ReplyAsync(
+            job.ClientId,
+            Arg.Is<ReviewThreadRef>(thread => thread.ExternalThreadId == "thread-warning"),
+            Arg.Any<string>(),
+            Arg.Any<CancellationToken>());
+
+        // The published finding is still recorded; only the note, whose id the adapter could not report, is not.
+        await originStore.Received(1).RecordAsync(
+            Arg.Is<IReadOnlyList<PostedCommentOriginEntry>>(entries =>
+                entries.All(entry => entry.ProviderCommentId == "c1")),
+            Arg.Any<CancellationToken>());
+        await originStore.Received(1).RecordAsync(
+            Arg.Any<IReadOnlyList<PostedCommentOriginEntry>>(),
+            Arg.Any<CancellationToken>());
+    }
+
+    private static IPostedCommentOriginStore CreateOriginStore()
+    {
+        var originStore = Substitute.For<IPostedCommentOriginStore>();
+        originStore.GetJobIdsForPullRequestAsync(
+                Arg.Any<Guid>(),
+                Arg.Any<string>(),
+                Arg.Any<long>(),
+                Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<IReadOnlyList<PostedCommentOriginRow>>([]));
+
+        return originStore;
+    }
+
     private static ICodeReviewPublicationService CreatePublicationService(Func<ReviewResult, ReviewCommentPostingDiagnosticsDto>? diagnosticsFactory = null)
     {
         var publicationService = Substitute.For<ICodeReviewPublicationService>();
@@ -330,7 +513,8 @@ public class ReviewOrchestrationServicePostConfigurationTests
 
     private static IScmProviderRegistry CreateProviderRegistry(
         ICodeReviewPublicationService commentPoster,
-        bool resolutionSupported = true)
+        bool resolutionSupported = true,
+        string? autoResolveNoteCommentId = null)
     {
         // Build every substitute the registry hands out BEFORE wiring the .Returns() calls: creating a substitute
         // (which itself configures members) inside a .Returns() argument corrupts NSubstitute's last-call context.
@@ -355,7 +539,7 @@ public class ReviewOrchestrationServicePostConfigurationTests
                 Arg.Any<ReviewThreadRef>(),
                 Arg.Any<string>(),
                 Arg.Any<CancellationToken>())
-            .Returns(Task.CompletedTask);
+            .Returns(Task.FromResult(autoResolveNoteCommentId));
 
         if (resolutionSupported)
         {
@@ -409,7 +593,10 @@ public class ReviewOrchestrationServicePostConfigurationTests
         IClientRegistry clientRegistry,
         ReviewResult orchestratorResult,
         ICodeReviewPublicationService commentPoster,
-        bool resolutionSupported = true)
+        bool resolutionSupported = true,
+        IPostedCommentOriginStore? postedCommentOriginStore = null,
+        string? autoResolveNoteCommentId = null,
+        IPostedFindingIndex? postedFindingIndex = null)
     {
         var prFetcher = Substitute.For<IPullRequestFetcher>();
         prFetcher.FetchRefAsync(
@@ -467,7 +654,7 @@ public class ReviewOrchestrationServicePostConfigurationTests
         aiRepo.GetActiveForClientAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
             .Returns(Task.FromResult<AiConnectionDto?>(connectionDto));
 
-        var providerRegistry = CreateProviderRegistry(commentPoster, resolutionSupported);
+        var providerRegistry = CreateProviderRegistry(commentPoster, resolutionSupported, autoResolveNoteCommentId);
 
         var service = new ReviewOrchestrationService(
             jobs,
@@ -475,7 +662,6 @@ public class ReviewOrchestrationServicePostConfigurationTests
             providerRegistry,
             clientRegistry,
             prScanRepository,
-            Substitute.For<IAiCommentResolutionCore>(),
             Substitute.For<IProtocolRecorder>(),
             reviewContextToolsFactory,
             instructionFetcher,
@@ -486,7 +672,9 @@ public class ReviewOrchestrationServicePostConfigurationTests
             aiRepo,
             Substitute.For<IAiChatClientFactory>(),
             orchestrator,
-            workspaceManager: CreateDefaultWorkspaceManager());
+            workspaceManager: CreateDefaultWorkspaceManager(),
+            postedCommentOriginStore: postedCommentOriginStore,
+            postedFindingIndex: postedFindingIndex);
 
         return (service, providerRegistry);
     }

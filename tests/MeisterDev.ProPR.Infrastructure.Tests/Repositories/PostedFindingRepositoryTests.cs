@@ -73,12 +73,12 @@ public sealed class PostedFindingRepositoryTests(PostgresContainerFixture fixtur
     [Fact]
     public async Task FindClosestInPullRequestAsync_IdenticalVector_ReturnsTheThreadAndScore()
     {
-        await this._repo.AddMissingAsync([Record(ClientA, 22092, 101, V(1f, 0f))]);
+        await this._repo.AddMissingAsync([Record(ClientA, 22092, "101", V(1f, 0f))]);
 
         var match = await this._repo.FindClosestInPullRequestAsync(ClientA, RepoId, 22092, V(1f, 0f), 0.85f);
 
         Assert.NotNull(match);
-        Assert.Equal(101, match.ProviderThreadId);
+        Assert.Equal("101", match.ProviderThreadId);
         Assert.True(match.SimilarityScore > 0.99f, $"similarity was {match.SimilarityScore}");
     }
 
@@ -86,7 +86,7 @@ public sealed class PostedFindingRepositoryTests(PostgresContainerFixture fixtur
     public async Task FindClosestInPullRequestAsync_BelowTheThreshold_ReturnsNothing()
     {
         // An orthogonal vector is similarity 0, which is what a genuinely unrelated finding looks like.
-        await this._repo.AddMissingAsync([Record(ClientA, 22092, 102, V(1f, 0f))]);
+        await this._repo.AddMissingAsync([Record(ClientA, 22092, "102", V(1f, 0f))]);
 
         var match = await this._repo.FindClosestInPullRequestAsync(ClientA, RepoId, 22092, V(0f, 1f), 0.85f);
 
@@ -98,9 +98,9 @@ public sealed class PostedFindingRepositoryTests(PostgresContainerFixture fixtur
     {
         await this._repo.AddMissingAsync(
         [
-            Record(ClientB, 22092, 201, V(1f, 0f)),
-            Record(ClientA, 22092, 202, V(1f, 0f), repositoryId: "other-repo"),
-            Record(ClientA, 99999, 203, V(1f, 0f)),
+            Record(ClientB, 22092, "201", V(1f, 0f)),
+            Record(ClientA, 22092, "202", V(1f, 0f), repositoryId: "other-repo"),
+            Record(ClientA, 99999, "203", V(1f, 0f)),
         ]);
 
         var match = await this._repo.FindClosestInPullRequestAsync(ClientA, RepoId, 22092, V(1f, 0f), 0.85f);
@@ -113,25 +113,25 @@ public sealed class PostedFindingRepositoryTests(PostgresContainerFixture fixtur
     {
         await this._repo.AddMissingAsync(
         [
-            Record(ClientA, 22092, 301, V(1f, 0f)),
-            Record(ClientA, 22092, 302, V(0.9f, 0.1f)),
+            Record(ClientA, 22092, "301", V(1f, 0f)),
+            Record(ClientA, 22092, "302", V(0.9f, 0.1f)),
         ]);
 
         var match = await this._repo.FindClosestInPullRequestAsync(ClientA, RepoId, 22092, V(1f, 0f), 0.5f);
 
         Assert.NotNull(match);
-        Assert.Equal(301, match.ProviderThreadId);
+        Assert.Equal("301", match.ProviderThreadId);
     }
 
     [Fact]
     public async Task AddMissingAsync_ThreadAlreadyIndexed_DoesNotInsertASecondRow()
     {
-        await this._repo.AddMissingAsync([Record(ClientA, 22092, 401, V(1f, 0f))]);
-        await this._repo.AddMissingAsync([Record(ClientA, 22092, 401, V(0f, 1f))]);
+        await this._repo.AddMissingAsync([Record(ClientA, 22092, "401", V(1f, 0f))]);
+        await this._repo.AddMissingAsync([Record(ClientA, 22092, "401", V(0f, 1f))]);
 
         var rows = await this._db.PostedFindingRecords
             .AsNoTracking()
-            .Where(r => r.ClientId == ClientA && r.ProviderThreadId == 401)
+            .Where(r => r.ClientId == ClientA && r.ProviderThreadId == "401")
             .ToListAsync();
 
         Assert.Single(rows);
@@ -144,13 +144,13 @@ public sealed class PostedFindingRepositoryTests(PostgresContainerFixture fixtur
         // record would treat the second pull request's identically numbered thread as already indexed.
         await this._repo.AddMissingAsync(
         [
-            Record(ClientA, 22092, 403, V(1f, 0f)),
-            Record(ClientA, 33033, 403, V(0f, 1f)),
+            Record(ClientA, 22092, "403", V(1f, 0f)),
+            Record(ClientA, 33033, "403", V(0f, 1f)),
         ]);
 
         var rows = await this._db.PostedFindingRecords
             .AsNoTracking()
-            .Where(r => r.ClientId == ClientA && r.ProviderThreadId == 403)
+            .Where(r => r.ClientId == ClientA && r.ProviderThreadId == "403")
             .ToListAsync();
 
         Assert.Equal(2, rows.Count);
@@ -163,13 +163,13 @@ public sealed class PostedFindingRepositoryTests(PostgresContainerFixture fixtur
         // or the unique index rejects the whole save.
         await this._repo.AddMissingAsync(
         [
-            Record(ClientA, 22092, 402, V(1f, 0f)),
-            Record(ClientA, 22092, 402, V(0f, 1f)),
+            Record(ClientA, 22092, "402", V(1f, 0f)),
+            Record(ClientA, 22092, "402", V(0f, 1f)),
         ]);
 
         var rows = await this._db.PostedFindingRecords
             .AsNoTracking()
-            .Where(r => r.ClientId == ClientA && r.ProviderThreadId == 402)
+            .Where(r => r.ClientId == ClientA && r.ProviderThreadId == "402")
             .ToListAsync();
 
         Assert.Single(rows);
@@ -188,7 +188,7 @@ public sealed class PostedFindingRepositoryTests(PostgresContainerFixture fixtur
     private static PostedFindingRecord Record(
         Guid clientId,
         int pullRequestId,
-        long providerThreadId,
+        string providerThreadId,
         float[] vector,
         string repositoryId = RepoId)
     {

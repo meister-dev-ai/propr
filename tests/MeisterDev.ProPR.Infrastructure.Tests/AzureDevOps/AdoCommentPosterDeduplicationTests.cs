@@ -23,7 +23,7 @@ public class AdoCommentPosterDeduplicationTests
         var threads = new List<PrCommentThread>
         {
             new(
-                1,
+                "1",
                 null,
                 null,
                 new List<PrThreadComment>
@@ -47,7 +47,7 @@ public class AdoCommentPosterDeduplicationTests
         var threads = new List<PrCommentThread>
         {
             new(
-                1,
+                "1",
                 "/src/Foo.cs",
                 5,
                 new List<PrThreadComment>
@@ -65,7 +65,7 @@ public class AdoCommentPosterDeduplicationTests
         var threads = new List<PrCommentThread>
         {
             new(
-                1,
+                "1",
                 null,
                 null,
                 new List<PrThreadComment>
@@ -83,7 +83,7 @@ public class AdoCommentPosterDeduplicationTests
         var threads = new List<PrCommentThread>
         {
             new(
-                1,
+                "1",
                 null,
                 null,
                 new List<PrThreadComment>
@@ -101,7 +101,7 @@ public class AdoCommentPosterDeduplicationTests
         var threads = new List<PrCommentThread>
         {
             new(
-                1,
+                "1",
                 null,
                 null,
                 new List<PrThreadComment>
@@ -126,7 +126,7 @@ public class AdoCommentPosterDeduplicationTests
         var threads = new List<PrCommentThread>
         {
             new(
-                1,
+                "1",
                 "/src/Foo.cs",
                 42,
                 new List<PrThreadComment>
@@ -144,7 +144,7 @@ public class AdoCommentPosterDeduplicationTests
         var threads = new List<PrCommentThread>
         {
             new(
-                1,
+                "1",
                 "/src/Foo.cs",
                 99,
                 new List<PrThreadComment>
@@ -168,7 +168,7 @@ public class AdoCommentPosterDeduplicationTests
         var threads = new List<PrCommentThread>
         {
             new(
-                1,
+                "1",
                 null,
                 null,
                 new List<PrThreadComment>
@@ -186,7 +186,7 @@ public class AdoCommentPosterDeduplicationTests
         var threads = new List<PrCommentThread>
         {
             new(
-                1,
+                "1",
                 "/src/Foo.cs",
                 42,
                 new List<PrThreadComment>
@@ -204,7 +204,7 @@ public class AdoCommentPosterDeduplicationTests
         var threads = new List<PrCommentThread>
         {
             new(
-                1,
+                "1",
                 "/src/Foo.cs",
                 42,
                 new List<PrThreadComment>
@@ -224,7 +224,7 @@ public class AdoCommentPosterDeduplicationTests
         var threads = new List<PrCommentThread>
         {
             new(
-                1,
+                "1",
                 "/src/Foo.cs",
                 null,
                 new List<PrThreadComment>
@@ -242,7 +242,7 @@ public class AdoCommentPosterDeduplicationTests
         var threads = new List<PrCommentThread>
         {
             new(
-                15,
+                "15",
                 "/src/Foo.cs",
                 42,
                 new List<PrThreadComment>
@@ -271,7 +271,7 @@ public class AdoCommentPosterDeduplicationTests
         var threads = new List<PrCommentThread>
         {
             new(
-                7,
+                "7",
                 null,
                 null,
                 new List<PrThreadComment>
@@ -299,7 +299,7 @@ public class AdoCommentPosterDeduplicationTests
         var threads = new List<PrCommentThread>
         {
             new(
-                11,
+                "11",
                 null,
                 null,
                 new List<PrThreadComment>
@@ -326,7 +326,7 @@ public class AdoCommentPosterDeduplicationTests
         var threads = new List<PrCommentThread>
         {
             new(
-                8,
+                "8",
                 null,
                 null,
                 new List<PrThreadComment>
@@ -352,7 +352,7 @@ public class AdoCommentPosterDeduplicationTests
         var threads = new List<PrCommentThread>
         {
             new(
-                9,
+                "9",
                 "/src/Foo.cs",
                 42,
                 new List<PrThreadComment>
@@ -378,7 +378,7 @@ public class AdoCommentPosterDeduplicationTests
         var threads = new List<PrCommentThread>
         {
             new(
-                10,
+                "10",
                 "/src/Foo.cs",
                 null,
                 new List<PrThreadComment>
@@ -404,7 +404,7 @@ public class AdoCommentPosterDeduplicationTests
         var threads = new List<PrCommentThread>
         {
             new(
-                27,
+                "27",
                 "/src/Foo.cs",
                 43,
                 new List<PrThreadComment>
@@ -430,7 +430,7 @@ public class AdoCommentPosterDeduplicationTests
         var threads = new List<PrCommentThread>
         {
             new(
-                33,
+                "33",
                 "/src/Foo.cs",
                 42,
                 new List<PrThreadComment>
@@ -459,7 +459,7 @@ public class AdoCommentPosterDeduplicationTests
         var threads = new List<PrCommentThread>
         {
             new(
-                34,
+                "34",
                 "/src/Foo.cs",
                 42,
                 new List<PrThreadComment>

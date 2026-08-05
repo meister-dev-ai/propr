@@ -11,17 +11,17 @@ public sealed partial class ThreadMemoryService
     [LoggerMessage(
         Level = LogLevel.Information,
         Message = "Memory embedding stored for thread {ThreadId} client {ClientId}")]
-    private static partial void LogEmbeddingStored(ILogger logger, long threadId, Guid clientId);
+    private static partial void LogEmbeddingStored(ILogger logger, string threadId, Guid clientId);
 
     [LoggerMessage(
         Level = LogLevel.Information,
         Message = "Memory embedding {Outcome} for thread {ThreadId} client {ClientId}")]
-    private static partial void LogEmbeddingRemoved(ILogger logger, long threadId, Guid clientId, string outcome);
+    private static partial void LogEmbeddingRemoved(ILogger logger, string threadId, Guid clientId, string outcome);
 
     [LoggerMessage(
         Level = LogLevel.Information,
         Message = "Memory storage skipped for thread {ThreadId} client {ClientId}: {Reason}")]
-    private static partial void LogResolvedSkippedCore(ILogger logger, long threadId, Guid clientId, string reason);
+    private static partial void LogResolvedSkippedCore(ILogger logger, string threadId, Guid clientId, string reason);
 
     [LoggerMessage(
         Level = LogLevel.Warning,
@@ -29,7 +29,7 @@ public sealed partial class ThreadMemoryService
     private static partial void LogProcessResolvedFailedCore(
         ILogger logger,
         Exception exception,
-        long threadId,
+        string threadId,
         Guid clientId);
 
     [LoggerMessage(
@@ -39,7 +39,7 @@ public sealed partial class ThreadMemoryService
     private static partial void LogCodeInsightEnrichmentFailedCore(
         ILogger logger,
         Exception exception,
-        long threadId,
+        string threadId,
         Guid clientId);
 
     [LoggerMessage(
@@ -48,7 +48,7 @@ public sealed partial class ThreadMemoryService
     private static partial void LogProcessReopenedFailedCore(
         ILogger logger,
         Exception exception,
-        long threadId,
+        string threadId,
         Guid clientId);
 
     [LoggerMessage(
@@ -57,7 +57,7 @@ public sealed partial class ThreadMemoryService
     private static partial void LogRecordNoOpFailedCore(
         ILogger logger,
         Exception exception,
-        long threadId,
+        string threadId,
         Guid clientId);
 
     [LoggerMessage(
@@ -121,29 +121,29 @@ public sealed partial class ThreadMemoryService
 
     private static void LogCodeInsightEnrichmentFailed(
         ILogger logger,
-        long threadId,
+        string threadId,
         Guid clientId,
         Exception exception)
     {
         LogCodeInsightEnrichmentFailedCore(logger, exception, threadId, clientId);
     }
 
-    private static void LogProcessResolvedFailed(ILogger logger, long threadId, Guid clientId, Exception exception)
+    private static void LogProcessResolvedFailed(ILogger logger, string threadId, Guid clientId, Exception exception)
     {
         LogProcessResolvedFailedCore(logger, exception, threadId, clientId);
     }
 
-    private static void LogProcessReopenedFailed(ILogger logger, long threadId, Guid clientId, Exception exception)
+    private static void LogProcessReopenedFailed(ILogger logger, string threadId, Guid clientId, Exception exception)
     {
         LogProcessReopenedFailedCore(logger, exception, threadId, clientId);
     }
 
-    private static void LogRecordNoOpFailed(ILogger logger, long threadId, Guid clientId, Exception exception)
+    private static void LogRecordNoOpFailed(ILogger logger, string threadId, Guid clientId, Exception exception)
     {
         LogRecordNoOpFailedCore(logger, exception, threadId, clientId);
     }
 
-    private static void LogResolvedSkipped(ILogger logger, long threadId, Guid clientId, string reason)
+    private static void LogResolvedSkipped(ILogger logger, string threadId, Guid clientId, string reason)
     {
         LogResolvedSkippedCore(logger, threadId, clientId, SanitizeForLog(reason));
     }

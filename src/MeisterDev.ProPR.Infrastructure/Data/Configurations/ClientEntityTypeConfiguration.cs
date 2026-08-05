@@ -99,6 +99,10 @@ internal sealed class ClientEntityTypeConfiguration : IEntityTypeConfiguration<C
             .HasColumnName("include_linked_items_in_context")
             .HasDefaultValue(true);
 
+        builder.Property(c => c.ReviewEveryIncrementEnabled)
+            .HasColumnName("review_every_increment_enabled")
+            .HasDefaultValue(false);
+
         builder.Property(c => c.OutputLanguage)
             .HasColumnName("output_language")
             .HasMaxLength(ReviewOutputLanguage.MaxTagLength)

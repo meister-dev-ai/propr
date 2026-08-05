@@ -52,12 +52,6 @@ public sealed partial class ReviewOrchestrationService
     [LoggerMessage(Level = LogLevel.Information, Message = "Completed review for job {JobId}")]
     private static partial void LogReviewCompleted(ILogger logger, Guid jobId);
 
-    [LoggerMessage(Level = LogLevel.Information, Message = "Thread {ThreadId} on PR#{PrId} marked as fixed")]
-    private static partial void LogThreadResolved(ILogger logger, long threadId, int prId);
-
-    [LoggerMessage(Level = LogLevel.Warning, Message = "Thread {ThreadId} evaluation failed on PR#{PrId} — skipping")]
-    private static partial void LogThreadEvaluationFailed(ILogger logger, long threadId, int prId, Exception ex);
-
     [LoggerMessage(
         Level = LogLevel.Warning,
         Message = "Failed to save ReviewPrScan for job {JobId} — processing continues")]

@@ -86,6 +86,14 @@ public sealed class ClientRecord
     public bool IncludeLinkedItemsInContext { get; set; } = true;
 
     /// <summary>
+    ///     Controls whether an automatic trigger reviews every pushed update to a pull request. Defaults to
+    ///     <see langword="false" />: crawl and webhook activation review a pull request at the first revision they
+    ///     see and leave later revisions alone, so a run of quick pushes costs one review instead of one per push.
+    ///     Requested reviews are never affected.
+    /// </summary>
+    public bool ReviewEveryIncrementEnabled { get; set; } = false;
+
+    /// <summary>
     ///     The natural language this client's reviewer-facing prose is written in, as an IETF BCP 47 language tag.
     ///     Defaults to <see cref="Domain.ValueObjects.ReviewOutputLanguage.Default" />. The language is never
     ///     detected from the pull request, so every surface of a review reads the same way. Fixed labels ProPR

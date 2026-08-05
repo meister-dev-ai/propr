@@ -3,6 +3,7 @@
 
 using System.Net;
 using System.Text.Json;
+using MeisterDev.ProPR.Application.Features.ThreadOwnership;
 using MeisterDev.ProPR.Application.DTOs;
 using MeisterDev.ProPR.Application.Interfaces;
 using MeisterDev.ProPR.Domain.Enums;
@@ -40,6 +41,7 @@ public sealed class GitHubReviewThreadStatusProviderTests
                                     {
                                         new
                                         {
+                                            id = "PRRT_501",
                                             isResolved = false,
                                             path = "src/feature.ts",
                                             line = 18,
@@ -64,6 +66,7 @@ public sealed class GitHubReviewThreadStatusProviderTests
                                         },
                                         new
                                         {
+                                            id = "PRRT_601",
                                             isResolved = true,
                                             path = "src/ignore.ts",
                                             line = 10,
@@ -97,12 +100,12 @@ public sealed class GitHubReviewThreadStatusProviderTests
             "acme",
             "101",
             42,
-            Guid.Empty,
+            ThreadOwnershipResolver.None,
             clientId,
             CancellationToken.None);
 
         var entry = Assert.Single(result);
-        Assert.Equal(501, entry.ThreadId);
+        Assert.Equal("PRRT_501", entry.ThreadId);
         Assert.Equal("Active", entry.Status);
         Assert.Equal("src/feature.ts", entry.FilePath);
         Assert.Equal(1, entry.NonReviewerReplyCount);
@@ -135,6 +138,7 @@ public sealed class GitHubReviewThreadStatusProviderTests
                                     {
                                         new
                                         {
+                                            id = "PRRT_501",
                                             isResolved = true,
                                             path = "src/feature.ts",
                                             line = 18,
@@ -168,7 +172,7 @@ public sealed class GitHubReviewThreadStatusProviderTests
             "acme",
             "101",
             42,
-            Guid.Empty,
+            ThreadOwnershipResolver.None,
             clientId,
             CancellationToken.None);
 
@@ -200,6 +204,7 @@ public sealed class GitHubReviewThreadStatusProviderTests
                                     {
                                         new
                                         {
+                                            id = "PRRT_501",
                                             isResolved = false,
                                             path = "src/feature.ts",
                                             line = 18,
@@ -233,16 +238,16 @@ public sealed class GitHubReviewThreadStatusProviderTests
             "meister-dev-ai",
             "meister-dev-ai/propr",
             8,
-            Guid.Empty,
+            ThreadOwnershipResolver.None,
             clientId,
             CancellationToken.None);
 
         var entry = Assert.Single(result);
-        Assert.Equal(501, entry.ThreadId);
+        Assert.Equal("PRRT_501", entry.ThreadId);
     }
 
     [Fact]
-    public async Task GetReviewerThreadStatusesAsync_AllowsNullGraphQlCommentDatabaseIds()
+    public async Task GetReviewerThreadStatusesAsync_NullCommentDatabaseIds_StillCarriesTheThreadNodeId()
     {
         var clientId = Guid.NewGuid();
         var host = new ProviderHostRef(ScmProvider.GitHub, "https://github.com");
@@ -265,6 +270,7 @@ public sealed class GitHubReviewThreadStatusProviderTests
                                     {
                                         new
                                         {
+                                            id = "PRRT_n5",
                                             isResolved = false,
                                             path = "src/feature.ts",
                                             line = 18,
@@ -299,16 +305,16 @@ public sealed class GitHubReviewThreadStatusProviderTests
             "meister-dev-ai",
             "meister-dev-ai/propr",
             8,
-            Guid.Empty,
+            ThreadOwnershipResolver.None,
             clientId,
             CancellationToken.None);
 
         var entry = Assert.Single(result);
-        Assert.Equal(0, entry.ThreadId);
+        Assert.Equal("PRRT_n5", entry.ThreadId);
     }
 
     [Fact]
-    public async Task GetReviewerThreadStatusesAsync_AllowsLargeGraphQlCommentDatabaseIds()
+    public async Task GetReviewerThreadStatusesAsync_LargeCommentDatabaseIds_StillCarriesTheThreadNodeId()
     {
         var clientId = Guid.NewGuid();
         var host = new ProviderHostRef(ScmProvider.GitHub, "https://github.com");
@@ -331,6 +337,7 @@ public sealed class GitHubReviewThreadStatusProviderTests
                                     {
                                         new
                                         {
+                                            id = "PRRT_3197004556",
                                             isResolved = false,
                                             path = "src/feature.ts",
                                             line = 18,
@@ -365,12 +372,12 @@ public sealed class GitHubReviewThreadStatusProviderTests
             "meister-dev-ai",
             "meister-dev-ai/propr",
             8,
-            Guid.Empty,
+            ThreadOwnershipResolver.None,
             clientId,
             CancellationToken.None);
 
         var entry = Assert.Single(result);
-        Assert.Equal(3197004556L, entry.ThreadId);
+        Assert.Equal("PRRT_3197004556", entry.ThreadId);
     }
 
     [Fact]
@@ -402,7 +409,7 @@ public sealed class GitHubReviewThreadStatusProviderTests
             "acme",
             "acme/propr",
             42,
-            Guid.Empty,
+            ThreadOwnershipResolver.None,
             clientId,
             CancellationToken.None);
 
@@ -428,6 +435,7 @@ public sealed class GitHubReviewThreadStatusProviderTests
                                     {
                                         new
                                         {
+                                            id = "PRRT_501",
                                             isResolved = false,
                                             path = "src/feature.ts",
                                             line = 18,
@@ -478,6 +486,7 @@ public sealed class GitHubReviewThreadStatusProviderTests
                                     {
                                         new
                                         {
+                                            id = "PRRT_501",
                                             isResolved = true,
                                             isOutdated = true,
                                             path = "src/changed.ts",
@@ -497,6 +506,7 @@ public sealed class GitHubReviewThreadStatusProviderTests
                                         },
                                         new
                                         {
+                                            id = "PRRT_601",
                                             isResolved = true,
                                             isOutdated = false,
                                             path = "src/untouched.ts",
@@ -531,7 +541,7 @@ public sealed class GitHubReviewThreadStatusProviderTests
             "meister-dev-ai",
             "meister-dev-ai/propr",
             8,
-            Guid.Empty,
+            ThreadOwnershipResolver.None,
             clientId,
             CancellationToken.None);
 
@@ -541,12 +551,12 @@ public sealed class GitHubReviewThreadStatusProviderTests
         // signal to trust a claimed fix as grounded (it fires on rebases/unrelated churn too).
         Assert.Equal(
             ThreadAnchorCodeChange.Unknown,
-            result.Single(entry => entry.ThreadId == 501).CodeChangedSinceRaised);
+            result.Single(entry => entry.ThreadId == "PRRT_501").CodeChangedSinceRaised);
 
         // A thread that is still current genuinely has an unchanged anchor.
         Assert.Equal(
             ThreadAnchorCodeChange.Unchanged,
-            result.Single(entry => entry.ThreadId == 601).CodeChangedSinceRaised);
+            result.Single(entry => entry.ThreadId == "PRRT_601").CodeChangedSinceRaised);
     }
 
     private static IClientScmConnectionRepository CreateConnectionRepository(Guid clientId, ProviderHostRef host)

@@ -240,6 +240,13 @@ public sealed partial class MentionScanService(
             return false;
         }
 
+        // A reply is published back into the thread it was mentioned in, so a provider that names no thread
+        // leaves nothing to answer into and nothing to key the duplicate guard on.
+        if (string.IsNullOrWhiteSpace(inputs.Thread.ThreadId))
+        {
+            return false;
+        }
+
         // Log a redacted, single-line, length-bounded rendering of the content so we can still detect
         // format changes without leaking full (attacker-controlled) comment text or allowing log injection.
         LogCommentContent(logger, inputs.Thread.ThreadId, inputs.Comment.CommentId, SanitizeCommentForLog(inputs.Comment.Content));
@@ -293,7 +300,7 @@ public sealed partial class MentionScanService(
             inputs.PullRequestId);
         var threadRef = new ReviewThreadRef(
             review,
-            inputs.Thread.ThreadId.ToString(),
+            inputs.Thread.ThreadId,
             inputs.Thread.FilePath,
             inputs.Thread.LineNumber,
             false);

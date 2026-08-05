@@ -12,7 +12,7 @@ public sealed partial class CodeInsightDispositionService
     [LoggerMessage(
         Level = LogLevel.Debug,
         Message = "Resolved thread {ThreadId} for client {ClientId} matches no collected finding; skipped.")]
-    private static partial void LogNoMatchingFinding(ILogger logger, long threadId, Guid clientId);
+    private static partial void LogNoMatchingFinding(ILogger logger, string threadId, Guid clientId);
 
     [LoggerMessage(Level = LogLevel.Debug, Message = "Finding {FindingId} recorded as {Disposition}.")]
     private static partial void LogDispositionRecorded(
@@ -30,5 +30,5 @@ public sealed partial class CodeInsightDispositionService
         Level = LogLevel.Warning,
         Message = "Recording a disposition for thread {ThreadId} (client {ClientId}) failed; "
                   + "the crawl continues unaffected.")]
-    private static partial void LogHandlingFailed(ILogger logger, long threadId, Guid clientId, Exception ex);
+    private static partial void LogHandlingFailed(ILogger logger, string threadId, Guid clientId, Exception ex);
 }

@@ -6,16 +6,21 @@ namespace MeisterDev.ProPR.Domain.ValueObjects;
 /// <summary>
 ///     Represents an existing comment thread on a pull request, from any author or iteration.
 /// </summary>
-/// <param name="ThreadId">ADO thread identifier.</param>
+/// <param name="ThreadId">
+///     The identifier the provider itself uses for the thread, carried verbatim so the same value addresses
+///     the thread on a later write. <c>null</c> where the provider has no thread object of its own and the
+///     threads were grouped client-side, because substituting another object's identifier would hand callers
+///     a handle that addresses nothing.
+/// </param>
 /// <param name="FilePath">File path the thread is anchored to, or <c>null</c> for PR-level threads.</param>
 /// <param name="LineNumber">Line number the thread is anchored to, or <c>null</c> for file- or PR-level threads.</param>
 /// <param name="Comments">Comments within this thread, ordered chronologically.</param>
 /// <param name="Status">
-///     ADO thread status string (e.g. "Active", "Fixed", "Closed", "WontFix", "ByDesign").
+///     Provider thread status string (e.g. "Active", "Fixed", "Closed", "WontFix", "ByDesign").
 ///     <c>null</c> when not provided or unknown.
 /// </param>
 public sealed record PrCommentThread(
-    long ThreadId,
+    string? ThreadId,
     string? FilePath,
     int? LineNumber,
     IReadOnlyList<PrThreadComment> Comments,

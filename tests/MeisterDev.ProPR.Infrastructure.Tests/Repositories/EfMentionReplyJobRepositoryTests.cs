@@ -70,7 +70,7 @@ public sealed class EfMentionReplyJobRepositoryTests(PostgresContainerFixture fi
     private static MentionReplyJob MakeJob(
         Guid? clientId = null,
         int prId = 1,
-        int threadId = 10,
+        string threadId = "10",
         int commentId = 100,
         string mentionText = "what does this do?")
     {
@@ -103,17 +103,17 @@ public sealed class EfMentionReplyJobRepositoryTests(PostgresContainerFixture fi
     [Fact]
     public async Task ExistsForCommentAsync_WhenJobExists_ReturnsTrue()
     {
-        var job = MakeJob(prId: 5, threadId: 20, commentId: 200);
+        var job = MakeJob(prId: 5, threadId: "20", commentId: 200);
         await this._repo.AddAsync(job);
 
-        var exists = await this._repo.ExistsForCommentAsync(ClientId, "repo", 5, 20, 200);
+        var exists = await this._repo.ExistsForCommentAsync(ClientId, "repo", 5, "20", 200);
         Assert.True(exists);
     }
 
     [Fact]
     public async Task ExistsForCommentAsync_WhenJobDoesNotExist_ReturnsFalse()
     {
-        var exists = await this._repo.ExistsForCommentAsync(ClientId, "repo", 99, 99, 99);
+        var exists = await this._repo.ExistsForCommentAsync(ClientId, "repo", 99, "99", 99);
         Assert.False(exists);
     }
 
@@ -199,11 +199,11 @@ public sealed class EfMentionReplyJobRepositoryTests(PostgresContainerFixture fi
     [Fact]
     public async Task AddAsync_DuplicateComment_ThrowsOnUniqueViolation()
     {
-        var job1 = MakeJob(prId: 2, threadId: 30, commentId: 300);
+        var job1 = MakeJob(prId: 2, threadId: "30", commentId: 300);
         await this._repo.AddAsync(job1);
 
         // Same (clientId, prId, threadId, commentId) → should fail on unique constraint
-        var job2 = MakeJob(prId: 2, threadId: 30, commentId: 300);
+        var job2 = MakeJob(prId: 2, threadId: "30", commentId: 300);
         await Assert.ThrowsAnyAsync<Exception>(() => this._repo.AddAsync(job2));
     }
 }

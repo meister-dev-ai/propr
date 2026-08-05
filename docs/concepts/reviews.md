@@ -31,7 +31,7 @@ that call fails, the filter keeps the comment rather than silently dropping it, 
 degraded.
 
 **Thread memory.** ProPR remembers how a comment thread on this pull request was resolved previously,
-so a point you already rejected does not come back on the next push. A memory of a thread you resolved
+so a point you already rejected does not come back on a later review. A memory of a thread you resolved
 records which kind of resolution it was: you rejected the concern and accepted the code as it stands, or
 you marked it fixed. Memories from before that was recorded, and ones an administrator created by
 dismissing a pattern, carry no such outcome and claim none.
@@ -93,8 +93,10 @@ Everything below is set in the management UI. Unless noted, the scope is one cli
 | Linked work items and issues | Per client | Pulls the work items or issues linked to the pull request into the review context, so the change is judged against its intended direction. On by default |
 | Exclusion rules | Per repository | Glob patterns read from the repository - see [configuring ProPR from your repository](repository-configuration.md) |
 | Minimum severity to post | Per client | Findings below it stay out of the pull request but remain visible in the ProPR review. Order, high to low: error, warning, suggestion, info |
-| Auto-resolve severities | Per client | Comments of the chosen severities are posted and then immediately resolved with a note. Azure DevOps only; on other providers the setting is a no-op |
+| Auto-resolve severities | Per client | Comments of the chosen severities are posted and then immediately resolved with a note. Azure DevOps, GitHub and GitLab; on Forgejo the setting is a no-op |
+| Resolving comment threads | Per client | What ProPR does with its own threads once a finding is acted on: resolve quietly (default), resolve with an explanation, or leave them alone. A question you ask is answered either way - see [how a review gets triggered](how-it-works.md#how-a-review-gets-triggered) |
 | SCM comment posting | Per client | Run reviews without publishing anything |
+| Review every pushed update | Per client | Whether pushes after the first one start another automatic review. Off by default - see [how a review gets triggered](how-it-works.md#how-a-review-gets-triggered) |
 | Budget caps | Per client | Monthly, per-pull-request and per-increment soft and hard USD caps |
 
 **Budget caps in detail.** A job is held at admission when a hard cap has already been reached, or when
@@ -104,6 +106,10 @@ running job from scanning further files and concludes it with a summary. A hard 
 calls in all three scopes. The tenant Budget and Spend views are read-only roll-ups over the tenant's
 clients - they report and forecast, they never enforce. Budgeting requires a commercial license; see
 [editions and licensed features](../reference/editions.md).
+
+Every scope totals both units of work over a pull request: the file review and the thread pass that
+answers the conversation. A thread pass is held, cut and restarted on the same terms a review is, and
+what it spent per thread is visible in its own trace, reachable from the pull request's review view.
 
 ### Output language
 

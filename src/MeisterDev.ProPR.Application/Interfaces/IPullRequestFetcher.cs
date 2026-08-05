@@ -109,4 +109,34 @@ public interface IPullRequestFetcher
         int pullRequestId,
         Guid? clientId = null,
         CancellationToken cancellationToken = default);
+
+    /// <summary>
+    ///     Fetches what is needed to reason about a pull request's conversation: its metadata, its status, the
+    ///     identity the connection authenticated as, and its comment threads. <c>ChangedFiles</c> comes back
+    ///     empty, because none of the file content is downloaded; a caller that needs one file's diff asks for
+    ///     it with <see cref="FetchFileDiffAsync" />.
+    /// </summary>
+    /// <remarks>
+    ///     The thread pass runs on every revision of every assigned open pull request, so pulling the content
+    ///     of every changed file to decide whether there is a thread to answer is the request profile behind a
+    ///     large-pull-request overload. A failed thread read is reported by throwing, never by returning an
+    ///     empty list: "no threads" and "could not read the threads" lead to opposite decisions about whether
+    ///     the pull request has been dealt with.
+    /// </remarks>
+    /// <param name="organizationUrl">The URL of the organization.</param>
+    /// <param name="projectId">The ID of the project.</param>
+    /// <param name="repositoryId">The ID of the repository.</param>
+    /// <param name="pullRequestId">The ID of the pull request.</param>
+    /// <param name="iterationId">The iteration the caller is reasoning about.</param>
+    /// <param name="clientId">Optional client ID for credential retrieval.</param>
+    /// <param name="cancellationToken">A token to monitor for cancellation requests.</param>
+    /// <returns>The pull request with its threads and no changed-file content.</returns>
+    Task<PullRequest> FetchThreadContextAsync(
+        string organizationUrl,
+        string projectId,
+        string repositoryId,
+        int pullRequestId,
+        int iterationId,
+        Guid? clientId = null,
+        CancellationToken cancellationToken = default);
 }

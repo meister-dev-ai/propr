@@ -37,7 +37,7 @@ public sealed class EfMentionReplyJobRepository(MeisterProPRDbContext dbContext)
         Guid clientId,
         string repositoryId,
         int pullRequestId,
-        long threadId,
+        string threadId,
         long commentId,
         CancellationToken ct = default)
     {

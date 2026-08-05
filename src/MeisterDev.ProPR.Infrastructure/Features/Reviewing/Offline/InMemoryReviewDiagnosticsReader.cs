@@ -22,6 +22,26 @@ public sealed class InMemoryReviewDiagnosticsReader(InMemoryReviewJobRepository 
     private const string EventTextOmittedMessage =
         "Event payload omitted from the overview to keep large protocol traces responsive. Select this pass to load the full captured body.";
 
+    /// <summary>
+    ///     Offline execution runs the file pass alone, so there is never a thread pass to read a trace for.
+    /// </summary>
+    public Task<GetReviewJobProtocolResult?> GetThreadPassProtocolAsync(
+        Guid threadPassJobId,
+        bool includeEvents = true,
+        CancellationToken ct = default)
+    {
+        return Task.FromResult<GetReviewJobProtocolResult?>(null);
+    }
+
+    /// <inheritdoc cref="GetThreadPassProtocolAsync" />
+    public Task<ReviewJobProtocolDto?> GetThreadPassProtocolPassAsync(
+        Guid threadPassJobId,
+        Guid protocolId,
+        CancellationToken ct = default)
+    {
+        return Task.FromResult<ReviewJobProtocolDto?>(null);
+    }
+
     public Task<GetReviewJobProtocolResult?> GetJobProtocolAsync(
         Guid jobId,
         bool includeEvents = true,

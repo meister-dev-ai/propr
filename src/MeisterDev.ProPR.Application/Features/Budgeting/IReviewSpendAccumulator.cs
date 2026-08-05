@@ -3,25 +3,28 @@
 // This file implements commercial-only functionality. A commercial license is required to activate or use that functionality.
 
 using MeisterDev.ProPR.Application.Features.Budgeting.Models;
-using MeisterDev.ProPR.Domain.Entities;
 
 namespace MeisterDev.ProPR.Application.Features.Budgeting;
 
 /// <summary>
-///     Reports the running USD review spend accumulated in each budget scope from the persisted per-job cost and
-///     the per-client daily usage samples. The result seeds a job's enforcement baseline and answers the
-///     admission gate's "is this scope already over its cap?" question.
+///     Reports the running USD spend accumulated in each budget scope from the persisted per-job cost and
+///     the per-client daily usage samples. The result seeds a unit of work's enforcement baseline and answers
+///     the admission gate's "is this scope already over its cap?" question.
 /// </summary>
 public interface IReviewSpendAccumulator
 {
     /// <summary>
-    ///     Returns the review spend already accumulated in each budget scope that applies to <paramref name="job" />,
-    ///     excluding the job's own in-flight spend, as of <paramref name="asOfDate" /> (UTC). The client scope is the
-    ///     month-to-date total for the current period (it resets at the period boundary); the pull-request and
-    ///     increment scopes sum the persisted per-job cost of the other jobs sharing that pull request / increment.
+    ///     Returns the spend already accumulated in each budget scope that applies to <paramref name="subject" />,
+    ///     excluding the subject's own in-flight spend, as of <paramref name="asOfDate" /> (UTC). The client scope is
+    ///     the month-to-date total for the current period (it resets at the period boundary); the pull-request and
+    ///     increment scopes sum the persisted per-job cost of every other unit of work sharing that pull request /
+    ///     increment, whichever kind it is.
     /// </summary>
-    /// <param name="job">The job whose applicable scopes to total.</param>
+    /// <param name="subject">The unit of work whose applicable scopes to total.</param>
     /// <param name="asOfDate">The UTC date defining the current monthly period for the client scope.</param>
     /// <param name="ct">Cancellation token.</param>
-    Task<ReviewSpendBaseline> GetBaselineAsync(ReviewJob job, DateOnly asOfDate, CancellationToken ct = default);
+    Task<ReviewSpendBaseline> GetBaselineAsync(
+        ReviewSpendSubject subject,
+        DateOnly asOfDate,
+        CancellationToken ct = default);
 }

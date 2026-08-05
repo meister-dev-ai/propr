@@ -32,9 +32,10 @@ public static class HarvestedThreadEligibility
     ///     Azure DevOps only. The other providers publish their summary through a review body that opens with the
     ///     reviewer's own display name ("## {name} Review"), which is per-installation and so cannot be matched by
     ///     a constant. On those providers this check therefore does nothing, and keeping ProPR's summary out of the
-    ///     miss harvest rests entirely on the identity checks that run first: recorded provenance, and the posting
-    ///     identity learned from it. That is enough for any installation that recorded provenance, which is every
-    ///     installation collecting insights today. It is not enough for a summary posted before provenance
+    ///     miss harvest rests entirely on the checks that run first: the provenance recorded when ProPR posted the
+    ///     comment, and failing that the account the connection authenticates as, when the pass reached a provider
+    ///     adapter that could resolve one. That is enough for any installation that recorded provenance, which is
+    ///     every installation collecting insights today. It is not enough for a summary posted before provenance
     ///     existed on a non-Azure-DevOps provider: such a thread is harvested as a human thread ProPR missed.
     ///     Closing that gap means giving every publisher a shared, matchable prefix, which changes what reviewers
     ///     see on the pull request and is therefore a product decision rather than a fix.

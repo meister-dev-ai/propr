@@ -28,7 +28,7 @@ public sealed record RetainedThreadView(
 /// <param name="IsAiAuthored">Whether the comment was authored by the AI reviewer.</param>
 /// <param name="PublishedAt">UTC timestamp the comment was published on the provider.</param>
 /// <param name="Text">The decrypted comment body.</param>
-/// <param name="OriginatingJobId">The review job that produced this comment, when its provenance is retained; null otherwise.</param>
+/// <param name="OriginatingJobId">The job that produced this comment: a review job, or a mention-reply job. Null when no provenance is retained.</param>
 public sealed record RetainedCommentView(
     string CommentId,
     string AuthorIdentity,

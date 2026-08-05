@@ -145,7 +145,7 @@ public partial class ReviewOrchestrationServiceTests
                 Arg.Any<ReviewThreadRef>(),
                 Arg.Any<string>(),
                 Arg.Any<CancellationToken>())
-            .Returns(Task.CompletedTask);
+            .Returns(Task.FromResult<string?>(null));
 
         return threadReplyPublisher;
     }
@@ -249,7 +249,6 @@ public partial class ReviewOrchestrationServiceTests
         IAiConnectionRepository? aiRepo = null,
         IAiChatClientFactory? chatFactory = null,
         IProtocolRecorder? protocolRecorder = null,
-        IAiCommentResolutionCore? resolutionCore = null,
         IReviewContextToolsFactory? reviewContextToolsFactory = null,
         ICodeReviewQueryService? queryService = null,
         IReviewThreadStatusWriter? threadStatusWriter = null,
@@ -262,7 +261,6 @@ public partial class ReviewOrchestrationServiceTests
         var fetcher = instructionFetcher ?? CreateDefaultInstructionFetcher();
         var evaluator = instructionEvaluator ?? CreateDefaultInstructionEvaluator();
         var exclusionFetcherResolved = exclusionFetcher ?? CreateDefaultExclusionFetcher();
-        var resolutionCoreResolved = resolutionCore ?? Substitute.For<IAiCommentResolutionCore>();
         var reviewContextToolsFactoryResolved = reviewContextToolsFactory ?? CreateDefaultReviewContextToolsFactory();
         var providerRegistry = CreateProviderRegistry(
             commentPoster,
@@ -280,7 +278,6 @@ public partial class ReviewOrchestrationServiceTests
             providerRegistry,
             clientRegistry,
             prScanRepository,
-            resolutionCoreResolved,
             protocolRecorder ?? Substitute.For<IProtocolRecorder>(),
             reviewContextToolsFactoryResolved,
             fetcher,
@@ -812,7 +809,6 @@ public partial class ReviewOrchestrationServiceTests
             .Returns(new ReviewResult("Summary", new List<ReviewComment>().AsReadOnly()));
 
         var reviewContextToolsFactory = CreateDefaultReviewContextToolsFactory();
-        var resolutionCore = Substitute.For<IAiCommentResolutionCore>();
 
         var (aiRepo, chatFactory) = CreateAiSubstitutes();
         var service = CreateService(
@@ -829,7 +825,6 @@ public partial class ReviewOrchestrationServiceTests
             CreateDefaultExclusionFetcher(),
             aiRepo,
             chatFactory,
-            resolutionCore: resolutionCore,
             reviewContextToolsFactory: reviewContextToolsFactory);
 
         // Act
@@ -1222,7 +1217,7 @@ public partial class ReviewOrchestrationServiceTests
         var threads = new List<PrCommentThread>
         {
             new(
-                1,
+                "1",
                 "/src/Foo.cs",
                 5,
                 new List<PrThreadComment>
@@ -1281,7 +1276,7 @@ public partial class ReviewOrchestrationServiceTests
         var resolvedThreads = new List<PrCommentThread>
         {
             new(
-                8,
+                "8",
                 "/src/Foo.cs",
                 14,
                 new List<PrThreadComment>
@@ -1340,7 +1335,7 @@ public partial class ReviewOrchestrationServiceTests
         var botSummaryThreads = new List<PrCommentThread>
         {
             new(
-                18,
+                "18",
                 null,
                 null,
                 new List<PrThreadComment>
@@ -2129,670 +2124,6 @@ public partial class ReviewOrchestrationServiceTests
     }
 
     [Fact]
-    public async Task ProcessAsync_SameIterationButNewRepliesOnReviewerThread_RunsConversationalPath()
-    {
-        var (jobs, prFetcher, orchestrator, commentPoster, reviewerManager, clientRegistry, prScanRepository,
-                instructionFetcher, instructionEvaluator, logger) =
-            CreateDeps();
-
-        var reviewerId = Guid.NewGuid();
-        var job = CreateJob(); // IterationId = 1
-        var result = CreateReviewResult();
-        orchestrator.ReviewAsync(
-                Arg.Any<ReviewJob>(),
-                Arg.Any<PullRequest>(),
-                Arg.Any<ReviewSystemContext>(),
-                Arg.Any<CancellationToken>(),
-                Arg.Any<IChatClient?>())
-            .Returns(result);
-
-        // Thread authored by reviewerId with 2 comments currently
-        var thread = new PrCommentThread(
-            42,
-            "/src/Foo.cs",
-            10,
-            new List<PrThreadComment>
-            {
-                new("Bot", "Please fix this.", reviewerId),
-                new("Dev", "I think it's fine."),
-            }.AsReadOnly());
-
-        var pr = CreatePullRequest(new List<PrCommentThread> { thread }.AsReadOnly());
-
-        SetupReviewerIdReturns(clientRegistry, job, reviewerId);
-        prFetcher.FetchAsync(
-                Arg.Any<string>(),
-                Arg.Any<string>(),
-                Arg.Any<string>(),
-                Arg.Any<int>(),
-                Arg.Any<int>(),
-                Arg.Any<int?>(),
-                Arg.Any<Guid?>(),
-                Arg.Any<CancellationToken>(),
-                Arg.Any<ReviewRevision?>(),
-                Arg.Any<IReviewRepositoryWorkspace?>())
-            .Returns(pr);
-
-        // Scan has same iteration but stored 0 non-reviewer replies for this thread.
-        // Thread now has 1 non-reviewer reply ("Dev") so a new user reply is detected.
-        var existingScan = new ReviewPrScan(Guid.NewGuid(), job.ClientId, job.RepositoryId, job.PullRequestId, "1");
-        existingScan.Threads.Add(
-            new ReviewPrScanThread
-            {
-                ReviewPrScanId = existingScan.Id,
-                ThreadId = 42,
-                LastSeenReplyCount = 0, // only non-reviewer comments are counted; 1 now > 0 stored → new reply
-            });
-        prScanRepository.GetAsync(Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
-            .Returns(Task.FromResult<ReviewPrScan?>(existingScan));
-
-        var resolutionCore = Substitute.For<IAiCommentResolutionCore>();
-        resolutionCore.EvaluateConversationalReplyAsync(
-                Arg.Any<PrCommentThread>(),
-                Arg.Any<IChatClient>(),
-                Arg.Any<string>(),
-                Arg.Any<CancellationToken>(),
-                Arg.Any<string?>())
-            .Returns(new ThreadResolutionResult(false, null));
-
-        // Build service with custom resolutionCore
-        var stubToolsFactory = CreateDefaultReviewContextToolsFactory();
-        var (aiRepo, chatFactory) = CreateAiSubstitutes();
-        var service = CreateService(
-            jobs,
-            prFetcher,
-            orchestrator,
-            commentPoster,
-            reviewerManager,
-            clientRegistry,
-            prScanRepository,
-            logger,
-            aiRepo: aiRepo,
-            chatFactory: chatFactory,
-            resolutionCore: resolutionCore,
-            reviewContextToolsFactory: stubToolsFactory);
-
-        await service.ProcessAsync(job, CancellationToken.None);
-
-        // Conversational path was invoked (not code-change)
-        await resolutionCore.Received(1)
-            .EvaluateConversationalReplyAsync(
-                Arg.Is<PrCommentThread>(t => t.ThreadId == 42),
-                Arg.Any<IChatClient>(),
-                Arg.Any<string>(),
-                Arg.Any<CancellationToken>(),
-                Arg.Any<string?>());
-        await resolutionCore.DidNotReceiveWithAnyArgs()
-            .EvaluateCodeChangeAsync(null!, null!, null!, null!, default, null);
-
-        // File-by-file review must NOT run — no new commit was pushed
-        await orchestrator.DidNotReceiveWithAnyArgs()
-            .ReviewAsync(null!, null!, null!, Arg.Any<CancellationToken>());
-
-        // Job must be cleaned up after conversational reply
-        await jobs.Received(1).DeleteAsync(job.Id, Arg.Any<CancellationToken>());
-    }
-
-    [Fact]
-    public async Task ProcessAsync_SameIterationButNewRepliesOnAuthorizedIdentityThread_RunsConversationalPath()
-    {
-        var (jobs, prFetcher, orchestrator, commentPoster, reviewerManager, clientRegistry, prScanRepository,
-                instructionFetcher, instructionEvaluator, logger) =
-            CreateDeps();
-
-        var reviewerId = Guid.NewGuid();
-        var servicePrincipalId = Guid.NewGuid();
-        var job = CreateJob(); // IterationId = 1
-        var result = CreateReviewResult();
-        orchestrator.ReviewAsync(
-                Arg.Any<ReviewJob>(),
-                Arg.Any<PullRequest>(),
-                Arg.Any<ReviewSystemContext>(),
-                Arg.Any<CancellationToken>(),
-                Arg.Any<IChatClient?>())
-            .Returns(result);
-
-        var thread = new PrCommentThread(
-            84,
-            "/src/Foo.cs",
-            10,
-            new List<PrThreadComment>
-            {
-                new("Bot", "Please fix this.", servicePrincipalId),
-                new("Dev", "I think it's fine."),
-            }.AsReadOnly());
-
-        var pr = CreatePullRequest(new List<PrCommentThread> { thread }.AsReadOnly(), servicePrincipalId);
-
-        SetupReviewerIdReturns(clientRegistry, job, reviewerId);
-        prFetcher.FetchAsync(
-                Arg.Any<string>(),
-                Arg.Any<string>(),
-                Arg.Any<string>(),
-                Arg.Any<int>(),
-                Arg.Any<int>(),
-                Arg.Any<int?>(),
-                Arg.Any<Guid?>(),
-                Arg.Any<CancellationToken>(),
-                Arg.Any<ReviewRevision?>(),
-                Arg.Any<IReviewRepositoryWorkspace?>())
-            .Returns(pr);
-
-        var existingScan = new ReviewPrScan(Guid.NewGuid(), job.ClientId, job.RepositoryId, job.PullRequestId, "1");
-        existingScan.Threads.Add(
-            new ReviewPrScanThread
-            {
-                ReviewPrScanId = existingScan.Id,
-                ThreadId = 84,
-                LastSeenReplyCount = 0,
-            });
-        prScanRepository.GetAsync(Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
-            .Returns(Task.FromResult<ReviewPrScan?>(existingScan));
-
-        var resolutionCore = Substitute.For<IAiCommentResolutionCore>();
-        resolutionCore.EvaluateConversationalReplyAsync(
-                Arg.Any<PrCommentThread>(),
-                Arg.Any<IChatClient>(),
-                Arg.Any<string>(),
-                Arg.Any<CancellationToken>(),
-                Arg.Any<string?>())
-            .Returns(new ThreadResolutionResult(false, null));
-
-        var stubToolsFactory = CreateDefaultReviewContextToolsFactory();
-        var (aiRepo, chatFactory) = CreateAiSubstitutes();
-        var service = CreateService(
-            jobs,
-            prFetcher,
-            orchestrator,
-            commentPoster,
-            reviewerManager,
-            clientRegistry,
-            prScanRepository,
-            logger,
-            aiRepo: aiRepo,
-            chatFactory: chatFactory,
-            resolutionCore: resolutionCore,
-            reviewContextToolsFactory: stubToolsFactory);
-
-        await service.ProcessAsync(job, CancellationToken.None);
-
-        await resolutionCore.Received(1)
-            .EvaluateConversationalReplyAsync(
-                Arg.Is<PrCommentThread>(t => t.ThreadId == 84),
-                Arg.Any<IChatClient>(),
-                Arg.Any<string>(),
-                Arg.Any<CancellationToken>(),
-                Arg.Any<string?>());
-        await resolutionCore.DidNotReceiveWithAnyArgs()
-            .EvaluateCodeChangeAsync(null!, null!, null!, null!, default, null);
-        await orchestrator.DidNotReceiveWithAnyArgs()
-            .ReviewAsync(null!, null!, null!, Arg.Any<CancellationToken>());
-        await jobs.Received(1).DeleteAsync(job.Id, Arg.Any<CancellationToken>());
-    }
-
-    [Fact]
-    public async Task ProcessAsync_NewIteration_WithReplyMode_ResolvedThreadPostsExplanationBeforeResolving()
-    {
-        var (jobs, prFetcher, orchestrator, commentPoster, reviewerManager, clientRegistry, prScanRepository, _, _,
-                logger) =
-            CreateDeps();
-
-        var reviewerId = Guid.NewGuid();
-        var job = CreateJob();
-        var result = CreateReviewResult();
-        orchestrator.ReviewAsync(
-                Arg.Any<ReviewJob>(),
-                Arg.Any<PullRequest>(),
-                Arg.Any<ReviewSystemContext>(),
-                Arg.Any<CancellationToken>(),
-                Arg.Any<IChatClient?>())
-            .Returns(result);
-
-        clientRegistry.GetCommentResolutionBehaviorAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
-            .Returns(Task.FromResult(CommentResolutionBehavior.WithReply));
-
-        var thread = new PrCommentThread(
-            200,
-            "/src/Foo.cs",
-            10,
-            [new PrThreadComment("Bot", "Please fix this.", reviewerId)]);
-
-        var pr = CreatePullRequest([thread]);
-
-        SetupReviewerIdReturns(clientRegistry, job, reviewerId);
-        prFetcher.FetchAsync(
-                Arg.Any<string>(),
-                Arg.Any<string>(),
-                Arg.Any<string>(),
-                Arg.Any<int>(),
-                Arg.Any<int>(),
-                Arg.Any<int?>(),
-                Arg.Any<Guid?>(),
-                Arg.Any<CancellationToken>(),
-                Arg.Any<ReviewRevision?>(),
-                Arg.Any<IReviewRepositoryWorkspace?>())
-            .Returns(pr);
-
-        var resolutionCore = Substitute.For<IAiCommentResolutionCore>();
-        resolutionCore.EvaluateCodeChangeAsync(
-                Arg.Any<PrCommentThread>(),
-                Arg.Any<PullRequest>(),
-                Arg.Any<IChatClient>(),
-                Arg.Any<string>(),
-                Arg.Any<CancellationToken>(),
-                Arg.Any<string?>())
-            .Returns(new ThreadResolutionResult(true, "Closing - fixed in the latest change."));
-
-        var threadReplyPublisher = CreateThreadReplyPublisher();
-        var threadStatusWriter = CreateThreadStatusWriter();
-        var stubToolsFactory = CreateDefaultReviewContextToolsFactory();
-        var (aiRepo, chatFactory) = CreateAiSubstitutes();
-        var service = CreateService(
-            jobs,
-            prFetcher,
-            orchestrator,
-            commentPoster,
-            reviewerManager,
-            clientRegistry,
-            prScanRepository,
-            logger,
-            aiRepo: aiRepo,
-            chatFactory: chatFactory,
-            resolutionCore: resolutionCore,
-            reviewContextToolsFactory: stubToolsFactory,
-            threadStatusWriter: threadStatusWriter,
-            threadReplyPublisher: threadReplyPublisher);
-
-        await service.ProcessAsync(job, CancellationToken.None);
-
-        Received.InOrder(() =>
-        {
-            threadReplyPublisher.ReplyAsync(
-                job.ClientId,
-                Arg.Is<ReviewThreadRef>(threadRef => threadRef.ExternalThreadId == "200"),
-                "Closing - fixed in the latest change.",
-                Arg.Any<CancellationToken>());
-            threadStatusWriter.UpdateThreadStatusAsync(
-                job.ClientId,
-                Arg.Is<ReviewThreadRef>(threadRef => threadRef.ExternalThreadId == "200"),
-                "fixed",
-                Arg.Any<CancellationToken>());
-        });
-    }
-
-    [Fact]
-    public async Task ProcessAsync_NewIteration_SilentMode_ResolvesWithoutReply()
-    {
-        var (jobs, prFetcher, orchestrator, commentPoster, reviewerManager, clientRegistry, prScanRepository, _, _,
-                logger) =
-            CreateDeps();
-
-        var reviewerId = Guid.NewGuid();
-        var job = CreateJob();
-        var result = CreateReviewResult();
-        orchestrator.ReviewAsync(
-                Arg.Any<ReviewJob>(),
-                Arg.Any<PullRequest>(),
-                Arg.Any<ReviewSystemContext>(),
-                Arg.Any<CancellationToken>(),
-                Arg.Any<IChatClient?>())
-            .Returns(result);
-
-        clientRegistry.GetCommentResolutionBehaviorAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
-            .Returns(Task.FromResult(CommentResolutionBehavior.Silent));
-
-        var thread = new PrCommentThread(
-            201,
-            "/src/Foo.cs",
-            10,
-            [new PrThreadComment("Bot", "Please fix this.", reviewerId)]);
-
-        var pr = CreatePullRequest([thread]);
-
-        SetupReviewerIdReturns(clientRegistry, job, reviewerId);
-        prFetcher.FetchAsync(
-                Arg.Any<string>(),
-                Arg.Any<string>(),
-                Arg.Any<string>(),
-                Arg.Any<int>(),
-                Arg.Any<int>(),
-                Arg.Any<int?>(),
-                Arg.Any<Guid?>(),
-                Arg.Any<CancellationToken>(),
-                Arg.Any<ReviewRevision?>(),
-                Arg.Any<IReviewRepositoryWorkspace?>())
-            .Returns(pr);
-
-        var resolutionCore = Substitute.For<IAiCommentResolutionCore>();
-        resolutionCore.EvaluateCodeChangeAsync(
-                Arg.Any<PrCommentThread>(),
-                Arg.Any<PullRequest>(),
-                Arg.Any<IChatClient>(),
-                Arg.Any<string>(),
-                Arg.Any<CancellationToken>(),
-                Arg.Any<string?>())
-            .Returns(new ThreadResolutionResult(true, "Closing - fixed in the latest change."));
-
-        var threadReplyPublisher = CreateThreadReplyPublisher();
-        var threadStatusWriter = CreateThreadStatusWriter();
-        var stubToolsFactory = CreateDefaultReviewContextToolsFactory();
-        var (aiRepo, chatFactory) = CreateAiSubstitutes();
-        var service = CreateService(
-            jobs,
-            prFetcher,
-            orchestrator,
-            commentPoster,
-            reviewerManager,
-            clientRegistry,
-            prScanRepository,
-            logger,
-            aiRepo: aiRepo,
-            chatFactory: chatFactory,
-            resolutionCore: resolutionCore,
-            reviewContextToolsFactory: stubToolsFactory,
-            threadStatusWriter: threadStatusWriter,
-            threadReplyPublisher: threadReplyPublisher);
-
-        await service.ProcessAsync(job, CancellationToken.None);
-
-        await threadReplyPublisher.DidNotReceiveWithAnyArgs()
-            .ReplyAsync(default, default!, default!);
-        await threadStatusWriter.Received(1).UpdateThreadStatusAsync(
-            job.ClientId,
-            Arg.Is<ReviewThreadRef>(threadRef => threadRef.ExternalThreadId == "201"),
-            "fixed",
-            Arg.Any<CancellationToken>());
-    }
-
-    [Fact]
-    public async Task ProcessAsync_NewIteration_HumanOwnedThread_IsLeftUntouched()
-    {
-        var (jobs, prFetcher, orchestrator, commentPoster, reviewerManager, clientRegistry, prScanRepository, _, _,
-                logger) =
-            CreateDeps();
-
-        var reviewerId = Guid.NewGuid();
-        var humanId = Guid.NewGuid();
-        var job = CreateJob();
-        var result = CreateReviewResult();
-        orchestrator.ReviewAsync(
-                Arg.Any<ReviewJob>(),
-                Arg.Any<PullRequest>(),
-                Arg.Any<ReviewSystemContext>(),
-                Arg.Any<CancellationToken>(),
-                Arg.Any<IChatClient?>())
-            .Returns(result);
-
-        clientRegistry.GetCommentResolutionBehaviorAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
-            .Returns(Task.FromResult(CommentResolutionBehavior.WithReply));
-
-        var thread = new PrCommentThread(
-            202,
-            "/src/Foo.cs",
-            10,
-            [new PrThreadComment("Alice", "Please fix this.", humanId)]);
-
-        var pr = CreatePullRequest([thread]);
-
-        SetupReviewerIdReturns(clientRegistry, job, reviewerId);
-        prFetcher.FetchAsync(
-                Arg.Any<string>(),
-                Arg.Any<string>(),
-                Arg.Any<string>(),
-                Arg.Any<int>(),
-                Arg.Any<int>(),
-                Arg.Any<int?>(),
-                Arg.Any<Guid?>(),
-                Arg.Any<CancellationToken>(),
-                Arg.Any<ReviewRevision?>(),
-                Arg.Any<IReviewRepositoryWorkspace?>())
-            .Returns(pr);
-
-        var resolutionCore = Substitute.For<IAiCommentResolutionCore>();
-        var threadReplyPublisher = CreateThreadReplyPublisher();
-        var threadStatusWriter = CreateThreadStatusWriter();
-        var stubToolsFactory = CreateDefaultReviewContextToolsFactory();
-        var (aiRepo, chatFactory) = CreateAiSubstitutes();
-        var service = CreateService(
-            jobs,
-            prFetcher,
-            orchestrator,
-            commentPoster,
-            reviewerManager,
-            clientRegistry,
-            prScanRepository,
-            logger,
-            aiRepo: aiRepo,
-            chatFactory: chatFactory,
-            resolutionCore: resolutionCore,
-            reviewContextToolsFactory: stubToolsFactory,
-            threadStatusWriter: threadStatusWriter,
-            threadReplyPublisher: threadReplyPublisher);
-
-        await service.ProcessAsync(job, CancellationToken.None);
-
-        await resolutionCore.DidNotReceiveWithAnyArgs()
-            .EvaluateCodeChangeAsync(null!, null!, null!, null!, default, null);
-        await threadReplyPublisher.DidNotReceiveWithAnyArgs()
-            .ReplyAsync(default, default!, default!);
-        await threadStatusWriter.DidNotReceiveWithAnyArgs()
-            .UpdateThreadStatusAsync(default, default!, default!);
-    }
-
-    [Fact]
-    public async Task ProcessAsync_NewIteration_OnlyEvaluatesThreadsAuthoredByReviewer()
-    {
-        var (jobs, prFetcher, orchestrator, commentPoster, reviewerManager, clientRegistry, prScanRepository,
-                instructionFetcher, instructionEvaluator, logger) =
-            CreateDeps();
-
-        var reviewerId = Guid.NewGuid();
-        var otherId = Guid.NewGuid();
-        var job = CreateJob(); // IterationId = 1
-        var result = CreateReviewResult();
-        orchestrator.ReviewAsync(
-                Arg.Any<ReviewJob>(),
-                Arg.Any<PullRequest>(),
-                Arg.Any<ReviewSystemContext>(),
-                Arg.Any<CancellationToken>(),
-                Arg.Any<IChatClient?>())
-            .Returns(result);
-
-        // Two threads: one by reviewer, one by someone else
-        var reviewerThread = new PrCommentThread(
-            10,
-            "/src/A.cs",
-            1,
-            new List<PrThreadComment>
-            {
-                new("Bot", "Reviewer comment", reviewerId),
-            }.AsReadOnly());
-
-        var otherThread = new PrCommentThread(
-            20,
-            "/src/B.cs",
-            2,
-            new List<PrThreadComment>
-            {
-                new("Human", "Human comment", otherId),
-            }.AsReadOnly());
-
-        var pr = CreatePullRequest(new List<PrCommentThread> { reviewerThread, otherThread }.AsReadOnly());
-
-        SetupReviewerIdReturns(clientRegistry, job, reviewerId);
-        prFetcher.FetchAsync(
-                Arg.Any<string>(),
-                Arg.Any<string>(),
-                Arg.Any<string>(),
-                Arg.Any<int>(),
-                Arg.Any<int>(),
-                Arg.Any<int?>(),
-                Arg.Any<Guid?>(),
-                Arg.Any<CancellationToken>(),
-                Arg.Any<ReviewRevision?>(),
-                Arg.Any<IReviewRepositoryWorkspace?>())
-            .Returns(pr);
-
-        // No existing scan → new iteration path
-        prScanRepository.GetAsync(Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
-            .Returns(Task.FromResult<ReviewPrScan?>(null));
-
-        var resolutionCore = Substitute.For<IAiCommentResolutionCore>();
-        resolutionCore.EvaluateCodeChangeAsync(
-                Arg.Any<PrCommentThread>(),
-                Arg.Any<PullRequest>(),
-                Arg.Any<IChatClient>(),
-                Arg.Any<string>(),
-                Arg.Any<CancellationToken>(),
-                Arg.Any<string?>())
-            .Returns(new ThreadResolutionResult(false, null));
-
-        var stubToolsFactory2 = CreateDefaultReviewContextToolsFactory();
-        var (aiRepo2, chatFactory2) = CreateAiSubstitutes();
-        var service = CreateService(
-            jobs,
-            prFetcher,
-            orchestrator,
-            commentPoster,
-            reviewerManager,
-            clientRegistry,
-            prScanRepository,
-            logger,
-            aiRepo: aiRepo2,
-            chatFactory: chatFactory2,
-            resolutionCore: resolutionCore,
-            reviewContextToolsFactory: stubToolsFactory2);
-
-        await service.ProcessAsync(job, CancellationToken.None);
-
-        // Only the reviewer-authored thread should be evaluated
-        await resolutionCore.Received(1)
-            .EvaluateCodeChangeAsync(
-                Arg.Is<PrCommentThread>(t => t.ThreadId == 10),
-                Arg.Any<PullRequest>(),
-                Arg.Any<IChatClient>(),
-                Arg.Any<string>(),
-                Arg.Any<CancellationToken>(),
-                Arg.Any<string?>());
-
-        // The other author's thread must NOT be evaluated
-        await resolutionCore.DidNotReceive()
-            .EvaluateCodeChangeAsync(
-                Arg.Is<PrCommentThread>(t => t.ThreadId == 20),
-                Arg.Any<PullRequest>(),
-                Arg.Any<IChatClient>(),
-                Arg.Any<string>(),
-                Arg.Any<CancellationToken>(),
-                Arg.Any<string?>());
-    }
-
-    [Fact]
-    public async Task ProcessAsync_NewIteration_EvaluatesThreadsOwnedByAuthorizedIdentity()
-    {
-        var (jobs, prFetcher, orchestrator, commentPoster, reviewerManager, clientRegistry, prScanRepository,
-                instructionFetcher, instructionEvaluator, logger) =
-            CreateDeps();
-
-        var reviewerId = Guid.NewGuid();
-        var servicePrincipalId = Guid.NewGuid();
-        var otherId = Guid.NewGuid();
-        var job = CreateJob(); // IterationId = 1
-        var result = CreateReviewResult();
-        orchestrator.ReviewAsync(
-                Arg.Any<ReviewJob>(),
-                Arg.Any<PullRequest>(),
-                Arg.Any<ReviewSystemContext>(),
-                Arg.Any<CancellationToken>(),
-                Arg.Any<IChatClient?>())
-            .Returns(result);
-
-        var servicePrincipalThread = new PrCommentThread(
-            30,
-            "/src/A.cs",
-            1,
-            new List<PrThreadComment>
-            {
-                new("Bot", "Reviewer comment", servicePrincipalId),
-            }.AsReadOnly());
-
-        var otherThread = new PrCommentThread(
-            40,
-            "/src/B.cs",
-            2,
-            new List<PrThreadComment>
-            {
-                new("Human", "Human comment", otherId),
-            }.AsReadOnly());
-
-        var pr = CreatePullRequest(
-            new List<PrCommentThread> { servicePrincipalThread, otherThread }.AsReadOnly(),
-            servicePrincipalId);
-
-        SetupReviewerIdReturns(clientRegistry, job, reviewerId);
-        prFetcher.FetchAsync(
-                Arg.Any<string>(),
-                Arg.Any<string>(),
-                Arg.Any<string>(),
-                Arg.Any<int>(),
-                Arg.Any<int>(),
-                Arg.Any<int?>(),
-                Arg.Any<Guid?>(),
-                Arg.Any<CancellationToken>(),
-                Arg.Any<ReviewRevision?>(),
-                Arg.Any<IReviewRepositoryWorkspace?>())
-            .Returns(pr);
-
-        prScanRepository.GetAsync(Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
-            .Returns(Task.FromResult<ReviewPrScan?>(null));
-
-        var resolutionCore = Substitute.For<IAiCommentResolutionCore>();
-        resolutionCore.EvaluateCodeChangeAsync(
-                Arg.Any<PrCommentThread>(),
-                Arg.Any<PullRequest>(),
-                Arg.Any<IChatClient>(),
-                Arg.Any<string>(),
-                Arg.Any<CancellationToken>(),
-                Arg.Any<string?>())
-            .Returns(new ThreadResolutionResult(false, null));
-
-        var stubToolsFactory = CreateDefaultReviewContextToolsFactory();
-        var (aiRepo, chatFactory) = CreateAiSubstitutes();
-        var service = CreateService(
-            jobs,
-            prFetcher,
-            orchestrator,
-            commentPoster,
-            reviewerManager,
-            clientRegistry,
-            prScanRepository,
-            logger,
-            aiRepo: aiRepo,
-            chatFactory: chatFactory,
-            resolutionCore: resolutionCore,
-            reviewContextToolsFactory: stubToolsFactory);
-
-        await service.ProcessAsync(job, CancellationToken.None);
-
-        await resolutionCore.Received(1)
-            .EvaluateCodeChangeAsync(
-                Arg.Is<PrCommentThread>(t => t.ThreadId == 30),
-                Arg.Any<PullRequest>(),
-                Arg.Any<IChatClient>(),
-                Arg.Any<string>(),
-                Arg.Any<CancellationToken>(),
-                Arg.Any<string?>());
-
-        await resolutionCore.DidNotReceive()
-            .EvaluateCodeChangeAsync(
-                Arg.Is<PrCommentThread>(t => t.ThreadId == 40),
-                Arg.Any<PullRequest>(),
-                Arg.Any<IChatClient>(),
-                Arg.Any<string>(),
-                Arg.Any<CancellationToken>(),
-                Arg.Any<string?>());
-    }
-
-    [Fact]
     public async Task ProcessAsync_SuccessfulFlow_SavesScanWithCurrentIteration()
     {
         var (jobs, prFetcher, orchestrator, commentPoster, reviewerManager, clientRegistry, prScanRepository,
@@ -2836,13 +2167,13 @@ public partial class ReviewOrchestrationServiceTests
 
         await service.ProcessAsync(job, CancellationToken.None);
 
-        // Scan must be upserted with the current iteration ID
+        // The watermark must be advanced to the current iteration ID
         await prScanRepository.Received(1)
-            .UpsertAsync(
-                Arg.Is<ReviewPrScan>(s =>
-                    s.LastProcessedCommitId == job.IterationId.ToString() &&
-                    s.PullRequestId == job.PullRequestId &&
-                    s.RepositoryId == job.RepositoryId),
+            .SetReviewWatermarkAsync(
+                job.ClientId,
+                job.RepositoryId,
+                job.PullRequestId,
+                job.IterationId.ToString(),
                 Arg.Any<CancellationToken>());
     }
 
@@ -3175,150 +2506,6 @@ public partial class ReviewOrchestrationServiceTests
                 Arg.Any<CancellationToken>(),
                 Arg.Any<IChatClient?>());
     }
-
-    // O1/O6 — threads with a resolved ADO status are skipped; resolution AI is never called for them
-
-    [Fact]
-    public async Task ProcessAsync_ThreadWithFixedStatus_IsSkippedWithoutAiCall()
-    {
-        var (jobs, prFetcher, orchestrator, commentPoster, reviewerManager, clientRegistry, prScanRepository, _, _,
-                logger) =
-            CreateDeps();
-
-        var reviewerId = Guid.NewGuid();
-        var job = CreateJob();
-        var result = CreateReviewResult();
-        orchestrator.ReviewAsync(
-                Arg.Any<ReviewJob>(),
-                Arg.Any<PullRequest>(),
-                Arg.Any<ReviewSystemContext>(),
-                Arg.Any<CancellationToken>(),
-                Arg.Any<IChatClient?>())
-            .Returns(result);
-
-        // Reviewer-authored thread that ADO already set to "Fixed"
-        var fixedThread = new PrCommentThread(
-            99,
-            "/src/Foo.cs",
-            5,
-            new List<PrThreadComment> { new("Bot", "Fix this", reviewerId) }.AsReadOnly(),
-            "Fixed");
-
-        var pr = CreatePullRequest(new List<PrCommentThread> { fixedThread }.AsReadOnly());
-
-        SetupReviewerIdReturns(clientRegistry, job, reviewerId);
-        prFetcher.FetchAsync(
-                Arg.Any<string>(),
-                Arg.Any<string>(),
-                Arg.Any<string>(),
-                Arg.Any<int>(),
-                Arg.Any<int>(),
-                Arg.Any<int?>(),
-                Arg.Any<Guid?>(),
-                Arg.Any<CancellationToken>(),
-                Arg.Any<ReviewRevision?>(),
-                Arg.Any<IReviewRepositoryWorkspace?>())
-            .Returns(pr);
-
-        var resolutionCore = Substitute.For<IAiCommentResolutionCore>();
-        var stubToolsFactory = CreateDefaultReviewContextToolsFactory();
-
-        var (aiRepoF, chatFactoryF) = CreateAiSubstitutes();
-        var service = CreateService(
-            jobs,
-            prFetcher,
-            orchestrator,
-            commentPoster,
-            reviewerManager,
-            clientRegistry,
-            prScanRepository,
-            logger,
-            aiRepo: aiRepoF,
-            chatFactory: chatFactoryF,
-            resolutionCore: resolutionCore,
-            reviewContextToolsFactory: stubToolsFactory);
-
-        await service.ProcessAsync(job, CancellationToken.None);
-
-        // Resolution AI must not be called at all — the thread is already fixed
-        await resolutionCore.DidNotReceiveWithAnyArgs()
-            .EvaluateCodeChangeAsync(null!, null!, null!, null!, default, null);
-        await resolutionCore.DidNotReceiveWithAnyArgs()
-            .EvaluateConversationalReplyAsync(null!, null!, null!, default, null);
-    }
-
-    [Theory]
-    [InlineData("Fixed")]
-    [InlineData("Closed")]
-    [InlineData("WontFix")]
-    [InlineData("ByDesign")]
-    public async Task ProcessAsync_ThreadWithResolvedStatus_NeverCallsResolutionAi(string resolvedStatus)
-    {
-        var (jobs, prFetcher, orchestrator, commentPoster, reviewerManager, clientRegistry, prScanRepository, _, _,
-                logger) =
-            CreateDeps();
-
-        var reviewerId = Guid.NewGuid();
-        var job = CreateJob();
-        var result = CreateReviewResult();
-        orchestrator.ReviewAsync(
-                Arg.Any<ReviewJob>(),
-                Arg.Any<PullRequest>(),
-                Arg.Any<ReviewSystemContext>(),
-                Arg.Any<CancellationToken>(),
-                Arg.Any<IChatClient?>())
-            .Returns(result);
-
-        var resolvedThread = new PrCommentThread(
-            100,
-            "/src/Bar.cs",
-            10,
-            new List<PrThreadComment> { new("Bot", "Concern here", reviewerId) }.AsReadOnly(),
-            resolvedStatus);
-
-        var pr = CreatePullRequest(new List<PrCommentThread> { resolvedThread }.AsReadOnly());
-
-        SetupReviewerIdReturns(clientRegistry, job, reviewerId);
-        prFetcher.FetchAsync(
-                Arg.Any<string>(),
-                Arg.Any<string>(),
-                Arg.Any<string>(),
-                Arg.Any<int>(),
-                Arg.Any<int>(),
-                Arg.Any<int?>(),
-                Arg.Any<Guid?>(),
-                Arg.Any<CancellationToken>(),
-                Arg.Any<ReviewRevision?>(),
-                Arg.Any<IReviewRepositoryWorkspace?>())
-            .Returns(pr);
-
-        var resolutionCore = Substitute.For<IAiCommentResolutionCore>();
-        var stubToolsFactory = CreateDefaultReviewContextToolsFactory();
-
-        var (aiRepoR, chatFactoryR) = CreateAiSubstitutes();
-        var service = CreateService(
-            jobs,
-            prFetcher,
-            orchestrator,
-            commentPoster,
-            reviewerManager,
-            clientRegistry,
-            prScanRepository,
-            logger,
-            aiRepo: aiRepoR,
-            chatFactory: chatFactoryR,
-            resolutionCore: resolutionCore,
-            reviewContextToolsFactory: stubToolsFactory);
-
-        await service.ProcessAsync(job, CancellationToken.None);
-
-        await resolutionCore.DidNotReceiveWithAnyArgs()
-            .EvaluateCodeChangeAsync(null!, null!, null!, null!, default, null);
-        await resolutionCore.DidNotReceiveWithAnyArgs()
-            .EvaluateConversationalReplyAsync(null!, null!, null!, default, null);
-    }
-
-    // --- T012: US1 PR Abandonment tests (failing until T019 is implemented) ---
 
     [Fact]
     public async Task ProcessAsync_AbandonedPr_CallsSetCancelledAsyncNotSetFailedAsync()
@@ -4847,7 +4034,7 @@ public partial class ReviewOrchestrationServiceTests
 
         // PR thread authored by reviewer with no user replies → no new replies
         var reviewerThread = new PrCommentThread(
-            1001,
+            "1001",
             null,
             null,
             new List<PrThreadComment>

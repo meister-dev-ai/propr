@@ -1,10 +1,12 @@
 // Copyright (c) Andreas Rain.
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
+using System.Globalization;
 using System.Net.Http.Json;
 using System.Text;
 using System.Text.Json.Serialization;
 using MeisterDev.ProPR.Application.DTOs;
+using MeisterDev.ProPR.Application.Features.ThreadOwnership;
 using MeisterDev.ProPR.Domain.Enums;
 using MeisterDev.ProPR.Domain.ValueObjects;
 using MeisterDev.ProPR.Infrastructure.Features.Providers.Common;
@@ -23,13 +25,21 @@ internal sealed class GitLabReviewThreadStatusProvider(
         string projectId,
         string repositoryId,
         int pullRequestId,
-        Guid reviewerId,
+        ThreadOwnershipResolver ownership,
         Guid clientId,
         CancellationToken ct = default)
     {
+        ArgumentNullException.ThrowIfNull(ownership);
+
         var host = new ProviderHostRef(ScmProvider.GitLab, organizationUrl);
         var context = await connectionVerifier.VerifyAsync(clientId, host, ct);
-        var authoredUsername = context.AuthenticatedUsername;
+
+        // GitLab names an author by username, and the connection verification above is the only place the
+        // authenticated one exists, so the pass's resolver is completed with it here. It is contributed into
+        // the instance the caller handed down, so the consumers that run later in the same pass, and never see
+        // a connection of their own, decide with the identity too.
+        ownership.ContributeIdentity(new ThreadOwnerIdentity(Login: context.AuthenticatedUsername));
+
         using var request = GitLabConnectionVerifier.CreateAuthenticatedRequest(
             GitLabConnectionVerifier.BuildApiUri(
                 host,
@@ -54,13 +64,13 @@ internal sealed class GitLabReviewThreadStatusProvider(
                 Notes = discussion.Notes.Where(note => !note.System).ToList(),
             })
             .Where(item => item.Notes.Count > 0)
-            .Where(item => AuthorMatches(item.Notes[0].Author, authoredUsername))
+            .Where(item => ownership.OwnsThread(ToCommentRef(item.Notes[0])))
             .Select(item => new PrThreadStatusEntry(
-                item.Notes[0].Id,
+                item.Discussion.Id,
                 item.Notes.Any(note => note.Resolved) ? "Fixed" : "Active",
                 ResolveFilePath(item.Notes),
                 BuildCommentHistory(item.Notes),
-                item.Notes.Count(note => !AuthorMatches(note.Author, authoredUsername)),
+                item.Notes.Count(note => !ownership.OwnsComment(ToCommentRef(note))),
                 // GitLab's discussions API exposes no per-thread "outdated" flag, so whether the anchored
                 // code changed since the finding was raised cannot be determined from this response alone
                 // (it would need a commit compare against the merge-request head). Reporting Unknown keeps
@@ -84,11 +94,14 @@ internal sealed class GitLabReviewThreadStatusProvider(
         return null;
     }
 
-    private static bool AuthorMatches(GitLabAuthorResponse? author, string authoredUsername)
+    // A GitLab note id is unique within the merge request, so provenance resolves on it alone. The thread id
+    // recorded at publish time is the discussion id, which this response carries but does not need.
+    private static ThreadCommentRef ToCommentRef(GitLabDiscussionNoteResponse note)
     {
-        return author is not null
-               && !string.IsNullOrWhiteSpace(author.Username)
-               && string.Equals(author.Username, authoredUsername, StringComparison.OrdinalIgnoreCase);
+        return new ThreadCommentRef(
+            null,
+            note.Id.ToString(CultureInfo.InvariantCulture),
+            AuthorLogin: note.Author?.Username);
     }
 
     private static string BuildCommentHistory(IReadOnlyList<GitLabDiscussionNoteResponse> notes)
@@ -111,6 +124,7 @@ internal sealed class GitLabReviewThreadStatusProvider(
     }
 
     private sealed record GitLabDiscussionResponse(
+        [property: JsonPropertyName("id")] string? Id,
         [property: JsonPropertyName("individual_note")]
         bool IndividualNote,
         [property: JsonPropertyName("notes")] IReadOnlyList<GitLabDiscussionNoteResponse> Notes);

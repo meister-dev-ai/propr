@@ -50,13 +50,13 @@ public sealed class ThreadMemoryServiceTests
         await repo.Received(1)
             .UpsertAsync(
                 Arg.Is<ThreadMemoryRecord>(r =>
-                    r.ClientId == ClientId && r.ThreadId == 7 && r.RepositoryId == "repo-1" &&
+                    r.ClientId == ClientId && r.ThreadId == "7" && r.RepositoryId == "repo-1" &&
                     r.ResolutionSummary == "Resolution summary."),
                 Arg.Any<CancellationToken>());
         await activityLog.Received(1)
             .AppendAsync(
                 Arg.Is<MemoryActivityLogEntry>(e =>
-                    e.ClientId == ClientId && e.ThreadId == 7 && e.Action == MemoryActivityAction.Stored &&
+                    e.ClientId == ClientId && e.ThreadId == "7" && e.Action == MemoryActivityAction.Stored &&
                     e.Reason == null),
                 Arg.Any<CancellationToken>());
     }
@@ -191,7 +191,7 @@ public sealed class ThreadMemoryServiceTests
             ClientId,
             "repo-1",
             42,
-            7,
+            "7",
             filePath,
             "diff",
             commentHistory,
@@ -204,7 +204,7 @@ public sealed class ThreadMemoryServiceTests
         await activityLog.Received(1)
             .AppendAsync(
                 Arg.Is<MemoryActivityLogEntry>(e =>
-                    e.ClientId == ClientId && e.ThreadId == 7 && e.Action == MemoryActivityAction.NoOp &&
+                    e.ClientId == ClientId && e.ThreadId == "7" && e.Action == MemoryActivityAction.NoOp &&
                     e.CurrentStatus == "resolved" && e.Reason == expectedReason),
                 Arg.Any<CancellationToken>());
     }
@@ -213,16 +213,16 @@ public sealed class ThreadMemoryServiceTests
     public async Task HandleThreadReopenedAsync_RecordExists_AppendsRemovedEntryWithDeletedReason()
     {
         var (_, repo, _, activityLog, service) = CreateService();
-        repo.RemoveByThreadAsync(ClientId, "repo-1", 7, Arg.Any<CancellationToken>())
+        repo.RemoveByThreadAsync(ClientId, "repo-1", "7", Arg.Any<CancellationToken>())
             .Returns(true);
 
-        var evt = new ThreadReopenedDomainEvent(ClientId, "repo-1", 42, 7, DateTimeOffset.UtcNow);
+        var evt = new ThreadReopenedDomainEvent(ClientId, "repo-1", 42, "7", DateTimeOffset.UtcNow);
         await service.HandleThreadReopenedAsync(evt);
 
         await activityLog.Received(1)
             .AppendAsync(
                 Arg.Is<MemoryActivityLogEntry>(e =>
-                    e.ClientId == ClientId && e.ThreadId == 7 && e.Action == MemoryActivityAction.Removed &&
+                    e.ClientId == ClientId && e.ThreadId == "7" && e.Action == MemoryActivityAction.Removed &&
                     e.Reason == "deleted"),
                 Arg.Any<CancellationToken>());
     }
@@ -231,10 +231,10 @@ public sealed class ThreadMemoryServiceTests
     public async Task HandleThreadReopenedAsync_NoRecord_AppendsRemovedEntryWithNoOpReason()
     {
         var (_, repo, _, activityLog, service) = CreateService();
-        repo.RemoveByThreadAsync(ClientId, "repo-1", 7, Arg.Any<CancellationToken>())
+        repo.RemoveByThreadAsync(ClientId, "repo-1", "7", Arg.Any<CancellationToken>())
             .Returns(false);
 
-        var evt = new ThreadReopenedDomainEvent(ClientId, "repo-1", 42, 7, DateTimeOffset.UtcNow);
+        var evt = new ThreadReopenedDomainEvent(ClientId, "repo-1", 42, "7", DateTimeOffset.UtcNow);
         await service.HandleThreadReopenedAsync(evt);
 
         await activityLog.Received(1)
@@ -248,10 +248,10 @@ public sealed class ThreadMemoryServiceTests
     public async Task HandleThreadReopenedAsync_RepositoryThrows_DoesNotThrow()
     {
         var (_, repo, _, _, service) = CreateService();
-        repo.RemoveByThreadAsync(Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<long>(), Arg.Any<CancellationToken>())
+        repo.RemoveByThreadAsync(Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
             .ThrowsAsync(new Exception("db error"));
 
-        var evt = new ThreadReopenedDomainEvent(ClientId, "repo-1", 42, 7, DateTimeOffset.UtcNow);
+        var evt = new ThreadReopenedDomainEvent(ClientId, "repo-1", 42, "7", DateTimeOffset.UtcNow);
         var ex = await Record.ExceptionAsync(() => service.HandleThreadReopenedAsync(evt));
 
         Assert.Null(ex);
@@ -262,12 +262,12 @@ public sealed class ThreadMemoryServiceTests
     {
         var (_, _, _, activityLog, service) = CreateService();
 
-        await service.RecordNoOpAsync(ClientId, "repo-1", 42, 7, "Active", "Active", "still_active");
+        await service.RecordNoOpAsync(ClientId, "repo-1", 42, "7", "Active", "Active", "still_active");
 
         await activityLog.Received(1)
             .AppendAsync(
                 Arg.Is<MemoryActivityLogEntry>(e =>
-                    e.ClientId == ClientId && e.ThreadId == 7 && e.Action == MemoryActivityAction.NoOp &&
+                    e.ClientId == ClientId && e.ThreadId == "7" && e.Action == MemoryActivityAction.NoOp &&
                     e.Reason == "still_active"),
                 Arg.Any<CancellationToken>());
     }
@@ -280,7 +280,7 @@ public sealed class ThreadMemoryServiceTests
             .ThrowsAsync(new Exception("log unavailable"));
 
         var ex = await Record.ExceptionAsync(() =>
-            service.RecordNoOpAsync(ClientId, "repo-1", 42, 7, null, "Active", "still_active"));
+            service.RecordNoOpAsync(ClientId, "repo-1", 42, "7", null, "Active", "still_active"));
 
         Assert.Null(ex);
     }
@@ -292,7 +292,7 @@ public sealed class ThreadMemoryServiceTests
         var draftResult = new ReviewResult("draft summary", []);
         var matches = new List<ThreadMemoryMatchDto>
         {
-            new(Guid.NewGuid(), 5, "src/Foo.cs", "Fixed by adding null check.", 0.92f),
+            new(Guid.NewGuid(), "5", "src/Foo.cs", "Fixed by adding null check.", 0.92f),
         };
         embedder.GenerateEmbeddingAsync(Arg.Any<string>(), Arg.Any<Guid>(), Arg.Any<CancellationToken>())
             .Returns(new[] { 0.5f });
@@ -371,7 +371,7 @@ public sealed class ThreadMemoryServiceTests
                 {
                     new(
                         Guid.NewGuid(),
-                        6023,
+                        "6023",
                         "package.json",
                         "Closed without code change.",
                         0f,
@@ -500,7 +500,7 @@ public sealed class ThreadMemoryServiceTests
                 {
                     new(
                         Guid.NewGuid(),
-                        7,
+                        "7",
                         "backend/Foo.cs",
                         "CLAIMED FIX SUMMARY",
                         0.95f,
@@ -510,7 +510,7 @@ public sealed class ThreadMemoryServiceTests
                         ResolutionClarity.ResolvedByChange),
                     new(
                         Guid.NewGuid(),
-                        8,
+                        "8",
                         "backend/Foo.cs",
                         "REVIEWER REJECTION SUMMARY",
                         0.81f,
@@ -560,7 +560,7 @@ public sealed class ThreadMemoryServiceTests
                 {
                     new(
                         Guid.NewGuid(),
-                        9,
+                        "9",
                         "backend/Foo.cs",
                         "CLAIMED FIX SUMMARY",
                         0.97f,
@@ -568,7 +568,7 @@ public sealed class ThreadMemoryServiceTests
                         MemorySource.ThreadResolved,
                         ThreadResolutionIntent.ClaimsFix,
                         ResolutionClarity.ResolvedByChange),
-                    new(Guid.NewGuid(), 10, "backend/Foo.cs", "LEGACY SUMMARY", 0.83f),
+                    new(Guid.NewGuid(), "10", "backend/Foo.cs", "LEGACY SUMMARY", 0.83f),
                 });
         StubReconsiderationResponse(chatClient);
 
@@ -606,7 +606,7 @@ public sealed class ThreadMemoryServiceTests
             .Returns(
                 new List<ThreadMemoryMatchDto>
                 {
-                    new(Guid.NewGuid(), 11, "backend/Foo.cs", "LEGACY SUMMARY", 0.9f),
+                    new(Guid.NewGuid(), "11", "backend/Foo.cs", "LEGACY SUMMARY", 0.9f),
                 });
         StubReconsiderationResponse(chatClient);
 
@@ -768,7 +768,7 @@ public sealed class ThreadMemoryServiceTests
             .Returns(
                 new List<ThreadMemoryMatchDto>
                 {
-                    new(Guid.NewGuid(), 91, "backend/Other.cs", "Accepted without a change.", 0.31f),
+                    new(Guid.NewGuid(), "91", "backend/Other.cs", "Accepted without a change.", 0.31f),
                 });
         repo.FindByFilePathAsync(
                 Arg.Any<Guid>(),
@@ -946,7 +946,7 @@ public sealed class ThreadMemoryServiceTests
                 matched = true;
                 return new List<ThreadMemoryMatchDto>
                 {
-                    new(Guid.NewGuid(), 5, "backend/File0.cs", "Fixed by adding the guard.", 0.92f),
+                    new(Guid.NewGuid(), "5", "backend/File0.cs", "Fixed by adding the guard.", 0.92f),
                 };
             });
         repo.FindByFilePathAsync(
@@ -1051,7 +1051,7 @@ public sealed class ThreadMemoryServiceTests
         var draftResult = new ReviewResult("draft summary", []);
         var matches = new List<ThreadMemoryMatchDto>
         {
-            new(Guid.NewGuid(), 5, "src/Foo.cs", "Fixed by adding null check.", 0.92f),
+            new(Guid.NewGuid(), "5", "src/Foo.cs", "Fixed by adding null check.", 0.92f),
         };
         embedder.GenerateEmbeddingAsync(Arg.Any<string>(), Arg.Any<Guid>(), Arg.Any<CancellationToken>())
             .Returns(new[] { 0.5f });
@@ -1100,7 +1100,7 @@ public sealed class ThreadMemoryServiceTests
         var draftResult = new ReviewResult("draft summary", []);
         var matches = new List<ThreadMemoryMatchDto>
         {
-            new(Guid.NewGuid(), 5, "src/Foo.cs", "Fixed by adding null check.", 0.92f),
+            new(Guid.NewGuid(), "5", "src/Foo.cs", "Fixed by adding null check.", 0.92f),
         };
         embedder.GenerateEmbeddingAsync(Arg.Any<string>(), Arg.Any<Guid>(), Arg.Any<CancellationToken>())
             .Returns(new[] { 0.5f });
@@ -1145,7 +1145,7 @@ public sealed class ThreadMemoryServiceTests
         var draftResult = new ReviewResult("draft summary", [commentA, commentB]);
         var matches = new List<ThreadMemoryMatchDto>
         {
-            new(Guid.NewGuid(), 5, "src/Foo.cs", "Was accepted by design.", 0.88f),
+            new(Guid.NewGuid(), "5", "src/Foo.cs", "Was accepted by design.", 0.88f),
         };
         embedder.GenerateEmbeddingAsync(Arg.Any<string>(), Arg.Any<Guid>(), Arg.Any<CancellationToken>())
             .Returns(new[] { 0.5f });
@@ -1192,7 +1192,7 @@ public sealed class ThreadMemoryServiceTests
         var draftResult = new ReviewResult("draft summary", [comment]);
         var matches = new List<ThreadMemoryMatchDto>
         {
-            new(Guid.NewGuid(), 5, "src/Foo.cs", "Fixed by adding null check.", 0.90f),
+            new(Guid.NewGuid(), "5", "src/Foo.cs", "Fixed by adding null check.", 0.90f),
         };
         embedder.GenerateEmbeddingAsync(Arg.Any<string>(), Arg.Any<Guid>(), Arg.Any<CancellationToken>())
             .Returns(new[] { 0.5f });
@@ -1252,7 +1252,7 @@ public sealed class ThreadMemoryServiceTests
         var draftResult = new ReviewResult("draft", [comment]);
         var matches = new List<ThreadMemoryMatchDto>
         {
-            new(Guid.NewGuid(), 9, "src/Bar.cs", "Accepted as known pattern.", 0.85f),
+            new(Guid.NewGuid(), "9", "src/Bar.cs", "Accepted as known pattern.", 0.85f),
         };
         embedder.GenerateEmbeddingAsync(Arg.Any<string>(), Arg.Any<Guid>(), Arg.Any<CancellationToken>())
             .Returns(new[] { 0.3f });
@@ -1309,7 +1309,7 @@ public sealed class ThreadMemoryServiceTests
             [
                 new ThreadMemoryMatchDto(
                     memoryRecordId,
-                    700,
+                    "700",
                     "/src/Foo.cs",
                     "Validate the configuration before using it.",
                     0.91f),
@@ -1324,7 +1324,7 @@ public sealed class ThreadMemoryServiceTests
 
         Assert.True(match.IsDuplicate);
         Assert.Equal("historical_similarity_match", match.ReasonCode);
-        Assert.Equal(700, match.ThreadId);
+        Assert.Equal("700", match.ThreadId);
         Assert.Equal(memoryRecordId, match.MemoryRecordId);
         Assert.False(match.IsDegraded);
     }
@@ -1349,7 +1349,7 @@ public sealed class ThreadMemoryServiceTests
             [
                 new ThreadMemoryMatchDto(
                     memoryRecordId,
-                    701,
+                    "701",
                     "/src/Foo.cs",
                     "Validate the config before using it as a connection string.",
                     0f,

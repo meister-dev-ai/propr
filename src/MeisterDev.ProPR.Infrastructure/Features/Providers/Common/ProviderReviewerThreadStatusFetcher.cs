@@ -2,6 +2,7 @@
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
 using MeisterDev.ProPR.Application.DTOs;
+using MeisterDev.ProPR.Application.Features.ThreadOwnership;
 using MeisterDev.ProPR.Application.Interfaces;
 using MeisterDev.ProPR.Domain.Enums;
 
@@ -20,7 +21,7 @@ internal sealed class ProviderReviewerThreadStatusFetcher(
         string projectId,
         string repositoryId,
         int pullRequestId,
-        Guid reviewerId,
+        ThreadOwnershipResolver ownership,
         Guid clientId,
         CancellationToken ct = default)
     {
@@ -35,7 +36,7 @@ internal sealed class ProviderReviewerThreadStatusFetcher(
             projectId,
             repositoryId,
             pullRequestId,
-            reviewerId,
+            ownership,
             clientId,
             ct);
     }

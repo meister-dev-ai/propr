@@ -31,6 +31,7 @@ export type DetailTab = (typeof detailTabs)[number]
 export const DEFAULT_OUTPUT_LANGUAGE = 'en'
 export type ReviewPassEntry = components['schemas']['ReviewPassEntry']
 export type ReviewReasoningEffort = components['schemas']['ReviewReasoningEffort']
+export type CommentResolutionBehavior = components['schemas']['CommentResolutionBehavior']
 export type BudgetConfig = components['schemas']['BudgetConfigDto']
 export type CommentSeverity = components['schemas']['CommentSeverity']
 
@@ -44,6 +45,8 @@ export interface ClientDetailDto {
   scmCommentPostingEnabled: boolean
   enableEvidenceBackedVerification: boolean
   enableMultiPassUnion: boolean
+  reviewEveryIncrementEnabled: boolean
+  commentResolutionBehavior?: CommentResolutionBehavior | null
   includeLinkedItemsInContext: boolean
   enableLanguageRobustScreening: boolean
   outputLanguage?: string | null
@@ -83,6 +86,8 @@ export interface ClientDetailViewModel {
   editedScmCommentPostingEnabled: Ref<boolean>
   editedEnableEvidenceBackedVerification: Ref<boolean>
   editedEnableMultiPassUnion: Ref<boolean>
+  editedReviewEveryIncrementEnabled: Ref<boolean>
+  editedCommentResolutionBehavior: Ref<CommentResolutionBehavior>
   editedIncludeLinkedItemsInContext: Ref<boolean>
   editedEnableLanguageRobustScreening: Ref<boolean>
   editedOutputLanguage: Ref<string>
@@ -340,6 +345,8 @@ export function useClientDetailViewModel(options: UseClientDetailViewModelOption
   const editedScmCommentPostingEnabled = ref(true)
   const editedEnableEvidenceBackedVerification = ref(false)
   const editedEnableMultiPassUnion = ref(false)
+  const editedReviewEveryIncrementEnabled = ref(false)
+  const editedCommentResolutionBehavior = ref<CommentResolutionBehavior>('silent')
   const editedIncludeLinkedItemsInContext = ref(true)
   const editedEnableLanguageRobustScreening = ref(false)
   const editedOutputLanguage = ref(DEFAULT_OUTPUT_LANGUAGE)
@@ -409,6 +416,8 @@ export function useClientDetailViewModel(options: UseClientDetailViewModelOption
     editedScmCommentPostingEnabled.value = Boolean(nextClient.scmCommentPostingEnabled)
     editedEnableEvidenceBackedVerification.value = Boolean(nextClient.enableEvidenceBackedVerification)
     editedEnableMultiPassUnion.value = Boolean(nextClient.enableMultiPassUnion)
+    editedReviewEveryIncrementEnabled.value = Boolean(nextClient.reviewEveryIncrementEnabled)
+    editedCommentResolutionBehavior.value = nextClient.commentResolutionBehavior ?? 'silent'
     editedIncludeLinkedItemsInContext.value = Boolean(nextClient.includeLinkedItemsInContext)
     editedEnableLanguageRobustScreening.value = Boolean(nextClient.enableLanguageRobustScreening)
     editedOutputLanguage.value = nextClient.outputLanguage || DEFAULT_OUTPUT_LANGUAGE
@@ -594,6 +603,8 @@ export function useClientDetailViewModel(options: UseClientDetailViewModelOption
         scmCommentPostingEnabled: editedScmCommentPostingEnabled.value,
         enableEvidenceBackedVerification: editedEnableEvidenceBackedVerification.value,
         enableMultiPassUnion: editedEnableMultiPassUnion.value,
+        reviewEveryIncrementEnabled: editedReviewEveryIncrementEnabled.value,
+        commentResolutionBehavior: editedCommentResolutionBehavior.value,
         includeLinkedItemsInContext: editedIncludeLinkedItemsInContext.value,
         enableLanguageRobustScreening: editedEnableLanguageRobustScreening.value,
         outputLanguage: editedOutputLanguage.value.trim(),
@@ -734,6 +745,8 @@ export function useClientDetailViewModel(options: UseClientDetailViewModelOption
         editedScmCommentPostingEnabled.value !== Boolean(client.value.scmCommentPostingEnabled) ||
         editedEnableEvidenceBackedVerification.value !== Boolean(client.value.enableEvidenceBackedVerification) ||
         editedEnableMultiPassUnion.value !== Boolean(client.value.enableMultiPassUnion) ||
+        editedReviewEveryIncrementEnabled.value !== Boolean(client.value.reviewEveryIncrementEnabled) ||
+        editedCommentResolutionBehavior.value !== (client.value.commentResolutionBehavior ?? 'silent') ||
         editedIncludeLinkedItemsInContext.value !== Boolean(client.value.includeLinkedItemsInContext) ||
         editedEnableLanguageRobustScreening.value !== Boolean(client.value.enableLanguageRobustScreening) ||
         editedOutputLanguage.value.trim() !== (client.value.outputLanguage || DEFAULT_OUTPUT_LANGUAGE) ||
@@ -803,6 +816,8 @@ export function useClientDetailViewModel(options: UseClientDetailViewModelOption
     editedScmCommentPostingEnabled,
     editedEnableEvidenceBackedVerification,
     editedEnableMultiPassUnion,
+    editedReviewEveryIncrementEnabled,
+    editedCommentResolutionBehavior,
     editedIncludeLinkedItemsInContext,
     editedEnableLanguageRobustScreening,
     editedOutputLanguage,

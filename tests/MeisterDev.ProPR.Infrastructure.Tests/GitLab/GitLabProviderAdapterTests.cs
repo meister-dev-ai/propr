@@ -3,6 +3,7 @@
 
 using System.Net;
 using System.Text.Json;
+using MeisterDev.ProPR.Application.Features.ThreadOwnership;
 using MeisterDev.ProPR.Application.DTOs;
 using MeisterDev.ProPR.Application.Exceptions;
 using MeisterDev.ProPR.Application.Interfaces;
@@ -261,6 +262,7 @@ public sealed class GitLabPullRequestFetcherTests
                         {
                             new
                             {
+                                id = "3f2b1c9d",
                                 individual_note = false,
                                 notes = new object[]
                                 {
@@ -304,7 +306,7 @@ public sealed class GitLabPullRequestFetcherTests
         Assert.Equal("src/OldProvider.cs", result.ChangedFiles[0].OriginalPath);
         Assert.Equal("src/Fetcher.cs", result.ChangedFiles[1].Path);
         var thread = Assert.Single(result.ExistingThreads!);
-        Assert.Equal(501, thread.ThreadId);
+        Assert.Equal("3f2b1c9d", thread.ThreadId);
         Assert.Equal("src/Fetcher.cs", thread.FilePath);
     }
 
@@ -909,6 +911,7 @@ public sealed class GitLabReviewThreadStatusProviderTests
                         {
                             new
                             {
+                                id = "3f2b1c9d",
                                 individual_note = false,
                                 notes = new object[]
                                 {
@@ -960,12 +963,12 @@ public sealed class GitLabReviewThreadStatusProviderTests
             "acme/platform",
             "101",
             42,
-            Guid.Empty,
+            ThreadOwnershipResolver.None,
             clientId,
             CancellationToken.None);
 
         var entry = Assert.Single(result);
-        Assert.Equal(501, entry.ThreadId);
+        Assert.Equal("3f2b1c9d", entry.ThreadId);
         Assert.Equal("Fixed", entry.Status);
         Assert.Equal("src/feature.ts", entry.FilePath);
         Assert.Equal(1, entry.NonReviewerReplyCount);

@@ -93,6 +93,8 @@ describe('ClientDetailView', () => {
         scmCommentPostingEnabled: true,
         enableEvidenceBackedVerification: false,
         enableMultiPassUnion: false,
+        reviewEveryIncrementEnabled: false,
+        commentResolutionBehavior: 'silent',
         includeLinkedItemsInContext: true,
         enableLanguageRobustScreening: false,
       },
@@ -107,6 +109,8 @@ describe('ClientDetailView', () => {
         scmCommentPostingEnabled: true,
         enableEvidenceBackedVerification: false,
         enableMultiPassUnion: false,
+        reviewEveryIncrementEnabled: false,
+        commentResolutionBehavior: 'silent',
         includeLinkedItemsInContext: true,
         enableLanguageRobustScreening: false,
       },
@@ -146,6 +150,7 @@ describe('ClientDetailView', () => {
     expect(adminWrapper.find('input[name="scmCommentPostingEnabled"]').exists()).toBe(true)
     expect(adminWrapper.find('input[name="enableEvidenceBackedVerification"]').exists()).toBe(true)
     expect(adminWrapper.find('input[name="enableMultiPassUnion"]').exists()).toBe(true)
+    expect(adminWrapper.find('input[name="reviewEveryIncrementEnabled"]').exists()).toBe(true)
     expect(adminWrapper.find('input[name="enableLanguageRobustScreening"]').exists()).toBe(true)
     expect(adminWrapper.find('input[name="outputLanguage"]').exists()).toBe(true)
 
@@ -157,6 +162,7 @@ describe('ClientDetailView', () => {
     expect(userWrapper.find('input[name="scmCommentPostingEnabled"]').exists()).toBe(false)
     expect(userWrapper.find('input[name="enableEvidenceBackedVerification"]').exists()).toBe(false)
     expect(userWrapper.find('input[name="enableMultiPassUnion"]').exists()).toBe(false)
+    expect(userWrapper.find('input[name="reviewEveryIncrementEnabled"]').exists()).toBe(false)
     expect(userWrapper.find('input[name="enableLanguageRobustScreening"]').exists()).toBe(false)
     expect(userWrapper.find('input[name="outputLanguage"]').exists()).toBe(false)
   })
@@ -177,6 +183,8 @@ describe('ClientDetailView', () => {
         scmCommentPostingEnabled: true,
         enableEvidenceBackedVerification: true,
         enableMultiPassUnion: false,
+        reviewEveryIncrementEnabled: false,
+        commentResolutionBehavior: 'silent',
         includeLinkedItemsInContext: true,
         enableLanguageRobustScreening: false,
         outputLanguage: 'en',
@@ -201,12 +209,98 @@ describe('ClientDetailView', () => {
         scmCommentPostingEnabled: true,
         enableEvidenceBackedVerification: false,
         enableMultiPassUnion: true,
+        reviewEveryIncrementEnabled: false,
+        commentResolutionBehavior: 'silent',
         includeLinkedItemsInContext: true,
         enableLanguageRobustScreening: false,
         outputLanguage: 'en',
         baselineReasoningEffort: 'none',
       },
     })
+  })
+
+  it('sends reviewEveryIncrementEnabled when saving advanced settings', async () => {
+    hasClientRoleMock.mockImplementation((_clientId: string, minRole: number) => minRole <= 1)
+
+    const wrapper = await mountView()
+    await flushPromises()
+
+    await wrapper.find('input[name="reviewEveryIncrementEnabled"]').setValue(true)
+    await wrapper.find('button.scm-advanced-settings-save-btn').trigger('click')
+    await flushPromises()
+
+    expect(patchClientMock).toHaveBeenCalledWith('/clients/{clientId}', {
+      params: { path: { clientId: 'client-1' } },
+      body: {
+        scmCommentPostingEnabled: true,
+        enableEvidenceBackedVerification: false,
+        enableMultiPassUnion: false,
+        reviewEveryIncrementEnabled: true,
+        commentResolutionBehavior: 'silent',
+        includeLinkedItemsInContext: true,
+        enableLanguageRobustScreening: false,
+        outputLanguage: 'en',
+        baselineReasoningEffort: 'none',
+      },
+    })
+  })
+
+  /**
+   * The setting decides whether ProPR ever speaks when it closes one of its own threads, and it had no
+   * control at all: it existed in the API and the database and nowhere a person could reach it, quietly
+   * defaulting to the quieter option.
+   */
+  it('sends the chosen comment-resolution behaviour when saving advanced settings', async () => {
+    hasClientRoleMock.mockImplementation((_clientId: string, minRole: number) => minRole <= 1)
+
+    const wrapper = await mountView()
+    await flushPromises()
+
+    await wrapper.find('select[name="commentResolutionBehavior"]').setValue('withReply')
+    await wrapper.find('button.scm-advanced-settings-save-btn').trigger('click')
+    await flushPromises()
+
+    expect(patchClientMock).toHaveBeenCalledWith('/clients/{clientId}', {
+      params: { path: { clientId: 'client-1' } },
+      body: {
+        scmCommentPostingEnabled: true,
+        enableEvidenceBackedVerification: false,
+        enableMultiPassUnion: false,
+        reviewEveryIncrementEnabled: false,
+        commentResolutionBehavior: 'withReply',
+        includeLinkedItemsInContext: true,
+        enableLanguageRobustScreening: false,
+        outputLanguage: 'en',
+        baselineReasoningEffort: 'none',
+      },
+    })
+  })
+
+  it('shows the behaviour the client is actually on rather than the default', async () => {
+    hasClientRoleMock.mockImplementation((_clientId: string, minRole: number) => minRole <= 1)
+    getClientMock.mockResolvedValue({
+      data: {
+        id: 'client-1',
+        displayName: 'Acme Review Team',
+        isActive: true,
+        createdAt: '2026-04-25T10:00:00Z',
+        scmCommentPostingEnabled: true,
+        enableEvidenceBackedVerification: false,
+        enableMultiPassUnion: false,
+        reviewEveryIncrementEnabled: false,
+        commentResolutionBehavior: 'disabled',
+        includeLinkedItemsInContext: true,
+        enableLanguageRobustScreening: false,
+      },
+      response: { status: 200 },
+    })
+
+    const wrapper = await mountView()
+    await flushPromises()
+
+    expect(
+      wrapper.find<HTMLSelectElement>('select[name="commentResolutionBehavior"]').element.value,
+    ).toBe('disabled')
   })
 
   it('sends enableLanguageRobustScreening when saving advanced settings', async () => {
@@ -225,6 +319,8 @@ describe('ClientDetailView', () => {
         scmCommentPostingEnabled: true,
         enableEvidenceBackedVerification: false,
         enableMultiPassUnion: false,
+        reviewEveryIncrementEnabled: false,
+        commentResolutionBehavior: 'silent',
         includeLinkedItemsInContext: true,
         enableLanguageRobustScreening: true,
         outputLanguage: 'en',
@@ -249,12 +345,41 @@ describe('ClientDetailView', () => {
         scmCommentPostingEnabled: true,
         enableEvidenceBackedVerification: false,
         enableMultiPassUnion: false,
+        reviewEveryIncrementEnabled: false,
+        commentResolutionBehavior: 'silent',
         includeLinkedItemsInContext: true,
         enableLanguageRobustScreening: false,
         outputLanguage: 'de',
         baselineReasoningEffort: 'none',
       },
     })
+  })
+
+  it('shows a stored review-every-increment setting rather than the default', async () => {
+    hasClientRoleMock.mockImplementation((_clientId: string, minRole: number) => minRole <= 1)
+    getClientMock.mockResolvedValue({
+      data: {
+        id: 'client-1',
+        displayName: 'Acme Review Team',
+        isActive: true,
+        createdAt: '2026-04-25T10:00:00Z',
+        scmCommentPostingEnabled: true,
+        enableEvidenceBackedVerification: false,
+        enableMultiPassUnion: false,
+        reviewEveryIncrementEnabled: true,
+        commentResolutionBehavior: 'silent',
+        includeLinkedItemsInContext: true,
+        enableLanguageRobustScreening: false,
+      },
+      response: { status: 200 },
+    })
+
+    const wrapper = await mountView()
+    await flushPromises()
+
+    expect(
+      wrapper.find<HTMLInputElement>('input[name="reviewEveryIncrementEnabled"]').element.checked,
+    ).toBe(true)
   })
 
   it('shows the stored output language rather than the default', async () => {
@@ -268,6 +393,8 @@ describe('ClientDetailView', () => {
         scmCommentPostingEnabled: true,
         enableEvidenceBackedVerification: false,
         enableMultiPassUnion: false,
+        reviewEveryIncrementEnabled: false,
+        commentResolutionBehavior: 'silent',
         includeLinkedItemsInContext: true,
         enableLanguageRobustScreening: false,
         outputLanguage: 'pt-BR',

@@ -45,7 +45,7 @@ internal sealed partial class AgentMentionAnswerService(
         PullRequest pullRequest,
         Guid clientId,
         string question,
-        long threadId,
+        string threadId,
         CancellationToken cancellationToken = default)
     {
         var cleanQuestion = MentionPrefixRegex.Replace(question, string.Empty).Trim();
@@ -97,7 +97,7 @@ internal sealed partial class AgentMentionAnswerService(
         return response.Text ?? "";
     }
 
-    private static string BuildUserMessage(PullRequest pr, string question, long threadId)
+    private static string BuildUserMessage(PullRequest pr, string question, string threadId)
     {
         var sb = new StringBuilder();
         sb.AppendLine($"PR: {pr.Title}");
@@ -141,7 +141,8 @@ internal sealed partial class AgentMentionAnswerService(
             }
         }
 
-        var focusThread = pr.ExistingThreads?.FirstOrDefault(t => t.ThreadId == threadId);
+        var focusThread = pr.ExistingThreads?.FirstOrDefault(t =>
+            string.Equals(t.ThreadId, threadId, StringComparison.Ordinal));
         if (focusThread is not null)
         {
             sb.AppendLine();

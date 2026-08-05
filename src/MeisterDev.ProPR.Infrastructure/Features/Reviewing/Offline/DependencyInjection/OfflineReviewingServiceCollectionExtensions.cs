@@ -39,6 +39,7 @@ public static class OfflineReviewingServiceCollectionExtensions
         services.TryAddSingleton<InMemoryReviewJobRepository>();
         services.TryAddSingleton<IJobRepository>(sp => sp.GetRequiredService<InMemoryReviewJobRepository>());
         services.TryAddSingleton<IProtocolRecorder, InMemoryProtocolRecorder>();
+        services.TryAddSingleton<IThreadPassJobRepository, NoOpThreadPassJobRepository>();
         services.TryAddSingleton<IReviewDiagnosticsReader, InMemoryReviewDiagnosticsReader>();
         services.TryAddSingleton<IAiConnectionRepository, NoOpAiConnectionRepository>();
         services.TryAddSingleton<IProCursorGateway, NoOpProCursorGateway>();

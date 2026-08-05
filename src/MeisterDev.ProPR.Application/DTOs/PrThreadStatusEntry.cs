@@ -9,8 +9,11 @@ namespace MeisterDev.ProPR.Application.DTOs;
 ///     Lightweight projection of a single PR reviewer thread used by
 ///     <see cref="MeisterDev.ProPR.Application.Interfaces.IReviewerThreadStatusFetcher" />.
 /// </summary>
-/// <param name="ThreadId">ADO thread identifier.</param>
-/// <param name="Status">Current ADO thread status string (e.g. <c>Active</c>, <c>Fixed</c>).</param>
+/// <param name="ThreadId">
+///     The identifier the provider itself uses for the thread, carried verbatim. <c>null</c> where the
+///     provider has no thread object of its own and the threads were grouped client-side.
+/// </param>
+/// <param name="Status">Current provider thread status string (e.g. <c>Active</c>, <c>Fixed</c>).</param>
 /// <param name="FilePath">File path the thread is anchored to; null for PR-level threads.</param>
 /// <param name="CommentHistory">
 ///     All non-system comments (<c>commentType != "system"</c>) concatenated chronologically as
@@ -28,7 +31,7 @@ namespace MeisterDev.ProPR.Application.DTOs;
 ///     does not supply the signal.
 /// </param>
 public sealed record PrThreadStatusEntry(
-    long ThreadId,
+    string? ThreadId,
     string Status,
     string? FilePath,
     string CommentHistory,

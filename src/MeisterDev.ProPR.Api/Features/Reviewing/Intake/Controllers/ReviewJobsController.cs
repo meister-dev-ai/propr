@@ -11,6 +11,7 @@ using MeisterDev.ProPR.Application.Features.Reviewing.Intake.Commands.SubmitRevi
 using MeisterDev.ProPR.Application.Features.Reviewing.Intake.Commands.SubmitReviewJob;
 using MeisterDev.ProPR.Application.Features.Reviewing.Intake.Dtos;
 using MeisterDev.ProPR.Application.Features.Reviewing.Intake.Queries.GetReviewJobStatus;
+using MeisterDev.ProPR.Application.Interfaces;
 using MeisterDev.ProPR.Domain.Enums;
 using MeisterDev.ProPR.Domain.ValueObjects;
 using Microsoft.AspNetCore.Mvc;
@@ -230,19 +231,22 @@ public sealed partial class ReviewJobsController(
         }
     }
 
-    /// <summary>Manually restart a failed review job.</summary>
+    /// <summary>Manually restart a failed or budget-blocked review job or thread pass.</summary>
     /// <remarks>
-    ///     Failed reviews are not auto-continued (to avoid looping on deterministic failures), so a restart must be
-    ///     triggered explicitly. Any user with at least <see cref="ClientRole.ClientUser" /> for the job's owning client
-    ///     may restart it — administrator rights are not required.
+    ///     Failed reviews are not auto-continued (to avoid looping on deterministic failures), and budget recovery
+    ///     is deliberately an operator decision, so a restart must be triggered explicitly. Any user with at least
+    ///     <see cref="ClientRole.ClientUser" /> for the owning client may restart it, and administrator rights are not
+    ///     required. A thread pass restarts through the same route, because both are units of work over one pull
+    ///     request and an operator recovers them the same way.
     /// </remarks>
-    /// <param name="jobId">The identifier of the failed review job to restart.</param>
+    /// <param name="jobId">The identifier of the review job or thread pass to restart.</param>
+    /// <param name="threadPasses">Repository used when the identifier belongs to a thread pass.</param>
     /// <param name="ct">Cancellation token.</param>
-    /// <response code="202">Restart accepted; a new pending review job was queued.</response>
+    /// <response code="202">Restart accepted; the work was queued again.</response>
     /// <response code="401">Missing or invalid credentials.</response>
     /// <response code="403">Caller lacks access to the job's owning client.</response>
     /// <response code="404">Job not found.</response>
-    /// <response code="409">Job is not in a failed state, or an active job already exists for this PR revision.</response>
+    /// <response code="409">Job is not in a restartable state, or an active job already exists for this PR revision.</response>
     [HttpPost("/reviewing/jobs/{jobId:guid}/restart")]
     [HttpPost("/jobs/{jobId:guid}/restart")]
     [ProducesResponseType(typeof(ReviewJobRestartResponse), StatusCodes.Status202Accepted)]
@@ -250,7 +254,10 @@ public sealed partial class ReviewJobsController(
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     [ProducesResponseType(StatusCodes.Status409Conflict)]
-    public async Task<IActionResult> RestartReview(Guid jobId, CancellationToken ct)
+    public async Task<IActionResult> RestartReview(
+        Guid jobId,
+        [FromServices] IThreadPassJobRepository threadPasses,
+        CancellationToken ct)
     {
         var auth = AuthHelpers.RequireAuthenticated(this.HttpContext);
         if (auth is not null)
@@ -262,7 +269,7 @@ public sealed partial class ReviewJobsController(
         var status = await getReviewJobStatusHandler.HandleAsync(new GetReviewJobStatusQuery(jobId), ct);
         if (status is null)
         {
-            return this.NotFound();
+            return await this.RestartThreadPassAsync(jobId, threadPasses, ct);
         }
 
         var roleCheck = AuthHelpers.RequireClientRole(this.HttpContext, status.ClientId, ClientRole.ClientUser);
@@ -290,6 +297,37 @@ public sealed partial class ReviewJobsController(
                         jobId,
                         JobStatus.Pending.ToString().ToLowerInvariant()));
         }
+    }
+
+    /// <summary>
+    ///     Returns a budget-blocked or failed thread pass to the queue. The restarted pass keeps its identifier,
+    ///     because a pass is unique on the trigger state that created it and a clone would be refused as its own
+    ///     duplicate.
+    /// </summary>
+    private async Task<IActionResult> RestartThreadPassAsync(
+        Guid jobId,
+        IThreadPassJobRepository threadPasses,
+        CancellationToken ct)
+    {
+        var pass = await threadPasses.GetByIdAsync(jobId, ct);
+        if (pass is null)
+        {
+            return this.NotFound();
+        }
+
+        var roleCheck = AuthHelpers.RequireClientRole(this.HttpContext, pass.ClientId, ClientRole.ClientUser);
+        if (roleCheck is not null)
+        {
+            return roleCheck;
+        }
+
+        if (!await threadPasses.TryRestartAsync(jobId, ct))
+        {
+            return this.Conflict(new { error = "Only failed or budget-blocked thread passes can be restarted." });
+        }
+
+        LogThreadPassRestarted(logger, jobId);
+        return this.Accepted(new ReviewJobRestartResponse(jobId, jobId, JobStatus.Pending.ToString().ToLowerInvariant()));
     }
 
     /// <summary>Manually stop a running or queued review job.</summary>
@@ -589,6 +627,9 @@ public sealed partial class ReviewJobsController(
 
     [LoggerMessage(Level = LogLevel.Information, Message = "Failed review job {SourceJobId} restarted as new job {NewJobId}")]
     private static partial void LogReviewJobRestarted(ILogger logger, Guid sourceJobId, Guid newJobId);
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "Thread pass {ThreadPassJobId} returned to the queue")]
+    private static partial void LogThreadPassRestarted(ILogger logger, Guid threadPassJobId);
 
     [LoggerMessage(Level = LogLevel.Information, Message = "Review job {JobId} stopped by client administrator")]
     private static partial void LogReviewJobStopped(ILogger logger, Guid jobId);

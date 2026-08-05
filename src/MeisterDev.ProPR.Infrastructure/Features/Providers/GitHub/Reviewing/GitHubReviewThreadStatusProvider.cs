@@ -1,11 +1,13 @@
 // Copyright (c) Andreas Rain.
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
+using System.Globalization;
 using System.Net;
 using System.Net.Http.Json;
 using System.Text;
 using System.Text.Json.Serialization;
 using MeisterDev.ProPR.Application.DTOs;
+using MeisterDev.ProPR.Application.Features.ThreadOwnership;
 using MeisterDev.ProPR.Domain.Enums;
 using MeisterDev.ProPR.Domain.ValueObjects;
 using MeisterDev.ProPR.Infrastructure.Features.Providers.Common;
@@ -18,7 +20,7 @@ internal sealed class GitHubReviewThreadStatusProvider(
     IHttpClientFactory httpClientFactory) : IProviderReviewerThreadStatusFetcher
 {
     private const string GitHubReviewThreadsQuery =
-        "query ReviewThreads($owner: String!, $name: String!, $pullRequestNumber: Int!) { repository(owner: $owner, name: $name) { pullRequest(number: $pullRequestNumber) { reviewThreads(first: 100) { nodes { isResolved isOutdated path line comments(first: 100) { nodes { databaseId body createdAt author { login } } } } } } } }";
+        "query ReviewThreads($owner: String!, $name: String!, $pullRequestNumber: Int!) { repository(owner: $owner, name: $name) { pullRequest(number: $pullRequestNumber) { reviewThreads(first: 100) { nodes { id isResolved isOutdated path line comments(first: 100) { nodes { databaseId body createdAt author { login } } } } } } } }";
 
     public ScmProvider Provider => ScmProvider.GitHub;
 
@@ -27,31 +29,32 @@ internal sealed class GitHubReviewThreadStatusProvider(
         string projectId,
         string repositoryId,
         int pullRequestId,
-        Guid reviewerId,
+        ThreadOwnershipResolver ownership,
         Guid clientId,
         CancellationToken ct = default)
     {
+        ArgumentNullException.ThrowIfNull(ownership);
+
         var host = new ProviderHostRef(ScmProvider.GitHub, organizationUrl);
         var context = await connectionVerifier.VerifyAsync(clientId, host, ct);
         var repositoryPath = await this.ResolveRepositoryPathAsync(context, host, repositoryId, ct);
         var threads = await this.GetReviewThreadsAsync(context, host, repositoryPath, pullRequestId, ct);
-        var authoredLogin = context.AuthenticatedActorLogin;
+
+        // GitHub names an author by login, and the connection verification above is the only place the
+        // authenticated one exists, so the pass's resolver is completed with it here. It is contributed into
+        // the instance the caller handed down, so the consumers that run later in the same pass, and never see
+        // a connection of their own, decide with the identity too.
+        ownership.ContributeIdentity(new ThreadOwnerIdentity(Login: context.AuthenticatedActorLogin));
 
         return threads
             .Where(thread => thread.Comments.Nodes.Count > 0)
-            .Where(thread => string.Equals(
-                thread.Comments.Nodes[0].Author?.Login,
-                authoredLogin,
-                StringComparison.OrdinalIgnoreCase))
+            .Where(thread => ownership.OwnsThread(ToCommentRef(thread.Comments.Nodes[0])))
             .Select(thread => new PrThreadStatusEntry(
-                thread.Comments.Nodes[0].DatabaseId ?? 0,
+                thread.Id,
                 thread.IsResolved ? "Fixed" : "Active",
                 thread.Path,
                 BuildCommentHistory(thread.Comments.Nodes),
-                thread.Comments.Nodes.Count(comment => !string.Equals(
-                    comment.Author?.Login,
-                    authoredLogin,
-                    StringComparison.OrdinalIgnoreCase)),
+                thread.Comments.Nodes.Count(comment => !ownership.OwnsComment(ToCommentRef(comment))),
                 // GitHub's isOutdated only means the thread's diff hunk no longer maps onto the current
                 // diff: it is also set by rebases and unrelated churn, and never confirms the flagged
                 // concern was addressed. Treat an outdated thread as undetermined rather than a corroborated
@@ -153,6 +156,16 @@ internal sealed class GitHubReviewThreadStatusProvider(
                ?? [];
     }
 
+    // A GitHub comment id is unique within the pull request, so provenance resolves on it alone. The thread
+    // id recorded at publish time is the review id, which this query does not return and does not need.
+    private static ThreadCommentRef ToCommentRef(GitHubReviewCommentNode comment)
+    {
+        return new ThreadCommentRef(
+            null,
+            comment.DatabaseId?.ToString(CultureInfo.InvariantCulture),
+            AuthorLogin: comment.Author?.Login);
+    }
+
     private static string BuildCommentHistory(IReadOnlyList<GitHubReviewCommentNode> comments)
     {
         var builder = new StringBuilder();
@@ -193,6 +206,7 @@ internal sealed class GitHubReviewThreadStatusProvider(
     private sealed record GitHubReviewThreadsConnection([property: JsonPropertyName("nodes")] IReadOnlyList<GitHubReviewThreadNode>? Nodes);
 
     private sealed record GitHubReviewThreadNode(
+        [property: JsonPropertyName("id")] string? Id,
         [property: JsonPropertyName("isResolved")]
         bool IsResolved,
         [property: JsonPropertyName("isOutdated")]

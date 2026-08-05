@@ -187,6 +187,16 @@ public sealed class DbClientRegistry(
     }
 
     /// <inheritdoc />
+    public async Task<bool> GetReviewEveryIncrementEnabledAsync(Guid clientId, CancellationToken ct = default)
+    {
+        return await dbContext.Clients
+                   .Where(c => c.Id == clientId)
+                   .Select(c => (bool?)c.ReviewEveryIncrementEnabled)
+                   .FirstOrDefaultAsync(ct)
+               ?? false;
+    }
+
+    /// <inheritdoc />
     public async Task<CommentSeverity> GetMinimumSeverityToPostAsync(Guid clientId, CancellationToken ct = default)
     {
         // A missing client yields default(CommentSeverity) == Info, i.e. publish everything.

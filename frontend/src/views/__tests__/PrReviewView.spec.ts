@@ -70,7 +70,7 @@ describe('PrReviewView', () => {
       breakdownConsistent: true,
       jobs: [{ jobId: 'job-1', status: 2, submittedAt: '2026-04-25T10:00:00Z', completedAt: '2026-04-25T10:05:00Z', findingCount: 1, totalInputTokens: 1600, totalOutputTokens: 400, tokenBreakdown: [] }],
       originatedMemoryCount: 1,
-      originatedMemories: [{ memoryRecordId: 'mem-1', threadId: 12, filePath: 'src/foo.ts', resolutionSummaryExcerpt: 'Resolved issue', source: 0, storedAt: '2026-04-25T10:06:00Z' }],
+      originatedMemories: [{ memoryRecordId: 'mem-1', threadId: '12', filePath: 'src/foo.ts', resolutionSummaryExcerpt: 'Resolved issue', source: 0, storedAt: '2026-04-25T10:06:00Z' }],
       contributedMemoryCount: 0,
       contributedMemories: [],
       totalEstimatedCostUsd: 1.234567,

@@ -92,6 +92,31 @@ internal sealed class ProviderPullRequestFetcher(
             cancellationToken);
     }
 
+    public async Task<PullRequest> FetchThreadContextAsync(
+        string organizationUrl,
+        string projectId,
+        string repositoryId,
+        int pullRequestId,
+        int iterationId,
+        Guid? clientId = null,
+        CancellationToken cancellationToken = default)
+    {
+        var provider = await this.ResolveProviderAsync(organizationUrl, clientId, cancellationToken);
+        if (!this._providerFetchersByProvider.TryGetValue(provider, out var fetcher))
+        {
+            throw new InvalidOperationException($"No pull-request fetcher is registered for provider {provider}.");
+        }
+
+        return await fetcher.FetchThreadContextAsync(
+            organizationUrl,
+            projectId,
+            repositoryId,
+            pullRequestId,
+            iterationId,
+            clientId,
+            cancellationToken);
+    }
+
     public async Task<IReadOnlyList<PrCommentThread>> FetchThreadsAsync(
         string organizationUrl,
         string projectId,

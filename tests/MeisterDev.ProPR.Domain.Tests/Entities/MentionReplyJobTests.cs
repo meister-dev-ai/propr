@@ -18,7 +18,7 @@ public sealed class MentionReplyJobTests
             "proj",
             "repo",
             42,
-            7,
+            "7",
             9,
             "@meister-bot please help");
 
@@ -45,7 +45,7 @@ public sealed class MentionReplyJobTests
             "proj",
             "repo",
             42,
-            7,
+            "7",
             9,
             "@meister-bot please help",
             "src/file.cs",

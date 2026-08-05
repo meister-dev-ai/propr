@@ -32,6 +32,19 @@ internal sealed class ReviewPrScanConfiguration : IEntityTypeConfiguration<Revie
             .HasColumnName("last_processed_commit_id")
             .IsRequired();
 
+        builder.Property(s => s.LastThreadPassRevisionKey)
+            .HasColumnName("last_thread_pass_revision_key")
+            .HasDefaultValue(string.Empty)
+            .IsRequired();
+
+        builder.Property(s => s.PendingReviewRevisionKey)
+            .HasColumnName("pending_review_revision_key")
+            .HasDefaultValue(string.Empty)
+            .IsRequired();
+
+        builder.Property(s => s.PendingReviewDetectedAt)
+            .HasColumnName("pending_review_detected_at");
+
         builder.Property(s => s.UpdatedAt)
             .HasColumnName("updated_at")
             .IsRequired();

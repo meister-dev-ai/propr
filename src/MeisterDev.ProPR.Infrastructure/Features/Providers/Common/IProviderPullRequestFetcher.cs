@@ -42,6 +42,31 @@ internal interface IProviderPullRequestFetcher
     }
 
     /// <summary>
+    ///     Fetches pull-request metadata and comment threads with no changed-file content, for the thread
+    ///     pass. Default implementation performs a full fetch, which every adapter overrides; the fallback
+    ///     exists so a new adapter is correct before it is cheap.
+    /// </summary>
+    async Task<PullRequest> FetchThreadContextAsync(
+        string organizationUrl,
+        string projectId,
+        string repositoryId,
+        int pullRequestId,
+        int iterationId,
+        Guid? clientId = null,
+        CancellationToken cancellationToken = default)
+    {
+        return await this.FetchAsync(
+            organizationUrl,
+            projectId,
+            repositoryId,
+            pullRequestId,
+            iterationId,
+            null,
+            clientId,
+            cancellationToken);
+    }
+
+    /// <summary>
     ///     Default implementation: performs a full fetch and extracts just the ref info.
     ///     ADO overrides this with a lightweight single-API-call implementation.
     /// </summary>

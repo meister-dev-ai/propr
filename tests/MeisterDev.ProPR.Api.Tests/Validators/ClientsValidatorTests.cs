@@ -318,6 +318,16 @@ public sealed class ClientsValidatorTests
     }
 
     [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void PatchClient_ReviewEveryIncrementEnabledBoolean_Passes(bool value)
+    {
+        var result = PatchClientValidator.Validate(new PatchClientRequest(ReviewEveryIncrementEnabled: value));
+
+        Assert.True(result.IsValid);
+    }
+
+    [Theory]
     [InlineData(ReviewReasoningEffort.None)]
     [InlineData(ReviewReasoningEffort.Low)]
     [InlineData(ReviewReasoningEffort.Medium)]

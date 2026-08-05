@@ -5,7 +5,9 @@ using MeisterDev.ProPR.Application.DTOs;
 using MeisterDev.ProPR.Application.Features.Crawling.Execution.Models;
 using MeisterDev.ProPR.Application.Features.Crawling.Execution.Ports;
 using MeisterDev.ProPR.Application.Features.Crawling.Execution.Services;
+using MeisterDev.ProPR.Application.Features.ReviewArchive;
 using MeisterDev.ProPR.Application.Features.Reviewing.Execution.Models;
+using MeisterDev.ProPR.Application.Features.ThreadOwnership;
 using MeisterDev.ProPR.Application.Interfaces;
 using MeisterDev.ProPR.Application.Support;
 using MeisterDev.ProPR.Domain.Entities;
@@ -26,11 +28,12 @@ public sealed partial class PrCrawlService(
     ILogger<PrCrawlService> logger,
     IReviewerThreadStatusFetcher? threadStatusFetcher = null,
     IThreadMemoryService? threadMemoryService = null,
-    IReviewPrScanRepository? prScanRepository = null,
+    IReviewPrScanThreadStatusStore? prScanRepository = null,
     IPullRequestSynchronizationService? pullRequestSynchronizationService = null,
     IProviderActivationService? providerActivationService = null,
     IClientRegistry? clientRegistry = null,
-    ICodeInsightDispositionService? codeInsightDispositionService = null) : IPrCrawlService
+    ICodeInsightDispositionService? codeInsightDispositionService = null,
+    IPostedCommentOriginStore? postedCommentOriginStore = null) : IPrCrawlService
 {
     /// <summary>
     ///     Runs one crawl cycle across all active configurations, creating review jobs for newly discovered pull requests.
@@ -110,11 +113,7 @@ public sealed partial class PrCrawlService(
                 continue;
             }
 
-            if (!await this.ShouldEnqueueReviewAsync(
-                    config,
-                    pr,
-                    reviewerContext.EffectiveReviewerId,
-                    cancellationToken))
+            if (!await this.ShouldEnqueueReviewAsync(config, pr, cancellationToken))
             {
                 continue;
             }
@@ -251,18 +250,13 @@ public sealed partial class PrCrawlService(
 
         foreach (var pr in assignedPrs)
         {
-            await this.RunThreadMemoryStateMachineAsync(
-                config,
-                pr,
-                reviewerContext.EffectiveReviewerId,
-                cancellationToken);
+            await this.RunThreadMemoryStateMachineAsync(config, pr, cancellationToken);
         }
     }
 
     private async Task<bool> ShouldEnqueueReviewAsync(
         CrawlConfigurationDto config,
         AssignedCodeReviewRef pr,
-        Guid? reviewerId,
         CancellationToken ct)
     {
         var existingJob = jobs.FindActiveJob(
@@ -347,7 +341,7 @@ public sealed partial class PrCrawlService(
                 config.ProviderProjectKey,
                 pr.Repository.ExternalRepositoryId,
                 pr.CodeReview.Number,
-                reviewerId ?? Guid.Empty,
+                await this.ResolveThreadOwnershipAsync(config, pr, ct),
                 config.ClientId,
                 ct);
 
@@ -452,15 +446,11 @@ public sealed partial class PrCrawlService(
     {
         if (clientRegistry is null)
         {
-            return new ResolvedReviewer(null, null);
+            return new ResolvedReviewer(null);
         }
 
         var host = new ProviderHostRef(config.Provider, config.ProviderScopePath);
-        var configuredTriggerReviewer = await clientRegistry.GetReviewerIdentityAsync(config.ClientId, host, ct);
-        var effectiveReviewer = configuredTriggerReviewer
-                                ?? await clientRegistry.GetEffectiveReviewerIdentityAsync(config.ClientId, host, ct);
-
-        return new ResolvedReviewer(configuredTriggerReviewer, ResolveReviewerId(effectiveReviewer));
+        return new ResolvedReviewer(await clientRegistry.GetReviewerIdentityAsync(config.ClientId, host, ct));
     }
 
     private async Task<string> ResolveReviewPipelineProfileIdAsync(Guid clientId, CancellationToken ct)
@@ -476,27 +466,49 @@ public sealed partial class PrCrawlService(
             : configuredProfileId;
     }
 
-    private static Guid? ResolveReviewerId(ReviewerIdentity? reviewer)
+    /// <summary>
+    ///     Builds the ownership answer for one pull request from a single provenance read.
+    /// </summary>
+    /// <remarks>
+    ///     No identity is known here: nothing on this path holds a live provider connection, so the
+    ///     thread-status adapter contributes the identity its own handshake resolves into this same instance.
+    ///     Keyed on the same repository identity a review job for this pull request carries, which is what its
+    ///     provenance rows were recorded under.
+    /// </remarks>
+    private async Task<ThreadOwnershipResolver> ResolveThreadOwnershipAsync(
+        CrawlConfigurationDto config,
+        AssignedCodeReviewRef pr,
+        CancellationToken ct)
     {
-        if (reviewer is null)
+        if (postedCommentOriginStore is null)
         {
-            return null;
+            return ThreadOwnershipResolver.None;
         }
 
-        if (Guid.TryParse(reviewer.ExternalUserId, out var reviewerId))
+        try
         {
-            return reviewerId;
+            var provenance = await postedCommentOriginStore.GetJobIdsForPullRequestAsync(
+                config.ClientId,
+                pr.Repository.ExternalRepositoryId,
+                pr.CodeReview.Number,
+                ct);
+            return ThreadOwnershipResolver.Create(
+                provenance,
+                ThreadOwnerIdentity.None,
+                ProviderCommentIdScopes.For(config.Provider));
         }
-
-        return reviewer.Host.Provider != ScmProvider.AzureDevOps
-            ? StableGuidGenerator.Create(reviewer.ExternalUserId)
-            : null;
+        catch (Exception ex) when (!ct.IsCancellationRequested)
+        {
+            // Provenance is enrichment, never a reason to stop crawling. Without it the adapter's own
+            // authenticated identity still decides.
+            LogThreadOwnershipProvenanceLookupFailed(logger, pr.CodeReview.Number, config.ClientId, ex);
+            return ThreadOwnershipResolver.None;
+        }
     }
 
     private async Task RunThreadMemoryStateMachineAsync(
         CrawlConfigurationDto config,
         AssignedCodeReviewRef pr,
-        Guid? reviewerId,
         CancellationToken ct)
     {
         try
@@ -520,7 +532,7 @@ public sealed partial class PrCrawlService(
                 config.ProviderProjectKey,
                 pr.Repository.ExternalRepositoryId,
                 pr.CodeReview.Number,
-                reviewerId ?? Guid.Empty,
+                await this.ResolveThreadOwnershipAsync(config, pr, ct),
                 config.ClientId,
                 ct);
 
@@ -534,6 +546,13 @@ public sealed partial class PrCrawlService(
             // Process each thread: detect transitions and dispatch domain events.
             foreach (var thread in currentThreads)
             {
+                // A provider that groups its threads client-side hands back no identifier, and a transition
+                // cannot be attributed to a stored row without one.
+                if (string.IsNullOrWhiteSpace(thread.ThreadId))
+                {
+                    continue;
+                }
+
                 var stored = scan.Threads.FirstOrDefault(t => t.ThreadId == thread.ThreadId);
                 var previousStatus = stored?.LastSeenStatus;
                 var currentIntent = ThreadResolutionStatusInterpreter.InterpretIntent(thread.Status);
@@ -595,45 +614,29 @@ public sealed partial class PrCrawlService(
         IReadOnlyList<PrThreadStatusEntry> currentThreads,
         CancellationToken ct)
     {
-        // Build an updated scan with the new LastSeenStatus values, preserving all other fields.
-        var updatedScan = new ReviewPrScan(
-            existingScan.Id,
+        var statusByThreadId = new Dictionary<string, string?>(StringComparer.Ordinal);
+        foreach (var thread in currentThreads)
+        {
+            if (string.IsNullOrWhiteSpace(thread.ThreadId))
+            {
+                continue;
+            }
+
+            statusByThreadId[thread.ThreadId] = thread.Status;
+        }
+
+        if (statusByThreadId.Count == 0)
+        {
+            return;
+        }
+
+        await prScanRepository!.SetLastSeenStatusesAsync(
             existingScan.ClientId,
             existingScan.RepositoryId,
             existingScan.PullRequestId,
-            existingScan.LastProcessedCommitId);
-
-        foreach (var thread in currentThreads)
-        {
-            var existing = existingScan.Threads.FirstOrDefault(t => t.ThreadId == thread.ThreadId);
-            updatedScan.Threads.Add(
-                new ReviewPrScanThread
-                {
-                    ReviewPrScanId = existingScan.Id,
-                    ThreadId = thread.ThreadId,
-                    LastSeenReplyCount = existing?.LastSeenReplyCount ?? 0,
-                    LastSeenStatus = thread.Status,
-                });
-        }
-
-        // Preserve threads not returned by the status fetcher (only reviewer-owned threads are returned).
-        foreach (var oldThread in existingScan.Threads)
-        {
-            if (!currentThreads.Any(t => t.ThreadId == oldThread.ThreadId))
-            {
-                updatedScan.Threads.Add(
-                    new ReviewPrScanThread
-                    {
-                        ReviewPrScanId = existingScan.Id,
-                        ThreadId = oldThread.ThreadId,
-                        LastSeenReplyCount = oldThread.LastSeenReplyCount,
-                        LastSeenStatus = oldThread.LastSeenStatus,
-                    });
-            }
-        }
-
-        await prScanRepository!.UpsertAsync(updatedScan, ct);
+            statusByThreadId,
+            ct);
     }
 
-    private sealed record ResolvedReviewer(ReviewerIdentity? ConfiguredTriggerReviewer, Guid? EffectiveReviewerId);
+    private sealed record ResolvedReviewer(ReviewerIdentity? ConfiguredTriggerReviewer);
 }

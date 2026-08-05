@@ -95,7 +95,7 @@ public sealed class PostedFindingRepository(
                 // is taken per group rather than from the first record: a thread id is only unique within one
                 // pull request, so probing a mixed batch under one scope would both miss existing rows and
                 // discard legitimate new ones.
-                var seen = new HashSet<(Guid ClientId, string RepositoryId, int PullRequestId, long ThreadId)>();
+                var seen = new HashSet<(Guid ClientId, string RepositoryId, int PullRequestId, string ThreadId)>();
                 var added = 0;
 
                 foreach (var scope in records.GroupBy(r => new { r.ClientId, r.RepositoryId, r.PullRequestId }))

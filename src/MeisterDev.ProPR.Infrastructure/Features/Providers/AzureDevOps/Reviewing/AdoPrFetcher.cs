@@ -1,6 +1,7 @@
 // Copyright (c) Andreas Rain.
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
+using System.Globalization;
 using MeisterDev.ProPR.Application.Features.Reviewing.Execution.Ports;
 using MeisterDev.ProPR.Application.Interfaces;
 using MeisterDev.ProPR.Domain.Enums;
@@ -243,6 +244,63 @@ public sealed partial class AdoPrFetcher(
         var diff = BuildUnifiedDiff(baseContent, headContent, repoRelativePath);
 
         return new ChangedFile(repoRelativePath, changeType, headContent, diff);
+    }
+
+    public async Task<PullRequest> FetchThreadContextAsync(
+        string organizationUrl,
+        string projectId,
+        string repositoryId,
+        int pullRequestId,
+        int iterationId,
+        Guid? clientId = null,
+        CancellationToken cancellationToken = default)
+    {
+        // Two API calls: the pull request itself and its threads. No iteration changes and no file content,
+        // because whether a reviewer thread needs answering is decided from the conversation alone. A pass
+        // that then wants one file's diff asks for that one file.
+        var credentials = await AdoProviderAdapterHelpers.ResolveCredentialsAsync(
+            connectionRepository,
+            clientId,
+            organizationUrl,
+            cancellationToken);
+        var connection = await connectionFactory.GetConnectionAsync(organizationUrl, credentials, cancellationToken);
+        await connection.ConnectAsync(cancellationToken);
+        var authorizedIdentityId = connection.AuthorizedIdentity?.Id;
+        var gitClient = await connection.GetClientAsync<GitHttpClient>(cancellationToken);
+
+        var pr = await gitClient.GetPullRequestAsync(
+            projectId,
+            repositoryId,
+            pullRequestId,
+            cancellationToken: cancellationToken);
+
+        var threads = await this.LoadThreadsAsync(
+            gitClient,
+            projectId,
+            repositoryId,
+            pullRequestId,
+            cancellationToken);
+
+        return new PullRequest(
+            organizationUrl,
+            projectId,
+            repositoryId,
+            pr.Repository?.Name ?? repositoryId,
+            pullRequestId,
+            iterationId,
+            pr.Title ?? "",
+            pr.Description,
+            pr.SourceRefName ?? "",
+            pr.TargetRefName ?? "",
+            [],
+            pr.Status switch
+            {
+                PullRequestStatus.Abandoned => PrStatus.Abandoned,
+                PullRequestStatus.Completed => PrStatus.Completed,
+                _ => PrStatus.Active,
+            },
+            threads,
+            AuthorizedIdentityId: authorizedIdentityId);
     }
 
     public async Task<IReadOnlyList<PrCommentThread>> FetchThreadsAsync(
@@ -606,6 +664,10 @@ public sealed partial class AdoPrFetcher(
             "Failed to fetch existing comment threads for PR #{PullRequestId}. Proceeding without thread context.")]
     private static partial void LogThreadFetchWarning(ILogger logger, int pullRequestId, Exception ex);
 
+    // The review path treats an unreadable thread list as no thread context and carries on with the file
+    // review, which is a deliberate degradation. The thread pass cannot: for it, "no threads" means the
+    // pull request has been dealt with. The two callers therefore differ in whether the failure is swallowed,
+    // and never in how the threads are read.
     private async Task<IReadOnlyList<PrCommentThread>> FetchExistingThreadsAsync(
         GitHttpClient gitClient,
         string projectId,
@@ -615,41 +677,51 @@ public sealed partial class AdoPrFetcher(
     {
         try
         {
-            var rawThreads = await gitClient.GetThreadsAsync(
-                projectId,
-                repositoryId,
-                pullRequestId,
-                cancellationToken: cancellationToken);
-
-            return (rawThreads ?? [])
-                .Where(t => !t.IsDeleted && t.Comments?.Count > 0)
-                .Select(t => new PrCommentThread(
-                    t.Id,
-                    t.ThreadContext?.FilePath,
-                    t.ThreadContext?.RightFileStart?.Line,
-                    t.Comments!
-                        .Where(c => !c.IsDeleted)
-                        .Select(c => new PrThreadComment(
-                            c.Author?.DisplayName ?? "Unknown",
-                            c.Content ?? "",
-                            Guid.TryParse(c.Author?.Id, out var aid) ? aid : null,
-                            c.Id,
-                            c.PublishedDate != default
-                                ? new DateTimeOffset(c.PublishedDate, TimeSpan.Zero)
-                                : null,
-                            // Azure DevOps returns its own activity entries ("added a reviewer", a vote, a policy
-                            // result) through this same API, authored by a system identity and typed as System.
-                            c.CommentType == CommentType.System))
-                        .ToList()
-                        .AsReadOnly(),
-                    t.Status.ToString()))
-                .ToList()
-                .AsReadOnly();
+            return await this.LoadThreadsAsync(gitClient, projectId, repositoryId, pullRequestId, cancellationToken);
         }
         catch (Exception ex)
         {
             LogThreadFetchWarning(logger, pullRequestId, ex);
             return [];
         }
+    }
+
+    private async Task<IReadOnlyList<PrCommentThread>> LoadThreadsAsync(
+        GitHttpClient gitClient,
+        string projectId,
+        string repositoryId,
+        int pullRequestId,
+        CancellationToken cancellationToken)
+    {
+        var rawThreads = await gitClient.GetThreadsAsync(
+            projectId,
+            repositoryId,
+            pullRequestId,
+            cancellationToken: cancellationToken);
+
+        return (rawThreads ?? [])
+            .Where(t => !t.IsDeleted && t.Comments?.Count > 0)
+            .Select(t => new PrCommentThread(
+                t.Id.ToString(CultureInfo.InvariantCulture),
+                t.ThreadContext?.FilePath,
+                t.ThreadContext?.RightFileStart?.Line,
+                t.Comments!
+                    .Where(c => !c.IsDeleted)
+                    .Select(c => new PrThreadComment(
+                        c.Author?.DisplayName ?? "Unknown",
+                        c.Content ?? "",
+                        Guid.TryParse(c.Author?.Id, out var aid) ? aid : null,
+                        c.Id,
+                        c.PublishedDate != default
+                            ? new DateTimeOffset(c.PublishedDate, TimeSpan.Zero)
+                            : null,
+                        // Azure DevOps returns its own activity entries ("added a reviewer", a vote, a policy
+                        // result) through this same API, authored by a system identity and typed as System.
+                        c.CommentType == CommentType.System))
+                    .ToList()
+                    .AsReadOnly(),
+                t.Status.ToString()))
+            .ToList()
+            .AsReadOnly();
     }
 }

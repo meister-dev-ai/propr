@@ -77,7 +77,7 @@ public class ReviewOrchestrationServicePromptOverrideTests
                 Arg.Any<ReviewThreadRef>(),
                 Arg.Any<string>(),
                 Arg.Any<CancellationToken>())
-            .Returns(Task.CompletedTask);
+            .Returns(Task.FromResult<string?>(null));
         return threadReplyPublisher;
     }
 
@@ -111,7 +111,6 @@ public class ReviewOrchestrationServicePromptOverrideTests
         IPromptOverrideService promptOverrideService)
     {
         var reviewerManager = CreateReviewerManager();
-        var resolutionCore = Substitute.For<IAiCommentResolutionCore>();
         var reviewContextToolsFactory = Substitute.For<IReviewContextToolsFactory>();
         reviewContextToolsFactory
             .Create(Arg.Any<ReviewContextToolsRequest>())
@@ -159,7 +158,6 @@ public class ReviewOrchestrationServicePromptOverrideTests
             providerRegistry,
             clientRegistry,
             prScanRepository,
-            resolutionCore,
             Substitute.For<IProtocolRecorder>(),
             reviewContextToolsFactory,
             instructionFetcher,

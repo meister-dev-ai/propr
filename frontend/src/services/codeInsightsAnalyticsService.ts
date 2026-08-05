@@ -727,7 +727,6 @@ export interface CodeInsightImportOutcome {
   collectionDisabled: boolean
   reachedLimit: boolean
   findingsAlreadyHeld: number
-  threadsNotReplayable: number
 }
 
 /** What to replay, for one client. */

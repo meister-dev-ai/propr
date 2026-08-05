@@ -121,7 +121,7 @@ export interface PrJobSummaryDto {
 
 export interface ThreadMemorySummaryDto {
   memoryRecordId: string
-  threadId: number
+  threadId: string
   filePath: string | null
   resolutionSummaryExcerpt: string
   /** Serialized by JsonStringEnumConverter, so 'threadResolved' | 'adminDismissed'. */
@@ -143,6 +143,41 @@ export interface ContributingMemorySummaryDto {
   maxSimilarityScore: number | null
 }
 
+/**
+ * One pass over the pull request's conversation. Runs on its own cadence beside the file reviews, so an
+ * increment may carry a review, a thread pass, or both.
+ */
+export interface PrThreadPassSummaryDto {
+  threadPassId: string
+  /** ThreadPassJobStatus: 0 pending, 1 processing, 2 completed, 3 failed, 4 cancelled, 5 budgetHeld, 6 budgetExceeded, 7 skipped. */
+  status: number
+  createdAt: string
+  completedAt: string | null
+  threadCount: number
+  totalInputTokens: number
+  totalOutputTokens: number
+  totalEstimatedCostUsd?: number | null
+  costIsApproximate?: boolean
+  errorMessage?: string | null
+  budgetBlockScope?: number | null
+  budgetBlockCapKind?: number | null
+  budgetBlockThresholdUsd?: number | null
+  budgetBlockSpentUsd?: number | null
+}
+
+/**
+ * Says the pull request has moved past the revision it was reviewed at and was left there, because the
+ * client reviews only a pull request's first increment.
+ *
+ * Present only while that is true. The backend decides, so this view and the browser extension cannot
+ * disagree about whether a pull request is waiting; do not re-derive it from the two revision keys.
+ */
+export interface PendingReviewDto {
+  revisionKey: string
+  reviewedRevisionKey?: string | null
+  detectedAt?: string | null
+}
+
 export interface PrReviewViewDto {
   providerScopePath: string
   providerProjectKey: string
@@ -160,6 +195,26 @@ export interface PrReviewViewDto {
   contributedMemories: ContributingMemorySummaryDto[]
   totalEstimatedCostUsd?: number | null
   costIsApproximate?: boolean
+  threadPasses?: PrThreadPassSummaryDto[] | null
+  threadPassTotalEstimatedCostUsd?: number | null
+  threadPassCostIsApproximate?: boolean
+  pendingReview?: PendingReviewDto | null
+}
+
+/** Named outcomes of asking for a review by coordinates, each of which the UI shows to a person. */
+export type SubmitReviewByCoordinatesOutcome =
+  | 'submitted'
+  | 'duplicateActiveJob'
+  | 'notAuthorized'
+  | 'pullRequestNotFound'
+  | 'revisionUnresolvable'
+  | 'notSubmittable'
+  | 'submissionFailed'
+
+export interface ReviewByCoordinatesResult {
+  outcome: SubmitReviewByCoordinatesOutcome
+  jobId?: string | null
+  reason?: string | null
 }
 
 // ──────────────────────────────────────────────────────────────────────────────
@@ -393,6 +448,41 @@ export async function unblockPr(clientId: string, identity: PullRequestIdentity)
   if (error) {
     throw new Error(getApiErrorMessage(error, 'Failed to unblock the pull request.'))
   }
+}
+
+/**
+ * Asks for a review of the pull request as it stands now.
+ *
+ * ProPR reads the current commits from the provider itself, which is what makes this the way to review a
+ * branch that has moved on: the caller knows which pull request it means, not what revision it is at.
+ *
+ * Every well-formed request answers with a named outcome rather than throwing, because each one is
+ * something to show the person who clicked. Only a transport failure is an error.
+ */
+export async function submitReviewByCoordinates(
+  clientId: string,
+  identity: PullRequestIdentity,
+): Promise<ReviewByCoordinatesResult> {
+  const { data, error } = await createAdminClient().POST(
+    '/clients/{clientId}/reviewing/jobs/by-coordinates',
+    {
+      params: { path: { clientId } },
+      body: { ...identity },
+    },
+  )
+
+  if (data) {
+    return data as ReviewByCoordinatesResult
+  }
+
+  // A refusal carries the same named shape as an acceptance, on a non-2xx status. Only a body without one
+  // is a genuine failure to report.
+  const refusal = error as ReviewByCoordinatesResult | undefined
+  if (refusal?.outcome) {
+    return refusal
+  }
+
+  throw new Error(getApiErrorMessage(error, 'Failed to request a review of this pull request.'))
 }
 
 export interface JobsService {

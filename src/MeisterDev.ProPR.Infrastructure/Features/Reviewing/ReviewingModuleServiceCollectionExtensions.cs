@@ -7,6 +7,8 @@ using MeisterDev.ProPR.Application.Features.Reviewing.Execution.Models;
 using MeisterDev.ProPR.Application.Features.Reviewing.Execution.Ports;
 using MeisterDev.ProPR.Application.Features.Reviewing.Execution.Strategies.Ports;
 using MeisterDev.ProPR.Application.Features.Reviewing.ThreadMemory.Ports;
+using MeisterDev.ProPR.Application.Features.Reviewing.Threads.Ports;
+using MeisterDev.ProPR.Application.Features.Reviewing.Threads.Services;
 using MeisterDev.ProPR.Application.Interfaces;
 using MeisterDev.ProPR.Infrastructure.Features.Reviewing.ThreadMemory;
 using MeisterDev.ProPR.Application.Options;
@@ -32,6 +34,7 @@ using MeisterDev.ProPR.Infrastructure.Features.Reviewing.Intake.DependencyInject
 using MeisterDev.ProPR.Infrastructure.Features.Reviewing.PostedFindings;
 using MeisterDev.ProPR.Infrastructure.Features.Reviewing.Offline.DependencyInjection;
 using MeisterDev.ProPR.Infrastructure.Features.Reviewing.ThreadMemory.DependencyInjection;
+using MeisterDev.ProPR.Infrastructure.Features.Reviewing.Threads.Persistence;
 using MeisterDev.ProPR.Infrastructure.Repositories;
 using MeisterDev.ProPR.ProRV.Abstractions;
 using Microsoft.Extensions.Configuration;
@@ -99,6 +102,7 @@ public static class ReviewingModuleServiceCollectionExtensions
         if (hasDatabase)
         {
             services.AddScoped<IJobRepository, JobRepository>();
+            services.AddScoped<IThreadPassJobRepository, EfThreadPassJobRepository>();
             services.AddScoped<IReviewSpendAccumulator, ReviewSpendAccumulator>();
 
             // Search keywords on resolution memories, extracted from text the memory already carries. The
@@ -126,6 +130,9 @@ public static class ReviewingModuleServiceCollectionExtensions
         }
 
         services.AddReviewingExecution(selectedCommentRelevanceFilterId);
+
+        // The conversation runs on its own cadence, beside the file review rather than inside it.
+        services.AddScoped<IThreadPassService, ThreadPassService>();
 
         // Unified code-analysis abstraction: register both backends as concrete
         // singletons, then expose the composite router as the single IStructuralCodeAnalyzer every

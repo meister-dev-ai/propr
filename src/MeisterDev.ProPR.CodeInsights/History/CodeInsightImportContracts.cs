@@ -81,10 +81,6 @@ public sealed record CodeInsightImportRequest(
 ///     collection holds only part of cannot be repaired by importing over it, because identity is a finding's
 ///     position, and a gap between these numbers is the only way to see that.
 /// </param>
-/// <param name="ThreadsNotReplayable">
-///     Threads outcomes were asked for but could not be replayed against, because their provider thread id is not
-///     the numeric kind the outcome path keys on. An explained zero rather than an unexplained one.
-/// </param>
 public sealed record CodeInsightImportResult(
     int JobsRead,
     int JobsImported,
@@ -96,8 +92,7 @@ public sealed record CodeInsightImportResult(
     int HumanThreadsReplayed,
     bool CollectionDisabled,
     bool ReachedLimit = false,
-    int FindingsAlreadyHeld = 0,
-    int ThreadsNotReplayable = 0)
+    int FindingsAlreadyHeld = 0)
 {
     /// <summary>The result of a run the gate refused.</summary>
     public static CodeInsightImportResult Gated { get; } = new(0, 0, 0, 0, 0, 0, 0, 0, true);

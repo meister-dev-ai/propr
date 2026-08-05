@@ -1,6 +1,7 @@
 // Copyright (c) Andreas Rain.
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
+using System.Globalization;
 using MeisterDev.ProPR.Domain.Entities;
 using MeisterDev.ProPR.Domain.Enums;
 using MeisterDev.ProPR.Infrastructure.Data;
@@ -79,7 +80,7 @@ public sealed class ThreadMemoryRepositoryTests(PostgresContainerFixture fixture
         await this._repo.UpsertAsync(record);
 
         var stored = await this._db.ThreadMemoryRecords
-            .FirstOrDefaultAsync(r => r.ClientId == ClientA && r.ThreadId == 101);
+            .FirstOrDefaultAsync(r => r.ClientId == ClientA && r.ThreadId == "101");
         Assert.NotNull(stored);
         Assert.Equal("src/Foo.cs", stored.FilePath);
     }
@@ -98,7 +99,7 @@ public sealed class ThreadMemoryRepositoryTests(PostgresContainerFixture fixture
 
         var stored = await this._db.ThreadMemoryRecords
             .AsNoTracking()
-            .FirstOrDefaultAsync(r => r.ClientId == ClientA && r.ThreadId == 110);
+            .FirstOrDefaultAsync(r => r.ClientId == ClientA && r.ThreadId == "110");
         Assert.NotNull(stored);
         Assert.Equal(ThreadResolutionIntent.AcceptedByHuman, stored.ResolutionIntent);
         Assert.Equal(ResolutionClarity.AcceptedWithoutChange, stored.ResolutionClarity);
@@ -127,7 +128,7 @@ public sealed class ThreadMemoryRepositoryTests(PostgresContainerFixture fixture
 
         var stored = await this._db.ThreadMemoryRecords
             .AsNoTracking()
-            .SingleAsync(r => r.ClientId == ClientA && r.ThreadId == 113);
+            .SingleAsync(r => r.ClientId == ClientA && r.ThreadId == "113");
         Assert.Equal(ThreadResolutionIntent.AcceptedByHuman, stored.ResolutionIntent);
         Assert.Equal(ResolutionClarity.AcceptedWithoutChange, stored.ResolutionClarity);
     }
@@ -141,7 +142,7 @@ public sealed class ThreadMemoryRepositoryTests(PostgresContainerFixture fixture
 
         var stored = await this._db.ThreadMemoryRecords
             .AsNoTracking()
-            .FirstOrDefaultAsync(r => r.ClientId == ClientA && r.ThreadId == 111);
+            .FirstOrDefaultAsync(r => r.ClientId == ClientA && r.ThreadId == "111");
         Assert.NotNull(stored);
         Assert.Null(stored.ResolutionIntent);
         Assert.Null(stored.ResolutionClarity);
@@ -160,7 +161,7 @@ public sealed class ThreadMemoryRepositoryTests(PostgresContainerFixture fixture
 
         var matches = await this._repo.FindSimilarAsync(ClientA, V(1f), 5, 0.5f);
 
-        var match = Assert.Single(matches, m => m.ThreadId == 112);
+        var match = Assert.Single(matches, m => m.ThreadId == "112");
         Assert.Equal(ThreadResolutionIntent.AcceptedByHuman, match.Intent);
         Assert.Equal(ResolutionClarity.Undetermined, match.Clarity);
     }
@@ -180,11 +181,11 @@ public sealed class ThreadMemoryRepositoryTests(PostgresContainerFixture fixture
         var semantic = await this._repo.FindSimilarInPullRequestAsync(ClientA, RepoId, 88, V(1f), 5, 0.5f);
         var byPath = await this._repo.FindByPullRequestFilePathAsync(ClientA, RepoId, 88, "src/Outcome.cs", 5);
 
-        var semanticMatch = Assert.Single(semantic, m => m.ThreadId == 114);
+        var semanticMatch = Assert.Single(semantic, m => m.ThreadId == "114");
         Assert.Equal(ThreadResolutionIntent.AcceptedByHuman, semanticMatch.Intent);
         Assert.Equal(ResolutionClarity.AcceptedWithoutChange, semanticMatch.Clarity);
 
-        var pathMatch = Assert.Single(byPath, m => m.ThreadId == 114);
+        var pathMatch = Assert.Single(byPath, m => m.ThreadId == "114");
         Assert.Equal(ThreadResolutionIntent.AcceptedByHuman, pathMatch.Intent);
         Assert.Equal(ResolutionClarity.AcceptedWithoutChange, pathMatch.Clarity);
     }
@@ -215,7 +216,7 @@ public sealed class ThreadMemoryRepositoryTests(PostgresContainerFixture fixture
         await this._repo.UpsertAsync(updatedRecord);
 
         var stored = await this._db.ThreadMemoryRecords
-            .Where(r => r.ClientId == ClientA && r.ThreadId == 102)
+            .Where(r => r.ClientId == ClientA && r.ThreadId == "102")
             .ToListAsync();
         Assert.Single(stored);
         Assert.Equal("Updated resolution.", stored[0].ResolutionSummary);
@@ -229,7 +230,7 @@ public sealed class ThreadMemoryRepositoryTests(PostgresContainerFixture fixture
         await this._repo.BulkUpsertAsync(records);
 
         var count = await this._db.ThreadMemoryRecords.CountAsync(r =>
-            r.ClientId == ClientA && r.ThreadId >= 200 && r.ThreadId < 205);
+            r.ClientId == ClientA && r.ThreadId.StartsWith("20"));
         Assert.Equal(5, count);
     }
 
@@ -242,7 +243,7 @@ public sealed class ThreadMemoryRepositoryTests(PostgresContainerFixture fixture
         await this._repo.BulkUpsertAsync(records); // second run — same keys
 
         var count = await this._db.ThreadMemoryRecords.CountAsync(r =>
-            r.ClientId == ClientA && r.ThreadId >= 300 && r.ThreadId < 303);
+            r.ClientId == ClientA && r.ThreadId.StartsWith("30"));
         Assert.Equal(3, count);
     }
 
@@ -251,16 +252,16 @@ public sealed class ThreadMemoryRepositoryTests(PostgresContainerFixture fixture
     {
         await this._repo.UpsertAsync(CreateRecord(ClientA, 1, 400));
 
-        var deleted = await this._repo.RemoveByThreadAsync(ClientA, RepoId, 400);
+        var deleted = await this._repo.RemoveByThreadAsync(ClientA, RepoId, "400");
 
         Assert.True(deleted);
-        Assert.False(await this._db.ThreadMemoryRecords.AnyAsync(r => r.ThreadId == 400 && r.ClientId == ClientA));
+        Assert.False(await this._db.ThreadMemoryRecords.AnyAsync(r => r.ThreadId == "400" && r.ClientId == ClientA));
     }
 
     [Fact]
     public async Task RemoveByThreadAsync_NoRecord_ReturnsFalseWithoutError()
     {
-        var deleted = await this._repo.RemoveByThreadAsync(ClientA, RepoId, 99999);
+        var deleted = await this._repo.RemoveByThreadAsync(ClientA, RepoId, "99999");
         Assert.False(deleted);
     }
 
@@ -278,9 +279,9 @@ public sealed class ThreadMemoryRepositoryTests(PostgresContainerFixture fixture
         var results = await this._repo.FindSimilarAsync(ClientA, queryVector, 5, 0.7f);
 
         Assert.NotEmpty(results);
-        Assert.Equal(501, results[0].ThreadId);
+        Assert.Equal("501", results[0].ThreadId);
         Assert.True(results[0].SimilarityScore >= 0.7f);
-        Assert.DoesNotContain(results, r => r.ThreadId == 502);
+        Assert.DoesNotContain(results, r => r.ThreadId == "502");
     }
 
     [Fact]
@@ -306,7 +307,7 @@ public sealed class ThreadMemoryRepositoryTests(PostgresContainerFixture fixture
 
         var results = await this._repo.FindSimilarAsync(ClientA, vector, 10, 0.0f);
 
-        Assert.DoesNotContain(results, r => r.ThreadId == 700);
+        Assert.DoesNotContain(results, r => r.ThreadId == "700");
     }
 
     [Fact]
@@ -337,7 +338,7 @@ public sealed class ThreadMemoryRepositoryTests(PostgresContainerFixture fixture
 
         var results = await Task.WhenAll(tasks);
 
-        Assert.All(results, matches => Assert.Equal(503, Assert.Single(matches).ThreadId));
+        Assert.All(results, matches => Assert.Equal("503", Assert.Single(matches).ThreadId));
     }
 
     [Fact]
@@ -375,16 +376,16 @@ public sealed class ThreadMemoryRepositoryTests(PostgresContainerFixture fixture
             results,
             first =>
             {
-                Assert.Equal(802, first.ThreadId);
+                Assert.Equal("802", first.ThreadId);
                 Assert.Equal("exact_file_fallback", first.MatchSource);
             },
             second =>
             {
-                Assert.Equal(801, second.ThreadId);
+                Assert.Equal("801", second.ThreadId);
                 Assert.Equal("exact_file_fallback", second.MatchSource);
             });
         Assert.All(results, r => Assert.Equal("package.json", r.FilePath));
-        Assert.DoesNotContain(results, r => r.ThreadId == 803 || r.ThreadId == 804);
+        Assert.DoesNotContain(results, r => r.ThreadId == "803" || r.ThreadId == "804");
     }
 
     [Fact]
@@ -396,7 +397,7 @@ public sealed class ThreadMemoryRepositoryTests(PostgresContainerFixture fixture
         var results = await this._repo.FindByFilePathAsync(ClientA, RepoId, "src/package.json", 5);
 
         Assert.Single(results);
-        Assert.Equal(805, results[0].ThreadId);
+        Assert.Equal("805", results[0].ThreadId);
     }
 
     [Fact]
@@ -408,7 +409,7 @@ public sealed class ThreadMemoryRepositoryTests(PostgresContainerFixture fixture
         var results = await this._repo.FindByPullRequestFilePathAsync(ClientA, RepoId, 77, "src/package.json", 5);
 
         Assert.Single(results);
-        Assert.Equal(806, results[0].ThreadId);
+        Assert.Equal("806", results[0].ThreadId);
     }
 
     [Theory]
@@ -466,7 +467,7 @@ public sealed class ThreadMemoryRepositoryTests(PostgresContainerFixture fixture
 
         var digest = Assert.Single(await this._repo.GetDigestsByIdsAsync(ClientA, [record.Id]));
 
-        Assert.Equal(920, digest.ThreadId);
+        Assert.Equal("920", digest.ThreadId);
         Assert.Equal(RepoId, digest.RepositoryId);
         Assert.Equal(42, digest.PullRequestId);
         Assert.Equal("src/Carried.cs", digest.FilePath);
@@ -599,7 +600,7 @@ public sealed class ThreadMemoryRepositoryTests(PostgresContainerFixture fixture
         {
             Id = Guid.NewGuid(),
             ClientId = clientId,
-            ThreadId = threadId,
+            ThreadId = threadId.ToString(CultureInfo.InvariantCulture),
             RepositoryId = repositoryId,
             PullRequestId = prId,
             FilePath = filePath,

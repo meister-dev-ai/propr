@@ -3,6 +3,7 @@
 
 using MeisterDev.ProPR.Application.DTOs;
 using MeisterDev.ProPR.Application.Features.Reviewing.Execution.Models;
+using MeisterDev.ProPR.Application.Features.ThreadOwnership;
 using MeisterDev.ProPR.Application.Interfaces;
 using MeisterDev.ProPR.Domain.Enums;
 using MeisterDev.ProPR.Domain.ValueObjects;
@@ -181,12 +182,12 @@ public sealed class ProviderReviewerThreadStatusFetcherTests
                 Arg.Any<string>(),
                 Arg.Any<string>(),
                 Arg.Any<int>(),
-                Arg.Any<Guid>(),
+                Arg.Any<ThreadOwnershipResolver>(),
                 Arg.Any<Guid>(),
                 Arg.Any<CancellationToken>())
             .Returns(
             [
-                new PrThreadStatusEntry(17, "Active", "src/Fetcher.cs", "meister-dev: Please revisit this.", 1),
+                new PrThreadStatusEntry("17", "Active", "src/Fetcher.cs", "meister-dev: Please revisit this.", 1),
             ]);
 
         var azureFetcher = Substitute.For<IProviderReviewerThreadStatusFetcher>();
@@ -219,7 +220,7 @@ public sealed class ProviderReviewerThreadStatusFetcherTests
             "acme",
             "101",
             42,
-            Guid.NewGuid(),
+            ThreadOwnershipResolver.None,
             clientId,
             CancellationToken.None);
 
@@ -230,7 +231,7 @@ public sealed class ProviderReviewerThreadStatusFetcherTests
                 Arg.Any<string>(),
                 Arg.Any<string>(),
                 42,
-                Arg.Any<Guid>(),
+                Arg.Any<ThreadOwnershipResolver>(),
                 clientId,
                 Arg.Any<CancellationToken>());
         await azureFetcher.DidNotReceiveWithAnyArgs()

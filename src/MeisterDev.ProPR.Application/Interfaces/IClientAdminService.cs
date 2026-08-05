@@ -69,6 +69,10 @@ public interface IClientAdminService
     /// <param name="outputLanguage">
     ///     When non-null, sets the IETF BCP 47 language tag ProPR writes this client's reviewer-facing prose in.
     /// </param>
+    /// <param name="reviewEveryIncrementEnabled">
+    ///     When non-null, sets whether an automatic trigger reviews every pushed update to a pull request rather than
+    ///     only the first revision it sees.
+    /// </param>
     /// <param name="ct">Cancellation token.</param>
     Task<ClientDto?> PatchAsync(
         Guid clientId,
@@ -89,6 +93,7 @@ public interface IClientAdminService
         IReadOnlyList<CommentSeverity>? autoResolveSeverities = null,
         bool? codeInsightsCollectionEnabled = null,
         string? outputLanguage = null,
+        bool? reviewEveryIncrementEnabled = null,
         CancellationToken ct = default);
 
     /// <summary>

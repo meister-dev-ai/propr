@@ -89,7 +89,7 @@ public sealed class AgentMentionAnswerServiceTests
         var rawMention = $"@<{BotGuid}> Is this method safe?";
 
         // Act
-        await sut.AnswerAsync(MakePr(), ClientId, rawMention, 5);
+        await sut.AnswerAsync(MakePr(), ClientId, rawMention, "5");
 
         // Assert: the user message must contain the cleaned question, not the raw GUID prefix
         var userMessage = captured.Single().Single(m => m.Role == ChatRole.User).Text!;
@@ -111,7 +111,7 @@ public sealed class AgentMentionAnswerServiceTests
             .Returns(new ChatResponse(new ChatMessage(ChatRole.Assistant, "ok")));
 
         var thread = new PrCommentThread(
-            5,
+            "5",
             "src/Foo.cs",
             42,
             [
@@ -121,7 +121,7 @@ public sealed class AgentMentionAnswerServiceTests
         var sut = CreateSut(chatClient);
 
         // Act
-        await sut.AnswerAsync(pr, ClientId, $"@<{BotGuid}> Is this safe?", 5);
+        await sut.AnswerAsync(pr, ClientId, $"@<{BotGuid}> Is this safe?", "5");
 
         // Assert: location info is present in the user message
         var userMessage = captured.Single().Single(m => m.Role == ChatRole.User).Text!;
@@ -137,7 +137,7 @@ public sealed class AgentMentionAnswerServiceTests
         var sut = CreateSut(chatClient);
 
         // Act & Assert: no exception, returns AI text
-        var result = await sut.AnswerAsync(MakePr(), ClientId, $"@<{BotGuid}> Hello?", 999);
+        var result = await sut.AnswerAsync(MakePr(), ClientId, $"@<{BotGuid}> Hello?", "999");
         Assert.Equal("fine", result);
     }
 
@@ -149,7 +149,7 @@ public sealed class AgentMentionAnswerServiceTests
         var sut = CreateSut(chatClient);
 
         // Act
-        var result = await sut.AnswerAsync(MakePr(), ClientId, "any question", 1);
+        var result = await sut.AnswerAsync(MakePr(), ClientId, "any question", "1");
 
         // Assert
         Assert.Equal("Certainly, here is the answer.", result);
@@ -171,7 +171,7 @@ public sealed class AgentMentionAnswerServiceTests
         clientRegistry.GetOutputLanguageAsync(ClientId, Arg.Any<CancellationToken>()).Returns("de");
         var sut = CreateSut(chatClient, clientRegistry);
 
-        await sut.AnswerAsync(MakePr(), ClientId, "Is this safe?", 5);
+        await sut.AnswerAsync(MakePr(), ClientId, "Is this safe?", "5");
 
         var systemMessage = captured.Single().Single(m => m.Role == ChatRole.System).Text!;
         Assert.Contains("`de`", systemMessage, StringComparison.Ordinal);

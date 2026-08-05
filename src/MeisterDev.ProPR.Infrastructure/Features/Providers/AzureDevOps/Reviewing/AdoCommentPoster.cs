@@ -375,7 +375,7 @@ public sealed class AdoCommentPoster(
         ReviewComment comment,
         int ordinal,
         string reasonCode,
-        long? matchedThreadId = null,
+        string? matchedThreadId = null,
         float? matchScore = null)
     {
         diagnostics.RecordSuppression(reasonCode);
@@ -443,13 +443,13 @@ public sealed class AdoCommentPoster(
         PostedFindingMatchDto match,
         IReadOnlyList<PrCommentThread>? existingThreads)
     {
-        if (!match.IsDuplicate || !match.ProviderThreadId.HasValue)
+        if (!match.IsDuplicate || string.IsNullOrWhiteSpace(match.ProviderThreadId))
         {
             return false;
         }
 
         var matchedThread = (existingThreads ?? [])
-            .FirstOrDefault(thread => thread.ThreadId == match.ProviderThreadId.Value);
+            .FirstOrDefault(thread => string.Equals(thread.ThreadId, match.ProviderThreadId, StringComparison.Ordinal));
         if (matchedThread is null)
         {
             return false;
@@ -1229,7 +1229,7 @@ public sealed class AdoCommentPoster(
         return tokens;
     }
 
-    internal sealed record DuplicateSuppressionMatch(string ReasonCode, long ThreadId);
+    internal sealed record DuplicateSuppressionMatch(string ReasonCode, string? ThreadId);
 
     private sealed class PostingDiagnosticsBuilder
     {

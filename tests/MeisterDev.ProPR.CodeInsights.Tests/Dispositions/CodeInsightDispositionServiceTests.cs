@@ -319,7 +319,7 @@ public sealed class CodeInsightDispositionServiceTests
             ClientId,
             "repo-1",
             7,
-            9001,
+            "9001",
             "src/Service.cs",
             "@@ -1 +1 @@",
             "dev: not now, tracked elsewhere",

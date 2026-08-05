@@ -147,7 +147,10 @@ public class ReviewJobWorkerTests
         capsProvider.GetCapsAsync(job.ClientId, Arg.Any<CancellationToken>())
             .Returns(new BudgetCaps(80m, 100m, null, null, null, null));
         var accumulator = Substitute.For<IReviewSpendAccumulator>();
-        accumulator.GetBaselineAsync(job, Arg.Any<DateOnly>(), Arg.Any<CancellationToken>())
+        accumulator.GetBaselineAsync(
+                Arg.Is<ReviewSpendSubject>(subject => subject.UnitOfWorkId == job.Id),
+                Arg.Any<DateOnly>(),
+                Arg.Any<CancellationToken>())
             .Returns(new ReviewSpendBaseline(new ReviewScopeSpend(80m, false), ReviewScopeSpend.None, ReviewScopeSpend.None));
 
         // The held transition also emits a budget event for a downstream alerting capability.

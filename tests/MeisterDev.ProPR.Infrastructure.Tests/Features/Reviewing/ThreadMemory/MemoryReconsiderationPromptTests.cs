@@ -55,7 +55,7 @@ public sealed class MemoryReconsiderationPromptTests
 
         var message = builder.BuildUserMessage(
             "{\"summary\":\"Draft\"}",
-            [new ThreadMemoryMatchDto(recordId, 42, "src/Foo.cs", "Previously accepted by design.", 0.92f)]);
+            [new ThreadMemoryMatchDto(recordId, "42", "src/Foo.cs", "Previously accepted by design.", 0.92f)]);
 
         Assert.Contains("## Draft Findings from Initial Review", message, StringComparison.Ordinal);
         Assert.Contains("{\"summary\":\"Draft\"}", message, StringComparison.Ordinal);
@@ -76,7 +76,7 @@ public sealed class MemoryReconsiderationPromptTests
             [
                 new ThreadMemoryMatchDto(
                     Guid.NewGuid(),
-                    0,
+                    "0",
                     null,
                     "Nullable warnings on generated code.",
                     0.81f,
@@ -98,7 +98,7 @@ public sealed class MemoryReconsiderationPromptTests
             [
                 new ThreadMemoryMatchDto(
                     Guid.NewGuid(),
-                    3,
+                    "3",
                     "src/Bar.cs",
                     "Team accepted the duplication.",
                     0.4f,
@@ -191,7 +191,7 @@ public sealed class MemoryReconsiderationPromptTests
             .Returns(
                 new List<ThreadMemoryMatchDto>
                 {
-                    new(Guid.NewGuid(), 5, "src/Foo.cs", "Fixed by adding a null check.", 0.92f),
+                    new(Guid.NewGuid(), "5", "src/Foo.cs", "Fixed by adding a null check.", 0.92f),
                 });
 
         var service = new ThreadMemoryService(

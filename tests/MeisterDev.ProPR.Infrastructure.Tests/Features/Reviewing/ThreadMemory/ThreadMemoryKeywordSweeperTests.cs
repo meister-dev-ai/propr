@@ -1,6 +1,7 @@
 // Copyright (c) Andreas Rain.
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
+using System.Globalization;
 using MeisterDev.ProPR.Domain.Entities;
 using MeisterDev.ProPR.Infrastructure.Data;
 using Microsoft.EntityFrameworkCore;
@@ -52,7 +53,7 @@ public sealed class CodeInsightMemoryKeywordSweeperTests : IDisposable
     [Fact]
     public async Task AMemoryWithoutKeywordsGetsThemAndNothingElseChanges()
     {
-        var before = await this.SeedAsync(ClientA, 1);
+        var before = await this.SeedAsync(ClientA, "1");
 
         Assert.Equal(1, await this._sweeper.SweepAsync(10));
 
@@ -66,7 +67,7 @@ public sealed class CodeInsightMemoryKeywordSweeperTests : IDisposable
     [Fact]
     public async Task AMemoryThatAlreadyHasKeywordsIsNotPaidForAgain()
     {
-        var record = await this.SeedAsync(ClientA, 1);
+        var record = await this.SeedAsync(ClientA, "1");
         record.Keywords = ["existing"];
         await this._dbContext.SaveChangesAsync();
 
@@ -82,9 +83,9 @@ public sealed class CodeInsightMemoryKeywordSweeperTests : IDisposable
     [Fact]
     public async Task TheSweepIsBoundedAndResumes()
     {
-        await this.SeedAsync(ClientA, 1);
-        await this.SeedAsync(ClientA, 2);
-        await this.SeedAsync(ClientA, 3);
+        await this.SeedAsync(ClientA, "1");
+        await this.SeedAsync(ClientA, "2");
+        await this.SeedAsync(ClientA, "3");
 
         Assert.Equal(2, await this._sweeper.SweepAsync(2));
         Assert.Equal(1, await this._sweeper.SweepAsync(2));
@@ -95,7 +96,7 @@ public sealed class CodeInsightMemoryKeywordSweeperTests : IDisposable
     public async Task AnEmptyExtractionLeavesTheRowAsACandidate()
     {
         // Right for a transient failure, and a bounded cost for a permanent one.
-        await this.SeedAsync(ClientA, 1);
+        await this.SeedAsync(ClientA, "1");
         this._extractor
             .ExtractAsync(Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<string?>(), Arg.Any<CancellationToken>())
             .Returns([]);
@@ -108,7 +109,7 @@ public sealed class CodeInsightMemoryKeywordSweeperTests : IDisposable
     [Fact]
     public async Task AFailingExtractionIsSwallowedAndTheMemorySurvives()
     {
-        await this.SeedAsync(ClientA, 1);
+        await this.SeedAsync(ClientA, "1");
         this._extractor
             .ExtractAsync(Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<string?>(), Arg.Any<CancellationToken>())
             .ThrowsAsync(new InvalidOperationException("the model is unavailable"));
@@ -130,7 +131,7 @@ public sealed class CodeInsightMemoryKeywordSweeperTests : IDisposable
             Arg.Any<CancellationToken>());
     }
 
-    private async Task<ThreadMemoryRecord> SeedAsync(Guid clientId, long threadId)
+    private async Task<ThreadMemoryRecord> SeedAsync(Guid clientId, string threadId)
     {
         var record = new ThreadMemoryRecord
         {
@@ -142,7 +143,7 @@ public sealed class CodeInsightMemoryKeywordSweeperTests : IDisposable
             FilePath = "src/Service.cs",
             ResolutionSummary = "The retry count was restored.",
             ChangeExcerpt = "retryCount = 3;",
-            CreatedAt = DateTimeOffset.UtcNow.AddDays(-threadId),
+            CreatedAt = DateTimeOffset.UtcNow.AddDays(-int.Parse(threadId, CultureInfo.InvariantCulture)),
         };
 
         this._dbContext.ThreadMemoryRecords.Add(record);

@@ -39,9 +39,9 @@ public sealed partial class MemoryActivityLogRepository(
             .AsNoTracking()
             .Where(e => e.ClientId == clientId);
 
-        if (query.ThreadId.HasValue)
+        if (!string.IsNullOrWhiteSpace(query.ThreadId))
         {
-            q = q.Where(e => e.ThreadId == query.ThreadId.Value);
+            q = q.Where(e => e.ThreadId == query.ThreadId);
         }
 
         if (query.PullRequestId.HasValue)
@@ -83,5 +83,5 @@ public sealed partial class MemoryActivityLogRepository(
     [LoggerMessage(
         Level = LogLevel.Warning,
         Message = "Failed to append MemoryActivityLogEntry for thread {ThreadId} / client {ClientId}")]
-    private static partial void LogAppendFailed(ILogger logger, long threadId, Guid clientId, Exception ex);
+    private static partial void LogAppendFailed(ILogger logger, string threadId, Guid clientId, Exception ex);
 }

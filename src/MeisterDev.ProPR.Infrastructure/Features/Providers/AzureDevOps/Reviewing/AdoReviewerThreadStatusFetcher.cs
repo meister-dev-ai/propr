@@ -1,7 +1,9 @@
 // Copyright (c) Andreas Rain.
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
+using System.Globalization;
 using MeisterDev.ProPR.Application.DTOs;
+using MeisterDev.ProPR.Application.Features.ThreadOwnership;
 using MeisterDev.ProPR.Application.Interfaces;
 using MeisterDev.ProPR.Domain.Enums;
 using MeisterDev.ProPR.Infrastructure.Features.Providers.Common;
@@ -12,7 +14,7 @@ namespace MeisterDev.ProPR.Infrastructure.Features.Providers.AzureDevOps.Reviewi
 
 /// <summary>
 ///     ADO-backed implementation of <see cref="IReviewerThreadStatusFetcher" />.
-///     Fetches all non-deleted threads for a PR, filters to reviewer-owned ones,
+///     Fetches all non-deleted threads for a PR, filters to the ones ProPR owns,
 ///     and builds the comment history string from all non-system comments.
 /// </summary>
 public sealed partial class AdoReviewerThreadStatusFetcher(
@@ -34,16 +36,24 @@ public sealed partial class AdoReviewerThreadStatusFetcher(
         string projectId,
         string repositoryId,
         int pullRequestId,
-        Guid reviewerId,
+        ThreadOwnershipResolver ownership,
         Guid clientId,
         CancellationToken ct = default)
     {
+        ArgumentNullException.ThrowIfNull(ownership);
+
         try
         {
             var (gitClient, authorizedIdentityId) = await this.ResolveGitClientAndAuthorizedIdentityAsync(
                 organizationUrl,
                 clientId,
                 ct);
+
+            // Azure DevOps names an author by identity GUID, and the connection handshake above is the only
+            // place that identity exists, so the pass's resolver is completed with it here. It is contributed
+            // into the instance the caller handed down, so the consumers that run later in the same pass, and
+            // never see a connection of their own, decide with the identity too.
+            ownership.ContributeIdentity(new ThreadOwnerIdentity(authorizedIdentityId));
 
             var rawThreads = await gitClient.GetThreadsAsync(
                 projectId,
@@ -66,14 +76,15 @@ public sealed partial class AdoReviewerThreadStatusFetcher(
                     continue;
                 }
 
-                // Keep only threads whose first non-deleted comment was posted by a reviewer-owned identity.
+                // Keep only threads ProPR owns, decided by the first comment that still exists.
                 var firstComment = thread.Comments.FirstOrDefault(c => !c.IsDeleted);
                 if (firstComment is null)
                 {
                     continue;
                 }
 
-                if (!IsReviewerOwnedAuthor(firstComment.Author?.Id, reviewerId, authorizedIdentityId))
+                var threadId = thread.Id.ToString(CultureInfo.InvariantCulture);
+                if (!ownership.OwnsThread(ToCommentRef(threadId, firstComment)))
                 {
                     continue;
                 }
@@ -82,7 +93,7 @@ public sealed partial class AdoReviewerThreadStatusFetcher(
                 var nonReviewerReplyCount = thread.Comments.Count(c =>
                     !c.IsDeleted &&
                     !string.Equals(c.CommentType.ToString(), "system", StringComparison.OrdinalIgnoreCase) &&
-                    !IsReviewerOwnedAuthor(c.Author?.Id, reviewerId, authorizedIdentityId));
+                    !ownership.OwnsComment(ToCommentRef(threadId, c)));
 
                 var codeChange = await this.ResolveAnchorCodeChangeAsync(
                     gitClient,
@@ -95,7 +106,7 @@ public sealed partial class AdoReviewerThreadStatusFetcher(
 
                 results.Add(
                     new PrThreadStatusEntry(
-                        thread.Id,
+                        thread.Id.ToString(CultureInfo.InvariantCulture),
                         thread.Status.ToString(),
                         thread.ThreadContext?.FilePath,
                         commentHistory,
@@ -215,15 +226,15 @@ public sealed partial class AdoReviewerThreadStatusFetcher(
             or CommentThreadStatus.WontFix or CommentThreadStatus.ByDesign;
     }
 
-    private static bool IsReviewerOwnedAuthor(string? authorId, Guid reviewerId, Guid? authorizedIdentityId)
+    // Azure DevOps scopes a comment id to its thread, so both ids travel together: the pair is what the
+    // provenance rows were recorded under. The author display name is left out because the authenticated
+    // identity is a GUID here, so a name could only ever match by coincidence.
+    private static ThreadCommentRef ToCommentRef(string threadId, Comment comment)
     {
-        if (!Guid.TryParse(authorId, out var parsedAuthorId))
-        {
-            return false;
-        }
-
-        return parsedAuthorId == reviewerId ||
-               (authorizedIdentityId.HasValue && parsedAuthorId == authorizedIdentityId.Value);
+        return new ThreadCommentRef(
+            threadId,
+            comment.Id.ToString(CultureInfo.InvariantCulture),
+            Guid.TryParse(comment.Author?.Id, out var authorId) ? authorId : null);
     }
 
     private static string BuildCommentHistory(GitPullRequestCommentThread thread)

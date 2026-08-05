@@ -25,7 +25,7 @@ public sealed class FixtureThreadMemoryRepository(IReviewEvaluationFixtureAccess
         return Task.CompletedTask;
     }
 
-    public Task<bool> RemoveByThreadAsync(Guid clientId, string repositoryId, long threadId, CancellationToken ct = default)
+    public Task<bool> RemoveByThreadAsync(Guid clientId, string repositoryId, string threadId, CancellationToken ct = default)
     {
         return Task.FromResult(false);
     }
@@ -138,7 +138,7 @@ public sealed class FixtureThreadMemoryRepository(IReviewEvaluationFixtureAccess
             .ToList();
     }
 
-    private static Guid CreateDeterministicGuid(string? fixtureId, string? scenarioId, long threadId, int index)
+    private static Guid CreateDeterministicGuid(string? fixtureId, string? scenarioId, string threadId, int index)
     {
         var seed = $"{fixtureId ?? string.Empty}|{scenarioId ?? string.Empty}|{threadId}|{index}";
         var bytes = Encoding.UTF8.GetBytes(seed);

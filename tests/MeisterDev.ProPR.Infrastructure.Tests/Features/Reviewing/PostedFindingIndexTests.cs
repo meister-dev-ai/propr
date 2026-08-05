@@ -37,12 +37,12 @@ public sealed class PostedFindingIndexTests
                 Arg.Any<float[]>(),
                 Arg.Any<float>(),
                 Arg.Any<CancellationToken>())
-            .Returns(new PostedFindingSimilarityDto(postedFindingId, 4242, 0.91f));
+            .Returns(new PostedFindingSimilarityDto(postedFindingId, "4242", 0.91f));
 
         var match = await index.FindDuplicateAsync(ClientId, "repo", 7, "The delete path races.");
 
         Assert.True(match.IsDuplicate);
-        Assert.Equal(4242, match.ProviderThreadId);
+        Assert.Equal("4242", match.ProviderThreadId);
         Assert.Equal(postedFindingId, match.PostedFindingId);
         Assert.Equal(0.91f, match.SimilarityScore);
         Assert.False(match.IsDegraded);
@@ -64,13 +64,13 @@ public sealed class PostedFindingIndexTests
                 Arg.Any<float[]>(),
                 Arg.Any<float>(),
                 Arg.Any<CancellationToken>())
-            .Returns(new PostedFindingSimilarityDto(Guid.NewGuid(), 4242, 0.62f));
+            .Returns(new PostedFindingSimilarityDto(Guid.NewGuid(), "4242", 0.62f));
 
         var match = await index.FindDuplicateAsync(ClientId, "repo", 7, "The delete path races.");
 
         Assert.False(match.IsDuplicate);
         Assert.Equal(0.62f, match.NearMissScore);
-        Assert.Equal(4242, match.NearMissProviderThreadId);
+        Assert.Equal("4242", match.NearMissProviderThreadId);
     }
 
     [Fact]
@@ -115,7 +115,7 @@ public sealed class PostedFindingIndexTests
                 Arg.Any<float[]>(),
                 Arg.Any<float>(),
                 Arg.Any<CancellationToken>())
-            .Returns(new PostedFindingSimilarityDto(Guid.NewGuid(), 4242, 0.91f, AutoResolvedByProPr: true));
+            .Returns(new PostedFindingSimilarityDto(Guid.NewGuid(), "4242", 0.91f, AutoResolvedByProPr: true));
 
         var match = await index.FindDuplicateAsync(ClientId, "repo", 7, "The delete path races.");
 
@@ -218,7 +218,7 @@ public sealed class PostedFindingIndexTests
             .AddMissingAsync(
                 Arg.Is<IReadOnlyList<PostedFindingRecord>>(records =>
                     records.Count == 1 &&
-                    records[0].ProviderThreadId == 4242 &&
+                    records[0].ProviderThreadId == "4242" &&
                     records[0].ReviewJobId == JobId &&
                     records[0].IterationId == 3 &&
                     records[0].FindingMessage == "The delete path races." &&
@@ -238,7 +238,7 @@ public sealed class PostedFindingIndexTests
         embedder.GenerateEmbeddingAsync(Arg.Any<string>(), ClientId, Arg.Any<CancellationToken>())
             .ThrowsAsync(new InvalidOperationException("no embedding model bound"));
 
-        var exception = await Record.ExceptionAsync(() => index.RecordPostedFindingsAsync([Entry("first", 1), Entry("second", 2)]));
+        var exception = await Record.ExceptionAsync(() => index.RecordPostedFindingsAsync([Entry("first", "1"), Entry("second", "2")]));
 
         Assert.Null(exception);
         await embedder.Received(1)
@@ -261,7 +261,7 @@ public sealed class PostedFindingIndexTests
         Assert.Null(exception);
     }
 
-    private static PostedFindingEntry Entry(string message, long threadId = 4242)
+    private static PostedFindingEntry Entry(string message, string threadId = "4242")
     {
         return new PostedFindingEntry(
             ClientId,

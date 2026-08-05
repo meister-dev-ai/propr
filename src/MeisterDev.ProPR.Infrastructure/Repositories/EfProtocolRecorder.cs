@@ -69,6 +69,31 @@ public sealed class EfProtocolRecorder(
     }
 
     /// <inheritdoc />
+    public async Task<Guid> BeginForThreadPassAsync(
+        Guid threadPassJobId,
+        int attemptNumber,
+        string? label = null,
+        string? modelId = null,
+        CancellationToken ct = default,
+        string? logicalModelName = null)
+    {
+        await using var db = await contextFactory.CreateDbContextAsync(ct);
+        var protocol = new ReviewJobProtocol
+        {
+            Id = Guid.NewGuid(),
+            ThreadPassJobId = threadPassJobId,
+            AttemptNumber = attemptNumber,
+            Label = label,
+            StartedAt = DateTimeOffset.UtcNow,
+            ModelId = modelId,
+            LogicalModelName = logicalModelName,
+        };
+        db.ReviewJobProtocols.Add(protocol);
+        await db.SaveChangesAsync(ct);
+        return protocol.Id;
+    }
+
+    /// <inheritdoc />
     public async Task RecordAiCallAsync(
         Guid protocolId,
         int iteration,
@@ -274,72 +299,186 @@ public sealed class EfProtocolRecorder(
             protocol.FinalConfidence = finalConfidence;
             await db.SaveChangesAsync(ct);
 
-            var job = await db.ReviewJobs.FindAsync([protocol.JobId], ct);
-            if (job is not null)
+            var totals = new ProtocolTotals(
+                totalInputTokens,
+                totalOutputTokens,
+                totalCachedInputTokens ?? 0,
+                totalCacheWriteTokens ?? 0,
+                totalReasoningTokens ?? 0);
+
+            if (protocol.JobId is { } reviewJobId)
             {
-                // Always accumulate into breakdown, using Default category if none specified
-                var category = protocol.AiConnectionCategory ?? AiConnectionModelCategory.Default;
-                var modelId = protocol.ModelId ?? job.AiModel ?? UnknownModelId;
-                var modelInferred = protocol.ModelId is null && job.AiModel is not null;
-                var logicalModelName = protocol.LogicalModelName;
-                var cachedInputTokens = totalCachedInputTokens ?? 0;
-                var cacheWriteTokens = totalCacheWriteTokens ?? 0;
-                var reasoningTokens = totalReasoningTokens ?? 0;
-                job.AccumulateTierTokens(
-                    category,
-                    modelId,
-                    totalInputTokens,
-                    totalOutputTokens,
-                    cachedInputTokens,
-                    cacheWriteTokens,
-                    reasoningTokens,
-                    logicalModelName);
-
-                await db.SaveChangesAsync(ct);
-
-                // Best-effort cost: a pricing-lookup failure must never break token recording.
-                var passCostDelta = await this.ApplyTierCostAsync(
-                    db,
-                    job,
-                    category,
-                    modelId,
-                    totalInputTokens,
-                    totalOutputTokens,
-                    cachedInputTokens,
-                    cacheWriteTokens,
-                    reasoningTokens,
-                    ct,
-                    logicalModelName,
-                    modelInferred);
-
-                // Upsert daily token usage aggregate for the client owning this job.
-                if (totalInputTokens > 0
-                    || totalOutputTokens > 0
-                    || cachedInputTokens > 0
-                    || cacheWriteTokens > 0
-                    || reasoningTokens > 0)
-                {
-                    var usageRepo = new ClientTokenUsageRepository(db);
-                    await usageRepo.UpsertAsync(
-                        job.ClientId,
-                        modelId,
-                        DateOnly.FromDateTime(DateTime.UtcNow),
-                        totalInputTokens,
-                        totalOutputTokens,
-                        ct,
-                        cachedInputTokens,
-                        cacheWriteTokens,
-                        reasoningTokens,
-                        passCostDelta,
-                        logicalModelName ?? string.Empty,
-                        await ResolveProviderKindAsync(db, job.AiConnectionId, ct));
-                }
+                await this.PropagateToReviewJobAsync(db, protocol, reviewJobId, totals, ct);
+            }
+            else if (protocol.ThreadPassJobId is { } threadPassJobId)
+            {
+                await this.PropagateToThreadPassAsync(db, protocol, threadPassJobId, totals, ct);
             }
         }
         catch (Exception ex)
         {
             logger.LogWarning(ex, "Failed to set completed state for protocol {ProtocolId}", protocolId);
         }
+    }
+
+    private async Task PropagateToReviewJobAsync(
+        MeisterProPRDbContext db,
+        ReviewJobProtocol protocol,
+        Guid reviewJobId,
+        ProtocolTotals totals,
+        CancellationToken ct)
+    {
+        var job = await db.ReviewJobs.FindAsync([reviewJobId], ct);
+        if (job is null)
+        {
+            return;
+        }
+
+        // Always accumulate into breakdown, using Default category if none specified
+        var category = protocol.AiConnectionCategory ?? AiConnectionModelCategory.Default;
+        var modelId = protocol.ModelId ?? job.AiModel ?? UnknownModelId;
+        var modelInferred = protocol.ModelId is null && job.AiModel is not null;
+        var logicalModelName = protocol.LogicalModelName;
+        job.AccumulateTierTokens(
+            category,
+            modelId,
+            totals.InputTokens,
+            totals.OutputTokens,
+            totals.CachedInputTokens,
+            totals.CacheWriteTokens,
+            totals.ReasoningTokens,
+            logicalModelName);
+
+        await db.SaveChangesAsync(ct);
+
+        // Best-effort cost: a pricing-lookup failure must never break token recording.
+        var passCostDelta = await this.ApplyTierCostAsync(
+            db,
+            job,
+            category,
+            modelId,
+            totals.InputTokens,
+            totals.OutputTokens,
+            totals.CachedInputTokens,
+            totals.CacheWriteTokens,
+            totals.ReasoningTokens,
+            ct,
+            logicalModelName,
+            modelInferred);
+
+        // Upsert daily token usage aggregate for the client owning this job.
+        if (totals.AnyTokens)
+        {
+            var usageRepo = new ClientTokenUsageRepository(db);
+            await usageRepo.UpsertAsync(
+                job.ClientId,
+                modelId,
+                DateOnly.FromDateTime(DateTime.UtcNow),
+                totals.InputTokens,
+                totals.OutputTokens,
+                ct,
+                totals.CachedInputTokens,
+                totals.CacheWriteTokens,
+                totals.ReasoningTokens,
+                passCostDelta,
+                logicalModelName ?? string.Empty,
+                await ResolveProviderKindAsync(db, job.AiConnectionId, ct));
+        }
+    }
+
+    /// <summary>
+    ///     Moves one closed thread-pass protocol's tokens onto the pass's own totals and the client's daily usage
+    ///     sample.
+    /// </summary>
+    /// <remarks>
+    ///     The pass carries a single total rather than a per-tier breakdown: it makes one call per thread on one
+    ///     resolved runtime, so there are no effort tiers to tell apart. The daily sample is keyed exactly as the
+    ///     review path keys it, which is how the client month-to-date scope reaches this spend without knowing a
+    ///     thread pass exists.
+    /// </remarks>
+    private async Task PropagateToThreadPassAsync(
+        MeisterProPRDbContext db,
+        ReviewJobProtocol protocol,
+        Guid threadPassJobId,
+        ProtocolTotals totals,
+        CancellationToken ct)
+    {
+        var pass = await db.ThreadPassJobs.FindAsync([threadPassJobId], ct);
+        if (pass is null || !totals.AnyTokens)
+        {
+            return;
+        }
+
+        var modelId = protocol.ModelId ?? pass.AiModel ?? UnknownModelId;
+        var pricing = await this.TryResolvePricingAsync(pass.AiConnectionId ?? Guid.Empty, modelId, ct);
+        var cost = pricing is null
+            ? null
+            : AiCostCalculator.Calculate(
+                    new AiTokenUsage(
+                        totals.InputTokens,
+                        totals.OutputTokens,
+                        totals.CachedInputTokens,
+                        totals.CacheWriteTokens,
+                        totals.ReasoningTokens),
+                    pricing)
+                .Usd;
+
+        pass.AccumulateSpend(totals.InputTokens, totals.OutputTokens, cost);
+        await db.SaveChangesAsync(ct);
+
+        var usageRepo = new ClientTokenUsageRepository(db);
+        await usageRepo.UpsertAsync(
+            pass.ClientId,
+            modelId,
+            DateOnly.FromDateTime(DateTime.UtcNow),
+            totals.InputTokens,
+            totals.OutputTokens,
+            ct,
+            totals.CachedInputTokens,
+            totals.CacheWriteTokens,
+            totals.ReasoningTokens,
+            cost,
+            protocol.LogicalModelName ?? string.Empty,
+            await ResolveProviderKindAsync(db, pass.AiConnectionId, ct));
+    }
+
+    /// <summary>
+    ///     Resolves a model's pricing, returning <see langword="null" /> when no resolver is configured or the
+    ///     lookup fails. Cost is best-effort everywhere: the tokens are already spent, so a pricing failure must
+    ///     leave the token record standing rather than discard it.
+    /// </summary>
+    private async Task<ModelPricing?> TryResolvePricingAsync(Guid connectionId, string modelId, CancellationToken ct)
+    {
+        if (pricingResolver is null)
+        {
+            return null;
+        }
+
+        try
+        {
+            return await pricingResolver.ResolveAsync(connectionId, AiConnectionModelCategory.Default, modelId, ct)
+                   ?? new ModelPricing(null, null);
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "Failed to resolve pricing for model {ModelId}", modelId);
+            return null;
+        }
+    }
+
+    /// <summary>The token counts one closed protocol contributes to whichever unit of work owns it.</summary>
+    private sealed record ProtocolTotals(
+        long InputTokens,
+        long OutputTokens,
+        long CachedInputTokens,
+        long CacheWriteTokens,
+        long ReasoningTokens)
+    {
+        public bool AnyTokens => this.InputTokens > 0
+                                 || this.OutputTokens > 0
+                                 || this.CachedInputTokens > 0
+                                 || this.CacheWriteTokens > 0
+                                 || this.ReasoningTokens > 0;
     }
 
     /// <inheritdoc />
@@ -383,7 +522,9 @@ public sealed class EfProtocolRecorder(
 
             await db.SaveChangesAsync(ct);
 
-            var job = await db.ReviewJobs.FindAsync([protocol.JobId], ct);
+            var job = protocol.JobId is { } reviewJobId
+                ? await db.ReviewJobs.FindAsync([reviewJobId], ct)
+                : null;
             if (job is not null)
             {
                 // Always accumulate into breakdown, using provided category or Default if none

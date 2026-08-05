@@ -14,7 +14,7 @@ public sealed record PostedFindingMatchDto
     public bool IsDuplicate { get; init; }
 
     /// <summary>Provider thread carrying the finding this candidate repeats, when one matched.</summary>
-    public long? ProviderThreadId { get; init; }
+    public string? ProviderThreadId { get; init; }
 
     /// <summary>Index record that matched, when one did.</summary>
     public Guid? PostedFindingId { get; init; }
@@ -33,7 +33,7 @@ public sealed record PostedFindingMatchDto
     public float? NearMissScore { get; init; }
 
     /// <summary>Thread the near miss belongs to, when there was one.</summary>
-    public long? NearMissProviderThreadId { get; init; }
+    public string? NearMissProviderThreadId { get; init; }
 
     /// <summary>Named components that were unavailable during the lookup.</summary>
     public IReadOnlyList<string> DegradedComponents { get; init; } = [];
@@ -60,7 +60,7 @@ public sealed record PostedFindingMatchDto
     }
 
     /// <summary>Returns a non-matching result that carries how close the nearest posted finding came.</summary>
-    public static PostedFindingMatchDto NearMiss(long providerThreadId, float similarityScore)
+    public static PostedFindingMatchDto NearMiss(string providerThreadId, float similarityScore)
     {
         return new PostedFindingMatchDto
         {
@@ -71,7 +71,7 @@ public sealed record PostedFindingMatchDto
 
     /// <summary>Returns a match against an already-posted finding.</summary>
     public static PostedFindingMatchDto Match(
-        long providerThreadId,
+        string providerThreadId,
         Guid postedFindingId,
         float similarityScore,
         bool autoResolvedByProPr = false)
@@ -96,7 +96,7 @@ public sealed record PostedFindingMatchDto
 /// <param name="AutoResolvedByProPr">Whether ProPR closed that thread itself.</param>
 public sealed record PostedFindingSimilarityDto(
     Guid PostedFindingId,
-    long ProviderThreadId,
+    string ProviderThreadId,
     float SimilarityScore,
     bool AutoResolvedByProPr = false);
 
@@ -116,7 +116,7 @@ public sealed record PostedFindingEntry(
     Guid ClientId,
     string RepositoryId,
     int PullRequestId,
-    long ProviderThreadId,
+    string ProviderThreadId,
     Guid ReviewJobId,
     int IterationId,
     string? FilePath,

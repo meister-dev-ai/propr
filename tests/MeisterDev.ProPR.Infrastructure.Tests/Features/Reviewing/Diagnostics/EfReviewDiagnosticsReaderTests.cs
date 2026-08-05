@@ -1225,4 +1225,82 @@ public sealed class EfReviewDiagnosticsReaderTests
         job.Protocols.Add(protocol);
         return job;
     }
+
+    [Fact]
+    public async Task GetThreadPassProtocolAsync_ReturnsThePassesPerThreadWorkWithItsModelCalls()
+    {
+        var options = new DbContextOptionsBuilder<MeisterProPRDbContext>()
+            .UseInMemoryDatabase($"EfReviewDiagnosticsReaderTests-{Guid.NewGuid():N}")
+            .Options;
+
+        var pass = new ThreadPassJob(
+            Guid.NewGuid(),
+            Guid.NewGuid(),
+            "https://dev.azure.com/org",
+            "proj",
+            "repo",
+            11,
+            2,
+            "2",
+            "2|abc");
+
+        var protocol = new ReviewJobProtocol
+        {
+            Id = Guid.NewGuid(),
+            ThreadPassJobId = pass.Id,
+            AttemptNumber = 1,
+            Label = "thread-17-code-change",
+            StartedAt = DateTimeOffset.UtcNow.AddMinutes(-1),
+            CompletedAt = DateTimeOffset.UtcNow,
+            Outcome = "Resolved",
+            ModelId = "gpt-4o",
+            TotalInputTokens = 900,
+            TotalOutputTokens = 120,
+        };
+        protocol.Events.Add(
+            new ProtocolEvent
+            {
+                Id = Guid.NewGuid(),
+                ProtocolId = protocol.Id,
+                Kind = ProtocolEventKind.AiCall,
+                Name = "ai_call_iter_1",
+                OccurredAt = DateTimeOffset.UtcNow.AddSeconds(-2),
+                InputTokens = 900,
+                OutputTokens = 120,
+            });
+
+        await using (var seed = new MeisterProPRDbContext(options))
+        {
+            seed.ThreadPassJobs.Add(pass);
+            seed.ReviewJobProtocols.Add(protocol);
+            await seed.SaveChangesAsync();
+        }
+
+        var sut = new EfReviewDiagnosticsReader(Substitute.For<IJobRepository>(), new TestDbContextFactory(options));
+
+        var result = await sut.GetThreadPassProtocolAsync(pass.Id, ct: CancellationToken.None);
+
+        Assert.NotNull(result);
+        Assert.Equal(pass.ClientId, result!.ClientId);
+        var returned = Assert.Single(result.Protocols);
+        Assert.Equal(pass.Id, returned.JobId);
+        Assert.Equal("thread-17-code-change", returned.Label);
+        Assert.Equal("gpt-4o", returned.ModelId);
+        Assert.Equal(11, returned.PullRequestId);
+        var aiCall = Assert.Single(returned.Events);
+        Assert.Equal(900, aiCall.InputTokens);
+        Assert.Equal(120, aiCall.OutputTokens);
+    }
+
+    [Fact]
+    public async Task GetThreadPassProtocolAsync_UnknownPass_ReturnsNothing()
+    {
+        var options = new DbContextOptionsBuilder<MeisterProPRDbContext>()
+            .UseInMemoryDatabase($"EfReviewDiagnosticsReaderTests-{Guid.NewGuid():N}")
+            .Options;
+
+        var sut = new EfReviewDiagnosticsReader(Substitute.For<IJobRepository>(), new TestDbContextFactory(options));
+
+        Assert.Null(await sut.GetThreadPassProtocolAsync(Guid.NewGuid(), ct: CancellationToken.None));
+    }
 }

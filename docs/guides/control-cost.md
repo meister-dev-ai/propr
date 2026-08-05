@@ -54,10 +54,15 @@ found - see [what you can tune](../concepts/reviews.md#what-you-can-tune).
 
 ## 5. Review less
 
+- **One review per pull request.** The default, and the largest saving on a repository where people push
+  often: a pull request is reviewed at the first revision it sees, and later pushes wait to be asked for.
+  Turning on "review every pushed update" for a client reverses that and pays for every push - see
+  [what you can tune](../concepts/reviews.md#what-you-can-tune).
 - **Exclusions.** Generated, vendored and mechanical files are the cheapest tokens to save, because they
   are never sent. The patterns live in the repository rather than in ProPR - see
   [configuring ProPR from your repository](../concepts/repository-configuration.md).
-- **Incremental re-reviews.** Already the default, and need no configuration - see
+- **Incremental re-reviews.** When a review does run again, it carries forward what the previous one
+  already covered. Already the default, and needs no configuration - see
   [what happens during a review](../concepts/reviews.md#what-happens-during-a-review).
 - **Iteration budgets.** They bound how long one file's review may keep gathering context before it must
   conclude - see [review loop budgets](../operate/configuration.md#review-loop-budgets).

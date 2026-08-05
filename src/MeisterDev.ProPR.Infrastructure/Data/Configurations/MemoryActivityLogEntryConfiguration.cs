@@ -24,7 +24,7 @@ internal sealed class MemoryActivityLogEntryConfiguration : IEntityTypeConfigura
 
         builder.Property(e => e.ThreadId)
             .HasColumnName("thread_id")
-            .HasColumnType("bigint")
+            .HasMaxLength(256)
             .IsRequired();
 
         builder.Property(e => e.RepositoryId)

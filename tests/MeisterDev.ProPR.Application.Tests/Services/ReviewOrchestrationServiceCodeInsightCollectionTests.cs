@@ -234,7 +234,6 @@ public sealed class ReviewOrchestrationServiceCodeInsightCollectionTests
                 providerRegistry,
                 clientRegistry,
                 prScanRepository,
-                Substitute.For<IAiCommentResolutionCore>(),
                 Substitute.For<IProtocolRecorder>(),
                 CreateReviewContextToolsFactory(),
                 CreateInstructionFetcher(),

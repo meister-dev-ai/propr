@@ -67,12 +67,17 @@ public sealed class AgentAiCommentResolutionCore : IAiCommentResolutionCore
         IChatClient chatClient,
         string modelId,
         CancellationToken cancellationToken = default,
-        string? outputLanguage = null)
+        string? outputLanguage = null,
+        bool hasNewReplies = false)
     {
         var userMessage = BuildCodeChangeUserMessage(thread, pr);
         var messages = new List<ChatMessage>
         {
-            new(ChatRole.System, OutputLanguageDirective.Append(CodeChangeSystemPrompt, outputLanguage)),
+            new(
+                ChatRole.System,
+                OutputLanguageDirective.Append(
+                    AppendDeveloperReplyDirective(CodeChangeSystemPrompt, hasNewReplies),
+                    outputLanguage)),
             new(ChatRole.User, userMessage),
         };
 
@@ -105,6 +110,25 @@ public sealed class AgentAiCommentResolutionCore : IAiCommentResolutionCore
             cancellationToken);
         var usage = AiTokenUsageExtractor.FromResponse(response);
         return ParseResult(response.Text ?? "", usage);
+    }
+
+    /// <summary>
+    ///     Adds the rule that governs a thread carrying both a code change and an unanswered reply. The wording
+    ///     lives in the prompt template tree rather than in this file, so every prompt fragment stays editable
+    ///     in one place.
+    /// </summary>
+    private static string AppendDeveloperReplyDirective(string prompt, bool hasNewReplies)
+    {
+        if (!hasNewReplies)
+        {
+            return prompt;
+        }
+
+        return string.Concat(
+            prompt,
+            Environment.NewLine,
+            Environment.NewLine,
+            PromptTemplateRuntime.RenderDeveloperReply());
     }
 
     private static string BuildCodeChangeUserMessage(PrCommentThread thread, PullRequest pr)

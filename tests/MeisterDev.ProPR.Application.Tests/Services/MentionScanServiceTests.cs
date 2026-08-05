@@ -157,7 +157,7 @@ public sealed class MentionScanServiceTests
             DateTimeOffset.UtcNow);
         var mentionContent = $"@<{ReviewerId}> what does this do?";
         var thread = new PrCommentThread(
-            100,
+            "100",
             null,
             null,
             [new PrThreadComment("Alice", mentionContent, Guid.NewGuid(), 200, DateTimeOffset.UtcNow)]);
@@ -195,7 +195,7 @@ public sealed class MentionScanServiceTests
                 Arg.Any<Guid?>(),
                 Arg.Any<CancellationToken>())
             .ReturnsForAnyArgs(pullRequest);
-        this._jobRepository.ExistsForCommentAsync(ClientId, "repo", 1, 100, 200, Arg.Any<CancellationToken>())
+        this._jobRepository.ExistsForCommentAsync(ClientId, "repo", 1, "100", 200, Arg.Any<CancellationToken>())
             .Returns(false);
 
         // Act
@@ -206,7 +206,7 @@ public sealed class MentionScanServiceTests
             .AddAsync(
                 Arg.Is<MentionReplyJob>(j =>
                     j.ClientId == ClientId &&
-                    j.ThreadId == 100 &&
+                    j.ThreadId == "100" &&
                     j.CommentId == 200),
                 Arg.Any<CancellationToken>());
         Assert.Equal(1, this._channel.Reader.Count);
@@ -224,7 +224,7 @@ public sealed class MentionScanServiceTests
             DateTimeOffset.UtcNow);
         var mentionContent = $"@<{ReviewerId}> same question";
         var thread = new PrCommentThread(
-            100,
+            "100",
             null,
             null,
             [new PrThreadComment("Bob", mentionContent, Guid.NewGuid(), 201, DateTimeOffset.UtcNow)]);
@@ -266,7 +266,7 @@ public sealed class MentionScanServiceTests
                 Arg.Any<Guid>(),
                 Arg.Any<string>(),
                 Arg.Any<int>(),
-                Arg.Any<long>(),
+                Arg.Any<string>(),
                 Arg.Any<long>(),
                 Arg.Any<CancellationToken>())
             .Returns(true);

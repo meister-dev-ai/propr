@@ -19,8 +19,12 @@ public sealed class ThreadMemoryRecord
     /// <summary>Owning client — scopes the record. Must not be <see cref="Guid.Empty" />.</summary>
     public Guid ClientId { get; init; }
 
-    /// <summary>ADO thread identifier. Must be &gt; 0. Unique per (ClientId, RepositoryId, ThreadId).</summary>
-    public long ThreadId { get; init; }
+    /// <summary>
+    ///     Provider-native thread identifier, as the provider itself writes it, unique per
+    ///     (ClientId, RepositoryId, ThreadId). Empty for an administrator dismissal, which is a memory
+    ///     nobody raised on a thread.
+    /// </summary>
+    public string ThreadId { get; init; } = string.Empty;
 
     /// <summary>ADO repository identifier. Required, ≤ 256 characters.</summary>
     public string RepositoryId { get; init; } = string.Empty;
@@ -103,11 +107,6 @@ public sealed class ThreadMemoryRecord
         if (this.ClientId == Guid.Empty)
         {
             throw new ArgumentException("ClientId must not be Guid.Empty.");
-        }
-
-        if (this.ThreadId <= 0)
-        {
-            throw new ArgumentException("ThreadId must be > 0.");
         }
 
         if (string.IsNullOrWhiteSpace(this.RepositoryId))

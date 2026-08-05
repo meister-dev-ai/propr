@@ -1,6 +1,7 @@
 // Copyright (c) Andreas Rain.
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
+using System.Collections.ObjectModel;
 using System.Diagnostics;
 using System.Globalization;
 using System.Net;
@@ -23,6 +24,11 @@ internal sealed partial class GitHubLifecyclePublicationService(
     IHttpClientFactory httpClientFactory,
     ILogger<GitHubLifecyclePublicationService>? logger = null)
 {
+    // Bounded to one page, matching the thread read path. A pull request past a hundred threads leaves the
+    // overflow without a thread id, which costs auto-resolution on those findings and nothing else.
+    private const string ReviewThreadIdsQuery =
+        "query ReviewThreadIds($owner: String!, $name: String!, $pullRequestNumber: Int!) { repository(owner: $owner, name: $name) { pullRequest(number: $pullRequestNumber) { reviewThreads(first: 100) { nodes { id comments(first: 100) { nodes { databaseId } } } } } } }";
+
     private static readonly ActivitySource ActivitySource = new("MeisterProPR.Infrastructure");
     private readonly ILogger<GitHubLifecyclePublicationService> _logger = logger ?? NullLogger<GitHubLifecyclePublicationService>.Instance;
 
@@ -86,6 +92,9 @@ internal sealed partial class GitHubLifecyclePublicationService(
         // each review comment's REST numeric id (GraphQL databaseId). The POST /reviews response only
         // carries the review id, so the per-comment ids are fetched via a follow-up read. Any failure
         // here must leave PostedComments empty without disrupting publishing.
+        // The review-thread node ids need a second follow-up read: GitHub exposes review threads only
+        // through GraphQL, and neither the create-review response nor the REST comment payload names the
+        // thread a comment opened.
         var postedComments = await this.TryCapturePostedCommentsAsync(context, review, response, ct);
 
         return ReviewCommentPostingDiagnosticsDto.Empty(
@@ -134,11 +143,13 @@ internal sealed partial class GitHubLifecyclePublicationService(
                 return [];
             }
 
+            var threadIdsByCommentId = await this.TryResolveReviewThreadIdsAsync(context, review, ct);
+
             return comments
                 .Where(comment => comment.Id is not null)
                 .Select(comment => new PostedReviewCommentRef(
                     comment.Id!.Value.ToString(CultureInfo.InvariantCulture),
-                    reviewIdText,
+                    threadIdsByCommentId.GetValueOrDefault(comment.Id.Value),
                     comment.Path,
                     comment.Line))
                 .ToList();
@@ -147,6 +158,88 @@ internal sealed partial class GitHubLifecyclePublicationService(
         {
             LogPostedCommentCaptureFailed(this._logger, review.Number, ex);
             return [];
+        }
+    }
+
+    /// <summary>
+    ///     Maps each of the pull request's review comments to the node id of the thread it belongs to.
+    ///     GitHub's review threads exist only in GraphQL: the create-review response names the review, and the
+    ///     REST comment payload names neither its thread nor anything a thread can be derived from, so the
+    ///     mapping has to be read back. A comment's REST id is its GraphQL databaseId, which is what joins the
+    ///     two reads.
+    /// </summary>
+    private async Task<IReadOnlyDictionary<long, string>> TryResolveReviewThreadIdsAsync(
+        GitHubConnectionVerifier.GitHubConnectionContext context,
+        CodeReviewRef review,
+        CancellationToken ct)
+    {
+        try
+        {
+            var (owner, name) = BuildRepositoryCoordinates(review.Repository);
+            using var request = new HttpRequestMessage(
+                HttpMethod.Post,
+                GitHubConnectionVerifier.BuildGraphQlUri(review.Repository.Host))
+            {
+                Content = JsonContent.Create(
+                    new
+                    {
+                        query = ReviewThreadIdsQuery,
+                        variables = new
+                        {
+                            owner,
+                            name,
+                            pullRequestNumber = review.Number,
+                        },
+                    }),
+            };
+            await context.AuthorizeRequestAsync(request, ct);
+
+            using var response = await httpClientFactory.CreateClient("GitHubProvider").SendAsync(request, ct);
+            if (!response.IsSuccessStatusCode)
+            {
+                LogReviewThreadIdLookupUnavailable(this._logger, review.Number, (int)response.StatusCode);
+                return ReadOnlyDictionary<long, string>.Empty;
+            }
+
+            var payload = await response.Content.ReadFromJsonAsync<GitHubThreadLookupResponse>(ct);
+
+            // GitHub answers a refused query with HTTP 200 and an errors array, and a partial refusal with a
+            // populated data section beside it, so a status-only check would trust a traversal that reported
+            // a problem. Ids read out of one are not safe to key a later write on, so the lookup is discarded
+            // rather than half believed.
+            if (payload?.Errors is { Count: > 0 })
+            {
+                LogReviewThreadIdLookupRefused(this._logger, review.Number);
+                return ReadOnlyDictionary<long, string>.Empty;
+            }
+
+            var threads = payload?.Data?.Repository?.PullRequest?.ReviewThreads?.Nodes;
+            if (threads is null || threads.Count == 0)
+            {
+                return ReadOnlyDictionary<long, string>.Empty;
+            }
+
+            var threadIdsByCommentId = new Dictionary<long, string>();
+            foreach (var thread in threads.Where(thread => !string.IsNullOrWhiteSpace(thread.Id)))
+            {
+                foreach (var comment in thread.Comments?.Nodes ?? [])
+                {
+                    if (comment.DatabaseId is { } databaseId)
+                    {
+                        threadIdsByCommentId[databaseId] = thread.Id!;
+                    }
+                }
+            }
+
+            return threadIdsByCommentId;
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            // A comment recorded without a thread id loses auto-resolution for that finding. A comment
+            // recorded against the wrong id would send a later write at an object that is not a thread, so
+            // absent beats invented.
+            LogReviewThreadIdLookupFailed(this._logger, review.Number, ex);
+            return ReadOnlyDictionary<long, string>.Empty;
         }
     }
 
@@ -192,13 +285,21 @@ internal sealed partial class GitHubLifecyclePublicationService(
 
     private static string BuildRepositoryPath(RepositoryRef repository)
     {
+        var (owner, name) = BuildRepositoryCoordinates(repository);
+        return $"{Uri.EscapeDataString(owner)}/{Uri.EscapeDataString(name)}";
+    }
+
+    // GraphQL takes owner and name as separate variables, so they are carried unescaped here and escaped
+    // only where they are spliced into a REST path.
+    private static (string Owner, string Name) BuildRepositoryCoordinates(RepositoryRef repository)
+    {
         var repositoryName = repository.ProjectPath.Split('/', StringSplitOptions.RemoveEmptyEntries).LastOrDefault();
         if (string.IsNullOrWhiteSpace(repositoryName))
         {
             repositoryName = repository.ExternalRepositoryId;
         }
 
-        return $"{Uri.EscapeDataString(repository.OwnerOrNamespace)}/{Uri.EscapeDataString(repositoryName)}";
+        return (repository.OwnerOrNamespace, repositoryName);
     }
 
     private static string NormalizePath(string path)
@@ -235,7 +336,58 @@ internal sealed partial class GitHubLifecyclePublicationService(
         Message = "GitHub posted-comment id capture failed for pull request {ReviewNumber}; provenance left empty.")]
     private static partial void LogPostedCommentCaptureFailed(ILogger logger, int reviewNumber, Exception exception);
 
+    [LoggerMessage(
+        EventId = 4782,
+        Level = LogLevel.Debug,
+        Message = "GitHub review-thread id lookup for pull request {ReviewNumber} answered with status {StatusCode}; posted comments carry no thread id.")]
+    private static partial void LogReviewThreadIdLookupUnavailable(ILogger logger, int reviewNumber, int statusCode);
+
+    [LoggerMessage(
+        EventId = 4783,
+        Level = LogLevel.Debug,
+        Message = "GitHub refused the review-thread id lookup for pull request {ReviewNumber}; posted comments carry no thread id.")]
+    private static partial void LogReviewThreadIdLookupRefused(ILogger logger, int reviewNumber);
+
+    [LoggerMessage(
+        EventId = 4784,
+        Level = LogLevel.Debug,
+        Message = "GitHub review-thread id lookup failed for pull request {ReviewNumber}; posted comments carry no thread id.")]
+    private static partial void LogReviewThreadIdLookupFailed(ILogger logger, int reviewNumber, Exception exception);
+
     private sealed record GitHubReviewResponse([property: JsonPropertyName("id")] long? Id);
+
+    private sealed record GitHubThreadLookupResponse(
+        [property: JsonPropertyName("data")] GitHubThreadLookupData? Data,
+        [property: JsonPropertyName("errors")] IReadOnlyList<GitHubThreadLookupError>? Errors);
+
+    private sealed record GitHubThreadLookupError(
+        [property: JsonPropertyName("message")]
+        string? Message);
+
+    private sealed record GitHubThreadLookupData(
+        [property: JsonPropertyName("repository")]
+        GitHubThreadLookupRepository? Repository);
+
+    private sealed record GitHubThreadLookupRepository(
+        [property: JsonPropertyName("pullRequest")]
+        GitHubThreadLookupPullRequest? PullRequest);
+
+    private sealed record GitHubThreadLookupPullRequest(
+        [property: JsonPropertyName("reviewThreads")]
+        GitHubReviewThreadConnection? ReviewThreads);
+
+    private sealed record GitHubReviewThreadConnection([property: JsonPropertyName("nodes")] IReadOnlyList<GitHubReviewThreadNode>? Nodes);
+
+    private sealed record GitHubReviewThreadNode(
+        [property: JsonPropertyName("id")] string? Id,
+        [property: JsonPropertyName("comments")]
+        GitHubThreadCommentConnection? Comments);
+
+    private sealed record GitHubThreadCommentConnection([property: JsonPropertyName("nodes")] IReadOnlyList<GitHubThreadCommentNode>? Nodes);
+
+    private sealed record GitHubThreadCommentNode(
+        [property: JsonPropertyName("databaseId")]
+        long? DatabaseId);
 
     private sealed record GitHubReviewCommentResponse(
         [property: JsonPropertyName("id")] long? Id,

@@ -8,6 +8,7 @@ using MeisterDev.ProPR.Application.Services;
 using MeisterDev.ProPR.Application.Support;
 using MeisterDev.ProPR.Application.ValueObjects;
 using MeisterDev.ProPR.Domain.Entities;
+using MeisterDev.ProPR.Domain.Enums;
 using MeisterDev.ProPR.Domain.ValueObjects;
 using Microsoft.Extensions.AI;
 using NSubstitute;
@@ -118,6 +119,7 @@ public partial class ReviewOrchestrationServiceTests
         var job = CreateJob();
         job.SetAllowUnchangedResubmission(true);
         StubUnchangedRevision(prScanRepository, prFetcher, job);
+        StubPriorJobToResumeFrom(jobs, job, budgetBlocked: false, inScopeChangedFileCount: 1);
         orchestrator.ReviewAsync(
                 Arg.Any<ReviewJob>(),
                 Arg.Any<PullRequest>(),
@@ -130,14 +132,117 @@ public partial class ReviewOrchestrationServiceTests
 
         await service.ProcessAsync(job, CancellationToken.None);
 
-        await jobs.DidNotReceiveWithAnyArgs()
-            .GetBestTerminalJobWithFileResultsByStoredRevisionAsync(
-                default!,
-                default!,
-                default!,
-                default,
-                default!,
-                default);
+        // Asserted on what was adopted rather than on whether the lookup happened. Whether a prior run stopped
+        // short at a budget cap cannot be known without looking it up, so the query is no longer the signal;
+        // adopting its files is.
+        await jobs.DidNotReceive().AddFileResultAsync(
+            Arg.Is<ReviewFileResult>(result => result.ResumedFromJobId != null),
+            Arg.Any<CancellationToken>());
+    }
+
+    /// <summary>
+    ///     A run stopped by a budget cap records the revision as processed while having reviewed only part of
+    ///     it. Standing resume down there leaves no way to finish the review except paying again for every file
+    ///     the capped run already covered.
+    /// </summary>
+    [Fact]
+    public async Task ProcessAsync_PriorRunStoppedShortAtABudgetCap_AdoptsWhatItAlreadyReviewed()
+    {
+        var (jobs, prFetcher, orchestrator, commentPoster, reviewerManager, clientRegistry, prScanRepository, _, _, logger) =
+            CreateDeps();
+
+        var job = CreateJob();
+        job.SetAllowUnchangedResubmission(true);
+        StubUnchangedRevision(prScanRepository, prFetcher, job);
+        StubPriorJobToResumeFrom(jobs, job, budgetBlocked: true, inScopeChangedFileCount: 275);
+        orchestrator.ReviewAsync(
+                Arg.Any<ReviewJob>(),
+                Arg.Any<PullRequest>(),
+                Arg.Any<ReviewSystemContext>(),
+                Arg.Any<CancellationToken>(),
+                Arg.Any<IChatClient?>())
+            .Returns(CreateReviewResult());
+
+        var service = CreateService(jobs, prFetcher, orchestrator, commentPoster, reviewerManager, clientRegistry, prScanRepository, logger);
+
+        await service.ProcessAsync(job, CancellationToken.None);
+
+        await jobs.Received().AddFileResultAsync(
+            Arg.Is<ReviewFileResult>(result => result.ResumedFromJobId != null),
+            Arg.Any<CancellationToken>());
+    }
+
+    /// <summary>
+    ///     A cap that tripped on the last file left nothing outstanding. Adopting that run wholesale would
+    ///     answer an explicit re-review request with no fresh work at all, which is the case resume stands
+    ///     down for.
+    /// </summary>
+    [Fact]
+    public async Task ProcessAsync_PriorRunHitACapButReviewedEverything_DoesNotAdoptIt()
+    {
+        var (jobs, prFetcher, orchestrator, commentPoster, reviewerManager, clientRegistry, prScanRepository, _, _, logger) =
+            CreateDeps();
+
+        var job = CreateJob();
+        job.SetAllowUnchangedResubmission(true);
+        StubUnchangedRevision(prScanRepository, prFetcher, job);
+        StubPriorJobToResumeFrom(jobs, job, budgetBlocked: true, inScopeChangedFileCount: 1);
+        orchestrator.ReviewAsync(
+                Arg.Any<ReviewJob>(),
+                Arg.Any<PullRequest>(),
+                Arg.Any<ReviewSystemContext>(),
+                Arg.Any<CancellationToken>(),
+                Arg.Any<IChatClient?>())
+            .Returns(CreateReviewResult());
+
+        var service = CreateService(jobs, prFetcher, orchestrator, commentPoster, reviewerManager, clientRegistry, prScanRepository, logger);
+
+        await service.ProcessAsync(job, CancellationToken.None);
+
+        await jobs.DidNotReceive().AddFileResultAsync(
+            Arg.Is<ReviewFileResult>(result => result.ResumedFromJobId != null),
+            Arg.Any<CancellationToken>());
+    }
+
+    /// <summary>
+    ///     Stubs a terminal prior job at the same revision carrying one finished file result, so the resume
+    ///     decision has something real to adopt or decline.
+    /// </summary>
+    private static void StubPriorJobToResumeFrom(
+        IReviewJobExecutionStore jobs,
+        ReviewJob job,
+        bool budgetBlocked,
+        int inScopeChangedFileCount)
+    {
+        var prior = new ReviewJob(
+            Guid.NewGuid(),
+            job.ClientId,
+            job.OrganizationUrl,
+            job.ProjectId,
+            job.RepositoryId,
+            job.PullRequestId,
+            job.IterationId);
+        prior.SetReviewRevision(job.ReviewRevisionReference!);
+        prior.Status = JobStatus.Completed;
+        prior.SetInScopeChangedFileCount(inScopeChangedFileCount);
+
+        if (budgetBlocked)
+        {
+            prior.SetBudgetBlock(BudgetScopeKind.Increment, BudgetCapKind.Soft, 5m, 5.12m);
+        }
+
+        var priorResult = new ReviewFileResult(prior.Id, ResumableFilePath);
+        priorResult.MarkCompleted("Already looked at.", []);
+        prior.FileReviewResults.Add(priorResult);
+
+        jobs.GetBestTerminalJobWithFileResultsByStoredRevisionAsync(
+                job.OrganizationUrl,
+                job.ProjectId,
+                job.RepositoryId,
+                job.PullRequestId,
+                Arg.Any<string>(),
+                Arg.Any<CancellationToken>())
+            .Returns(prior);
     }
 
     [Fact]
@@ -167,6 +272,9 @@ public partial class ReviewOrchestrationServiceTests
     ///     Puts the pull request in the state both guards react to: a scan that already records this exact
     ///     revision, and no reviewer threads carrying a new reply.
     /// </summary>
+    /// <summary>A path present both in the prior job's finished work and in the current change set.</summary>
+    private const string ResumableFilePath = "src/Reviewed.cs";
+
     private static void StubUnchangedRevision(
         IReviewPrScanRepository prScanRepository,
         IPullRequestFetcher prFetcher,
@@ -194,6 +302,13 @@ public partial class ReviewOrchestrationServiceTests
                 Arg.Any<CancellationToken>(),
                 Arg.Any<ReviewRevision?>(),
                 Arg.Any<IReviewRepositoryWorkspace?>())
-            .Returns(CreatePullRequest());
+            .Returns(
+                CreatePullRequest() with
+                {
+                    ChangedFiles = new List<ChangedFile>
+                    {
+                        new(ResumableFilePath, ChangeType.Edit, "content", "+line"),
+                    }.AsReadOnly(),
+                });
     }
 }

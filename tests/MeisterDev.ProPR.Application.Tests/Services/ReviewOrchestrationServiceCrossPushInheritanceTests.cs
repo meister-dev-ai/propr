@@ -224,6 +224,21 @@ public partial class ReviewOrchestrationServiceTests
         {
             return Task.FromResult<IReadOnlyList<PrCommentThread>>([]);
         }
+
+        public Task<PullRequest> FetchThreadContextAsync(
+            string organizationUrl, string projectId, string repositoryId, int pullRequestId, int iterationId,
+            Guid? clientId = null, CancellationToken cancellationToken = default)
+        {
+            return this.FetchAsync(
+                organizationUrl,
+                projectId,
+                repositoryId,
+                pullRequestId,
+                iterationId,
+                null,
+                clientId,
+                cancellationToken);
+        }
     }
 
     /// <summary>

@@ -6,31 +6,17 @@ using MeisterDev.ProPR.Domain.Entities;
 namespace MeisterDev.ProPR.Application.Interfaces;
 
 /// <summary>
-///     Persists <see cref="ReviewPrScan" /> watermarks that track the last commit processed
-///     for comment resolution on each pull request.
+///     Persists the scan progress recorded against a pull request: the review watermark that tracks the
+///     last revision processed, and the per-thread counters that detect new human replies.
 /// </summary>
-public interface IReviewPrScanRepository
-{
-    /// <summary>
-    ///     Gets the scan watermark for the given client and pull request,
-    ///     or <c>null</c> if no scan has been performed yet.
-    ///     The <see cref="ReviewPrScan.Threads" /> collection is included.
-    /// </summary>
-    /// <param name="clientId">The client identifier.</param>
-    /// <param name="repositoryId">ADO repository identifier.</param>
-    /// <param name="pullRequestId">ADO pull request number.</param>
-    /// <param name="ct">A token to monitor for cancellation requests.</param>
-    Task<ReviewPrScan?> GetAsync(
-        Guid clientId,
-        string repositoryId,
-        int pullRequestId,
-        CancellationToken ct = default);
-
-    /// <summary>
-    ///     Creates or updates the scan watermark including all child thread records.
-    ///     Replaces thread records — any threads no longer present are removed.
-    /// </summary>
-    /// <param name="record">The scan record to upsert.</param>
-    /// <param name="ct">A token to monitor for cancellation requests.</param>
-    Task UpsertAsync(ReviewPrScan record, CancellationToken ct = default);
-}
+/// <remarks>
+///     Every fact on <see cref="ReviewPrScan" /> is written through its own operation, so a writer that
+///     owns one fact cannot express a write of another. Inject the narrowest port a caller needs rather
+///     than this composition, which exists for the implementation and for callers that genuinely own
+///     every fact.
+/// </remarks>
+public interface IReviewPrScanRepository :
+    IReviewPrScanThreadStatusStore,
+    IReviewPrScanWatermarkStore,
+    IReviewPrScanThreadPassStore,
+    IReviewPrScanPendingReviewWriter;

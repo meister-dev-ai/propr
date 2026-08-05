@@ -35,7 +35,7 @@ where it is defined in full and kept up to date.
 
 | Term | What it means | Covered in |
 |---|---|---|
-| Review increment | One revision of a pull request as ProPR reviewed it. A new push makes a new increment, which is why budget caps and diff archiving are counted per increment rather than per pull request. | [Reviews](concepts/reviews.md) |
+| Review increment | One revision of a pull request as ProPR reviewed it. Reviewing a new revision makes a new increment, which is why budget caps and diff archiving are counted per increment rather than per pull request. | [Reviews](concepts/reviews.md) |
 | Review pass | One sweep of a review model over the change. Every changed file gets one; a client's pass list can add more. | [Review passes](concepts/reviews.md#review-passes) |
 | Lens | The `None`, `Security` or `ProRV` setting on an extra pass: the choice of prompt, and with it the set of files that pass covers. | [Review passes](concepts/reviews.md#review-passes) |
 | ProRV | The knowledge lens - the one that consults a catalog of per-language checks bundled with the product instead of working from the diff alone. | [Review passes](concepts/reviews.md#review-passes) |

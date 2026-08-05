@@ -349,6 +349,7 @@ function buildMockClient(id: string, displayName = `Mocked Client ${id}`, overri
     scmCommentPostingEnabled: true,
     enableEvidenceBackedVerification: false,
     enableMultiPassUnion: false,
+    reviewEveryIncrementEnabled: false,
     enableLanguageRobustScreening: false,
     outputLanguage: 'en',
     // Client "3" (Umbrella) is intentionally uncapped to exercise the no-budget state; others carry caps.
@@ -2089,7 +2090,7 @@ let threadMemoryRecords = [
   {
     id: 'tm-1',
     clientId: '1',
-    threadId: 1024,
+    threadId: '1024',
     repositoryId: 'meister-propr',
     pullRequestId: 450,
     filePath: 'src/MeisterDev.ProPR.Api/Features/Reviewing/Diagnostics/Controllers/JobsController.cs',
@@ -2100,7 +2101,7 @@ let threadMemoryRecords = [
   {
     id: 'tm-2',
     clientId: '1',
-    threadId: 1025,
+    threadId: '1025',
     repositoryId: 'meister-propr',
     pullRequestId: 450,
     filePath: 'src/MeisterDev.ProPR.Core/Services/JobService.cs',
@@ -2111,7 +2112,7 @@ let threadMemoryRecords = [
   {
     id: 'tm-3',
     clientId: '2',
-    threadId: 501,
+    threadId: '501',
     repositoryId: 'infrastructure',
     pullRequestId: 12,
     filePath: 'terraform/main.tf',
@@ -2125,7 +2126,7 @@ let memoryActivityLog = [
   {
     id: 'log-1',
     clientId: '1',
-    threadId: 1024,
+    threadId: '1024',
     repositoryId: 'meister-propr',
     pullRequestId: 450,
     action: 0,
@@ -2137,7 +2138,7 @@ let memoryActivityLog = [
   {
     id: 'log-2',
     clientId: '1',
-    threadId: 1025,
+    threadId: '1025',
     repositoryId: 'meister-propr',
     pullRequestId: 450,
     action: 0,
@@ -2149,7 +2150,7 @@ let memoryActivityLog = [
   {
     id: 'log-3',
     clientId: '1',
-    threadId: 1026,
+    threadId: '1026',
     repositoryId: 'meister-propr',
     pullRequestId: 451,
     action: 2,

@@ -21,4 +21,10 @@ public sealed partial class MentionReplyService
         Level = LogLevel.Error,
         Message = "MentionReplyService: job {JobId} failed")]
     private static partial void LogJobFailed(ILogger logger, Guid jobId, Exception ex);
+
+    [LoggerMessage(
+        Level = LogLevel.Warning,
+        Message =
+            "MentionReplyService: recording posted-comment provenance failed for job {JobId} — the reply is unaffected")]
+    private static partial void LogPostedCommentOriginRecordingFailed(ILogger logger, Guid jobId, Exception ex);
 }

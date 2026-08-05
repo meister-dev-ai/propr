@@ -67,7 +67,7 @@ public sealed class MentionsModuleTests
             ExistingThreads:
             [
                 new PrCommentThread(
-                    100,
+                    "100",
                     null,
                     null,
                     [
@@ -106,7 +106,7 @@ public sealed class MentionsModuleTests
                 Arg.Any<Guid?>(),
                 Arg.Any<CancellationToken>())
             .Returns(pullRequest);
-        jobRepository.ExistsForCommentAsync(ClientId, "repo", 1, 100, 200, Arg.Any<CancellationToken>()).Returns(false);
+        jobRepository.ExistsForCommentAsync(ClientId, "repo", 1, "100", 200, Arg.Any<CancellationToken>()).Returns(false);
 
         await sut.ScanAsync();
 
@@ -115,7 +115,7 @@ public sealed class MentionsModuleTests
                 Arg.Is<MentionReplyJob>(job =>
                     job.ClientId == ClientId &&
                     job.PullRequestId == 1 &&
-                    job.ThreadId == 100 &&
+                    job.ThreadId == "100" &&
                     job.CommentId == 200),
                 Arg.Any<CancellationToken>());
         Assert.Equal(1, channel.Reader.Count);
@@ -135,7 +135,7 @@ public sealed class MentionsModuleTests
                 Arg.Any<ReviewThreadRef>(),
                 Arg.Any<string>(),
                 Arg.Any<CancellationToken>())
-            .Returns(Task.CompletedTask);
+            .Returns(Task.FromResult<string?>(null));
         providerRegistry.GetReviewThreadReplyPublisher(Arg.Any<ScmProvider>())
             .Returns(threadReplier);
         var sut = new MentionReplyService(
@@ -152,7 +152,7 @@ public sealed class MentionsModuleTests
             "proj",
             "repo",
             7,
-            3,
+            "3",
             11,
             "@bot please help");
         var pullRequest = new PullRequest(

@@ -2,7 +2,6 @@
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 // This file implements commercial-only functionality. A commercial license is required to activate or use that functionality.
 
-using System.Globalization;
 using MeisterDev.ProPR.Domain.Enums;
 using MeisterDev.ProPR.Domain.Events;
 using Microsoft.Extensions.Logging;
@@ -41,16 +40,13 @@ public sealed partial class CodeInsightDispositionService(
                 return;
             }
 
-            // The provider thread id captured at materialisation is the join. The crawl carries the thread id
-            // as a number and the store holds the provider's own string form, so the conversion is explicit
-            // and invariant: a culture-dependent one would silently never match.
-            var providerThreadId = evt.ThreadId.ToString(CultureInfo.InvariantCulture);
-
+            // The provider thread id captured at materialisation is the join, and both sides now hold the
+            // provider's own form, so there is nothing to convert between them.
             var finding = await findingStore.FindByProviderThreadAsync(
                 evt.ClientId,
                 evt.RepositoryId,
                 evt.PullRequestId,
-                providerThreadId,
+                evt.ThreadId,
                 ct);
 
             if (finding is null)

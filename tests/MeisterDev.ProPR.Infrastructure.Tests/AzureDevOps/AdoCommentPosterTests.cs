@@ -663,7 +663,7 @@ public class AdoCommentPosterTests
         var existingThreads = new List<PrCommentThread>
         {
             new(
-                101,
+                "101",
                 null,
                 null,
                 new List<PrThreadComment>
@@ -729,7 +729,7 @@ public class AdoCommentPosterTests
         var existingThreads = new List<PrCommentThread>
         {
             new(
-                102,
+                "102",
                 null,
                 null,
                 new List<PrThreadComment>

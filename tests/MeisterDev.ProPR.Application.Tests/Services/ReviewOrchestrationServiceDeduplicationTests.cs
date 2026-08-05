@@ -84,7 +84,7 @@ public class ReviewOrchestrationServiceDeduplicationTests
                 Arg.Any<ReviewThreadRef>(),
                 Arg.Any<string>(),
                 Arg.Any<CancellationToken>())
-            .Returns(Task.CompletedTask);
+            .Returns(Task.FromResult<string?>(null));
 
         registry.GetReviewThreadStatusWriter(Arg.Any<ScmProvider>()).Returns(threadStatusWriter);
         registry.GetReviewThreadReplyPublisher(Arg.Any<ScmProvider>()).Returns(threadReplyPublisher);
@@ -107,7 +107,6 @@ public class ReviewOrchestrationServiceDeduplicationTests
         IReviewPrScanRepository prScanRepository)
     {
         var reviewerManager = CreateReviewerManager();
-        var resolutionCore = Substitute.For<IAiCommentResolutionCore>();
         var reviewContextToolsFactory = Substitute.For<IReviewContextToolsFactory>();
         reviewContextToolsFactory
             .Create(Arg.Any<ReviewContextToolsRequest>())
@@ -155,7 +154,6 @@ public class ReviewOrchestrationServiceDeduplicationTests
             providerRegistry,
             clientRegistry,
             prScanRepository,
-            resolutionCore,
             Substitute.For<IProtocolRecorder>(),
             reviewContextToolsFactory,
             instructionFetcher,

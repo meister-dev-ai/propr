@@ -99,7 +99,7 @@ public sealed class ReviewPromptsMemoryReconsiderationOutcomeTests
     {
         return new ThreadMemoryMatchDto(
             Guid.NewGuid(),
-            42,
+            "42",
             "backend/Foo.cs",
             "The resolution summary.",
             0.92f,

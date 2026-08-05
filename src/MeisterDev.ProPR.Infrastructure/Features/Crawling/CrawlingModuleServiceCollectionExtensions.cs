@@ -50,6 +50,21 @@ public static class CrawlingModuleServiceCollectionExtensions
             services.AddScoped<IWebhookConfigurationRepository, EfWebhookConfigurationRepository>();
             services.AddScoped<IWebhookDeliveryLogRepository, EfWebhookDeliveryLogRepository>();
             services.AddScoped<IReviewPrScanRepository, EfReviewPrScanRepository>();
+
+            // Callers that own only the last-seen thread status resolve the narrow port, which cannot
+            // express a watermark or reply-count write.
+            services.AddScoped<IReviewPrScanThreadStatusStore>(sp => sp.GetRequiredService<IReviewPrScanRepository>());
+
+            // The file pass reaches the review watermark and nothing else; the thread pass reaches the thread
+            // watermark and the per-thread counters and nothing else. Neither port can express the other's write.
+            services.AddScoped<IReviewPrScanWatermarkStore>(sp => sp.GetRequiredService<IReviewPrScanRepository>());
+            services.AddScoped<IReviewPrScanThreadPassStore>(sp => sp.GetRequiredService<IReviewPrScanRepository>());
+
+            // The guard that declines an increment records which revision it declined, and reaches nothing else.
+            services.AddScoped<IReviewPrScanPendingReviewWriter>(sp => sp.GetRequiredService<IReviewPrScanRepository>());
+
+            // Read surfaces report the scan record without being able to write any part of it.
+            services.AddScoped<IReviewPrScanReader>(sp => sp.GetRequiredService<IReviewPrScanRepository>());
         }
 
         services.AddAzureDevOpsCrawlingServices(configuration);

@@ -335,6 +335,25 @@ public interface IJobRepository
         CancellationToken ct = default);
 
     /// <summary>
+    ///     Returns the revision the given client last engaged with for the given pull request, or
+    ///     <see langword="null" /> when that client has no job on record for it. The result is scoped to
+    ///     <paramref name="clientId" />: two clients configured against the same repository engage independently.
+    /// </summary>
+    /// <remarks>
+    ///     A job in any status counts, including a still-running one, because a first review in flight is engagement.
+    ///     The exceptions are <see cref="JobStatus.BudgetHeld" /> and <see cref="JobStatus.BudgetExceeded" />: a job
+    ///     blocked at a budget cap is resumed by restarting it once budget frees, so counting it would leave the pull
+    ///     request permanently at a revision no review was completed for.
+    /// </remarks>
+    Task<EngagedReviewRevision?> GetLatestEngagedRevisionAsync(
+        Guid clientId,
+        string organizationUrl,
+        string projectId,
+        string repositoryId,
+        int pullRequestId,
+        CancellationToken ct = default);
+
+    /// <summary>
     ///     Returns the terminal review job for the given pull request and persisted revision key that has the most
     ///     reusable completed file results, with <see cref="ReviewJob.FileReviewResults" /> eagerly loaded, or
     ///     <see langword="null" />.

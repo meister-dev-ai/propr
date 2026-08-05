@@ -615,6 +615,37 @@ public sealed class InMemoryReviewJobRepository : IJobRepository
         return Task.FromResult(ReviewBaselineSelection.SelectReusableBaseline(candidates, currentRevisionKey));
     }
 
+    public Task<EngagedReviewRevision?> GetLatestEngagedRevisionAsync(
+        Guid clientId,
+        string organizationUrl,
+        string projectId,
+        string repositoryId,
+        int pullRequestId,
+        CancellationToken ct = default)
+    {
+        // A job blocked at a budget cap is waiting on a manual restart, so it is not an engagement with its
+        // revision; every other status is, including a review still in flight.
+        var latest = this._jobs.Values
+            .Where(job =>
+                job.ClientId == clientId
+                && string.Equals(job.OrganizationUrl, organizationUrl, StringComparison.Ordinal)
+                && string.Equals(job.ProjectId, projectId, StringComparison.Ordinal)
+                && string.Equals(job.RepositoryId, repositoryId, StringComparison.Ordinal)
+                && job.PullRequestId == pullRequestId
+                && job.Status is not (JobStatus.BudgetHeld or JobStatus.BudgetExceeded))
+            .OrderByDescending(job => job.SubmittedAt)
+            .ThenByDescending(job => job.IterationId)
+            .FirstOrDefault();
+
+        return Task.FromResult(
+            latest is null
+                ? null
+                : new EngagedReviewRevision(
+                    ReviewRevisionKeys.GetStoredKey(latest.ReviewRevisionReference, latest.IterationId),
+                    latest.ReviewRevisionReference,
+                    latest.IterationId));
+    }
+
     public Task<ReviewJob?> GetBestTerminalJobWithFileResultsByStoredRevisionAsync(
         string organizationUrl,
         string projectId,

@@ -131,7 +131,6 @@ public sealed class ReviewOrchestrationServiceDiffRetentionTests
                 providerRegistry,
                 clientRegistry,
                 prScanRepository,
-                Substitute.For<IAiCommentResolutionCore>(),
                 Substitute.For<IProtocolRecorder>(),
                 CreateReviewContextToolsFactory(),
                 CreateInstructionFetcher(),

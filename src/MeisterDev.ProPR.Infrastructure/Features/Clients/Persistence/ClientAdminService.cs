@@ -80,6 +80,7 @@ public sealed class ClientAdminService(
         IReadOnlyList<CommentSeverity>? autoResolveSeverities = null,
         bool? codeInsightsCollectionEnabled = null,
         string? outputLanguage = null,
+        bool? reviewEveryIncrementEnabled = null,
         CancellationToken ct = default)
     {
         var isCommunityEdition = await this.IsCommunityEditionAsync(ct);
@@ -111,7 +112,8 @@ public sealed class ClientAdminService(
             baselineReasoningEffort,
             minimumSeverityToPost,
             codeInsightsCollectionEnabled,
-            outputLanguage);
+            outputLanguage,
+            reviewEveryIncrementEnabled);
         ReplaceReviewPassesIfProvided(client, reviewPasses);
         ReplaceBudgetCapsIfProvided(client, budgetConfig);
         ReplaceAutoResolveSeveritiesIfProvided(client, autoResolveSeverities);
@@ -135,7 +137,8 @@ public sealed class ClientAdminService(
         ReviewReasoningEffort? baselineReasoningEffort,
         CommentSeverity? minimumSeverityToPost,
         bool? codeInsightsCollectionEnabled,
-        string? outputLanguage)
+        string? outputLanguage,
+        bool? reviewEveryIncrementEnabled)
     {
         ApplyIfHasValue(isActive, value => client.IsActive = value);
         ApplyIfNotNull(displayName, value => client.DisplayName = value);
@@ -159,6 +162,7 @@ public sealed class ClientAdminService(
         ApplyIfHasValue(enableMultiPassUnion, value => client.EnableMultiPassUnion = value);
         ApplyIfHasValue(codeInsightsCollectionEnabled, value => client.CodeInsightsCollectionEnabled = value);
         ApplyIfHasValue(includeLinkedItemsInContext, value => client.IncludeLinkedItemsInContext = value);
+        ApplyIfHasValue(reviewEveryIncrementEnabled, value => client.ReviewEveryIncrementEnabled = value);
         ApplyIfHasValue(baselineReasoningEffort, value => client.BaselineReasoningEffort = value);
 
         // A blank tag reads as the default rather than as "clear it": the column is never empty, because every
@@ -458,7 +462,8 @@ public sealed class ClientAdminService(
             client.MinimumSeverityToPost,
             client.AutoResolveSeverities,
             client.CodeInsightsCollectionEnabled,
-            ReviewOutputLanguage.Normalize(client.OutputLanguage));
+            ReviewOutputLanguage.Normalize(client.OutputLanguage),
+            client.ReviewEveryIncrementEnabled);
     }
 
     private async Task<bool> IsCommunityEditionAsync(CancellationToken ct)

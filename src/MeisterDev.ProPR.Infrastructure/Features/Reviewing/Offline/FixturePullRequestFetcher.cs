@@ -129,4 +129,25 @@ public sealed class FixturePullRequestFetcher(IReviewEvaluationFixtureAccessor f
         var pr = await this.FetchAsync(organizationUrl, projectId, repositoryId, pullRequestId, 1, null, clientId, cancellationToken);
         return pr.ExistingThreads ?? [];
     }
+
+    public async Task<PullRequest> FetchThreadContextAsync(
+        string organizationUrl,
+        string projectId,
+        string repositoryId,
+        int pullRequestId,
+        int iterationId,
+        Guid? clientId = null,
+        CancellationToken cancellationToken = default)
+    {
+        // Nothing is downloaded from a remote here, so the whole pull request is already the cheap answer.
+        return await this.FetchAsync(
+            organizationUrl,
+            projectId,
+            repositoryId,
+            pullRequestId,
+            iterationId,
+            null,
+            clientId,
+            cancellationToken);
+    }
 }

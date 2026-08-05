@@ -271,6 +271,32 @@ try
         builder.Services.AddHostedService(sp => sp.GetRequiredService<MentionReplyWorker>());
     }
 
+    // ThreadPassScanWorker (producer) and ThreadPassWorker (consumer) share a single bounded
+    // Channel<ThreadPassJob>. The passes themselves are created by pull-request synchronization; the producer
+    // only moves durable rows into execution, so a restart loses nothing.
+    var threadPassChannel = Channel.CreateBounded<ThreadPassJob>(
+        new BoundedChannelOptions(1000)
+        {
+            FullMode = BoundedChannelFullMode.Wait,
+            SingleReader = true,
+            SingleWriter = false,
+        });
+    builder.Services.AddSingleton(threadPassChannel);
+    builder.Services.AddSingleton(threadPassChannel.Reader);
+    builder.Services.AddSingleton(threadPassChannel.Writer);
+
+    builder.Services.AddSingleton<ThreadPassScanWorker>();
+    if (hasDatabaseConnectionString && !isTesting && !disableHostedServices)
+    {
+        builder.Services.AddHostedService(sp => sp.GetRequiredService<ThreadPassScanWorker>());
+    }
+
+    builder.Services.AddSingleton<ThreadPassWorker>();
+    if (hasDatabaseConnectionString && !isTesting && !disableHostedServices)
+    {
+        builder.Services.AddHostedService(sp => sp.GetRequiredService<ThreadPassWorker>());
+    }
+
     // RetentionPurgeWorker deletes elapsed retained raw PR data. It depends on the review-archive
     // store, which is only registered when a database connection string is configured, so gate it
     // the same way to keep it inert in DB-less test runs.

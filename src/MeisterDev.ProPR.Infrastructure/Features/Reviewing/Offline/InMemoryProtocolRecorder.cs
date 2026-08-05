@@ -51,6 +51,21 @@ public sealed class InMemoryProtocolRecorder(
         return Task.FromResult(protocol.Id);
     }
 
+    /// <summary>
+    ///     Offline execution runs the file pass alone, so there is no thread pass to own a protocol and nothing
+    ///     to record against. The identifier is still returned so the caller's recording path stays uniform.
+    /// </summary>
+    public Task<Guid> BeginForThreadPassAsync(
+        Guid threadPassJobId,
+        int attemptNumber,
+        string? label = null,
+        string? modelId = null,
+        CancellationToken ct = default,
+        string? logicalModelName = null)
+    {
+        return Task.FromResult(Guid.NewGuid());
+    }
+
     public Task RecordAiCallAsync(
         Guid protocolId,
         int iteration,
@@ -232,7 +247,7 @@ public sealed class InMemoryProtocolRecorder(
         protocol.ToolCallCount = toolCallCount;
         protocol.FinalConfidence = finalConfidence;
 
-        var job = jobs.GetById(protocol.JobId);
+        var job = protocol.JobId is { } ownerJobId ? jobs.GetById(ownerJobId) : null;
         if (job is not null)
         {
             var category = protocol.AiConnectionCategory ?? AiConnectionModelCategory.Default;
@@ -286,7 +301,7 @@ public sealed class InMemoryProtocolRecorder(
             protocol.TotalReasoningTokens = (protocol.TotalReasoningTokens ?? 0) + reasoningTokens;
         }
 
-        var job = jobs.GetById(protocol.JobId);
+        var job = protocol.JobId is { } ownerJobId ? jobs.GetById(ownerJobId) : null;
         if (job is not null)
         {
             var category = connectionCategory ?? AiConnectionModelCategory.Default;

@@ -23,7 +23,7 @@ public sealed class NoOpThreadMemoryRepository : IThreadMemoryRepository
         return Task.CompletedTask;
     }
 
-    public Task<bool> RemoveByThreadAsync(Guid clientId, string repositoryId, long threadId, CancellationToken ct = default)
+    public Task<bool> RemoveByThreadAsync(Guid clientId, string repositoryId, string threadId, CancellationToken ct = default)
     {
         return Task.FromResult(false);
     }

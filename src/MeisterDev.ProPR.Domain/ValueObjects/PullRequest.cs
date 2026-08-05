@@ -36,14 +36,14 @@ namespace MeisterDev.ProPR.Domain.ValueObjects;
 ///     <see cref="ChangedFiles" />.
 /// </param>
 /// <param name="AuthorizedIdentityId">
-///     Provider-authenticated identity GUID when the review host exposes one.
-///     When populated, reviewer-owned thread detection treats this identity as equivalent to the
-///     configured reviewer identity.
+///     Provider-authenticated identity GUID when the review host exposes one: the account whose token
+///     fetched this pull request and posts on it. Thread ownership falls back to this identity for a thread
+///     with no recorded posting provenance. The configured reviewer identity is not consulted.
 /// </param>
 /// <param name="AuthorizedIdentityName">
-///     Provider-native login or display name of the authenticated connection identity used to
-///     fetch and post review correspondence. When populated, reviewer-owned thread detection
-///     also treats this identity as equivalent to the configured reviewer identity.
+///     Provider-native login or display name of the same authenticated connection identity, for hosts that
+///     name authors that way rather than by GUID. Used on the same terms as
+///     <paramref name="AuthorizedIdentityId" />.
 /// </param>
 /// <param name="LinkedItems">
 ///     Work items (Azure DevOps) or issues (GitHub, GitLab, Forgejo) linked to the pull request,

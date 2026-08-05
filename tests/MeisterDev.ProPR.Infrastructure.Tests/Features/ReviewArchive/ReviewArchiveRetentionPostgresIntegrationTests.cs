@@ -287,7 +287,7 @@ public sealed class ReviewArchiveRetentionPostgresIntegrationTests(PostgresConta
         {
             Id = Guid.NewGuid(),
             ClientId = clientId,
-            ThreadId = 999,
+            ThreadId = "999",
             RepositoryId = repositoryId,
             PullRequestId = pullRequestId,
             FilePath = "src/Domain/Cart.cs",

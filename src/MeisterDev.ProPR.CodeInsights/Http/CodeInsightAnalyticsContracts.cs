@@ -569,9 +569,6 @@ public sealed record CodeInsightImportRequestBody(
 ///     Findings the collection already held for these jobs, so this run plus what was there can be compared
 ///     against what coverage says the reviews produced.
 /// </param>
-/// <param name="ThreadsNotReplayable">
-///     Threads that could not be replayed because their provider thread id is not numeric.
-/// </param>
 public sealed record CodeInsightImportResponse(
     int JobsRead,
     int JobsImported,
@@ -583,5 +580,4 @@ public sealed record CodeInsightImportResponse(
     int HumanThreadsReplayed,
     bool CollectionDisabled,
     bool ReachedLimit,
-    int FindingsAlreadyHeld,
-    int ThreadsNotReplayable);
+    int FindingsAlreadyHeld);

@@ -32,7 +32,7 @@ internal sealed class PostedFindingRecordConfiguration : IEntityTypeConfiguratio
 
         builder.Property(r => r.ProviderThreadId)
             .HasColumnName("provider_thread_id")
-            .HasColumnType("bigint")
+            .HasMaxLength(256)
             .IsRequired();
 
         builder.Property(r => r.ReviewJobId)

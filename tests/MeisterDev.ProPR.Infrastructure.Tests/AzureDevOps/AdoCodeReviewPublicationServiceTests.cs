@@ -55,7 +55,7 @@ public sealed class AdoCodeReviewPublicationServiceTests
         var result = new ReviewResult("Looks solid.", []);
         IReadOnlyList<PrCommentThread> existingThreads =
         [
-            new(12, "/src/Foo.cs", 14, [new PrThreadComment("Bot", "Existing thread")]),
+            new("12", "/src/Foo.cs", 14, [new PrThreadComment("Bot", "Existing thread")]),
         ];
 
         var publicationContext = new ReviewPublicationContext(
@@ -159,7 +159,7 @@ public sealed class AdoCodeReviewPublicationServiceTests
         var result = new ReviewResult("Looks solid.", []);
         IReadOnlyList<PrCommentThread> existingThreads =
         [
-            new(12, null, null, [new PrThreadComment("Meister Bot", "**AI Review Summary**")]),
+            new("12", null, null, [new PrThreadComment("Meister Bot", "**AI Review Summary**")]),
         ];
 
         var publicationContext = new ReviewPublicationContext(

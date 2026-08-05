@@ -200,4 +200,99 @@ public sealed class EfProtocolRecorderCostTests
         Assert.Equal(500, storedJob.TotalOutputTokensAggregated);
         Assert.Null(storedJob.TotalEstimatedCostUsd);
     }
+
+    [Fact]
+    public async Task BeginForThreadPassAsync_OwnsTheTraceRecordByThePassRatherThanAReviewJob()
+    {
+        var options = CreateOptions();
+        var pass = await SeedThreadPassAsync(options);
+
+        var recorder = new EfProtocolRecorder(
+            new TestDbContextFactory(options),
+            NullLogger<EfProtocolRecorder>.Instance);
+
+        var protocolId = await recorder.BeginForThreadPassAsync(pass.Id, 1, "thread-17-code-change", "gpt-4o");
+
+        await using var verify = new MeisterProPRDbContext(options);
+        var stored = await verify.ReviewJobProtocols.FirstAsync(p => p.Id == protocolId);
+        Assert.Equal(pass.Id, stored.ThreadPassJobId);
+        Assert.Null(stored.JobId);
+        Assert.Equal("thread-17-code-change", stored.Label);
+    }
+
+    [Fact]
+    public async Task SetCompletedAsync_ForAThreadPassProtocol_MovesTheSpendOntoThePassAndTheDailySample()
+    {
+        var options = CreateOptions();
+        var pass = await SeedThreadPassAsync(options);
+
+        var resolver = Substitute.For<IModelPricingResolver>();
+        resolver.ResolveAsync(ConnectionId, Arg.Any<AiConnectionModelCategory>(), "gpt-4o", Arg.Any<CancellationToken>())
+            .Returns(new ModelPricing(2m, 10m, 1m));
+
+        var recorder = new EfProtocolRecorder(
+            new TestDbContextFactory(options),
+            NullLogger<EfProtocolRecorder>.Instance,
+            resolver);
+
+        // Two threads, each closed as its own trace record.
+        var first = await recorder.BeginForThreadPassAsync(pass.Id, 1, "thread-17-code-change", "gpt-4o");
+        await recorder.SetCompletedAsync(first, "Resolved", 1_000_000, 500_000, 1, 0, null);
+        var second = await recorder.BeginForThreadPassAsync(pass.Id, 1, "thread-18-conversational", "gpt-4o");
+        await recorder.SetCompletedAsync(second, "NotResolved", 1_000_000, 0, 1, 0, null);
+
+        await using var verify = new MeisterProPRDbContext(options);
+        var storedPass = await verify.ThreadPassJobs.FirstAsync(p => p.Id == pass.Id);
+
+        Assert.Equal(2_000_000, storedPass.TotalInputTokens);
+        Assert.Equal(500_000, storedPass.TotalOutputTokens);
+        Assert.Equal(9m, storedPass.TotalEstimatedCostUsd);
+        Assert.False(storedPass.CostIsApproximate);
+
+        var sample = await verify.ClientTokenUsageSamples.FirstAsync(s => s.ClientId == pass.ClientId);
+        Assert.Equal(2_000_000, sample.InputTokens);
+        Assert.Equal(500_000, sample.OutputTokens);
+        Assert.Equal(9m, sample.EstimatedCostUsd);
+    }
+
+    [Fact]
+    public async Task SetCompletedAsync_ForAnUnpricedThreadPassProtocol_RecordsTokensAndFlagsTheCostApproximate()
+    {
+        var options = CreateOptions();
+        var pass = await SeedThreadPassAsync(options);
+
+        var recorder = new EfProtocolRecorder(
+            new TestDbContextFactory(options),
+            NullLogger<EfProtocolRecorder>.Instance);
+
+        var protocolId = await recorder.BeginForThreadPassAsync(pass.Id, 1, "thread-17-code-change", "gpt-4o");
+        await recorder.SetCompletedAsync(protocolId, "Resolved", 1000, 500, 1, 0, null);
+
+        await using var verify = new MeisterProPRDbContext(options);
+        var storedPass = await verify.ThreadPassJobs.FirstAsync(p => p.Id == pass.Id);
+
+        Assert.Equal(1000, storedPass.TotalInputTokens);
+        Assert.Null(storedPass.TotalEstimatedCostUsd);
+        Assert.True(storedPass.CostIsApproximate);
+    }
+
+    private static async Task<ThreadPassJob> SeedThreadPassAsync(DbContextOptions<MeisterProPRDbContext> options)
+    {
+        var pass = new ThreadPassJob(
+            Guid.NewGuid(),
+            Guid.NewGuid(),
+            "https://dev.azure.com/test",
+            "proj",
+            "repo",
+            1,
+            1,
+            "1",
+            "1|abc");
+        pass.SetAiConfig(ConnectionId, "gpt-4o");
+
+        await using var seed = new MeisterProPRDbContext(options);
+        seed.ThreadPassJobs.Add(pass);
+        await seed.SaveChangesAsync();
+        return pass;
+    }
 }

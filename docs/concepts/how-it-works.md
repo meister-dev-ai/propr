@@ -62,8 +62,45 @@ Four ways, and they produce the same review:
 3. **On demand** - a call to the review API naming the pull request and the commits to review, from CI. See [trigger a review](../reference/api.md#trigger-a-review).
 4. **From coordinates** - a call naming only the client, repository and pull request, for callers such as a browser extension that know which pull request they mean but not which commits it is at. ProPR reads the current commits from your SCM host, so the same call starts a first review or a re-review after a push. The coordinates must be covered by a crawl or webhook configuration. See [trigger a review from coordinates alone](../reference/api.md#trigger-a-review-from-coordinates-alone).
 
-A pull request that already has a review running will not start a second one; the existing job is
-returned instead.
+Webhook and crawl are the automatic triggers, and they review a pull request once, at the first
+revision they see. A later push does not start another review, and a review already running is left
+to finish on the revision it started on rather than being cancelled by the push. The per-client
+**Review every pushed update** setting changes that: with it on, every pushed update starts a new
+review and cancels any review still running for an older revision. It is off by default and lives on
+the client's System tab.
+
+The files may not be reviewed on every push, but the conversation is checked on every one. ProPR's own
+comment threads are walked by a separate pass that runs whenever the pull request gains a revision or
+one of those threads gains a comment from someone else, whether or not a review ran. So a finding you
+fixed and pushed is resolved, and a reply you left is answered, without a review of the files. The pass
+is gated only by the client's **Resolving comment threads** setting, on its System tab, and by what your
+SCM host supports.
+Azure DevOps, GitHub and GitLab all support changing a thread's status and replying into a thread, so
+the pass runs in full on those three. Forgejo supports neither: its API exposes no thread to address,
+so the pass does not run there and findings stay open until you close them yourself. Mentioning the
+reviewer identity in a comment is answered on every host; see
+[asking ProPR a question](#asking-propr-a-question).
+
+That setting decides whether ProPR explains itself when it closes one of its own threads, not whether it
+talks to you. **Resolve quietly**, the default, closes a fixed finding without a word; **Resolve with an
+explanation** posts why first. Either way, a question you ask in one of its threads is answered, because
+you asked it. **Leave threads alone** switches the pass off entirely, so nothing is resolved and nothing
+is answered.
+
+An on-demand review is not held back by that setting. It reviews the revision the pull request is on
+when you ask, which is how you get a fresh review of a branch that has moved.
+
+You do not have to notice that yourself. When an automatic trigger leaves a pushed update unreviewed,
+ProPR records it, and the pull request then reports itself as waiting. Its review page says so and
+offers **Review current state**; the browser extension enables **Review now** on the same signal. Both
+need only the client-user role, matching restart, which also spends money and is deliberately not
+administrator-gated. Asking for the review clears the state, because the review writes its own record of
+the revision it covered.
+
+Asking twice for the same revision does not start a second review; the job already running is returned
+instead. The one case that does replace a running review is a pushed update on a client that reviews
+every one, described above: the older revision's review is cancelled because it is reviewing code that
+has been superseded.
 
 ## Asking ProPR a question
 

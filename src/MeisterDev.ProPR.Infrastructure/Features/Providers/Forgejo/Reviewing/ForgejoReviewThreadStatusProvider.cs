@@ -1,11 +1,13 @@
 // Copyright (c) Andreas Rain.
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
+using System.Globalization;
 using System.Net;
 using System.Net.Http.Json;
 using System.Text;
 using System.Text.Json.Serialization;
 using MeisterDev.ProPR.Application.DTOs;
+using MeisterDev.ProPR.Application.Features.ThreadOwnership;
 using MeisterDev.ProPR.Domain.Enums;
 using MeisterDev.ProPR.Domain.ValueObjects;
 using MeisterDev.ProPR.Infrastructure.Features.Providers.Common;
@@ -24,15 +26,22 @@ internal sealed class ForgejoReviewThreadStatusProvider(
         string projectId,
         string repositoryId,
         int pullRequestId,
-        Guid reviewerId,
+        ThreadOwnershipResolver ownership,
         Guid clientId,
         CancellationToken ct = default)
     {
+        ArgumentNullException.ThrowIfNull(ownership);
+
         var host = new ProviderHostRef(ScmProvider.Forgejo, organizationUrl);
         var context = await connectionVerifier.VerifyAsync(clientId, host, ct);
         var repositoryPath = await this.ResolveRepositoryPathAsync(context, host, repositoryId, ct);
         var reviews = await this.GetReviewsAsync(context, host, repositoryPath, pullRequestId, ct);
-        var authoredUsername = context.AuthenticatedUsername;
+
+        // Forgejo names an author by login, and the connection verification above is the only place the
+        // authenticated one exists, so the pass's resolver is completed with it here. It is contributed into
+        // the instance the caller handed down, so the consumers that run later in the same pass, and never see
+        // a connection of their own, decide with the identity too.
+        ownership.ContributeIdentity(new ThreadOwnerIdentity(Login: context.AuthenticatedUsername));
 
         var flattenedComments = new List<ForgejoReviewCommentEnvelope>();
         foreach (var review in reviews)
@@ -52,13 +61,16 @@ internal sealed class ForgejoReviewThreadStatusProvider(
             .Select(group => group.OrderBy(comment => comment.Comment.CreatedAt)
                 .ThenBy(comment => comment.Comment.Id)
                 .ToList())
-            .Where(group => group.Count > 0 && AuthorMatches(group[0].Comment.User, authoredUsername))
+            .Where(group => group.Count > 0 && ownership.OwnsThread(ToCommentRef(group[0].Comment)))
             .Select(group => new PrThreadStatusEntry(
-                group[0].Comment.Id,
-                DetermineStatus(group, authoredUsername),
+                // Forgejo has no thread object: these groups are ProPR's own, keyed on path and position, and
+                // nothing the API accepts addresses one. The identifier is absent rather than borrowed from
+                // the first comment, which would hand callers a handle that resolves to a comment.
+                null,
+                DetermineStatus(group, ownership),
                 group[0].Comment.Path,
                 BuildCommentHistory(group),
-                group.Count(comment => !AuthorMatches(comment.Comment.User, authoredUsername)),
+                group.Count(comment => !ownership.OwnsComment(ToCommentRef(comment.Comment))),
                 DetermineCodeChange(group)))
             .ToList()
             .AsReadOnly();
@@ -183,18 +195,21 @@ internal sealed class ForgejoReviewThreadStatusProvider(
         return $"comment:{comment.Id}";
     }
 
-    private static bool AuthorMatches(ForgejoUserResponse? user, string authoredUsername)
+    // A Forgejo review comment id is unique within the pull request, so provenance resolves on it alone. The
+    // thread id recorded at publish time is the review id, which this listing does not carry per comment.
+    private static ThreadCommentRef ToCommentRef(ForgejoPullReviewCommentResponse comment)
     {
-        return user is not null
-               && !string.IsNullOrWhiteSpace(user.Login)
-               && string.Equals(user.Login, authoredUsername, StringComparison.OrdinalIgnoreCase);
+        return new ThreadCommentRef(
+            null,
+            comment.Id.ToString(CultureInfo.InvariantCulture),
+            AuthorLogin: comment.User?.Login);
     }
 
     private static string DetermineStatus(
         IReadOnlyList<ForgejoReviewCommentEnvelope> comments,
-        string authoredUsername)
+        ThreadOwnershipResolver ownership)
     {
-        return comments.Any(comment => !AuthorMatches(comment.Comment.User, authoredUsername) && string.Equals(
+        return comments.Any(comment => !ownership.OwnsComment(ToCommentRef(comment.Comment)) && string.Equals(
             comment.ReviewState,
             "APPROVED",
             StringComparison.OrdinalIgnoreCase))

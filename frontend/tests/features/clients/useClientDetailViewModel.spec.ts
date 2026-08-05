@@ -44,6 +44,7 @@ const sampleClient = {
   scmCommentPostingEnabled: true,
   enableEvidenceBackedVerification: false,
   enableMultiPassUnion: false,
+  reviewEveryIncrementEnabled: false,
   includeLinkedItemsInContext: true,
 }
 
@@ -154,6 +155,8 @@ describe('useClientDetailViewModel (FR-007, FR-008, FR-012)', () => {
         scmCommentPostingEnabled: false,
         enableEvidenceBackedVerification: false,
         enableMultiPassUnion: false,
+        reviewEveryIncrementEnabled: false,
+        commentResolutionBehavior: 'silent',
         includeLinkedItemsInContext: true,
         enableLanguageRobustScreening: false,
         outputLanguage: 'en',

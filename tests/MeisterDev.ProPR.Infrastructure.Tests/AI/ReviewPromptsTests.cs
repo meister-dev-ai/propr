@@ -27,7 +27,7 @@ public class ReviewPromptsTests
     private static PrCommentThread CreateThread(string? filePath)
     {
         return new PrCommentThread(
-            1,
+            "1",
             filePath,
             filePath is null ? null : 1,
             new List<PrThreadComment>

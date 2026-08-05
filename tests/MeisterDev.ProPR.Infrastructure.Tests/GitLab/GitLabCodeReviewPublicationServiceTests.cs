@@ -49,7 +49,7 @@ public sealed class GitLabPublicationContextContractTests
             review,
             revision,
             reviewer,
-            [new PrCommentThread(1, null, null, [new PrThreadComment("Bot", "Summary")])]);
+            [new PrCommentThread("1", null, null, [new PrThreadComment("Bot", "Summary")])]);
         var connectionRepository = GitLabTestHelpers.CreateConnectionRepository(clientId, host);
         var httpClientFactory = GitLabTestHelpers.CreateHttpClientFactory(request =>
             request.RequestUri!.AbsoluteUri switch

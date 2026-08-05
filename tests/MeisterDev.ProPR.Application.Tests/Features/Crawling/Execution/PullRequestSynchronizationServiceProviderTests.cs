@@ -4,8 +4,8 @@
 using MeisterDev.ProPR.Application.DTOs;
 using MeisterDev.ProPR.Application.Features.Crawling.Execution.Models;
 using MeisterDev.ProPR.Application.Features.Crawling.Execution.Services;
+using MeisterDev.ProPR.Application.Features.ThreadOwnership;
 using MeisterDev.ProPR.Application.Interfaces;
-using MeisterDev.ProPR.Application.Support;
 using MeisterDev.ProPR.Domain.Entities;
 using MeisterDev.ProPR.Domain.Enums;
 using MeisterDev.ProPR.Domain.Events;
@@ -90,7 +90,7 @@ public sealed class PullRequestSynchronizationServiceProviderTests
             new ReviewPrScanThread
             {
                 ReviewPrScanId = scan.Id,
-                ThreadId = 17,
+                ThreadId = "17",
                 LastSeenReplyCount = 0,
                 LastSeenStatus = "Active",
             });
@@ -102,12 +102,12 @@ public sealed class PullRequestSynchronizationServiceProviderTests
                 "project",
                 "repo-gh-1",
                 42,
-                ReviewerId,
+                Arg.Any<ThreadOwnershipResolver>(),
                 ClientId,
                 Arg.Any<CancellationToken>())
             .Returns(
             [
-                new PrThreadStatusEntry(17, "Fixed", "/src/file.ts", "Bot: comment\nUser: reply", 1),
+                new PrThreadStatusEntry("17", "Fixed", "/src/file.ts", "Bot: comment\nUser: reply", 1),
             ]);
 
         var sut = new PullRequestSynchronizationService(
@@ -138,12 +138,15 @@ public sealed class PullRequestSynchronizationServiceProviderTests
                     evt.ClientId == ClientId &&
                     evt.RepositoryId == "repo-gh-1" &&
                     evt.PullRequestId == 42 &&
-                    evt.ThreadId == 17),
+                    evt.ThreadId == "17"),
                 Arg.Any<CancellationToken>());
         await scanRepository.Received(1)
-            .UpsertAsync(
-                Arg.Is<ReviewPrScan>(updated =>
-                    updated.Threads.Any(thread => thread.ThreadId == 17 && thread.LastSeenStatus == "Fixed")),
+            .SetLastSeenStatusesAsync(
+                ClientId,
+                "repo-gh-1",
+                42,
+                Arg.Is<IReadOnlyDictionary<string, string?>>(statuses =>
+                    statuses.Count == 1 && statuses["17"] == "Fixed"),
                 Arg.Any<CancellationToken>());
         await jobs.Received(1)
             .TryAddIfNoActiveDuplicateAsync(
@@ -176,7 +179,7 @@ public sealed class PullRequestSynchronizationServiceProviderTests
                 "project",
                 "repo-gh-1",
                 42,
-                ReviewerId,
+                Arg.Any<ThreadOwnershipResolver>(),
                 ClientId,
                 Arg.Any<CancellationToken>())
             .Returns([]);
@@ -206,8 +209,13 @@ public sealed class PullRequestSynchronizationServiceProviderTests
     }
 
     [Fact]
-    public async Task SynchronizeAsync_WithoutTriggerReviewer_UsesEffectiveReviewerIdentityForProviderThreadChecks()
+    public async Task SynchronizeAsync_WithoutTriggerReviewer_ChecksProviderThreadsWithoutResolvingAReviewerIdentity()
     {
+        // The expectation that no reviewer identity is resolved here is the deliberate narrowing, not a
+        // regression. Which threads are ProPR's is answered by posted-comment provenance and the identity
+        // the provider adapter's own connection authenticates as; a reviewer identity resolved up here
+        // decided nothing, and the pass no longer asks for one.
+
         var jobs = Substitute.For<IJobRepository>();
         var threadStatusFetcher = Substitute.For<IReviewerThreadStatusFetcher>();
         var threadMemoryService = Substitute.For<IThreadMemoryService>();
@@ -215,7 +223,6 @@ public sealed class PullRequestSynchronizationServiceProviderTests
         var clientRegistry = Substitute.For<IClientRegistry>();
         var host = new ProviderHostRef(ScmProvider.GitHub, "https://github.com");
         var effectiveReviewer = new ReviewerIdentity(host, "propr-review[bot]", "propr-review[bot]", "ProPR Review", true);
-        var effectiveReviewerId = StableGuidGenerator.Create(effectiveReviewer.ExternalUserId);
 
         jobs.GetActiveJobsForConfigAsync("https://dev.azure.com/org", "project", Arg.Any<CancellationToken>())
             .Returns([]);
@@ -226,12 +233,14 @@ public sealed class PullRequestSynchronizationServiceProviderTests
         jobs.TryAddIfNoActiveDuplicateAsync(Arg.Any<ReviewJob>(), Arg.Any<CancellationToken>())
             .Returns(new TryAddReviewJobResult(true, null, 0));
 
-        var scan = new ReviewPrScan(Guid.NewGuid(), ClientId, "repo-gh-1", 42, "11");
+        // The watermark holds the revision key the last pass ran at, which for a provider-neutral revision is the
+        // provider revision id rather than the iteration id.
+        var scan = new ReviewPrScan(Guid.NewGuid(), ClientId, "repo-gh-1", 42, "revision-1");
         scan.Threads.Add(
             new ReviewPrScanThread
             {
                 ReviewPrScanId = scan.Id,
-                ThreadId = 17,
+                ThreadId = "17",
                 LastSeenReplyCount = 0,
                 LastSeenStatus = "Active",
             });
@@ -245,12 +254,12 @@ public sealed class PullRequestSynchronizationServiceProviderTests
                 "project",
                 "repo-gh-1",
                 42,
-                effectiveReviewerId,
+                Arg.Any<ThreadOwnershipResolver>(),
                 ClientId,
                 Arg.Any<CancellationToken>())
             .Returns(
             [
-                new PrThreadStatusEntry(17, "Fixed", "/src/file.ts", "Bot: comment\nUser: reply", 1),
+                new PrThreadStatusEntry("17", "Fixed", "/src/file.ts", "Bot: comment\nUser: reply", 1),
             ]);
 
         var sut = new PullRequestSynchronizationService(
@@ -269,7 +278,7 @@ public sealed class PullRequestSynchronizationServiceProviderTests
             });
 
         Assert.Equal(PullRequestSynchronizationReviewDecision.Submitted, outcome.ReviewDecision);
-        await clientRegistry.Received(1)
+        await clientRegistry.DidNotReceive()
             .GetEffectiveReviewerIdentityAsync(ClientId, host, Arg.Any<CancellationToken>());
         await threadStatusFetcher.Received(1)
             .GetReviewerThreadStatusesAsync(
@@ -277,7 +286,7 @@ public sealed class PullRequestSynchronizationServiceProviderTests
                 "project",
                 "repo-gh-1",
                 42,
-                effectiveReviewerId,
+                Arg.Any<ThreadOwnershipResolver>(),
                 ClientId,
                 Arg.Any<CancellationToken>());
     }

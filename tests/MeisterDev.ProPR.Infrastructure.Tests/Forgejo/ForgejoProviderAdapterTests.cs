@@ -4,6 +4,7 @@
 using System.Net;
 using System.Text;
 using System.Text.Json;
+using MeisterDev.ProPR.Application.Features.ThreadOwnership;
 using MeisterDev.ProPR.Application.DTOs;
 using MeisterDev.ProPR.Application.Interfaces;
 using MeisterDev.ProPR.Domain.Enums;
@@ -340,7 +341,10 @@ public sealed class ForgejoPullRequestFetcherTests
         Assert.Equal("src/LegacyProvider.cs", result.ChangedFiles[0].OriginalPath);
         Assert.Equal("src/Fetcher.cs", result.ChangedFiles[1].Path);
         var thread = Assert.Single(result.ExistingThreads!);
-        Assert.Equal(501, thread.ThreadId);
+
+        // Forgejo groups review comments client-side and exposes no thread object, so the thread carries no
+        // identifier rather than the first comment's.
+        Assert.Null(thread.ThreadId);
         Assert.Equal("src/Fetcher.cs", thread.FilePath);
     }
 
@@ -1070,12 +1074,12 @@ public sealed class ForgejoReviewThreadStatusProviderTests
             "acme",
             "101",
             42,
-            Guid.Empty,
+            ThreadOwnershipResolver.None,
             clientId,
             CancellationToken.None);
 
         var entry = Assert.Single(result);
-        Assert.Equal(501, entry.ThreadId);
+        Assert.Null(entry.ThreadId);
         Assert.Equal("Active", entry.Status);
         Assert.Equal("src/feature.ts", entry.FilePath);
         Assert.Equal(1, entry.NonReviewerReplyCount);
@@ -1141,12 +1145,12 @@ public sealed class ForgejoReviewThreadStatusProviderTests
             "local_admin",
             "local_admin/propr",
             42,
-            Guid.Empty,
+            ThreadOwnershipResolver.None,
             clientId,
             CancellationToken.None);
 
         var entry = Assert.Single(result);
-        Assert.Equal(501, entry.ThreadId);
+        Assert.Null(entry.ThreadId);
         Assert.Equal("src/feature.ts", entry.FilePath);
         Assert.Equal(1, entry.NonReviewerReplyCount);
     }

@@ -156,7 +156,7 @@ public sealed record ReviewCommentSuppressionRecord(
     string? FilePath,
     int? LineNumber,
     string ReasonCode,
-    long? MatchedProviderThreadId = null,
+    string? MatchedProviderThreadId = null,
     float? MatchScore = null);
 
 /// <summary>
@@ -185,7 +185,7 @@ public sealed record HistoricalDuplicateSuppressionMatchDto
     public string? ReasonCode { get; init; }
 
     /// <summary>Historical thread identifier that triggered the match, when available.</summary>
-    public long? ThreadId { get; init; }
+    public string? ThreadId { get; init; }
 
     /// <summary>Historical memory-record identifier that triggered the match, when available.</summary>
     public Guid? MemoryRecordId { get; init; }
@@ -225,7 +225,7 @@ public sealed record HistoricalDuplicateSuppressionMatchDto
     /// <summary>Returns a duplicate match for the current candidate finding.</summary>
     public static HistoricalDuplicateSuppressionMatchDto Match(
         string reasonCode,
-        long? threadId = null,
+        string? threadId = null,
         Guid? memoryRecordId = null,
         float? similarityScore = null,
         IReadOnlyList<string>? degradedComponents = null,

@@ -235,7 +235,7 @@ public sealed class ReviewEvaluationModelsTests
                 ]),
             [
                 new FixtureThread(
-                    1001,
+                    "1001",
                     "src/Example.cs",
                     1,
                     "Active",

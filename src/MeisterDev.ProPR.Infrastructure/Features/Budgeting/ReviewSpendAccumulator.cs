@@ -12,25 +12,34 @@ using Microsoft.EntityFrameworkCore;
 namespace MeisterDev.ProPR.Infrastructure.Features.Budgeting;
 
 /// <summary>
-///     Computes accumulated review spend per budget scope from the persisted per-job USD cost
-///     (<see cref="ReviewJob.TotalEstimatedCostUsd" />) and the per-client daily usage samples. All sums are
-///     null-aware: an unpriced contribution is omitted from the total and flags the scope approximate rather than
-///     being coerced to zero.
+///     Computes accumulated spend per budget scope from the persisted per-job USD cost
+///     (<see cref="ReviewJob.TotalEstimatedCostUsd" /> and <see cref="ThreadPassJob.TotalEstimatedCostUsd" />) and
+///     the per-client daily usage samples. All sums are null-aware: an unpriced contribution is omitted from the
+///     total and flags the scope approximate rather than being coerced to zero.
 /// </summary>
+/// <remarks>
+///     The pull-request and increment scopes total both kinds of job. A thread pass spends a client's money
+///     against the same pull request a review does, so a scope that saw only review jobs would let a recurring,
+///     deliberately created category of spend run past every cap. The client month-to-date scope needs no such
+///     widening: it reads the daily usage samples, which both kinds of job write.
+/// </remarks>
 public sealed class ReviewSpendAccumulator(
     IDbContextFactory<MeisterProPRDbContext> contextFactory,
     IClientTokenUsageRepository usageRepository) : IReviewSpendAccumulator
 {
     /// <inheritdoc />
-    public async Task<ReviewSpendBaseline> GetBaselineAsync(ReviewJob job, DateOnly asOfDate, CancellationToken ct = default)
+    public async Task<ReviewSpendBaseline> GetBaselineAsync(
+        ReviewSpendSubject subject,
+        DateOnly asOfDate,
+        CancellationToken ct = default)
     {
-        ArgumentNullException.ThrowIfNull(job);
+        ArgumentNullException.ThrowIfNull(subject);
 
-        var clientMonthToDate = await this.SumClientMonthToDateAsync(job.ClientId, asOfDate, ct).ConfigureAwait(false);
+        var clientMonthToDate = await this.SumClientMonthToDateAsync(subject.ClientId, asOfDate, ct).ConfigureAwait(false);
 
         await using var context = await contextFactory.CreateDbContextAsync(ct).ConfigureAwait(false);
-        var pullRequest = await SumOtherJobCostAsync(context, job, includeIncrementFilter: false, ct).ConfigureAwait(false);
-        var increment = await SumOtherJobCostAsync(context, job, includeIncrementFilter: true, ct).ConfigureAwait(false);
+        var pullRequest = await SumOtherUnitCostAsync(context, subject, includeIncrementFilter: false, ct).ConfigureAwait(false);
+        var increment = await SumOtherUnitCostAsync(context, subject, includeIncrementFilter: true, ct).ConfigureAwait(false);
 
         return new ReviewSpendBaseline(clientMonthToDate, pullRequest, increment);
     }
@@ -51,32 +60,51 @@ public sealed class ReviewSpendAccumulator(
         return new ReviewScopeSpend(known, isApproximate);
     }
 
-    private static async Task<ReviewScopeSpend> SumOtherJobCostAsync(
+    private static async Task<ReviewScopeSpend> SumOtherUnitCostAsync(
         MeisterProPRDbContext context,
-        ReviewJob job,
+        ReviewSpendSubject subject,
         bool includeIncrementFilter,
         CancellationToken ct)
     {
-        // Exclude the job itself: at job start its own cost has not accrued, and enforcement adds the live
+        // Exclude the subject itself: at its start its own cost has not accrued, and enforcement adds the live
         // in-run delta on top of this baseline, so counting it here would double-count. Prior attempts of the
         // same increment (a restart reuses the iteration on a new job row) remain counted, so their paid cost
         // is respected.
-        var query = context.ReviewJobs
+        var reviewJobs = context.ReviewJobs
             .AsNoTracking()
             .Where(candidate =>
-                candidate.ClientId == job.ClientId &&
-                candidate.OrganizationUrl == job.OrganizationUrl &&
-                candidate.ProjectId == job.ProjectId &&
-                candidate.RepositoryId == job.RepositoryId &&
-                candidate.PullRequestId == job.PullRequestId &&
-                candidate.Id != job.Id);
+                candidate.ClientId == subject.ClientId &&
+                candidate.OrganizationUrl == subject.OrganizationUrl &&
+                candidate.ProjectId == subject.ProjectId &&
+                candidate.RepositoryId == subject.RepositoryId &&
+                candidate.PullRequestId == subject.PullRequestId &&
+                candidate.Id != subject.UnitOfWorkId);
+
+        var threadPasses = context.ThreadPassJobs
+            .AsNoTracking()
+            .Where(candidate =>
+                candidate.ClientId == subject.ClientId &&
+                candidate.OrganizationUrl == subject.OrganizationUrl &&
+                candidate.ProjectId == subject.ProjectId &&
+                candidate.RepositoryId == subject.RepositoryId &&
+                candidate.PullRequestId == subject.PullRequestId &&
+                candidate.Id != subject.UnitOfWorkId);
 
         if (includeIncrementFilter)
         {
-            query = query.Where(candidate => candidate.IterationId == job.IterationId);
+            reviewJobs = reviewJobs.Where(candidate => candidate.IterationId == subject.IterationId);
+            threadPasses = threadPasses.Where(candidate => candidate.IterationId == subject.IterationId);
         }
 
-        var rows = await query
+        var rows = await reviewJobs
+            .Select(candidate => new CostProjection(candidate.TotalEstimatedCostUsd, candidate.CostIsApproximate))
+            .ToListAsync(ct)
+            .ConfigureAwait(false);
+
+        // A pass that has not yet spent anything reports no cost at all, which is silence rather than an
+        // unpriced call, so it must not flag the scope approximate the way an unpriced review job does.
+        var passRows = await threadPasses
+            .Where(candidate => candidate.TotalEstimatedCostUsd != null || candidate.CostIsApproximate)
             .Select(candidate => new CostProjection(candidate.TotalEstimatedCostUsd, candidate.CostIsApproximate))
             .ToListAsync(ct)
             .ConfigureAwait(false);
@@ -84,7 +112,12 @@ public sealed class ReviewSpendAccumulator(
         var known = rows
             .Where(row => row.TotalEstimatedCostUsd.HasValue)
             .Sum(row => row.TotalEstimatedCostUsd!.Value);
-        var isApproximate = rows.Any(row => !row.TotalEstimatedCostUsd.HasValue || row.CostIsApproximate);
+        known += passRows
+            .Where(row => row.TotalEstimatedCostUsd.HasValue)
+            .Sum(row => row.TotalEstimatedCostUsd!.Value);
+
+        var isApproximate = rows.Any(row => !row.TotalEstimatedCostUsd.HasValue || row.CostIsApproximate)
+                            || passRows.Any(row => row.CostIsApproximate);
         return new ReviewScopeSpend(known, isApproximate);
     }
 

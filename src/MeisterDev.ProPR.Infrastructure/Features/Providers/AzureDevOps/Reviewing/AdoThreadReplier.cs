@@ -2,6 +2,7 @@
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
 using System.Diagnostics;
+using System.Globalization;
 using MeisterDev.ProPR.Application.Features.Reviewing.Execution.Models;
 using MeisterDev.ProPR.Application.Interfaces;
 using MeisterDev.ProPR.Domain.Enums;
@@ -26,7 +27,7 @@ internal sealed partial class AdoThreadReplier(
 
     public ScmProvider Provider => ScmProvider.AzureDevOps;
 
-    public Task ReplyAsync(
+    public Task<string?> ReplyAsync(
         Guid clientId,
         ReviewThreadRef thread,
         string replyText,
@@ -50,8 +51,8 @@ internal sealed partial class AdoThreadReplier(
             ct);
     }
 
-    /// <inheritdoc />
-    public async Task ReplyAsync(
+    /// <inheritdoc cref="ReplyAsync(Guid, ReviewThreadRef, string, CancellationToken)" />
+    public async Task<string?> ReplyAsync(
         string organizationUrl,
         string projectId,
         string repositoryId,
@@ -88,7 +89,7 @@ internal sealed partial class AdoThreadReplier(
             CommentType = CommentType.Text,
         };
 
-        await gitClient.CreateCommentAsync(
+        var created = await gitClient.CreateCommentAsync(
             comment,
             repositoryId,
             pullRequestId,
@@ -97,9 +98,13 @@ internal sealed partial class AdoThreadReplier(
             cancellationToken);
 
         LogReplied(logger, organizationUrl, pullRequestId, threadId);
+
+        // Azure DevOps assigns the id server-side; a response without a positive one carries no comment to
+        // record, so report none rather than a placeholder that would key a provenance row to nothing.
+        return created is { Id: > 0 } ? created.Id.ToString(CultureInfo.InvariantCulture) : null;
     }
 
-    private async Task ReplyAcrossOrganizationsAsync(
+    private async Task<string?> ReplyAcrossOrganizationsAsync(
         Guid clientId,
         ProviderHostRef host,
         string projectId,
@@ -120,7 +125,7 @@ internal sealed partial class AdoThreadReplier(
         {
             try
             {
-                await this.ReplyAsync(
+                return await this.ReplyAsync(
                     organizationUrl,
                     projectId,
                     repositoryId,
@@ -129,7 +134,6 @@ internal sealed partial class AdoThreadReplier(
                     replyText,
                     clientId,
                     ct);
-                return;
             }
             catch (Exception ex) when (!ct.IsCancellationRequested)
             {

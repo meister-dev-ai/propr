@@ -467,7 +467,7 @@ public sealed class ReviewerPerformanceController(
 
         if (historyImporter is null || scope.ClientIds.Count == 0)
         {
-            return this.Ok(new CodeInsightImportResponse(0, 0, 0, 0, 0, 0, 0, 0, true, false, 0, 0));
+            return this.Ok(new CodeInsightImportResponse(0, 0, 0, 0, 0, 0, 0, 0, true, false, 0));
         }
 
         var result = await historyImporter.ImportAsync(
@@ -491,8 +491,7 @@ public sealed class ReviewerPerformanceController(
                 result.HumanThreadsReplayed,
                 result.CollectionDisabled,
                 result.ReachedLimit,
-                result.FindingsAlreadyHeld,
-                result.ThreadsNotReplayable));
+                result.FindingsAlreadyHeld));
     }
 
     private static List<CodeInsightRejectionReasonCountResponse> Ranked(IReadOnlyDictionary<CodeInsightRejectionReason, int> counts)

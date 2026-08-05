@@ -19,7 +19,7 @@ internal sealed class GitHubPullRequestFetcher(
     IHttpClientFactory httpClientFactory) : IProviderPullRequestFetcher
 {
     private const string ReviewThreadsQuery =
-        "query ReviewThreads($owner: String!, $name: String!, $pullRequestNumber: Int!) { repository(owner: $owner, name: $name) { pullRequest(number: $pullRequestNumber) { reviewThreads(first: 100) { nodes { isResolved path line comments(first: 100) { nodes { databaseId body createdAt author { login ... on User { databaseId } ... on Bot { databaseId } } } } } } } } }";
+        "query ReviewThreads($owner: String!, $name: String!, $pullRequestNumber: Int!) { repository(owner: $owner, name: $name) { pullRequest(number: $pullRequestNumber) { reviewThreads(first: 100) { nodes { id isResolved path line comments(first: 100) { nodes { databaseId body createdAt author { login ... on User { databaseId } ... on Bot { databaseId } } } } } } } } }";
 
     public ScmProvider Provider => ScmProvider.GitHub;
 
@@ -162,6 +162,56 @@ internal sealed class GitHubPullRequestFetcher(
         var diff = UnifiedDiffBuilder.Build(baseContent ?? string.Empty, headContent ?? string.Empty, path);
 
         return new ChangedFile(path, changeType, headContent ?? string.Empty, diff);
+    }
+
+    public async Task<PullRequest> FetchThreadContextAsync(
+        string organizationUrl,
+        string projectId,
+        string repositoryId,
+        int pullRequestId,
+        int iterationId,
+        Guid? clientId = null,
+        CancellationToken cancellationToken = default)
+    {
+        // Metadata and threads only: whether a reviewer thread needs answering is decided from the
+        // conversation, so the changed-file query and every content download are left out. A caller that
+        // wants one file's diff asks for that one file.
+        if (!clientId.HasValue)
+        {
+            throw new InvalidOperationException("GitHub pull-request fetches require a client identifier.");
+        }
+
+        var host = new ProviderHostRef(ScmProvider.GitHub, organizationUrl);
+        var context = await connectionVerifier.VerifyAsync(clientId.Value, host, cancellationToken);
+        var repositoryPath = await this.ResolveRepositoryPathAsync(context, host, repositoryId, cancellationToken);
+        var pullRequest = await this.GetPullRequestAsync(
+            context,
+            host,
+            repositoryPath,
+            pullRequestId,
+            cancellationToken);
+        var existingThreads = await this.FetchExistingThreadsAsync(
+            context,
+            host,
+            repositoryPath,
+            pullRequestId,
+            cancellationToken);
+
+        return new PullRequest(
+            organizationUrl,
+            projectId,
+            repositoryId,
+            repositoryPath.Split('/', StringSplitOptions.RemoveEmptyEntries).LastOrDefault() ?? repositoryId,
+            pullRequestId,
+            iterationId,
+            pullRequest.Title ?? $"Pull Request #{pullRequestId}",
+            pullRequest.Body,
+            pullRequest.Head?.Ref ?? string.Empty,
+            pullRequest.Base?.Ref ?? string.Empty,
+            [],
+            MapStatus(pullRequest),
+            existingThreads,
+            AuthorizedIdentityName: context.AuthenticatedActorLogin);
     }
 
     public async Task<IReadOnlyList<PrCommentThread>> FetchThreadsAsync(
@@ -511,7 +561,7 @@ internal sealed class GitHubPullRequestFetcher(
         return threads
             .Where(thread => thread.Comments.Nodes.Count > 0)
             .Select(thread => new PrCommentThread(
-                thread.Comments.Nodes[0].DatabaseId ?? 0,
+                thread.Id,
                 NormalizePath(thread.Path),
                 thread.Line,
                 thread.Comments.Nodes.Select(ToThreadComment).ToList().AsReadOnly(),
@@ -643,6 +693,7 @@ internal sealed class GitHubPullRequestFetcher(
     private sealed record GitHubReviewThreadsConnection([property: JsonPropertyName("nodes")] IReadOnlyList<GitHubReviewThreadNode>? Nodes);
 
     private sealed record GitHubReviewThreadNode(
+        [property: JsonPropertyName("id")] string? Id,
         [property: JsonPropertyName("isResolved")]
         bool IsResolved,
         [property: JsonPropertyName("path")] string? Path,

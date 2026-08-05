@@ -17,8 +17,8 @@ public sealed class MemoryActivityLogEntry
     /// <summary>Owning client identifier.</summary>
     public Guid ClientId { get; set; }
 
-    /// <summary>ADO thread identifier.</summary>
-    public long ThreadId { get; set; }
+    /// <summary>Provider-native thread identifier, as the provider itself writes it.</summary>
+    public string ThreadId { get; set; } = string.Empty;
 
     /// <summary>ADO repository identifier (≤ 256 chars).</summary>
     public string RepositoryId { get; set; } = string.Empty;

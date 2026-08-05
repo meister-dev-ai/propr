@@ -7435,7 +7435,13 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Returns the protocol (agentic trace) for a single review job. */
+        /**
+         * Returns the protocol (agentic trace) for a single unit of work: a review job, or a thread pass over
+         *     the same pull request's conversation.
+         * @description One route serves both because an operator inspecting a pull request reads one trace view. A thread
+         *     pass records one protocol per thread it evaluated, in the same shape a review pass records one per
+         *     file.
+         */
         get: {
             parameters: {
                 query?: {
@@ -7444,7 +7450,7 @@ export interface paths {
                 };
                 header?: never;
                 path: {
-                    /** @description The review job identifier. */
+                    /** @description The review job or thread pass identifier. */
                     id: string;
                 };
                 cookie?: never;
@@ -7501,7 +7507,13 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Returns the protocol (agentic trace) for a single review job. */
+        /**
+         * Returns the protocol (agentic trace) for a single unit of work: a review job, or a thread pass over
+         *     the same pull request's conversation.
+         * @description One route serves both because an operator inspecting a pull request reads one trace view. A thread
+         *     pass records one protocol per thread it evaluated, in the same shape a review pass records one per
+         *     file.
+         */
         get: {
             parameters: {
                 query?: {
@@ -7510,7 +7522,7 @@ export interface paths {
                 };
                 header?: never;
                 path: {
-                    /** @description The review job identifier. */
+                    /** @description The review job or thread pass identifier. */
                     id: string;
                 };
                 cookie?: never;
@@ -7567,13 +7579,13 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Returns one full protocol pass (including captured event bodies) for a single review job. */
+        /** Returns one full protocol pass (including captured event bodies) for a single review job or thread pass. */
         get: {
             parameters: {
                 query?: never;
                 header?: never;
                 path: {
-                    /** @description The review job identifier. */
+                    /** @description The review job or thread pass identifier. */
                     id: string;
                     /** @description The protocol-pass identifier. */
                     protocolId: string;
@@ -7632,13 +7644,13 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Returns one full protocol pass (including captured event bodies) for a single review job. */
+        /** Returns one full protocol pass (including captured event bodies) for a single review job or thread pass. */
         get: {
             parameters: {
                 query?: never;
                 header?: never;
                 path: {
-                    /** @description The review job identifier. */
+                    /** @description The review job or thread pass identifier. */
                     id: string;
                     /** @description The protocol-pass identifier. */
                     protocolId: string;
@@ -11173,6 +11185,146 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/clients/{clientId}/reviewing/jobs/by-coordinates": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Review a pull request identified only by its coordinates.
+         * @description For callers that can address a pull request but cannot describe its commits. Review intake is
+         *     otherwise addressed by revision, which a caller looking at a pull request page has no way to know
+         *     and, without a source-control credential of its own, no way to find out. This action asks the
+         *     provider on the client's behalf, so the same request starts a first review or a re-review after
+         *     new commits. Every answer to a well-formed request is a named outcome the caller shows to a
+         *     person; a malformed one is refused with the plain validation error the rest of this controller
+         *     uses, because a caller that sent nothing usable has no outcome to render.
+         *
+         *     The coordinates must be covered by one of this client's crawl or webhook configurations. That
+         *         match is an authorization boundary as much as a lookup: it is what stops a caller aiming the
+         *         client's source-control credential at a repository the client never configured. Any user with
+         *         at least MeisterDev.ProPR.Domain.Enums.ClientRole.ClientUser for the client may trigger a review, matching
+         *         restart, which also spends money and is deliberately not administrator-gated.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    /** @description ID of the client on whose behalf the review is triggered. */
+                    clientId: string;
+                };
+                cookie?: never;
+            };
+            /** @description The pull request's coordinates. */
+            requestBody?: {
+                content: {
+                    "application/json": components["schemas"]["SubmitReviewByCoordinatesRequest"];
+                    "text/json": components["schemas"]["SubmitReviewByCoordinatesRequest"];
+                    "application/*+json": components["schemas"]["SubmitReviewByCoordinatesRequest"];
+                };
+            };
+            responses: {
+                /** @description A review job was queued. The response carries its `jobId`. */
+                202: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ReviewByCoordinatesResponse"];
+                        "application/json": components["schemas"]["ReviewByCoordinatesResponse"];
+                        "text/json": components["schemas"]["ReviewByCoordinatesResponse"];
+                    };
+                };
+                /** @description One of the coordinates is missing or empty. */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Missing or invalid credentials. */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Caller lacks `ClientUser` for the client, or no configuration covers the coordinates. */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ReviewByCoordinatesResponse"];
+                        "application/json": components["schemas"]["ReviewByCoordinatesResponse"];
+                        "text/json": components["schemas"]["ReviewByCoordinatesResponse"];
+                    };
+                };
+                /** @description The provider reports no such pull request. */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ReviewByCoordinatesResponse"];
+                        "application/json": components["schemas"]["ReviewByCoordinatesResponse"];
+                        "text/json": components["schemas"]["ReviewByCoordinatesResponse"];
+                    };
+                };
+                /** @description A review is already running at this revision, or the pull request cannot be reviewed. */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ReviewByCoordinatesResponse"];
+                        "application/json": components["schemas"]["ReviewByCoordinatesResponse"];
+                        "text/json": components["schemas"]["ReviewByCoordinatesResponse"];
+                    };
+                };
+                /** @description The pull request resolved, but queueing the review failed. */
+                500: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ReviewByCoordinatesResponse"];
+                        "application/json": components["schemas"]["ReviewByCoordinatesResponse"];
+                        "text/json": components["schemas"]["ReviewByCoordinatesResponse"];
+                    };
+                };
+                /** @description The provider could not be asked for the pull request's current revision. */
+                502: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ReviewByCoordinatesResponse"];
+                        "application/json": components["schemas"]["ReviewByCoordinatesResponse"];
+                        "text/json": components["schemas"]["ReviewByCoordinatesResponse"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/reviewing/jobs/{jobId}/restart": {
         parameters: {
             query?: never;
@@ -11183,24 +11335,26 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * Manually restart a failed review job.
-         * @description Failed reviews are not auto-continued (to avoid looping on deterministic failures), so a restart must be
-         *     triggered explicitly. Any user with at least MeisterDev.ProPR.Domain.Enums.ClientRole.ClientUser for the job's owning client
-         *     may restart it — administrator rights are not required.
+         * Manually restart a failed or budget-blocked review job or thread pass.
+         * @description Failed reviews are not auto-continued (to avoid looping on deterministic failures), and budget recovery
+         *     is deliberately an operator decision, so a restart must be triggered explicitly. Any user with at least
+         *     MeisterDev.ProPR.Domain.Enums.ClientRole.ClientUser for the owning client may restart it, and administrator rights are not
+         *     required. A thread pass restarts through the same route, because both are units of work over one pull
+         *     request and an operator recovers them the same way.
          */
         post: {
             parameters: {
                 query?: never;
                 header?: never;
                 path: {
-                    /** @description The identifier of the failed review job to restart. */
+                    /** @description The identifier of the review job or thread pass to restart. */
                     jobId: string;
                 };
                 cookie?: never;
             };
             requestBody?: never;
             responses: {
-                /** @description Restart accepted; a new pending review job was queued. */
+                /** @description Restart accepted; the work was queued again. */
                 202: {
                     headers: {
                         [name: string]: unknown;
@@ -11244,7 +11398,7 @@ export interface paths {
                         "text/json": components["schemas"]["ProblemDetails"];
                     };
                 };
-                /** @description Job is not in a failed state, or an active job already exists for this PR revision. */
+                /** @description Job is not in a restartable state, or an active job already exists for this PR revision. */
                 409: {
                     headers: {
                         [name: string]: unknown;
@@ -11273,24 +11427,26 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * Manually restart a failed review job.
-         * @description Failed reviews are not auto-continued (to avoid looping on deterministic failures), so a restart must be
-         *     triggered explicitly. Any user with at least MeisterDev.ProPR.Domain.Enums.ClientRole.ClientUser for the job's owning client
-         *     may restart it — administrator rights are not required.
+         * Manually restart a failed or budget-blocked review job or thread pass.
+         * @description Failed reviews are not auto-continued (to avoid looping on deterministic failures), and budget recovery
+         *     is deliberately an operator decision, so a restart must be triggered explicitly. Any user with at least
+         *     MeisterDev.ProPR.Domain.Enums.ClientRole.ClientUser for the owning client may restart it, and administrator rights are not
+         *     required. A thread pass restarts through the same route, because both are units of work over one pull
+         *     request and an operator recovers them the same way.
          */
         post: {
             parameters: {
                 query?: never;
                 header?: never;
                 path: {
-                    /** @description The identifier of the failed review job to restart. */
+                    /** @description The identifier of the review job or thread pass to restart. */
                     jobId: string;
                 };
                 cookie?: never;
             };
             requestBody?: never;
             responses: {
-                /** @description Restart accepted; a new pending review job was queued. */
+                /** @description Restart accepted; the work was queued again. */
                 202: {
                     headers: {
                         [name: string]: unknown;
@@ -11334,7 +11490,7 @@ export interface paths {
                         "text/json": components["schemas"]["ProblemDetails"];
                     };
                 };
-                /** @description Job is not in a failed state, or an active job already exists for this PR revision. */
+                /** @description Job is not in a restartable state, or an active job already exists for this PR revision. */
                 409: {
                     headers: {
                         [name: string]: unknown;
@@ -14264,7 +14420,7 @@ export interface paths {
                     /** @description Owning client ID. Required. */
                     clientId?: string;
                     /** @description Optional: filter by thread ID. */
-                    threadId?: number;
+                    threadId?: string;
                     /** @description Optional: filter by pull request ID. */
                     pullRequestId?: number;
                     /** @description Optional: filter by repository ID. */
@@ -14332,7 +14488,7 @@ export interface paths {
                     /** @description Owning client ID. Required. */
                     clientId?: string;
                     /** @description Optional: filter by thread ID. */
-                    threadId?: number;
+                    threadId?: string;
                     /** @description Optional: filter by pull request ID. */
                     pullRequestId?: number;
                     /** @description Optional: filter by repository ID. */
@@ -15400,6 +15556,7 @@ export interface components {
             autoResolveSeverities?: components["schemas"]["CommentSeverity"][] | null;
             codeInsightsCollectionEnabled?: boolean;
             outputLanguage?: string | null;
+            reviewEveryIncrementEnabled?: boolean;
         };
         /** @description Client-scoped review profile response. */
         ClientReviewProfileResponse: {
@@ -16032,11 +16189,6 @@ export interface components {
              *     against what coverage says the reviews produced.
              */
             findingsAlreadyHeld?: number;
-            /**
-             * Format: int32
-             * @description Threads that could not be replayed because their provider thread id is not numeric.
-             */
-            threadsNotReplayable?: number;
         };
         /** @description One bucket of a metric series. */
         CodeInsightMetricPointResponse: {
@@ -16823,11 +16975,8 @@ export interface components {
              * @description Owning client identifier.
              */
             clientId?: string;
-            /**
-             * Format: int64
-             * @description ADO thread identifier.
-             */
-            threadId?: number;
+            /** @description Provider-native thread identifier, as the provider itself writes it. */
+            threadId?: string | null;
             /** @description ADO repository identifier (≤ 256 chars). */
             repositoryId?: string | null;
             /**
@@ -16987,11 +17136,27 @@ export interface components {
             autoResolveSeverities?: components["schemas"]["CommentSeverity"][] | null;
             codeInsightsCollectionEnabled?: boolean | null;
             outputLanguage?: string | null;
+            reviewEveryIncrementEnabled?: boolean | null;
         };
         /** @description Patch payload for one premium capability override. */
         PatchPremiumCapabilityOverrideRequest: {
             key?: string | null;
             overrideState?: components["schemas"]["PremiumCapabilityOverrideState"];
+        };
+        /**
+         * @description Says that the pull request has moved past the revision it was reviewed at, and was left there because
+         *     the client reviews only a pull request's first increment.
+         */
+        PendingReviewDto: {
+            /** @description The revision the pull request sits at, unreviewed. */
+            revisionKey?: string | null;
+            /** @description The revision the files were last reviewed at, or null when no review has recorded one. */
+            reviewedRevisionKey?: string | null;
+            /**
+             * Format: date-time
+             * @description When the unreviewed revision was first seen, so a reader can say how long ago.
+             */
+            detectedAt?: string | null;
         };
         /** @description One provider family this build can call, and what a given client may do with it. */
         PermittedProviderDescriptor: {
@@ -17060,6 +17225,66 @@ export interface components {
             /** Format: double */
             totalEstimatedCostUsd?: number | null;
             costIsApproximate?: boolean;
+            threadPasses?: components["schemas"]["PrThreadPassSummaryDto"][] | null;
+            /** Format: double */
+            threadPassTotalEstimatedCostUsd?: number | null;
+            threadPassCostIsApproximate?: boolean;
+            pendingReview?: components["schemas"]["PendingReviewDto"];
+        };
+        /** @description Summary of one thread pass over this pull request's conversation. */
+        PrThreadPassSummaryDto: {
+            /**
+             * Format: uuid
+             * @description Identifier of the pass, and of its trace.
+             */
+            threadPassId?: string;
+            status?: components["schemas"]["ThreadPassJobStatus"];
+            /**
+             * Format: date-time
+             * @description When the pass was queued.
+             */
+            createdAt?: string;
+            /**
+             * Format: date-time
+             * @description When the pass reached a terminal status, if it has.
+             */
+            completedAt?: string | null;
+            /**
+             * Format: int32
+             * @description How many threads the pass acted on.
+             */
+            threadCount?: number;
+            /**
+             * Format: int64
+             * @description Input tokens the pass spent.
+             */
+            totalInputTokens?: number;
+            /**
+             * Format: int64
+             * @description Output tokens the pass spent.
+             */
+            totalOutputTokens?: number;
+            /**
+             * Format: double
+             * @description What the pass cost, or null when nothing priced was recorded.
+             */
+            totalEstimatedCostUsd?: number | null;
+            /** @description True when some of the pass's spend had no known price. */
+            costIsApproximate?: boolean;
+            /** @description Why the last attempt failed, if it did. */
+            errorMessage?: string | null;
+            budgetBlockScope?: components["schemas"]["BudgetScopeKind"];
+            budgetBlockCapKind?: components["schemas"]["BudgetCapKind"];
+            /**
+             * Format: double
+             * @description The cap the blocked scope was measured against.
+             */
+            budgetBlockThresholdUsd?: number | null;
+            /**
+             * Format: double
+             * @description What the blocked scope had already spent.
+             */
+            budgetBlockSpentUsd?: number | null;
         };
         /**
          * @description Stable-prefix eligibility recorded for one cache-sensitive AI call.
@@ -18042,7 +18267,7 @@ export interface components {
             body?: string | null;
             /**
              * Format: uuid
-             * @description The review job that produced this comment, when its provenance is retained; null otherwise.
+             * @description The job that produced this comment: a review job, or a mention-reply job. Null when no provenance is retained.
              */
             originatingJobId?: string | null;
         };
@@ -18100,6 +18325,17 @@ export interface components {
             updatedAt?: string;
             /** @description Comments belonging to the thread, in publication order. */
             comments?: components["schemas"]["RetainedCommentDto"][] | null;
+        };
+        /** @description Response returned by coordinate-addressed review submission, whatever the outcome. */
+        ReviewByCoordinatesResponse: {
+            outcome?: components["schemas"]["SubmitReviewByCoordinatesOutcome"];
+            /**
+             * Format: uuid
+             * @description The review job to follow, when the request reached one.
+             */
+            jobId?: string | null;
+            /** @description A sentence explaining a refusal. */
+            reason?: string | null;
         };
         /** @description Provider-neutral code review identity supplied by review intake clients. */
         ReviewCodeReviewRefDto: {
@@ -18459,6 +18695,25 @@ export interface components {
         SetUserActiveRequest: {
             isActive: boolean;
         };
+        /**
+         * @description Why a coordinate-addressed review request did or did not produce a review job.
+         * @enum {string}
+         */
+        SubmitReviewByCoordinatesOutcome: "submitted" | "duplicateActiveJob" | "notAuthorized" | "pullRequestNotFound" | "revisionUnresolvable" | "notSubmittable" | "submissionFailed";
+        /** @description Request payload identifying a pull request by the coordinates ProPR already stores. */
+        SubmitReviewByCoordinatesRequest: {
+            /** @description Scope path exactly as the covering configuration stores it. */
+            providerScopePath?: string | null;
+            /** @description Project, workspace, or namespace key exactly as the covering configuration stores it. */
+            providerProjectKey?: string | null;
+            /** @description Provider repository identity. */
+            repositoryId?: string | null;
+            /**
+             * Format: int32
+             * @description Pull request number as the provider numbers it.
+             */
+            pullRequestId?: number | null;
+        };
         /** @description Request payload for provider-neutral review intake. */
         SubmitReviewRequest: {
             provider?: components["schemas"]["ScmProvider"];
@@ -18768,11 +19023,8 @@ export interface components {
              * @description Owning client.
              */
             clientId?: string;
-            /**
-             * Format: int64
-             * @description ADO thread ID.
-             */
-            threadId?: number;
+            /** @description Provider-native thread identifier. */
+            threadId?: string | null;
             /** @description ADO repository ID. */
             repositoryId?: string | null;
             /**
@@ -18822,11 +19074,8 @@ export interface components {
              * @description Record identifier.
              */
             memoryRecordId?: string;
-            /**
-             * Format: int64
-             * @description Provider thread identifier.
-             */
-            threadId?: number;
+            /** @description Provider thread identifier. */
+            threadId?: string | null;
             /** @description File the thread was anchored to, if any. */
             filePath?: string | null;
             /** @description Opening of the stored resolution summary. */
@@ -18840,6 +19089,11 @@ export interface components {
             resolutionIntent?: components["schemas"]["ThreadResolutionIntent"];
             resolutionClarity?: components["schemas"]["ResolutionClarity"];
         };
+        /**
+         * @description Lifecycle of one thread pass over a pull request's reviewer-owned comment threads.
+         * @enum {string}
+         */
+        ThreadPassJobStatus: "pending" | "processing" | "completed" | "failed" | "cancelled" | "budgetHeld" | "budgetExceeded" | "skipped";
         /**
          * @description Provider-neutral classification of what a reviewer-owned thread's current state means for
          *     memory, independent of any single SCM's status vocabulary. The crawl state machine maps each

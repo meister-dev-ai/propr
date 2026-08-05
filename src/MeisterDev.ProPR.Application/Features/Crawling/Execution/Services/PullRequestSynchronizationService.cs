@@ -12,6 +12,8 @@ using MeisterDev.ProPR.Application.Features.Crawling.Execution.Ports;
 using MeisterDev.ProPR.Application.Features.Crawling.Webhooks.Ports;
 using MeisterDev.ProPR.Application.Features.ReviewArchive;
 using MeisterDev.ProPR.Application.Features.Reviewing.Execution.Models;
+using MeisterDev.ProPR.Application.Features.Reviewing.Threads;
+using MeisterDev.ProPR.Application.Features.ThreadOwnership;
 using MeisterDev.ProPR.Application.Interfaces;
 using MeisterDev.ProPR.Application.Support;
 using MeisterDev.ProPR.Domain.Entities;
@@ -30,7 +32,7 @@ public sealed class PullRequestSynchronizationService(
     IPullRequestIterationResolver? iterationResolver = null,
     IReviewerThreadStatusFetcher? threadStatusFetcher = null,
     IThreadMemoryService? threadMemoryService = null,
-    IReviewPrScanRepository? prScanRepository = null,
+    IReviewPrScanThreadStatusStore? prScanRepository = null,
     IClientRegistry? clientRegistry = null,
     IClientScmConnectionRepository? scmConnectionRepository = null,
     IPullRequestFetcher? pullRequestFetcher = null,
@@ -39,7 +41,10 @@ public sealed class PullRequestSynchronizationService(
     IBlockedPullRequestStore? blockedPullRequestStore = null,
     ICodeInsightDispositionService? codeInsightDispositionService = null,
     ICodeInsightMissHarvester? codeInsightMissHarvester = null,
-    ICodeInsightMetricSealer? codeInsightMetricSealer = null) : IPullRequestSynchronizationService
+    ICodeInsightMetricSealer? codeInsightMetricSealer = null,
+    IThreadPassJobRepository? threadPassJobs = null,
+    IScmProviderRegistry? providerRegistry = null,
+    IReviewPrScanPendingReviewWriter? prScanPendingReviewWriter = null) : IPullRequestSynchronizationService
 {
     private const string ActivationSourceTagName = "pull_request.activation_source";
     private static readonly ActivitySource CrawlingActivitySource = new("MeisterProPR.Crawling", "1.0.0");
@@ -112,25 +117,43 @@ public sealed class PullRequestSynchronizationService(
                 return CompleteOutcome(activity, startedAt, request, outcome);
             }
 
-            var reviewerIdentity = await this.ResolveReviewerIdentityAsync(request, ct);
-            var reviewerId = ResolveReviewerId(reviewerIdentity);
+            // Whether a thread is ProPR's is one question with one answer for the whole pass, and every
+            // consumer below asks this. It resolves on first use so a pass with no thread consumers issues
+            // no provenance query at all.
+            var ownership = new ThreadOwnershipSnapshot(this, request);
 
-            // Thread memory reconciliation and the review decision both need the reviewer's threads for
-            // this pass. Fetching once means one provider round trip per pull request per cycle instead
-            // of two, and both consumers now reason about the same point-in-time snapshot.
-            var threadStatuses = new ReviewerThreadStatusSnapshot(request, reviewerId);
+            // Thread memory reconciliation and the review decision both need ProPR's threads for this pass.
+            // Fetching once means one provider round trip per pull request per cycle instead of two, and
+            // both consumers now reason about the same point-in-time snapshot.
+            var threadStatuses = new ReviewerThreadStatusSnapshot(request, ownership);
 
             await this.RunThreadMemoryStateMachineAsync(request, threadStatuses, ct);
-            await this.IngestRetainedThreadsAsync(request, reviewerIdentity, reviewerId, ct);
+            await this.IngestRetainedThreadsAsync(request, ownership, ct);
 
             var iterationId = await this.ResolveIterationIdAsync(request, ct);
             activity?.SetTag("pull_request.iteration_id", iterationId);
+
+            // The conversation is decided here, above every review-intake return below, because none of them
+            // speak for it: a declined increment, a reconciled duplicate and every change-detection branch
+            // are all answers about the files.
+            var threadPass = await this.EvaluateThreadPassAsync(request, iterationId, threadStatuses, ct);
+            activity?.SetTag("pull_request.thread_pass_decision", threadPass.Decision.ToString().ToLowerInvariant());
+
+            var subsequentIncrementSkip = await this.EvaluateSubsequentIncrementAsync(request, iterationId, ct);
+            if (subsequentIncrementSkip is not null)
+            {
+                return CompleteOutcome(activity, startedAt, request, threadPass.ApplyTo(subsequentIncrementSkip));
+            }
 
             var currentRevisionKey = ReviewRevisionKeys.TryGetStoredKey(request.ReviewRevision);
             var activeJobReconciliation = await this.ReconcileActiveJobsAsync(request, currentRevisionKey, ct);
             if (activeJobReconciliation.DuplicateOutcome is not null)
             {
-                return CompleteOutcome(activity, startedAt, request, activeJobReconciliation.DuplicateOutcome);
+                return CompleteOutcome(
+                    activity,
+                    startedAt,
+                    request,
+                    threadPass.ApplyTo(activeJobReconciliation.DuplicateOutcome));
             }
 
             var reviewDecision = await this.EvaluateReviewDecisionAsync(
@@ -144,7 +167,7 @@ public sealed class PullRequestSynchronizationService(
                     activity,
                     startedAt,
                     request,
-                    MergeOutcome(activeJobReconciliation, reviewDecision));
+                    threadPass.ApplyTo(MergeOutcome(activeJobReconciliation, reviewDecision)));
             }
 
             outcome = await this.SubmitReviewJobAsync(
@@ -154,13 +177,117 @@ public sealed class PullRequestSynchronizationService(
                 activeJobReconciliation,
                 activity,
                 ct);
-            return CompleteOutcome(activity, startedAt, request, outcome);
+            return CompleteOutcome(activity, startedAt, request, threadPass.ApplyTo(outcome));
         }
         catch (Exception ex) when (!ct.IsCancellationRequested)
         {
             activity?.SetStatus(ActivityStatusCode.Error, ex.Message);
             activity?.SetTag("pull_request.error_type", ex.GetType().FullName ?? ex.GetType().Name);
             throw;
+        }
+    }
+
+    /// <summary>
+    ///     Decides whether the reviewer's threads on this pull request are due a visit, and queues the pass
+    ///     that pays it.
+    /// </summary>
+    /// <remarks>
+    ///     Two gates and two conditions, and nothing else. The gates are the client's comment-resolution
+    ///     setting and the provider's advertised ability to write a thread status; neither the first-increment
+    ///     guard nor the file pass's decision nor the existence of a review job has any say. A pass is due when
+    ///     the pull request's revision differs from the revision the threads were last checked at, or when a
+    ///     reviewer-owned thread has gained a non-reviewer comment since its stored count. The predicate is the
+    ///     same on crawl, webhook and manual activation.
+    /// </remarks>
+    private async Task<ThreadPassTriggerResult> EvaluateThreadPassAsync(
+        PullRequestSynchronizationRequest request,
+        int iterationId,
+        ReviewerThreadStatusSnapshot threadStatuses,
+        CancellationToken ct)
+    {
+        if (threadPassJobs is null || clientRegistry is null || providerRegistry is null
+            || threadStatusFetcher is null || prScanRepository is null)
+        {
+            return ThreadPassTriggerResult.None;
+        }
+
+        try
+        {
+            var behavior = await clientRegistry.GetCommentResolutionBehaviorAsync(request.ClientId, ct);
+            if (behavior == CommentResolutionBehavior.Disabled)
+            {
+                return ThreadPassTriggerResult.ResolutionDisabled;
+            }
+
+            var capabilities = providerRegistry.GetRegisteredCapabilities(request.Provider);
+            if (!ReviewThreadCapabilities.Advertises(capabilities, ReviewThreadCapabilities.Status))
+            {
+                return ThreadPassTriggerResult.ProviderUnsupported;
+            }
+
+            var scan = await this.TryGetScanAsync(request, ct);
+            var currentThreads = await threadStatuses.GetAsync(threadStatusFetcher, ct);
+            var revisionKey = ReviewRevisionKeys.GetStoredKey(request.ReviewRevision, iterationId);
+
+            var revisionMoved = !string.Equals(
+                scan?.LastThreadPassRevisionKey,
+                revisionKey,
+                StringComparison.Ordinal);
+            if (!revisionMoved && !HasNewReviewerThreadReplies(currentThreads, scan))
+            {
+                return ThreadPassTriggerResult.NotDue;
+            }
+
+            var observedReplyCounts = currentThreads
+                .Where(thread => !string.IsNullOrWhiteSpace(thread.ThreadId))
+                .ToDictionary(
+                    thread => thread.ThreadId!,
+                    thread => thread.NonReviewerReplyCount,
+                    StringComparer.Ordinal);
+
+            var job = new ThreadPassJob(
+                Guid.NewGuid(),
+                request.ClientId,
+                request.ProviderScopePath,
+                request.ProviderProjectKey,
+                request.RepositoryId,
+                request.PullRequestId,
+                iterationId,
+                revisionKey,
+                ThreadPassTriggerKey.Build(revisionKey, observedReplyCounts));
+
+            if (request.CodeReview is not null)
+            {
+                job.SetProviderReviewContext(request.CodeReview);
+            }
+
+            var claim = await threadPassJobs.TryClaimAsync(job, ct);
+            if (!claim.WasClaimed)
+            {
+                return new ThreadPassTriggerResult(
+                    PullRequestSynchronizationThreadPassDecision.AlreadyClaimed,
+                    claim.BlockingJob?.Id,
+                    $"A thread pass for PR #{request.PullRequestId} is already accounted for; no second one was queued during {request.SummaryLabel}.");
+            }
+
+            return new ThreadPassTriggerResult(
+                PullRequestSynchronizationThreadPassDecision.Queued,
+                job.Id,
+                $"Queued a thread pass for PR #{request.PullRequestId} at revision {revisionKey} via {request.SummaryLabel}.");
+        }
+        catch (Exception ex) when (!ct.IsCancellationRequested)
+        {
+            // The conversation failing to be scheduled must never stop the files being reviewed. It must
+            // equally never read as "nothing was due": a caller told None cannot tell a pull request whose
+            // threads were up to date from one whose threads nobody managed to look at.
+            logger.LogWarning(
+                ex,
+                "Shared synchronization failed to evaluate the thread pass for PR {PullRequestId}.",
+                request.PullRequestId);
+            return new ThreadPassTriggerResult(
+                PullRequestSynchronizationThreadPassDecision.Failed,
+                null,
+                $"Could not decide whether PR #{request.PullRequestId} was due a thread pass during {request.SummaryLabel}: {ex.Message}");
         }
     }
 
@@ -338,8 +465,32 @@ public sealed class PullRequestSynchronizationService(
                           && job.PullRequestId == request.PullRequestId)
             .ToList();
 
+        foreach (var job in matchingJobs)
+        {
+            await jobs.SetCancelledAsync(job.Id, ct);
+        }
+
+        // A closed pull request terminates every unit of work over it, not only the review jobs this method
+        // can see through the job repository. The thread pass is its own entity with its own repository, so it
+        // is cancelled here, in the same pass, before the outcome is returned.
+        var cancelledThreadPasses = await this.CancelActiveThreadPassesAsync(request, ct);
+
         var pullRequestStatus = request.PullRequestStatus.ToString().ToLowerInvariant();
-        if (matchingJobs.Count == 0)
+        var actionSummaries = new List<string>(2);
+
+        if (matchingJobs.Count > 0)
+        {
+            actionSummaries.Add(
+                $"Cancelled {matchingJobs.Count} active review job(s) for PR #{request.PullRequestId} because the pull request is {pullRequestStatus}.");
+        }
+
+        if (cancelledThreadPasses > 0)
+        {
+            actionSummaries.Add(
+                $"Cancelled {cancelledThreadPasses} active thread pass(es) for PR #{request.PullRequestId} because the pull request is {pullRequestStatus}.");
+        }
+
+        if (actionSummaries.Count == 0)
         {
             return new PullRequestSynchronizationOutcome(
                 PullRequestSynchronizationReviewDecision.None,
@@ -349,17 +500,37 @@ public sealed class PullRequestSynchronizationService(
                 ]);
         }
 
-        foreach (var job in matchingJobs)
-        {
-            await jobs.SetCancelledAsync(job.Id, ct);
-        }
-
         return new PullRequestSynchronizationOutcome(
             PullRequestSynchronizationReviewDecision.None,
             PullRequestSynchronizationLifecycleDecision.CancelledActiveJobs,
-            [
-                $"Cancelled {matchingJobs.Count} active review job(s) for PR #{request.PullRequestId} because the pull request is {pullRequestStatus}.",
-            ]);
+            actionSummaries);
+    }
+
+    private async Task<int> CancelActiveThreadPassesAsync(
+        PullRequestSynchronizationRequest request,
+        CancellationToken ct)
+    {
+        if (threadPassJobs is null)
+        {
+            return 0;
+        }
+
+        try
+        {
+            return await threadPassJobs.CancelActiveForPullRequestAsync(
+                request.ClientId,
+                request.RepositoryId,
+                request.PullRequestId,
+                ct);
+        }
+        catch (Exception ex) when (!ct.IsCancellationRequested)
+        {
+            logger.LogWarning(
+                ex,
+                "Cancelling thread-pass work for closed PR {PullRequestId} failed.",
+                request.PullRequestId);
+            return 0;
+        }
     }
 
     /// <summary>
@@ -492,6 +663,150 @@ public sealed class PullRequestSynchronizationService(
             logger.LogWarning(
                 ex,
                 "Shared synchronization failed to evaluate review changes for PR {PullRequestId}; defaulting to queue review work.",
+                request.PullRequestId);
+            return null;
+        }
+    }
+
+    /// <summary>
+    ///     An automatic trigger reviews a pull request at the first revision it sees and stops there; later revisions
+    ///     are left alone unless the client opted in to reviewing every increment. Returns the outcome that records
+    ///     the declined increment, or <see langword="null" /> when the trigger may proceed.
+    /// </summary>
+    /// <remarks>
+    ///     This runs before active-job reconciliation on purpose. Reconciling first would supersede the review still
+    ///     running at the earlier revision and then decline to replace it, leaving the pull request unreviewed.
+    /// </remarks>
+    private async Task<PullRequestSynchronizationOutcome?> EvaluateSubsequentIncrementAsync(
+        PullRequestSynchronizationRequest request,
+        int iterationId,
+        CancellationToken ct)
+    {
+        // Only automatic triggers are guarded. Someone who asked for this review has already decided they want the
+        // work done, so both the way that request announces itself pass through: its activation source, and the flag
+        // it sets to opt out of the change-detection heuristics generally.
+        if (request.ActivationSource is not (PullRequestActivationSource.Crawl or PullRequestActivationSource.Webhook)
+            || request.AllowUnchangedResubmission)
+        {
+            return null;
+        }
+
+        // Offline and minimal wirings have no registry to read the per-client setting from, so they keep the
+        // unguarded behavior.
+        if (clientRegistry is null)
+        {
+            return null;
+        }
+
+        if (await clientRegistry.GetReviewEveryIncrementEnabledAsync(request.ClientId, ct))
+        {
+            return null;
+        }
+
+        var engagedJobRevision = await jobs.GetLatestEngagedRevisionAsync(
+            request.ClientId,
+            request.ProviderScopePath,
+            request.ProviderProjectKey,
+            request.RepositoryId,
+            request.PullRequestId,
+            ct);
+
+        // The head is compared against the revision this client engaged with, not against "some other revision".
+        // A head the client already engaged with is no increment at all, and the change-detection path decides.
+        var revisionKey = ReviewRevisionKeys.GetStoredKey(request.ReviewRevision, iterationId);
+        if (string.Equals(engagedJobRevision?.StoredRevisionKey, revisionKey, StringComparison.Ordinal))
+        {
+            return null;
+        }
+
+        // A review that finds nothing deletes its own job row after writing the scan watermark, so the watermark is
+        // the durable record of engagement and the job query covers only the window before it is written.
+        var scan = await this.TryGetScanAsync(request, ct);
+        if (string.Equals(scan?.LastProcessedCommitId, revisionKey, StringComparison.Ordinal))
+        {
+            return null;
+        }
+
+        // A scan record the thread pass brought into being carries no review watermark yet, and an absent
+        // watermark is no engagement at all: reading it as one would decline the pull request's first review.
+        var engagedRevisionKey = engagedJobRevision?.StoredRevisionKey ?? scan?.LastProcessedCommitId;
+        if (string.IsNullOrEmpty(engagedRevisionKey))
+        {
+            return null;
+        }
+
+        logger.LogInformation(
+            "Skipping review intake for PR {PullRequestId} at revision {RevisionKey} during {SummaryLabel}: this client already has a review at revision {EngagedRevisionKey} and reviews only the first increment.",
+            request.PullRequestId,
+            revisionKey,
+            request.SummaryLabel,
+            engagedRevisionKey);
+
+        await this.RecordPendingReviewAsync(request, revisionKey, ct);
+
+        return CreateSubsequentIncrementSkippedOutcome(request, revisionKey, engagedRevisionKey);
+    }
+
+    /// <summary>
+    ///     Records the revision the guard just declined, so that a person can be shown a pull request has moved
+    ///     on and offered the review of it. Nothing else knows: the head revision reaches the product only
+    ///     through whoever last spoke to the provider, and the surfaces that would offer the action have not.
+    /// </summary>
+    /// <remarks>
+    ///     Best-effort. A pull request left unreviewed is the decision that was just taken and stands whether or
+    ///     not it can be advertised, so a failed write is logged and the decline returned unchanged.
+    /// </remarks>
+    private async Task RecordPendingReviewAsync(
+        PullRequestSynchronizationRequest request,
+        string revisionKey,
+        CancellationToken ct)
+    {
+        if (prScanPendingReviewWriter is null)
+        {
+            return;
+        }
+
+        try
+        {
+            await prScanPendingReviewWriter.SetPendingReviewRevisionAsync(
+                request.ClientId,
+                request.RepositoryId,
+                request.PullRequestId,
+                revisionKey,
+                ct);
+        }
+        catch (Exception ex) when (!ct.IsCancellationRequested)
+        {
+            logger.LogWarning(
+                ex,
+                "Shared synchronization declined to review PR {PullRequestId} at revision {RevisionKey} but could not record it as awaiting a review.",
+                request.PullRequestId,
+                revisionKey);
+        }
+    }
+
+    private async Task<ReviewPrScan?> TryGetScanAsync(
+        PullRequestSynchronizationRequest request,
+        CancellationToken ct)
+    {
+        if (prScanRepository is null)
+        {
+            return null;
+        }
+
+        try
+        {
+            return await prScanRepository.GetAsync(
+                request.ClientId,
+                request.RepositoryId,
+                request.PullRequestId,
+                ct);
+        }
+        catch (Exception ex) when (!ct.IsCancellationRequested)
+        {
+            logger.LogWarning(
+                ex,
+                "Shared synchronization failed to read the scan watermark for PR {PullRequestId}.",
                 request.PullRequestId);
             return null;
         }
@@ -644,35 +959,6 @@ public sealed class PullRequestSynchronizationService(
         return null;
     }
 
-    private static Guid? ResolveReviewerId(ReviewerIdentity? requestedReviewerIdentity)
-    {
-        if (requestedReviewerIdentity is not null)
-        {
-            if (Guid.TryParse(requestedReviewerIdentity.ExternalUserId, out var parsedReviewerId))
-            {
-                return parsedReviewerId;
-            }
-
-            return StableGuidGenerator.Create(requestedReviewerIdentity.ExternalUserId);
-        }
-
-        return null;
-    }
-
-    private async Task<ReviewerIdentity?> ResolveReviewerIdentityAsync(
-        PullRequestSynchronizationRequest request,
-        CancellationToken ct)
-    {
-        var reviewerIdentity = request.RequestedReviewerIdentity;
-        if (reviewerIdentity is null && clientRegistry is not null)
-        {
-            var host = request.Host ?? new ProviderHostRef(request.Provider, request.ProviderScopePath);
-            reviewerIdentity = await clientRegistry.GetEffectiveReviewerIdentityAsync(request.ClientId, host, ct);
-        }
-
-        return reviewerIdentity;
-    }
-
     private static int? TryCreateSyntheticIterationId(ReviewRevision? revision)
     {
         if (revision is null)
@@ -736,7 +1022,15 @@ public sealed class PullRequestSynchronizationService(
 
             foreach (var thread in currentThreads)
             {
-                var stored = scan.Threads.FirstOrDefault(candidate => candidate.ThreadId == thread.ThreadId);
+                // A provider that groups its threads client-side hands back no identifier, and a transition
+                // cannot be attributed to a stored row without one.
+                if (string.IsNullOrWhiteSpace(thread.ThreadId))
+                {
+                    continue;
+                }
+
+                var stored = scan.Threads.FirstOrDefault(candidate =>
+                    string.Equals(candidate.ThreadId, thread.ThreadId, StringComparison.Ordinal));
                 var previousStatus = stored?.LastSeenStatus;
                 var currentIntent = ThreadResolutionStatusInterpreter.InterpretIntent(thread.Status);
                 var isCurrentlyResolved = ThreadResolutionStatusInterpreter.IsResolved(currentIntent);
@@ -792,8 +1086,7 @@ public sealed class PullRequestSynchronizationService(
 
     private async Task IngestRetainedThreadsAsync(
         PullRequestSynchronizationRequest request,
-        ReviewerIdentity? reviewerIdentity,
-        Guid? reviewerId,
+        ThreadOwnershipSnapshot ownership,
         CancellationToken ct)
     {
         // Two independent passive observers read the same thread snapshots: the review archive (when the
@@ -837,20 +1130,21 @@ public sealed class PullRequestSynchronizationService(
                 request.ClientId,
                 ct);
 
-            // Resolve the originating-job provenance for the whole pull request in one pass. This is a
-            // passive side-read: when the store is absent or the read fails, stamping is simply skipped and
-            // ingestion proceeds with no originating job, never disrupting the crawl.
-            var originatingJobs = OriginatingJobResolver.FromRows(await this.ResolveOriginatingJobsAsync(request, ct));
-
-            // Who ProPR posts as is learned from its own recorded posts in this pull request, not assumed from the
-            // configured reviewer identity: that identity is who a review is *requested* of and need not be the
-            // account whose token posts. Getting this wrong makes ProPR's own threads look human, which is a
-            // false negative charged against its recall.
-            var authorship = AiAuthorshipResolver.Learn(threads, originatingJobs, reviewerIdentity, reviewerId);
+            // The pass's one ownership answer, over provenance resolved for the whole pull request in a
+            // single read. This is a passive side-read: when the store is absent or the read fails, nothing
+            // is stamped and ingestion proceeds without originating jobs, never disrupting the crawl.
+            var passOwnership = await ownership.GetAsync(ct);
 
             foreach (var thread in threads)
             {
-                var evt = BuildThreadUpdatedEvent(request, connection.Id, thread, authorship, originatingJobs);
+                // Both consumers key on the provider's thread identity, so a thread the provider cannot name
+                // has nothing to be stored or harvested under.
+                if (string.IsNullOrWhiteSpace(thread.ThreadId))
+                {
+                    continue;
+                }
+
+                var evt = BuildThreadUpdatedEvent(request, connection.Id, thread, passOwnership);
 
                 if (archiveWanted)
                 {
@@ -874,22 +1168,38 @@ public sealed class PullRequestSynchronizationService(
         }
     }
 
-    private async Task<IReadOnlyList<PostedCommentOriginRow>> ResolveOriginatingJobsAsync(
+    /// <summary>
+    ///     Builds the pass's ownership answer from one provenance read over the whole pull request.
+    /// </summary>
+    /// <remarks>
+    ///     No identity is known here. Nothing on this path holds a live provider connection, and no provider
+    ///     persists the identity its token authenticates as. The provider adapter reached through the
+    ///     thread-status fetcher contributes the identity from its own handshake into this same instance, so
+    ///     consumers that run after it in the pass decide with it too; a pass that never reaches that fetcher
+    ///     decides on provenance alone. Keyed on
+    ///     <see cref="PullRequestSynchronizationRequest.RepositoryId" />, which is the value a review job for
+    ///     this pull request carries and records provenance under.
+    /// </remarks>
+    private async Task<ThreadOwnershipResolver> ResolveThreadOwnershipAsync(
         PullRequestSynchronizationRequest request,
         CancellationToken ct)
     {
         if (postedCommentOriginStore is null)
         {
-            return [];
+            return ThreadOwnershipResolver.None;
         }
 
         try
         {
-            return await postedCommentOriginStore.GetJobIdsForPullRequestAsync(
+            var provenance = await postedCommentOriginStore.GetJobIdsForPullRequestAsync(
                 request.ClientId,
                 request.RepositoryId,
                 request.PullRequestId,
                 ct);
+            return ThreadOwnershipResolver.Create(
+                provenance,
+                ThreadOwnerIdentity.None,
+                ProviderCommentIdScopes.For(request.Provider));
         }
         catch (Exception ex) when (!ct.IsCancellationRequested)
         {
@@ -899,7 +1209,7 @@ public sealed class PullRequestSynchronizationService(
                 ex,
                 "Comment-origin lookup failed for PR {PullRequestId}; ingesting retained threads without originating jobs.",
                 request.PullRequestId);
-            return [];
+            return ThreadOwnershipResolver.None;
         }
     }
 
@@ -944,12 +1254,11 @@ public sealed class PullRequestSynchronizationService(
         PullRequestSynchronizationRequest request,
         Guid connectionId,
         PrCommentThread thread,
-        AiAuthorshipResolver authorship,
-        OriginatingJobResolver originatingJobs)
+        ThreadOwnershipResolver ownership)
     {
         var comments = new List<ThreadUpdatedComment>(thread.Comments.Count);
         var lastActivityAt = DateTimeOffset.MinValue;
-        var threadId = thread.ThreadId.ToString(CultureInfo.InvariantCulture);
+        var threadId = thread.ThreadId!;
 
         foreach (var comment in thread.Comments)
         {
@@ -960,20 +1269,16 @@ public sealed class PullRequestSynchronizationService(
             }
 
             var commentId = comment.CommentId.ToString(CultureInfo.InvariantCulture);
-            // Attribute comment-id-primary: the comment id alone resolves the originating job for providers
-            // whose comment ids are globally unique within the pull request (GitHub/GitLab/Forgejo), where
-            // the crawled thread id need not match the recorded one. Azure DevOps scopes comment ids to a
-            // thread, so several origins can share a comment id; the thread id breaks that collision.
-            var originatingJobId = originatingJobs.Resolve(threadId, commentId);
+            var commentRef = new ThreadCommentRef(threadId, commentId, comment.AuthorId, comment.AuthorName);
 
             comments.Add(
                 new ThreadUpdatedComment(
                     commentId,
                     ResolveAuthorIdentity(comment),
-                    authorship.IsAiAuthored(comment, originatingJobId),
+                    ownership.OwnsComment(commentRef),
                     publishedAt,
                     comment.Content,
-                    originatingJobId,
+                    ownership.ResolveOriginatingJobId(threadId, commentId),
                     comment.IsSystemGenerated));
         }
 
@@ -1006,93 +1311,18 @@ public sealed class PullRequestSynchronizationService(
     }
 
     /// <summary>
-    ///     Decides which comments on a pull request are ProPR's own.
+    ///     Holds the pass's ownership answer so the provenance behind it is read at most once, and only when
+    ///     something actually asks.
     /// </summary>
-    /// <remarks>
-    ///     <para>
-    ///         The load-bearing signal is provenance, not identity: a comment whose provider id ProPR recorded when
-    ///         it posted is ProPR's, whatever account it went out as. From those comments the posting identity is
-    ///         <em>learned</em>, and any other comment on the pull request by the same author is ProPR's too: which
-    ///         covers threads whose ids were never recorded, and threads ProPR resolved rather than created.
-    ///     </para>
-    ///     <para>
-    ///         The configured reviewer identity is kept as one more input and no longer the only one. It is who a
-    ///         review is requested of: an account that need not be the one whose token posts, and on several
-    ///         installations is not configured at all. Relying on it alone marked every ProPR thread human, and a
-    ///         human thread ProPR did not raise is by definition a miss, so its own findings were being counted
-    ///         against its recall.
-    ///     </para>
-    /// </remarks>
-    private sealed class AiAuthorshipResolver
+    private sealed class ThreadOwnershipSnapshot(
+        PullRequestSynchronizationService service,
+        PullRequestSynchronizationRequest request)
     {
-        private readonly HashSet<Guid> _authorIds = [];
-        private readonly HashSet<string> _authorNames = new(StringComparer.OrdinalIgnoreCase);
+        private ThreadOwnershipResolver? _ownership;
 
-        public static AiAuthorshipResolver Learn(
-            IReadOnlyList<PrCommentThread> threads,
-            OriginatingJobResolver originatingJobs,
-            ReviewerIdentity? reviewerIdentity,
-            Guid? reviewerId)
+        public async Task<ThreadOwnershipResolver> GetAsync(CancellationToken ct)
         {
-            var resolver = new AiAuthorshipResolver();
-
-            if (reviewerId.HasValue)
-            {
-                resolver._authorIds.Add(reviewerId.Value);
-            }
-
-            if (reviewerIdentity is not null)
-            {
-                resolver.Remember(reviewerIdentity.Login);
-                resolver.Remember(reviewerIdentity.DisplayName);
-            }
-
-            foreach (var thread in threads)
-            {
-                var threadId = thread.ThreadId.ToString(CultureInfo.InvariantCulture);
-                foreach (var comment in thread.Comments)
-                {
-                    var commentId = comment.CommentId.ToString(CultureInfo.InvariantCulture);
-                    if (originatingJobs.Resolve(threadId, commentId) is null)
-                    {
-                        continue;
-                    }
-
-                    // ProPR posted this one and recorded its id, so whatever account it appears under is the
-                    // account ProPR posts as on this connection.
-                    if (comment.AuthorId is { } authorId && authorId != Guid.Empty)
-                    {
-                        resolver._authorIds.Add(authorId);
-                    }
-
-                    resolver.Remember(comment.AuthorName);
-                }
-            }
-
-            return resolver;
-        }
-
-        public bool IsAiAuthored(PrThreadComment comment, Guid? originatingJobId)
-        {
-            if (originatingJobId.HasValue)
-            {
-                return true;
-            }
-
-            if (comment.AuthorId is { } authorId && authorId != Guid.Empty && this._authorIds.Contains(authorId))
-            {
-                return true;
-            }
-
-            return !string.IsNullOrWhiteSpace(comment.AuthorName) && this._authorNames.Contains(comment.AuthorName);
-        }
-
-        private void Remember(string? name)
-        {
-            if (!string.IsNullOrWhiteSpace(name))
-            {
-                this._authorNames.Add(name);
-            }
+            return this._ownership ??= await service.ResolveThreadOwnershipAsync(request, ct);
         }
     }
 
@@ -1106,44 +1336,28 @@ public sealed class PullRequestSynchronizationService(
             return;
         }
 
-        var updatedScan = new ReviewPrScan(
-            existingScan.Id,
-            existingScan.ClientId,
-            existingScan.RepositoryId,
-            existingScan.PullRequestId,
-            existingScan.LastProcessedCommitId);
-
+        var statusByThreadId = new Dictionary<string, string?>(StringComparer.Ordinal);
         foreach (var thread in currentThreads)
         {
-            var existing = existingScan.Threads.FirstOrDefault(candidate => candidate.ThreadId == thread.ThreadId);
-            updatedScan.Threads.Add(
-                new ReviewPrScanThread
-                {
-                    ReviewPrScanId = existingScan.Id,
-                    ThreadId = thread.ThreadId,
-                    LastSeenReplyCount = existing?.LastSeenReplyCount ?? 0,
-                    LastSeenStatus = thread.Status,
-                });
-        }
-
-        foreach (var oldThread in existingScan.Threads)
-        {
-            if (currentThreads.Any(thread => thread.ThreadId == oldThread.ThreadId))
+            if (string.IsNullOrWhiteSpace(thread.ThreadId))
             {
                 continue;
             }
 
-            updatedScan.Threads.Add(
-                new ReviewPrScanThread
-                {
-                    ReviewPrScanId = existingScan.Id,
-                    ThreadId = oldThread.ThreadId,
-                    LastSeenReplyCount = oldThread.LastSeenReplyCount,
-                    LastSeenStatus = oldThread.LastSeenStatus,
-                });
+            statusByThreadId[thread.ThreadId] = thread.Status;
         }
 
-        await prScanRepository.UpsertAsync(updatedScan, ct);
+        if (statusByThreadId.Count == 0)
+        {
+            return;
+        }
+
+        await prScanRepository.SetLastSeenStatusesAsync(
+            existingScan.ClientId,
+            existingScan.RepositoryId,
+            existingScan.PullRequestId,
+            statusByThreadId,
+            ct);
     }
 
     private static PullRequestSynchronizationOutcome CreateNoReviewChangesOutcome(
@@ -1170,13 +1384,35 @@ public sealed class PullRequestSynchronizationService(
             ]);
     }
 
+    private static PullRequestSynchronizationOutcome CreateSubsequentIncrementSkippedOutcome(
+        PullRequestSynchronizationRequest request,
+        string revisionKey,
+        string engagedRevisionKey)
+    {
+        return new PullRequestSynchronizationOutcome(
+            PullRequestSynchronizationReviewDecision.SubsequentIncrementSkipped,
+            PullRequestSynchronizationLifecycleDecision.None,
+            [
+                $"Skipped review intake for PR #{request.PullRequestId} at revision {revisionKey} because this client already has a review at revision {engagedRevisionKey} and reviews only the first increment (via {request.SummaryLabel}).",
+            ]);
+    }
+
     private static bool HasNewReviewerThreadReplies(
         IReadOnlyList<PrThreadStatusEntry> currentThreads,
-        ReviewPrScan scan)
+        ReviewPrScan? scan)
     {
         foreach (var thread in currentThreads)
         {
-            var stored = scan.Threads.FirstOrDefault(candidate => candidate.ThreadId == thread.ThreadId);
+            // A provider that groups its threads client-side hands back no identifier, so nothing stored can
+            // be matched against it. Treating that as an unseen thread would report new replies on every
+            // cycle and queue a pass that has nothing to key its progress on.
+            if (string.IsNullOrWhiteSpace(thread.ThreadId))
+            {
+                continue;
+            }
+
+            var stored = scan?.Threads.FirstOrDefault(candidate =>
+                string.Equals(candidate.ThreadId, thread.ThreadId, StringComparison.Ordinal));
             if (stored is null)
             {
                 return true;
@@ -1207,8 +1443,8 @@ public sealed class PullRequestSynchronizationService(
     }
 
     /// <summary>
-    ///     Holds the reviewer's thread statuses for the lifetime of a single synchronization pass so the
-    ///     provider is asked once no matter how many consumers need them.
+    ///     Holds ProPR's thread statuses for the lifetime of a single synchronization pass so the provider is
+    ///     asked once no matter how many consumers need them.
     /// </summary>
     /// <remarks>
     ///     A failed fetch is deliberately not cached: each consumer already degrades on its own terms, so
@@ -1216,7 +1452,7 @@ public sealed class PullRequestSynchronizationService(
     /// </remarks>
     private sealed class ReviewerThreadStatusSnapshot(
         PullRequestSynchronizationRequest request,
-        Guid? reviewerId)
+        ThreadOwnershipSnapshot ownership)
     {
         private IReadOnlyList<PrThreadStatusEntry>? threads;
 
@@ -1225,7 +1461,7 @@ public sealed class PullRequestSynchronizationService(
         ///     before reaching here. What the snapshot identifies is fixed at construction.
         /// </param>
         /// <param name="ct">Cancels the fetch.</param>
-        /// <returns>The reviewer's threads for this pass.</returns>
+        /// <returns>ProPR's threads for this pass.</returns>
         public async Task<IReadOnlyList<PrThreadStatusEntry>> GetAsync(
             IReviewerThreadStatusFetcher fetcher,
             CancellationToken ct)
@@ -1235,11 +1471,56 @@ public sealed class PullRequestSynchronizationService(
                 request.ProviderProjectKey,
                 request.RepositoryId,
                 request.PullRequestId,
-                reviewerId ?? Guid.Empty,
+                await ownership.GetAsync(ct),
                 request.ClientId,
                 ct);
 
             return this.threads;
+        }
+    }
+
+    /// <summary>
+    ///     What the thread-pass trigger decided, kept apart from the file pass's decision so a caller
+    ///     following one is never handed the other's job.
+    /// </summary>
+    /// <param name="Decision">The thread pass's own decision.</param>
+    /// <param name="JobId">The thread pass this synchronization settled on, when it reached one.</param>
+    /// <param name="ActionSummary">An operator-visible sentence, or null when there is nothing to say.</param>
+    private sealed record ThreadPassTriggerResult(
+        PullRequestSynchronizationThreadPassDecision Decision,
+        Guid? JobId,
+        string? ActionSummary)
+    {
+        public static ThreadPassTriggerResult None { get; } = new(
+            PullRequestSynchronizationThreadPassDecision.None,
+            null,
+            null);
+
+        public static ThreadPassTriggerResult NotDue { get; } = new(
+            PullRequestSynchronizationThreadPassDecision.NotDue,
+            null,
+            null);
+
+        public static ThreadPassTriggerResult ResolutionDisabled { get; } = new(
+            PullRequestSynchronizationThreadPassDecision.ResolutionDisabled,
+            null,
+            null);
+
+        public static ThreadPassTriggerResult ProviderUnsupported { get; } = new(
+            PullRequestSynchronizationThreadPassDecision.ProviderUnsupported,
+            null,
+            null);
+
+        public PullRequestSynchronizationOutcome ApplyTo(PullRequestSynchronizationOutcome outcome)
+        {
+            return outcome with
+            {
+                ThreadPassDecision = this.Decision,
+                ThreadPassJobId = this.JobId,
+                ActionSummaries = this.ActionSummary is null
+                    ? outcome.ActionSummaries
+                    : [.. outcome.ActionSummaries, this.ActionSummary],
+            };
         }
     }
 
@@ -1252,57 +1533,5 @@ public sealed class PullRequestSynchronizationService(
             null,
             PullRequestSynchronizationLifecycleDecision.None,
             []);
-    }
-
-    /// <summary>
-    ///     Resolves a crawled comment back to the review job that posted it, comment-id-primary: among a
-    ///     pull request's origins sharing a comment id, a single match wins outright; only a thread-local
-    ///     collision (several origins under one comment id, as Azure DevOps produces) falls back to the
-    ///     crawled thread id to disambiguate. Comment ids that are globally unique within the pull request
-    ///     (GitHub/GitLab/Forgejo) therefore resolve on the comment id alone, ignoring a non-matching or
-    ///     null crawled thread id.
-    /// </summary>
-    private sealed class OriginatingJobResolver
-    {
-        private readonly IReadOnlyDictionary<string, IReadOnlyList<PostedCommentOriginRow>> _byCommentId;
-
-        private OriginatingJobResolver(IReadOnlyDictionary<string, IReadOnlyList<PostedCommentOriginRow>> byCommentId)
-        {
-            this._byCommentId = byCommentId;
-        }
-
-        public static OriginatingJobResolver FromRows(IReadOnlyList<PostedCommentOriginRow> rows)
-        {
-            var byCommentId = rows
-                .GroupBy(row => row.ProviderCommentId, StringComparer.Ordinal)
-                .ToDictionary(
-                    group => group.Key,
-                    group => (IReadOnlyList<PostedCommentOriginRow>)group.ToList(),
-                    StringComparer.Ordinal);
-            return new OriginatingJobResolver(byCommentId);
-        }
-
-        public Guid? Resolve(string? threadId, string commentId)
-        {
-            if (!this._byCommentId.TryGetValue(commentId, out var matches) || matches.Count == 0)
-            {
-                return null;
-            }
-
-            if (matches.Count == 1)
-            {
-                return matches[0].JobId;
-            }
-
-            foreach (var match in matches)
-            {
-                if (string.Equals(match.ProviderThreadId, threadId, StringComparison.Ordinal))
-                {
-                    return match.JobId;
-                }
-            }
-
-            return null;
-        }
     }
 }

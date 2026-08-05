@@ -41,8 +41,9 @@ public sealed record ThreadUpdatedEvent(
 /// <param name="PublishedAt">The UTC timestamp the comment was published on the provider.</param>
 /// <param name="Text">The comment body text.</param>
 /// <param name="OriginatingJobId">
-///     The review job that produced this comment, when its provenance is retained; null otherwise. Set by
-///     the producer from a passive provenance side-read and never influences review behavior.
+///     The job that produced this comment, when its provenance is retained; null otherwise. A review job, or
+///     a mention-reply job for an answer to a mention. Set by the producer from a passive provenance side-read
+///     and never influences review behavior.
 /// </param>
 /// <param name="IsSystemGenerated">
 ///     Whether the provider wrote this entry itself to record an activity ("added a reviewer", a vote, a policy

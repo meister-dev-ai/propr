@@ -306,7 +306,7 @@ public sealed class ReviewOrchestrationServiceProCursorIntegrationTests
                 Arg.Any<ReviewThreadRef>(),
                 Arg.Any<string>(),
                 Arg.Any<CancellationToken>())
-            .Returns(Task.CompletedTask);
+            .Returns(Task.FromResult<string?>(null));
 
         var providerRegistry = Substitute.For<IScmProviderRegistry>();
         providerRegistry.GetCodeReviewPublicationService(Arg.Any<ScmProvider>()).Returns(publicationService);
@@ -334,7 +334,6 @@ public sealed class ReviewOrchestrationServiceProCursorIntegrationTests
             providerRegistry,
             clientRegistry,
             prScanRepository,
-            Substitute.For<IAiCommentResolutionCore>(),
             Substitute.For<IProtocolRecorder>(),
             reviewContextToolsFactory,
             instructionFetcher,
@@ -474,7 +473,7 @@ public sealed class ReviewOrchestrationServiceProCursorIntegrationTests
                 Arg.Any<ReviewThreadRef>(),
                 Arg.Any<string>(),
                 Arg.Any<CancellationToken>())
-            .Returns(Task.CompletedTask);
+            .Returns(Task.FromResult<string?>(null));
 
         var providerRegistry = Substitute.For<IScmProviderRegistry>();
         providerRegistry.GetCodeReviewPublicationService(Arg.Any<ScmProvider>()).Returns(publicationService);
@@ -507,7 +506,6 @@ public sealed class ReviewOrchestrationServiceProCursorIntegrationTests
             providerRegistry,
             clientRegistry,
             prScanRepository,
-            Substitute.For<IAiCommentResolutionCore>(),
             Substitute.For<IProtocolRecorder>(),
             reviewContextToolsFactory,
             instructionFetcher,

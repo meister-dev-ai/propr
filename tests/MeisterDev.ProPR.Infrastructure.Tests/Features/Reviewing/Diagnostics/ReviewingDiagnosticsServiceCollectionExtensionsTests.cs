@@ -361,6 +361,17 @@ public sealed class ReviewingDiagnosticsServiceCollectionExtensionsTests
             return Task.FromResult<ReviewJob?>(null);
         }
 
+        public Task<EngagedReviewRevision?> GetLatestEngagedRevisionAsync(
+            Guid clientId,
+            string organizationUrl,
+            string projectId,
+            string repositoryId,
+            int pullRequestId,
+            CancellationToken ct = default)
+        {
+            return Task.FromResult<EngagedReviewRevision?>(null);
+        }
+
         public Task<ReviewJob?> GetBestTerminalJobWithFileResultsByStoredRevisionAsync(
             string organizationUrl,
             string projectId,

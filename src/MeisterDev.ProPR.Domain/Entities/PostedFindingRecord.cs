@@ -30,8 +30,14 @@ public sealed class PostedFindingRecord
     /// <summary>Pull request number the finding was posted on. Must be greater than zero.</summary>
     public int PullRequestId { get; init; }
 
-    /// <summary>Provider thread the finding was posted as. The handle a later increment reports as the duplicated thread.</summary>
-    public long ProviderThreadId { get; init; }
+    /// <summary>
+    ///     Provider thread the finding was posted as, as the provider itself writes it. The handle a later
+    ///     increment reports as the duplicated thread.
+    /// </summary>
+    public string ProviderThreadId { get; init; } = string.Empty;
+
+    /// <summary>Mirrors the stored column's bound, so an over-long value is refused before the insert.</summary>
+    private const int MaxProviderThreadIdLength = 256;
 
     /// <summary>
     ///     The review job that posted the finding. Rows are written once, after that job has finished
@@ -103,14 +109,23 @@ public sealed class PostedFindingRecord
             throw new ArgumentException("PullRequestId must be > 0.");
         }
 
-        if (this.ProviderThreadId <= 0)
-        {
-            throw new ArgumentException("ProviderThreadId must be > 0.");
-        }
-
         if (string.IsNullOrWhiteSpace(this.FindingMessage))
         {
             throw new ArgumentException("FindingMessage must not be null or whitespace.");
+        }
+
+        // The thread identity carries the deduplication key. An absent one is not merely an incomplete record:
+        // every finding missing it collides on the same key within a pull request, so all but the first are
+        // silently discarded as duplicates of each other. The stored column is bounded, and a value the
+        // database would reject has to be refused here rather than at the insert.
+        if (string.IsNullOrWhiteSpace(this.ProviderThreadId))
+        {
+            throw new ArgumentException("ProviderThreadId must not be null or whitespace.");
+        }
+
+        if (this.ProviderThreadId.Length > MaxProviderThreadIdLength)
+        {
+            throw new ArgumentException($"ProviderThreadId must not exceed {MaxProviderThreadIdLength} characters.");
         }
 
         if (this.EmbeddingVector is null || this.EmbeddingVector.Length == 0)

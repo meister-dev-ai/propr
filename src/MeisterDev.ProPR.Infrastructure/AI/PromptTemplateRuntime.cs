@@ -95,6 +95,25 @@ public static class PromptTemplateRuntime
         }
     }
 
+    /// <summary>
+    ///     Renders the <c>developer-reply</c> shared partial, which a thread evaluation appends when the thread
+    ///     carries a reply nobody has answered yet. It states that the evaluation is being shown a code change
+    ///     and a person's words together, and that both are owed an answer.
+    /// </summary>
+    internal static string RenderDeveloperReply()
+    {
+        try
+        {
+            var template = FileProvider.Value.ReadSharedPartial("developer-reply");
+            var partials = PartialRegistry.Value.GetPartials();
+            return Renderer.Value.Render(template, null, partials).TrimEnd();
+        }
+        catch (InvalidOperationException ex)
+        {
+            throw new InvalidOperationException($"Failed to render developer-reply partial: {ex.Message}", ex);
+        }
+    }
+
     internal static string RenderAgenticLoopGuidance(bool assertiveCertaintyGate, bool designReviewScope)
     {
         try

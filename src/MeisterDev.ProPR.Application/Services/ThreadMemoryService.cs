@@ -323,7 +323,7 @@ public sealed partial class ThreadMemoryService(
         Guid clientId,
         string repositoryId,
         int pullRequestId,
-        long threadId,
+        string threadId,
         string? previousStatus,
         string currentStatus,
         string reason,
@@ -373,7 +373,7 @@ public sealed partial class ThreadMemoryService(
         {
             Id = Guid.NewGuid(),
             ClientId = clientId,
-            ThreadId = 0,
+            ThreadId = string.Empty,
             RepositoryId = string.Empty,
             PullRequestId = 0,
             FilePath = canonicalFilePath ?? string.Empty,

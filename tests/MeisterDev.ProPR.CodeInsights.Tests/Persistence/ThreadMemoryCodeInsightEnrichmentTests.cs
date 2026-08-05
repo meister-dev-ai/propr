@@ -176,7 +176,7 @@ public sealed class ThreadMemoryCodeInsightEnrichmentTests
             ClientId,
             "repo-1",
             7,
-            9001,
+            "9001",
             "src/Service.cs",
             "@@ -1 +1 @@",
             "alice: needs a null check\nbob: by design, the caller guarantees it",

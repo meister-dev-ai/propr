@@ -16,6 +16,12 @@ namespace MeisterDev.ProPR.Infrastructure.Tests.GitHub;
 
 public sealed class GitHubCodeReviewPublicationServiceTests
 {
+    private const string ThreadNodeId = "PRRT_kwDOABCD1234";
+    private const string UserUri = "https://api.github.com/user";
+    private const string GraphQlUri = "https://api.github.com/graphql";
+    private const string ReviewsUri = "https://api.github.com/repos/acme/propr/pulls/42/reviews";
+    private const string ReviewCommentsUri = "https://api.github.com/repos/acme/propr/pulls/42/reviews/555/comments";
+
     [Fact]
     public async Task PublishReviewAsync_PostsSummaryAndInlineCommentsToGitHubReviewApi()
     {
@@ -214,7 +220,7 @@ public sealed class GitHubCodeReviewPublicationServiceTests
             review,
             revision,
             reviewer,
-            [new PrCommentThread(1, "src/file.ts", 18, [new PrThreadComment("Bot", "Existing thread")])]);
+            [new PrCommentThread("1", "src/file.ts", 18, [new PrThreadComment("Bot", "Existing thread")])]);
 
         var connectionRepository = Substitute.For<IClientScmConnectionRepository>();
         connectionRepository.GetOperationalConnectionAsync(clientId, host, Arg.Any<CancellationToken>())
@@ -388,6 +394,118 @@ public sealed class GitHubCodeReviewPublicationServiceTests
     }
 
     [Fact]
+    public async Task PublishReviewAsync_RecordsAThreadIdTheThreadStatusWriterAccepts()
+    {
+        var clientId = Guid.NewGuid();
+        var host = new ProviderHostRef(ScmProvider.GitHub, "https://github.com");
+        var repository = new RepositoryRef(host, "101", "acme", "acme/propr");
+        var review = new CodeReviewRef(repository, CodeReviewPlatformKind.PullRequest, "42", 42);
+        var revision = new ReviewRevision("head-sha", "base-sha", null, "head-sha", "base-sha...head-sha");
+        var reviewer = new ReviewerIdentity(host, "99", "meister-review-bot[bot]", "Meister Review Bot", true);
+        var result = new ReviewResult(
+            "Looks solid overall.",
+            [new ReviewComment("src/file.ts", 18, CommentSeverity.Warning, "Guard this null case.")]);
+
+        var connectionRepository = CreateConnectionRepository(clientId, host);
+
+        string? mutationBody = null;
+        var httpClientFactory = Substitute.For<IHttpClientFactory>();
+        using var httpClient = new HttpClient(
+            new StubHttpMessageHandler(async request =>
+            {
+                if (request.RequestUri!.AbsoluteUri == GraphQlUri)
+                {
+                    var graphQlBody = await request.Content!.ReadAsStringAsync();
+                    if (graphQlBody.Contains("resolveReviewThread", StringComparison.Ordinal))
+                    {
+                        mutationBody = graphQlBody;
+                        return CreateJsonResponse(new { data = new { resolveReviewThread = new { thread = new { id = ThreadNodeId, isResolved = true } } } });
+                    }
+
+                    return CreateReviewThreadsResponse(ThreadNodeId, 9001L);
+                }
+
+                return request.RequestUri.AbsoluteUri switch
+                {
+                    UserUri => CreateJsonResponse(new { login = "meister-dev" }),
+                    ReviewsUri => CreateJsonResponse(new { id = 555L }),
+                    ReviewCommentsUri => CreateJsonResponse(new[] { new { id = 9001L, path = "src/file.ts", line = 18 } }),
+                    _ => CreateJsonResponse(new { message = "Not Found" }, HttpStatusCode.NotFound),
+                };
+            }));
+        httpClientFactory.CreateClient("GitHubProvider").Returns(httpClient);
+
+        var publicationService = new GitHubCodeReviewPublicationService(
+            new GitHubConnectionVerifier(connectionRepository, httpClientFactory),
+            httpClientFactory);
+
+        var diagnostics = await publicationService.PublishReviewAsync(clientId, review, revision, result, reviewer);
+
+        var reference = Assert.Single(diagnostics.PostedComments);
+        Assert.NotNull(reference.ProviderThreadId);
+
+        // The identifier publishing recorded is handed straight to the writer that resolves the thread, which
+        // is the journey that made a review id recorded here reach a call expecting a thread node id.
+        var statusWriter = new GitHubReviewThreadStatusWriter(
+            new GitHubConnectionVerifier(connectionRepository, httpClientFactory),
+            httpClientFactory);
+        var thread = new ReviewThreadRef(
+            review,
+            reference.ProviderThreadId!,
+            reference.FilePath,
+            reference.Line,
+            isReviewerOwned: true);
+
+        await statusWriter.UpdateThreadStatusAsync(clientId, thread, "fixed");
+
+        Assert.NotNull(mutationBody);
+        Assert.Contains(ThreadNodeId, mutationBody, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task PublishReviewAsync_WhenTheThreadLookupIsRefused_RecordsCommentIdsWithoutAThreadId()
+    {
+        var clientId = Guid.NewGuid();
+        var host = new ProviderHostRef(ScmProvider.GitHub, "https://github.com");
+        var repository = new RepositoryRef(host, "101", "acme", "acme/propr");
+        var review = new CodeReviewRef(repository, CodeReviewPlatformKind.PullRequest, "42", 42);
+        var revision = new ReviewRevision("head-sha", "base-sha", null, "head-sha", "base-sha...head-sha");
+        var reviewer = new ReviewerIdentity(host, "99", "meister-review-bot[bot]", "Meister Review Bot", true);
+        var result = new ReviewResult(
+            "Looks solid overall.",
+            [new ReviewComment("src/file.ts", 18, CommentSeverity.Warning, "Guard this null case.")]);
+
+        var connectionRepository = CreateConnectionRepository(clientId, host);
+
+        // GitHub refuses a query with two hundred and an errors array, and answers a partial refusal with a
+        // data section alongside it. Ids read out of a traversal that reported an error are not trustworthy
+        // enough to key a later write on, so the whole lookup is discarded rather than half believed.
+        var httpClientFactory = Substitute.For<IHttpClientFactory>();
+        using var httpClient = new HttpClient(
+            new StubHttpMessageHandler(request => Task.FromResult(
+                request.RequestUri!.AbsoluteUri switch
+                {
+                    UserUri => CreateJsonResponse(new { login = "meister-dev" }),
+                    ReviewsUri => CreateJsonResponse(new { id = 555L }),
+                    ReviewCommentsUri => CreateJsonResponse(new[] { new { id = 9001L, path = "src/file.ts", line = 18 } }),
+                    GraphQlUri => CreateRefusedReviewThreadsResponse(ThreadNodeId, 9001L),
+                    _ => CreateJsonResponse(new { message = "Not Found" }, HttpStatusCode.NotFound),
+                })));
+        httpClientFactory.CreateClient("GitHubProvider").Returns(httpClient);
+
+        var sut = new GitHubCodeReviewPublicationService(
+            new GitHubConnectionVerifier(connectionRepository, httpClientFactory),
+            httpClientFactory);
+
+        var diagnostics = await sut.PublishReviewAsync(clientId, review, revision, result, reviewer);
+
+        var reference = Assert.Single(diagnostics.PostedComments);
+        Assert.Equal("9001", reference.ProviderCommentId);
+        Assert.Null(reference.ProviderThreadId);
+        Assert.Equal(1, diagnostics.PostedCount);
+    }
+
+    [Fact]
     public async Task PublishReviewAsync_CapturesCreatedCommentIdsFromReviewCommentsEndpoint()
     {
         var clientId = Guid.NewGuid();
@@ -418,13 +536,14 @@ public sealed class GitHubCodeReviewPublicationServiceTests
             new StubHttpMessageHandler(request => Task.FromResult(
                 request.RequestUri!.AbsoluteUri switch
                 {
-                    "https://api.github.com/user" => CreateJsonResponse(new { login = "meister-dev" }),
-                    "https://api.github.com/repos/acme/propr/pulls/42/reviews" => CreateJsonResponse(new { id = 555L }),
-                    "https://api.github.com/repos/acme/propr/pulls/42/reviews/555/comments" => CreateJsonResponse(
+                    UserUri => CreateJsonResponse(new { login = "meister-dev" }),
+                    ReviewsUri => CreateJsonResponse(new { id = 555L }),
+                    ReviewCommentsUri => CreateJsonResponse(
                         new[]
                         {
                             new { id = 9001L, path = "src/file.ts", line = 18 },
                         }),
+                    GraphQlUri => CreateReviewThreadsResponse(ThreadNodeId, 9001L),
                     _ => CreateJsonResponse(new { message = "Not Found" }, HttpStatusCode.NotFound),
                 })));
         httpClientFactory.CreateClient("GitHubProvider").Returns(httpClient);
@@ -437,7 +556,10 @@ public sealed class GitHubCodeReviewPublicationServiceTests
 
         var reference = Assert.Single(diagnostics.PostedComments);
         Assert.Equal("9001", reference.ProviderCommentId);
-        Assert.Equal("555", reference.ProviderThreadId);
+
+        // The node id of the thread the comment opened, which is what addresses a GitHub review thread. The
+        // review id the same response also carries names a different object and can never address one.
+        Assert.Equal(ThreadNodeId, reference.ProviderThreadId);
         Assert.Equal("src/file.ts", reference.FilePath);
         Assert.Equal(18, reference.Line);
         Assert.Equal(1, diagnostics.PostedCount);
@@ -499,6 +621,67 @@ public sealed class GitHubCodeReviewPublicationServiceTests
         {
             Content = new StringContent(JsonSerializer.Serialize(payload)),
         };
+    }
+
+    // The pull request's review threads as GraphQL reports them: each thread's node id alongside the database
+    // ids of its comments, which is the only join between a created review comment and its thread.
+    private static HttpResponseMessage CreateReviewThreadsResponse(string threadNodeId, long commentDatabaseId)
+    {
+        return CreateJsonResponse(new { data = BuildReviewThreadsData(threadNodeId, commentDatabaseId) });
+    }
+
+    private static HttpResponseMessage CreateRefusedReviewThreadsResponse(string threadNodeId, long commentDatabaseId)
+    {
+        return CreateJsonResponse(
+            new
+            {
+                data = BuildReviewThreadsData(threadNodeId, commentDatabaseId),
+                errors = new[] { new { type = "FORBIDDEN", message = "Resource not accessible by integration" } },
+            });
+    }
+
+    private static object BuildReviewThreadsData(string threadNodeId, long commentDatabaseId)
+    {
+        return new
+        {
+            repository = new
+            {
+                pullRequest = new
+                {
+                    reviewThreads = new
+                    {
+                        nodes = new[]
+                        {
+                            new
+                            {
+                                id = threadNodeId,
+                                comments = new
+                                {
+                                    nodes = new[] { new { databaseId = commentDatabaseId } },
+                                },
+                            },
+                        },
+                    },
+                },
+            },
+        };
+    }
+
+    private static IClientScmConnectionRepository CreateConnectionRepository(Guid clientId, ProviderHostRef host)
+    {
+        var repository = Substitute.For<IClientScmConnectionRepository>();
+        repository.GetOperationalConnectionAsync(clientId, host, Arg.Any<CancellationToken>())
+            .Returns(
+                new ClientScmConnectionCredentialDto(
+                    Guid.NewGuid(),
+                    clientId,
+                    ScmProvider.GitHub,
+                    host.HostBaseUrl,
+                    ScmAuthenticationKind.PersonalAccessToken,
+                    "GitHub",
+                    "ghp_test",
+                    true));
+        return repository;
     }
 
     private sealed class StubHttpMessageHandler(Func<HttpRequestMessage, Task<HttpResponseMessage>> responder)

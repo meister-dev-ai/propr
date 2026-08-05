@@ -19,10 +19,15 @@ namespace MeisterDev.ProPR.Api.Controllers;
 [Route("clients/{clientId:guid}")]
 public sealed class PrReviewViewController(
     IJobRepository jobRepository,
-    IThreadMemoryRepository memoryRepository) : ControllerBase
+    IThreadMemoryRepository memoryRepository,
+    IThreadPassJobRepository threadPassRepository,
+    IReviewPrScanReader? prScanReader = null) : ControllerBase
 {
     /// <summary>How much of a stored resolution summary the PR view renders.</summary>
     private const int ResolutionSummaryExcerptLength = 200;
+
+    /// <summary>Most thread passes over one pull request the view lists.</summary>
+    private const int ThreadPassLimit = 50;
 
     /// <summary>Most memories originating in this pull request that the view lists.</summary>
     private const int OriginatedMemoryLimit = 50;
@@ -136,6 +141,39 @@ public sealed class PrReviewViewController(
             .ToList()
             .AsReadOnly();
 
+        var threadPasses = await threadPassRepository.GetForPullRequestAsync(
+            clientId,
+            query.RepositoryId,
+            query.PullRequestId.Value,
+            ThreadPassLimit,
+            cancellationToken);
+        var threadPassSummaries = threadPasses
+            .Select(pass => new PrThreadPassSummaryDto(
+                pass.Id,
+                pass.Status,
+                pass.CreatedAt,
+                pass.CompletedAt,
+                pass.HandledThreads.Count,
+                pass.TotalInputTokens,
+                pass.TotalOutputTokens,
+                pass.TotalEstimatedCostUsd,
+                pass.CostIsApproximate,
+                pass.ErrorMessage,
+                pass.BudgetBlockScope,
+                pass.BudgetBlockCapKind,
+                pass.BudgetBlockThresholdUsd,
+                pass.BudgetBlockSpentUsd))
+            .ToList()
+            .AsReadOnly();
+        var threadPassCost = ComputeThreadPassCostRollup(threadPasses);
+
+        var pendingReview = await ResolvePendingReviewAsync(
+            prScanReader,
+            clientId,
+            query.RepositoryId,
+            query.PullRequestId.Value,
+            cancellationToken);
+
         var dto = new PrReviewViewDto(
             query.ProviderScopePath,
             query.ProviderProjectKey,
@@ -152,9 +190,51 @@ public sealed class PrReviewViewController(
             externalContributingIds.Count,
             contributingMemories,
             costRollup.TotalEstimatedCostUsd,
-            costRollup.CostIsApproximate);
+            costRollup.CostIsApproximate,
+            threadPassSummaries,
+            threadPassCost.TotalEstimatedCostUsd,
+            threadPassCost.CostIsApproximate,
+            pendingReview);
 
         return this.Ok(dto);
+    }
+
+    /// <summary>
+    ///     Decides whether the pull request is waiting for a review, which is the one thing a surface needs in
+    ///     order to offer one. Answered here so the ProPR UI and the browser extension cannot disagree.
+    /// </summary>
+    /// <remarks>
+    ///     A declined revision that has since been reviewed is not pending: the review wrote its own watermark
+    ///     over the same revision, and comparing the two is what retires the state without a second write that
+    ///     could be missed.
+    /// </remarks>
+    private static async Task<PendingReviewDto?> ResolvePendingReviewAsync(
+        IReviewPrScanReader? prScanReader,
+        Guid clientId,
+        string repositoryId,
+        int pullRequestId,
+        CancellationToken cancellationToken)
+    {
+        if (prScanReader is null)
+        {
+            return null;
+        }
+
+        var scan = await prScanReader.GetAsync(clientId, repositoryId, pullRequestId, cancellationToken);
+        if (scan is null || string.IsNullOrEmpty(scan.PendingReviewRevisionKey))
+        {
+            return null;
+        }
+
+        if (string.Equals(scan.PendingReviewRevisionKey, scan.LastProcessedCommitId, StringComparison.Ordinal))
+        {
+            return null;
+        }
+
+        return new PendingReviewDto(
+            scan.PendingReviewRevisionKey,
+            string.IsNullOrEmpty(scan.LastProcessedCommitId) ? null : scan.LastProcessedCommitId,
+            scan.PendingReviewDetectedAt);
     }
 
     private static TokenAggregation AggregateTokenBreakdown(IReadOnlyList<ReviewJob> jobs)
@@ -211,6 +291,15 @@ public sealed class PrReviewViewController(
         return new CostRollup(totalEstimatedCostUsd, costIsApproximate);
     }
 
+    private static CostRollup ComputeThreadPassCostRollup(IReadOnlyList<ThreadPassJob> passes)
+    {
+        // Null when nothing priced was recorded, so an operator reads "not known" rather than "free".
+        var anyPriced = passes.Any(pass => pass.TotalEstimatedCostUsd.HasValue);
+        return new CostRollup(
+            anyPriced ? passes.Sum(pass => pass.TotalEstimatedCostUsd ?? 0m) : null,
+            passes.Any(pass => pass.CostIsApproximate));
+    }
+
     private static HashSet<Guid> CollectContributingMemoryIds(IReadOnlyList<ReviewJob> jobs)
     {
         var contributingMemoryIds = new HashSet<Guid>();
@@ -235,6 +324,14 @@ public sealed class PrReviewViewController(
         {
             var doc = JsonDocument.Parse(inputTextSample);
             if (!doc.RootElement.TryGetProperty("contributingMemoryIds", out var idsEl))
+            {
+                return;
+            }
+
+            // Shape is checked rather than assumed. Enumerating a scalar, object or null throws
+            // InvalidOperationException rather than JsonException, so the catch below would not hold it and one
+            // malformed persisted event would fail the whole pull-request view instead of being skipped.
+            if (idsEl.ValueKind != JsonValueKind.Array)
             {
                 return;
             }

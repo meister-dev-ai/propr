@@ -182,6 +182,55 @@ internal sealed class ForgejoPullRequestFetcher(
         return await this.FetchExistingThreadsAsync(context, host, repositoryPath, pullRequestId, cancellationToken);
     }
 
+    public async Task<PullRequest> FetchThreadContextAsync(
+        string organizationUrl,
+        string projectId,
+        string repositoryId,
+        int pullRequestId,
+        int iterationId,
+        Guid? clientId = null,
+        CancellationToken cancellationToken = default)
+    {
+        // Metadata and threads only: whether a reviewer thread needs answering is decided from the
+        // conversation, so the changed-file query and every content download are left out.
+        if (!clientId.HasValue)
+        {
+            throw new InvalidOperationException("Forgejo pull-request fetches require a client identifier.");
+        }
+
+        var host = new ProviderHostRef(ScmProvider.Forgejo, organizationUrl);
+        var context = await connectionVerifier.VerifyAsync(clientId.Value, host, cancellationToken);
+        var repositoryPath = await this.ResolveRepositoryPathAsync(context, host, repositoryId, cancellationToken);
+        var pullRequest = await this.GetPullRequestAsync(
+            context,
+            host,
+            repositoryPath,
+            pullRequestId,
+            cancellationToken);
+        var existingThreads = await this.FetchExistingThreadsAsync(
+            context,
+            host,
+            repositoryPath,
+            pullRequestId,
+            cancellationToken);
+
+        return new PullRequest(
+            organizationUrl,
+            projectId,
+            repositoryId,
+            repositoryPath.Split('/', StringSplitOptions.RemoveEmptyEntries).LastOrDefault() ?? repositoryId,
+            pullRequestId,
+            iterationId,
+            pullRequest.Title ?? $"Pull Request #{pullRequestId}",
+            pullRequest.Body,
+            pullRequest.Head?.Ref ?? string.Empty,
+            pullRequest.Base?.Ref ?? string.Empty,
+            [],
+            MapStatus(pullRequest),
+            existingThreads,
+            AuthorizedIdentityName: context.AuthenticatedUsername);
+    }
+
     private async Task<IReadOnlyList<ForgejoPullRequestFileResponse>?> TryGetDeltaFilesAsync(
         ForgejoConnectionVerifier.ForgejoConnectionContext context,
         ProviderHostRef host,
@@ -494,7 +543,10 @@ internal sealed class ForgejoPullRequestFetcher(
                 .ToList())
             .Where(group => group.Count > 0)
             .Select(group => new PrCommentThread(
-                group[0].Comment.Id,
+                // Forgejo has no thread object: these groups are ProPR's own, keyed on path and position, and
+                // nothing the API accepts addresses one. The identifier is absent rather than borrowed from
+                // the first comment, which would hand callers a handle that resolves to a comment.
+                null,
                 NormalizePath(group[0].Comment.Path),
                 group[0].Comment.Position ?? group[0].Comment.OriginalPosition,
                 group.Select(comment => ToThreadComment(comment.Comment)).ToList().AsReadOnly(),

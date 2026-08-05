@@ -11,5 +11,5 @@ public sealed record ThreadReopenedDomainEvent(
     Guid ClientId,
     string RepositoryId,
     int PullRequestId,
-    long ThreadId,
+    string ThreadId,
     DateTimeOffset ObservedAt);

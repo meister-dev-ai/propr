@@ -23,7 +23,7 @@ namespace MeisterDev.ProPR.Application.DTOs;
 /// <param name="ResolutionClarity">How plainly the discussion stated that decision.</param>
 public sealed record ThreadMemoryDigestDto(
     Guid Id,
-    long ThreadId,
+    string ThreadId,
     MemorySource MemorySource,
     string RepositoryId,
     int PullRequestId,

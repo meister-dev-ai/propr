@@ -135,7 +135,7 @@ public sealed class ThreadMemoryControllerTests(ThreadMemoryControllerTests.Thre
                                 {
                                     Id = Guid.NewGuid(),
                                     ClientId = clientId,
-                                    ThreadId = 42,
+                                    ThreadId = "42",
                                     RepositoryId = "repo",
                                     PullRequestId = 7,
                                     FilePath = "src/File.cs",
@@ -152,6 +152,7 @@ public sealed class ThreadMemoryControllerTests(ThreadMemoryControllerTests.Thre
 
                 var scanRepository = Substitute.For<IReviewPrScanRepository>();
                 services.AddSingleton(scanRepository);
+                services.AddSingleton<IReviewPrScanThreadStatusStore>(scanRepository);
 
                 var activityLog = Substitute.For<IMemoryActivityLog>();
                 activityLog.QueryAsync(
@@ -168,7 +169,7 @@ public sealed class ThreadMemoryControllerTests(ThreadMemoryControllerTests.Thre
                                     {
                                         Id = Guid.NewGuid(),
                                         ClientId = clientId,
-                                        ThreadId = 42,
+                                        ThreadId = "42",
                                         RepositoryId = "repo",
                                         PullRequestId = 7,
                                         Action = MemoryActivityAction.Stored,

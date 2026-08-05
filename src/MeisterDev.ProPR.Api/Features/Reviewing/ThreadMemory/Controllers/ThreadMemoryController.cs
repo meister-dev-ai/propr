@@ -16,7 +16,7 @@ namespace MeisterDev.ProPR.Api.Controllers;
 [Route("admin/reviewing/thread-memory")]
 public sealed partial class ThreadMemoryController(
     IThreadMemoryRepository memoryRepository,
-    IReviewPrScanRepository scanRepository,
+    IReviewPrScanThreadStatusStore scanRepository,
     IMemoryActivityLog activityLog,
     ILogger<ThreadMemoryController> logger) : ControllerBase
 {
@@ -156,7 +156,7 @@ public sealed partial class ThreadMemoryController(
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
     public async Task<IActionResult> GetActivityLog(
         [FromQuery] Guid clientId,
-        [FromQuery] long? threadId = null,
+        [FromQuery] string? threadId = null,
         [FromQuery] int? pullRequestId = null,
         [FromQuery] string? repositoryId = null,
         [FromQuery] MemoryActivityAction? action = null,
@@ -198,7 +198,7 @@ public sealed partial class ThreadMemoryController(
         Guid clientId,
         string repositoryId,
         int pullRequestId,
-        long threadId,
+        string threadId,
         CancellationToken ct)
     {
         try
@@ -209,32 +209,19 @@ public sealed partial class ThreadMemoryController(
                 return;
             }
 
-            var thread = scan.Threads.FirstOrDefault(t => t.ThreadId == threadId);
+            var thread = scan.Threads.FirstOrDefault(t =>
+                string.Equals(t.ThreadId, threadId, StringComparison.Ordinal));
             if (thread is null)
             {
                 return;
             }
 
-            var updatedScan = new ReviewPrScan(
-                scan.Id,
-                scan.ClientId,
-                scan.RepositoryId,
-                scan.PullRequestId,
-                scan.LastProcessedCommitId);
-
-            foreach (var t in scan.Threads)
-            {
-                updatedScan.Threads.Add(
-                    new ReviewPrScanThread
-                    {
-                        ReviewPrScanId = scan.Id,
-                        ThreadId = t.ThreadId,
-                        LastSeenReplyCount = t.LastSeenReplyCount,
-                        LastSeenStatus = t.ThreadId == threadId ? null : t.LastSeenStatus,
-                    });
-            }
-
-            await scanRepository.UpsertAsync(updatedScan, ct);
+            await scanRepository.SetLastSeenStatusesAsync(
+                clientId,
+                repositoryId,
+                pullRequestId,
+                new Dictionary<string, string?>(StringComparer.Ordinal) { [threadId] = null },
+                ct);
         }
         catch (Exception ex)
         {
@@ -267,13 +254,13 @@ public sealed partial class ThreadMemoryController(
     [LoggerMessage(
         Level = LogLevel.Warning,
         Message = "Failed to reset last_seen_status for thread {ThreadId} after admin deletion")]
-    private static partial void LogResetLastSeenStatusFailed(ILogger logger, long threadId, Exception ex);
+    private static partial void LogResetLastSeenStatusFailed(ILogger logger, string threadId, Exception ex);
 }
 
 /// <summary>DTO for a stored thread memory embedding (admin view).</summary>
 /// <param name="Id">Record identifier.</param>
 /// <param name="ClientId">Owning client.</param>
-/// <param name="ThreadId">ADO thread ID.</param>
+/// <param name="ThreadId">Provider-native thread identifier.</param>
 /// <param name="RepositoryId">ADO repository ID.</param>
 /// <param name="PullRequestId">ADO pull request number.</param>
 /// <param name="FilePath">File path, if any.</param>
@@ -295,7 +282,7 @@ public sealed partial class ThreadMemoryController(
 public sealed record ThreadMemoryRecordDto(
     Guid Id,
     Guid ClientId,
-    long ThreadId,
+    string ThreadId,
     string RepositoryId,
     int PullRequestId,
     string? FilePath,

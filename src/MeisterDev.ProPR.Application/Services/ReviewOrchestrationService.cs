@@ -14,6 +14,7 @@ using MeisterDev.ProPR.Application.Features.Reviewing.Execution.Models;
 using MeisterDev.ProPR.Application.Features.Reviewing.Execution.Ports;
 using MeisterDev.ProPR.Application.Features.Reviewing.Execution.Services;
 using MeisterDev.ProPR.Application.Features.Reviewing.Execution.Strategies.Ports;
+using MeisterDev.ProPR.Application.Features.ThreadOwnership;
 using MeisterDev.ProPR.Application.Interfaces;
 using MeisterDev.ProPR.Application.Options;
 using MeisterDev.ProPR.Application.Support;
@@ -37,8 +38,7 @@ public sealed partial class ReviewOrchestrationService(
     IPullRequestFetcher prFetcher,
     IScmProviderRegistry providerRegistry,
     IClientRegistry clientRegistry,
-    IReviewPrScanRepository prScanRepository,
-    IAiCommentResolutionCore resolutionCore,
+    IReviewPrScanWatermarkStore prScanRepository,
     IProtocolRecorder protocolRecorder,
     IReviewContextToolsFactory reviewContextToolsFactory,
     IRepositoryInstructionFetcher instructionFetcher,
@@ -98,13 +98,12 @@ public sealed partial class ReviewOrchestrationService(
         var budgetScope = await this.TryCreateBudgetScopeAsync(job, ct);
         using var budgetScopeHandle = budgetScope is null ? null : budgetScopeAccessor!.BeginScope(budgetScope);
 
-        PullRequest? pr = null;
+        ReviewPipelineResult? pipelineResult = null;
 
         try
         {
-            pr = await this.RunReviewPipelineAsync(
+            pipelineResult = await this.RunReviewPipelineAsync(
                 job,
-                reviewerContext.EffectiveReviewerId,
                 reviewerContext.ConfiguredTriggerReviewer,
                 resolvedReviewRuntime.Value.ChatClient,
                 resolvedReviewRuntime.Value.Capabilities,
@@ -125,7 +124,7 @@ public sealed partial class ReviewOrchestrationService(
                 return;
             }
 
-            await this.HandlePartialReviewFailureAsync(job, pr, ex, ct);
+            await this.HandlePartialReviewFailureAsync(job, pipelineResult?.PullRequest, ex, ct);
             return;
         }
         catch (Exception ex)
@@ -147,15 +146,9 @@ public sealed partial class ReviewOrchestrationService(
             await this.EmitBudgetEventAsync(job, incrementSoftCapBreach, ct);
         }
 
-        if (pr is not null)
+        if (pipelineResult is not null)
         {
-            await this.SaveScanAsync(
-                job,
-                GetReviewerThreads(pr, reviewerContext.EffectiveReviewerId),
-                reviewerContext.EffectiveReviewerId,
-                pr.AuthorizedIdentityName,
-                pr.AuthorizedIdentityId,
-                ct);
+            await this.SaveScanAsync(job, ct);
         }
     }
 
@@ -172,7 +165,10 @@ public sealed partial class ReviewOrchestrationService(
             return null;
         }
 
-        var baseline = await spendAccumulator.GetBaselineAsync(job, DateOnly.FromDateTime(DateTime.UtcNow), ct);
+        var baseline = await spendAccumulator.GetBaselineAsync(
+            ReviewSpendSubject.For(job),
+            DateOnly.FromDateTime(DateTime.UtcNow),
+            ct);
         return new BudgetScope(caps, baseline);
     }
 
@@ -207,9 +203,8 @@ public sealed partial class ReviewOrchestrationService(
             ct);
     }
 
-    private async Task<PullRequest?> RunReviewPipelineAsync(
+    private async Task<ReviewPipelineResult?> RunReviewPipelineAsync(
         ReviewJob job,
-        Guid? reviewerId,
         ReviewerIdentity? reviewer,
         IChatClient overrideChatClient,
         AgentReviewRuntimeCapabilities runtimeCapabilities,
@@ -218,7 +213,7 @@ public sealed partial class ReviewOrchestrationService(
     {
         LogReviewStarted(logger, job.Id, job.PullRequestId);
 
-        var (scan, isNewIteration, baselineJob, baselineIsFullCoverage, resumeJob, compareToIterationId, compareToReviewRevision) =
+        var (isNewIteration, baselineJob, baselineIsFullCoverage, resumeJob, compareToIterationId, compareToReviewRevision) =
             await this.LoadScanStateAsync(job, ct);
 
         // Lightweight fetch: get branch names so the workspace can be prepared before the
@@ -241,21 +236,16 @@ public sealed partial class ReviewOrchestrationService(
             return null;
         }
 
-        var reviewerThreads = GetReviewerThreads(pr, reviewerId);
         var providerCapabilities = providerRegistry.GetRegisteredCapabilities(job.Provider) ?? [];
 
         // This is the execution-side copy of the rule intake also applies before queueing anything, and the
         // two have to agree: this one deletes the job rather than recording a skip, so a review intake let
         // through would otherwise vanish here with nothing said. A job that carries an explicit request
-        // passes both.
-        if (!isNewIteration
-            && !job.AllowUnchangedResubmission
-            && !HasNewThreadReplies(reviewerThreads, scan!, reviewerId, pr.AuthorizedIdentityId, pr.AuthorizedIdentityName))
+        // passes both. Without new commits there is nothing to review; a reply is the thread pass's business.
+        if (!isNewIteration && !job.AllowUnchangedResubmission)
         {
             return await this.DisposeSkipAndFinalizeAsync(
                 job,
-                pr,
-                reviewerId,
                 earlyWorkspace,
                 workspacePreparation,
                 () => LogSkippedNoChange(logger, job.Id, job.PullRequestId),
@@ -263,33 +253,6 @@ public sealed partial class ReviewOrchestrationService(
         }
 
         await this.AddOptionalReviewerIfSupportedAsync(job, reviewer, providerCapabilities, ct);
-
-        await this.EvaluateExistingThreadsAsync(
-            job,
-            pr,
-            reviewerThreads,
-            scan,
-            isNewIteration,
-            reviewerId,
-            providerCapabilities,
-            overrideChatClient,
-            ct);
-
-        // The second half of the same rule: replies alone are answered above, and without new commits there
-        // is nothing left to review. An explicitly requested review is the exception, and reaches here with
-        // the full current scope, because a revision that is not new has neither a delta to compare against
-        // nor a carry-forward baseline.
-        if (!isNewIteration && !job.AllowUnchangedResubmission)
-        {
-            return await this.DisposeSkipAndFinalizeAsync(
-                job,
-                pr,
-                reviewerId,
-                earlyWorkspace,
-                workspacePreparation,
-                () => LogSkippedNoChange(logger, job.Id, job.PullRequestId),
-                ct);
-        }
 
         var (systemContext, carriedForwardPaths) = await this.BuildReviewContextAsync(
             job,
@@ -307,8 +270,6 @@ public sealed partial class ReviewOrchestrationService(
         {
             return await this.DisposeSkipAndFinalizeAsync(
                 job,
-                pr,
-                reviewerId,
                 earlyWorkspace,
                 workspacePreparation,
                 () => LogSkippedNoChange(logger, job.Id, job.PullRequestId),
@@ -344,8 +305,6 @@ public sealed partial class ReviewOrchestrationService(
             // which is not idempotent, so leave the workspace disposal to the dispatch path.
             return await this.DisposeSkipAndFinalizeAsync(
                 job,
-                pr,
-                reviewerId,
                 earlyWorkspace,
                 workspacePreparation,
                 () => LogSkippedEmptyReview(logger, job.Id, job.PullRequestId),
@@ -367,7 +326,7 @@ public sealed partial class ReviewOrchestrationService(
 
         await this.RetainIncrementDiffsAsync(job, pr, ct);
 
-        return pr;
+        return new ReviewPipelineResult(pr);
     }
 
     private async Task<PullRequest?> TryFetchPullRequestWithCleanupAsync(
@@ -424,10 +383,8 @@ public sealed partial class ReviewOrchestrationService(
             .AddOptionalReviewerAsync(job.ClientId, job.CodeReviewReference, reviewer, ct);
     }
 
-    private async Task<PullRequest?> DisposeSkipAndFinalizeAsync(
+    private async Task<ReviewPipelineResult?> DisposeSkipAndFinalizeAsync(
         ReviewJob job,
-        PullRequest pr,
-        Guid? reviewerId,
         IReviewRepositoryWorkspace? earlyWorkspace,
         ReviewRepositoryWorkspacePreparationResult workspacePreparation,
         Action logSkip,
@@ -440,7 +397,7 @@ public sealed partial class ReviewOrchestrationService(
             await DisposeEarlyWorkspaceAsync(earlyWorkspace, workspacePreparation);
         }
 
-        await this.SaveScanAndDeleteJobAsync(job, pr, reviewerId, ct);
+        await this.SaveScanAndDeleteJobAsync(job, ct);
         return null;
     }
 
@@ -553,6 +510,45 @@ public sealed partial class ReviewOrchestrationService(
         }
     }
 
+    // The single-reply counterpart of the findings recording above. A reply ProPR posts into an existing thread
+    // is as much its own comment as a finding it raised, and provenance is the only thing that still says so on
+    // the crawl path, where no connection and therefore no token identity exists to fall back to.
+    //
+    // Same best-effort posture, for the same reason: the reply is already on the pull request by the time this
+    // runs, and a bookkeeping failure must not undo it or fail the job. An adapter that reported no comment id
+    // leaves the reply posted and unrecorded rather than blocking it.
+    private async Task RecordPostedReplyOriginAsync(
+        ReviewJob job,
+        string providerThreadId,
+        string? providerCommentId,
+        CancellationToken ct)
+    {
+        if (postedCommentOriginStore is null || string.IsNullOrWhiteSpace(providerCommentId))
+        {
+            return;
+        }
+
+        try
+        {
+            await postedCommentOriginStore.RecordAsync(
+                [
+                    new PostedCommentOriginEntry(
+                        job.ClientId,
+                        job.RepositoryId,
+                        job.PullRequestId,
+                        providerThreadId,
+                        providerCommentId,
+                        job.Id,
+                        DateTimeOffset.UtcNow),
+                ],
+                ct);
+        }
+        catch (Exception ex) when (!ct.IsCancellationRequested)
+        {
+            LogPostedCommentOriginRecordingFailed(logger, job.Id, ex);
+        }
+    }
+
     /// <summary>
     ///     Indexes the findings this job actually posted, so a later increment can recognise the same concern
     ///     coming back and keep it off the pull request.
@@ -603,7 +599,10 @@ public sealed partial class ReviewOrchestrationService(
                 var posted = unclaimed[matchIndex];
                 unclaimed.RemoveAt(matchIndex);
 
-                if (!long.TryParse(posted.ProviderThreadId, out var providerThreadId) || providerThreadId <= 0)
+                // Only a thread the provider named can be reported back as the duplicated one. Every provider
+                // that creates a thread supplies its own identifier, so this excludes nothing but the case
+                // where none was created at all.
+                if (string.IsNullOrWhiteSpace(posted.ProviderThreadId))
                 {
                     continue;
                 }
@@ -613,7 +612,7 @@ public sealed partial class ReviewOrchestrationService(
                         job.ClientId,
                         job.RepositoryId,
                         job.PullRequestId,
-                        providerThreadId,
+                        posted.ProviderThreadId,
                         job.Id,
                         job.IterationId,
                         comment.FilePath,
@@ -781,15 +780,9 @@ public sealed partial class ReviewOrchestrationService(
         };
     }
 
-    private async Task SaveScanAndDeleteJobAsync(ReviewJob job, PullRequest pr, Guid? reviewerId, CancellationToken ct)
+    private async Task SaveScanAndDeleteJobAsync(ReviewJob job, CancellationToken ct)
     {
-        await this.SaveScanAsync(
-            job,
-            GetReviewerThreads(pr, reviewerId),
-            reviewerId,
-            pr.AuthorizedIdentityName,
-            pr.AuthorizedIdentityId,
-            ct);
+        await this.SaveScanAsync(job, ct);
         await jobs.DeleteAsync(job.Id, ct);
     }
 
@@ -908,23 +901,15 @@ public sealed partial class ReviewOrchestrationService(
         }
     }
 
-    // Resolve the optional configured trigger reviewer plus any effective reviewer-owned identity key.
+    // Resolve the optional configured trigger reviewer. It says which pull requests ProPR is asked to
+    // review and is offered to the provider as a reviewer on the pull request; it decides nothing about
+    // which threads are ProPR's.
     private async Task<ResolvedReviewerContext> ResolveReviewerAsync(
         ReviewJob job,
         CancellationToken ct)
     {
         var configuredTriggerReviewer = await clientRegistry.GetReviewerIdentityAsync(job.ClientId, job.ProviderHost, ct);
-        var effectiveReviewer = configuredTriggerReviewer
-                                ?? await clientRegistry.GetEffectiveReviewerIdentityAsync(job.ClientId, job.ProviderHost, ct);
-        Guid? effectiveReviewerId = null;
-        if (effectiveReviewer is not null)
-        {
-            effectiveReviewerId = Guid.TryParse(effectiveReviewer.ExternalUserId, out var parsedReviewerId)
-                ? parsedReviewerId
-                : StableGuidGenerator.Create(effectiveReviewer.ExternalUserId);
-        }
-
-        return new ResolvedReviewerContext(configuredTriggerReviewer, effectiveReviewerId);
+        return new ResolvedReviewerContext(configuredTriggerReviewer);
     }
 
     // T070: Resolve per-client AI connection — returns null when not configured (caller sets job failed).
@@ -977,11 +962,10 @@ public sealed partial class ReviewOrchestrationService(
         return (client, new AgentReviewRuntimeCapabilities(false, false, false, false), null);
     }
 
-    // Load scan state — returns the scan, whether a new revision exists, the reusable carry-forward baseline
+    // Load scan state: whether a new revision exists, the reusable carry-forward baseline
     // (with whether it covered its full revision), any same-revision resume job, and the provider-neutral
     // delta-compare handle when the baseline is full-coverage.
     private async Task<(
-        ReviewPrScan? scan,
         bool isNewIteration,
         ReviewJob? baselineJob,
         bool baselineIsFullCoverage,
@@ -999,15 +983,41 @@ public sealed partial class ReviewOrchestrationService(
         // adopts a prior job's finished files wholesale. On an explicitly requested review of a revision
         // already reviewed, that prior job is the completed review itself, so every file would be adopted
         // and none re-reviewed: the request would report success having reviewed nothing. Redoing the work
-        // is the whole point of asking, so resume stands down for exactly that case and no other.
-        var resumeJob = isNewIteration || !job.AllowUnchangedResubmission
-            ? await this.FindResumeJobIfAnyAsync(job, ct)
+        // is the whole point of asking, so resume stands down for that case.
+        //
+        // A run stopped by a budget cap is the exception. It records the revision as processed even though it
+        // reviewed only part of it, so the revision looks reviewed and resume would stand down — leaving the
+        // only way to finish the job a full re-review of everything it already paid for. Continuing from where
+        // it stopped is precisely what asking again means there.
+        var resumeCandidate = await this.FindResumeJobIfAnyAsync(job, ct);
+        var resumeJob = isNewIteration
+                        || !job.AllowUnchangedResubmission
+                        || StoppedShortAtBudgetCap(resumeCandidate)
+            ? resumeCandidate
             : null;
 
         var (baselineJob, baselineIsFullCoverage, compareToIterationId, compareToReviewRevision) =
             await this.ResolveCarryForwardBaselineAsync(job, isNewIteration, iterationKey, ct);
 
-        return (scan, isNewIteration, baselineJob, baselineIsFullCoverage, resumeJob, compareToIterationId, compareToReviewRevision);
+        return (isNewIteration, baselineJob, baselineIsFullCoverage, resumeJob, compareToIterationId, compareToReviewRevision);
+    }
+
+    /// <summary>
+    ///     Whether a prior run at this revision was stopped by a budget cap before it had reviewed everything
+    ///     in scope.
+    /// </summary>
+    /// <remarks>
+    ///     Both halves are needed. The budget block alone does not mean work is outstanding: a cap tripped on
+    ///     the last file leaves nothing to continue, and adopting that job wholesale would answer a re-review
+    ///     request with no fresh work at all. The coverage comparison is what distinguishes a run that stopped
+    ///     short from one that merely finished expensively.
+    /// </remarks>
+    private static bool StoppedShortAtBudgetCap(ReviewJob? candidate)
+    {
+        return candidate is not null
+               && candidate.BudgetBlockScope is not null
+               && candidate.InScopeChangedFileCount is > 0
+               && ReviewBaselineSelection.CountUsableReviewedResults(candidate) < candidate.InScopeChangedFileCount;
     }
 
     private async Task<ReviewJob?> FindResumeJobIfAnyAsync(ReviewJob job, CancellationToken ct)
@@ -1178,49 +1188,6 @@ public sealed partial class ReviewOrchestrationService(
         }
 
         return null;
-    }
-
-    // T073: Evaluate existing reviewer threads if any are present.
-    private async Task EvaluateExistingThreadsAsync(
-        ReviewJob job,
-        PullRequest pr,
-        IReadOnlyList<PrCommentThread> reviewerThreads,
-        ReviewPrScan? scan,
-        bool isNewIteration,
-        Guid? reviewerId,
-        IReadOnlyList<string> providerCapabilities,
-        IChatClient chatClient,
-        CancellationToken ct)
-    {
-        if (reviewerThreads.Count == 0)
-        {
-            return;
-        }
-
-        if (!providerCapabilities.Any(capability => string.Equals(
-                capability,
-                "reviewThreadStatus",
-                StringComparison.Ordinal)))
-        {
-            return;
-        }
-
-        var behavior = await clientRegistry.GetCommentResolutionBehaviorAsync(job.ClientId, ct);
-        var canReply = providerCapabilities.Any(capability => string.Equals(
-            capability,
-            "reviewThreadReply",
-            StringComparison.Ordinal));
-        await this.EvaluateReviewerThreadsAsync(
-            job,
-            pr,
-            reviewerThreads,
-            scan,
-            isNewIteration,
-            behavior,
-            reviewerId,
-            canReply,
-            chatClient,
-            ct);
     }
 
     // Build review context — reuse prior results, fetch instructions and exclusions.
@@ -1917,7 +1884,8 @@ public sealed partial class ReviewOrchestrationService(
                 // reply — never an active thread carrying a note that (falsely) claims it was auto-resolved.
                 await statusWriter.UpdateThreadStatusAsync(job.ClientId, thread, ResolvedThreadStatus, ct);
                 autoResolvedThreadIds.Add(posted.ProviderThreadId);
-                await replyPublisher.ReplyAsync(job.ClientId, thread, AutoResolvedNote, ct);
+                var noteCommentId = await replyPublisher.ReplyAsync(job.ClientId, thread, AutoResolvedNote, ct);
+                await this.RecordPostedReplyOriginAsync(job, thread.ExternalThreadId, noteCommentId, ct);
             }
             catch (Exception ex)
             {
@@ -2115,49 +2083,6 @@ public sealed partial class ReviewOrchestrationService(
         return path.TrimStart('/');
     }
 
-    private static IReadOnlyList<PrCommentThread> GetReviewerThreads(PullRequest pr, Guid? reviewerId)
-    {
-        if (pr.ExistingThreads is null)
-        {
-            return [];
-        }
-
-        return pr.ExistingThreads
-            .Where(t => IsReviewerOwnedAuthor(
-                t.Comments.FirstOrDefault()?.AuthorId,
-                t.Comments.FirstOrDefault()?.AuthorName,
-                reviewerId,
-                pr.AuthorizedIdentityId,
-                pr.AuthorizedIdentityName))
-            .ToList()
-            .AsReadOnly();
-    }
-
-    private static bool HasNewThreadReplies(
-        IReadOnlyList<PrCommentThread> reviewerThreads,
-        ReviewPrScan scan,
-        Guid? reviewerId,
-        Guid? authorizedIdentityId,
-        string? authorizedIdentityName)
-    {
-        foreach (var thread in reviewerThreads)
-        {
-            var stored = scan.Threads.FirstOrDefault(t => t.ThreadId == thread.ThreadId);
-            var storedCount = stored?.LastSeenReplyCount ?? 0;
-            var userReplyCount = CountNonReviewerComments(
-                thread.Comments,
-                reviewerId,
-                authorizedIdentityId,
-                authorizedIdentityName);
-            if (userReplyCount > storedCount)
-            {
-                return true;
-            }
-        }
-
-        return false;
-    }
-
     /// <summary>
     ///     Loads prompt overrides for every known prompt key for the given client.
     ///     Returns an empty dictionary on null service, cancellation, or any exception (graceful degradation).
@@ -2197,297 +2122,26 @@ public sealed partial class ReviewOrchestrationService(
         }
     }
 
-    private async Task EvaluateReviewerThreadsAsync(
-        ReviewJob job,
-        PullRequest pr,
-        IReadOnlyList<PrCommentThread> reviewerThreads,
-        ReviewPrScan? scan,
-        bool isNewIteration,
-        CommentResolutionBehavior behavior,
-        Guid? reviewerId,
-        bool canReply,
-        IChatClient chatClient,
-        CancellationToken ct)
-    {
-        if (behavior == CommentResolutionBehavior.Disabled)
-        {
-            return;
-        }
-
-        foreach (var thread in reviewerThreads)
-        {
-            // Skip threads that ADO already reports as resolved — no AI call needed.
-            if (IsResolvedStatus(thread.Status))
-            {
-                continue;
-            }
-
-            try
-            {
-                await this.EvaluateReviewerThreadAsync(
-                    job,
-                    pr,
-                    thread,
-                    scan,
-                    isNewIteration,
-                    behavior,
-                    reviewerId,
-                    canReply,
-                    chatClient,
-                    ct);
-            }
-            catch (Exception ex)
-            {
-                LogThreadEvaluationFailed(logger, thread.ThreadId, job.PullRequestId, ex);
-            }
-        }
-    }
-
-    private async Task EvaluateReviewerThreadAsync(
-        ReviewJob job,
-        PullRequest pr,
-        PrCommentThread thread,
-        ReviewPrScan? scan,
-        bool isNewIteration,
-        CommentResolutionBehavior behavior,
-        Guid? reviewerId,
-        bool canReply,
-        IChatClient chatClient,
-        CancellationToken ct)
-    {
-        var stored = scan?.Threads.FirstOrDefault(t => t.ThreadId == thread.ThreadId);
-        var storedCount = stored?.LastSeenReplyCount ?? 0;
-        var userReplyCount = CountNonReviewerComments(
-            thread.Comments,
-            reviewerId,
-            pr.AuthorizedIdentityId,
-            pr.AuthorizedIdentityName);
-        var hasNewReplies = userReplyCount > storedCount;
-
-        var protocolId = await this.BeginThreadProtocolAsync(job, thread, isNewIteration, ct);
-
-        if (!isNewIteration && !hasNewReplies)
-        {
-            await this.MarkThreadProtocolSkippedAsync(protocolId, ct);
-            return;
-        }
-
-        var resolution = await this.EvaluateThreadAsync(job, thread, pr, chatClient, isNewIteration, hasNewReplies, ct);
-
-        await this.RecordEvaluationProtocolIfNeededAsync(protocolId, resolution, ct);
-        await this.ApplyResolvedThreadActionAsync(job, thread, behavior, resolution, canReply, isNewIteration, ct);
-    }
-
-    private async Task<Guid?> BeginThreadProtocolAsync(
-        ReviewJob job,
-        PrCommentThread thread,
-        bool isNewIteration,
-        CancellationToken ct)
-    {
-        var evaluationKind = isNewIteration ? "code-change" : "conversational";
-        try
-        {
-            return await protocolRecorder.BeginAsync(
-                job.Id,
-                job.RetryCount + 1,
-                $"thread-{thread.ThreadId}-{evaluationKind}",
-                ct: ct);
-        }
-        catch (Exception ex)
-        {
-            LogProtocolBeginFailed(logger, job.Id, ex);
-            return null;
-        }
-    }
-
-    private async Task MarkThreadProtocolSkippedAsync(Guid? protocolId, CancellationToken ct)
-    {
-        if (!protocolId.HasValue)
-        {
-            return;
-        }
-
-        await protocolRecorder.SetCompletedAsync(protocolId.Value, "Skipped", 0, 0, 0, 0, null, ct);
-    }
-
-    private async Task<ThreadResolutionResult> EvaluateThreadAsync(
-        ReviewJob job,
-        PrCommentThread thread,
-        PullRequest pr,
-        IChatClient chatClient,
-        bool isNewIteration,
-        bool hasNewReplies,
-        CancellationToken ct)
-    {
-        var modelId = job.AiModel ?? this._opts.ModelId;
-        var outputLanguage = await clientRegistry.GetOutputLanguageAsync(job.ClientId, ct);
-        return isNewIteration
-            ? await resolutionCore.EvaluateCodeChangeAsync(thread, pr, chatClient, modelId, ct, outputLanguage)
-            : await resolutionCore.EvaluateConversationalReplyAsync(thread, chatClient, modelId, ct, outputLanguage);
-    }
-
-    private async Task RecordEvaluationProtocolIfNeededAsync(
-        Guid? protocolId,
-        ThreadResolutionResult resolution,
-        CancellationToken ct)
-    {
-        if (!protocolId.HasValue)
-        {
-            return;
-        }
-
-        await protocolRecorder.RecordAiCallAsync(
-            protocolId.Value,
-            1,
-            resolution.InputTokens,
-            resolution.OutputTokens,
-            null,
-            null,
-            resolution.ReplyText,
-            ct,
-            cachedInputTokens: resolution.CachedInputTokens,
-            cacheWriteTokens: resolution.CacheWriteTokens,
-            reasoningTokens: resolution.ReasoningTokens);
-
-        var outcome = resolution.IsResolved ? "Resolved" : "NotResolved";
-        await protocolRecorder.SetCompletedAsync(
-            protocolId.Value,
-            outcome,
-            resolution.InputTokens ?? 0,
-            resolution.OutputTokens ?? 0,
-            1,
-            0,
-            null,
-            ct,
-            resolution.CachedInputTokens ?? 0,
-            resolution.CachedInputTokens.HasValue ? CacheObservabilityStatus.Observable : CacheObservabilityStatus.Unobservable,
-            resolution.CacheWriteTokens ?? 0,
-            resolution.ReasoningTokens ?? 0);
-    }
-
-    private async Task ApplyResolvedThreadActionAsync(
-        ReviewJob job,
-        PrCommentThread thread,
-        CommentResolutionBehavior behavior,
-        ThreadResolutionResult resolution,
-        bool canReply,
-        bool isNewIteration,
-        CancellationToken ct)
-    {
-        var resolvedAction = BuildResolvedThreadAction(thread, behavior, resolution, canReply);
-        if (resolvedAction.ShouldPostReply && resolvedAction.ReplyText is not null)
-        {
-            await providerRegistry.GetReviewThreadReplyPublisher(job.Provider)
-                .ReplyAsync(job.ClientId, CreateReviewThreadRef(job, thread), resolvedAction.ReplyText, ct);
-        }
-
-        if (resolvedAction.ShouldResolveThread)
-        {
-            await providerRegistry.GetReviewThreadStatusWriter(job.Provider)
-                .UpdateThreadStatusAsync(job.ClientId, CreateReviewThreadRef(job, thread), "fixed", ct);
-
-            LogThreadResolved(logger, thread.ThreadId, job.PullRequestId);
-            return;
-        }
-
-        if (canReply && !resolution.IsResolved && resolution.ReplyText is not null && !isNewIteration)
-        {
-            await providerRegistry.GetReviewThreadReplyPublisher(job.Provider)
-                .ReplyAsync(job.ClientId, CreateReviewThreadRef(job, thread), resolution.ReplyText, ct);
-        }
-    }
-
-    private async Task SaveScanAsync(
-        ReviewJob job,
-        IReadOnlyList<PrCommentThread> reviewerThreads,
-        Guid? reviewerId,
-        string? authorizedIdentityName,
-        Guid? authorizedIdentityId,
-        CancellationToken ct)
+    /// <summary>
+    ///     Records the revision this review examined, and nothing else. The per-thread counters belong to the
+    ///     thread pass, which is the only thing that answers or resolves a thread.
+    /// </summary>
+    private async Task SaveScanAsync(ReviewJob job, CancellationToken ct)
     {
         try
         {
-            var existing = await prScanRepository.GetAsync(job.ClientId, job.RepositoryId, job.PullRequestId, ct);
-            var scanId = existing?.Id ?? Guid.NewGuid();
             var iterationKey = ReviewRevisionKeys.GetStoredKey(job.ReviewRevisionReference, job.IterationId);
-            var scan = new ReviewPrScan(scanId, job.ClientId, job.RepositoryId, job.PullRequestId, iterationKey);
-
-            foreach (var thread in reviewerThreads)
-            {
-                scan.Threads.Add(
-                    new ReviewPrScanThread
-                    {
-                        ReviewPrScanId = scanId,
-                        ThreadId = thread.ThreadId,
-                        LastSeenReplyCount =
-                            CountNonReviewerComments(
-                                thread.Comments,
-                                reviewerId,
-                                authorizedIdentityId,
-                                authorizedIdentityName),
-                        LastSeenStatus = thread.Status,
-                    });
-            }
-
-            await prScanRepository.UpsertAsync(scan, ct);
+            await prScanRepository.SetReviewWatermarkAsync(
+                job.ClientId,
+                job.RepositoryId,
+                job.PullRequestId,
+                iterationKey,
+                ct);
         }
         catch (Exception ex)
         {
             LogScanSaveFailed(logger, job.Id, ex);
         }
-    }
-
-    private static bool IsResolvedStatus(string? status)
-    {
-        return string.Equals(status, "Fixed", StringComparison.OrdinalIgnoreCase) ||
-               string.Equals(status, "Closed", StringComparison.OrdinalIgnoreCase) ||
-               string.Equals(status, "WontFix", StringComparison.OrdinalIgnoreCase) ||
-               string.Equals(status, "ByDesign", StringComparison.OrdinalIgnoreCase);
-    }
-
-    private static ResolvedThreadAction BuildResolvedThreadAction(
-        PrCommentThread thread,
-        CommentResolutionBehavior behavior,
-        ThreadResolutionResult resolution,
-        bool canReply)
-    {
-        var normalizedReplyText = string.IsNullOrWhiteSpace(resolution.ReplyText)
-            ? null
-            : resolution.ReplyText.Trim();
-
-        if (!resolution.IsResolved)
-        {
-            return new ResolvedThreadAction(
-                thread.ThreadId,
-                behavior,
-                false,
-                normalizedReplyText,
-                false,
-                false,
-                ResolvedThreadReasonSource.None);
-        }
-
-        if (behavior == CommentResolutionBehavior.WithReply)
-        {
-            var shouldReplyAndResolve = canReply && normalizedReplyText is not null;
-            return new ResolvedThreadAction(
-                thread.ThreadId,
-                behavior,
-                shouldReplyAndResolve,
-                normalizedReplyText,
-                shouldReplyAndResolve,
-                shouldReplyAndResolve,
-                shouldReplyAndResolve ? ResolvedThreadReasonSource.AiGenerated : ResolvedThreadReasonSource.None);
-        }
-
-        return new ResolvedThreadAction(
-            thread.ThreadId,
-            behavior,
-            true,
-            normalizedReplyText,
-            false,
-            true,
-            normalizedReplyText is not null ? ResolvedThreadReasonSource.AiGenerated : ResolvedThreadReasonSource.None);
     }
 
     private static ReviewerIdentity ResolvePublicationIdentity(ReviewJob job, PullRequest pr)
@@ -2519,49 +2173,6 @@ public sealed partial class ReviewOrchestrationService(
             publicationIdentity,
             pr.ExistingThreads ?? [],
             providerSpecificContext);
-    }
-
-    private static bool IsReviewerOwnedAuthor(Guid? authorId, string? authorName, Guid? reviewerId, Guid? authorizedIdentityId, string? authorizedIdentityName)
-    {
-        if (authorId.HasValue)
-        {
-            if (reviewerId.HasValue && authorId.Value == reviewerId.Value)
-            {
-                return true;
-            }
-
-            if (authorizedIdentityId.HasValue && authorId.Value == authorizedIdentityId.Value)
-            {
-                return true;
-            }
-        }
-
-        return !string.IsNullOrWhiteSpace(authorizedIdentityName)
-               && string.Equals(authorName, authorizedIdentityName, StringComparison.OrdinalIgnoreCase);
-    }
-
-    private static int CountNonReviewerComments(
-        IReadOnlyList<PrThreadComment> comments,
-        Guid? reviewerId,
-        Guid? authorizedIdentityId,
-        string? authorizedIdentityName)
-    {
-        return comments.Count(comment => !IsReviewerOwnedAuthor(
-            comment.AuthorId,
-            comment.AuthorName,
-            reviewerId,
-            authorizedIdentityId,
-            authorizedIdentityName));
-    }
-
-    private static ReviewThreadRef CreateReviewThreadRef(ReviewJob job, PrCommentThread thread)
-    {
-        return new ReviewThreadRef(
-            job.CodeReviewReference,
-            thread.ThreadId.ToString(CultureInfo.InvariantCulture),
-            thread.FilePath,
-            thread.LineNumber,
-            true);
     }
 
     private async Task<ReviewRevision> ResolvePublicationReviewRevisionAsync(ReviewJob job, CancellationToken ct)
@@ -2643,5 +2254,8 @@ public sealed partial class ReviewOrchestrationService(
         throw new InvalidOperationException($"Review job {job.Id} is missing normalized review revision data for provider {job.Provider}.");
     }
 
-    private sealed record ResolvedReviewerContext(ReviewerIdentity? ConfiguredTriggerReviewer, Guid? EffectiveReviewerId);
+    private sealed record ResolvedReviewerContext(ReviewerIdentity? ConfiguredTriggerReviewer);
+
+    /// <summary>What a completed pipeline hands back: the pull request it reviewed.</summary>
+    private sealed record ReviewPipelineResult(PullRequest PullRequest);
 }

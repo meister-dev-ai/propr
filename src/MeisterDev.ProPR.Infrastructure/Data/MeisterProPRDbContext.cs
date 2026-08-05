@@ -56,6 +56,12 @@ public sealed class MeisterProPRDbContext(DbContextOptions<MeisterProPRDbContext
     /// <summary>Per-thread reply watermarks within a review PR scan.</summary>
     public DbSet<ReviewPrScanThread> ReviewPrScanThreads => this.Set<ReviewPrScanThread>();
 
+    /// <summary>Thread passes over a pull request's reviewer-owned comment threads.</summary>
+    public DbSet<ThreadPassJob> ThreadPassJobs => this.Set<ThreadPassJob>();
+
+    /// <summary>Threads a pass has acted on, keyed by the comment count that made each due.</summary>
+    public DbSet<ThreadPassHandledThread> ThreadPassHandledThreads => this.Set<ThreadPassHandledThread>();
+
     /// <summary>Pull requests blocked from review processing (one row per client+PR identity).</summary>
     public DbSet<BlockedPullRequest> BlockedPullRequests => this.Set<BlockedPullRequest>();
 

@@ -177,6 +177,54 @@ internal sealed class GitLabPullRequestFetcher(
         return await this.FetchExistingThreadsAsync(context, host, repositoryId, pullRequestId, cancellationToken);
     }
 
+    public async Task<PullRequest> FetchThreadContextAsync(
+        string organizationUrl,
+        string projectId,
+        string repositoryId,
+        int pullRequestId,
+        int iterationId,
+        Guid? clientId = null,
+        CancellationToken cancellationToken = default)
+    {
+        // Metadata and threads only: whether a reviewer thread needs answering is decided from the
+        // conversation, so the changes query and every content download are left out.
+        if (!clientId.HasValue)
+        {
+            throw new InvalidOperationException("GitLab pull-request fetches require a client identifier.");
+        }
+
+        var host = new ProviderHostRef(ScmProvider.GitLab, organizationUrl);
+        var context = await connectionVerifier.VerifyAsync(clientId.Value, host, cancellationToken);
+        var mergeRequest = await this.GetMergeRequestAsync(
+            context,
+            host,
+            repositoryId,
+            pullRequestId,
+            cancellationToken);
+        var existingThreads = await this.FetchExistingThreadsAsync(
+            context,
+            host,
+            repositoryId,
+            pullRequestId,
+            cancellationToken);
+
+        return new PullRequest(
+            organizationUrl,
+            projectId,
+            repositoryId,
+            ResolveRepositoryName(mergeRequest, repositoryId),
+            pullRequestId,
+            iterationId,
+            mergeRequest.Title ?? $"Merge Request !{pullRequestId}",
+            mergeRequest.Description,
+            mergeRequest.SourceBranch ?? string.Empty,
+            mergeRequest.TargetBranch ?? string.Empty,
+            [],
+            MapStatus(mergeRequest.State),
+            existingThreads,
+            AuthorizedIdentityName: context.AuthenticatedUsername);
+    }
+
     private async Task<IReadOnlyList<GitLabMergeRequestChangeResponse>?> TryGetDeltaChangesAsync(
         GitLabConnectionVerifier.GitLabConnectionContext context,
         ProviderHostRef host,
@@ -437,17 +485,21 @@ internal sealed class GitLabPullRequestFetcher(
 
         return discussions
             .Where(discussion => !discussion.IndividualNote)
-            .Select(discussion => discussion.Notes.Where(note => !note.System).ToList())
-            .Where(notes => notes.Count > 0)
-            .Select(notes => new PrCommentThread(
-                notes[0].Id,
+            .Select(discussion => new
+            {
+                discussion.Id,
+                Notes = discussion.Notes.Where(note => !note.System).ToList(),
+            })
+            .Where(item => item.Notes.Count > 0)
+            .Select(item => new PrCommentThread(
+                item.Id,
                 NormalizePath(
-                    notes.Select(note => note.Position?.NewPath ?? note.Position?.OldPath)
+                    item.Notes.Select(note => note.Position?.NewPath ?? note.Position?.OldPath)
                         .FirstOrDefault(path => !string.IsNullOrWhiteSpace(path))),
-                notes.Select(note => note.Position?.NewLine ?? note.Position?.OldLine)
+                item.Notes.Select(note => note.Position?.NewLine ?? note.Position?.OldLine)
                     .FirstOrDefault(line => line.HasValue),
-                notes.Select(ToThreadComment).ToList().AsReadOnly(),
-                notes.Any(note => note.Resolved) ? "Fixed" : "Active"))
+                item.Notes.Select(ToThreadComment).ToList().AsReadOnly(),
+                item.Notes.Any(note => note.Resolved) ? "Fixed" : "Active"))
             .ToList()
             .AsReadOnly();
     }
@@ -606,6 +658,7 @@ internal sealed class GitLabPullRequestFetcher(
         bool RenamedFile);
 
     private sealed record GitLabDiscussionResponse(
+        [property: JsonPropertyName("id")] string? Id,
         [property: JsonPropertyName("individual_note")]
         bool IndividualNote,
         [property: JsonPropertyName("notes")] IReadOnlyList<GitLabDiscussionNoteResponse> Notes);

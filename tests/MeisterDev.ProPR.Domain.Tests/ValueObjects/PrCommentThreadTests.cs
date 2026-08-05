@@ -11,9 +11,9 @@ public class PrCommentThreadTests
     public void PrCommentThread_WithFilePath_ReturnsCorrectProperties()
     {
         var comments = new List<PrThreadComment> { new("Alice", "LGTM") }.AsReadOnly();
-        var thread = new PrCommentThread(1, "/src/Foo.cs", 42, comments);
+        var thread = new PrCommentThread("1", "/src/Foo.cs", 42, comments);
 
-        Assert.Equal(1, thread.ThreadId);
+        Assert.Equal("1", thread.ThreadId);
         Assert.Equal("/src/Foo.cs", thread.FilePath);
         Assert.Equal(42, thread.LineNumber);
         Assert.Single(thread.Comments);
@@ -28,7 +28,7 @@ public class PrCommentThreadTests
             new("Alice", "Fixed in this commit."),
         }.AsReadOnly();
 
-        var thread = new PrCommentThread(3, "/src/Bar.cs", 10, comments);
+        var thread = new PrCommentThread("3", "/src/Bar.cs", 10, comments);
 
         Assert.Equal(2, thread.Comments.Count);
         Assert.Equal("Bot", thread.Comments[0].AuthorName);
@@ -38,7 +38,7 @@ public class PrCommentThreadTests
     [Fact]
     public void PrCommentThread_WithoutFilePath_IsNullFilePath()
     {
-        var thread = new PrCommentThread(2, null, null, new List<PrThreadComment>().AsReadOnly());
+        var thread = new PrCommentThread("2", null, null, new List<PrThreadComment>().AsReadOnly());
 
         Assert.Null(thread.FilePath);
         Assert.Null(thread.LineNumber);
@@ -47,7 +47,7 @@ public class PrCommentThreadTests
     [Fact]
     public void PrCommentThread_DefaultStatus_IsNull()
     {
-        var thread = new PrCommentThread(5, "/src/Foo.cs", 1, new List<PrThreadComment>().AsReadOnly());
+        var thread = new PrCommentThread("5", "/src/Foo.cs", 1, new List<PrThreadComment>().AsReadOnly());
 
         Assert.Null(thread.Status);
     }
@@ -59,7 +59,7 @@ public class PrCommentThreadTests
     [InlineData("WontFix")]
     public void PrCommentThread_WithStatus_ReturnsExpectedStatus(string status)
     {
-        var thread = new PrCommentThread(6, "/src/Bar.cs", 2, new List<PrThreadComment>().AsReadOnly(), status);
+        var thread = new PrCommentThread("6", "/src/Bar.cs", 2, new List<PrThreadComment>().AsReadOnly(), status);
 
         Assert.Equal(status, thread.Status);
     }
