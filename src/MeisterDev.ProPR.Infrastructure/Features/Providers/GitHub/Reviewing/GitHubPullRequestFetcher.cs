@@ -1,6 +1,7 @@
 // Copyright (c) Andreas Rain.
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
+using System.Globalization;
 using System.Net;
 using System.Net.Http.Json;
 using System.Text;
@@ -18,8 +19,12 @@ internal sealed class GitHubPullRequestFetcher(
     GitHubConnectionVerifier connectionVerifier,
     IHttpClientFactory httpClientFactory) : IProviderPullRequestFetcher
 {
+    // The thread connection is read across pages: pageInfo carries whether another page exists and the cursor
+    // to resume from. The comment connection inside each thread is still read to one page, so a thread past a
+    // hundred comments contributes its first hundred. That is a separate query keyed on the thread rather than
+    // a deeper nesting of this one, and rare enough to be worth keeping apart from the common case.
     private const string ReviewThreadsQuery =
-        "query ReviewThreads($owner: String!, $name: String!, $pullRequestNumber: Int!) { repository(owner: $owner, name: $name) { pullRequest(number: $pullRequestNumber) { reviewThreads(first: 100) { nodes { id isResolved path line comments(first: 100) { nodes { databaseId body createdAt author { login ... on User { databaseId } ... on Bot { databaseId } } } } } } } } }";
+        "query ReviewThreads($owner: String!, $name: String!, $pullRequestNumber: Int!, $after: String) { repository(owner: $owner, name: $name) { pullRequest(number: $pullRequestNumber) { reviewThreads(first: 100, after: $after) { pageInfo { hasNextPage endCursor } nodes { id isResolved path line comments(first: 100) { nodes { databaseId body createdAt author { login ... on User { databaseId } ... on Bot { databaseId } } } } } } } } }";
 
     public ScmProvider Provider => ScmProvider.GitHub;
 
@@ -359,11 +364,29 @@ internal sealed class GitHubPullRequestFetcher(
         int pullRequestId,
         CancellationToken ct)
     {
-        using var request = await context.CreateAuthenticatedRequestAsync(
-            GitHubConnectionVerifier.BuildApiUri(
+        return await ProviderRestPager.LoadAllAsync(
+            (page, pageSize, pageCt) => this.GetChangedFilePageAsync(
+                context,
                 host,
                 $"/repos/{repositoryPath}/pulls/{pullRequestId}/files",
-                "per_page=100"),
+                page,
+                pageSize,
+                pageCt),
+            file => file.FileName,
+            $"GitHub's changed-file listing for pull request {pullRequestId}",
+            ct);
+    }
+
+    private async Task<ProviderRestPager.RestPage<GitHubPullRequestFileResponse>> GetChangedFilePageAsync(
+        GitHubConnectionVerifier.GitHubConnectionContext context,
+        ProviderHostRef host,
+        string path,
+        int page,
+        int pageSize,
+        CancellationToken ct)
+    {
+        using var request = await context.CreateAuthenticatedRequestAsync(
+            GitHubConnectionVerifier.BuildApiUri(host, path, BuildPageQuery(page, pageSize)),
             ct: ct);
         using var response = await httpClientFactory.CreateClient("GitHubProvider").SendAsync(request, ct);
         if (!response.IsSuccessStatusCode)
@@ -371,8 +394,12 @@ internal sealed class GitHubPullRequestFetcher(
             throw new InvalidOperationException($"GitHub changed-file lookup failed with status {(int)response.StatusCode}.");
         }
 
-        return await response.Content.ReadFromJsonAsync<IReadOnlyList<GitHubPullRequestFileResponse>>(ct)
-               ?? [];
+        var files = await response.Content.ReadFromJsonAsync<IReadOnlyList<GitHubPullRequestFileResponse>>(ct)
+                    ?? [];
+
+        return new ProviderRestPager.RestPage<GitHubPullRequestFileResponse>(
+            files,
+            ProviderPaginationHeaders.ReadGitHubHasMore(response));
     }
 
     private async Task<IReadOnlyList<GitHubPullRequestFileResponse>?> TryGetComparedFilesAsync(
@@ -383,25 +410,62 @@ internal sealed class GitHubPullRequestFetcher(
         string headRevision,
         CancellationToken ct)
     {
+        // A comparison that cannot be read in full answers null, which sends the caller back to reviewing every
+        // changed file. That is the one incomplete read worth absorbing: it widens the review rather than
+        // narrowing it. It also covers the case where this endpoint does not paginate its file list at all, in
+        // which case a second page repeats the first and the read is abandoned for the full set.
+        return await ProviderRestPager.TryLoadAllAsync(
+            (page, pageSize, pageCt) => this.GetComparedFilePageAsync(
+                context,
+                host,
+                repositoryPath,
+                baseRevision,
+                headRevision,
+                page,
+                pageSize,
+                pageCt),
+            file => file.FileName,
+            $"GitHub's comparison of {baseRevision} and {headRevision}",
+            ct);
+    }
+
+    private async Task<ProviderRestPager.RestPage<GitHubPullRequestFileResponse>> GetComparedFilePageAsync(
+        GitHubConnectionVerifier.GitHubConnectionContext context,
+        ProviderHostRef host,
+        string repositoryPath,
+        string baseRevision,
+        string headRevision,
+        int page,
+        int pageSize,
+        CancellationToken ct)
+    {
         using var request = await context.CreateAuthenticatedRequestAsync(
             GitHubConnectionVerifier.BuildApiUri(
                 host,
                 $"/repos/{repositoryPath}/compare/{Uri.EscapeDataString(baseRevision)}...{Uri.EscapeDataString(headRevision)}",
-                "per_page=100"),
+                BuildPageQuery(page, pageSize)),
             ct: ct);
         using var response = await httpClientFactory.CreateClient("GitHubProvider").SendAsync(request, ct);
-        if (response.StatusCode is HttpStatusCode.NotFound or HttpStatusCode.UnprocessableEntity)
-        {
-            return null;
-        }
-
         if (!response.IsSuccessStatusCode)
         {
-            return null;
+            throw new InvalidOperationException($"GitHub comparison lookup failed with status {(int)response.StatusCode}.");
         }
 
         var payload = await response.Content.ReadFromJsonAsync<GitHubCompareResponse>(ct);
-        return payload?.Files ?? [];
+
+        return new ProviderRestPager.RestPage<GitHubPullRequestFileResponse>(
+            payload?.Files ?? [],
+            ProviderPaginationHeaders.ReadGitHubHasMore(response));
+    }
+
+    // The first page asks for a size and no page number, which is the request a single-page collection made
+    // before it was read across pages: GitHub serves page one either way, and a collection that fits in one
+    // page still costs exactly one request.
+    private static string BuildPageQuery(int page, int pageSize)
+    {
+        var size = $"per_page={pageSize.ToString(CultureInfo.InvariantCulture)}";
+
+        return page <= 1 ? size : $"{size}&page={page.ToString(CultureInfo.InvariantCulture)}";
     }
 
     private async Task<List<ChangedFile>> BuildChangedFilesAsync(
@@ -532,6 +596,39 @@ internal sealed class GitHubPullRequestFetcher(
             throw new InvalidOperationException("GitHub repository path must be in owner/name format.");
         }
 
+        var threads = await ProviderCursorPager.LoadAllAsync(
+            (cursor, pageCt) => this.GetReviewThreadPageAsync(
+                context,
+                host,
+                parts[0],
+                parts[1],
+                pullRequestId,
+                cursor,
+                pageCt),
+            $"GitHub's review-thread listing for pull request {pullRequestId}",
+            ct);
+
+        return threads
+            .Where(thread => thread.Comments.Nodes.Count > 0)
+            .Select(thread => new PrCommentThread(
+                thread.Id,
+                NormalizePath(thread.Path),
+                thread.Line,
+                thread.Comments.Nodes.Select(ToThreadComment).ToList().AsReadOnly(),
+                thread.IsResolved ? "Fixed" : "Active"))
+            .ToList()
+            .AsReadOnly();
+    }
+
+    private async Task<ProviderCursorPager.CursorPage<GitHubReviewThreadNode>> GetReviewThreadPageAsync(
+        GitHubConnectionVerifier.GitHubConnectionContext context,
+        ProviderHostRef host,
+        string owner,
+        string name,
+        int pullRequestId,
+        string? after,
+        CancellationToken ct)
+    {
         using var request = new HttpRequestMessage(HttpMethod.Post, GitHubConnectionVerifier.BuildGraphQlUri(host))
         {
             Content = JsonContent.Create(
@@ -540,9 +637,10 @@ internal sealed class GitHubPullRequestFetcher(
                     query = ReviewThreadsQuery,
                     variables = new
                     {
-                        owner = parts[0],
-                        name = parts[1],
+                        owner,
+                        name,
                         pullRequestNumber = pullRequestId,
+                        after,
                     },
                 }),
         };
@@ -556,18 +654,12 @@ internal sealed class GitHubPullRequestFetcher(
 
         var payload = await response.Content.ReadFromJsonAsync<GitHubGraphQlResponse>(ct)
                       ?? throw new InvalidOperationException("GitHub thread lookup returned an empty payload.");
-        var threads = payload.Data?.Repository?.PullRequest?.ReviewThreads?.Nodes ?? [];
+        var connection = payload.Data?.Repository?.PullRequest?.ReviewThreads;
 
-        return threads
-            .Where(thread => thread.Comments.Nodes.Count > 0)
-            .Select(thread => new PrCommentThread(
-                thread.Id,
-                NormalizePath(thread.Path),
-                thread.Line,
-                thread.Comments.Nodes.Select(ToThreadComment).ToList().AsReadOnly(),
-                thread.IsResolved ? "Fixed" : "Active"))
-            .ToList()
-            .AsReadOnly();
+        return new ProviderCursorPager.CursorPage<GitHubReviewThreadNode>(
+            connection?.Nodes ?? [],
+            connection?.PageInfo?.HasNextPage ?? false,
+            connection?.PageInfo?.EndCursor);
     }
 
     private static PrThreadComment ToThreadComment(GitHubReviewCommentNode comment)
@@ -690,7 +782,16 @@ internal sealed class GitHubPullRequestFetcher(
         [property: JsonPropertyName("reviewThreads")]
         GitHubReviewThreadsConnection? ReviewThreads);
 
-    private sealed record GitHubReviewThreadsConnection([property: JsonPropertyName("nodes")] IReadOnlyList<GitHubReviewThreadNode>? Nodes);
+    private sealed record GitHubReviewThreadsConnection(
+        [property: JsonPropertyName("nodes")] IReadOnlyList<GitHubReviewThreadNode>? Nodes,
+        [property: JsonPropertyName("pageInfo")]
+        GitHubPageInfo? PageInfo);
+
+    private sealed record GitHubPageInfo(
+        [property: JsonPropertyName("hasNextPage")]
+        bool HasNextPage,
+        [property: JsonPropertyName("endCursor")]
+        string? EndCursor);
 
     private sealed record GitHubReviewThreadNode(
         [property: JsonPropertyName("id")] string? Id,

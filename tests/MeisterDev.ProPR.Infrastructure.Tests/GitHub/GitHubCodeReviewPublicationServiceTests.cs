@@ -19,8 +19,13 @@ public sealed class GitHubCodeReviewPublicationServiceTests
     private const string ThreadNodeId = "PRRT_kwDOABCD1234";
     private const string UserUri = "https://api.github.com/user";
     private const string GraphQlUri = "https://api.github.com/graphql";
+
     private const string ReviewsUri = "https://api.github.com/repos/acme/propr/pulls/42/reviews";
-    private const string ReviewCommentsUri = "https://api.github.com/repos/acme/propr/pulls/42/reviews/555/comments";
+
+    // The comment listing asks for a page size: left to GitHub's default of thirty, a review posting more
+    // comments than that recorded provenance for the first thirty only.
+    private const string ReviewCommentsUri =
+        "https://api.github.com/repos/acme/propr/pulls/42/reviews/555/comments?per_page=100";
 
     [Fact]
     public async Task PublishReviewAsync_PostsSummaryAndInlineCommentsToGitHubReviewApi()
@@ -598,7 +603,7 @@ public sealed class GitHubCodeReviewPublicationServiceTests
                 {
                     "https://api.github.com/user" => CreateJsonResponse(new { login = "meister-dev" }),
                     "https://api.github.com/repos/acme/propr/pulls/42/reviews" => CreateJsonResponse(new { id = 555L }),
-                    "https://api.github.com/repos/acme/propr/pulls/42/reviews/555/comments" => CreateJsonResponse(
+                    ReviewCommentsUri => CreateJsonResponse(
                         new { message = "Not Found" },
                         HttpStatusCode.NotFound),
                     _ => CreateJsonResponse(new { message = "Not Found" }, HttpStatusCode.NotFound),

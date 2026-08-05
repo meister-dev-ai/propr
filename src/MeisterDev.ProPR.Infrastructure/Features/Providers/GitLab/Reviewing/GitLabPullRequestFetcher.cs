@@ -1,6 +1,7 @@
 // Copyright (c) Andreas Rain.
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
+using System.Globalization;
 using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json.Serialization;
@@ -318,8 +319,17 @@ internal sealed class GitLabPullRequestFetcher(
             throw new InvalidOperationException($"GitLab change lookup failed with status {(int)response.StatusCode}.");
         }
 
-        return await response.Content.ReadFromJsonAsync<GitLabMergeRequestChangesResponse>(ct)
-               ?? throw new InvalidOperationException("GitLab change lookup returned an empty payload.");
+        var changes = await response.Content.ReadFromJsonAsync<GitLabMergeRequestChangesResponse>(ct)
+                      ?? throw new InvalidOperationException("GitLab change lookup returned an empty payload.");
+
+        // This listing is not paginated: past the host's diff limits GitLab drops the remainder from the
+        // payload and says so in an overflow flag, which is the only signal that the change set is short.
+        if (changes.Overflow)
+        {
+            throw new InvalidOperationException(ProviderPaginationFailure.ProviderTruncated($"GitLab's change listing for merge request {pullRequestId}"));
+        }
+
+        return changes;
     }
 
     private async Task<IReadOnlyList<GitLabMergeRequestChangeResponse>?> TryGetComparedChangesAsync(
@@ -468,20 +478,18 @@ internal sealed class GitLabPullRequestFetcher(
         int pullRequestId,
         CancellationToken ct)
     {
-        using var request = GitLabConnectionVerifier.CreateAuthenticatedRequest(
-            GitLabConnectionVerifier.BuildApiUri(
+        var discussions = await ProviderRestPager.LoadAllAsync(
+            (page, pageSize, pageCt) => this.GetDiscussionPageAsync(
+                context,
                 host,
-                $"/projects/{Uri.EscapeDataString(repositoryId)}/merge_requests/{pullRequestId}/discussions",
-                "per_page=100"),
-            context.Connection.Secret);
-        using var response = await httpClientFactory.CreateClient("GitLabProvider").SendAsync(request, ct);
-        if (!response.IsSuccessStatusCode)
-        {
-            throw new InvalidOperationException($"GitLab discussion lookup failed with status {(int)response.StatusCode}.");
-        }
-
-        var discussions = await response.Content.ReadFromJsonAsync<IReadOnlyList<GitLabDiscussionResponse>>(ct)
-                          ?? [];
+                repositoryId,
+                pullRequestId,
+                page,
+                pageSize,
+                pageCt),
+            IdentifyDiscussion,
+            $"GitLab's discussion listing for merge request {pullRequestId}",
+            ct);
 
         return discussions
             .Where(discussion => !discussion.IndividualNote)
@@ -502,6 +510,53 @@ internal sealed class GitLabPullRequestFetcher(
                 item.Notes.Any(note => note.Resolved) ? "Fixed" : "Active"))
             .ToList()
             .AsReadOnly();
+    }
+
+    private async Task<ProviderRestPager.RestPage<GitLabDiscussionResponse>> GetDiscussionPageAsync(
+        GitLabConnectionVerifier.GitLabConnectionContext context,
+        ProviderHostRef host,
+        string repositoryId,
+        int pullRequestId,
+        int page,
+        int pageSize,
+        CancellationToken ct)
+    {
+        using var request = GitLabConnectionVerifier.CreateAuthenticatedRequest(
+            GitLabConnectionVerifier.BuildApiUri(
+                host,
+                $"/projects/{Uri.EscapeDataString(repositoryId)}/merge_requests/{pullRequestId}/discussions",
+                BuildPageQuery(page, pageSize)),
+            context.Connection.Secret);
+        using var response = await httpClientFactory.CreateClient("GitLabProvider").SendAsync(request, ct);
+        if (!response.IsSuccessStatusCode)
+        {
+            throw new InvalidOperationException($"GitLab discussion lookup failed with status {(int)response.StatusCode}.");
+        }
+
+        var discussions = await response.Content.ReadFromJsonAsync<IReadOnlyList<GitLabDiscussionResponse>>(ct)
+                          ?? [];
+
+        return new ProviderRestPager.RestPage<GitLabDiscussionResponse>(
+            discussions,
+            ProviderPaginationHeaders.ReadGitLabHasMore(response));
+    }
+
+    // The first page asks for a size and no page number, which is the request a single-page collection made
+    // before it was read across pages: GitLab serves page one either way.
+    private static string BuildPageQuery(int page, int pageSize)
+    {
+        var size = $"per_page={pageSize.ToString(CultureInfo.InvariantCulture)}";
+
+        return page <= 1 ? size : $"{size}&page={page.ToString(CultureInfo.InvariantCulture)}";
+    }
+
+    // A discussion is named by its own id. The notes it holds are the fallback, so that discussions arriving
+    // without one stay distinct from each other rather than collapsing into a single entry.
+    private static string IdentifyDiscussion(GitLabDiscussionResponse discussion)
+    {
+        return string.IsNullOrWhiteSpace(discussion.Id)
+            ? string.Join(',', discussion.Notes.Select(note => note.Id.ToString(CultureInfo.InvariantCulture)))
+            : discussion.Id;
     }
 
     private static PrThreadComment ToThreadComment(GitLabDiscussionNoteResponse note)
@@ -640,7 +695,9 @@ internal sealed class GitLabPullRequestFetcher(
 
     private sealed record GitLabMergeRequestChangesResponse(
         [property: JsonPropertyName("changes")]
-        IReadOnlyList<GitLabMergeRequestChangeResponse> Changes);
+        IReadOnlyList<GitLabMergeRequestChangeResponse> Changes,
+        [property: JsonPropertyName("overflow")]
+        bool Overflow = false);
 
     private sealed record GitLabCompareResponse([property: JsonPropertyName("diffs")] IReadOnlyList<GitLabMergeRequestChangeResponse>? Diffs);
 

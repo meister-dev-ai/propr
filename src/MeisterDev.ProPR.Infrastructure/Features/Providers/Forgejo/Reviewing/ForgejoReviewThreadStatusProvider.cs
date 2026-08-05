@@ -143,11 +143,34 @@ internal sealed class ForgejoReviewThreadStatusProvider(
         int pullRequestId,
         CancellationToken ct)
     {
+        return await ProviderRestPager.LoadAllAsync(
+            (page, pageSize, pageCt) => this.GetReviewPageAsync(
+                context,
+                host,
+                repositoryPath,
+                pullRequestId,
+                page,
+                pageSize,
+                pageCt),
+            review => review.Id.ToString(CultureInfo.InvariantCulture),
+            $"Forgejo's review listing for pull request {pullRequestId}",
+            ct);
+    }
+
+    private async Task<ProviderRestPager.RestPage<ForgejoPullReviewResponse>> GetReviewPageAsync(
+        ForgejoConnectionVerifier.ForgejoConnectionContext context,
+        ProviderHostRef host,
+        string repositoryPath,
+        int pullRequestId,
+        int page,
+        int pageSize,
+        CancellationToken ct)
+    {
         using var request = ForgejoConnectionVerifier.CreateAuthenticatedRequest(
             ForgejoConnectionVerifier.BuildApiUri(
                 host,
                 $"/repos/{repositoryPath}/pulls/{pullRequestId}/reviews",
-                "limit=100"),
+                BuildPageQuery(page, pageSize)),
             context.Connection.Secret);
         using var response = await httpClientFactory.CreateClient("ForgejoProvider").SendAsync(request, ct);
 
@@ -156,8 +179,12 @@ internal sealed class ForgejoReviewThreadStatusProvider(
             throw new InvalidOperationException($"Forgejo review thread lookup failed with status {(int)response.StatusCode}.");
         }
 
-        return await response.Content.ReadFromJsonAsync<IReadOnlyList<ForgejoPullReviewResponse>>(ct)
-               ?? [];
+        var reviews = await response.Content.ReadFromJsonAsync<IReadOnlyList<ForgejoPullReviewResponse>>(ct)
+                      ?? [];
+
+        return new ProviderRestPager.RestPage<ForgejoPullReviewResponse>(
+            reviews,
+            TotalCount: ProviderPaginationHeaders.ReadForgejoTotalCount(response));
     }
 
     private async Task<IReadOnlyList<ForgejoPullReviewCommentResponse>> GetReviewCommentsAsync(
@@ -182,6 +209,16 @@ internal sealed class ForgejoReviewThreadStatusProvider(
 
         return await response.Content.ReadFromJsonAsync<IReadOnlyList<ForgejoPullReviewCommentResponse>>(ct)
                ?? [];
+    }
+
+    // Forgejo clamps a requested page size to the host's configured maximum response length, which is why the
+    // read follows the total it reports rather than counting requests. The first page asks for a size and no
+    // page number, which is the request a single-page collection made before it was read across pages.
+    private static string BuildPageQuery(int page, int pageSize)
+    {
+        var size = $"limit={pageSize.ToString(CultureInfo.InvariantCulture)}";
+
+        return page <= 1 ? size : $"page={page.ToString(CultureInfo.InvariantCulture)}&{size}";
     }
 
     private static string BuildThreadKey(ForgejoPullReviewCommentResponse comment)

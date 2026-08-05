@@ -19,8 +19,10 @@ internal sealed class GitHubReviewThreadStatusProvider(
     GitHubConnectionVerifier connectionVerifier,
     IHttpClientFactory httpClientFactory) : IProviderReviewerThreadStatusFetcher
 {
+    // Read across pages from pageInfo, as the fetcher's copy of this query is. The comment connection inside
+    // each thread is still one page, so a thread past a hundred comments contributes its first hundred.
     private const string GitHubReviewThreadsQuery =
-        "query ReviewThreads($owner: String!, $name: String!, $pullRequestNumber: Int!) { repository(owner: $owner, name: $name) { pullRequest(number: $pullRequestNumber) { reviewThreads(first: 100) { nodes { id isResolved isOutdated path line comments(first: 100) { nodes { databaseId body createdAt author { login } } } } } } } }";
+        "query ReviewThreads($owner: String!, $name: String!, $pullRequestNumber: Int!, $after: String) { repository(owner: $owner, name: $name) { pullRequest(number: $pullRequestNumber) { reviewThreads(first: 100, after: $after) { pageInfo { hasNextPage endCursor } nodes { id isResolved isOutdated path line comments(first: 100) { nodes { databaseId body createdAt author { login } } } } } } } }";
 
     public ScmProvider Provider => ScmProvider.GitHub;
 
@@ -127,6 +129,28 @@ internal sealed class GitHubReviewThreadStatusProvider(
             throw new InvalidOperationException("GitHub repository lookup returned an invalid repository path.");
         }
 
+        return await ProviderCursorPager.LoadAllAsync(
+            (cursor, pageCt) => this.GetReviewThreadPageAsync(
+                context,
+                host,
+                parts[0],
+                parts[1],
+                pullRequestId,
+                cursor,
+                pageCt),
+            $"GitHub's review-thread listing for pull request {pullRequestId}",
+            ct);
+    }
+
+    private async Task<ProviderCursorPager.CursorPage<GitHubReviewThreadNode>> GetReviewThreadPageAsync(
+        GitHubConnectionVerifier.GitHubConnectionContext context,
+        ProviderHostRef host,
+        string owner,
+        string name,
+        int pullRequestId,
+        string? after,
+        CancellationToken ct)
+    {
         using var request = new HttpRequestMessage(HttpMethod.Post, GitHubConnectionVerifier.BuildGraphQlUri(host))
         {
             Content = JsonContent.Create(
@@ -135,9 +159,10 @@ internal sealed class GitHubReviewThreadStatusProvider(
                     query = GitHubReviewThreadsQuery,
                     variables = new
                     {
-                        owner = parts[0],
-                        name = parts[1],
+                        owner,
+                        name,
                         pullRequestNumber = pullRequestId,
+                        after,
                     },
                 }),
         };
@@ -151,9 +176,12 @@ internal sealed class GitHubReviewThreadStatusProvider(
 
         var payload = await response.Content.ReadFromJsonAsync<GitHubGraphQlResponse>(ct)
                       ?? throw new InvalidOperationException("GitHub review thread lookup returned an empty payload.");
+        var connection = payload.Data?.Repository?.PullRequest?.ReviewThreads;
 
-        return payload.Data?.Repository?.PullRequest?.ReviewThreads?.Nodes
-               ?? [];
+        return new ProviderCursorPager.CursorPage<GitHubReviewThreadNode>(
+            connection?.Nodes ?? [],
+            connection?.PageInfo?.HasNextPage ?? false,
+            connection?.PageInfo?.EndCursor);
     }
 
     // A GitHub comment id is unique within the pull request, so provenance resolves on it alone. The thread
@@ -203,7 +231,16 @@ internal sealed class GitHubReviewThreadStatusProvider(
         [property: JsonPropertyName("reviewThreads")]
         GitHubReviewThreadsConnection? ReviewThreads);
 
-    private sealed record GitHubReviewThreadsConnection([property: JsonPropertyName("nodes")] IReadOnlyList<GitHubReviewThreadNode>? Nodes);
+    private sealed record GitHubReviewThreadsConnection(
+        [property: JsonPropertyName("nodes")] IReadOnlyList<GitHubReviewThreadNode>? Nodes,
+        [property: JsonPropertyName("pageInfo")]
+        GitHubPageInfo? PageInfo);
+
+    private sealed record GitHubPageInfo(
+        [property: JsonPropertyName("hasNextPage")]
+        bool HasNextPage,
+        [property: JsonPropertyName("endCursor")]
+        string? EndCursor);
 
     private sealed record GitHubReviewThreadNode(
         [property: JsonPropertyName("id")] string? Id,

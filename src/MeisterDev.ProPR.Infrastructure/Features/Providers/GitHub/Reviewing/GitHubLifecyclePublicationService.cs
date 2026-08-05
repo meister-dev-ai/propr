@@ -24,10 +24,10 @@ internal sealed partial class GitHubLifecyclePublicationService(
     IHttpClientFactory httpClientFactory,
     ILogger<GitHubLifecyclePublicationService>? logger = null)
 {
-    // Bounded to one page, matching the thread read path. A pull request past a hundred threads leaves the
-    // overflow without a thread id, which costs auto-resolution on those findings and nothing else.
+    // Read across pages from pageInfo, matching the thread read path. A pull request past a hundred threads
+    // used to leave the overflow without a thread id, which cost auto-resolution on those findings.
     private const string ReviewThreadIdsQuery =
-        "query ReviewThreadIds($owner: String!, $name: String!, $pullRequestNumber: Int!) { repository(owner: $owner, name: $name) { pullRequest(number: $pullRequestNumber) { reviewThreads(first: 100) { nodes { id comments(first: 100) { nodes { databaseId } } } } } } }";
+        "query ReviewThreadIds($owner: String!, $name: String!, $pullRequestNumber: Int!, $after: String) { repository(owner: $owner, name: $name) { pullRequest(number: $pullRequestNumber) { reviewThreads(first: 100, after: $after) { pageInfo { hasNextPage endCursor } nodes { id comments(first: 100) { nodes { databaseId } } } } } } }";
 
     private static readonly ActivitySource ActivitySource = new("MeisterProPR.Infrastructure");
     private readonly ILogger<GitHubLifecyclePublicationService> _logger = logger ?? NullLogger<GitHubLifecyclePublicationService>.Instance;
@@ -122,23 +122,22 @@ internal sealed partial class GitHubLifecyclePublicationService(
             }
 
             var reviewIdText = reviewId.ToString(CultureInfo.InvariantCulture);
-            using var commentsRequest = new HttpRequestMessage(
-                HttpMethod.Get,
-                GitHubConnectionVerifier.BuildApiUri(
-                    review.Repository.Host,
-                    $"/repos/{BuildRepositoryPath(review.Repository)}/pulls/{review.Number}/reviews/{reviewIdText}/comments"));
-            await context.AuthorizeRequestAsync(commentsRequest, ct);
 
-            using var commentsResponse = await httpClientFactory.CreateClient("GitHubProvider")
-                .SendAsync(commentsRequest, ct);
-            if (!commentsResponse.IsSuccessStatusCode)
-            {
-                return [];
-            }
-
-            var comments = await commentsResponse.Content
-                .ReadFromJsonAsync<IReadOnlyList<GitHubReviewCommentResponse>>(ct);
-            if (comments is null || comments.Count == 0)
+            // Read across pages: without a page size this listing takes GitHub's default of thirty, so a
+            // review posting more comments than that recorded provenance for the first thirty only and lost
+            // auto-resolution on the rest.
+            var comments = await ProviderRestPager.LoadAllAsync(
+                (page, pageSize, pageCt) => this.GetReviewCommentPageAsync(
+                    context,
+                    review,
+                    reviewIdText,
+                    page,
+                    pageSize,
+                    pageCt),
+                comment => comment.Id?.ToString(CultureInfo.InvariantCulture) ?? string.Empty,
+                $"GitHub's comment listing for review {reviewIdText}",
+                ct);
+            if (comments.Count == 0)
             {
                 return [];
             }
@@ -161,6 +160,38 @@ internal sealed partial class GitHubLifecyclePublicationService(
         }
     }
 
+    private async Task<ProviderRestPager.RestPage<GitHubReviewCommentResponse>> GetReviewCommentPageAsync(
+        GitHubConnectionVerifier.GitHubConnectionContext context,
+        CodeReviewRef review,
+        string reviewIdText,
+        int page,
+        int pageSize,
+        CancellationToken ct)
+    {
+        using var request = new HttpRequestMessage(
+            HttpMethod.Get,
+            GitHubConnectionVerifier.BuildApiUri(
+                review.Repository.Host,
+                $"/repos/{BuildRepositoryPath(review.Repository)}/pulls/{review.Number}/reviews/{reviewIdText}/comments",
+                page <= 1
+                    ? $"per_page={pageSize.ToString(CultureInfo.InvariantCulture)}"
+                    : $"per_page={pageSize.ToString(CultureInfo.InvariantCulture)}&page={page.ToString(CultureInfo.InvariantCulture)}"));
+        await context.AuthorizeRequestAsync(request, ct);
+
+        using var response = await httpClientFactory.CreateClient("GitHubProvider").SendAsync(request, ct);
+        if (!response.IsSuccessStatusCode)
+        {
+            throw new InvalidOperationException($"GitHub review-comment listing failed with status {(int)response.StatusCode}.");
+        }
+
+        var comments = await response.Content.ReadFromJsonAsync<IReadOnlyList<GitHubReviewCommentResponse>>(ct)
+                       ?? [];
+
+        return new ProviderRestPager.RestPage<GitHubReviewCommentResponse>(
+            comments,
+            ProviderPaginationHeaders.ReadGitHubHasMore(response));
+    }
+
     /// <summary>
     ///     Maps each of the pull request's review comments to the node id of the thread it belongs to.
     ///     GitHub's review threads exist only in GraphQL: the create-review response names the review, and the
@@ -176,45 +207,66 @@ internal sealed partial class GitHubLifecyclePublicationService(
         try
         {
             var (owner, name) = BuildRepositoryCoordinates(review.Repository);
-            using var request = new HttpRequestMessage(
-                HttpMethod.Post,
-                GitHubConnectionVerifier.BuildGraphQlUri(review.Repository.Host))
-            {
-                Content = JsonContent.Create(
-                    new
+
+            // A page this traversal could not read abandons the whole mapping rather than keying writes on the
+            // part that arrived, on the same reasoning as a refusal: ids from an incomplete read are not safe
+            // to send a later write at.
+            var abandoned = false;
+            var threads = await ProviderCursorPager.LoadAllAsync(
+                async (cursor, pageCt) =>
+                {
+                    using var request = new HttpRequestMessage(
+                        HttpMethod.Post,
+                        GitHubConnectionVerifier.BuildGraphQlUri(review.Repository.Host))
                     {
-                        query = ReviewThreadIdsQuery,
-                        variables = new
-                        {
-                            owner,
-                            name,
-                            pullRequestNumber = review.Number,
-                        },
-                    }),
-            };
-            await context.AuthorizeRequestAsync(request, ct);
+                        Content = JsonContent.Create(
+                            new
+                            {
+                                query = ReviewThreadIdsQuery,
+                                variables = new
+                                {
+                                    owner,
+                                    name,
+                                    pullRequestNumber = review.Number,
+                                    after = cursor,
+                                },
+                            }),
+                    };
+                    await context.AuthorizeRequestAsync(request, pageCt);
 
-            using var response = await httpClientFactory.CreateClient("GitHubProvider").SendAsync(request, ct);
-            if (!response.IsSuccessStatusCode)
-            {
-                LogReviewThreadIdLookupUnavailable(this._logger, review.Number, (int)response.StatusCode);
-                return ReadOnlyDictionary<long, string>.Empty;
-            }
+                    using var response = await httpClientFactory.CreateClient("GitHubProvider")
+                        .SendAsync(request, pageCt);
+                    if (!response.IsSuccessStatusCode)
+                    {
+                        LogReviewThreadIdLookupUnavailable(this._logger, review.Number, (int)response.StatusCode);
+                        abandoned = true;
+                        return new ProviderCursorPager.CursorPage<GitHubReviewThreadNode>([], false, null);
+                    }
 
-            var payload = await response.Content.ReadFromJsonAsync<GitHubThreadLookupResponse>(ct);
+                    var payload = await response.Content.ReadFromJsonAsync<GitHubThreadLookupResponse>(pageCt);
 
-            // GitHub answers a refused query with HTTP 200 and an errors array, and a partial refusal with a
-            // populated data section beside it, so a status-only check would trust a traversal that reported
-            // a problem. Ids read out of one are not safe to key a later write on, so the lookup is discarded
-            // rather than half believed.
-            if (payload?.Errors is { Count: > 0 })
-            {
-                LogReviewThreadIdLookupRefused(this._logger, review.Number);
-                return ReadOnlyDictionary<long, string>.Empty;
-            }
+                    // GitHub answers a refused query with HTTP 200 and an errors array, and a partial refusal
+                    // with a populated data section beside it, so a status-only check would trust a traversal
+                    // that reported a problem. Ids read out of one are not safe to key a later write on, so the
+                    // lookup is discarded rather than half believed.
+                    if (payload?.Errors is { Count: > 0 })
+                    {
+                        LogReviewThreadIdLookupRefused(this._logger, review.Number);
+                        abandoned = true;
+                        return new ProviderCursorPager.CursorPage<GitHubReviewThreadNode>([], false, null);
+                    }
 
-            var threads = payload?.Data?.Repository?.PullRequest?.ReviewThreads?.Nodes;
-            if (threads is null || threads.Count == 0)
+                    var connection = payload?.Data?.Repository?.PullRequest?.ReviewThreads;
+
+                    return new ProviderCursorPager.CursorPage<GitHubReviewThreadNode>(
+                        connection?.Nodes ?? [],
+                        connection?.PageInfo?.HasNextPage ?? false,
+                        connection?.PageInfo?.EndCursor);
+                },
+                $"GitHub's review-thread id listing for pull request {review.Number}",
+                ct);
+
+            if (abandoned || threads.Count == 0)
             {
                 return ReadOnlyDictionary<long, string>.Empty;
             }
@@ -376,7 +428,16 @@ internal sealed partial class GitHubLifecyclePublicationService(
         [property: JsonPropertyName("reviewThreads")]
         GitHubReviewThreadConnection? ReviewThreads);
 
-    private sealed record GitHubReviewThreadConnection([property: JsonPropertyName("nodes")] IReadOnlyList<GitHubReviewThreadNode>? Nodes);
+    private sealed record GitHubReviewThreadConnection(
+        [property: JsonPropertyName("nodes")] IReadOnlyList<GitHubReviewThreadNode>? Nodes,
+        [property: JsonPropertyName("pageInfo")]
+        GitHubPageInfo? PageInfo);
+
+    private sealed record GitHubPageInfo(
+        [property: JsonPropertyName("hasNextPage")]
+        bool HasNextPage,
+        [property: JsonPropertyName("endCursor")]
+        string? EndCursor);
 
     private sealed record GitHubReviewThreadNode(
         [property: JsonPropertyName("id")] string? Id,

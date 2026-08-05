@@ -40,21 +40,18 @@ internal sealed class GitLabReviewThreadStatusProvider(
         // a connection of their own, decide with the identity too.
         ownership.ContributeIdentity(new ThreadOwnerIdentity(Login: context.AuthenticatedUsername));
 
-        using var request = GitLabConnectionVerifier.CreateAuthenticatedRequest(
-            GitLabConnectionVerifier.BuildApiUri(
+        var payload = await ProviderRestPager.LoadAllAsync(
+            (page, pageSize, pageCt) => this.GetDiscussionPageAsync(
+                context,
                 host,
-                $"/projects/{Uri.EscapeDataString(repositoryId)}/merge_requests/{pullRequestId}/discussions",
-                "per_page=100"),
-            context.Connection.Secret);
-        using var response = await httpClientFactory.CreateClient("GitLabProvider").SendAsync(request, ct);
-
-        if (!response.IsSuccessStatusCode)
-        {
-            throw new InvalidOperationException($"GitLab review thread lookup failed with status {(int)response.StatusCode}.");
-        }
-
-        var payload = await response.Content.ReadFromJsonAsync<IReadOnlyList<GitLabDiscussionResponse>>(ct)
-                      ?? [];
+                repositoryId,
+                pullRequestId,
+                page,
+                pageSize,
+                pageCt),
+            IdentifyDiscussion,
+            $"GitLab's discussion listing for merge request {pullRequestId}",
+            ct);
 
         return payload
             .Where(discussion => !discussion.IndividualNote)
@@ -78,6 +75,54 @@ internal sealed class GitLabReviewThreadStatusProvider(
                 ThreadAnchorCodeChange.Unknown))
             .ToList()
             .AsReadOnly();
+    }
+
+    private async Task<ProviderRestPager.RestPage<GitLabDiscussionResponse>> GetDiscussionPageAsync(
+        GitLabConnectionVerifier.GitLabConnectionContext context,
+        ProviderHostRef host,
+        string repositoryId,
+        int pullRequestId,
+        int page,
+        int pageSize,
+        CancellationToken ct)
+    {
+        using var request = GitLabConnectionVerifier.CreateAuthenticatedRequest(
+            GitLabConnectionVerifier.BuildApiUri(
+                host,
+                $"/projects/{Uri.EscapeDataString(repositoryId)}/merge_requests/{pullRequestId}/discussions",
+                BuildPageQuery(page, pageSize)),
+            context.Connection.Secret);
+        using var response = await httpClientFactory.CreateClient("GitLabProvider").SendAsync(request, ct);
+
+        if (!response.IsSuccessStatusCode)
+        {
+            throw new InvalidOperationException($"GitLab review thread lookup failed with status {(int)response.StatusCode}.");
+        }
+
+        var discussions = await response.Content.ReadFromJsonAsync<IReadOnlyList<GitLabDiscussionResponse>>(ct)
+                          ?? [];
+
+        return new ProviderRestPager.RestPage<GitLabDiscussionResponse>(
+            discussions,
+            ProviderPaginationHeaders.ReadGitLabHasMore(response));
+    }
+
+    // The first page asks for a size and no page number, which is the request a single-page collection made
+    // before it was read across pages: GitLab serves page one either way.
+    private static string BuildPageQuery(int page, int pageSize)
+    {
+        var size = $"per_page={pageSize.ToString(CultureInfo.InvariantCulture)}";
+
+        return page <= 1 ? size : $"{size}&page={page.ToString(CultureInfo.InvariantCulture)}";
+    }
+
+    // A discussion is named by its own id. The notes it holds are the fallback, so that discussions arriving
+    // without one stay distinct from each other rather than collapsing into a single entry.
+    private static string IdentifyDiscussion(GitLabDiscussionResponse discussion)
+    {
+        return string.IsNullOrWhiteSpace(discussion.Id)
+            ? string.Join(',', discussion.Notes.Select(note => note.Id.ToString(CultureInfo.InvariantCulture)))
+            : discussion.Id;
     }
 
     private static string? ResolveFilePath(IReadOnlyList<GitLabDiscussionNoteResponse> notes)
