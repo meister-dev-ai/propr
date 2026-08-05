@@ -169,7 +169,7 @@ const router = createRouter({
         params: { id: to.params.id },
         query: { ...to.query, tab: 'providers' },
       }),
-      meta: { requiresAuth: true, requiresClientAdmin: true },
+      meta: { requiresAuth: true, requiresClientAdmin: true, idParamIsClient: true },
     },
     {
       path: '/pr-review',
@@ -186,13 +186,13 @@ const router = createRouter({
       path: '/:id',
       name: 'client-detail',
       component: () => import('@/features/clients/views/ClientDetailView.vue'),
-      meta: { requiresAuth: true, requiresClientAccess: true },
+      meta: { requiresAuth: true, requiresClientAccess: true, idParamIsClient: true },
     },
     {
       path: '/:id/procursor/sources/:sourceId/events',
       name: 'client-procursor-source-events',
       component: () => import('@/features/procursor/views/ProCursorSourceEventsView.vue'),
-      meta: { requiresAuth: true, requiresClientAdmin: true },
+      meta: { requiresAuth: true, requiresClientAdmin: true, idParamIsClient: true },
     },
   ],
 })
@@ -245,11 +245,19 @@ function resolveRequiredClientRole(to: RouteLocationNormalizedGeneric): RoleLeve
   return to.meta.requiresClientAccess ? RoleLevel.User : null
 }
 
+/**
+ * The client a route is about, when it names one at all.
+ *
+ * A route whose `:id` is a client says so with `idParamIsClient`. Without it the parameter is something
+ * else (the protocol route's `:id` is a job), and reading that as a client denies the page to everyone
+ * except a platform administrator, whose check short-circuits before this one. A route that names no
+ * client falls through to the any-client-role check below, with the server as the real boundary.
+ */
 function resolveRouteClientId(to: RouteLocationNormalizedGeneric): string | undefined {
   if (typeof to.query.clientId === 'string') {
     return to.query.clientId
   }
-  return typeof to.params.id === 'string' ? to.params.id : undefined
+  return to.meta.idParamIsClient === true && typeof to.params.id === 'string' ? to.params.id : undefined
 }
 
 function resolveClientAccessGuard(
