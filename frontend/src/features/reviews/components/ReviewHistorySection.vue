@@ -148,7 +148,7 @@
 
                         <div class="list-action-col">
                             <button
-                                v-if="(item.status === 'failed' || item.status === 'budgetHeld' || item.status === 'budgetExceeded') && item.id && canInspectClient(props.clientId || item.clientId)"
+                                v-if="isRestartable(item) && item.id && canInspectClient(props.clientId || item.clientId)"
                                 class="btn-ghost restart-btn"
                                 :disabled="restartingJobs.has(item.id)"
                                 :title="item.status === 'failed' ? 'Restart this failed review' : 'Restart this budget-blocked review after freeing budget'"
@@ -264,6 +264,7 @@ const {
     visibleItems,
     canInspectClient,
     canManageClient,
+    isRestartable,
     restartingJobs,
     restartError,
     restartJob,

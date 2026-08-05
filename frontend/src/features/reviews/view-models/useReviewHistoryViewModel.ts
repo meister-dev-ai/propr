@@ -76,6 +76,7 @@ export interface ReviewHistoryViewModel {
   visibleItems: (group: PrGroup) => JobListItem[]
   canInspectClient: (clientId: string | null | undefined) => boolean
   canManageClient: (clientId: string | null | undefined) => boolean
+  isRestartable: (item: JobListItem) => boolean
   restartingJobs: Ref<Set<string>>
   restartError: Ref<string>
   restartJob: (item: JobListItem) => Promise<void>
@@ -96,6 +97,16 @@ export interface UseReviewHistoryViewModelOptions {
 
 const ITEMS_VISIBLE_DEFAULT = 3
 const ITEMS_PER_PAGE = 10
+
+/**
+ * The states a review can be restarted from, which is what the server accepts.
+ *
+ * Budget-blocked work belongs here as much as a failure does: a soft cap holds a review before it starts
+ * and a hard cap stops one part-way, and both are resumed by restarting once budget is freed. Offering the
+ * button for those states while the action recognised only a failure made the click do nothing at all, with
+ * no request sent and no error shown to say that budget was the thing to sort out first.
+ */
+const RESTARTABLE_STATUSES: ReadonlySet<string> = new Set(['failed', 'budgetHeld', 'budgetExceeded'])
 
 async function defaultListPullRequestHistory(
   params: ListPullRequestHistoryParams,
@@ -299,8 +310,12 @@ export function useReviewHistoryViewModel(options: UseReviewHistoryViewModelOpti
     await loadJobs(true)
   }
 
+  function isRestartable(item: JobListItem): boolean {
+    return typeof item.status === 'string' && RESTARTABLE_STATUSES.has(item.status)
+  }
+
   async function restartJobAction(item: JobListItem) {
-    if (!item.id || item.status !== 'failed' || restartingJobs.value.has(item.id)) {
+    if (!item.id || !isRestartable(item) || restartingJobs.value.has(item.id)) {
       return
     }
 
@@ -443,6 +458,7 @@ export function useReviewHistoryViewModel(options: UseReviewHistoryViewModelOpti
     visibleItems,
     canInspectClient,
     canManageClient,
+    isRestartable,
     restartingJobs,
     restartError,
     restartJob: restartJobAction,

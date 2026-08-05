@@ -88,6 +88,29 @@ describe('useReviewHistoryViewModel restart action', () => {
     expect(vm.restartError.value).toBe('')
   })
 
+  // A soft cap holds a review before it starts and a hard cap stops one part-way. Both are resumed by
+  // restarting once budget is freed, which is what the server accepts and what the button offers.
+  it.each(['budgetHeld', 'budgetExceeded'])('restarts a %s job', async (status) => {
+    const item = failedItem({ status } as Partial<JobListItem>)
+    const restartJob = vi.fn().mockResolvedValue(undefined)
+
+    const vm = useReviewHistoryViewModel({
+      autoLoad: false,
+      reviewHistoryService: {
+        listPullRequestHistory: vi.fn().mockResolvedValue(historyPage([item])),
+        restartJob,
+      },
+    })
+
+    expect(vm.isRestartable(item)).toBe(true)
+
+    await vm.restartJob(item)
+    await flushPromises()
+
+    expect(restartJob).toHaveBeenCalledWith('job-1')
+    expect(vm.restartError.value).toBe('')
+  })
+
   it('does not restart a non-failed job', async () => {
     const restartJob = vi.fn().mockResolvedValue(undefined)
     const vm = useReviewHistoryViewModel({
@@ -98,7 +121,10 @@ describe('useReviewHistoryViewModel restart action', () => {
       },
     })
 
-    await vm.restartJob(failedItem({ status: 'completed' }))
+    const completed = failedItem({ status: 'completed' })
+    expect(vm.isRestartable(completed)).toBe(false)
+
+    await vm.restartJob(completed)
 
     expect(restartJob).not.toHaveBeenCalled()
   })
