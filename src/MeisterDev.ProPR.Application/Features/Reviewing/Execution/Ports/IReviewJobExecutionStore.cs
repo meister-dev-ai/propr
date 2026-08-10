@@ -21,18 +21,18 @@ public interface IReviewJobExecutionStore
     ReviewJob? GetById(Guid id);
 
     /// <summary>
+    ///     The job together with the per-file results already recorded for it — what adoption checks
+    ///     before writing, so a job that already has rows never gains a second row for the same file.
+    /// </summary>
+    /// <param name="id">The review job identifier.</param>
+    /// <param name="ct">The cancellation token.</param>
+    Task<ReviewJob?> GetByIdWithFileResultsAsync(Guid id, CancellationToken ct = default);
+
+    /// <summary>
     ///     Gets all pending review jobs.
     /// </summary>
     /// <returns>A read-only list of pending review jobs.</returns>
     IReadOnlyList<ReviewJob> GetPendingJobs();
-
-    /// <summary>
-    ///     Gets review jobs that are stuck in processing state beyond the specified threshold.
-    /// </summary>
-    /// <param name="threshold">The maximum duration a job should remain in processing state.</param>
-    /// <param name="ct">The cancellation token.</param>
-    /// <returns>A read-only list of stuck processing review jobs.</returns>
-    Task<IReadOnlyList<ReviewJob>> GetStuckProcessingJobsAsync(TimeSpan threshold, CancellationToken ct = default);
 
     /// <summary>Returns the number of review jobs currently in the Processing state.</summary>
     Task<int> CountProcessingJobsAsync(CancellationToken ct = default);

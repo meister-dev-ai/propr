@@ -6,6 +6,7 @@ using MeisterDev.ProPR.Application.DTOs.AzureDevOps;
 using MeisterDev.ProPR.Application.Features.Crawling.Execution.Models;
 using MeisterDev.ProPR.Application.Features.Crawling.Execution.Ports;
 using MeisterDev.ProPR.Application.Features.Crawling.Webhooks.Commands.HandleProviderWebhookDelivery;
+using MeisterDev.ProPR.Application.Features.Crawling.Webhooks.Ports;
 using MeisterDev.ProPR.Application.Features.Crawling.Webhooks.Dtos;
 using MeisterDev.ProPR.Application.Interfaces;
 using MeisterDev.ProPR.Domain.Enums;
@@ -17,6 +18,297 @@ namespace MeisterDev.ProPR.Application.Tests.Features.Crawling.Webhooks;
 
 public sealed class HandleProviderWebhookDeliveryHandlerTests
 {
+    // The defect this exists for: intake used to read the pull request from the provider inside the
+    // provider's own request, and every provider gives up after a few seconds. A burst then dropped
+    // exactly the deliveries that arrived together. Accepting first is what breaks that tie.
+    [Fact]
+    public async Task HandleAsync_ByDefault_AcceptsTheDeliveryAndQueuesItWithoutTouchingTheProvider()
+    {
+        var configuration = CreateConfiguration([WebhookEventType.PullRequestCommented]);
+        var host = new ProviderHostRef(ScmProvider.AzureDevOps, configuration.OrganizationUrl);
+        var repository = new RepositoryRef(host, "repo-1", "project", "project");
+        var review = new CodeReviewRef(repository, CodeReviewPlatformKind.PullRequest, "42", 42);
+        var reviewer = new ReviewerIdentity(host, "reviewer-guid", "meister-bot", "Meister Bot", true);
+        var ingressService = Substitute.For<IWebhookIngressService>();
+        var queryService = Substitute.For<ICodeReviewQueryService>();
+        var reviewDiscoveryProvider = Substitute.For<IReviewDiscoveryProvider>();
+        var configurationRepository = Substitute.For<IWebhookConfigurationRepository>();
+        var deliveryLogRepository = Substitute.For<IWebhookDeliveryLogRepository>();
+        var providerRegistry = Substitute.For<IScmProviderRegistry>();
+        var clientRegistry = Substitute.For<IClientRegistry>();
+        var secretProtectionCodec = Substitute.For<ISecretProtectionCodec>();
+        var synchronizationService = Substitute.For<IPullRequestSynchronizationService>();
+        var queue = Substitute.For<IWebhookDeliveryQueue>();
+        queue.EnqueueAsync(Arg.Any<WebhookDeliveryQueueSubmission>(), Arg.Any<CancellationToken>()).Returns(true);
+
+        configurationRepository.GetActiveByPathKeyAsync("path-key", Arg.Any<CancellationToken>())
+            .Returns(configuration);
+        providerRegistry.GetWebhookIngressService(ScmProvider.AzureDevOps).Returns(ingressService);
+        providerRegistry.GetCodeReviewQueryService(ScmProvider.AzureDevOps).Returns(queryService);
+        providerRegistry.GetReviewDiscoveryProvider(ScmProvider.AzureDevOps).Returns(reviewDiscoveryProvider);
+        secretProtectionCodec.Unprotect(configuration.SecretCiphertext!, "WebhookSecret").Returns("webhook-secret");
+        clientRegistry.GetReviewerIdentityAsync(configuration.ClientId, host, Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<ReviewerIdentity?>(reviewer));
+        ingressService.VerifyAsync(
+                configuration.ClientId,
+                host,
+                Arg.Any<IReadOnlyDictionary<string, string>>(),
+                Arg.Any<string>(),
+                "webhook-secret",
+                Arg.Any<CancellationToken>())
+            .Returns(true);
+        ingressService.ParseAsync(
+                configuration.ClientId,
+                host,
+                Arg.Any<IReadOnlyDictionary<string, string>>(),
+                Arg.Any<string>(),
+                Arg.Any<CancellationToken>())
+            .Returns(
+                new WebhookDeliveryEnvelope(
+                    host,
+                    "delivery-1",
+                    "pull_request.commented",
+                    "ms.vss-code.git-pullrequest-comment-event",
+                    repository,
+                    review,
+                    null,
+                    "refs/heads/feature/test",
+                    "refs/heads/main",
+                    null));
+        queryService.GetReviewAsync(configuration.ClientId, review, Arg.Any<CancellationToken>())
+            .Returns(
+                new ReviewDiscoveryItemDto(
+                    ScmProvider.AzureDevOps,
+                    repository,
+                    review,
+                    CodeReviewState.Open,
+                    null,
+                    reviewer,
+                    "PR 42",
+                    null,
+                    "feature/test",
+                    "main"));
+        reviewDiscoveryProvider.ListOpenReviewsAsync(
+                configuration.ClientId,
+                repository,
+                reviewer,
+                Arg.Any<CancellationToken>())
+            .Returns(
+            [
+                new ReviewDiscoveryItemDto(
+                    ScmProvider.AzureDevOps,
+                    repository,
+                    review,
+                    CodeReviewState.Open,
+                    null,
+                    reviewer,
+                    "PR 42",
+                    null,
+                    "feature/test",
+                    "main"),
+            ]);
+        queryService.GetLatestRevisionAsync(configuration.ClientId, review, Arg.Any<CancellationToken>())
+            .Returns(new ReviewRevision("head-sha", "base-sha", null, "7", "base-sha...head-sha"));
+        synchronizationService.SynchronizeAsync(
+                Arg.Any<PullRequestSynchronizationRequest>(),
+                Arg.Any<CancellationToken>())
+            .Returns(
+                new PullRequestSynchronizationOutcome(
+                    PullRequestSynchronizationReviewDecision.Submitted,
+                    PullRequestSynchronizationLifecycleDecision.None,
+                    ["Processed shared Azure DevOps comment delivery."]));
+        deliveryLogRepository.AddAsync(
+                default,
+                default,
+                default!,
+                default,
+                default,
+                default,
+                default,
+                default,
+                default,
+                default!,
+                default)
+            .ReturnsForAnyArgs(_ => Task.FromResult(CreateLogEntry(WebhookDeliveryOutcome.Accepted, 200)));
+
+        var sut = new HandleProviderWebhookDeliveryHandler(
+            configurationRepository,
+            deliveryLogRepository,
+            providerRegistry,
+            clientRegistry,
+            secretProtectionCodec,
+            NullLogger<HandleProviderWebhookDeliveryHandler>.Instance,
+            synchronizationService,
+            queue);
+        var payload = "{\"eventType\":\"ms.vss-code.git-pullrequest-comment-event\"}";
+        var headers = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["Authorization"] = "Basic valid",
+        };
+
+        var result = await sut.HandleAsync(
+            new HandleProviderWebhookDeliveryCommand(
+                ScmProvider.AzureDevOps, "path-key", headers, payload,
+                WebhookDeliveryProcessingMode.AcceptAndQueue),
+            CancellationToken.None);
+
+        Assert.Equal(WebhookDeliveryOutcome.Accepted, result.DeliveryOutcome);
+        Assert.Equal(200, result.HttpStatusCode);
+
+        await queue.Received(1).EnqueueAsync(
+            Arg.Is<WebhookDeliveryQueueSubmission>(submission =>
+                submission.WebhookConfigurationId == configuration.Id
+                && submission.Provider == ScmProvider.AzureDevOps
+                && submission.PathKey == "path-key"
+                && submission.Payload == payload),
+            Arg.Any<CancellationToken>());
+
+        // Nothing reached the provider on the caller's thread. That is the whole point.
+        await synchronizationService.DidNotReceiveWithAnyArgs()
+            .SynchronizeAsync(default!, default);
+    }
+
+    // Providers retry a delivery they think failed. The retry carries the same delivery id, and the
+    // answer has to stay an acceptance — refusing it would make the provider retry harder — while the
+    // review happens once.
+    [Fact]
+    public async Task HandleAsync_WhenTheProviderRetriesADelivery_AcceptsItWithoutQueueingItTwice()
+    {
+        var configuration = CreateConfiguration([WebhookEventType.PullRequestCommented]);
+        var host = new ProviderHostRef(ScmProvider.AzureDevOps, configuration.OrganizationUrl);
+        var repository = new RepositoryRef(host, "repo-1", "project", "project");
+        var review = new CodeReviewRef(repository, CodeReviewPlatformKind.PullRequest, "42", 42);
+        var reviewer = new ReviewerIdentity(host, "reviewer-guid", "meister-bot", "Meister Bot", true);
+        var ingressService = Substitute.For<IWebhookIngressService>();
+        var queryService = Substitute.For<ICodeReviewQueryService>();
+        var reviewDiscoveryProvider = Substitute.For<IReviewDiscoveryProvider>();
+        var configurationRepository = Substitute.For<IWebhookConfigurationRepository>();
+        var deliveryLogRepository = Substitute.For<IWebhookDeliveryLogRepository>();
+        var providerRegistry = Substitute.For<IScmProviderRegistry>();
+        var clientRegistry = Substitute.For<IClientRegistry>();
+        var secretProtectionCodec = Substitute.For<ISecretProtectionCodec>();
+        var synchronizationService = Substitute.For<IPullRequestSynchronizationService>();
+        var queue = Substitute.For<IWebhookDeliveryQueue>();
+
+        // Already queued: this is the provider's retry of a delivery it was already told was accepted.
+        queue.EnqueueAsync(Arg.Any<WebhookDeliveryQueueSubmission>(), Arg.Any<CancellationToken>()).Returns(false);
+
+        configurationRepository.GetActiveByPathKeyAsync("path-key", Arg.Any<CancellationToken>())
+            .Returns(configuration);
+        providerRegistry.GetWebhookIngressService(ScmProvider.AzureDevOps).Returns(ingressService);
+        providerRegistry.GetCodeReviewQueryService(ScmProvider.AzureDevOps).Returns(queryService);
+        providerRegistry.GetReviewDiscoveryProvider(ScmProvider.AzureDevOps).Returns(reviewDiscoveryProvider);
+        secretProtectionCodec.Unprotect(configuration.SecretCiphertext!, "WebhookSecret").Returns("webhook-secret");
+        clientRegistry.GetReviewerIdentityAsync(configuration.ClientId, host, Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<ReviewerIdentity?>(reviewer));
+        ingressService.VerifyAsync(
+                configuration.ClientId,
+                host,
+                Arg.Any<IReadOnlyDictionary<string, string>>(),
+                Arg.Any<string>(),
+                "webhook-secret",
+                Arg.Any<CancellationToken>())
+            .Returns(true);
+        ingressService.ParseAsync(
+                configuration.ClientId,
+                host,
+                Arg.Any<IReadOnlyDictionary<string, string>>(),
+                Arg.Any<string>(),
+                Arg.Any<CancellationToken>())
+            .Returns(
+                new WebhookDeliveryEnvelope(
+                    host,
+                    "delivery-1",
+                    "pull_request.commented",
+                    "ms.vss-code.git-pullrequest-comment-event",
+                    repository,
+                    review,
+                    null,
+                    "refs/heads/feature/test",
+                    "refs/heads/main",
+                    null));
+        queryService.GetReviewAsync(configuration.ClientId, review, Arg.Any<CancellationToken>())
+            .Returns(
+                new ReviewDiscoveryItemDto(
+                    ScmProvider.AzureDevOps,
+                    repository,
+                    review,
+                    CodeReviewState.Open,
+                    null,
+                    reviewer,
+                    "PR 42",
+                    null,
+                    "feature/test",
+                    "main"));
+        reviewDiscoveryProvider.ListOpenReviewsAsync(
+                configuration.ClientId,
+                repository,
+                reviewer,
+                Arg.Any<CancellationToken>())
+            .Returns(
+            [
+                new ReviewDiscoveryItemDto(
+                    ScmProvider.AzureDevOps,
+                    repository,
+                    review,
+                    CodeReviewState.Open,
+                    null,
+                    reviewer,
+                    "PR 42",
+                    null,
+                    "feature/test",
+                    "main"),
+            ]);
+        queryService.GetLatestRevisionAsync(configuration.ClientId, review, Arg.Any<CancellationToken>())
+            .Returns(new ReviewRevision("head-sha", "base-sha", null, "7", "base-sha...head-sha"));
+        synchronizationService.SynchronizeAsync(
+                Arg.Any<PullRequestSynchronizationRequest>(),
+                Arg.Any<CancellationToken>())
+            .Returns(
+                new PullRequestSynchronizationOutcome(
+                    PullRequestSynchronizationReviewDecision.Submitted,
+                    PullRequestSynchronizationLifecycleDecision.None,
+                    ["Processed shared Azure DevOps comment delivery."]));
+        deliveryLogRepository.AddAsync(
+                default,
+                default,
+                default!,
+                default,
+                default,
+                default,
+                default,
+                default,
+                default,
+                default!,
+                default)
+            .ReturnsForAnyArgs(_ => Task.FromResult(CreateLogEntry(WebhookDeliveryOutcome.Accepted, 200)));
+
+        var sut = new HandleProviderWebhookDeliveryHandler(
+            configurationRepository,
+            deliveryLogRepository,
+            providerRegistry,
+            clientRegistry,
+            secretProtectionCodec,
+            NullLogger<HandleProviderWebhookDeliveryHandler>.Instance,
+            synchronizationService,
+            queue);
+        var payload = "{\"eventType\":\"ms.vss-code.git-pullrequest-comment-event\"}";
+        var headers = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["Authorization"] = "Basic valid",
+        };
+
+        var result = await sut.HandleAsync(
+            new HandleProviderWebhookDeliveryCommand(
+                ScmProvider.AzureDevOps, "path-key", headers, payload,
+                WebhookDeliveryProcessingMode.AcceptAndQueue),
+            CancellationToken.None);
+
+        Assert.Equal(WebhookDeliveryOutcome.Accepted, result.DeliveryOutcome);
+        Assert.Equal(200, result.HttpStatusCode);
+        Assert.Contains(result.ActionSummaries, summary => summary.Contains("already queued", StringComparison.Ordinal));
+    }
+
     [Fact]
     public async Task HandleAsync_AzureDevOpsCommentDelivery_UsesWebhookSecretAndSharedSynchronization()
     {
@@ -132,7 +424,8 @@ public sealed class HandleProviderWebhookDeliveryHandlerTests
             clientRegistry,
             secretProtectionCodec,
             NullLogger<HandleProviderWebhookDeliveryHandler>.Instance,
-            synchronizationService);
+            synchronizationService,
+            Substitute.For<IWebhookDeliveryQueue>());
         var payload = "{\"eventType\":\"ms.vss-code.git-pullrequest-comment-event\"}";
         var headers = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
         {
@@ -140,7 +433,9 @@ public sealed class HandleProviderWebhookDeliveryHandlerTests
         };
 
         var result = await sut.HandleAsync(
-            new HandleProviderWebhookDeliveryCommand(ScmProvider.AzureDevOps, "path-key", headers, payload),
+            new HandleProviderWebhookDeliveryCommand(
+                ScmProvider.AzureDevOps, "path-key", headers, payload,
+                WebhookDeliveryProcessingMode.Process),
             CancellationToken.None);
 
         Assert.Equal(WebhookDeliveryOutcome.Accepted, result.DeliveryOutcome);
@@ -192,10 +487,13 @@ public sealed class HandleProviderWebhookDeliveryHandlerTests
             secretProtectionCodec,
             NullLogger<HandleProviderWebhookDeliveryHandler>.Instance,
             synchronizationService,
+            Substitute.For<IWebhookDeliveryQueue>(),
             providerActivationService);
 
         var result = await sut.HandleAsync(
-            new HandleProviderWebhookDeliveryCommand(ScmProvider.GitHub, "path-key", CreateHeaders(), "{}"),
+            new HandleProviderWebhookDeliveryCommand(
+                ScmProvider.GitHub, "path-key", CreateHeaders(), "{}",
+                WebhookDeliveryProcessingMode.Process),
             CancellationToken.None);
 
         Assert.Equal(WebhookDeliveryOutcome.Rejected, result.DeliveryOutcome);
@@ -305,10 +603,13 @@ public sealed class HandleProviderWebhookDeliveryHandlerTests
             clientRegistry,
             secretProtectionCodec,
             NullLogger<HandleProviderWebhookDeliveryHandler>.Instance,
-            synchronizationService);
+            synchronizationService,
+            Substitute.For<IWebhookDeliveryQueue>());
 
         var result = await sut.HandleAsync(
-            new HandleProviderWebhookDeliveryCommand(ScmProvider.AzureDevOps, "path-key", CreateHeaders(), "{}"),
+            new HandleProviderWebhookDeliveryCommand(
+                ScmProvider.AzureDevOps, "path-key", CreateHeaders(), "{}",
+                WebhookDeliveryProcessingMode.Process),
             CancellationToken.None);
 
         Assert.Equal(WebhookDeliveryOutcome.Accepted, result.DeliveryOutcome);
@@ -350,10 +651,13 @@ public sealed class HandleProviderWebhookDeliveryHandlerTests
             clientRegistry,
             secretProtectionCodec,
             NullLogger<HandleProviderWebhookDeliveryHandler>.Instance,
-            synchronizationService);
+            synchronizationService,
+            Substitute.For<IWebhookDeliveryQueue>());
 
         var result = await sut.HandleAsync(
-            new HandleProviderWebhookDeliveryCommand(ScmProvider.GitHub, "missing-path", CreateHeaders(), "{}"),
+            new HandleProviderWebhookDeliveryCommand(
+                ScmProvider.GitHub, "missing-path", CreateHeaders(), "{}",
+                WebhookDeliveryProcessingMode.Process),
             CancellationToken.None);
 
         Assert.Equal(WebhookDeliveryOutcome.Rejected, result.DeliveryOutcome);
@@ -411,10 +715,13 @@ public sealed class HandleProviderWebhookDeliveryHandlerTests
             clientRegistry,
             secretProtectionCodec,
             NullLogger<HandleProviderWebhookDeliveryHandler>.Instance,
-            synchronizationService);
+            synchronizationService,
+            Substitute.For<IWebhookDeliveryQueue>());
 
         var result = await sut.HandleAsync(
-            new HandleProviderWebhookDeliveryCommand(ScmProvider.GitHub, "path-key", CreateHeaders(), "{}"),
+            new HandleProviderWebhookDeliveryCommand(
+                ScmProvider.GitHub, "path-key", CreateHeaders(), "{}",
+                WebhookDeliveryProcessingMode.Process),
             CancellationToken.None);
 
         Assert.Equal(WebhookDeliveryOutcome.Rejected, result.DeliveryOutcome);
@@ -485,11 +792,14 @@ public sealed class HandleProviderWebhookDeliveryHandlerTests
             clientRegistry,
             secretProtectionCodec,
             NullLogger<HandleProviderWebhookDeliveryHandler>.Instance,
-            synchronizationService);
+            synchronizationService,
+            Substitute.For<IWebhookDeliveryQueue>());
 
         var payload = "{\"eventType\":\"ms.vss-code.git-pullrequest-comment-event\"}";
         var result = await sut.HandleAsync(
-            new HandleProviderWebhookDeliveryCommand(ScmProvider.AzureDevOps, "path-key", CreateHeaders(), payload),
+            new HandleProviderWebhookDeliveryCommand(
+                ScmProvider.AzureDevOps, "path-key", CreateHeaders(), payload,
+                WebhookDeliveryProcessingMode.Process),
             CancellationToken.None);
 
         Assert.Equal(WebhookDeliveryOutcome.Rejected, result.DeliveryOutcome);
@@ -653,10 +963,13 @@ public sealed class HandleProviderWebhookDeliveryHandlerTests
             clientRegistry,
             secretProtectionCodec,
             NullLogger<HandleProviderWebhookDeliveryHandler>.Instance,
-            synchronizationService);
+            synchronizationService,
+            Substitute.For<IWebhookDeliveryQueue>());
 
         var result = await sut.HandleAsync(
-            new HandleProviderWebhookDeliveryCommand(ScmProvider.Forgejo, "path-key", CreateHeaders(), "{}"),
+            new HandleProviderWebhookDeliveryCommand(
+                ScmProvider.Forgejo, "path-key", CreateHeaders(), "{}",
+                WebhookDeliveryProcessingMode.Process),
             CancellationToken.None);
 
         Assert.Equal(WebhookDeliveryOutcome.Accepted, result.DeliveryOutcome);
@@ -789,10 +1102,13 @@ public sealed class HandleProviderWebhookDeliveryHandlerTests
             clientRegistry,
             secretProtectionCodec,
             NullLogger<HandleProviderWebhookDeliveryHandler>.Instance,
-            synchronizationService);
+            synchronizationService,
+            Substitute.For<IWebhookDeliveryQueue>());
 
         var result = await sut.HandleAsync(
-            new HandleProviderWebhookDeliveryCommand(ScmProvider.GitHub, "path-key", CreateHeaders(), "{}"),
+            new HandleProviderWebhookDeliveryCommand(
+                ScmProvider.GitHub, "path-key", CreateHeaders(), "{}",
+                WebhookDeliveryProcessingMode.Process),
             CancellationToken.None);
 
         Assert.Equal(WebhookDeliveryOutcome.Accepted, result.DeliveryOutcome);
@@ -912,10 +1228,13 @@ public sealed class HandleProviderWebhookDeliveryHandlerTests
             clientRegistry,
             secretProtectionCodec,
             NullLogger<HandleProviderWebhookDeliveryHandler>.Instance,
-            synchronizationService);
+            synchronizationService,
+            Substitute.For<IWebhookDeliveryQueue>());
 
         var result = await sut.HandleAsync(
-            new HandleProviderWebhookDeliveryCommand(ScmProvider.Forgejo, "path-key", CreateHeaders(), "{}"),
+            new HandleProviderWebhookDeliveryCommand(
+                ScmProvider.Forgejo, "path-key", CreateHeaders(), "{}",
+                WebhookDeliveryProcessingMode.Process),
             CancellationToken.None);
 
         Assert.Equal(WebhookDeliveryOutcome.Accepted, result.DeliveryOutcome);
@@ -1023,10 +1342,13 @@ public sealed class HandleProviderWebhookDeliveryHandlerTests
             clientRegistry,
             secretProtectionCodec,
             NullLogger<HandleProviderWebhookDeliveryHandler>.Instance,
-            synchronizationService);
+            synchronizationService,
+            Substitute.For<IWebhookDeliveryQueue>());
 
         var result = await sut.HandleAsync(
-            new HandleProviderWebhookDeliveryCommand(ScmProvider.Forgejo, "path-key", CreateHeaders(), "{}"),
+            new HandleProviderWebhookDeliveryCommand(
+                ScmProvider.Forgejo, "path-key", CreateHeaders(), "{}",
+                WebhookDeliveryProcessingMode.Process),
             CancellationToken.None);
 
         Assert.Equal(WebhookDeliveryOutcome.Accepted, result.DeliveryOutcome);

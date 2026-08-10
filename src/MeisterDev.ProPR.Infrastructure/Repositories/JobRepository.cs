@@ -80,35 +80,62 @@ public sealed partial class JobRepository(
     /// <inheritdoc />
     public async Task<bool> TryTransitionAsync(Guid id, JobStatus from, JobStatus to, CancellationToken ct = default)
     {
-        var job = await dbContext.ReviewJobs.FindAsync([id], ct);
-        if (job is null || job.Status != from)
+        if (!dbContext.Database.IsRelational())
+        {
+            return await this.TryTransitionInMemoryAsync(id, from, to, ct).ConfigureAwait(false);
+        }
+
+        // One conditional statement, carrying the expected status in its predicate, so the database picks the
+        // winner. Loading the row, comparing its status in memory, and saving it back let two hosts both
+        // believe they had won: there is no concurrency token on this model for the save to catch.
+        var candidates = dbContext.ReviewJobs.Where(j => j.Id == id && j.Status == from);
+        if (from == JobStatus.Processing && to == JobStatus.Pending)
+        {
+            // Never while comments are going out: requeuing a publishing job is how the same review gets
+            // posted twice, whoever asks.
+            candidates = candidates.Where(j => j.PublishingStartedAt == null);
+        }
+
+        var affected = to == JobStatus.Processing
+            ? await candidates.ExecuteUpdateAsync(
+                setters => setters
+                    .SetProperty(j => j.Status, to)
+                    .SetProperty(j => j.ProcessingStartedAt, DateTimeOffset.UtcNow),
+                ct)
+            : from == JobStatus.Processing && to == JobStatus.Pending
+                // A requeued job goes back to the pool clean. Left stamped, the lease columns make a
+                // Pending job read as held, and the next claim inherits state from an attempt that is over.
+                ? await candidates.ExecuteUpdateAsync(
+                    setters => setters
+                        .SetProperty(j => j.Status, to)
+                        .SetProperty(j => j.LeaseOwner, (string?)null)
+                        .SetProperty(j => j.LeaseExpiresAt, (DateTimeOffset?)null)
+                        .SetProperty(j => j.LastHeartbeatAt, (DateTimeOffset?)null),
+                    ct)
+                : await candidates.ExecuteUpdateAsync(setters => setters.SetProperty(j => j.Status, to), ct);
+
+        if (affected == 0)
         {
             return false;
         }
 
-        job.Status = to;
-        if (to == JobStatus.Processing)
+        // That statement went straight to the database, so a copy this context happens to be tracking still
+        // holds the old status, and callers hand exactly that instance on to execution.
+        var tracked = dbContext.ChangeTracker.Entries<ReviewJob>()
+            .FirstOrDefault(entry => entry.Entity.Id == id);
+        if (tracked is not null)
         {
-            job.ProcessingStartedAt = DateTimeOffset.UtcNow;
+            await tracked.ReloadAsync(ct).ConfigureAwait(false);
         }
 
-        try
+        if (from == JobStatus.Processing && to == JobStatus.Pending)
         {
-            await dbContext.SaveChangesAsync(ct).ConfigureAwait(false);
-            if (from == JobStatus.Processing && to == JobStatus.Pending)
-            {
-                // Recovery reset: the job is leaving Processing, so any still-open protocol
-                // rows are abandoned in-flight passes that will never be finalized.
-                await this.CloseOpenProtocolsAsync(id).ConfigureAwait(false);
-            }
+            // Recovery reset: the job is leaving Processing, so any still-open protocol
+            // rows are abandoned in-flight passes that will never be finalized.
+            await this.CloseOpenProtocolsAsync(id).ConfigureAwait(false);
+        }
 
-            return true;
-        }
-        catch (DbUpdateConcurrencyException)
-        {
-            await dbContext.Entry(job).ReloadAsync(ct).ConfigureAwait(false);
-            return false;
-        }
+        return true;
     }
 
     /// <inheritdoc />
@@ -132,6 +159,32 @@ public sealed partial class JobRepository(
             .ToList();
 
         this.HydrateSourceScopes(jobs);
+        return jobs;
+    }
+
+    /// <inheritdoc />
+    public async Task<IReadOnlyList<ReviewJob>> GetClaimCandidatesAsync(
+        int limit,
+        DateTimeOffset? submittedAfter = null,
+        CancellationToken ct = default)
+    {
+        if (limit < 1)
+        {
+            return [];
+        }
+
+        var pending = dbContext.ReviewJobs.Where(j => j.Status == JobStatus.Pending);
+        if (submittedAfter is { } cursor)
+        {
+            pending = pending.Where(j => j.SubmittedAt > cursor);
+        }
+
+        var jobs = await pending
+            .OrderBy(j => j.SubmittedAt)
+            .Take(limit)
+            .ToListAsync(ct);
+
+        await this.HydrateSourceScopesAsync(jobs, ct);
         return jobs;
     }
 
@@ -615,6 +668,7 @@ public sealed partial class JobRepository(
         job.Status = JobStatus.Failed;
         job.CompletedAt = DateTimeOffset.UtcNow;
         await dbContext.SaveChangesAsync(ct).ConfigureAwait(false);
+        await this.ClearLeaseAsync(job, ct).ConfigureAwait(false);
         await this.CloseOpenProtocolsAsync(id).ConfigureAwait(false);
     }
 
@@ -646,6 +700,7 @@ public sealed partial class JobRepository(
         job.ApplyResult(result);
         job.Status = JobStatus.Completed;
         job.CompletedAt = DateTimeOffset.UtcNow;
+        await this.ClearLeaseAsync(job, ct).ConfigureAwait(false);
 
         // A per-increment soft cap stops a running job from scanning further files but lets it finish with a
         // synthesis, so the job completes normally. Record the breach on the completed job so the UI can mark the
@@ -716,17 +771,27 @@ public sealed partial class JobRepository(
         Guid jobId,
         CancellationToken ct)
     {
+        if (!db.Database.IsRelational())
+        {
+            return Task.CompletedTask;
+        }
+
         return db.ReviewJobs
             .Where(j => j.Id == jobId)
             .ExecuteUpdateAsync(
-                setters => setters.SetProperty(
-                    j => j.ReviewedFileCount,
-                    j => db.ReviewFileResults.Count(r =>
-                        r.JobId == jobId
-                        && r.IsComplete
-                        && !r.IsFailed
-                        && !r.IsExcluded
-                        && !r.IsCarriedForward)),
+                setters => setters
+                    .SetProperty(
+                        j => j.ReviewedFileCount,
+                        j => db.ReviewFileResults.Count(r =>
+                            r.JobId == jobId
+                            && r.IsComplete
+                            && !r.IsFailed
+                            && !r.IsExcluded
+                            && !r.IsCarriedForward))
+                    // Completing files is the progress that clears a job's run of interruptions. Without
+                    // this, a job interrupted by three unrelated deploys would exhaust its reclaim budget
+                    // even though every attempt had got further than the one before.
+                    .SetProperty(j => j.ConsecutiveReclaimCount, 0),
                 ct);
     }
 
@@ -834,20 +899,6 @@ public sealed partial class JobRepository(
     }
 
     /// <inheritdoc />
-    public async Task<IReadOnlyList<ReviewJob>> GetStuckProcessingJobsAsync(
-        TimeSpan threshold,
-        CancellationToken ct = default)
-    {
-        var staleBeforeUtc = DateTimeOffset.UtcNow - threshold;
-        var jobs = await dbContext.ReviewJobs
-            .Where(j => j.Status == JobStatus.Processing && j.ProcessingStartedAt < staleBeforeUtc)
-            .ToListAsync(ct);
-
-        await this.HydrateSourceScopesAsync(jobs, ct);
-        return jobs;
-    }
-
-    /// <inheritdoc />
     [Obsolete("Use GetByIdWithProtocolsAsync instead.")]
     public async Task<ReviewJob?> GetByIdWithProtocolAsync(Guid id, CancellationToken ct = default)
     {
@@ -866,6 +917,7 @@ public sealed partial class JobRepository(
         job.Status = JobStatus.Cancelled;
         job.CompletedAt = DateTimeOffset.UtcNow;
         await dbContext.SaveChangesAsync(ct).ConfigureAwait(false);
+        await this.ClearLeaseAsync(job, ct).ConfigureAwait(false);
         await this.CloseOpenProtocolsAsync(id).ConfigureAwait(false);
     }
 
@@ -881,6 +933,7 @@ public sealed partial class JobRepository(
         job.Status = JobStatus.Superseded;
         job.CompletedAt = DateTimeOffset.UtcNow;
         await dbContext.SaveChangesAsync(ct).ConfigureAwait(false);
+        await this.ClearLeaseAsync(job, ct).ConfigureAwait(false);
         await this.CloseOpenProtocolsAsync(id).ConfigureAwait(false);
     }
 
@@ -896,6 +949,7 @@ public sealed partial class JobRepository(
         job.Status = JobStatus.Stopped;
         job.CompletedAt = DateTimeOffset.UtcNow;
         await dbContext.SaveChangesAsync(ct).ConfigureAwait(false);
+        await this.ClearLeaseAsync(job, ct).ConfigureAwait(false);
         await this.CloseOpenProtocolsAsync(id).ConfigureAwait(false);
     }
 
@@ -919,6 +973,7 @@ public sealed partial class JobRepository(
         job.Status = JobStatus.BudgetExceeded;
         job.CompletedAt = DateTimeOffset.UtcNow;
         await dbContext.SaveChangesAsync(ct).ConfigureAwait(false);
+        await this.ClearLeaseAsync(job, ct).ConfigureAwait(false);
         await this.CloseOpenProtocolsAsync(id).ConfigureAwait(false);
     }
 
@@ -941,6 +996,7 @@ public sealed partial class JobRepository(
         job.SetBudgetBlock(scope, capKind, thresholdUsd, spentUsd);
         job.Status = JobStatus.BudgetHeld;
         await dbContext.SaveChangesAsync(ct).ConfigureAwait(false);
+        await this.ClearLeaseAsync(job, ct).ConfigureAwait(false);
     }
 
     /// <inheritdoc />
@@ -1127,7 +1183,11 @@ public sealed partial class JobRepository(
                         (j.Status == JobStatus.Completed ||
                          j.Status == JobStatus.Failed ||
                          j.Status == JobStatus.Cancelled ||
-                         j.Status == JobStatus.Superseded))
+                         j.Status == JobStatus.Superseded ||
+                         // A stopped job's finished files are paid for and still valid for this revision.
+                         // Excluding it stranded that work: restart refuses a stopped job, so the only way
+                         // back was a fresh push, which re-reviews everything from the beginning.
+                         j.Status == JobStatus.Stopped))
             .ToListAsync(ct);
 
         var job = matchingJobs
@@ -1279,6 +1339,76 @@ public sealed partial class JobRepository(
                 },
                 ct);
         }
+    }
+
+    /// <summary>
+    ///     Clears the lease columns of a job that has reached a terminal state, leaving the generation so a
+    ///     holder that comes back stays recognisably stale. Written as a statement rather than through the
+    ///     change tracker: the claim stamps these columns with a statement of its own, so a context that
+    ///     loaded the job beforehand holds a snapshot in which they are still empty, and clearing them in
+    ///     memory would look like no change at all.
+    /// </summary>
+    private async Task ClearLeaseAsync(ReviewJob job, CancellationToken ct)
+    {
+        job.ClearLease();
+
+        if (!dbContext.Database.IsRelational())
+        {
+            // The in-memory provider has no statement form. It also has no second writer to race, so the
+            // tracked write above already says everything there is to say.
+            await dbContext.SaveChangesAsync(ct).ConfigureAwait(false);
+            return;
+        }
+
+        await dbContext.ReviewJobs
+            .Where(j => j.Id == job.Id)
+            .ExecuteUpdateAsync(
+                setters => setters
+                    .SetProperty(j => j.LeaseOwner, (string?)null)
+                    .SetProperty(j => j.LeaseExpiresAt, (DateTimeOffset?)null)
+                    .SetProperty(j => j.LastHeartbeatAt, (DateTimeOffset?)null),
+                ct)
+            .ConfigureAwait(false);
+    }
+
+    /// <summary>
+    ///     The status transition without a conditional statement, for the in-memory provider the controller
+    ///     tests run on. Nothing in production takes this path: PostgreSQL is the only provider the
+    ///     application is configured with, and only the statement form above makes the claim atomic.
+    /// </summary>
+    private async Task<bool> TryTransitionInMemoryAsync(Guid id, JobStatus from, JobStatus to, CancellationToken ct)
+    {
+        var job = await dbContext.ReviewJobs.FindAsync([id], ct);
+        if (job is null || job.Status != from)
+        {
+            return false;
+        }
+
+        if (from == JobStatus.Processing && to == JobStatus.Pending)
+        {
+            if (job.PublishingStartedAt is not null)
+            {
+                // Never while comments are going out, exactly as the relational statement refuses.
+                return false;
+            }
+
+            job.ClearLease();
+        }
+
+        job.Status = to;
+        if (to == JobStatus.Processing)
+        {
+            job.ProcessingStartedAt = DateTimeOffset.UtcNow;
+        }
+
+        await dbContext.SaveChangesAsync(ct).ConfigureAwait(false);
+
+        if (from == JobStatus.Processing && to == JobStatus.Pending)
+        {
+            await this.CloseOpenProtocolsAsync(id).ConfigureAwait(false);
+        }
+
+        return true;
     }
 
     private async Task AcquireReviewJobLockAsync(ReviewJob job, CancellationToken ct)

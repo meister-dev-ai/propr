@@ -63,6 +63,11 @@ Then start the stack with `docker compose up -d`, without `--build`. Keep the th
 [upgrades and backups](upgrades-and-backups.md#upgrading). Everything else in the file, including
 PostgreSQL and the bundled proxy, already runs published images.
 
+A fourth image, `ghcr.io/meister-dev-ai/propr/runner:<tag>`, is published from the same release and is
+not part of the compose stack. It runs on hosts of your own; see [scaling runners](#scaling-runners).
+Give it the same tag as the control plane, because a runner has to stay inside that control plane's
+contract compatibility window.
+
 ## Review workers
 
 There is no separate worker to deploy - the background work runs inside the API process, listed under
@@ -79,6 +84,70 @@ has no effect at all - see [editions](../reference/editions.md).
 More API instances is not the lever, and is not safe: those in-process workers are not coordinated
 between processes, so a second instance means the crawler, the mention scan and the retention purge all
 run twice. Run one API instance and raise its concurrency instead.
+
+## Scaling runners
+
+Runners are the one part of ProPR you can add more of. The in-process workers above are not coordinated
+between API instances, so a second API is unsafe; a second runner is the supported way to review more at
+once. See [the runner architecture](../reference/runner-architecture.md) for what a runner is.
+
+Two shapes work, and they differ in how a host gets its enrollment.
+
+**Hosts you start yourself.** Issue a token per host and start it. Straightforward, and what a small
+installation should do.
+
+**A group the platform scales for you**, such as Azure Container Apps, a Kubernetes Deployment or an ECS
+service. Replicas appear without an operator present, so they cannot each be handed their own token. Issue one
+token whose enrollment count covers the replicas the group may run, put it in the platform's secret
+store, and give every replica the same environment. Each spends one use as it starts.
+
+### Scaling on the queue, not on traffic
+
+A runner polls for work; nothing calls it. An HTTP scale rule therefore measures nothing, and the default
+Container Apps rule will hold the group at its minimum however deep the queue is. Scale on the queue
+itself with a KEDA PostgreSQL scaler pointed at the control plane's database:
+
+```yaml
+scale:
+  minReplicas: 1
+  maxReplicas: 10
+  rules:
+    - name: pending-reviews
+      custom:
+        type: postgresql
+        metadata:
+          query: "SELECT count(*) FROM review_jobs WHERE status = 'Pending'"
+          targetQueryValue: "2"
+        auth:
+          - secretRef: propr-db-connection
+            triggerParameter: connection
+```
+
+`targetQueryValue` is jobs per replica: at two, a queue of ten asks for five replicas. Size it against
+`RUNNER_CAPACITY`, which is how many each replica runs at once. A capacity of two and a target of two
+means a replica is asked for only once the existing ones are full.
+
+**On `minReplicas: 0`.** Scale-to-zero is cheapest and costs the first review of an idle period a cold
+start, including the runner's tree-sitter probe. For a tool somebody is waiting on, one warm replica is
+usually worth more than the saving.
+
+### What a rolling update depends on
+
+Three behaviours make a redeploy safe.
+
+**Draining.** The platform signals the replica and waits. The runner releases the leases it holds on
+shutdown, so a job in flight returns to Pending and another replica picks it up. Give the group a
+termination grace period long enough for that release. It takes a handful of requests, not the length of
+a review.
+
+**Version skew.** During the rollout, replicas on both the old and new contract version poll at once. The
+compatibility window covers this: a runner outside it is refused in a way that reads as a lost lease
+rather than a crash. Skipping enough versions in one jump to leave that window is what breaks it, so
+update runners with the control plane rather than long after it.
+
+**Identity.** A replaced replica does not keep its registry row. The credential is held in memory only,
+so the new one enrolls afresh. Rows from replicas that are gone are removed by the prune sweep; see
+`RUNNER_PRUNE_UNSEEN_DAYS` in [the configuration reference](configuration.md).
 
 ## Review workspace
 

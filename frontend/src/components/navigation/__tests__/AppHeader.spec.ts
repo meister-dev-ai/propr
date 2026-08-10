@@ -168,6 +168,54 @@ describe('AppHeader', () => {
     expect(wrapper.text()).toContain('Reviewer Performance')
   })
 
+  // A platform administrator holds no tenant membership, so deriving the link's tenant from memberships
+  // hid Runners from precisely the operator the installation-wide API accepts.
+  it('points a platform administrator at the installation-wide fleet without a tenant membership', async () => {
+    isAdmin.value = true
+    tenantRoles.value = {}
+    availableCapabilities.value = ['distributed-execution']
+
+    const wrapper = await mountHeader()
+    await wrapper.get('.dropdown-toggle').trigger('click')
+
+    const runnersLink = wrapper.findAllComponents(RouterLinkStub)
+      .find((component) => component.text() === 'Runners')
+
+    expect(runnersLink?.props('to')).toEqual({ name: 'runners-all' })
+  })
+
+  it('points a tenant administrator at their own tenant fleet', async () => {
+    tenantRoles.value = { 'tenant-1': 1 }
+    availableCapabilities.value = ['distributed-execution']
+
+    const wrapper = await mountHeader()
+    await wrapper.get('.dropdown-toggle').trigger('click')
+
+    const runnersLink = wrapper.findAllComponents(RouterLinkStub)
+      .find((component) => component.text() === 'Runners')
+
+    expect(runnersLink?.props('to')).toEqual({ name: 'runners', params: { tenantId: 'tenant-1' } })
+  })
+
+  it('keeps Runners hidden from a tenant member who administers nothing', async () => {
+    tenantRoles.value = { 'tenant-1': 0 }
+    availableCapabilities.value = ['distributed-execution']
+
+    const wrapper = await mountHeader()
+
+    expect(wrapper.text()).not.toContain('Runners')
+  })
+
+  it('leaves Runners out for an installation without distributed execution', async () => {
+    isAdmin.value = true
+    availableCapabilities.value = []
+
+    const wrapper = await mountHeader()
+    await wrapper.get('.dropdown-toggle').trigger('click')
+
+    expect(wrapper.text()).not.toContain('Runners')
+  })
+
   it('leaves Reviewer Performance out for an unlicensed installation', async () => {
     isAdmin.value = true
     availableCapabilities.value = []

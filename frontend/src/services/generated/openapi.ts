@@ -865,6 +865,463 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/admin/runners": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * The whole installation's fleet, every tenant together, for the operator who administers all of
+         *     them. Each runner names the tenant it belongs to, because across tenants a display name alone
+         *     does not identify a host.
+         */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["RunnerRegistryDto"];
+                        "application/json": components["schemas"]["RunnerRegistryDto"];
+                        "text/json": components["schemas"]["RunnerRegistryDto"];
+                    };
+                };
+                /** @description Unauthorized */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Forbidden */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Conflict */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/runners/{tenantId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Every runner enrolled in one tenant, with its health, scope, and current work. */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    /** @description The tenant whose registry to read. */
+                    tenantId: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["RunnerRegistryDto"];
+                        "application/json": components["schemas"]["RunnerRegistryDto"];
+                        "text/json": components["schemas"]["RunnerRegistryDto"];
+                    };
+                };
+                /** @description Unauthorized */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Forbidden */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Conflict */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/runners/tokens": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Issues a registration token. The value is returned here and never again. Single-use unless the
+         *     request asks for more, which is what a scaling group needs: its replicas start without an
+         *     operator present to issue each of them one.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            /** @description Which tenant and clients the enrolled runner will be scoped to. */
+            requestBody?: {
+                content: {
+                    "application/json": components["schemas"]["IssueRunnerTokenRequest"];
+                    "text/json": components["schemas"]["IssueRunnerTokenRequest"];
+                    "application/*+json": components["schemas"]["IssueRunnerTokenRequest"];
+                };
+            };
+            responses: {
+                /** @description Created */
+                201: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["RunnerRegistrationTokenDto"];
+                        "application/json": components["schemas"]["RunnerRegistrationTokenDto"];
+                        "text/json": components["schemas"]["RunnerRegistrationTokenDto"];
+                    };
+                };
+                /** @description Bad Request */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Unauthorized */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Forbidden */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Conflict */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/runners/{runnerId}/revoke": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Revokes a runner. It stops being able to lease immediately. */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    /** @description The runner to revoke. */
+                    runnerId: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description No Content */
+                204: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Not Found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/runners/{runnerId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Deletes a runner's row from the registry. This is how a stale identity — a host that was
+         *     redeployed and re-enrolled as somebody new — stops counting as capacity and stops sitting amber
+         *     in the fleet view forever. Refused while the runner holds a lease: revoke it first, let the
+         *     lease expire, then delete.
+         */
+        delete: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    /** @description The runner to delete. */
+                    runnerId: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description No Content */
+                204: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Not Found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Conflict */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+            };
+        };
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/runners/tokens/{tokenId}/revoke": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Revokes an issued registration token so it can no longer enroll anything. */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    /** @description The token to revoke. */
+                    tokenId: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description No Content */
+                204: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Not Found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/runners/{runnerId}/scope": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Re-stamps which clients a runner may serve, taking effect on its next lease. */
+        put: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    /** @description The runner. */
+                    runnerId: string;
+                };
+                cookie?: never;
+            };
+            /** @description The new scope. */
+            requestBody?: {
+                content: {
+                    "application/json": components["schemas"]["AssignRunnerScopeRequest"];
+                    "text/json": components["schemas"]["AssignRunnerScopeRequest"];
+                    "application/*+json": components["schemas"]["AssignRunnerScopeRequest"];
+                };
+            };
+            responses: {
+                /** @description No Content */
+                204: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Not Found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+            };
+        };
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/admin/identity/users": {
         parameters: {
             query?: never;
@@ -11691,6 +12148,938 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/runners/execution/tools/changed-files": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Source-control metadata: the files this review's revision changed. */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: {
+                content: {
+                    "application/json": components["schemas"]["RunnerJobCallRequest"];
+                    "text/json": components["schemas"]["RunnerJobCallRequest"];
+                    "application/*+json": components["schemas"]["RunnerJobCallRequest"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/runners/execution/tools/knowledge": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** A repository-aware knowledge answer. */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: {
+                content: {
+                    "application/json": components["schemas"]["RunnerKnowledgeRequest"];
+                    "text/json": components["schemas"]["RunnerKnowledgeRequest"];
+                    "application/*+json": components["schemas"]["RunnerKnowledgeRequest"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/runners/execution/tools/linked-item-discussion": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** The discussion on a work item linked to the review. */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: {
+                content: {
+                    "application/json": components["schemas"]["RunnerLinkedItemRequest"];
+                    "text/json": components["schemas"]["RunnerLinkedItemRequest"];
+                    "application/*+json": components["schemas"]["RunnerLinkedItemRequest"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/runners/execution/tools/symbol-insight": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Symbol-aware insight, through the code-knowledge service the executor cannot reach. */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: {
+                content: {
+                    "application/json": components["schemas"]["RunnerSymbolInsightRequest"];
+                    "text/json": components["schemas"]["RunnerSymbolInsightRequest"];
+                    "application/*+json": components["schemas"]["RunnerSymbolInsightRequest"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/runners/execution/tools/linked-item-details": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** The structured fields of a work item linked to the review. */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: {
+                content: {
+                    "application/json": components["schemas"]["RunnerLinkedItemRequest"];
+                    "text/json": components["schemas"]["RunnerLinkedItemRequest"];
+                    "application/*+json": components["schemas"]["RunnerLinkedItemRequest"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/runners/execution/tools/resolve-linked-item": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Resolves a related link on a linked item into a full summary. */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: {
+                content: {
+                    "application/json": components["schemas"]["RunnerRelatedItemRequest"];
+                    "text/json": components["schemas"]["RunnerRelatedItemRequest"];
+                    "application/*+json": components["schemas"]["RunnerRelatedItemRequest"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/runners/execution/memory/reconsider": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Reconsiders one file's draft result against the thread-memory store. */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: {
+                content: {
+                    "application/json": components["schemas"]["RunnerMemoryReconsiderRequest"];
+                    "text/json": components["schemas"]["RunnerMemoryReconsiderRequest"];
+                    "application/*+json": components["schemas"]["RunnerMemoryReconsiderRequest"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/runners/execution/ai/chat": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Relays one chat completion, charged and capped centrally. */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: {
+                content: {
+                    "application/json": components["schemas"]["RunnerChatRequest"];
+                    "text/json": components["schemas"]["RunnerChatRequest"];
+                    "application/*+json": components["schemas"]["RunnerChatRequest"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/runners/execution/ingest": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Applies one batch of trace events, per-file results, and spend. */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: {
+                content: {
+                    "application/json": components["schemas"]["RunnerIngestRequest"];
+                    "text/json": components["schemas"]["RunnerIngestRequest"];
+                    "application/*+json": components["schemas"]["RunnerIngestRequest"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/runners/execution/prior-results": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * What this job already has reviewed, for an executor picking it up after a reclaim.
+         *
+         *     Read here rather than carried in the manifest: a completed file result holds its findings, so
+         *         a job most of the way through a large review would put all of them in every lease offer, and
+         *         only a reclaim ever needs them.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: {
+                content: {
+                    "application/json": components["schemas"]["RunnerJobCallRequest"];
+                    "text/json": components["schemas"]["RunnerJobCallRequest"];
+                    "application/*+json": components["schemas"]["RunnerJobCallRequest"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/runners/execution/findings": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Submits one chunk of the review's findings for the control plane to publish. */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: {
+                content: {
+                    "application/json": components["schemas"]["RunnerFindingsRequest"];
+                    "text/json": components["schemas"]["RunnerFindingsRequest"];
+                    "application/*+json": components["schemas"]["RunnerFindingsRequest"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/runners/execution/workspace": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Where to fetch this job's repository content from, if the fetch is allowed. */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: {
+                content: {
+                    "application/json": components["schemas"]["RunnerJobCallRequest"];
+                    "text/json": components["schemas"]["RunnerJobCallRequest"];
+                    "application/*+json": components["schemas"]["RunnerJobCallRequest"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/runners/execution/workspace/{jobId}/{generation}/info/refs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * The ref advertisement a git client reads first. Authorized per lease like everything else, so a
+         *     runner that lost the job cannot keep pulling its repository.
+         */
+        get: {
+            parameters: {
+                query?: {
+                    service?: string;
+                };
+                header?: never;
+                path: {
+                    jobId: string;
+                    generation: number;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/runners/execution/workspace/{jobId}/{generation}/git-upload-pack": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Serves the client's negotiation and streams back the pack. */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    jobId: string;
+                    generation: number;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/runners/lease": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Asks for a job. Answered with a manifest, or with a typed reason there is none. */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            /** @description How much room the runner has and which contract it speaks. */
+            requestBody?: {
+                content: {
+                    "application/json": components["schemas"]["RunnerLeaseHttpRequest"];
+                    "text/json": components["schemas"]["RunnerLeaseHttpRequest"];
+                    "application/*+json": components["schemas"]["RunnerLeaseHttpRequest"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["RunnerJobManifest"];
+                        "application/json": components["schemas"]["RunnerJobManifest"];
+                        "text/json": components["schemas"]["RunnerJobManifest"];
+                    };
+                };
+                /** @description No Content */
+                204: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Unauthorized */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["RunnerContractError"];
+                        "application/json": components["schemas"]["RunnerContractError"];
+                        "text/json": components["schemas"]["RunnerContractError"];
+                    };
+                };
+                /** @description Conflict */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["RunnerContractError"];
+                        "application/json": components["schemas"]["RunnerContractError"];
+                        "text/json": components["schemas"]["RunnerContractError"];
+                    };
+                };
+                /** @description Too Many Requests */
+                429: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["RunnerContractError"];
+                        "application/json": components["schemas"]["RunnerContractError"];
+                        "text/json": components["schemas"]["RunnerContractError"];
+                    };
+                };
+                /** @description Service Unavailable */
+                503: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["RunnerContractError"];
+                        "application/json": components["schemas"]["RunnerContractError"];
+                        "text/json": components["schemas"]["RunnerContractError"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/runners/lease/heartbeat": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Keeps a lease alive while the review runs, and carries back the one instruction the control
+         *     plane has for a job already in flight.
+         *
+         *     Answered 200 whether or not the renewal was accepted. A refusal has a reason the executor
+         *         must act on differently — a lost lease means stop quietly, a revoked client means stop and
+         *         say so — and a bare status code cannot carry that.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            /** @description The job and generation being renewed. */
+            requestBody?: {
+                content: {
+                    "application/json": components["schemas"]["RunnerLeaseHeartbeatRequest"];
+                    "text/json": components["schemas"]["RunnerLeaseHeartbeatRequest"];
+                    "application/*+json": components["schemas"]["RunnerLeaseHeartbeatRequest"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["RunnerHeartbeatResponse"];
+                        "application/json": components["schemas"]["RunnerHeartbeatResponse"];
+                        "text/json": components["schemas"]["RunnerHeartbeatResponse"];
+                    };
+                };
+                /** @description Unauthorized */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["RunnerContractError"];
+                        "application/json": components["schemas"]["RunnerContractError"];
+                        "text/json": components["schemas"]["RunnerContractError"];
+                    };
+                };
+                /** @description Conflict */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["RunnerContractError"];
+                        "application/json": components["schemas"]["RunnerContractError"];
+                        "text/json": components["schemas"]["RunnerContractError"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/runners/lease/release": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Hands a lease back deliberately, so a planned shutdown costs the job nothing. */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            /** @description The job and generation being handed back. */
+            requestBody?: {
+                content: {
+                    "application/json": components["schemas"]["RunnerLeaseHandbackRequest"];
+                    "text/json": components["schemas"]["RunnerLeaseHandbackRequest"];
+                    "application/*+json": components["schemas"]["RunnerLeaseHandbackRequest"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Unauthorized */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["RunnerContractError"];
+                        "application/json": components["schemas"]["RunnerContractError"];
+                        "text/json": components["schemas"]["RunnerContractError"];
+                    };
+                };
+                /** @description Conflict */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["RunnerContractError"];
+                        "application/json": components["schemas"]["RunnerContractError"];
+                        "text/json": components["schemas"]["RunnerContractError"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/runners/register": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Enrolls a host presenting an operator-issued registration token. */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            /** @description The token, the name the host reports, and the contract it speaks. */
+            requestBody?: {
+                content: {
+                    "application/json": components["schemas"]["RunnerRegisterRequest"];
+                    "text/json": components["schemas"]["RunnerRegisterRequest"];
+                    "application/*+json": components["schemas"]["RunnerRegisterRequest"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["RunnerCredentialResponse"];
+                        "application/json": components["schemas"]["RunnerCredentialResponse"];
+                        "text/json": components["schemas"]["RunnerCredentialResponse"];
+                    };
+                };
+                /** @description Unauthorized */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["RunnerContractError"];
+                        "application/json": components["schemas"]["RunnerContractError"];
+                        "text/json": components["schemas"]["RunnerContractError"];
+                    };
+                };
+                /** @description Conflict */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["RunnerContractError"];
+                        "application/json": components["schemas"]["RunnerContractError"];
+                        "text/json": components["schemas"]["RunnerContractError"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/runners/credential/renew": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Issues a fresh credential to an enrolled runner, keeping its identity and stamped scope. */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            /** @description The contract the runner speaks. */
+            requestBody?: {
+                content: {
+                    "application/json": components["schemas"]["RunnerCredentialRenewRequest"];
+                    "text/json": components["schemas"]["RunnerCredentialRenewRequest"];
+                    "application/*+json": components["schemas"]["RunnerCredentialRenewRequest"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["RunnerCredentialResponse"];
+                        "application/json": components["schemas"]["RunnerCredentialResponse"];
+                        "text/json": components["schemas"]["RunnerCredentialResponse"];
+                    };
+                };
+                /** @description Unauthorized */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["RunnerContractError"];
+                        "application/json": components["schemas"]["RunnerContractError"];
+                        "text/json": components["schemas"]["RunnerContractError"];
+                    };
+                };
+                /** @description Conflict */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["RunnerContractError"];
+                        "application/json": components["schemas"]["RunnerContractError"];
+                        "text/json": components["schemas"]["RunnerContractError"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/tenants/{tenantId}/ai-connections": {
         parameters: {
             query?: never;
@@ -14766,6 +16155,18 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        AIAnnotation: {
+            annotatedRegions?: components["schemas"]["AnnotatedRegion"][] | null;
+            additionalProperties?: {
+                [key: string]: unknown;
+            } | null;
+        };
+        AIContent: {
+            annotations?: components["schemas"]["AIAnnotation"][] | null;
+            additionalProperties?: {
+                [key: string]: unknown;
+            } | null;
+        };
         /** @description A branch option discovered for one source. */
         AdoBranchOptionDto: {
             branchName?: string | null;
@@ -15166,6 +16567,7 @@ export interface components {
          * @enum {string}
          */
         AiVerificationStatus: "neverVerified" | "verified" | "failed";
+        AnnotatedRegion: Record<string, never>;
         /**
          * @description Global role assigned directly to an application user.
          * @enum {string}
@@ -15182,6 +16584,11 @@ export interface components {
             /** Format: uuid */
             clientId: string;
             role: components["schemas"]["ClientRole"];
+        };
+        /** @description A request to re-scope a runner. */
+        AssignRunnerScopeRequest: {
+            /** @description The new scope. Empty or absent means every client in the tenant. */
+            clientScope?: string[] | null;
         };
         /** @description Public authentication bootstrap information for the current installation edition. */
         AuthOptionsDto: {
@@ -15429,6 +16836,20 @@ export interface components {
         ChangePasswordRequest: {
             currentPassword?: string | null;
             newPassword?: string | null;
+        };
+        ChatMessage: {
+            authorName?: string | null;
+            /** Format: date-time */
+            createdAt?: string | null;
+            role?: components["schemas"]["ChatRole"];
+            contents?: components["schemas"]["AIContent"][] | null;
+            messageId?: string | null;
+            additionalProperties?: {
+                [key: string]: unknown;
+            } | null;
+        };
+        ChatRole: {
+            value?: string | null;
         };
         /**
          * @description Response DTO for `GET /admin/clients/{clientId}/budget/consumption`: the client's spend against its
@@ -16832,6 +18253,29 @@ export interface components {
          * @enum {string}
          */
         InstallationEdition: "community" | "commercial";
+        /** @description A request to mint a registration token. */
+        IssueRunnerTokenRequest: {
+            /**
+             * Format: uuid
+             * @description The tenant the enrolled runner will belong to.
+             */
+            tenantId?: string;
+            /** @description The clients it may serve. Empty or absent means every client in the tenant. */
+            clientScope?: string[] | null;
+            /**
+             * Format: int32
+             * @description How long the token stays usable, in hours. Omit it for a token that does not expire — an
+             *     operator's choice, and the right one for a key a scaling group reads from its secret store.
+             */
+            validForHours?: number | null;
+            /**
+             * Format: int32
+             * @description How many hosts may enroll with this token. Omit it for no limit. One suits a host enrolled by
+             *     hand; a scaling group needs more, because its replicas start without an operator present to
+             *     issue each of them a token.
+             */
+            maxUses?: number | null;
+        };
         /** @description Detailed response for a single job, including the per-tier token breakdown. */
         JobDetailResponse: {
             /** Format: uuid */
@@ -18177,6 +19621,23 @@ export interface components {
         PutClientReviewProfileRequest: {
             defaultReviewPipelineProfileId?: string | null;
         };
+        /** @description A queue that has work nothing is taking. */
+        QueueStallDto: {
+            /** @description Why. */
+            cause?: string | null;
+            /**
+             * Format: int32
+             * @description How many jobs are waiting.
+             */
+            pendingJobCount?: number;
+            /**
+             * Format: date-time
+             * @description When the longest-waiting job was submitted.
+             */
+            oldestPendingSince?: string;
+            /** @description Operator-readable detail. */
+            detail?: string | null;
+        };
         /** @description Refresh token request payload. */
         RefreshRequest: {
             refreshToken?: string | null;
@@ -18344,6 +19805,75 @@ export interface components {
             /** Format: int32 */
             number: number;
         };
+        /** @description Represents a single review comment produced by the review engine. */
+        ReviewComment: {
+            /** @description Optional file path the comment refers to. */
+            filePath?: string | null;
+            /**
+             * Format: int32
+             * @description Optional line number within the file.
+             */
+            lineNumber?: number | null;
+            severity?: components["schemas"]["CommentSeverity"];
+            /** @description Comment message text. */
+            message?: string | null;
+            /**
+             * @description The `ReviewPassKind` name of the review pass that produced this finding (e.g.
+             *     `"Baseline"`, `"MultiPassUnion"`), when known. Provenance metadata only:
+             *     it does not participate in deduplication (which keys on message text) and is
+             *     null for legacy comments and comments with no recorded origin.
+             */
+            originPassKind?: string | null;
+            /**
+             * Format: int32
+             * @description The 1-based index of the review pass that produced this finding, when it came from a numbered
+             *     multi-pass union pass. The tier baseline is pass 1, so the first additional pass is 2. Provenance
+             *     metadata only: it does not participate in deduplication and is null for the
+             *     baseline pass, legacy comments, and comments with no recorded numbered origin.
+             */
+            originPassIndex?: number | null;
+            /**
+             * @description The specialist lens of the multi-pass union pass that produced this finding (e.g. `"security"`),
+             *     when the pass ran under a lens. Provenance metadata only: it does not participate in deduplication and is
+             *     null for the baseline pass, ordinary resample passes, and legacy comments.
+             */
+            originPassLens?: string | null;
+            /**
+             * @description Whether this finding came from a shadow review pass — a pass that runs and is recorded for diagnostics
+             *     but whose findings are never published. Provenance metadata only: it does not participate in
+             *     deduplication. Shadow comments are filtered out of the publishable synthesis input while remaining in the
+             *     persisted per-file result for the trace. false for ordinary comments.
+             */
+            originPassShadow?: boolean;
+            scopeRelation?: components["schemas"]["ReviewCommentScopeRelation"];
+            sourceReadGrounding?: components["schemas"]["ReviewCommentReadGrounding"];
+            /**
+             * @description The remote model that produced this finding, when a single pass owns it. Provenance metadata only: it
+             *     does not participate in deduplication and is null for legacy comments and for
+             *     comments no single pass produced (a synthesized cross-cutting concern is drawn from many).
+             */
+            originModelId?: string | null;
+            /**
+             * @description The client's logical model name for the producing pass, when the pass ran through a named logical model
+             *     rather than a bare connection binding. Kept alongside MeisterDev.ProPR.Domain.ValueObjects.ReviewComment.OriginModelId rather than instead of
+             *     it, because a logical name can be repointed at a different remote model: attributing findings to the name
+             *     alone would silently merge two models' results, and to the remote id alone would lose the name the
+             *     operator actually configures.
+             */
+            originLogicalModelName?: string | null;
+            /**
+             * @description Name of the definition this comment's line falls inside (the method, class, or function the finding is
+             *     about) resolved structurally from the file's own syntax. Provenance metadata only: it does not
+             *     participate in deduplication and is null for pull-request-level comments, unparsable
+             *     or unsupported languages, and lines that fall outside every definition.
+             */
+            originSymbolName?: string | null;
+            /**
+             * @description What kind of definition MeisterDev.ProPR.Domain.ValueObjects.ReviewComment.OriginSymbolName is (method, class, function, …), as the
+             *     structural analyzer classified it. null whenever the name is.
+             */
+            originSymbolKind?: string | null;
+        };
         /** @description DTO for a single review comment. */
         ReviewCommentDto: {
             filePath?: string | null;
@@ -18357,6 +19887,16 @@ export interface components {
             originPassIndex?: number | null;
             originPassLens?: string | null;
         };
+        /**
+         * @description Whether the reviewer read the actual source at a finding's cited location while producing it.
+         *     Derived deterministically from the review pass's recorded file-read tool calls — it captures
+         *     grounding, not correctness: MeisterDev.ProPR.Domain.Enums.ReviewCommentReadGrounding.Covered means the cited lines were fetched, not that
+         *     the finding's conclusion is right. Provenance metadata only; it does not participate in
+         *     deduplication and is null when grounding is not applicable (no line number,
+         *     or a finding produced outside the file-by-file read loop).
+         * @enum {string}
+         */
+        ReviewCommentReadGrounding: "covered" | "notRead" | "citedLineMissing";
         /**
          * @description Deterministic classification of where a review comment's anchor line falls relative to the
          *     pull request's changed-line ranges for its file. Provenance metadata only — it does not
@@ -18669,6 +20209,968 @@ export interface components {
             failureStage?: string | null;
             failureCode?: string | null;
             failureMessage?: string | null;
+        };
+        /**
+         * @description The portable slice of a relayed completion's options.
+         *
+         *     The review pipeline shapes every call with tools, a temperature, an output ceiling, and reasoning
+         *         settings. On the runner those live in a rich in-memory options object that cannot travel — tools
+         *         carry their implementations — so this record carries exactly the parts the provider needs to see:
+         *         each tool as a declaration (name, description, parameter schema) and the reasoning knobs in
+         *         neutral terms. A relay that dropped any of this would quietly turn a tool-using review into a
+         *         single-turn one, which is precisely what happened before the options rode the wire.
+         */
+        RunnerChatOptions: {
+            /**
+             * Format: float
+             * @description The sampling temperature, when the job pins one.
+             */
+            temperature?: number | null;
+            /**
+             * Format: int32
+             * @description The output ceiling for this call, when the caller resolved one.
+             */
+            maxOutputTokens?: number | null;
+            /** @description The tools the model may call, as declarations. Invocation stays with the runner. */
+            tools?: components["schemas"]["RunnerChatToolDefinition"][] | null;
+            /**
+             * @description The reasoning effort level (`low` / `medium` / `high`), or null to leave the provider
+             *     at its default. Carried as text so the contract stays free of library enums.
+             */
+            reasoningEffort?: string | null;
+            /** @description Whether the call asks the model to return a reasoning summary. */
+            captureReasoning?: boolean;
+        };
+        /** @description A relayed completion. */
+        RunnerChatRequest: {
+            /**
+             * Format: uuid
+             * @description The job the call concerns.
+             */
+            jobId?: string;
+            /**
+             * Format: int32
+             * @description The lease generation the caller believes it holds.
+             */
+            leaseGeneration?: number;
+            /**
+             * Format: int32
+             * @description The contract version the caller speaks.
+             */
+            contractVersion?: number;
+            /** @description The named model role to use. A name, never a connection. */
+            logicalModelName?: string | null;
+            /** @description Identifies the attempt, so a retry is answered rather than charged again. */
+            idempotencyKey?: string | null;
+            /** @description The conversation to complete. */
+            messages?: components["schemas"]["ChatMessage"][] | null;
+            options?: components["schemas"]["RunnerChatOptions"];
+        };
+        /**
+         * @description One tool as the provider needs to see it: a name, a description, and a parameter schema. The
+         *     implementation never travels — the model's calls come back to the runner that offered the tool.
+         */
+        RunnerChatToolDefinition: {
+            /** @description The tool name the model calls it by. */
+            name?: string | null;
+            /** @description What the tool does, as shown to the model. */
+            description?: string | null;
+            /** @description The JSON schema of the tool's parameters, or null for a parameterless tool. */
+            schema?: unknown;
+        };
+        /** @description A refusal from the control plane, in a shape the executor can act on rather than parse out of prose. */
+        RunnerContractError: {
+            /** @description A stable machine-readable code. */
+            code?: string | null;
+            /** @description An operator-readable explanation. */
+            message?: string | null;
+        };
+        /** @description An enrolled runner asking for a fresh credential. */
+        RunnerCredentialRenewRequest: {
+            /**
+             * Format: int32
+             * @description The contract version the runner speaks.
+             */
+            contractVersion?: number;
+        };
+        /**
+         * @description A credential, returned exactly once. Nothing stores it in a form it can be read back from, so a
+         *     runner that loses it renews rather than recovers.
+         */
+        RunnerCredentialResponse: {
+            /**
+             * Format: uuid
+             * @description The runner's identity in the registry.
+             */
+            runnerId?: string;
+            /** @description The credential to present on every subsequent call. */
+            credential?: string | null;
+            /**
+             * Format: date-time
+             * @description When it must be renewed by.
+             */
+            expiresAt?: string | null;
+        };
+        /** @description One enrolled runner. */
+        RunnerDto: {
+            /**
+             * Format: uuid
+             * @description Identity.
+             */
+            id?: string;
+            /** @description Operator-facing name the runner declared. */
+            displayName?: string | null;
+            /** @description Enrolled or revoked. */
+            state?: string | null;
+            /** @description The clients it may serve. Empty means every client in the tenant. */
+            clientScope?: string[] | null;
+            /** @description Tags it declares. */
+            tags?: string[] | null;
+            /**
+             * Format: int32
+             * @description The contract version it reported.
+             */
+            contractVersion?: number;
+            /**
+             * Format: date-time
+             * @description When it last authenticated, or null if never.
+             */
+            lastSeenAt?: string | null;
+            /**
+             * Format: date-time
+             * @description When its credential must be renewed by.
+             */
+            credentialExpiresAt?: string;
+            /**
+             * Format: date-time
+             * @description When it enrolled.
+             */
+            enrolledAt?: string;
+            /**
+             * @description What the server makes of it: active, stale, incompatible, or revoked. Computed here so the
+             *     registry cannot disagree with the execution decision about whether a runner is usable.
+             */
+            health?: string | null;
+            /**
+             * Format: int32
+             * @description Reviews it holds a lease on right now.
+             */
+            executingJobCount?: number;
+            /**
+             * Format: int32
+             * @description Reviews it finished in the last day.
+             */
+            completedJobCount?: number;
+            /**
+             * @description The reviews it is running, up to a bound. Named rather than counted because the count alone cannot
+             *     tell an operator whether a runner is working or stuck on one thing.
+             */
+            executing?: components["schemas"]["RunnerJobDto"][] | null;
+            /** Format: uuid */
+            tenantId?: string;
+            tenantName?: string | null;
+        };
+        /** @description The outcome of reviewing one file, as the resume checkpoint it becomes. */
+        RunnerFileOutcome: {
+            /** @description The file reviewed. */
+            filePath?: string | null;
+            /** @description Whether the file finished. */
+            isComplete?: boolean;
+            /** @description Whether it failed. */
+            isFailed?: boolean;
+            /** @description The per-file summary, when it completed. */
+            summary?: string | null;
+            /** @description The failure, when it failed. */
+            errorMessage?: string | null;
+            /** @description Which configured passes produced it, so a later resume can judge it. */
+            reviewedPassKeys?: string[] | null;
+            /**
+             * @description The findings the file produced. These are the checkpoint's substance: a resumed attempt synthesizes
+             *     over what the rows carry, and rows persisted without their comments hand the next attempt forty
+             *     finished files that appear to have found nothing.
+             */
+            comments?: components["schemas"]["ReviewComment"][] | null;
+            /** @description Whether the file matched an exclusion and was never reviewed. */
+            isExcluded?: boolean;
+            /** @description The matching rule, when it was excluded. */
+            exclusionReason?: string | null;
+        };
+        /** @description One chunk of a findings submission. */
+        RunnerFindingsRequest: {
+            /**
+             * Format: uuid
+             * @description The job the call concerns.
+             */
+            jobId?: string;
+            /**
+             * Format: int32
+             * @description The lease generation the caller believes it holds.
+             */
+            leaseGeneration?: number;
+            /**
+             * Format: int32
+             * @description The contract version the caller speaks.
+             */
+            contractVersion?: number;
+            /** @description Identifies the whole submission across its chunks and retries. */
+            submissionId?: string | null;
+            /**
+             * Format: int32
+             * @description Zero-based position of this chunk.
+             */
+            chunkIndex?: number;
+            /**
+             * Format: int32
+             * @description How many chunks the submission has.
+             */
+            chunkCount?: number;
+            /** @description The review summary, carried on the final chunk. */
+            summary?: string | null;
+            /** @description The findings in this chunk. */
+            comments?: components["schemas"]["ReviewComment"][] | null;
+            annotations?: components["schemas"]["RunnerResultAnnotations"];
+        };
+        /** @description What a heartbeat learns: whether the lease is still held, until when, and why not. */
+        RunnerHeartbeatResponse: {
+            /** @description Whether the runner still holds the lease it named. */
+            accepted?: boolean;
+            /**
+             * Format: date-time
+             * @description When the renewed lease expires, or null when it was not renewed.
+             */
+            expiresAt?: string | null;
+            /**
+             * @description Why the renewal was refused, as a stable token. `None` on an accepted renewal. The executor
+             *     needs this rather than a status code: a lost lease is somebody else's job now and this one stops
+             *     quietly, while a revoked client or an exhausted budget is a decision an operator made and has to
+             *     be reported as one.
+             */
+            stopReason?: string | null;
+        };
+        /** @description One batch of executor output. */
+        RunnerIngestRequest: {
+            /**
+             * Format: uuid
+             * @description The job the call concerns.
+             */
+            jobId?: string;
+            /**
+             * Format: int32
+             * @description The lease generation the caller believes it holds.
+             */
+            leaseGeneration?: number;
+            /**
+             * Format: int32
+             * @description The contract version the caller speaks.
+             */
+            contractVersion?: number;
+            /**
+             * Format: int32
+             * @description Position in this job's stream, starting at 1.
+             */
+            sequence?: number;
+            /** @description Identifies the batch, so a resend is recognised. */
+            idempotencyKey?: string | null;
+            /** @description Trace events, in the order they occurred. */
+            events?: components["schemas"]["RunnerTraceEvent"][] | null;
+            /** @description Per-file outcomes finished since the last batch. */
+            fileResults?: components["schemas"]["RunnerFileOutcome"][] | null;
+            /** @description Spend records for completions made through the relay. */
+            spend?: components["schemas"]["RunnerSpendRecord"][] | null;
+        };
+        /** @description What every runner call carries: which job, which generation, and which contract version. */
+        RunnerJobCallRequest: {
+            /**
+             * Format: uuid
+             * @description The job the call concerns.
+             */
+            jobId?: string;
+            /**
+             * Format: int32
+             * @description The lease generation the caller believes it holds.
+             */
+            leaseGeneration?: number;
+            /**
+             * Format: int32
+             * @description The contract version the caller speaks.
+             */
+            contractVersion?: number;
+        };
+        /** @description One review a runner is holding. */
+        RunnerJobDto: {
+            /**
+             * Format: uuid
+             * @description The review job.
+             */
+            jobId?: string;
+            /** @description The repository, as the provider names it. */
+            repositoryName?: string | null;
+            /**
+             * Format: int32
+             * @description The pull request under review.
+             */
+            pullRequestNumber?: number;
+            /** @description The pull request's title, when the job recorded one. */
+            title?: string | null;
+            /**
+             * Format: date-time
+             * @description When the runner started it.
+             */
+            startedAt?: string | null;
+            /**
+             * Format: int32
+             * @description How many times this review has been taken back from a runner that went quiet.
+             */
+            reclaimCount?: number;
+        };
+        /**
+         * @description Everything non-secret a review needs, resolved once when the job is dispatched.
+         *
+         *     Configuration is otherwise read from the database throughout a review, which an executor without
+         *         database access cannot do, and which also means a configuration change part-way through can
+         *         quietly alter a review already in progress. Resolving it once fixes both: the executor holds this
+         *         for the duration of its lease and never persists it.
+         *     Secrets are structurally absent rather than merely left unset. There is no field here that can
+         *         carry a credential, a connection string, or a key, and a test asserts it, because "we remember not
+         *         to populate it" is not a boundary.
+         */
+        RunnerJobManifest: {
+            /**
+             * Format: int32
+             * @description The contract version this manifest was written against.
+             */
+            contractVersion?: number;
+            /**
+             * Format: uuid
+             * @description The review job this manifest describes.
+             */
+            jobId?: string;
+            /**
+             * Format: uuid
+             * @description The client the job belongs to.
+             */
+            clientId?: string;
+            /**
+             * Format: int32
+             * @description The lease generation the manifest was issued under, presented on every proxied call.
+             */
+            leaseGeneration?: number;
+            target?: components["schemas"]["RunnerReviewTarget"];
+            workspace?: components["schemas"]["RunnerWorkspaceReference"];
+            defaultModel?: components["schemas"]["RunnerModelBinding"];
+            /** @description The ordered pass list, already resolved from client configuration. */
+            passes?: components["schemas"]["RunnerReviewPass"][] | null;
+            prompts?: components["schemas"]["RunnerPromptConfiguration"];
+            /** @description Paths the client excludes from review. */
+            exclusions?: string[] | null;
+            /**
+             * @description Repository instructions that apply to this review, already fetched and already filtered to the ones
+             *     relevant to the changed paths. Filtering happens here rather than on the executor because deciding
+             *     relevance reads the repository, which is a credentialed operation.
+             */
+            repositoryInstructions?: components["schemas"]["RunnerRepositoryInstruction"][] | null;
+            /**
+             * Format: double
+             * @description Remaining spend before the job's hard cap, when one is configured. An optimisation only: it lets the
+             *     executor wind down gracefully rather than being refused mid-pass, and the relay stays the point where
+             *     the cap is actually enforced, because this number is stale the moment it is written.
+             */
+            budgetHeadroomUsd?: number | null;
+            traceContext?: components["schemas"]["RunnerTraceContext"];
+            behaviour?: components["schemas"]["RunnerReviewBehaviour"];
+            /**
+             * @description The work items linked to the review, discovered and bounded at dispatch the way the in-process path
+             *     discovers them at review start. Carried because discovery is a credentialed provider call; the
+             *     executor reads these into the prompt and asks follow-up questions through the proxied tools.
+             */
+            linkedItems?: components["schemas"]["RunnerLinkedItem"][] | null;
+            /**
+             * @description The base URL of the control-plane replica that granted this lease, when the operator advertises
+             *     one. The workspace mirror is that replica's local disk and the budget, tool, and workspace
+             *     registries are that replica's process, so every call this job makes has to reach the replica that
+             *     holds them — a load balancer in front of the fleet routes to whichever replica is next, which is
+             *     exactly the wrong answer. Unset on a single-replica installation, where the one configured URL is
+             *     already the right one.
+             */
+            servedBy?: string | null;
+            /**
+             * @description Whether reviewing several files in parallel is licensed, resolved at dispatch because the license
+             *     lives in the control plane's database. Without it the pipeline works one file at a time however
+             *     high the configured concurrency is — the same clamp the in-process planner applies. Null from an
+             *     older control plane reads as licensed, which is exactly what the review did before the field
+             *     existed.
+             */
+            parallelReviewExecutionLicensed?: boolean | null;
+        };
+        /** @description A knowledge question. */
+        RunnerKnowledgeRequest: {
+            /**
+             * Format: uuid
+             * @description The job the call concerns.
+             */
+            jobId?: string;
+            /**
+             * Format: int32
+             * @description The lease generation the caller believes it holds.
+             */
+            leaseGeneration?: number;
+            /**
+             * Format: int32
+             * @description The contract version the caller speaks.
+             */
+            contractVersion?: number;
+            /** @description The question to ask against configured knowledge sources. */
+            question?: string | null;
+        };
+        /** @description A runner handing a lease back. */
+        RunnerLeaseHandbackRequest: {
+            /**
+             * Format: uuid
+             * @description The job whose lease is being returned.
+             */
+            jobId?: string;
+            /**
+             * Format: int32
+             * @description The generation the runner believes it holds.
+             */
+            leaseGeneration?: number;
+            /**
+             * @description Why the lease is coming back — MeisterDev.ProPR.Runner.Contracts.RunnerLeaseReleaseReasons. Absent from an older
+             *     runner, which reads as a drain: the uncounted release every handback was before the field existed.
+             */
+            reason?: string | null;
+        };
+        /** @description A runner saying it is still working on a job. */
+        RunnerLeaseHeartbeatRequest: {
+            /**
+             * Format: uuid
+             * @description The job whose lease is being renewed.
+             */
+            jobId?: string;
+            /**
+             * Format: int32
+             * @description The generation the runner believes it holds.
+             */
+            leaseGeneration?: number;
+            /**
+             * Format: int32
+             * @description The contract version the runner speaks, absent from runners older than the field. Carried so a
+             *     control-plane deploy mid-review surfaces as a refused renewal naming the skew, not as a healthy
+             *     lease over a job whose every other call is refused.
+             */
+            contractVersion?: number | null;
+        };
+        /** @description A runner asking for work. */
+        RunnerLeaseHttpRequest: {
+            /**
+             * Format: int32
+             * @description How many more jobs this runner can take right now.
+             */
+            freeSlots?: number;
+            /**
+             * Format: int32
+             * @description The contract version the runner speaks.
+             */
+            contractVersion?: number;
+        };
+        /**
+         * @description One work item linked to the review, reduced to the provider-neutral summary the prompt is built
+         *     from. The shape mirrors the domain's linked-item summary so the reviewer reads the same thing on
+         *     both sides.
+         */
+        RunnerLinkedItem: {
+            /** @description The provider's identifier for the item, used to ask follow-up questions. */
+            providerKey?: string | null;
+            /** @description What kind of item it is, in the provider's vocabulary. */
+            itemType?: string | null;
+            /** @description The item's title. */
+            title?: string | null;
+            /** @description The item's description, already bounded at dispatch. */
+            description?: string | null;
+            /** @description Where the item lives, when the provider names it. */
+            url?: string | null;
+            /** @description Links from this item to others, resolvable through the proxied tools. */
+            relatedLinks?: components["schemas"]["RunnerLinkedItemRef"][] | null;
+        };
+        /** @description One link from a linked item to a related item. */
+        RunnerLinkedItemRef: {
+            /** @description The relationship, in the provider's vocabulary. */
+            kind?: string | null;
+            /** @description The provider's identifier for the related item. */
+            targetKey?: string | null;
+            /** @description Where the related item lives, when known. */
+            url?: string | null;
+            /** @description The related item's title, when known. */
+            title?: string | null;
+        };
+        /** @description A linked-item lookup. */
+        RunnerLinkedItemRequest: {
+            /**
+             * Format: uuid
+             * @description The job the call concerns.
+             */
+            jobId?: string;
+            /**
+             * Format: int32
+             * @description The lease generation the caller believes it holds.
+             */
+            leaseGeneration?: number;
+            /**
+             * Format: int32
+             * @description The contract version the caller speaks.
+             */
+            contractVersion?: number;
+            /** @description Provider-native identifier of the linked item. */
+            providerKey?: string | null;
+        };
+        /** @description One file's draft result, to be reconsidered against thread memory. */
+        RunnerMemoryReconsiderRequest: {
+            /**
+             * Format: uuid
+             * @description The job the call concerns.
+             */
+            jobId?: string;
+            /**
+             * Format: int32
+             * @description The lease generation the caller believes it holds.
+             */
+            leaseGeneration?: number;
+            /**
+             * Format: int32
+             * @description The contract version the caller speaks.
+             */
+            contractVersion?: number;
+            /** @description The file whose draft is being reconsidered. */
+            filePath?: string | null;
+            /** @description An excerpt of the change, used to retrieve relevant memory. */
+            changeExcerpt?: string | null;
+            /** @description The draft's summary text. */
+            draftSummary?: string | null;
+            /** @description The draft's comments. Reconsideration may drop or reword them; it never adds findings. */
+            draftComments?: components["schemas"]["ReviewComment"][] | null;
+            /**
+             * Format: float
+             * @description The review temperature the reconsideration model runs at, when the job pins one.
+             */
+            temperature?: number | null;
+        };
+        /**
+         * @description A model the executor may call, named rather than connected.
+         *
+         *     The relay resolves LogicalModelName to a connection and a credential on the
+         *         control-plane side, which is what keeps the key off the executor. Everything else here is
+         *         non-secret description the pipeline needs before it makes a call: which tokenizer counts the
+         *         prompt, what fits in the context window, and which behaviours the model supports.
+         */
+        RunnerModelBinding: {
+            /** @description The named model role the relay resolves. */
+            logicalModelName?: string | null;
+            /** @description The provider's model identifier, recorded on the trace. */
+            remoteModelId?: string | null;
+            /** @description The provider family, which decides prompt-shape details. */
+            providerKind?: string | null;
+            /** @description The reasoning effort this binding asks for. */
+            reasoningEffort?: string | null;
+            /** @description The tokenizer that counts this model's prompts, when one is configured. */
+            tokenizerName?: string | null;
+            /**
+             * Format: int32
+             * @description The largest prompt the model accepts, when known.
+             */
+            maxInputTokens?: number | null;
+            /**
+             * Format: int32
+             * @description The context window the budgeter degrades against, when known.
+             */
+            maxContextTokens?: number | null;
+            /** @description Whether the model can serve a cached prefix. */
+            supportsPromptCaching?: boolean;
+            /** @description Whether the reviewer may offer this model tools. */
+            supportsToolUse?: boolean;
+            /** @description Whether findings can be requested as a structured response. */
+            supportsStructuredOutput?: boolean;
+        };
+        /** @description Prompt configuration for this review, resolved from client configuration at dispatch. */
+        RunnerPromptConfiguration: {
+            /** @description The output language contract for findings, when the client sets one. */
+            language?: string | null;
+            /** @description The configured review aggressiveness. */
+            aggressiveness?: string | null;
+            /** @description Prompt overrides by prompt key. */
+            overrides?: {
+                [key: string]: string;
+            } | null;
+        };
+        /** @description A host asking to become a runner. */
+        RunnerRegisterRequest: {
+            /** @description The single-use token an operator issued for this host. */
+            registrationToken?: string | null;
+            /** @description The name the host reports for itself, shown in the registry. */
+            displayName?: string | null;
+            /** @description The tags this host declares, comma-separated. */
+            tags?: string | null;
+            /**
+             * Format: int32
+             * @description The contract version the host speaks.
+             */
+            contractVersion?: number;
+        };
+        /** @description A freshly issued token. The value appears here and is never retrievable again. */
+        RunnerRegistrationTokenDto: {
+            /**
+             * Format: uuid
+             * @description Identity of the token.
+             */
+            tokenId?: string;
+            /** @description The secret, shown once. */
+            token?: string | null;
+            /**
+             * Format: date-time
+             * @description When it stops being usable.
+             */
+            expiresAt?: string | null;
+        };
+        /**
+         * @description An issued enrollment token that has not been used up, expired, or revoked. The secret is not here
+         *     and cannot be: only its hashes were stored.
+         */
+        RunnerRegistrationTokenSummaryDto: {
+            /**
+             * Format: uuid
+             * @description Identity, for revoking it.
+             */
+            tokenId?: string;
+            /**
+             * Format: date-time
+             * @description When it was issued.
+             */
+            issuedAt?: string;
+            /**
+             * Format: date-time
+             * @description When it stops being usable.
+             */
+            expiresAt?: string | null;
+            /**
+             * Format: int32
+             * @description How many enrollments it can still perform.
+             */
+            remainingUses?: number | null;
+        };
+        /** @description The runner registry as an operator sees it. */
+        RunnerRegistryDto: {
+            /** @description Every runner in the tenant, whatever its state. */
+            runners?: components["schemas"]["RunnerDto"][] | null;
+            /**
+             * Format: int32
+             * @description How many currently count as capacity.
+             */
+            activeRunnerCount?: number;
+            /** @description Whether reviews are running on runners or in the control plane. */
+            executionMode?: string | null;
+            /**
+             * Format: int32
+             * @description Reviews the fleet is running right now.
+             */
+            executingJobCount?: number;
+            /**
+             * Format: int32
+             * @description Reviews waiting for one of this tenant's runners. Reported whether or not the queue counts as
+             *     stalled: a queue that is merely deep and a queue that nothing is taking look the same to an
+             *     operator who can only see the second one.
+             */
+            pendingJobCount?: number;
+            /**
+             * Format: date-time
+             * @description When the longest-waiting review was submitted, or null when none wait.
+             */
+            oldestPendingSince?: string | null;
+            /** @description Issued enrollment tokens that can still be used. */
+            pendingTokens?: components["schemas"]["RunnerRegistrationTokenSummaryDto"][] | null;
+            stall?: components["schemas"]["QueueStallDto"];
+        };
+        /** @description A request to resolve a related link on a linked item. */
+        RunnerRelatedItemRequest: {
+            /**
+             * Format: uuid
+             * @description The job the call concerns.
+             */
+            jobId?: string;
+            /**
+             * Format: int32
+             * @description The lease generation the caller believes it holds.
+             */
+            leaseGeneration?: number;
+            /**
+             * Format: int32
+             * @description The contract version the caller speaks.
+             */
+            contractVersion?: number;
+            /** @description Provider-native key of the related target. */
+            relatedTargetKey?: string | null;
+        };
+        /**
+         * @description One repository instruction, carried whole. Flattening these into a single blob would lose the
+         *     structure the prompt is built from: the pipeline uses the description and the when-to-use guidance
+         *     to decide how to present each one.
+         */
+        RunnerRepositoryInstruction: {
+            /** @description The instruction file it came from. */
+            fileName?: string | null;
+            /** @description What the instruction is about. */
+            description?: string | null;
+            /** @description When the instruction applies. */
+            whenToUse?: string | null;
+            /** @description The instruction text. */
+            body?: string | null;
+        };
+        /**
+         * @description Everything a review result says about itself beyond its summary and findings: what was carried
+         *     forward, what was degraded or skipped for context, and whether the budget cut the scan short.
+         *
+         *     A submission that carried only summary and comments flattened all of it — most visibly the
+         *         budget label, which made a soft-capped remote review indistinguishable from a complete one
+         *         everywhere the label is read.
+         */
+        RunnerResultAnnotations: {
+            /** @description Files whose results came from a prior iteration's review. */
+            carriedForwardFilePaths?: string[] | null;
+            /**
+             * Format: int32
+             * @description Candidates suppressed because they came from carried-forward results.
+             */
+            carriedForwardCandidatesSkipped?: number;
+            /** @description Files reviewed diff-only because their context exceeded the window. */
+            contextDegradedFilePaths?: string[] | null;
+            /** @description Files skipped because even their minimal payload exceeded the window. */
+            contextSkippedFilePaths?: string[] | null;
+            /** @description Whether the scan stopped early because the budget soft cap was reached. */
+            budgetSoftCapped?: boolean;
+            /**
+             * Format: double
+             * @description The cap that was reached, when the executor knew the figure.
+             */
+            budgetSoftCapThresholdUsd?: number | null;
+            /**
+             * Format: double
+             * @description The spend that reached it, when the executor knew the figure.
+             */
+            budgetSoftCapSpentUsd?: number | null;
+            /** @description Files not scanned because the cap was reached first. */
+            budgetSoftCapSkippedFilePaths?: string[] | null;
+        };
+        /**
+         * @description The per-client decisions that change what a review does rather than which model runs it.
+         *
+         *     Carried because the executor cannot read them: they live on the client record, which a runner
+         *         has no database to reach. Absent, every one of them falls to its default and the review quietly
+         *         becomes a different review — multi-pass union off, screening off, verification off, temperature
+         *         unset, profile Balanced — with nothing in the result saying so.
+         *     Optional on the contract so a manifest from an older control plane still deserializes. A runner
+         *         reading one without this reverts to exactly the behaviour it had before the field existed.
+         */
+        RunnerReviewBehaviour: {
+            /**
+             * @description Whether the pass list is actually unioned. Off, the carefully-bound passes in this manifest are
+             *     decorative: the baseline result is returned as-is and the semantic deduplicator never runs.
+             */
+            enableMultiPassUnion?: boolean;
+            /** @description Whether the semantic screener runs over candidates. */
+            enableLanguageRobustScreening?: boolean;
+            /** @description Whether findings are verified against collected evidence. */
+            enableEvidenceBackedVerification?: boolean;
+            /** @description Whether linked work items and issues are offered to the review. */
+            includeLinkedItemsInContext?: boolean;
+            /**
+             * Format: float
+             * @description The review temperature, when the job pins one.
+             */
+            temperature?: number | null;
+            /** @description The pipeline profile the review runs under, when one is configured. */
+            reviewPipelineProfileId?: string | null;
+        };
+        /** @description One entry of the resolved pass list. */
+        RunnerReviewPass: {
+            /**
+             * Format: int32
+             * @description Position in the list; a pass's ordinal is how its trace is identified.
+             */
+            ordinal?: number;
+            model?: components["schemas"]["RunnerModelBinding"];
+            /** @description The specialist lens this pass applies, or null for an ordinary pass. */
+            lens?: string | null;
+            /** @description Whether the pass runs per file or once over the whole change set. */
+            scope?: string | null;
+            /**
+             * @description Whether the pass runs for comparison only. A shadow pass records its full trace and never publishes,
+             *     which is the whole point of running one, so an executor that ignored this flag would post findings
+             *     from a pass the client is still evaluating.
+             */
+            shadow?: boolean;
+        };
+        /**
+         * @description Which review the executor is being asked to perform.
+         *
+         *     The title, description, and branch names are here because the reviewer reads them: a change is
+         *         judged against what its author said it does. An executor that could not see them would review
+         *         the diff in isolation and reach different conclusions than the in-process path on the same
+         *         commit.
+         */
+        RunnerReviewTarget: {
+            /** @description The source-control provider family, as a stable token. */
+            provider?: string | null;
+            /** @description The provider host the review lives on. */
+            organizationUrl?: string | null;
+            /** @description The project or namespace the repository belongs to. */
+            projectId?: string | null;
+            /** @description The provider's repository identifier. */
+            repositoryId?: string | null;
+            /** @description The repository's display name. */
+            repositoryName?: string | null;
+            /** @description The provider's identifier for the pull request or merge request. */
+            externalReviewId?: string | null;
+            /**
+             * Format: int32
+             * @description The human-facing review number.
+             */
+            number?: number;
+            /**
+             * Format: int32
+             * @description The revision's iteration number within the review.
+             */
+            iterationId?: number;
+            /** @description The review's title. */
+            title?: string | null;
+            /** @description The review's description, when the author wrote one. */
+            description?: string | null;
+            /** @description The branch the change is on. */
+            sourceBranch?: string | null;
+            /** @description The branch the change is proposed into. */
+            targetBranch?: string | null;
+            /** @description The head commit of the revision under review. */
+            headSha?: string | null;
+            /** @description The base commit the revision is compared against. */
+            baseSha?: string | null;
+            /** @description The frozen changed-path scope of this revision. */
+            changedPaths?: string[] | null;
+            /**
+             * @description The conversation already on the review. The reviewer reads it to avoid raising again what somebody
+             *     has already answered, so an executor without it would post duplicates of findings the author has
+             *     addressed.
+             */
+            existingThreads?: components["schemas"]["RunnerReviewThread"][] | null;
+        };
+        /**
+         * @description One conversation thread on the review, reduced to what a reviewer reads: where it sits, whether it
+         *     is still open, and what was said. Author identity beyond a display name and the provider's internal
+         *     ids are left out, because nothing on the executor's side uses them.
+         */
+        RunnerReviewThread: {
+            /** @description The file the thread is anchored to, or null for a review-level thread. */
+            filePath?: string | null;
+            /**
+             * Format: int32
+             * @description The line the thread is anchored to, when it has one.
+             */
+            lineNumber?: number | null;
+            /** @description The thread's status as the provider reports it. */
+            status?: string | null;
+            /** @description The comments, oldest first. */
+            comments?: components["schemas"]["RunnerReviewThreadComment"][] | null;
+        };
+        /** @description One comment in a thread. */
+        RunnerReviewThreadComment: {
+            /** @description The author's display name. */
+            authorName?: string | null;
+            /** @description What they wrote. */
+            content?: string | null;
+        };
+        /** @description What one relayed completion cost. */
+        RunnerSpendRecord: {
+            /** @description The model role that served it. */
+            logicalModelName?: string | null;
+            /**
+             * Format: int64
+             * @description Input tokens consumed.
+             */
+            inputTokens?: number;
+            /**
+             * Format: int64
+             * @description Output tokens produced.
+             */
+            outputTokens?: number;
+            /**
+             * Format: double
+             * @description Estimated cost, or null when the model has no configured pricing.
+             */
+            estimatedCostUsd?: number | null;
+        };
+        /** @description A symbol-insight question for the code-knowledge service. */
+        RunnerSymbolInsightRequest: {
+            /**
+             * Format: uuid
+             * @description The job the call concerns.
+             */
+            jobId?: string;
+            /**
+             * Format: int32
+             * @description The lease generation the caller believes it holds.
+             */
+            leaseGeneration?: number;
+            /**
+             * Format: int32
+             * @description The contract version the caller speaks.
+             */
+            contractVersion?: number;
+            /** @description The symbol to look up. */
+            symbol?: string | null;
+            /** @description Optional query mode the gateway understands. */
+            queryMode?: string | null;
+            /**
+             * Format: int32
+             * @description Optional ceiling on how many relations to return.
+             */
+            maxRelations?: number | null;
+        };
+        /**
+         * @description W3C trace context carried from the lease into the executor's spans and back, so one review can be
+         *     followed across the boundary instead of appearing as two unrelated traces.
+         */
+        RunnerTraceContext: {
+            /** @description The `traceparent` header value. */
+            traceParent?: string | null;
+            /** @description The `tracestate` header value, when present. */
+            traceState?: string | null;
+        };
+        /** @description One trace event produced by a remote execution. */
+        RunnerTraceEvent: {
+            /**
+             * Format: date-time
+             * @description When it happened, on the executor's clock.
+             */
+            occurredAt?: string;
+            /** @description The event name, matching the names the in-process path records. */
+            name?: string | null;
+            /** @description Structured detail, already serialised. */
+            details?: string | null;
+        };
+        /**
+         * @description Where the executor fetches repository content. The control plane serves its own mirror over the git
+         *     wire protocol, authorized per lease, so the executor never holds a source-control credential and
+         *     never contacts the source-control system.
+         */
+        RunnerWorkspaceReference: {
+            /** @description Path on the control plane the executor fetches from, relative to its base URL. */
+            fetchPath?: string | null;
+            /** @description The commit the head worktree is materialized at. */
+            headSha?: string | null;
+            /** @description The commit the base worktree is materialized at. */
+            baseSha?: string | null;
+            /**
+             * Format: int64
+             * @description Ceiling on the transfer. Exceeding it fails the job with an operator-readable reason rather than
+             *     moving unbounded data to a host that may be paying for the egress.
+             */
+            maxTransferBytes?: number;
         };
         /**
          * @description Credential models supported by SCM provider connections.

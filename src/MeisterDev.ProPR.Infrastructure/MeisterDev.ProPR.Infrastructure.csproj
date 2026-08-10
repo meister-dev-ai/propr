@@ -7,6 +7,7 @@
         <ProjectReference Include="..\MeisterDev.ProPR.Application\MeisterDev.ProPR.Application.csproj"/>
         <ProjectReference Include="..\MeisterDev.ProPR.ProCursor.Contracts\MeisterDev.ProPR.ProCursor.Contracts.csproj"/>
         <ProjectReference Include="..\MeisterDev.ProPR.ProRV\MeisterDev.ProPR.ProRV.csproj"/>
+        <ProjectReference Include="..\MeisterDev.ProPR.Reviewing\MeisterDev.ProPR.Reviewing.csproj"/>
         <ProjectReference Include="..\MeisterDev.ProPR.CodeAnalysis.TreeSitter\MeisterDev.ProPR.CodeAnalysis.TreeSitter.csproj"/>
         <ProjectReference Include="..\MeisterDev.ProPR.CodeAnalysis.Roslyn\MeisterDev.ProPR.CodeAnalysis.Roslyn.csproj"/>
     </ItemGroup>
@@ -48,13 +49,6 @@
     <ItemGroup>
         <InternalsVisibleTo Include="MeisterDev.ProPR.Infrastructure.Tests"/>
         <InternalsVisibleTo Include="DynamicProxyGenAssembly2"/>
-    </ItemGroup>
-
-    <ItemGroup>
-        <Content Include="AI/Prompts/**/*">
-            <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-            <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
-        </Content>
     </ItemGroup>
 
     <PropertyGroup>

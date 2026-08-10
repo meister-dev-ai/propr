@@ -10,6 +10,14 @@ namespace MeisterDev.ProPR.Application.Interfaces;
 /// </summary>
 public interface IProCursorGateway
 {
+    /// <summary>
+    ///     Whether this installation has ProCursor configured at all. Asked rather than inferred from the
+    ///     implementation's type: a caller that type-tests the gateway has to reference the assembly the
+    ///     disabled one lives in, which is how the review pipeline ended up depending on a transport it
+    ///     never calls.
+    /// </summary>
+    bool IsConfigured => true;
+
     /// <summary>Lists all ProCursor knowledge sources configured for the given client.</summary>
     Task<IReadOnlyList<ProCursorKnowledgeSourceDto>> ListSourcesAsync(Guid clientId, CancellationToken ct = default);
 

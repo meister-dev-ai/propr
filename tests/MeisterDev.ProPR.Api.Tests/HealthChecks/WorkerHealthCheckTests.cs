@@ -83,8 +83,10 @@ public sealed class WorkerHealthCheckTests
         var worker = new ReviewJobWorker(
             Substitute.For<IServiceScopeFactory>(),
             Options.Create(new WorkerOptions()),
+            Options.Create(new ReviewLeaseOptions()),
             metrics,
             new ReviewJobCancellationRegistry(),
+            TimeProvider.System,
             NullLogger<ReviewJobWorker>.Instance);
 
         var sut = new WorkerHealthCheck(worker, provider, configuration);

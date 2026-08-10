@@ -155,33 +155,7 @@ public sealed class ThreadPassIdempotencyMigrationTests(PostgresContainerFixture
 
     private static async Task<Guid> SeedClientAsync(MeisterProPRDbContext dbContext)
     {
-        var tenantId = await dbContext.Tenants.Select(tenant => tenant.Id).FirstOrDefaultAsync();
-        if (tenantId == Guid.Empty)
-        {
-            tenantId = TenantCatalog.SystemTenantId;
-            dbContext.Tenants.Add(
-                new TenantRecord
-                {
-                    Id = tenantId,
-                    Slug = "idempotency-migration-test",
-                    DisplayName = "Idempotency Migration Test Tenant",
-                    IsActive = true,
-                    CreatedAt = DateTimeOffset.UtcNow,
-                });
-        }
-
-        var clientId = Guid.NewGuid();
-        dbContext.Clients.Add(
-            new ClientRecord
-            {
-                Id = clientId,
-                TenantId = tenantId,
-                DisplayName = "Idempotency Migration Test Client",
-                IsActive = true,
-                CreatedAt = DateTimeOffset.UtcNow,
-            });
-        await dbContext.SaveChangesAsync();
-        return clientId;
+        return await HistoricalSchemaSeed.SeedClientAsync(dbContext, "Thread Pass Idempotency Migration Test");
     }
 
     private static MeisterProPRDbContext CreateDbContext(string connectionString)

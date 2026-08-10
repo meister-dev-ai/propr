@@ -1,0 +1,75 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+    <!--
+      The review pipeline, split out of Infrastructure so a host can run a review without being able to
+      reach a database.
+
+      Infrastructure holds the persistence adapters, the credential stores, and the data-protection key
+      ring. A runner needs none of those and must not be able to name them, but it does need everything
+      here: the file-by-file strategy, screening, verification, deduplication, and the review cores. While
+      the two lived in one assembly, "the runner runs the same pipeline" and "the runner cannot reach the
+      database" could not both be true.
+
+      Known wart: the types here still declare MeisterDev.ProPR.Infrastructure.* namespaces, because the
+      move kept them so the split itself stayed reviewable. Renaming them to MeisterDev.ProPR.Reviewing.*
+      is a mechanical follow-up; it touches every call site and belongs in its own commit rather than
+      buried in the extraction.
+    -->
+
+    <ItemGroup>
+        <ProjectReference Include="..\MeisterDev.Ai.Providers\MeisterDev.Ai.Providers.csproj"/>
+        <ProjectReference Include="..\MeisterDev.ProPR.Application\MeisterDev.ProPR.Application.csproj"/>
+        <ProjectReference Include="..\MeisterDev.ProPR.CodeAnalysis.Roslyn\MeisterDev.ProPR.CodeAnalysis.Roslyn.csproj"/>
+        <ProjectReference Include="..\MeisterDev.ProPR.CodeAnalysis.TreeSitter\MeisterDev.ProPR.CodeAnalysis.TreeSitter.csproj"/>
+        <ProjectReference Include="..\MeisterDev.ProPR.CodeInsights.Contracts\MeisterDev.ProPR.CodeInsights.Contracts.csproj"/>
+        <ProjectReference Include="..\MeisterDev.ProPR.Domain\MeisterDev.ProPR.Domain.csproj"/>
+        <ProjectReference Include="..\MeisterDev.ProPR.ProCursor.Contracts\MeisterDev.ProPR.ProCursor.Contracts.csproj"/>
+        <ProjectReference Include="..\MeisterDev.ProPR.ProRV\MeisterDev.ProPR.ProRV.csproj"/>
+    </ItemGroup>
+
+    <ItemGroup>
+        <PackageReference Include="DiffPlex" Version="1.9.0"/>
+        <PackageReference Include="Handlebars.Net" Version="2.1.6"/>
+        <PackageReference Include="Microsoft.Agents.AI" Version="1.6.2"/>
+        <PackageReference Include="Microsoft.Extensions.AI" Version="10.5.1"/>
+        <PackageReference Include="Microsoft.Extensions.Configuration.Abstractions" Version="10.0.7"/>
+        <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="10.0.7"/>
+        <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.7"/>
+        <PackageReference Include="Microsoft.Extensions.Options" Version="10.0.7"/>
+        <PackageReference Include="SharpToken" Version="2.0.6"/>
+    </ItemGroup>
+
+    <!-- The prompts the pipeline renders, shipped with it. The renderer resolves them relative to the
+         host's base directory, so every host that runs a review needs this tree beside its binaries. -->
+    <ItemGroup>
+        <Content Include="AI/Prompts/**/*">
+            <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+            <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+        </Content>
+    </ItemGroup>
+
+    <PropertyGroup>
+        <TargetFramework>net10.0</TargetFramework>
+        <ImplicitUsings>enable</ImplicitUsings>
+        <Nullable>enable</Nullable>
+        <GenerateDocumentationFile>true</GenerateDocumentationFile>
+        <!-- The OpenAI responses client is still marked experimental upstream; Infrastructure suppressed
+             the same two diagnostics before these files moved here. -->
+        <NoWarn>$(NoWarn);OPENAI001;MEAI001</NoWarn>
+    </PropertyGroup>
+
+    <!--
+      The two hosts that compose this pipeline. Infrastructure builds it against a database; the runner
+      builds it against the control plane's HTTP surface. Both are composition roots for the same
+      internals, so both see them.
+    -->
+    <ItemGroup>
+        <InternalsVisibleTo Include="MeisterDev.ProPR.Infrastructure"/>
+        <InternalsVisibleTo Include="MeisterDev.ProPR.Infrastructure.Tests"/>
+        <InternalsVisibleTo Include="MeisterDev.ProPR.Reviewing.Tests"/>
+        <InternalsVisibleTo Include="MeisterDev.ProPR.Runner"/>
+        <InternalsVisibleTo Include="MeisterDev.ProPR.Runner.Tests"/>
+        <InternalsVisibleTo Include="DynamicProxyGenAssembly2"/>
+    </ItemGroup>
+
+</Project>

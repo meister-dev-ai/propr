@@ -130,11 +130,186 @@ What these controls are for, and why the per-IP limit is deliberately looser tha
 |---|---|---|---|---|
 | `WORKER_MAX_CONCURRENT_REVIEW_JOBS` | How many review jobs one API instance runs at once | `4` | 1–64 | no |
 | `WORKER_POLL_INTERVAL_MILLISECONDS` | How often the worker looks for pending jobs | `2000` | 10–60000 | no |
-| `WORKER_STUCK_JOB_TIMEOUT_MINUTES` | How long a job may sit in processing before it is failed | `30` | 5–1440 | no |
+| `WORKER_STUCK_JOB_TIMEOUT_MINUTES` | Retired. Accepted and ignored; the worker warns at startup when it is set | - | - | no |
 
 `WORKER_MAX_CONCURRENT_REVIEW_JOBS` needs a commercial license for parallel review execution to have any
 effect - see [editions](../reference/editions.md) - and it is one of the two multipliers described under
 [review workers](deploy.md#review-workers).
+
+## The runner host
+
+Read by the runner container, not by the control plane. The runner exposes a health endpoint and
+nothing else.
+
+| Variable | What it does | Default | Accepted | Example stack |
+|---|---|---|---|---|
+| `RUNNER_CONTROL_PLANE_URL` | Base URL of the control plane it leases from | none | absolute URL | no |
+| `RUNNER_CREDENTIAL` | The credential issued at enrollment | none | - | no |
+| `RUNNER_REGISTRATION_TOKEN` | Operator-issued token, spending one of its uses to enroll | none | - | no |
+| `RUNNER_DISPLAY_NAME` | Operator-facing name in the registry | the machine name | - | no |
+| `RUNNER_TAGS` | Tags this runner declares | none | comma-separated | no |
+| `RUNNER_CAPACITY` | How many jobs it runs at once | `2` | 1-64 | no |
+| `RUNNER_POLL_INTERVAL_SECONDS` | Wait between asks when the last found no work | `5` | 1-3600 | no |
+| `RUNNER_MAX_BACKOFF_SECONDS` | Backoff ceiling while the control plane is unreachable | `60` | 5-3600 | no |
+| `RUNNER_WORK_ROOT` | Where leased jobs are worked | a temp directory | writable path | no |
+| `RUNNER_LOG_LEVEL` | Minimum log level | `Information` | a Serilog level name | no |
+
+These are read by the control plane rather than the runner, and govern the registry the fleet is listed
+from:
+
+| Variable | Meaning | Default | Range | Secret |
+|---|---|---|---|---|
+| `RUNNER_PRUNE_UNSEEN_DAYS` | How long a runner may be silent before its row is removed. `0` keeps every row until an operator deletes it | `30` | 0-3650 | no |
+| `RUNNER_PRUNE_INTERVAL_SECONDS` | How often the prune sweep runs | `3600` | 60+ | no |
+
+A runner that restarts enrolls again as a new runner, because its credential is held in memory only. The
+row it used before stays in the registry. The sweep deletes rows that have not been heard from within the
+window. A runner still holding a lease is skipped and removed by a later sweep.
+
+The runner reads `OTLP_ENDPOINT` like every other service. With none set it installs no exporter.
+
+`RUNNER_CONTROL_PLANE_URL` must be `https`, except for loopback addresses. The credential is sent on
+every call.
+
+**Set `RUNNER_REGISTRATION_TOKEN`, not `RUNNER_CREDENTIAL`.** Issue the token in the admin UI and give
+it to the host. The runner exchanges it for a credential on its first cycle, renews that credential
+before it expires, and holds both in memory only. A host with neither reports it on `/healthz` and keeps
+running rather than exiting.
+
+**A registration token is single-use by default, and every enrollment spends one use.** That includes a
+restart: the credential lives in memory only, so a host that comes back enrolls again as a new runner.
+A host you start by hand therefore needs a fresh token each time it restarts, unless you issue the
+token for more than one use.
+
+**Issue a token for as many hosts as the deployment will start.** A scaling group's replicas come up
+without an operator present to issue each of them a token, so give the group one token whose enrollment
+count covers the replicas it may run, and put it in the platform's secret store rather than in a
+manifest. The Runners page shows each token's remaining uses, and a token can be revoked at any point,
+so rotation is issuing the replacement before withdrawing the old one.
+
+**Both bounds are optional.** Leave the lifetime empty for a token that does not expire, and the
+enrollment count empty for one with no limit. A group that scales on its own for months needs both. A token with neither is usable until somebody revokes it, and revocation is then the only
+thing that stops it.
+
+Weigh that against what losing it costs. A token that enrolls twenty hosts is a credential that enrolls
+twenty hosts for whoever holds it; one with no limit enrolls as many as they like, for as long as they
+like. An unbounded token belongs in a secret store with an owner, not in a manifest or a wiki page, and
+is worth revoking and reissuing on the cadence you would rotate any other standing credential.
+
+**To remove an enrolled host, revoke the runner, not its token.** A token's use is spent at enrollment
+and revoking the token afterwards reaches nothing already enrolled. It only stops uses that remain.
+Revoking the runner makes every call it makes fail authentication; a lease it holds expires on its own,
+up to one lease duration later.
+
+**What touches the runner's disk.** Everything a review produces (trace, results, spend) is held in
+memory and batched to the control plane. None of it touches the runner's disk. The repository content under review does: it sits in plaintext under `RUNNER_WORK_ROOT` while a
+job runs, and is purged when the job ends and again at startup. What purge cannot cover is a host
+imaged or destroyed mid-job, so where disk remanence matters, put `RUNNER_WORK_ROOT` on an encrypted
+or ephemeral volume.
+
+`RUNNER_CREDENTIAL` is for a host that already has one, such as a redeploy that must keep its registry
+identity. Leave it unset otherwise.
+
+The runner requests a lease only when it has a free slot. An unreachable control plane, a full slot
+pool, an unsupported contract version and a drain are each reported on `/healthz` and retried with
+backoff; none exits the process. On shutdown it releases the leases it holds.
+
+**The runner also reads the `AI_*` review options**, because it runs the review pipeline. Set them to
+the same values as the control plane. A runner with different values reviews differently, and nothing
+reports the difference.
+
+The runner reads no other `AI_*` value: connections, keys, and model bindings stay on the control
+plane, and the runner names a model rather than holding one.
+
+## Runner fleet and queue stalls
+
+A runner counts as active when it is enrolled, not revoked, speaks a contract version this control
+plane can serve, and was heard from inside `RUNNER_ACTIVE_HEARTBEAT_WINDOW_SECONDS`.
+
+The control plane does not execute a job itself when an active runner is eligible for that job's
+client. Jobs for clients no active runner can serve continue to run in the control plane. There is no
+setting that re-enables in-process execution for a job a runner could take.
+
+An installation with no runners registered behaves as it always has.
+
+| Variable | What it does | Default | Accepted | Example stack |
+|---|---|---|---|---|
+| `RUNNER_ACTIVE_HEARTBEAT_WINDOW_SECONDS` | How recently a runner must have been heard from to count as capacity | `120` | 15-3600 | no |
+| `RUNNER_FLEET_EMPTY_SETTLE_SECONDS` | How long the fleet must be continuously empty before in-process execution resumes | `300` | 0-3600 | no |
+| `RUNNER_QUEUE_STALL_GRACE_SECONDS` | How long work may sit pending with no runner taking it before the queue is called stalled | `600` | 30-86400 | no |
+| `RUNNER_ADVERTISED_URL` | Base URL this control-plane replica advertises to runners for job-scoped calls | unset | absolute https URL (loopback may be http) | no |
+
+`RUNNER_ACTIVE_HEARTBEAT_WINDOW_SECONDS` must not exceed `REVIEW_LEASE_DURATION_SECONDS`, and startup
+fails when it does. A runner counted as available for longer than its leases survive leaves work with
+nobody to run it: its own leases keep being reclaimed, and the control plane keeps waiting for a fleet
+it believes is healthy.
+
+`RUNNER_FLEET_EMPTY_SETTLE_SECONDS` delays only the return to in-process execution; a runner becoming
+active takes effect at once. This stops a runner flapping around the heartbeat window from toggling the
+execution mode on every poll.
+
+A stalled queue reports one of `NoActiveRunner`, `NoFreeSlot` or `NoRunnerMatchesRequiredTags`.
+
+**Running more than one control-plane replica with runners requires `RUNNER_ADVERTISED_URL` on every
+replica.** The replica that grants a lease serves that job: its workspace mirror is local disk, and the
+job's budget scope, tools, and workspace registration live in its process. A runner configured with only
+a load-balanced URL reaches whichever replica is next, which refuses the job's calls as though the lease
+were lost. Set each replica's own reachable address here; the lease carries it to the runner, which uses
+it for everything job-scoped and keeps the load-balanced URL for enrollment and asking for work. Unset,
+the lease carries no address and runners use `RUNNER_CONTROL_PLANE_URL` for everything. That is correct
+for a single replica and wrong for a fleet.
+
+## Review job leases
+
+A review job is claimed under a lease. The claim is a single conditional database write, so exactly one
+host wins a given job however many are polling, and the holder keeps the lease alive by renewing it on a
+timer that runs independently of review progress. That renewal, not elapsed processing time, is the
+evidence an execution is alive, which is how a legitimately long review and an abandoned one are told
+apart.
+
+| Variable | What it does | Default | Accepted | Example stack |
+|---|---|---|---|---|
+| `REVIEW_LEASE_DURATION_SECONDS` | How long a claim holds a job before its lease must be renewed | `120` | 30–3600 | no |
+| `REVIEW_LEASE_HEARTBEAT_INTERVAL_SECONDS` | How often the holder renews its lease | `20` | 5–1200 | no |
+| `REVIEW_LEASE_HEARTBEAT_JITTER_FRACTION` | Random fraction of the interval each renewal is brought forward by | `0.2` | 0–0.5 | no |
+| `REVIEW_LEASE_MAX_HEARTBEAT_FAILURES` | Consecutive renewal failures tolerated before the holder stops working on the job | `3` | 1–20 | no |
+| `REVIEW_LEASE_CLAIM_CANDIDATE_LIMIT` | How many pending jobs one poll cycle considers | `50` | 1–500 | no |
+
+`REVIEW_LEASE_DURATION_SECONDS` must be at least three times `REVIEW_LEASE_HEARTBEAT_INTERVAL_SECONDS`,
+and startup fails when it is not. A lease only one or two renewals long is lost to a single slow database
+call, which would hand a healthy job to another host while the first is still reviewing it.
+
+Raise the duration when reviews run on hosts with slow or intermittent database access. The cost of a
+longer lease is that a genuinely dead host's jobs wait longer before another host can take them over.
+
+### Reclaim
+
+A job whose lease expires is taken back and offered again rather than failed. Jobs were once failed for
+having been in the processing state too long, which could not tell a long review from an abandoned one and,
+with more than one host, let one host fail another host's healthy review. `WORKER_STUCK_JOB_TIMEOUT_MINUTES`
+is retired: it is still accepted so an existing deployment starts unchanged, and the worker warns at startup
+when it is set.
+
+Because reclaim is automatic where recovery used to be a deliberate operator restart, it carries its own
+spend discipline. Completing further files clears the consecutive count, so only a job that keeps cycling
+without progress exhausts its budget, and a graceful release during a deploy or scale-in counts for nothing.
+
+| Variable | What it does | Default | Accepted | Example stack |
+|---|---|---|---|---|
+| `REVIEW_LEASE_MAX_CONSECUTIVE_RECLAIMS` | Reclaims allowed without completing further files | `3` | 1–50 | no |
+| `REVIEW_LEASE_MAX_TOTAL_RECLAIMS` | Reclaims allowed in total, whatever the progress | `12` | 1–500 | no |
+| `REVIEW_LEASE_RECLAIM_BACKOFF_SECONDS` | How long a reclaimed job is left alone before it may be reclaimed again | `60` | 0–3600 | no |
+| `REVIEW_LEASE_MAX_RECLAIMS_PER_SWEEP` | How many jobs one sweep takes back | `20` | 1–500 | no |
+| `REVIEW_LEASE_RECLAIM_SWEEP_INTERVAL_SECONDS` | Seconds between reclaim sweeps | `30` | 5–3600 | no |
+| `REVIEW_LEASE_PUBLICATION_TIMEOUT_MINUTES` | How long publication may run before the job counts as stuck | `30` | 1–720 | no |
+
+A job that exhausts its reclaim budget is failed with a reason naming the lease loss, so it reads
+differently from a review that failed on its own merits.
+
+While a review is publishing its comments it is not reclaimable at all, however long its lease has been
+gone: taking it back mid-publication is how the same review gets posted twice. Publication has its own,
+longer timeout, and a publication that outlives it fails the job distinctly rather than retrying it,
+because some comments may already be out.
 
 ## Review workspace
 
@@ -155,6 +330,23 @@ Why this wants a mounted volume: [review workspace](deploy.md#review-workspace).
 | `MENTION_CRAWL_INTERVAL_SECONDS` | How often ProPR scans for @-mentions to answer | `60` | clamped to at least 10 | no |
 | `THREAD_PASS_SCAN_INTERVAL_SECONDS` | How often queued thread passes are picked up and run | `30` | clamped to at least 5 | no |
 | `REVIEW_ARCHIVE_PURGE_INTERVAL_SECONDS` | How often the retention purge sweeps archived pull-request content | `3600` | clamped to at least 60 | no |
+| `WEBHOOK_DELIVERY_IDLE_POLL_SECONDS` | How often an idle installation asks for a queued webhook delivery | `2` | 1–300 | no |
+| `WEBHOOK_DELIVERY_MAX_CONCURRENCY` | Deliveries one replica turns into reviews at once | `4` | 1–32 | no |
+| `WEBHOOK_DELIVERY_CLAIM_SECONDS` | How long one replica's claim on a delivery is good for | `300` | 30–3600 | no |
+| `WEBHOOK_DELIVERY_MAX_ATTEMPTS` | Tries before a delivery is kept as failed rather than retried | `5` | 1–20 | no |
+| `WEBHOOK_DELIVERY_RETRY_BACKOFF_SECONDS` | Wait before a failed delivery is eligible again | `30` | 1–3600 | no |
+
+A webhook delivery is answered as soon as it is verified and stored, and turned into a review afterwards
+by a worker on its own schedule, so no provider's delivery timeout decides whether a review happens.
+A backlog is drained without waiting; the idle interval is only how often an empty queue is asked. Raise
+`WEBHOOK_DELIVERY_CLAIM_SECONDS` above the slowest intake a large pull request can take on your
+providers, since it is the point at which a delivery is assumed abandoned and given to another replica.
+
+`WEBHOOK_DELIVERY_MAX_CONCURRENCY` is what to raise when reviews are waiting while runners sit idle:
+turning a delivery into a review takes seconds, so a replica working one at a time creates roughly one
+job every few seconds however much execution capacity is available. Measured against a three-runner
+fleet with six slots, serial intake held the fleet to four slots at peak. The ceiling worth respecting
+is the provider's rate limit, because each delivery reads a pull request from the provider that sent it.
 
 Crawling and @-mention scanning need a commercial license ([editions](../reference/editions.md)); the
 purge sweep does not. What the purge deletes and what it never touches:
@@ -207,6 +399,11 @@ the management UI does not expose - see [control cost](../guides/control-cost.md
 | `AI_MAX_BACKOFF_SECONDS` | Maximum backoff between those retries | `30` | 5–120 | no |
 | `AI_FILE_BATCH_LINES` | Lines returned per file-content read the reviewer makes | `100` | 10–1000 | no |
 | `AI_MAX_FILE_SIZE_BYTES` | Largest file the reviewer may read; above it the read returns an error instead of content | `1048576` | 1024 or more | no |
+
+`AI_MAX_FILE_REVIEW_CONCURRENCY` needs a commercial license for parallel review execution to have any
+effect - see [editions](../reference/editions.md). Without it a review works on one file at a time, the
+same rule the worker applies to whole jobs. It is the second of the two multipliers described under
+[review workers](deploy.md#review-workers).
 
 Which files land in which complexity tier is decided per review - see
 [reviews](../concepts/reviews.md).

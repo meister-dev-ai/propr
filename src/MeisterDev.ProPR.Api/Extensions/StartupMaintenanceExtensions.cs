@@ -75,10 +75,19 @@ public static class StartupMaintenanceExtensions
         }
 
         // Startup recovery: transition stale Processing jobs (e.g., from a crash) back to Pending.
+        // Only lease-less rows are this boot's business. A leased job is alive on another replica — or, if
+        // its lease has expired, the reclaim sweep takes it back with the reclaim budget counted — and a
+        // publishing job must never be requeued at all: that is how the same review gets posted twice on a
+        // rolling deploy.
         var jobRepo = scope.ServiceProvider.GetRequiredService<IJobRepository>();
         var staleJobs = await jobRepo.GetProcessingJobsAsync();
         foreach (var job in staleJobs)
         {
+            if (job.LeaseOwner is not null || job.PublishingStartedAt is not null)
+            {
+                continue;
+            }
+
             await jobRepo.TryTransitionAsync(job.Id, JobStatus.Processing, JobStatus.Pending);
             Log.Warning(
                 "Startup recovery: job {JobId} for PR#{PrId} was stale (Processing); reset to Pending",

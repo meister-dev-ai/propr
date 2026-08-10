@@ -23,6 +23,7 @@ using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using MeisterDev.ProPR.Infrastructure.Features.Reviewing.Execution.Services;
 using Microsoft.Extensions.Options;
 
 namespace MeisterDev.ProPR.Infrastructure.DependencyInjection;
@@ -122,14 +123,139 @@ public static class InfrastructureServiceExtensions
                     opts.PollIntervalMilliseconds = pollIntervalMilliseconds;
                 }
 
-                if (int.TryParse(configuration["WORKER_STUCK_JOB_TIMEOUT_MINUTES"], out var timeout))
+                // Retired, and accepted rather than rejected so an existing deployment still starts. The
+                // worker reports it at startup so the operator learns it no longer does anything.
+                if (int.TryParse(configuration["WORKER_STUCK_JOB_TIMEOUT_MINUTES"], out var retiredTimeout))
                 {
-                    opts.StuckJobTimeoutMinutes = timeout;
+                    opts.RetiredStuckJobTimeoutMinutes = retiredTimeout;
                 }
 
                 if (int.TryParse(configuration["WORKER_MAX_CONCURRENT_REVIEW_JOBS"], out var maxConcurrentReviewJobs))
                 {
                     opts.MaxConcurrentReviewJobs = maxConcurrentReviewJobs;
+                }
+            })
+            .ValidateDataAnnotations()
+            .ValidateOnStart();
+
+        // ReviewLeaseOptions — bound from individual env vars. Validated on start because a lease shorter
+        // than a few heartbeat intervals silently hands healthy jobs to another host.
+        services.AddOptions<ReviewLeaseOptions>()
+            .Configure(opts =>
+            {
+                if (int.TryParse(configuration["REVIEW_LEASE_DURATION_SECONDS"], out var leaseDuration))
+                {
+                    opts.LeaseDurationSeconds = leaseDuration;
+                }
+
+                if (int.TryParse(configuration["REVIEW_LEASE_HEARTBEAT_INTERVAL_SECONDS"], out var heartbeatInterval))
+                {
+                    opts.HeartbeatIntervalSeconds = heartbeatInterval;
+                }
+
+                if (double.TryParse(
+                        configuration["REVIEW_LEASE_HEARTBEAT_JITTER_FRACTION"],
+                        CultureInfo.InvariantCulture,
+                        out var jitterFraction))
+                {
+                    opts.HeartbeatJitterFraction = jitterFraction;
+                }
+
+                if (int.TryParse(configuration["REVIEW_LEASE_MAX_HEARTBEAT_FAILURES"], out var maxFailures))
+                {
+                    opts.MaxConsecutiveHeartbeatFailures = maxFailures;
+                }
+
+                if (int.TryParse(configuration["REVIEW_LEASE_CLAIM_CANDIDATE_LIMIT"], out var candidateLimit))
+                {
+                    opts.ClaimCandidateLimit = candidateLimit;
+                }
+
+                if (int.TryParse(configuration["REVIEW_LEASE_MAX_CONSECUTIVE_RECLAIMS"], out var maxConsecutive))
+                {
+                    opts.MaxConsecutiveReclaims = maxConsecutive;
+                }
+
+                if (int.TryParse(configuration["REVIEW_LEASE_MAX_TOTAL_RECLAIMS"], out var maxTotal))
+                {
+                    opts.MaxTotalReclaims = maxTotal;
+                }
+
+                if (int.TryParse(configuration["REVIEW_LEASE_RECLAIM_BACKOFF_SECONDS"], out var reclaimBackoff))
+                {
+                    opts.ReclaimBackoffSeconds = reclaimBackoff;
+                }
+
+                if (int.TryParse(configuration["REVIEW_LEASE_MAX_RECLAIMS_PER_SWEEP"], out var maxPerSweep))
+                {
+                    opts.MaxReclaimsPerSweep = maxPerSweep;
+                }
+
+                if (int.TryParse(configuration["REVIEW_LEASE_RECLAIM_SWEEP_INTERVAL_SECONDS"], out var sweepInterval))
+                {
+                    opts.ReclaimSweepIntervalSeconds = sweepInterval;
+                }
+
+                if (int.TryParse(configuration["REVIEW_LEASE_PUBLICATION_TIMEOUT_MINUTES"], out var publicationTimeout))
+                {
+                    opts.PublicationTimeoutMinutes = publicationTimeout;
+                }
+
+                if (!string.IsNullOrWhiteSpace(configuration["RUNNER_ADVERTISED_URL"]))
+                {
+                    opts.AdvertisedRunnerUrl = configuration["RUNNER_ADVERTISED_URL"];
+                }
+            })
+            .ValidateDataAnnotations()
+            .Validate(
+                opts => opts.LeaseDurationSeconds
+                        >= opts.HeartbeatIntervalSeconds * ReviewLeaseOptions.MinimumHeartbeatsPerLease,
+                $"REVIEW_LEASE_DURATION_SECONDS must be at least {ReviewLeaseOptions.MinimumHeartbeatsPerLease} "
+                + "times REVIEW_LEASE_HEARTBEAT_INTERVAL_SECONDS so a single late renewal cannot lose a healthy lease.")
+            .ValidateOnStart();
+
+        // RunnerFleetOptions — what counts as a live fleet, and when a still queue is called a stall.
+        services.AddOptions<RunnerFleetOptions>()
+            .Configure(opts =>
+            {
+                if (int.TryParse(configuration["RUNNER_ACTIVE_HEARTBEAT_WINDOW_SECONDS"], out var activeWindow))
+                {
+                    opts.ActiveHeartbeatWindowSeconds = activeWindow;
+                }
+
+                if (int.TryParse(configuration["RUNNER_FLEET_EMPTY_SETTLE_SECONDS"], out var settle))
+                {
+                    opts.FleetEmptySettleSeconds = settle;
+                }
+
+                if (int.TryParse(configuration["RUNNER_QUEUE_STALL_GRACE_SECONDS"], out var stallGrace))
+                {
+                    opts.QueueStallGraceSeconds = stallGrace;
+                }
+            })
+            .ValidateDataAnnotations()
+            .ValidateOnStart();
+
+        // The one rule that spans two option sets, so neither one's own range check can catch it.
+        services.AddSingleton<IValidateOptions<RunnerFleetOptions>, RunnerFleetOptionsValidator>();
+
+        // RunnerIngestOptions — bounds on what an executor may ship in one batch.
+        services.AddOptions<RunnerIngestOptions>()
+            .Configure(opts =>
+            {
+                if (int.TryParse(configuration["RUNNER_INGEST_MAX_ITEMS_PER_BATCH"], out var maxItems))
+                {
+                    opts.MaxItemsPerBatch = maxItems;
+                }
+
+                if (int.TryParse(configuration["RUNNER_INGEST_MAX_BATCH_BYTES"], out var maxBytes))
+                {
+                    opts.MaxBatchBytes = maxBytes;
+                }
+
+                if (int.TryParse(configuration["RUNNER_INGEST_FRESHNESS_SECONDS"], out var freshness))
+                {
+                    opts.FreshnessSeconds = freshness;
                 }
             })
             .ValidateDataAnnotations()
@@ -230,55 +356,8 @@ public static class InfrastructureServiceExtensions
     /// </summary>
     private static void ConfigureAiReviewOptions(AiReviewOptions opts, IConfiguration configuration)
     {
-        opts.MaxIterations = TryGetInt(configuration, "AI_MAX_REVIEW_ITERATIONS") ?? opts.MaxIterations;
-        opts.FileBatchLines = TryGetInt(configuration, "AI_FILE_BATCH_LINES") ?? opts.FileBatchLines;
-        opts.ConfidenceThreshold = TryGetInt(configuration, "AI_CONFIDENCE_THRESHOLD") ?? opts.ConfidenceThreshold;
-        opts.MaxFileSizeBytes = TryGetInt(configuration, "AI_MAX_FILE_SIZE_BYTES") ?? opts.MaxFileSizeBytes;
-        opts.MaxFileReviewConcurrency = TryGetInt(configuration, "AI_MAX_FILE_REVIEW_CONCURRENCY") ?? opts.MaxFileReviewConcurrency;
-        opts.MaxFileReviewRetries = TryGetInt(configuration, "AI_MAX_FILE_REVIEW_RETRIES") ?? opts.MaxFileReviewRetries;
-        opts.MaxRateLimitRetries = TryGetInt(configuration, "AI_MAX_RATE_LIMIT_RETRIES") ?? opts.MaxRateLimitRetries;
-        opts.MaxBackoffSeconds = TryGetInt(configuration, "AI_MAX_BACKOFF_SECONDS") ?? opts.MaxBackoffSeconds;
-        opts.MaxIterationsLow = TryGetInt(configuration, "AI_MAX_ITERATIONS_LOW") ?? opts.MaxIterationsLow;
-        opts.MaxIterationsMedium = TryGetInt(configuration, "AI_MAX_ITERATIONS_MEDIUM") ?? opts.MaxIterationsMedium;
-        opts.MaxIterationsHigh = TryGetInt(configuration, "AI_MAX_ITERATIONS_HIGH") ?? opts.MaxIterationsHigh;
-        opts.ConfidenceFloorError = TryGetInt(configuration, "AI_CONFIDENCE_FLOOR_ERROR") ?? opts.ConfidenceFloorError;
-        opts.ConfidenceFloorWarning = TryGetInt(configuration, "AI_CONFIDENCE_FLOOR_WARNING") ?? opts.ConfidenceFloorWarning;
-        opts.QualityFilterThreshold = TryGetInt(configuration, "AI_QUALITY_FILTER_THRESHOLD") ?? opts.QualityFilterThreshold;
-        opts.MemoryTopN = TryGetInt(configuration, "AI_MEMORY_TOP_N") ?? opts.MemoryTopN;
-        opts.MemoryMinSimilarity = TryGetFloat(configuration, "AI_MEMORY_MIN_SIMILARITY") ?? opts.MemoryMinSimilarity;
-        opts.MemoryEmbeddingDimensions = TryGetInt(configuration, "AI_MEMORY_EMBEDDING_DIMENSIONS") ?? opts.MemoryEmbeddingDimensions;
-        opts.PostedFindingMinSimilarity =
-            TryGetFloat(configuration, "AI_POSTED_FINDING_MIN_SIMILARITY") ?? opts.PostedFindingMinSimilarity;
-
-        // Structural boundary resolution (feature 070).
-        opts.EnableStructuralBoundaryResolution =
-            TryGetBool(configuration, "AI_ENABLE_STRUCTURAL_BOUNDARY_RESOLUTION") ?? opts.EnableStructuralBoundaryResolution;
-        opts.StructuralParseTimeoutMs = TryGetInt(configuration, "AI_STRUCTURAL_PARSE_TIMEOUT_MS") ?? opts.StructuralParseTimeoutMs;
-        opts.MaxStructuralParseBytes = TryGetInt(configuration, "AI_MAX_STRUCTURAL_PARSE_BYTES") ?? opts.MaxStructuralParseBytes;
-
-        // Cross-file structural reference surface.
-        opts.EnableStructuralReferenceTools =
-            TryGetBool(configuration, "AI_ENABLE_STRUCTURAL_REFERENCE_TOOLS") ?? opts.EnableStructuralReferenceTools;
-        opts.MaxReferenceCandidateFiles = TryGetInt(configuration, "AI_MAX_REFERENCE_CANDIDATE_FILES") ?? opts.MaxReferenceCandidateFiles;
-        opts.MaxReferenceResults = TryGetInt(configuration, "AI_MAX_REFERENCE_RESULTS") ?? opts.MaxReferenceResults;
-        opts.MaxReferenceResultChars = TryGetInt(configuration, "AI_MAX_REFERENCE_RESULT_CHARS") ?? opts.MaxReferenceResultChars;
-        opts.ReferenceResolutionTimeoutMs = TryGetInt(configuration, "AI_REFERENCE_RESOLUTION_TIMEOUT_MS") ?? opts.ReferenceResolutionTimeoutMs;
-
-        // Cross-compaction tool-evidence retention (experimental; A/B only).
-        opts.EnableRetainedToolEvidence =
-            TryGetBool(configuration, "AI_ENABLE_RETAINED_TOOL_EVIDENCE") ?? opts.EnableRetainedToolEvidence;
-
-        // Reasoning capture into recorded assistant-turn output (off by default; data-retention gate).
-        opts.CaptureReasoningInProtocol =
-            TryGetBool(configuration, "AI_CAPTURE_REASONING_IN_PROTOCOL") ?? opts.CaptureReasoningInProtocol;
-
-        // Linked work items / issues in the review context.
-        opts.MaxLinkedItemsInContext = TryGetInt(configuration, "AI_MAX_LINKED_ITEMS_IN_CONTEXT") ?? opts.MaxLinkedItemsInContext;
-        opts.MaxLinkedItemDescriptionChars = TryGetInt(configuration, "AI_MAX_LINKED_ITEM_DESCRIPTION_CHARS") ?? opts.MaxLinkedItemDescriptionChars;
-        opts.EnableLinkedItemTools = TryGetBool(configuration, "AI_ENABLE_LINKED_ITEM_TOOLS") ?? opts.EnableLinkedItemTools;
-        opts.MaxLinkedItemToolCalls = TryGetInt(configuration, "AI_MAX_LINKED_ITEM_TOOL_CALLS") ?? opts.MaxLinkedItemToolCalls;
-        opts.MaxLinkedItemToolResultChars = TryGetInt(configuration, "AI_MAX_LINKED_ITEM_TOOL_RESULT_CHARS") ?? opts.MaxLinkedItemToolResultChars;
-        opts.LinkedItemToolTimeoutMs = TryGetInt(configuration, "AI_LINKED_ITEM_TOOL_TIMEOUT_MS") ?? opts.LinkedItemToolTimeoutMs;
+        // Bound by the pipeline's own binder, so a runner reads the same variables into the same fields.
+        AiReviewOptionsBinder.Bind(opts, configuration);
     }
 
     private static int? TryGetInt(IConfiguration configuration, string key)

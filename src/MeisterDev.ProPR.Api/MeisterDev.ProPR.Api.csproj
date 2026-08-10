@@ -41,4 +41,8 @@
         <UserSecretsId>1d530dec-7d4c-4cce-a315-1bb4d0e0ea7e</UserSecretsId>
     </PropertyGroup>
 
+    <ItemGroup>
+        <InternalsVisibleTo Include="MeisterDev.ProPR.Api.Tests"/>
+    </ItemGroup>
+
 </Project>

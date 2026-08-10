@@ -44,6 +44,7 @@ public sealed class ProviderFailureIsolationTests(WebhookReviewActivationIntegra
         var acceptedResponse = await client.SendAsync(acceptedRequest);
 
         Assert.Equal(HttpStatusCode.OK, acceptedResponse.StatusCode);
+        await factory.DrainQueueAsync();
 
         var persisted = await factory.GetLatestDeliveryAsync();
         Assert.NotNull(persisted);

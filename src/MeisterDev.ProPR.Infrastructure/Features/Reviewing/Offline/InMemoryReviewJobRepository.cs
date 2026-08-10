@@ -325,6 +325,20 @@ public sealed class InMemoryReviewJobRepository : IJobRepository
             .AsReadOnly();
     }
 
+    public Task<IReadOnlyList<ReviewJob>> GetClaimCandidatesAsync(
+        int limit,
+        DateTimeOffset? submittedAfter = null,
+        CancellationToken ct = default)
+    {
+        var pending = this.GetPendingJobs().AsEnumerable();
+        if (submittedAfter is { } cursor)
+        {
+            pending = pending.Where(job => job.SubmittedAt > cursor);
+        }
+
+        return Task.FromResult<IReadOnlyList<ReviewJob>>(limit < 1 ? [] : pending.Take(limit).ToList().AsReadOnly());
+    }
+
     public Task<IReadOnlyList<ReviewJob>> GetProcessingJobsAsync(CancellationToken ct = default)
     {
         return Task.FromResult<IReadOnlyList<ReviewJob>>(
@@ -353,16 +367,6 @@ public sealed class InMemoryReviewJobRepository : IJobRepository
         }
 
         return Task.FromResult(true);
-    }
-
-    public Task<IReadOnlyList<ReviewJob>> GetStuckProcessingJobsAsync(TimeSpan threshold, CancellationToken ct = default)
-    {
-        var cutoff = DateTimeOffset.UtcNow - threshold;
-        return Task.FromResult<IReadOnlyList<ReviewJob>>(
-            this._jobs.Values
-                .Where(job => job.Status == JobStatus.Processing && job.ProcessingStartedAt < cutoff)
-                .ToList()
-                .AsReadOnly());
     }
 
     public Task UpdateRetryCountAsync(Guid id, int retryCount, CancellationToken ct = default)

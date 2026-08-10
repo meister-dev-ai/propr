@@ -2,12 +2,14 @@
 // Licensed under the Elastic License 2.0. See LICENSE file in the project root for full license terms.
 
 using System.Diagnostics;
+using System.Text.Json;
 using System.Diagnostics.Metrics;
 using System.Text.RegularExpressions;
 using MeisterDev.ProPR.Application.Features.Crawling.Execution.Models;
 using MeisterDev.ProPR.Application.Features.Crawling.Execution.Ports;
 using MeisterDev.ProPR.Application.Features.Crawling.Webhooks.Dtos;
 using MeisterDev.ProPR.Application.Features.Crawling.Webhooks.Models;
+using MeisterDev.ProPR.Application.Features.Crawling.Webhooks.Ports;
 using MeisterDev.ProPR.Application.Interfaces;
 using MeisterDev.ProPR.Domain.Enums;
 using MeisterDev.ProPR.Domain.ValueObjects;
@@ -24,6 +26,7 @@ public sealed partial class HandleProviderWebhookDeliveryHandler(
     ISecretProtectionCodec secretProtectionCodec,
     ILogger<HandleProviderWebhookDeliveryHandler> logger,
     IPullRequestSynchronizationService pullRequestSynchronizationService,
+    IWebhookDeliveryQueue deliveryQueue,
     IProviderActivationService? providerActivationService = null)
 {
     private const int OkStatusCode = 200;
@@ -220,6 +223,43 @@ public sealed partial class HandleProviderWebhookDeliveryHandler(
                 rejected,
                 ct);
             return CompleteDecision(activity, startedAt, providerTagValue, delivery.EventName, true, rejected);
+        }
+
+        // The seam. Everything above reads only the delivery and this installation's own configuration;
+        // everything below reads the provider — the revision, the reviewer, the pull request itself — and
+        // that is the part no provider's delivery timeout will wait for. So an accepted delivery is
+        // recorded here and answered immediately, and the work happens on a worker that owns its own time.
+        if (command.Mode == WebhookDeliveryProcessingMode.AcceptAndQueue)
+        {
+            var queued = await deliveryQueue.EnqueueAsync(
+                new WebhookDeliveryQueueSubmission(
+                    configuration.Id,
+                    command.Provider,
+                    command.PathKey,
+                    delivery.EventName,
+                    TryReadDeliveryKey(command.Provider, command.Headers),
+                    JsonSerializer.Serialize(command.Headers),
+                    command.Payload),
+                ct);
+
+            var accepted = NormalizeDecision(new WebhookDeliveryQueueOutcome(queued).ToDecision(OkStatusCode));
+
+            // Logged on acceptance rather than left to the worker, so a delivery this installation took
+            // responsibility for is visible from the moment it did. The worker records what processing made
+            // of it as its own entry; a delivery with only the first of the two is one that never got that
+            // far, which is exactly the case that used to leave no trace at all.
+            await this.PersistLogAsync(
+                configuration.Id,
+                delivery.EventName,
+                delivery.Repository.ExternalRepositoryId,
+                delivery.Review.Number,
+                delivery.SourceBranch,
+                delivery.TargetBranch,
+                accepted,
+                ct);
+
+            LogDeliveryQueued(logger, configuration.Id, command.Provider, delivery.EventName, queued);
+            return CompleteDecision(activity, startedAt, providerTagValue, delivery.EventName, true, accepted);
         }
 
         try
@@ -656,6 +696,48 @@ public sealed partial class HandleProviderWebhookDeliveryHandler(
         };
     }
 
+    /// <summary>
+    ///     The provider's own identifier for this delivery, when it sends one. It is what makes a retried
+    ///     delivery recognisable as the same delivery rather than a second pull request event.
+    /// </summary>
+    /// <summary>
+    ///     What the provider is told when a delivery is accepted for processing. Deliberately the same
+    ///     "accepted" it was told before: from the provider's side nothing has changed, and only the
+    ///     summary says the work now happens behind the answer.
+    /// </summary>
+    private sealed record WebhookDeliveryQueueOutcome(bool Queued)
+    {
+        public WebhookRoutingDecision ToDecision(int statusCode)
+        {
+            return new WebhookRoutingDecision(
+                WebhookDeliveryOutcome.Accepted,
+                statusCode,
+                "accepted",
+                [
+                    this.Queued
+                        ? "Accepted the delivery and queued it for review intake."
+                        : "Accepted the delivery; this delivery was already queued, so nothing was queued again.",
+                ],
+                null);
+        }
+    }
+
+    private static string? TryReadDeliveryKey(ScmProvider provider, IReadOnlyDictionary<string, string> headers)
+    {
+        return provider switch
+        {
+            ScmProvider.GitHub => TryReadHeader(headers, "X-GitHub-Delivery"),
+            ScmProvider.GitLab => TryReadHeader(headers, "X-Gitlab-Event-UUID"),
+            ScmProvider.Forgejo => TryReadHeader(headers, "X-Gitea-Delivery"),
+
+            // Azure DevOps sends no delivery header. Its service hooks carry a notification id in the body
+            // instead, and reading it here would mean parsing the payload a second way; without a key the
+            // queue simply accepts a retry as a new entry, which the synchronisation step already handles
+            // by recognising the revision it has seen.
+            _ => null,
+        };
+    }
+
     private static WebhookRoutingDecision CompleteDecision(
         Activity? activity,
         Stopwatch stopwatch,
@@ -727,6 +809,17 @@ public sealed partial class HandleProviderWebhookDeliveryHandler(
             ? trimmed
             : trimmed[..maxLength].TrimEnd() + "...";
     }
+
+    [LoggerMessage(
+        EventId = 2830,
+        Level = LogLevel.Information,
+        Message = "Queued provider webhook delivery for configuration {ConfigurationId}, provider {Provider}, event {EventType} (newly queued: {Queued}).")]
+    private static partial void LogDeliveryQueued(
+        ILogger logger,
+        Guid configurationId,
+        ScmProvider provider,
+        string eventType,
+        bool queued);
 
     [LoggerMessage(
         EventId = 2820,

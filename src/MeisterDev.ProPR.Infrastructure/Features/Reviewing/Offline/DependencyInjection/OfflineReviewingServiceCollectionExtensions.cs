@@ -3,6 +3,7 @@
 
 using MeisterDev.ProPR.Application.Features.Reviewing.Diagnostics.Ports;
 using MeisterDev.ProPR.Application.Features.Reviewing.Execution.Ports;
+using MeisterDev.ProPR.Infrastructure.Features.Reviewing.Offline;
 using MeisterDev.ProPR.Application.Features.Reviewing.Intake.Ports;
 using MeisterDev.ProPR.Application.Features.Reviewing.ThreadMemory.Ports;
 using MeisterDev.ProPR.Application.Interfaces;
@@ -38,6 +39,11 @@ public static class OfflineReviewingServiceCollectionExtensions
 
         services.TryAddSingleton<InMemoryReviewJobRepository>();
         services.TryAddSingleton<IJobRepository>(sp => sp.GetRequiredService<InMemoryReviewJobRepository>());
+        // Claiming without a database. Registered ahead of the Postgres-backed store, which is also TryAdd.
+        services.TryAddScoped<IReviewJobLeaseStore, InMemoryReviewJobLeaseStore>();
+        // Same reason and same ordering: the harness has no database, and the worker asks for a fleet
+        // monitor on every cycle. Registered ahead of the Postgres-backed one, which is also TryAdd.
+        services.TryAddScoped<IRunnerFleetMonitor, OfflineRunnerFleetMonitor>();
         services.TryAddSingleton<IProtocolRecorder, InMemoryProtocolRecorder>();
         services.TryAddSingleton<IThreadPassJobRepository, NoOpThreadPassJobRepository>();
         services.TryAddSingleton<IReviewDiagnosticsReader, InMemoryReviewDiagnosticsReader>();

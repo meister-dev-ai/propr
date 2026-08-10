@@ -24,7 +24,8 @@ redeploys, and is not configured through an environment variable - see
 | Capability | Key | Without it |
 |---|---|---|
 | Single sign-on | `sso-authentication` | Tenant users sign in with local accounts only |
-| Parallel review execution | `parallel-review-execution` | One review at a time; a submission made while another review is queued or running is refused with HTTP 409 and a license message |
+| Parallel review execution | `parallel-review-execution` | One review at a time, working on one file at a time, however many replicas run and whatever the concurrency settings say; a submission made while another review is queued or running is refused with HTTP 409 and a license message |
+| Distributed review execution | `distributed-execution` | No runner can enroll and none can lease; reviews run in the control plane as before |
 | Multiple SCM providers | `multiple-scm-providers` | One SCM provider connection per client |
 | Crawl configurations | `crawl-configs` | No scheduled crawling, no @-mention scanning, and crawl-setup discovery is refused; reviews come from webhooks or the API |
 | Budgeting | `budgeting` | No USD spend caps or budget enforcement; the tenant Budget and Spend views are refused with the same license message |

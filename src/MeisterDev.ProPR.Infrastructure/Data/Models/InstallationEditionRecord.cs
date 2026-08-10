@@ -18,5 +18,16 @@ public sealed class InstallationEditionRecord
 
     public DateTimeOffset UpdatedAt { get; set; }
 
+    /// <summary>
+    ///     How many runners may hold leases at once, or null when leasing is not metered.
+    ///     <para>
+    ///         Stored rather than compiled, so a large installation or a hosted offering raises it without a
+    ///         new build. Null is deliberately "unmetered" rather than "zero": until the signed entitlement
+    ///         lands there is no authority to read a number from, and defaulting an unset installation to
+    ///         zero would refuse every lease on an install that never opted into metering at all.
+    ///     </para>
+    /// </summary>
+    public int? EntitledRunnerSlots { get; set; }
+
     public Guid? UpdatedByUserId { get; set; }
 }

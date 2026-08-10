@@ -21,7 +21,7 @@
            worse than no link. The route guard and the server both repeat the check. -->
       <RouterLink v-if="canViewCodeQuality" :to="{ name: 'code-quality' }" class="nav-link" :class="{ 'router-link-active': $route.name === 'code-quality' }"><i class="fi fi-rr-chart-histogram"></i> Code Quality</RouterLink>
       <div v-if="hasAnyAdministrationAccess" class="nav-dropdown" @mouseenter="adminDropdownOpen = true" @mouseleave="adminDropdownOpen = false">
-        <button class="nav-link dropdown-toggle" :class="{ 'router-link-active': $route.name === 'tenant-directory' || $route.name === 'tenant-settings' || $route.name === 'tenant-members' || $route.name === 'users' || $route.name === 'thread-memory' || $route.name === 'provider-settings' || $route.name === 'licensing' || $route.name === 'reviewer-performance' }" @click="adminDropdownOpen = !adminDropdownOpen">
+        <button class="nav-link dropdown-toggle" :class="{ 'router-link-active': $route.name === 'tenant-directory' || $route.name === 'tenant-settings' || $route.name === 'tenant-members' || $route.name === 'users' || $route.name === 'thread-memory' || $route.name === 'provider-settings' || $route.name === 'licensing' || $route.name === 'runners' || $route.name === 'runners-all' || $route.name === 'reviewer-performance' }" @click="adminDropdownOpen = !adminDropdownOpen">
           <i class="fi fi-rr-shield-check"></i> Administration
           <i class="fi fi-rr-angle-small-down ml-1 text-xs"></i>
         </button>
@@ -32,6 +32,7 @@
           <RouterLink v-if="isAdmin" :to="{ name: 'provider-settings' }" class="dropdown-item" :class="{ 'active': $route.name === 'provider-settings' }" @click="adminDropdownOpen = false"><i class="fi fi-rr-plug-connection"></i> SCM Providers</RouterLink>
           <RouterLink v-if="isAdmin" :to="{ name: 'users' }" class="dropdown-item" :class="{ 'active': $route.name === 'users' }" @click="adminDropdownOpen = false"><i class="fi fi-rr-user"></i> Users</RouterLink>
           <RouterLink v-if="isAdmin" :to="{ name: 'thread-memory' }" class="dropdown-item" :class="{ 'active': $route.name === 'thread-memory' }" @click="adminDropdownOpen = false"><i class="fi fi-rr-brain"></i> Memory</RouterLink>
+          <RouterLink v-if="defaultRunnersRoute" :to="defaultRunnersRoute" class="dropdown-item" :class="{ 'active': $route.name === 'runners' || $route.name === 'runners-all' }" @click="adminDropdownOpen = false"><i class="fi fi-rr-computer"></i> Runners</RouterLink>
         </div>
       </div>
     </nav>
@@ -104,6 +105,25 @@ const hasAnyAdministrationAccess = computed(
 
 const defaultTenantAdminRoute = computed(() => {
   return canAccessTenantAdministration.value ? { name: 'tenant-directory' } : null
+})
+
+/**
+ * A platform administrator administers every tenant, so their entry is the installation-wide fleet. They
+ * hold no tenant membership to resolve an id from, and deriving one from memberships hid this entry from
+ * precisely the operators the API accepts. A tenant's own administrators go to their own tenant. Hidden
+ * without the capability, which is also what the route guard and the API enforce.
+ */
+const defaultRunnersRoute = computed(() => {
+  if (!isCapabilityAvailable('distributed-execution')) {
+    return null
+  }
+
+  if (isAdmin.value) {
+    return { name: 'runners-all' }
+  }
+
+  const tenantId = Object.entries(tenantRoles.value).find(([, role]) => role >= 1)?.[0]
+  return tenantId ? { name: 'runners', params: { tenantId } } : null
 })
 
 const adminDropdownOpen = ref(false)

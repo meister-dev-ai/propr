@@ -1229,6 +1229,548 @@
         }
       }
     },
+    "/admin/runners": {
+      "get": {
+        "tags": [
+          "AdminRunners"
+        ],
+        "summary": "The whole installation's fleet, every tenant together, for the operator who administers all of\nthem. Each runner names the tenant it belongs to, because across tenants a display name alone\ndoes not identify a host.",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/RunnerRegistryDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RunnerRegistryDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RunnerRegistryDto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/admin/runners/{tenantId}": {
+      "get": {
+        "tags": [
+          "AdminRunners"
+        ],
+        "summary": "Every runner enrolled in one tenant, with its health, scope, and current work.",
+        "parameters": [
+          {
+            "name": "tenantId",
+            "in": "path",
+            "description": "The tenant whose registry to read.",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/RunnerRegistryDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RunnerRegistryDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RunnerRegistryDto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/admin/runners/tokens": {
+      "post": {
+        "tags": [
+          "AdminRunners"
+        ],
+        "summary": "Issues a registration token. The value is returned here and never again. Single-use unless the\nrequest asks for more, which is what a scaling group needs: its replicas start without an\noperator present to issue each of them one.",
+        "requestBody": {
+          "description": "Which tenant and clients the enrolled runner will be scoped to.",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/IssueRunnerTokenRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/IssueRunnerTokenRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/IssueRunnerTokenRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Created",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/RunnerRegistrationTokenDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RunnerRegistrationTokenDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RunnerRegistrationTokenDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/admin/runners/{runnerId}/revoke": {
+      "post": {
+        "tags": [
+          "AdminRunners"
+        ],
+        "summary": "Revokes a runner. It stops being able to lease immediately.",
+        "parameters": [
+          {
+            "name": "runnerId",
+            "in": "path",
+            "description": "The runner to revoke.",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "No Content"
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/admin/runners/{runnerId}": {
+      "delete": {
+        "tags": [
+          "AdminRunners"
+        ],
+        "summary": "Deletes a runner's row from the registry. This is how a stale identity — a host that was\nredeployed and re-enrolled as somebody new — stops counting as capacity and stops sitting amber\nin the fleet view forever. Refused while the runner holds a lease: revoke it first, let the\nlease expire, then delete.",
+        "parameters": [
+          {
+            "name": "runnerId",
+            "in": "path",
+            "description": "The runner to delete.",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "No Content"
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/admin/runners/tokens/{tokenId}/revoke": {
+      "post": {
+        "tags": [
+          "AdminRunners"
+        ],
+        "summary": "Revokes an issued registration token so it can no longer enroll anything.",
+        "parameters": [
+          {
+            "name": "tokenId",
+            "in": "path",
+            "description": "The token to revoke.",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "No Content"
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/admin/runners/{runnerId}/scope": {
+      "put": {
+        "tags": [
+          "AdminRunners"
+        ],
+        "summary": "Re-stamps which clients a runner may serve, taking effect on its next lease.",
+        "parameters": [
+          {
+            "name": "runnerId",
+            "in": "path",
+            "description": "The runner.",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "description": "The new scope.",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AssignRunnerScopeRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AssignRunnerScopeRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/AssignRunnerScopeRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "204": {
+            "description": "No Content"
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/admin/identity/users": {
       "get": {
         "tags": [
@@ -17057,6 +17599,939 @@
         }
       }
     },
+    "/runners/execution/tools/changed-files": {
+      "post": {
+        "tags": [
+          "RunnerExecution"
+        ],
+        "summary": "Source-control metadata: the files this review's revision changed.",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RunnerJobCallRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RunnerJobCallRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/RunnerJobCallRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/runners/execution/tools/knowledge": {
+      "post": {
+        "tags": [
+          "RunnerExecution"
+        ],
+        "summary": "A repository-aware knowledge answer.",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RunnerKnowledgeRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RunnerKnowledgeRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/RunnerKnowledgeRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/runners/execution/tools/linked-item-discussion": {
+      "post": {
+        "tags": [
+          "RunnerExecution"
+        ],
+        "summary": "The discussion on a work item linked to the review.",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RunnerLinkedItemRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RunnerLinkedItemRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/RunnerLinkedItemRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/runners/execution/tools/symbol-insight": {
+      "post": {
+        "tags": [
+          "RunnerExecution"
+        ],
+        "summary": "Symbol-aware insight, through the code-knowledge service the executor cannot reach.",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RunnerSymbolInsightRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RunnerSymbolInsightRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/RunnerSymbolInsightRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/runners/execution/tools/linked-item-details": {
+      "post": {
+        "tags": [
+          "RunnerExecution"
+        ],
+        "summary": "The structured fields of a work item linked to the review.",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RunnerLinkedItemRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RunnerLinkedItemRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/RunnerLinkedItemRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/runners/execution/tools/resolve-linked-item": {
+      "post": {
+        "tags": [
+          "RunnerExecution"
+        ],
+        "summary": "Resolves a related link on a linked item into a full summary.",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RunnerRelatedItemRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RunnerRelatedItemRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/RunnerRelatedItemRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/runners/execution/memory/reconsider": {
+      "post": {
+        "tags": [
+          "RunnerExecution"
+        ],
+        "summary": "Reconsiders one file's draft result against the thread-memory store.",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RunnerMemoryReconsiderRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RunnerMemoryReconsiderRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/RunnerMemoryReconsiderRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/runners/execution/ai/chat": {
+      "post": {
+        "tags": [
+          "RunnerExecution"
+        ],
+        "summary": "Relays one chat completion, charged and capped centrally.",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RunnerChatRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RunnerChatRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/RunnerChatRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/runners/execution/ingest": {
+      "post": {
+        "tags": [
+          "RunnerExecution"
+        ],
+        "summary": "Applies one batch of trace events, per-file results, and spend.",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RunnerIngestRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RunnerIngestRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/RunnerIngestRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/runners/execution/prior-results": {
+      "post": {
+        "tags": [
+          "RunnerExecution"
+        ],
+        "summary": "What this job already has reviewed, for an executor picking it up after a reclaim.\n\nRead here rather than carried in the manifest: a completed file result holds its findings, so\n    a job most of the way through a large review would put all of them in every lease offer, and\n    only a reclaim ever needs them.",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RunnerJobCallRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RunnerJobCallRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/RunnerJobCallRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/runners/execution/findings": {
+      "post": {
+        "tags": [
+          "RunnerExecution"
+        ],
+        "summary": "Submits one chunk of the review's findings for the control plane to publish.",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RunnerFindingsRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RunnerFindingsRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/RunnerFindingsRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/runners/execution/workspace": {
+      "post": {
+        "tags": [
+          "RunnerExecution"
+        ],
+        "summary": "Where to fetch this job's repository content from, if the fetch is allowed.",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RunnerJobCallRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RunnerJobCallRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/RunnerJobCallRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/runners/execution/workspace/{jobId}/{generation}/info/refs": {
+      "get": {
+        "tags": [
+          "RunnerExecution"
+        ],
+        "summary": "The ref advertisement a git client reads first. Authorized per lease like everything else, so a\nrunner that lost the job cannot keep pulling its repository.",
+        "parameters": [
+          {
+            "name": "jobId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "generation",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          },
+          {
+            "name": "service",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/runners/execution/workspace/{jobId}/{generation}/git-upload-pack": {
+      "post": {
+        "tags": [
+          "RunnerExecution"
+        ],
+        "summary": "Serves the client's negotiation and streams back the pack.",
+        "parameters": [
+          {
+            "name": "jobId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "generation",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/runners/lease": {
+      "post": {
+        "tags": [
+          "RunnerLease"
+        ],
+        "summary": "Asks for a job. Answered with a manifest, or with a typed reason there is none.",
+        "requestBody": {
+          "description": "How much room the runner has and which contract it speaks.",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RunnerLeaseHttpRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RunnerLeaseHttpRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/RunnerLeaseHttpRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/RunnerJobManifest"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RunnerJobManifest"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RunnerJobManifest"
+                }
+              }
+            }
+          },
+          "204": {
+            "description": "No Content"
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/RunnerContractError"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RunnerContractError"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RunnerContractError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/RunnerContractError"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RunnerContractError"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RunnerContractError"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Too Many Requests",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/RunnerContractError"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RunnerContractError"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RunnerContractError"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Service Unavailable",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/RunnerContractError"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RunnerContractError"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RunnerContractError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/runners/lease/heartbeat": {
+      "post": {
+        "tags": [
+          "RunnerLease"
+        ],
+        "summary": "Keeps a lease alive while the review runs, and carries back the one instruction the control\nplane has for a job already in flight.\n\nAnswered 200 whether or not the renewal was accepted. A refusal has a reason the executor\n    must act on differently — a lost lease means stop quietly, a revoked client means stop and\n    say so — and a bare status code cannot carry that.",
+        "requestBody": {
+          "description": "The job and generation being renewed.",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RunnerLeaseHeartbeatRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RunnerLeaseHeartbeatRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/RunnerLeaseHeartbeatRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/RunnerHeartbeatResponse"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RunnerHeartbeatResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RunnerHeartbeatResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/RunnerContractError"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RunnerContractError"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RunnerContractError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/RunnerContractError"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RunnerContractError"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RunnerContractError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/runners/lease/release": {
+      "post": {
+        "tags": [
+          "RunnerLease"
+        ],
+        "summary": "Hands a lease back deliberately, so a planned shutdown costs the job nothing.",
+        "requestBody": {
+          "description": "The job and generation being handed back.",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RunnerLeaseHandbackRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RunnerLeaseHandbackRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/RunnerLeaseHandbackRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/RunnerContractError"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RunnerContractError"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RunnerContractError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/RunnerContractError"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RunnerContractError"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RunnerContractError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/runners/register": {
+      "post": {
+        "tags": [
+          "RunnerRegistration"
+        ],
+        "summary": "Enrolls a host presenting an operator-issued registration token.",
+        "requestBody": {
+          "description": "The token, the name the host reports, and the contract it speaks.",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RunnerRegisterRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RunnerRegisterRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/RunnerRegisterRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/RunnerCredentialResponse"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RunnerCredentialResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RunnerCredentialResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/RunnerContractError"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RunnerContractError"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RunnerContractError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/RunnerContractError"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RunnerContractError"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RunnerContractError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/runners/credential/renew": {
+      "post": {
+        "tags": [
+          "RunnerRegistration"
+        ],
+        "summary": "Issues a fresh credential to an enrolled runner, keeping its identity and stamped scope.",
+        "requestBody": {
+          "description": "The contract the runner speaks.",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RunnerCredentialRenewRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RunnerCredentialRenewRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/RunnerCredentialRenewRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/RunnerCredentialResponse"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RunnerCredentialResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RunnerCredentialResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/RunnerContractError"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RunnerContractError"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RunnerContractError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/RunnerContractError"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RunnerContractError"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RunnerContractError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/tenants/{tenantId}/ai-connections": {
       "get": {
         "tags": [
@@ -21669,6 +23144,42 @@
   },
   "components": {
     "schemas": {
+      "AIAnnotation": {
+        "type": "object",
+        "properties": {
+          "annotatedRegions": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AnnotatedRegion"
+            },
+            "nullable": true
+          },
+          "additionalProperties": {
+            "type": "object",
+            "additionalProperties": { },
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "AIContent": {
+        "type": "object",
+        "properties": {
+          "annotations": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AIAnnotation"
+            },
+            "nullable": true
+          },
+          "additionalProperties": {
+            "type": "object",
+            "additionalProperties": { },
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
       "AdoBranchOptionDto": {
         "type": "object",
         "properties": {
@@ -22549,6 +24060,10 @@
         "type": "string",
         "description": "Latest verification state for one AI connection profile."
       },
+      "AnnotatedRegion": {
+        "type": "object",
+        "additionalProperties": false
+      },
       "AppUserRole": {
         "enum": [
           "user",
@@ -22592,6 +24107,22 @@
         },
         "additionalProperties": false,
         "description": "Request payload to grant a tenant member a role on a client."
+      },
+      "AssignRunnerScopeRequest": {
+        "type": "object",
+        "properties": {
+          "clientScope": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "description": "The new scope. Empty or absent means every client in the tenant.",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false,
+        "description": "A request to re-scope a runner."
       },
       "AuthOptionsDto": {
         "type": "object",
@@ -23007,6 +24538,50 @@
         },
         "additionalProperties": false,
         "description": "Password change request payload."
+      },
+      "ChatMessage": {
+        "type": "object",
+        "properties": {
+          "authorName": {
+            "type": "string",
+            "nullable": true
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "role": {
+            "$ref": "#/components/schemas/ChatRole"
+          },
+          "contents": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AIContent"
+            },
+            "nullable": true
+          },
+          "messageId": {
+            "type": "string",
+            "nullable": true
+          },
+          "additionalProperties": {
+            "type": "object",
+            "additionalProperties": { },
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "ChatRole": {
+        "type": "object",
+        "properties": {
+          "value": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
       },
       "ClientBudgetConsumptionDto": {
         "type": "object",
@@ -25523,6 +27098,39 @@
         ],
         "type": "string",
         "description": "Customer-facing product edition for one ProPR installation."
+      },
+      "IssueRunnerTokenRequest": {
+        "type": "object",
+        "properties": {
+          "tenantId": {
+            "type": "string",
+            "description": "The tenant the enrolled runner will belong to.",
+            "format": "uuid"
+          },
+          "clientScope": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "description": "The clients it may serve. Empty or absent means every client in the tenant.",
+            "nullable": true
+          },
+          "validForHours": {
+            "type": "integer",
+            "description": "How long the token stays usable, in hours. Omit it for a token that does not expire — an\noperator's choice, and the right one for a key a scaling group reads from its secret store.",
+            "format": "int32",
+            "nullable": true
+          },
+          "maxUses": {
+            "type": "integer",
+            "description": "How many hosts may enroll with this token. Omit it for no limit. One suits a host enrolled by\nhand; a scaling group needs more, because its replicas start without an operator present to\nissue each of them a token.",
+            "format": "int32",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false,
+        "description": "A request to mint a registration token."
       },
       "JobDetailResponse": {
         "type": "object",
@@ -28746,6 +30354,33 @@
         "additionalProperties": false,
         "description": "Request body for setting a client's default review profile."
       },
+      "QueueStallDto": {
+        "type": "object",
+        "properties": {
+          "cause": {
+            "type": "string",
+            "description": "Why.",
+            "nullable": true
+          },
+          "pendingJobCount": {
+            "type": "integer",
+            "description": "How many jobs are waiting.",
+            "format": "int32"
+          },
+          "oldestPendingSince": {
+            "type": "string",
+            "description": "When the longest-waiting job was submitted.",
+            "format": "date-time"
+          },
+          "detail": {
+            "type": "string",
+            "description": "Operator-readable detail.",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false,
+        "description": "A queue that has work nothing is taking."
+      },
       "RefreshRequest": {
         "type": "object",
         "properties": {
@@ -29058,6 +30693,78 @@
         "additionalProperties": false,
         "description": "Provider-neutral code review identity supplied by review intake clients."
       },
+      "ReviewComment": {
+        "type": "object",
+        "properties": {
+          "filePath": {
+            "type": "string",
+            "description": "Optional file path the comment refers to.",
+            "nullable": true
+          },
+          "lineNumber": {
+            "type": "integer",
+            "description": "Optional line number within the file.",
+            "format": "int32",
+            "nullable": true
+          },
+          "severity": {
+            "$ref": "#/components/schemas/CommentSeverity"
+          },
+          "message": {
+            "type": "string",
+            "description": "Comment message text.",
+            "nullable": true
+          },
+          "originPassKind": {
+            "type": "string",
+            "description": "The `ReviewPassKind` name of the review pass that produced this finding (e.g.\n`\"Baseline\"`, `\"MultiPassUnion\"`), when known. Provenance metadata only:\nit does not participate in deduplication (which keys on message text) and is\nnull for legacy comments and comments with no recorded origin.",
+            "nullable": true
+          },
+          "originPassIndex": {
+            "type": "integer",
+            "description": "The 1-based index of the review pass that produced this finding, when it came from a numbered\nmulti-pass union pass. The tier baseline is pass 1, so the first additional pass is 2. Provenance\nmetadata only: it does not participate in deduplication and is null for the\nbaseline pass, legacy comments, and comments with no recorded numbered origin.",
+            "format": "int32",
+            "nullable": true
+          },
+          "originPassLens": {
+            "type": "string",
+            "description": "The specialist lens of the multi-pass union pass that produced this finding (e.g. `\"security\"`),\nwhen the pass ran under a lens. Provenance metadata only: it does not participate in deduplication and is\nnull for the baseline pass, ordinary resample passes, and legacy comments.",
+            "nullable": true
+          },
+          "originPassShadow": {
+            "type": "boolean",
+            "description": "Whether this finding came from a shadow review pass — a pass that runs and is recorded for diagnostics\nbut whose findings are never published. Provenance metadata only: it does not participate in\ndeduplication. Shadow comments are filtered out of the publishable synthesis input while remaining in the\npersisted per-file result for the trace. false for ordinary comments."
+          },
+          "scopeRelation": {
+            "$ref": "#/components/schemas/ReviewCommentScopeRelation"
+          },
+          "sourceReadGrounding": {
+            "$ref": "#/components/schemas/ReviewCommentReadGrounding"
+          },
+          "originModelId": {
+            "type": "string",
+            "description": "The remote model that produced this finding, when a single pass owns it. Provenance metadata only: it\ndoes not participate in deduplication and is null for legacy comments and for\ncomments no single pass produced (a synthesized cross-cutting concern is drawn from many).",
+            "nullable": true
+          },
+          "originLogicalModelName": {
+            "type": "string",
+            "description": "The client's logical model name for the producing pass, when the pass ran through a named logical model\nrather than a bare connection binding. Kept alongside MeisterDev.ProPR.Domain.ValueObjects.ReviewComment.OriginModelId rather than instead of\nit, because a logical name can be repointed at a different remote model: attributing findings to the name\nalone would silently merge two models' results, and to the remote id alone would lose the name the\noperator actually configures.",
+            "nullable": true
+          },
+          "originSymbolName": {
+            "type": "string",
+            "description": "Name of the definition this comment's line falls inside (the method, class, or function the finding is\nabout) resolved structurally from the file's own syntax. Provenance metadata only: it does not\nparticipate in deduplication and is null for pull-request-level comments, unparsable\nor unsupported languages, and lines that fall outside every definition.",
+            "nullable": true
+          },
+          "originSymbolKind": {
+            "type": "string",
+            "description": "What kind of definition MeisterDev.ProPR.Domain.ValueObjects.ReviewComment.OriginSymbolName is (method, class, function, …), as the\nstructural analyzer classified it. null whenever the name is.",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false,
+        "description": "Represents a single review comment produced by the review engine."
+      },
       "ReviewCommentDto": {
         "type": "object",
         "properties": {
@@ -29096,6 +30803,15 @@
         },
         "additionalProperties": false,
         "description": "DTO for a single review comment."
+      },
+      "ReviewCommentReadGrounding": {
+        "enum": [
+          "covered",
+          "notRead",
+          "citedLineMissing"
+        ],
+        "type": "string",
+        "description": "Whether the reviewer read the actual source at a finding's cited location while producing it.\nDerived deterministically from the review pass's recorded file-read tool calls — it captures\ngrounding, not correctness: MeisterDev.ProPR.Domain.Enums.ReviewCommentReadGrounding.Covered means the cited lines were fetched, not that\nthe finding's conclusion is right. Provenance metadata only; it does not participate in\ndeduplication and is null when grounding is not applicable (no line number,\nor a finding produced outside the file-by-file read loop)."
       },
       "ReviewCommentScopeRelation": {
         "enum": [
@@ -29732,6 +31448,1484 @@
         },
         "additionalProperties": false,
         "description": "DTO representing local review workspace adoption and fallback visibility."
+      },
+      "RunnerChatOptions": {
+        "type": "object",
+        "properties": {
+          "temperature": {
+            "type": "number",
+            "description": "The sampling temperature, when the job pins one.",
+            "format": "float",
+            "nullable": true
+          },
+          "maxOutputTokens": {
+            "type": "integer",
+            "description": "The output ceiling for this call, when the caller resolved one.",
+            "format": "int32",
+            "nullable": true
+          },
+          "tools": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/RunnerChatToolDefinition"
+            },
+            "description": "The tools the model may call, as declarations. Invocation stays with the runner.",
+            "nullable": true
+          },
+          "reasoningEffort": {
+            "type": "string",
+            "description": "The reasoning effort level (`low` / `medium` / `high`), or null to leave the provider\nat its default. Carried as text so the contract stays free of library enums.",
+            "nullable": true
+          },
+          "captureReasoning": {
+            "type": "boolean",
+            "description": "Whether the call asks the model to return a reasoning summary."
+          }
+        },
+        "additionalProperties": false,
+        "description": "The portable slice of a relayed completion's options.\n\nThe review pipeline shapes every call with tools, a temperature, an output ceiling, and reasoning\n    settings. On the runner those live in a rich in-memory options object that cannot travel — tools\n    carry their implementations — so this record carries exactly the parts the provider needs to see:\n    each tool as a declaration (name, description, parameter schema) and the reasoning knobs in\n    neutral terms. A relay that dropped any of this would quietly turn a tool-using review into a\n    single-turn one, which is precisely what happened before the options rode the wire."
+      },
+      "RunnerChatRequest": {
+        "type": "object",
+        "properties": {
+          "jobId": {
+            "type": "string",
+            "description": "The job the call concerns.",
+            "format": "uuid"
+          },
+          "leaseGeneration": {
+            "type": "integer",
+            "description": "The lease generation the caller believes it holds.",
+            "format": "int32"
+          },
+          "contractVersion": {
+            "type": "integer",
+            "description": "The contract version the caller speaks.",
+            "format": "int32"
+          },
+          "logicalModelName": {
+            "type": "string",
+            "description": "The named model role to use. A name, never a connection.",
+            "nullable": true
+          },
+          "idempotencyKey": {
+            "type": "string",
+            "description": "Identifies the attempt, so a retry is answered rather than charged again.",
+            "nullable": true
+          },
+          "messages": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ChatMessage"
+            },
+            "description": "The conversation to complete.",
+            "nullable": true
+          },
+          "options": {
+            "$ref": "#/components/schemas/RunnerChatOptions"
+          }
+        },
+        "additionalProperties": false,
+        "description": "A relayed completion."
+      },
+      "RunnerChatToolDefinition": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "The tool name the model calls it by.",
+            "nullable": true
+          },
+          "description": {
+            "type": "string",
+            "description": "What the tool does, as shown to the model.",
+            "nullable": true
+          },
+          "schema": {
+            "description": "The JSON schema of the tool's parameters, or null for a parameterless tool.",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false,
+        "description": "One tool as the provider needs to see it: a name, a description, and a parameter schema. The\nimplementation never travels — the model's calls come back to the runner that offered the tool."
+      },
+      "RunnerContractError": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string",
+            "description": "A stable machine-readable code.",
+            "nullable": true
+          },
+          "message": {
+            "type": "string",
+            "description": "An operator-readable explanation.",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false,
+        "description": "A refusal from the control plane, in a shape the executor can act on rather than parse out of prose."
+      },
+      "RunnerCredentialRenewRequest": {
+        "type": "object",
+        "properties": {
+          "contractVersion": {
+            "type": "integer",
+            "description": "The contract version the runner speaks.",
+            "format": "int32"
+          }
+        },
+        "additionalProperties": false,
+        "description": "An enrolled runner asking for a fresh credential."
+      },
+      "RunnerCredentialResponse": {
+        "type": "object",
+        "properties": {
+          "runnerId": {
+            "type": "string",
+            "description": "The runner's identity in the registry.",
+            "format": "uuid"
+          },
+          "credential": {
+            "type": "string",
+            "description": "The credential to present on every subsequent call.",
+            "nullable": true
+          },
+          "expiresAt": {
+            "type": "string",
+            "description": "When it must be renewed by.",
+            "format": "date-time",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false,
+        "description": "A credential, returned exactly once. Nothing stores it in a form it can be read back from, so a\nrunner that loses it renews rather than recovers."
+      },
+      "RunnerDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "Identity.",
+            "format": "uuid"
+          },
+          "displayName": {
+            "type": "string",
+            "description": "Operator-facing name the runner declared.",
+            "nullable": true
+          },
+          "state": {
+            "type": "string",
+            "description": "Enrolled or revoked.",
+            "nullable": true
+          },
+          "clientScope": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "description": "The clients it may serve. Empty means every client in the tenant.",
+            "nullable": true
+          },
+          "tags": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Tags it declares.",
+            "nullable": true
+          },
+          "contractVersion": {
+            "type": "integer",
+            "description": "The contract version it reported.",
+            "format": "int32"
+          },
+          "lastSeenAt": {
+            "type": "string",
+            "description": "When it last authenticated, or null if never.",
+            "format": "date-time",
+            "nullable": true
+          },
+          "credentialExpiresAt": {
+            "type": "string",
+            "description": "When its credential must be renewed by.",
+            "format": "date-time"
+          },
+          "enrolledAt": {
+            "type": "string",
+            "description": "When it enrolled.",
+            "format": "date-time"
+          },
+          "health": {
+            "type": "string",
+            "description": "What the server makes of it: active, stale, incompatible, or revoked. Computed here so the\nregistry cannot disagree with the execution decision about whether a runner is usable.",
+            "nullable": true
+          },
+          "executingJobCount": {
+            "type": "integer",
+            "description": "Reviews it holds a lease on right now.",
+            "format": "int32"
+          },
+          "completedJobCount": {
+            "type": "integer",
+            "description": "Reviews it finished in the last day.",
+            "format": "int32"
+          },
+          "executing": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/RunnerJobDto"
+            },
+            "description": "The reviews it is running, up to a bound. Named rather than counted because the count alone cannot\ntell an operator whether a runner is working or stuck on one thing.",
+            "nullable": true
+          },
+          "tenantId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "tenantName": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false,
+        "description": "One enrolled runner."
+      },
+      "RunnerFileOutcome": {
+        "type": "object",
+        "properties": {
+          "filePath": {
+            "type": "string",
+            "description": "The file reviewed.",
+            "nullable": true
+          },
+          "isComplete": {
+            "type": "boolean",
+            "description": "Whether the file finished."
+          },
+          "isFailed": {
+            "type": "boolean",
+            "description": "Whether it failed."
+          },
+          "summary": {
+            "type": "string",
+            "description": "The per-file summary, when it completed.",
+            "nullable": true
+          },
+          "errorMessage": {
+            "type": "string",
+            "description": "The failure, when it failed.",
+            "nullable": true
+          },
+          "reviewedPassKeys": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Which configured passes produced it, so a later resume can judge it.",
+            "nullable": true
+          },
+          "comments": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ReviewComment"
+            },
+            "description": "The findings the file produced. These are the checkpoint's substance: a resumed attempt synthesizes\nover what the rows carry, and rows persisted without their comments hand the next attempt forty\nfinished files that appear to have found nothing.",
+            "nullable": true
+          },
+          "isExcluded": {
+            "type": "boolean",
+            "description": "Whether the file matched an exclusion and was never reviewed."
+          },
+          "exclusionReason": {
+            "type": "string",
+            "description": "The matching rule, when it was excluded.",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false,
+        "description": "The outcome of reviewing one file, as the resume checkpoint it becomes."
+      },
+      "RunnerFindingsRequest": {
+        "type": "object",
+        "properties": {
+          "jobId": {
+            "type": "string",
+            "description": "The job the call concerns.",
+            "format": "uuid"
+          },
+          "leaseGeneration": {
+            "type": "integer",
+            "description": "The lease generation the caller believes it holds.",
+            "format": "int32"
+          },
+          "contractVersion": {
+            "type": "integer",
+            "description": "The contract version the caller speaks.",
+            "format": "int32"
+          },
+          "submissionId": {
+            "type": "string",
+            "description": "Identifies the whole submission across its chunks and retries.",
+            "nullable": true
+          },
+          "chunkIndex": {
+            "type": "integer",
+            "description": "Zero-based position of this chunk.",
+            "format": "int32"
+          },
+          "chunkCount": {
+            "type": "integer",
+            "description": "How many chunks the submission has.",
+            "format": "int32"
+          },
+          "summary": {
+            "type": "string",
+            "description": "The review summary, carried on the final chunk.",
+            "nullable": true
+          },
+          "comments": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ReviewComment"
+            },
+            "description": "The findings in this chunk.",
+            "nullable": true
+          },
+          "annotations": {
+            "$ref": "#/components/schemas/RunnerResultAnnotations"
+          }
+        },
+        "additionalProperties": false,
+        "description": "One chunk of a findings submission."
+      },
+      "RunnerHeartbeatResponse": {
+        "type": "object",
+        "properties": {
+          "accepted": {
+            "type": "boolean",
+            "description": "Whether the runner still holds the lease it named."
+          },
+          "expiresAt": {
+            "type": "string",
+            "description": "When the renewed lease expires, or null when it was not renewed.",
+            "format": "date-time",
+            "nullable": true
+          },
+          "stopReason": {
+            "type": "string",
+            "description": "Why the renewal was refused, as a stable token. `None` on an accepted renewal. The executor\nneeds this rather than a status code: a lost lease is somebody else's job now and this one stops\nquietly, while a revoked client or an exhausted budget is a decision an operator made and has to\nbe reported as one.",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false,
+        "description": "What a heartbeat learns: whether the lease is still held, until when, and why not."
+      },
+      "RunnerIngestRequest": {
+        "type": "object",
+        "properties": {
+          "jobId": {
+            "type": "string",
+            "description": "The job the call concerns.",
+            "format": "uuid"
+          },
+          "leaseGeneration": {
+            "type": "integer",
+            "description": "The lease generation the caller believes it holds.",
+            "format": "int32"
+          },
+          "contractVersion": {
+            "type": "integer",
+            "description": "The contract version the caller speaks.",
+            "format": "int32"
+          },
+          "sequence": {
+            "type": "integer",
+            "description": "Position in this job's stream, starting at 1.",
+            "format": "int32"
+          },
+          "idempotencyKey": {
+            "type": "string",
+            "description": "Identifies the batch, so a resend is recognised.",
+            "nullable": true
+          },
+          "events": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/RunnerTraceEvent"
+            },
+            "description": "Trace events, in the order they occurred.",
+            "nullable": true
+          },
+          "fileResults": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/RunnerFileOutcome"
+            },
+            "description": "Per-file outcomes finished since the last batch.",
+            "nullable": true
+          },
+          "spend": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/RunnerSpendRecord"
+            },
+            "description": "Spend records for completions made through the relay.",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false,
+        "description": "One batch of executor output."
+      },
+      "RunnerJobCallRequest": {
+        "type": "object",
+        "properties": {
+          "jobId": {
+            "type": "string",
+            "description": "The job the call concerns.",
+            "format": "uuid"
+          },
+          "leaseGeneration": {
+            "type": "integer",
+            "description": "The lease generation the caller believes it holds.",
+            "format": "int32"
+          },
+          "contractVersion": {
+            "type": "integer",
+            "description": "The contract version the caller speaks.",
+            "format": "int32"
+          }
+        },
+        "additionalProperties": false,
+        "description": "What every runner call carries: which job, which generation, and which contract version."
+      },
+      "RunnerJobDto": {
+        "type": "object",
+        "properties": {
+          "jobId": {
+            "type": "string",
+            "description": "The review job.",
+            "format": "uuid"
+          },
+          "repositoryName": {
+            "type": "string",
+            "description": "The repository, as the provider names it.",
+            "nullable": true
+          },
+          "pullRequestNumber": {
+            "type": "integer",
+            "description": "The pull request under review.",
+            "format": "int32"
+          },
+          "title": {
+            "type": "string",
+            "description": "The pull request's title, when the job recorded one.",
+            "nullable": true
+          },
+          "startedAt": {
+            "type": "string",
+            "description": "When the runner started it.",
+            "format": "date-time",
+            "nullable": true
+          },
+          "reclaimCount": {
+            "type": "integer",
+            "description": "How many times this review has been taken back from a runner that went quiet.",
+            "format": "int32"
+          }
+        },
+        "additionalProperties": false,
+        "description": "One review a runner is holding."
+      },
+      "RunnerJobManifest": {
+        "type": "object",
+        "properties": {
+          "contractVersion": {
+            "type": "integer",
+            "description": "The contract version this manifest was written against.",
+            "format": "int32"
+          },
+          "jobId": {
+            "type": "string",
+            "description": "The review job this manifest describes.",
+            "format": "uuid"
+          },
+          "clientId": {
+            "type": "string",
+            "description": "The client the job belongs to.",
+            "format": "uuid"
+          },
+          "leaseGeneration": {
+            "type": "integer",
+            "description": "The lease generation the manifest was issued under, presented on every proxied call.",
+            "format": "int32"
+          },
+          "target": {
+            "$ref": "#/components/schemas/RunnerReviewTarget"
+          },
+          "workspace": {
+            "$ref": "#/components/schemas/RunnerWorkspaceReference"
+          },
+          "defaultModel": {
+            "$ref": "#/components/schemas/RunnerModelBinding"
+          },
+          "passes": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/RunnerReviewPass"
+            },
+            "description": "The ordered pass list, already resolved from client configuration.",
+            "nullable": true
+          },
+          "prompts": {
+            "$ref": "#/components/schemas/RunnerPromptConfiguration"
+          },
+          "exclusions": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Paths the client excludes from review.",
+            "nullable": true
+          },
+          "repositoryInstructions": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/RunnerRepositoryInstruction"
+            },
+            "description": "Repository instructions that apply to this review, already fetched and already filtered to the ones\nrelevant to the changed paths. Filtering happens here rather than on the executor because deciding\nrelevance reads the repository, which is a credentialed operation.",
+            "nullable": true
+          },
+          "budgetHeadroomUsd": {
+            "type": "number",
+            "description": "Remaining spend before the job's hard cap, when one is configured. An optimisation only: it lets the\nexecutor wind down gracefully rather than being refused mid-pass, and the relay stays the point where\nthe cap is actually enforced, because this number is stale the moment it is written.",
+            "format": "double",
+            "nullable": true
+          },
+          "traceContext": {
+            "$ref": "#/components/schemas/RunnerTraceContext"
+          },
+          "behaviour": {
+            "$ref": "#/components/schemas/RunnerReviewBehaviour"
+          },
+          "linkedItems": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/RunnerLinkedItem"
+            },
+            "description": "The work items linked to the review, discovered and bounded at dispatch the way the in-process path\ndiscovers them at review start. Carried because discovery is a credentialed provider call; the\nexecutor reads these into the prompt and asks follow-up questions through the proxied tools.",
+            "nullable": true
+          },
+          "servedBy": {
+            "type": "string",
+            "description": "The base URL of the control-plane replica that granted this lease, when the operator advertises\none. The workspace mirror is that replica's local disk and the budget, tool, and workspace\nregistries are that replica's process, so every call this job makes has to reach the replica that\nholds them — a load balancer in front of the fleet routes to whichever replica is next, which is\nexactly the wrong answer. Unset on a single-replica installation, where the one configured URL is\nalready the right one.",
+            "nullable": true
+          },
+          "parallelReviewExecutionLicensed": {
+            "type": "boolean",
+            "description": "Whether reviewing several files in parallel is licensed, resolved at dispatch because the license\nlives in the control plane's database. Without it the pipeline works one file at a time however\nhigh the configured concurrency is — the same clamp the in-process planner applies. Null from an\nolder control plane reads as licensed, which is exactly what the review did before the field\nexisted.",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false,
+        "description": "Everything non-secret a review needs, resolved once when the job is dispatched.\n\nConfiguration is otherwise read from the database throughout a review, which an executor without\n    database access cannot do, and which also means a configuration change part-way through can\n    quietly alter a review already in progress. Resolving it once fixes both: the executor holds this\n    for the duration of its lease and never persists it.\nSecrets are structurally absent rather than merely left unset. There is no field here that can\n    carry a credential, a connection string, or a key, and a test asserts it, because \"we remember not\n    to populate it\" is not a boundary."
+      },
+      "RunnerKnowledgeRequest": {
+        "type": "object",
+        "properties": {
+          "jobId": {
+            "type": "string",
+            "description": "The job the call concerns.",
+            "format": "uuid"
+          },
+          "leaseGeneration": {
+            "type": "integer",
+            "description": "The lease generation the caller believes it holds.",
+            "format": "int32"
+          },
+          "contractVersion": {
+            "type": "integer",
+            "description": "The contract version the caller speaks.",
+            "format": "int32"
+          },
+          "question": {
+            "type": "string",
+            "description": "The question to ask against configured knowledge sources.",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false,
+        "description": "A knowledge question."
+      },
+      "RunnerLeaseHandbackRequest": {
+        "type": "object",
+        "properties": {
+          "jobId": {
+            "type": "string",
+            "description": "The job whose lease is being returned.",
+            "format": "uuid"
+          },
+          "leaseGeneration": {
+            "type": "integer",
+            "description": "The generation the runner believes it holds.",
+            "format": "int32"
+          },
+          "reason": {
+            "type": "string",
+            "description": "Why the lease is coming back — MeisterDev.ProPR.Runner.Contracts.RunnerLeaseReleaseReasons. Absent from an older\nrunner, which reads as a drain: the uncounted release every handback was before the field existed.",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false,
+        "description": "A runner handing a lease back."
+      },
+      "RunnerLeaseHeartbeatRequest": {
+        "type": "object",
+        "properties": {
+          "jobId": {
+            "type": "string",
+            "description": "The job whose lease is being renewed.",
+            "format": "uuid"
+          },
+          "leaseGeneration": {
+            "type": "integer",
+            "description": "The generation the runner believes it holds.",
+            "format": "int32"
+          },
+          "contractVersion": {
+            "type": "integer",
+            "description": "The contract version the runner speaks, absent from runners older than the field. Carried so a\ncontrol-plane deploy mid-review surfaces as a refused renewal naming the skew, not as a healthy\nlease over a job whose every other call is refused.",
+            "format": "int32",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false,
+        "description": "A runner saying it is still working on a job."
+      },
+      "RunnerLeaseHttpRequest": {
+        "type": "object",
+        "properties": {
+          "freeSlots": {
+            "type": "integer",
+            "description": "How many more jobs this runner can take right now.",
+            "format": "int32"
+          },
+          "contractVersion": {
+            "type": "integer",
+            "description": "The contract version the runner speaks.",
+            "format": "int32"
+          }
+        },
+        "additionalProperties": false,
+        "description": "A runner asking for work."
+      },
+      "RunnerLinkedItem": {
+        "type": "object",
+        "properties": {
+          "providerKey": {
+            "type": "string",
+            "description": "The provider's identifier for the item, used to ask follow-up questions.",
+            "nullable": true
+          },
+          "itemType": {
+            "type": "string",
+            "description": "What kind of item it is, in the provider's vocabulary.",
+            "nullable": true
+          },
+          "title": {
+            "type": "string",
+            "description": "The item's title.",
+            "nullable": true
+          },
+          "description": {
+            "type": "string",
+            "description": "The item's description, already bounded at dispatch.",
+            "nullable": true
+          },
+          "url": {
+            "type": "string",
+            "description": "Where the item lives, when the provider names it.",
+            "nullable": true
+          },
+          "relatedLinks": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/RunnerLinkedItemRef"
+            },
+            "description": "Links from this item to others, resolvable through the proxied tools.",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false,
+        "description": "One work item linked to the review, reduced to the provider-neutral summary the prompt is built\nfrom. The shape mirrors the domain's linked-item summary so the reviewer reads the same thing on\nboth sides."
+      },
+      "RunnerLinkedItemRef": {
+        "type": "object",
+        "properties": {
+          "kind": {
+            "type": "string",
+            "description": "The relationship, in the provider's vocabulary.",
+            "nullable": true
+          },
+          "targetKey": {
+            "type": "string",
+            "description": "The provider's identifier for the related item.",
+            "nullable": true
+          },
+          "url": {
+            "type": "string",
+            "description": "Where the related item lives, when known.",
+            "nullable": true
+          },
+          "title": {
+            "type": "string",
+            "description": "The related item's title, when known.",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false,
+        "description": "One link from a linked item to a related item."
+      },
+      "RunnerLinkedItemRequest": {
+        "type": "object",
+        "properties": {
+          "jobId": {
+            "type": "string",
+            "description": "The job the call concerns.",
+            "format": "uuid"
+          },
+          "leaseGeneration": {
+            "type": "integer",
+            "description": "The lease generation the caller believes it holds.",
+            "format": "int32"
+          },
+          "contractVersion": {
+            "type": "integer",
+            "description": "The contract version the caller speaks.",
+            "format": "int32"
+          },
+          "providerKey": {
+            "type": "string",
+            "description": "Provider-native identifier of the linked item.",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false,
+        "description": "A linked-item lookup."
+      },
+      "RunnerMemoryReconsiderRequest": {
+        "type": "object",
+        "properties": {
+          "jobId": {
+            "type": "string",
+            "description": "The job the call concerns.",
+            "format": "uuid"
+          },
+          "leaseGeneration": {
+            "type": "integer",
+            "description": "The lease generation the caller believes it holds.",
+            "format": "int32"
+          },
+          "contractVersion": {
+            "type": "integer",
+            "description": "The contract version the caller speaks.",
+            "format": "int32"
+          },
+          "filePath": {
+            "type": "string",
+            "description": "The file whose draft is being reconsidered.",
+            "nullable": true
+          },
+          "changeExcerpt": {
+            "type": "string",
+            "description": "An excerpt of the change, used to retrieve relevant memory.",
+            "nullable": true
+          },
+          "draftSummary": {
+            "type": "string",
+            "description": "The draft's summary text.",
+            "nullable": true
+          },
+          "draftComments": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ReviewComment"
+            },
+            "description": "The draft's comments. Reconsideration may drop or reword them; it never adds findings.",
+            "nullable": true
+          },
+          "temperature": {
+            "type": "number",
+            "description": "The review temperature the reconsideration model runs at, when the job pins one.",
+            "format": "float",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false,
+        "description": "One file's draft result, to be reconsidered against thread memory."
+      },
+      "RunnerModelBinding": {
+        "type": "object",
+        "properties": {
+          "logicalModelName": {
+            "type": "string",
+            "description": "The named model role the relay resolves.",
+            "nullable": true
+          },
+          "remoteModelId": {
+            "type": "string",
+            "description": "The provider's model identifier, recorded on the trace.",
+            "nullable": true
+          },
+          "providerKind": {
+            "type": "string",
+            "description": "The provider family, which decides prompt-shape details.",
+            "nullable": true
+          },
+          "reasoningEffort": {
+            "type": "string",
+            "description": "The reasoning effort this binding asks for.",
+            "nullable": true
+          },
+          "tokenizerName": {
+            "type": "string",
+            "description": "The tokenizer that counts this model's prompts, when one is configured.",
+            "nullable": true
+          },
+          "maxInputTokens": {
+            "type": "integer",
+            "description": "The largest prompt the model accepts, when known.",
+            "format": "int32",
+            "nullable": true
+          },
+          "maxContextTokens": {
+            "type": "integer",
+            "description": "The context window the budgeter degrades against, when known.",
+            "format": "int32",
+            "nullable": true
+          },
+          "supportsPromptCaching": {
+            "type": "boolean",
+            "description": "Whether the model can serve a cached prefix."
+          },
+          "supportsToolUse": {
+            "type": "boolean",
+            "description": "Whether the reviewer may offer this model tools."
+          },
+          "supportsStructuredOutput": {
+            "type": "boolean",
+            "description": "Whether findings can be requested as a structured response."
+          }
+        },
+        "additionalProperties": false,
+        "description": "A model the executor may call, named rather than connected.\n\nThe relay resolves LogicalModelName to a connection and a credential on the\n    control-plane side, which is what keeps the key off the executor. Everything else here is\n    non-secret description the pipeline needs before it makes a call: which tokenizer counts the\n    prompt, what fits in the context window, and which behaviours the model supports."
+      },
+      "RunnerPromptConfiguration": {
+        "type": "object",
+        "properties": {
+          "language": {
+            "type": "string",
+            "description": "The output language contract for findings, when the client sets one.",
+            "nullable": true
+          },
+          "aggressiveness": {
+            "type": "string",
+            "description": "The configured review aggressiveness.",
+            "nullable": true
+          },
+          "overrides": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string"
+            },
+            "description": "Prompt overrides by prompt key.",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false,
+        "description": "Prompt configuration for this review, resolved from client configuration at dispatch."
+      },
+      "RunnerRegisterRequest": {
+        "type": "object",
+        "properties": {
+          "registrationToken": {
+            "type": "string",
+            "description": "The single-use token an operator issued for this host.",
+            "nullable": true
+          },
+          "displayName": {
+            "type": "string",
+            "description": "The name the host reports for itself, shown in the registry.",
+            "nullable": true
+          },
+          "tags": {
+            "type": "string",
+            "description": "The tags this host declares, comma-separated.",
+            "nullable": true
+          },
+          "contractVersion": {
+            "type": "integer",
+            "description": "The contract version the host speaks.",
+            "format": "int32"
+          }
+        },
+        "additionalProperties": false,
+        "description": "A host asking to become a runner."
+      },
+      "RunnerRegistrationTokenDto": {
+        "type": "object",
+        "properties": {
+          "tokenId": {
+            "type": "string",
+            "description": "Identity of the token.",
+            "format": "uuid"
+          },
+          "token": {
+            "type": "string",
+            "description": "The secret, shown once.",
+            "nullable": true
+          },
+          "expiresAt": {
+            "type": "string",
+            "description": "When it stops being usable.",
+            "format": "date-time",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false,
+        "description": "A freshly issued token. The value appears here and is never retrievable again."
+      },
+      "RunnerRegistrationTokenSummaryDto": {
+        "type": "object",
+        "properties": {
+          "tokenId": {
+            "type": "string",
+            "description": "Identity, for revoking it.",
+            "format": "uuid"
+          },
+          "issuedAt": {
+            "type": "string",
+            "description": "When it was issued.",
+            "format": "date-time"
+          },
+          "expiresAt": {
+            "type": "string",
+            "description": "When it stops being usable.",
+            "format": "date-time",
+            "nullable": true
+          },
+          "remainingUses": {
+            "type": "integer",
+            "description": "How many enrollments it can still perform.",
+            "format": "int32",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false,
+        "description": "An issued enrollment token that has not been used up, expired, or revoked. The secret is not here\nand cannot be: only its hashes were stored."
+      },
+      "RunnerRegistryDto": {
+        "type": "object",
+        "properties": {
+          "runners": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/RunnerDto"
+            },
+            "description": "Every runner in the tenant, whatever its state.",
+            "nullable": true
+          },
+          "activeRunnerCount": {
+            "type": "integer",
+            "description": "How many currently count as capacity.",
+            "format": "int32"
+          },
+          "executionMode": {
+            "type": "string",
+            "description": "Whether reviews are running on runners or in the control plane.",
+            "nullable": true
+          },
+          "executingJobCount": {
+            "type": "integer",
+            "description": "Reviews the fleet is running right now.",
+            "format": "int32"
+          },
+          "pendingJobCount": {
+            "type": "integer",
+            "description": "Reviews waiting for one of this tenant's runners. Reported whether or not the queue counts as\nstalled: a queue that is merely deep and a queue that nothing is taking look the same to an\noperator who can only see the second one.",
+            "format": "int32"
+          },
+          "oldestPendingSince": {
+            "type": "string",
+            "description": "When the longest-waiting review was submitted, or null when none wait.",
+            "format": "date-time",
+            "nullable": true
+          },
+          "pendingTokens": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/RunnerRegistrationTokenSummaryDto"
+            },
+            "description": "Issued enrollment tokens that can still be used.",
+            "nullable": true
+          },
+          "stall": {
+            "$ref": "#/components/schemas/QueueStallDto"
+          }
+        },
+        "additionalProperties": false,
+        "description": "The runner registry as an operator sees it."
+      },
+      "RunnerRelatedItemRequest": {
+        "type": "object",
+        "properties": {
+          "jobId": {
+            "type": "string",
+            "description": "The job the call concerns.",
+            "format": "uuid"
+          },
+          "leaseGeneration": {
+            "type": "integer",
+            "description": "The lease generation the caller believes it holds.",
+            "format": "int32"
+          },
+          "contractVersion": {
+            "type": "integer",
+            "description": "The contract version the caller speaks.",
+            "format": "int32"
+          },
+          "relatedTargetKey": {
+            "type": "string",
+            "description": "Provider-native key of the related target.",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false,
+        "description": "A request to resolve a related link on a linked item."
+      },
+      "RunnerRepositoryInstruction": {
+        "type": "object",
+        "properties": {
+          "fileName": {
+            "type": "string",
+            "description": "The instruction file it came from.",
+            "nullable": true
+          },
+          "description": {
+            "type": "string",
+            "description": "What the instruction is about.",
+            "nullable": true
+          },
+          "whenToUse": {
+            "type": "string",
+            "description": "When the instruction applies.",
+            "nullable": true
+          },
+          "body": {
+            "type": "string",
+            "description": "The instruction text.",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false,
+        "description": "One repository instruction, carried whole. Flattening these into a single blob would lose the\nstructure the prompt is built from: the pipeline uses the description and the when-to-use guidance\nto decide how to present each one."
+      },
+      "RunnerResultAnnotations": {
+        "type": "object",
+        "properties": {
+          "carriedForwardFilePaths": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Files whose results came from a prior iteration's review.",
+            "nullable": true
+          },
+          "carriedForwardCandidatesSkipped": {
+            "type": "integer",
+            "description": "Candidates suppressed because they came from carried-forward results.",
+            "format": "int32"
+          },
+          "contextDegradedFilePaths": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Files reviewed diff-only because their context exceeded the window.",
+            "nullable": true
+          },
+          "contextSkippedFilePaths": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Files skipped because even their minimal payload exceeded the window.",
+            "nullable": true
+          },
+          "budgetSoftCapped": {
+            "type": "boolean",
+            "description": "Whether the scan stopped early because the budget soft cap was reached."
+          },
+          "budgetSoftCapThresholdUsd": {
+            "type": "number",
+            "description": "The cap that was reached, when the executor knew the figure.",
+            "format": "double",
+            "nullable": true
+          },
+          "budgetSoftCapSpentUsd": {
+            "type": "number",
+            "description": "The spend that reached it, when the executor knew the figure.",
+            "format": "double",
+            "nullable": true
+          },
+          "budgetSoftCapSkippedFilePaths": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Files not scanned because the cap was reached first.",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false,
+        "description": "Everything a review result says about itself beyond its summary and findings: what was carried\nforward, what was degraded or skipped for context, and whether the budget cut the scan short.\n\nA submission that carried only summary and comments flattened all of it — most visibly the\n    budget label, which made a soft-capped remote review indistinguishable from a complete one\n    everywhere the label is read."
+      },
+      "RunnerReviewBehaviour": {
+        "type": "object",
+        "properties": {
+          "enableMultiPassUnion": {
+            "type": "boolean",
+            "description": "Whether the pass list is actually unioned. Off, the carefully-bound passes in this manifest are\ndecorative: the baseline result is returned as-is and the semantic deduplicator never runs."
+          },
+          "enableLanguageRobustScreening": {
+            "type": "boolean",
+            "description": "Whether the semantic screener runs over candidates."
+          },
+          "enableEvidenceBackedVerification": {
+            "type": "boolean",
+            "description": "Whether findings are verified against collected evidence."
+          },
+          "includeLinkedItemsInContext": {
+            "type": "boolean",
+            "description": "Whether linked work items and issues are offered to the review."
+          },
+          "temperature": {
+            "type": "number",
+            "description": "The review temperature, when the job pins one.",
+            "format": "float",
+            "nullable": true
+          },
+          "reviewPipelineProfileId": {
+            "type": "string",
+            "description": "The pipeline profile the review runs under, when one is configured.",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false,
+        "description": "The per-client decisions that change what a review does rather than which model runs it.\n\nCarried because the executor cannot read them: they live on the client record, which a runner\n    has no database to reach. Absent, every one of them falls to its default and the review quietly\n    becomes a different review — multi-pass union off, screening off, verification off, temperature\n    unset, profile Balanced — with nothing in the result saying so.\nOptional on the contract so a manifest from an older control plane still deserializes. A runner\n    reading one without this reverts to exactly the behaviour it had before the field existed."
+      },
+      "RunnerReviewPass": {
+        "type": "object",
+        "properties": {
+          "ordinal": {
+            "type": "integer",
+            "description": "Position in the list; a pass's ordinal is how its trace is identified.",
+            "format": "int32"
+          },
+          "model": {
+            "$ref": "#/components/schemas/RunnerModelBinding"
+          },
+          "lens": {
+            "type": "string",
+            "description": "The specialist lens this pass applies, or null for an ordinary pass.",
+            "nullable": true
+          },
+          "scope": {
+            "type": "string",
+            "description": "Whether the pass runs per file or once over the whole change set.",
+            "nullable": true
+          },
+          "shadow": {
+            "type": "boolean",
+            "description": "Whether the pass runs for comparison only. A shadow pass records its full trace and never publishes,\nwhich is the whole point of running one, so an executor that ignored this flag would post findings\nfrom a pass the client is still evaluating."
+          }
+        },
+        "additionalProperties": false,
+        "description": "One entry of the resolved pass list."
+      },
+      "RunnerReviewTarget": {
+        "type": "object",
+        "properties": {
+          "provider": {
+            "type": "string",
+            "description": "The source-control provider family, as a stable token.",
+            "nullable": true
+          },
+          "organizationUrl": {
+            "type": "string",
+            "description": "The provider host the review lives on.",
+            "nullable": true
+          },
+          "projectId": {
+            "type": "string",
+            "description": "The project or namespace the repository belongs to.",
+            "nullable": true
+          },
+          "repositoryId": {
+            "type": "string",
+            "description": "The provider's repository identifier.",
+            "nullable": true
+          },
+          "repositoryName": {
+            "type": "string",
+            "description": "The repository's display name.",
+            "nullable": true
+          },
+          "externalReviewId": {
+            "type": "string",
+            "description": "The provider's identifier for the pull request or merge request.",
+            "nullable": true
+          },
+          "number": {
+            "type": "integer",
+            "description": "The human-facing review number.",
+            "format": "int32"
+          },
+          "iterationId": {
+            "type": "integer",
+            "description": "The revision's iteration number within the review.",
+            "format": "int32"
+          },
+          "title": {
+            "type": "string",
+            "description": "The review's title.",
+            "nullable": true
+          },
+          "description": {
+            "type": "string",
+            "description": "The review's description, when the author wrote one.",
+            "nullable": true
+          },
+          "sourceBranch": {
+            "type": "string",
+            "description": "The branch the change is on.",
+            "nullable": true
+          },
+          "targetBranch": {
+            "type": "string",
+            "description": "The branch the change is proposed into.",
+            "nullable": true
+          },
+          "headSha": {
+            "type": "string",
+            "description": "The head commit of the revision under review.",
+            "nullable": true
+          },
+          "baseSha": {
+            "type": "string",
+            "description": "The base commit the revision is compared against.",
+            "nullable": true
+          },
+          "changedPaths": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "The frozen changed-path scope of this revision.",
+            "nullable": true
+          },
+          "existingThreads": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/RunnerReviewThread"
+            },
+            "description": "The conversation already on the review. The reviewer reads it to avoid raising again what somebody\nhas already answered, so an executor without it would post duplicates of findings the author has\naddressed.",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false,
+        "description": "Which review the executor is being asked to perform.\n\nThe title, description, and branch names are here because the reviewer reads them: a change is\n    judged against what its author said it does. An executor that could not see them would review\n    the diff in isolation and reach different conclusions than the in-process path on the same\n    commit."
+      },
+      "RunnerReviewThread": {
+        "type": "object",
+        "properties": {
+          "filePath": {
+            "type": "string",
+            "description": "The file the thread is anchored to, or null for a review-level thread.",
+            "nullable": true
+          },
+          "lineNumber": {
+            "type": "integer",
+            "description": "The line the thread is anchored to, when it has one.",
+            "format": "int32",
+            "nullable": true
+          },
+          "status": {
+            "type": "string",
+            "description": "The thread's status as the provider reports it.",
+            "nullable": true
+          },
+          "comments": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/RunnerReviewThreadComment"
+            },
+            "description": "The comments, oldest first.",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false,
+        "description": "One conversation thread on the review, reduced to what a reviewer reads: where it sits, whether it\nis still open, and what was said. Author identity beyond a display name and the provider's internal\nids are left out, because nothing on the executor's side uses them."
+      },
+      "RunnerReviewThreadComment": {
+        "type": "object",
+        "properties": {
+          "authorName": {
+            "type": "string",
+            "description": "The author's display name.",
+            "nullable": true
+          },
+          "content": {
+            "type": "string",
+            "description": "What they wrote.",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false,
+        "description": "One comment in a thread."
+      },
+      "RunnerSpendRecord": {
+        "type": "object",
+        "properties": {
+          "logicalModelName": {
+            "type": "string",
+            "description": "The model role that served it.",
+            "nullable": true
+          },
+          "inputTokens": {
+            "type": "integer",
+            "description": "Input tokens consumed.",
+            "format": "int64"
+          },
+          "outputTokens": {
+            "type": "integer",
+            "description": "Output tokens produced.",
+            "format": "int64"
+          },
+          "estimatedCostUsd": {
+            "type": "number",
+            "description": "Estimated cost, or null when the model has no configured pricing.",
+            "format": "double",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false,
+        "description": "What one relayed completion cost."
+      },
+      "RunnerSymbolInsightRequest": {
+        "type": "object",
+        "properties": {
+          "jobId": {
+            "type": "string",
+            "description": "The job the call concerns.",
+            "format": "uuid"
+          },
+          "leaseGeneration": {
+            "type": "integer",
+            "description": "The lease generation the caller believes it holds.",
+            "format": "int32"
+          },
+          "contractVersion": {
+            "type": "integer",
+            "description": "The contract version the caller speaks.",
+            "format": "int32"
+          },
+          "symbol": {
+            "type": "string",
+            "description": "The symbol to look up.",
+            "nullable": true
+          },
+          "queryMode": {
+            "type": "string",
+            "description": "Optional query mode the gateway understands.",
+            "nullable": true
+          },
+          "maxRelations": {
+            "type": "integer",
+            "description": "Optional ceiling on how many relations to return.",
+            "format": "int32",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false,
+        "description": "A symbol-insight question for the code-knowledge service."
+      },
+      "RunnerTraceContext": {
+        "type": "object",
+        "properties": {
+          "traceParent": {
+            "type": "string",
+            "description": "The `traceparent` header value.",
+            "nullable": true
+          },
+          "traceState": {
+            "type": "string",
+            "description": "The `tracestate` header value, when present.",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false,
+        "description": "W3C trace context carried from the lease into the executor's spans and back, so one review can be\nfollowed across the boundary instead of appearing as two unrelated traces."
+      },
+      "RunnerTraceEvent": {
+        "type": "object",
+        "properties": {
+          "occurredAt": {
+            "type": "string",
+            "description": "When it happened, on the executor's clock.",
+            "format": "date-time"
+          },
+          "name": {
+            "type": "string",
+            "description": "The event name, matching the names the in-process path records.",
+            "nullable": true
+          },
+          "details": {
+            "type": "string",
+            "description": "Structured detail, already serialised.",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false,
+        "description": "One trace event produced by a remote execution."
+      },
+      "RunnerWorkspaceReference": {
+        "type": "object",
+        "properties": {
+          "fetchPath": {
+            "type": "string",
+            "description": "Path on the control plane the executor fetches from, relative to its base URL.",
+            "nullable": true
+          },
+          "headSha": {
+            "type": "string",
+            "description": "The commit the head worktree is materialized at.",
+            "nullable": true
+          },
+          "baseSha": {
+            "type": "string",
+            "description": "The commit the base worktree is materialized at.",
+            "nullable": true
+          },
+          "maxTransferBytes": {
+            "type": "integer",
+            "description": "Ceiling on the transfer. Exceeding it fails the job with an operator-readable reason rather than\nmoving unbounded data to a host that may be paying for the egress.",
+            "format": "int64"
+          }
+        },
+        "additionalProperties": false,
+        "description": "Where the executor fetches repository content. The control plane serves its own mirror over the git\nwire protocol, authorized per lease, so the executor never holds a source-control credential and\nnever contacts the source-control system."
       },
       "ScmAuthenticationKind": {
         "enum": [
@@ -31028,6 +34222,9 @@
       "name": "AdminReviewProfiles"
     },
     {
+      "name": "AdminRunners"
+    },
+    {
       "name": "AdminUsers"
     },
     {
@@ -31131,6 +34328,15 @@
     },
     {
       "name": "Reviews"
+    },
+    {
+      "name": "RunnerExecution"
+    },
+    {
+      "name": "RunnerLease"
+    },
+    {
+      "name": "RunnerRegistration"
     },
     {
       "name": "TenantAiConnections"

@@ -112,4 +112,75 @@ public sealed class StartupRecoveryTests(PostgresContainerFixture fixture) : IAs
         Assert.NotNull(recoveredJob);
         Assert.Equal(JobStatus.Pending, recoveredJob.Status);
     }
+
+    /// <summary>
+    ///     A leased job is alive on another replica — or, once its lease expires, the counted reclaim
+    ///     sweep's to take back — and a publishing job must never be requeued at all: a rolling deploy that
+    ///     requeued it is how the same review got posted twice. Startup recovery only touches lease-less
+    ///     rows.
+    /// </summary>
+    [SkippableFact]
+    public async Task Startup_LeavesLeasedAndPublishingJobsToTheLeaseSubsystem()
+    {
+        fixture.SkipIfUnavailable();
+
+        var connectionString = fixture.ConnectionString;
+        var options = new DbContextOptionsBuilder<MeisterProPRDbContext>()
+            .UseNpgsql(connectionString, o => o.UseVector())
+            .Options;
+
+        Guid leasedJobId;
+        Guid publishingJobId;
+        await using (var db = new MeisterProPRDbContext(options))
+        {
+            var repo = new JobRepository(db, new TestDbContextFactory(options), NullLogger<JobRepository>.Instance);
+            var leaseStore = new Infrastructure.Features.Reviewing.Execution.Persistence.ReviewJobLeaseStore(db, repo);
+
+            var leased = new ReviewJob(Guid.NewGuid(), Guid.NewGuid(), "https://dev.azure.com/org", "proj", "repo", 100, 1);
+            await repo.AddAsync(leased);
+            Assert.NotNull(await leaseStore.TryClaimAsync(leased.Id, "replica-a", TimeSpan.FromMinutes(10)));
+            leasedJobId = leased.Id;
+
+            var publishing = new ReviewJob(Guid.NewGuid(), Guid.NewGuid(), "https://dev.azure.com/org", "proj", "repo", 101, 1);
+            await repo.AddAsync(publishing);
+            Assert.NotNull(await leaseStore.TryClaimAsync(publishing.Id, "replica-a", TimeSpan.FromMinutes(10)));
+            Assert.True(await leaseStore.TryMarkPublishingAsync(publishing.Id));
+            publishingJobId = publishing.Id;
+        }
+
+        using var factory = new WebApplicationFactory<Program>()
+            .WithWebHostBuilder(builder =>
+            {
+                builder.UseEnvironment("Testing");
+                builder.UseSetting("MEISTER_DISABLE_HOSTED_SERVICES", "true");
+                builder.UseSetting("DB_CONNECTION_STRING", connectionString);
+                builder.UseSetting("AI_ENDPOINT", "https://fake.openai.azure.com/");
+                builder.UseSetting("AI_DEPLOYMENT", "gpt-4o");
+                builder.UseSetting("MEISTER_ADMIN_KEY", "admin-key-min-16-chars-ok");
+                builder.UseSetting("MEISTER_BOOTSTRAP_ADMIN_USER", "testadmin");
+                builder.UseSetting("MEISTER_BOOTSTRAP_ADMIN_PASSWORD", "TestAdminPass1!");
+                builder.UseSetting("MEISTER_JWT_SECRET", "test-jwt-secret-at-least-32-chars-ok!!");
+                builder.ConfigureServices(services =>
+                {
+                    services.AddSingleton(Substitute.For<IPullRequestFetcher>());
+                    services.AddSingleton(Substitute.For<IAdoCommentPoster>());
+                    services.AddSingleton(Substitute.For<IAssignedReviewDiscoveryService>());
+                });
+            });
+
+        _ = factory.CreateClient();
+
+        using var scope = factory.Services.CreateScope();
+        var jobs = scope.ServiceProvider.GetRequiredService<IJobRepository>();
+
+        var leasedAfterBoot = jobs.GetById(leasedJobId);
+        Assert.NotNull(leasedAfterBoot);
+        Assert.Equal(JobStatus.Processing, leasedAfterBoot.Status);
+        Assert.Equal("replica-a", leasedAfterBoot.LeaseOwner);
+
+        var publishingAfterBoot = jobs.GetById(publishingJobId);
+        Assert.NotNull(publishingAfterBoot);
+        Assert.Equal(JobStatus.Processing, publishingAfterBoot.Status);
+        Assert.NotNull(publishingAfterBoot.PublishingStartedAt);
+    }
 }

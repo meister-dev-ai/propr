@@ -160,6 +160,28 @@ public sealed record ChangedPathSnapshot(
     public string EffectiveTargetPath => string.IsNullOrWhiteSpace(this.TargetPath) ? this.Path : this.TargetPath;
 
     /// <summary>
+    ///     Creates a changed-path snapshot from a workspace's summary of a changed file.
+    ///     <para>
+    ///         The summary carries no original path, so a rename's pre-rename name is not recoverable here
+    ///         and the target path falls back to the current one. Every other case is identical to
+    ///         <see cref="FromChangedFile" />.
+    ///     </para>
+    /// </summary>
+    /// <param name="file">The workspace's summary of one changed file.</param>
+    public static ChangedPathSnapshot FromChangedFileSummary(ChangedFileSummary file)
+    {
+        ArgumentNullException.ThrowIfNull(file);
+
+        return file.ChangeType switch
+        {
+            ChangeType.Add => new ChangedPathSnapshot(file.Path, file.ChangeType, true, false),
+            ChangeType.Delete => new ChangedPathSnapshot(file.Path, file.ChangeType, false, true, file.Path),
+            ChangeType.Rename => new ChangedPathSnapshot(file.Path, file.ChangeType, true, true, file.Path),
+            _ => new ChangedPathSnapshot(file.Path, file.ChangeType, true, true),
+        };
+    }
+
+    /// <summary>
     ///     Creates a changed-path snapshot from a live pull-request changed file.
     /// </summary>
     public static ChangedPathSnapshot FromChangedFile(ChangedFile file)

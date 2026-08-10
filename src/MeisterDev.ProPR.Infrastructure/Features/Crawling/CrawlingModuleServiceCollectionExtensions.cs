@@ -49,6 +49,11 @@ public static class CrawlingModuleServiceCollectionExtensions
             services.AddScoped<ICrawlConfigurationRepository, CrawlConfigurationRepository>();
             services.AddScoped<IWebhookConfigurationRepository, EfWebhookConfigurationRepository>();
             services.AddScoped<IWebhookDeliveryLogRepository, EfWebhookDeliveryLogRepository>();
+
+            // Where a verified delivery waits between being accepted and becoming a review. Registered
+            // beside the delivery log because they are the two halves of the same story: one records what
+            // was decided, the other holds the work that decision created.
+            services.AddScoped<IWebhookDeliveryQueue, WebhookDeliveryQueue>();
             services.AddScoped<IReviewPrScanRepository, EfReviewPrScanRepository>();
 
             // Callers that own only the last-seen thread status resolve the narrow port, which cannot

@@ -62,6 +62,11 @@ public sealed partial class ReviewOrchestrationService
         Message = "Failed to begin protocol recording for job {JobId} — review continues without tracing")]
     private static partial void LogProtocolBeginFailed(ILogger logger, Guid jobId, Exception ex);
 
+    [LoggerMessage(
+        Level = LogLevel.Information,
+        Message = "Abandoned publication for job {JobId}: the job is no longer processing, so its review was not posted")]
+    private static partial void LogPublicationAbandoned(ILogger logger, Guid jobId);
+
     [LoggerMessage(Level = LogLevel.Error, Message = "Review failed for job {JobId}")]
     private static partial void LogReviewFailed(ILogger logger, Guid jobId, Exception ex);
 

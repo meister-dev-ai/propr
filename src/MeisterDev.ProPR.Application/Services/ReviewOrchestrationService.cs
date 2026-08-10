@@ -61,7 +61,8 @@ public sealed partial class ReviewOrchestrationService(
     IReviewSpendAccumulator? spendAccumulator = null,
     IBudgetScopeAccessor? budgetScopeAccessor = null,
     IBudgetEventPublisher? budgetEventPublisher = null,
-    IPostedFindingIndex? postedFindingIndex = null) : IReviewJobProcessor
+    IPostedFindingIndex? postedFindingIndex = null,
+    IReviewJobLeaseStore? leaseStore = null) : IReviewJobProcessor, IReviewResultPublisher
 {
     private const string LocalWorkspacePreparedEventName = "local_workspace_prepared";
     private const string LocalWorkspaceFailedEventName = "local_workspace_failed";
@@ -74,6 +75,16 @@ public sealed partial class ReviewOrchestrationService(
     private const string AutoResolvedNote = "Auto-resolved by ProPR post configuration.";
 
     private readonly AiReviewOptions _opts = options.Value;
+
+    private ReviewJobReuse? _reuse;
+
+    /// <summary>
+    ///     The shared adopt-prior-work rules, self-built from this service's own dependencies so nothing
+    ///     changes for callers that construct this service directly. The dispatch preparer resolves the
+    ///     same type from the container, which is what keeps a remote review adopting exactly what a
+    ///     local one would.
+    /// </summary>
+    private ReviewJobReuse Reuse => this._reuse ??= new ReviewJobReuse(jobs, prScanRepository, logger);
 
     /// <summary>Processes the given review job end-to-end.</summary>
     public async Task ProcessAsync(ReviewJob job, CancellationToken ct)
@@ -786,6 +797,33 @@ public sealed partial class ReviewOrchestrationService(
         await jobs.DeleteAsync(job.Id, ct);
     }
 
+    /// <summary>
+    ///     Publishes a result produced elsewhere, through the same publication an in-process review uses.
+    ///     <para>
+    ///         This exists so a runner's findings and an in-process review end on one publication rather
+    ///         than two. Everything publication carries, deduplication at both layers, thread memory,
+    ///         posted-comment origins, and per-thread failure isolation, is behaviour nobody should be
+    ///         reimplementing for a remote executor, and a second entry point is how the two would drift.
+    ///     </para>
+    /// </summary>
+    /// <param name="jobId">The job whose findings to publish.</param>
+    /// <param name="result">The findings the executor produced.</param>
+    /// <param name="ct">The cancellation token.</param>
+    public async Task PublishAsync(Guid jobId, ReviewResult result, CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(result);
+
+        var job = jobs.GetById(jobId)
+                  ?? throw new InvalidOperationException($"Review job {jobId} cannot be published because it no longer exists.");
+
+        // The pull request is fetched here rather than sent by the executor. Publication needs the live
+        // thread state to deduplicate against, and an executor's view of it is both stale and unverifiable.
+        var pr = await this.FetchPullRequestAsync(job, null, null, null, ct)
+                 ?? throw new InvalidOperationException($"Review job {jobId} cannot be published because its pull request could not be read.");
+
+        await this.PublishReviewResultAsync(job, pr, result, null, ct);
+    }
+
     private async Task PublishReviewResultAsync(
         ReviewJob job,
         PullRequest pr,
@@ -801,6 +839,27 @@ public sealed partial class ReviewOrchestrationService(
         catch (Exception ex)
         {
             LogProtocolBeginFailed(logger, job.Id, ex);
+        }
+
+        // Publication is the one stretch that must not be interrupted: taking the job back while comments
+        // are going out is how the same review gets posted twice. Marking it protects the job from reclaim
+        // until publication finishes or its own, longer timeout passes.
+        //
+        // The mark is refused when the job is no longer Processing — stopped, superseded, or already
+        // terminal — and that refusal is the answer to whether this review should be posted at all.
+        // Publishing over it puts a review on the pull request for work somebody already decided against:
+        // most visibly, a push supersedes this job while its comments are going out and the stale review
+        // lands anyway. The status guard further down only runs after the comments have been posted, so it
+        // cannot be the thing that stops this.
+        if (leaseStore is not null && !await leaseStore.TryMarkPublishingAsync(job.Id, ct: ct))
+        {
+            if (protocolId.HasValue)
+            {
+                await protocolRecorder.SetCompletedAsync(protocolId.Value, "Excluded", 0, 0, 0, 0, null, ct);
+            }
+
+            LogPublicationAbandoned(logger, job.Id);
+            return;
         }
 
         try
@@ -899,6 +958,15 @@ public sealed partial class ReviewOrchestrationService(
 
             throw;
         }
+        finally
+        {
+            if (leaseStore is not null)
+            {
+                // Publication is over either way, so the job stops being protected from reclaim. Uses a
+                // token of its own: a cancelled review still has to give this protection back.
+                await leaseStore.ClearPublishingAsync(job.Id, CancellationToken.None);
+            }
+        }
     }
 
     // Resolve the optional configured trigger reviewer. It says which pull requests ProPR is asked to
@@ -975,135 +1043,17 @@ public sealed partial class ReviewOrchestrationService(
         ReviewJob job,
         CancellationToken ct)
     {
-        var scan = await prScanRepository.GetAsync(job.ClientId, job.RepositoryId, job.PullRequestId, ct);
-        var iterationKey = ReviewRevisionKeys.GetStoredKey(job.ReviewRevisionReference, job.IterationId);
-        var isNewIteration = scan is null || scan.LastProcessedCommitId != iterationKey;
-
-        // Resume exists so work already done at this revision is not redone after an interruption, and it
-        // adopts a prior job's finished files wholesale. On an explicitly requested review of a revision
-        // already reviewed, that prior job is the completed review itself, so every file would be adopted
-        // and none re-reviewed: the request would report success having reviewed nothing. Redoing the work
-        // is the whole point of asking, so resume stands down for that case.
-        //
-        // A run stopped by a budget cap is the exception. It records the revision as processed even though it
-        // reviewed only part of it, so the revision looks reviewed and resume would stand down — leaving the
-        // only way to finish the job a full re-review of everything it already paid for. Continuing from where
-        // it stopped is precisely what asking again means there.
-        var resumeCandidate = await this.FindResumeJobIfAnyAsync(job, ct);
-        var resumeJob = isNewIteration
-                        || !job.AllowUnchangedResubmission
-                        || StoppedShortAtBudgetCap(resumeCandidate)
-            ? resumeCandidate
-            : null;
-
-        var (baselineJob, baselineIsFullCoverage, compareToIterationId, compareToReviewRevision) =
-            await this.ResolveCarryForwardBaselineAsync(job, isNewIteration, iterationKey, ct);
-
-        return (isNewIteration, baselineJob, baselineIsFullCoverage, resumeJob, compareToIterationId, compareToReviewRevision);
-    }
-
-    /// <summary>
-    ///     Whether a prior run at this revision was stopped by a budget cap before it had reviewed everything
-    ///     in scope.
-    /// </summary>
-    /// <remarks>
-    ///     Both halves are needed. The budget block alone does not mean work is outstanding: a cap tripped on
-    ///     the last file leaves nothing to continue, and adopting that job wholesale would answer a re-review
-    ///     request with no fresh work at all. The coverage comparison is what distinguishes a run that stopped
-    ///     short from one that merely finished expensively.
-    /// </remarks>
-    private static bool StoppedShortAtBudgetCap(ReviewJob? candidate)
-    {
-        return candidate is not null
-               && candidate.BudgetBlockScope is not null
-               && candidate.InScopeChangedFileCount is > 0
-               && ReviewBaselineSelection.CountUsableReviewedResults(candidate) < candidate.InScopeChangedFileCount;
-    }
-
-    private async Task<ReviewJob?> FindResumeJobIfAnyAsync(ReviewJob job, CancellationToken ct)
-    {
-        var currentRevisionKey = ReviewRevisionKeys.TryGetStoredKey(job.ReviewRevisionReference);
-        if (string.IsNullOrWhiteSpace(currentRevisionKey))
-        {
-            return null;
-        }
-
-        var resumeJob = await jobs.GetBestTerminalJobWithFileResultsByStoredRevisionAsync(
-            job.OrganizationUrl,
-            job.ProjectId,
-            job.RepositoryId,
-            job.PullRequestId,
-            currentRevisionKey,
-            ct);
-
-        // A resume job that points at this very job is not a real resume candidate.
-        return resumeJob?.Id == job.Id ? null : resumeJob;
-    }
-
-    private async Task<(
-            ReviewJob? BaselineJob,
-            bool BaselineIsFullCoverage,
-            int? CompareToIterationId,
-            ReviewRevision? CompareToReviewRevision)>
-        ResolveCarryForwardBaselineAsync(
-            ReviewJob job,
-            bool isNewIteration,
-            string iterationKey,
-            CancellationToken ct)
-    {
-        if (!isNewIteration)
-        {
-            return (null, false, null, null);
-        }
-
-        // Select the carry-forward baseline from job history — the most-recent terminal job at a
-        // different revision — rather than from the scan. This lets a prior review that was
-        // cancelled/failed/superseded mid-flight still seed the next review's unchanged files.
-        var baselineJob = await jobs.GetLatestReusableTerminalJobAsync(
-            job.OrganizationUrl,
-            job.ProjectId,
-            job.RepositoryId,
-            job.PullRequestId,
-            job.Id,
-            iterationKey,
-            ct);
-
-        if (baselineJob is null)
-        {
-            return (null, false, null, null);
-        }
-
-        var baselineIsFullCoverage = ReviewBaselineSelection.IsFullCoverage(baselineJob);
-        if (!baselineIsFullCoverage)
-        {
-            return (baselineJob, false, null, null);
-        }
-
-        // Full-coverage baseline: delta-scope against it so only files changed since the
-        // baseline are re-reviewed. The compare handle is provider-neutral — Azure DevOps
-        // reads the iteration id off the baseline job, other providers read its review revision.
-        if (job.Provider == ScmProvider.AzureDevOps)
-        {
-            var baselineIterationId = ResolveBaselineIterationId(baselineJob);
-            if (baselineIterationId is > 0 && baselineIterationId < job.IterationId)
-            {
-                return (baselineJob, true, baselineIterationId, null);
-            }
-
-            // Out-of-order or unavailable iteration id: fall back to a full fetch and treat
-            // the baseline purely as an AI-skip set rather than risk a negative delta.
-            return (baselineJob, false, null, null);
-        }
-
-        return (baselineJob, true, null, baselineJob.ReviewRevisionReference);
-    }
-
-    // Derives the Azure DevOps iteration id to compare against from the baseline job itself: prefer the
-    // iteration id carried in its review revision (ProviderRevisionId), falling back to the stored iteration.
-    private static int? ResolveBaselineIterationId(ReviewJob baselineJob)
-    {
-        var iterationFromRevision = ReviewRevisionKeys.TryParseIterationId(ReviewRevisionKeys.TryGetStoredKey(baselineJob.ReviewRevisionReference));
-        return iterationFromRevision ?? (baselineJob.IterationId > 0 ? baselineJob.IterationId : null);
+        // Delegated to the shared reuse service so the dispatch path adopts exactly what this path
+        // adopts. Two implementations of "what may this review inherit" is how a remote review quietly
+        // becomes a different review.
+        var state = await this.Reuse.LoadScanStateAsync(job, ct);
+        return (
+            state.IsNewIteration,
+            state.BaselineJob,
+            state.BaselineIsFullCoverage,
+            state.ResumeJob,
+            state.CompareToIterationId,
+            state.CompareToReviewRevision);
     }
 
     // T072: Fetch PR and guard the active status — returns null if PR is no longer active (job already updated).
@@ -1218,8 +1168,8 @@ public sealed partial class ReviewOrchestrationService(
         // Case-insensitive to match changedPathsSet so the no-duplicate guarantee holds even when resume and
         // carry-forward emit the same logical path in different casing (e.g. src/File.cs vs src/file.cs).
         var claimedPaths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        await this.ResumePriorFileResultsAsync(job, resumeJob, changedPathsSet, claimedPaths, ct);
-        var carriedForwardPaths = await this.CarryForwardBaselineResultsAsync(
+        await this.Reuse.ResumePriorFileResultsAsync(job, resumeJob, changedPathsSet, claimedPaths, ct);
+        var carriedForwardPaths = await this.Reuse.CarryForwardBaselineResultsAsync(
             job, baselineJob, baselineIsFullCoverage, changedPathsSet, exclusionRules, claimedPaths, ct);
 
         if (changedFilePaths.Count == 0 && (carriedForwardPaths.Count > 0 || resumeJob is not null))
@@ -1354,95 +1304,6 @@ public sealed partial class ReviewOrchestrationService(
         Level = LogLevel.Information,
         Message = "Linked-item discovery unavailable for job {JobId}; proceeding without linked-item context.")]
     private static partial void LogLinkedItemsSkipped(ILogger logger, Guid jobId, Exception ex);
-
-    // Carries forward reviewed file results from a prior baseline job at a different revision.
-    //
-    // Full-coverage baseline: the current fetch is delta-scoped against it, so a reviewed file that is NOT
-    // in the delta (<paramref name="changedPathsSet" /> holds the delta) is provably unchanged and carries
-    // forward. This is the long-standing behaviour and is unchanged for a completed baseline.
-    //
-    // Partial baseline (cancelled/failed/superseded mid per-file review): the current fetch is the full PR
-    // (<paramref name="changedPathsSet" /> holds every current file), so carry forward every reviewed file
-    // still present as an AI-skip set and let the dispatcher review the rest fresh — this keeps files that
-    // are unchanged since the baseline but were never reviewed by it from being silently skipped.
-    private async Task<List<string>> CarryForwardBaselineResultsAsync(
-        ReviewJob job,
-        ReviewJob? baselineJob,
-        bool baselineIsFullCoverage,
-        HashSet<string> changedPathsSet,
-        ReviewExclusionRules exclusionRules,
-        HashSet<string> claimedPaths,
-        CancellationToken ct)
-    {
-        var carriedForwardPaths = new List<string>();
-        if (baselineJob is null)
-        {
-            return carriedForwardPaths;
-        }
-
-        foreach (var priorResult in baselineJob.FileReviewResults
-                     .Where(fr => fr.IsComplete && !fr.IsFailed && !fr.IsExcluded && !fr.IsCarriedForward))
-        {
-            var shouldCarryForward = baselineIsFullCoverage
-                ? !changedPathsSet.Contains(priorResult.FilePath)
-                : changedPathsSet.Contains(priorResult.FilePath);
-            if (!shouldCarryForward)
-            {
-                continue;
-            }
-
-            // Exclusion drift only applies on the partial (full-fetch) path: there the skipped file still
-            // reaches the dispatcher to be recorded as excluded. On the delta path the file is absent from
-            // the fetch, so skipping carry-forward would drop it entirely — preserve carry-forward there.
-            if (!baselineIsFullCoverage && exclusionRules.Matches(priorResult.FilePath))
-            {
-                continue;
-            }
-
-            if (!claimedPaths.Add(priorResult.FilePath))
-            {
-                continue;
-            }
-
-            var carried = ReviewFileResult.CreateCarriedForward(job.Id, priorResult);
-            await jobs.AddFileResultAsync(carried, ct);
-            carriedForwardPaths.Add(priorResult.FilePath);
-        }
-
-        return carriedForwardPaths;
-    }
-
-    // Resumes file results from a prior job targeting the same review revision for files that
-    // are still part of the current change set, so completed work is not redone.
-    private async Task ResumePriorFileResultsAsync(
-        ReviewJob job,
-        ReviewJob? resumeJob,
-        HashSet<string> changedPathsSet,
-        HashSet<string> claimedPaths,
-        CancellationToken ct)
-    {
-        if (resumeJob is null)
-        {
-            return;
-        }
-
-        foreach (var priorResult in resumeJob.FileReviewResults
-                     .Where(fr => fr.IsComplete && !fr.IsFailed && !fr.IsExcluded && !fr.IsCarriedForward))
-        {
-            if (!changedPathsSet.Contains(priorResult.FilePath))
-            {
-                continue;
-            }
-
-            if (!claimedPaths.Add(priorResult.FilePath))
-            {
-                continue;
-            }
-
-            var resumed = ReviewFileResult.CreateResumed(job.Id, priorResult);
-            await jobs.AddFileResultAsync(resumed, ct);
-        }
-    }
 
     // Fetches the repository exclusion rules for the review target branch. IRepositoryExclusionFetcher is
     // contractually non-throwing and returns defaults on failure; the catch is belt-and-suspenders.

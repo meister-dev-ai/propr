@@ -1963,6 +1963,13 @@ namespace MeisterDev.ProPR.Infrastructure.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("resumed_from_job_id");
 
+                    b.Property<string>("ReviewedPassKeys")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("jsonb")
+                        .HasColumnName("reviewed_pass_keys")
+                        .HasDefaultValueSql("'[]'");
+
                     b.HasKey("Id");
 
                     b.HasIndex("JobId")
@@ -2034,6 +2041,12 @@ namespace MeisterDev.ProPR.Infrastructure.Migrations
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("completed_at");
 
+                    b.Property<int>("ConsecutiveReclaimCount")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(0)
+                        .HasColumnName("consecutive_reclaim_count");
+
                     b.Property<bool>("CostIsApproximate")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("boolean")
@@ -2049,6 +2062,12 @@ namespace MeisterDev.ProPR.Infrastructure.Migrations
                         .HasColumnType("character varying(128)")
                         .HasColumnName("external_code_review_id");
 
+                    b.Property<int>("FailureReason")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(0)
+                        .HasColumnName("failure_reason");
+
                     b.Property<string>("HostBaseUrl")
                         .HasMaxLength(512)
                         .HasColumnType("character varying(512)")
@@ -2061,6 +2080,29 @@ namespace MeisterDev.ProPR.Infrastructure.Migrations
                     b.Property<int>("IterationId")
                         .HasColumnType("integer")
                         .HasColumnName("iteration_id");
+
+                    b.Property<DateTimeOffset?>("LastHeartbeatAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("last_heartbeat_at");
+
+                    b.Property<DateTimeOffset?>("LastReclaimedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("last_reclaimed_at");
+
+                    b.Property<DateTimeOffset?>("LeaseExpiresAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("lease_expires_at");
+
+                    b.Property<int>("LeaseGeneration")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(0)
+                        .HasColumnName("lease_generation");
+
+                    b.Property<string>("LeaseOwner")
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)")
+                        .HasColumnName("lease_owner");
 
                     b.Property<string>("OrganizationUrl")
                         .IsRequired()
@@ -2112,6 +2154,10 @@ namespace MeisterDev.ProPR.Infrastructure.Migrations
                         .HasMaxLength(128)
                         .HasColumnType("character varying(128)")
                         .HasColumnName("provider_revision_id");
+
+                    b.Property<DateTimeOffset?>("PublishingStartedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("publishing_started_at");
 
                     b.Property<int>("PullRequestId")
                         .HasColumnType("integer")
@@ -2220,6 +2266,12 @@ namespace MeisterDev.ProPR.Infrastructure.Migrations
                         .HasColumnType("bigint")
                         .HasColumnName("total_reasoning_tokens_aggregated");
 
+                    b.Property<int>("TotalReclaimCount")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(0)
+                        .HasColumnName("total_reclaim_count");
+
                     b.HasKey("Id");
 
                     b.HasIndex("ClientId")
@@ -2238,6 +2290,12 @@ namespace MeisterDev.ProPR.Infrastructure.Migrations
                     b.HasIndex("ClientId", "SubmittedAt")
                         .IsDescending(false, true)
                         .HasDatabaseName("ix_review_jobs_client_submitted_at");
+
+                    b.HasIndex("Status", "LeaseExpiresAt")
+                        .HasDatabaseName("ix_review_jobs_lease_expiry");
+
+                    b.HasIndex("Status", "SubmittedAt")
+                        .HasDatabaseName("ix_review_jobs_claim_candidates");
 
                     b.HasIndex("ClientId", "Provider", "RepositoryId", "ExternalCodeReviewId")
                         .HasDatabaseName("ix_review_jobs_client_provider_review");
@@ -2445,6 +2503,183 @@ namespace MeisterDev.ProPR.Infrastructure.Migrations
                     b.HasKey("ReviewPrScanId", "ThreadId");
 
                     b.ToTable("review_pr_scan_threads", (string)null);
+                });
+
+            modelBuilder.Entity("MeisterDev.ProPR.Domain.Entities.ReviewRunner", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<int>("ContractVersion")
+                        .HasColumnType("integer")
+                        .HasColumnName("contract_version");
+
+                    b.Property<DateTimeOffset>("CredentialExpiresAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("credential_expires_at");
+
+                    b.Property<string>("CredentialHash")
+                        .IsRequired()
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)")
+                        .HasColumnName("credential_hash");
+
+                    b.Property<string>("CredentialLookupHash")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("credential_lookup_hash");
+
+                    b.Property<string>("DisplayName")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("display_name");
+
+                    b.Property<DateTimeOffset>("EnrolledAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("enrolled_at");
+
+                    b.Property<DateTimeOffset?>("LastSeenAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("last_seen_at");
+
+                    b.Property<DateTimeOffset?>("RevokedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("revoked_at");
+
+                    b.Property<string>("State")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)")
+                        .HasDefaultValue("Enrolled")
+                        .HasColumnName("state");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("tenant_id");
+
+                    b.PrimitiveCollection<List<Guid>>("_clientScope")
+                        .IsRequired()
+                        .HasColumnType("uuid[]")
+                        .HasColumnName("client_scope");
+
+                    b.PrimitiveCollection<List<string>>("_tags")
+                        .IsRequired()
+                        .HasColumnType("text[]")
+                        .HasColumnName("tags");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CredentialLookupHash")
+                        .IsUnique()
+                        .HasDatabaseName("ix_review_runners_credential_lookup");
+
+                    b.HasIndex("TenantId", "State")
+                        .HasDatabaseName("ix_review_runners_tenant_state");
+
+                    b.ToTable("review_runners", (string)null);
+                });
+
+            modelBuilder.Entity("MeisterDev.ProPR.Domain.Entities.RunnerIngestReceipt", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<string>("IdempotencyKey")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)")
+                        .HasColumnName("idempotency_key");
+
+                    b.Property<Guid>("JobId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("job_id");
+
+                    b.Property<DateTimeOffset>("ReceivedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("received_at");
+
+                    b.Property<int>("Sequence")
+                        .HasColumnType("integer")
+                        .HasColumnName("sequence");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("JobId", "IdempotencyKey")
+                        .IsUnique()
+                        .HasDatabaseName("ix_runner_ingest_receipts_job_key");
+
+                    b.HasIndex("JobId", "Sequence")
+                        .IsUnique()
+                        .HasDatabaseName("ix_runner_ingest_receipts_job_sequence");
+
+                    b.ToTable("runner_ingest_receipts", (string)null);
+                });
+
+            modelBuilder.Entity("MeisterDev.ProPR.Domain.Entities.RunnerRegistrationToken", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<DateTimeOffset?>("ExpiresAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("expires_at");
+
+                    b.Property<DateTimeOffset>("IssuedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("issued_at");
+
+                    b.Property<Guid>("IssuedByUserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("issued_by_user_id");
+
+                    b.Property<int?>("MaxUses")
+                        .HasColumnType("integer")
+                        .HasColumnName("max_uses");
+
+                    b.Property<DateTimeOffset?>("RevokedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("revoked_at");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("tenant_id");
+
+                    b.Property<string>("TokenHash")
+                        .IsRequired()
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)")
+                        .HasColumnName("token_hash");
+
+                    b.Property<string>("TokenLookupHash")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("token_lookup_hash");
+
+                    b.Property<int>("UseCount")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(0)
+                        .HasColumnName("use_count");
+
+                    b.PrimitiveCollection<List<Guid>>("_clientScope")
+                        .IsRequired()
+                        .HasColumnType("uuid[]")
+                        .HasColumnName("client_scope");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("TokenLookupHash")
+                        .IsUnique()
+                        .HasDatabaseName("ix_runner_registration_tokens_lookup");
+
+                    b.ToTable("runner_registration_tokens", (string)null);
                 });
 
             modelBuilder.Entity("MeisterDev.ProPR.Domain.Entities.ThreadMemoryRecord", b =>
@@ -3558,6 +3793,13 @@ namespace MeisterDev.ProPR.Infrastructure.Migrations
                         .HasColumnType("numeric(18,6)")
                         .HasColumnName("pull_request_budget_soft_cap_usd");
 
+                    b.Property<string>("RequiredRunnerTags")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("text")
+                        .HasColumnName("required_runner_tags")
+                        .HasDefaultValueSql("''");
+
                     b.Property<bool>("ReviewEveryIncrementEnabled")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("boolean")
@@ -4112,6 +4354,10 @@ namespace MeisterDev.ProPR.Infrastructure.Migrations
                     b.Property<int>("Edition")
                         .HasColumnType("integer")
                         .HasColumnName("edition");
+
+                    b.Property<int?>("EntitledRunnerSlots")
+                        .HasColumnType("integer")
+                        .HasColumnName("entitled_runner_slots");
 
                     b.Property<DateTimeOffset>("UpdatedAt")
                         .HasColumnType("timestamp with time zone")
@@ -4936,6 +5182,94 @@ namespace MeisterDev.ProPR.Infrastructure.Migrations
                     b.ToTable("webhook_delivery_log_entries", (string)null);
                 });
 
+            modelBuilder.Entity("MeisterDev.ProPR.Infrastructure.Data.Models.WebhookDeliveryQueueEntryRecord", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<int>("Attempts")
+                        .HasColumnType("integer")
+                        .HasColumnName("attempts");
+
+                    b.Property<DateTimeOffset?>("ClaimedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("claimed_at");
+
+                    b.Property<string>("ClaimedBy")
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)")
+                        .HasColumnName("claimed_by");
+
+                    b.Property<DateTimeOffset?>("CompletedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("completed_at");
+
+                    b.Property<string>("DeliveryKey")
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)")
+                        .HasColumnName("delivery_key");
+
+                    b.Property<DateTimeOffset>("EligibleAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("eligible_at");
+
+                    b.Property<string>("EventType")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)")
+                        .HasColumnName("event_type");
+
+                    b.Property<string>("HeadersJson")
+                        .IsRequired()
+                        .HasColumnType("jsonb")
+                        .HasColumnName("headers");
+
+                    b.Property<string>("LastError")
+                        .HasMaxLength(2048)
+                        .HasColumnType("character varying(2048)")
+                        .HasColumnName("last_error");
+
+                    b.Property<string>("PathKey")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)")
+                        .HasColumnName("path_key");
+
+                    b.Property<string>("Payload")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("payload");
+
+                    b.Property<int>("Provider")
+                        .HasColumnType("integer")
+                        .HasColumnName("provider");
+
+                    b.Property<DateTimeOffset>("ReceivedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("received_at");
+
+                    b.Property<int>("Status")
+                        .HasColumnType("integer")
+                        .HasColumnName("status");
+
+                    b.Property<Guid>("WebhookConfigurationId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("webhook_configuration_id");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Status", "EligibleAt")
+                        .HasDatabaseName("ix_webhook_delivery_queue_status_eligible_at");
+
+                    b.HasIndex("WebhookConfigurationId", "DeliveryKey")
+                        .IsUnique()
+                        .HasDatabaseName("ix_webhook_delivery_queue_config_delivery_key")
+                        .HasFilter("delivery_key IS NOT NULL");
+
+                    b.ToTable("webhook_delivery_queue", (string)null);
+                });
+
             modelBuilder.Entity("MeisterDev.ProPR.Infrastructure.Data.Models.WebhookRepoFilterRecord", b =>
                 {
                     b.Property<Guid>("Id")
@@ -5665,6 +5999,17 @@ namespace MeisterDev.ProPR.Infrastructure.Migrations
                 {
                     b.HasOne("MeisterDev.ProPR.Infrastructure.Data.Models.WebhookConfigurationRecord", "WebhookConfiguration")
                         .WithMany("DeliveryLogs")
+                        .HasForeignKey("WebhookConfigurationId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("WebhookConfiguration");
+                });
+
+            modelBuilder.Entity("MeisterDev.ProPR.Infrastructure.Data.Models.WebhookDeliveryQueueEntryRecord", b =>
+                {
+                    b.HasOne("MeisterDev.ProPR.Infrastructure.Data.Models.WebhookConfigurationRecord", "WebhookConfiguration")
+                        .WithMany()
                         .HasForeignKey("WebhookConfigurationId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();

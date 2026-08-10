@@ -27,11 +27,19 @@ public static class PremiumCapabilityKey
     /// </summary>
     public const string CodeInsights = "code-insights";
 
+    /// <summary>
+    ///     Capability key for executing reviews on registered runners rather than in the control plane.
+    ///     Separate from parallel review execution: one is about how much work runs at once, this is about
+    ///     where it runs, and an installation can be licensed for either without the other.
+    /// </summary>
+    public const string DistributedExecution = "distributed-execution";
+
     /// <summary>All known premium capability keys in their canonical order.</summary>
     public static IReadOnlyList<string> All { get; } =
     [
         SsoAuthentication,
         ParallelReviewExecution,
+        DistributedExecution,
         MultipleScmProviders,
         CrawlConfigs,
         Budgeting,

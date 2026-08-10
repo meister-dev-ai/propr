@@ -162,6 +162,24 @@ const router = createRouter({
       meta: { requiresAuth: true, requiresAdmin: true },
     },
     {
+      // The whole installation's fleet. Reserved to platform administrators, because it spans tenants and
+      // administering one is not grounds for reading the rest — the same rule the API applies.
+      path: '/runners',
+      name: 'runners-all',
+      component: () => import('@/features/runners/views/RunnersView.vue'),
+      meta: { requiresAuth: true, requiresAdmin: true, requiresCapability: 'distributed-execution' },
+    },
+    {
+      // One tenant's fleet, for that tenant's own administrators. requiresTenantAdmin checks the tenant
+      // named in the route rather than merely that the caller administers something, so this cannot be
+      // reached for somebody else's tenant by editing the URL.
+      path: '/tenants/:tenantId/runners',
+      name: 'runners',
+      component: () => import('@/features/runners/views/RunnersView.vue'),
+      props: true,
+      meta: { requiresAuth: true, requiresTenantAdmin: true, requiresCapability: 'distributed-execution' },
+    },
+    {
       path: '/clients/:id/providers',
       name: 'client-detail-providers',
       redirect: (to) => ({

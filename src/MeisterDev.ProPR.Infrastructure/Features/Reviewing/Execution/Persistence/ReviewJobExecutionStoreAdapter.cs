@@ -20,16 +20,14 @@ public sealed class ReviewJobExecutionStoreAdapter(IJobRepository inner) : IRevi
         return inner.GetById(id);
     }
 
+    public Task<ReviewJob?> GetByIdWithFileResultsAsync(Guid id, CancellationToken ct = default)
+    {
+        return inner.GetByIdWithFileResultsAsync(id, ct);
+    }
+
     public IReadOnlyList<ReviewJob> GetPendingJobs()
     {
         return inner.GetPendingJobs();
-    }
-
-    public Task<IReadOnlyList<ReviewJob>> GetStuckProcessingJobsAsync(
-        TimeSpan threshold,
-        CancellationToken ct = default)
-    {
-        return inner.GetStuckProcessingJobsAsync(threshold, ct);
     }
 
     public Task<int> CountProcessingJobsAsync(CancellationToken ct = default)

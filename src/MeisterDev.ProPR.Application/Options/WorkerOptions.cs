@@ -20,11 +20,17 @@ public sealed class WorkerOptions
     public int PollIntervalMilliseconds { get; set; } = 2000;
 
     /// <summary>
-    ///     Minutes before a job stuck in the <c>Processing</c> state is transitioned to <c>Failed</c>.
-    ///     Bound to <c>WORKER_STUCK_JOB_TIMEOUT_MINUTES</c>.
+    ///     Retired. Jobs were once failed for sitting in the <c>Processing</c> state longer than this, which
+    ///     could not tell a long review from an abandoned one and, with more than one host, let one host fail
+    ///     another host's healthy review. Liveness is now the job's lease, configured through
+    ///     <see cref="ReviewLeaseOptions" />.
+    ///     <para>
+    ///         Still read from <c>WORKER_STUCK_JOB_TIMEOUT_MINUTES</c> so an existing deployment starts
+    ///         unchanged, and reported at startup so an operator learns it no longer does anything. Null when
+    ///         the variable is not set.
+    ///     </para>
     /// </summary>
-    [Range(5, 1440, ErrorMessage = "StuckJobTimeoutMinutes must be between 5 and 1440.")]
-    public int StuckJobTimeoutMinutes { get; set; } = 30;
+    public int? RetiredStuckJobTimeoutMinutes { get; set; }
 
     /// <summary>
     ///     Maximum number of review jobs the worker runs concurrently in a single cycle when parallel

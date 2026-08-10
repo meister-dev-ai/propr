@@ -378,6 +378,34 @@ public sealed class JobRepositoryTests(PostgresContainerFixture fixture) : IAsyn
         Assert.Equal(olderFailedJob.Id, found!.Id);
     }
 
+    // A stopped job used to be excluded from the baseline while restart also refused it, so an operator
+    // stop stranded every file it had already paid for: the only way forward was a fresh push that
+    // re-reviewed the lot.
+    [Fact]
+    public async Task GetBestTerminalJobWithFileResultsByStoredRevisionAsync_AcceptsAStoppedJobAsBaseline()
+    {
+        var stoppedJob = MakeJob(prId: 703, iterationId: 2);
+        stoppedJob.SetReviewRevision(new ReviewRevision("head-sha", "base-sha", null, "head-sha", "base-sha...head-sha"));
+        await this._repo.AddAsync(stoppedJob);
+        await this._repo.AddFileResultAsync(CreateCompletedFileResult(stoppedJob.Id, "src/A.cs"));
+        await this._repo.SetStoppedAsync(stoppedJob.Id);
+
+        var storedRevisionKey = ReviewRevisionKeys.GetStoredKey(
+            stoppedJob.ReviewRevisionReference,
+            stoppedJob.IterationId);
+
+        var found = await this._repo.GetBestTerminalJobWithFileResultsByStoredRevisionAsync(
+            stoppedJob.OrganizationUrl,
+            stoppedJob.ProjectId,
+            stoppedJob.RepositoryId,
+            stoppedJob.PullRequestId,
+            storedRevisionKey);
+
+        Assert.NotNull(found);
+        Assert.Equal(stoppedJob.Id, found!.Id);
+        Assert.Single(found.FileReviewResults);
+    }
+
     [Fact]
     public async Task GetPullRequestHistoryPageAsync_GroupsRunsByPullRequestAndPagesOverPullRequests()
     {

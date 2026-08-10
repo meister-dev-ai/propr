@@ -6,6 +6,7 @@ using MeisterDev.ProPR.Domain.Entities;
 using MeisterDev.ProPR.Domain.Enums;
 using MeisterDev.ProPR.Domain.ValueObjects;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.ChangeTracking;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
 
 namespace MeisterDev.ProPR.Infrastructure.Data.Configurations;
@@ -82,11 +83,41 @@ internal sealed class ReviewFileResultConfiguration : IEntityTypeConfiguration<R
                     ? null
                     : JsonSerializer.Deserialize<IReadOnlyList<ReviewComment>>(v, (JsonSerializerOptions?)null));
 
+        // Which configured passes produced this result, so a resume can tell whether it still matches the
+        // client's configuration. A ValueComparer is required or EF compares the list by reference and never
+        // notices it was populated.
+        var passKeysComparer = new ValueComparer<IReadOnlyList<string>>(
+            (left, right) => left != null && right != null && left.SequenceEqual(right),
+            keys => keys.Aggregate(0, (hash, key) => HashCode.Combine(hash, key.GetHashCode(StringComparison.Ordinal))),
+            keys => keys.ToList());
+
+        builder.Property(r => r.ReviewedPassKeys)
+            .HasColumnName("reviewed_pass_keys")
+            .HasColumnType("jsonb")
+            .IsRequired()
+            .HasDefaultValueSql("'[]'")
+            .HasConversion(
+                v => JsonSerializer.Serialize(v, (JsonSerializerOptions?)null),
+                v => DeserializePassKeys(v),
+                passKeysComparer);
+
         builder.HasIndex(r => r.JobId).HasDatabaseName("ix_review_file_results_job_id");
         builder.HasIndex(r => r.ResumedFromJobId).HasDatabaseName("ix_review_file_results_resumed_from_job_id");
         builder.HasIndex(r => r.ResumedFromFileResultId).HasDatabaseName("ix_review_file_results_resumed_from_file_result_id");
         builder.HasIndex(r => new { r.JobId, r.FilePath })
             .IsUnique()
             .HasDatabaseName("ix_review_file_results_job_file");
+    }
+
+    private static IReadOnlyList<string> DeserializePassKeys(string value)
+    {
+        try
+        {
+            return JsonSerializer.Deserialize<List<string>>(value) ?? [];
+        }
+        catch (JsonException)
+        {
+            return [];
+        }
     }
 }

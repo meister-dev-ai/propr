@@ -16,13 +16,23 @@ public static class ReviewFileSelectionService
     /// <summary>
     ///     Splits changed files into reviewable and excluded sets after removing already-completed file results.
     /// </summary>
+    /// <param name="changedFiles">The changed files in scope for this review.</param>
+    /// <param name="existingResults">Per-file results already persisted for this job, keyed by path.</param>
+    /// <param name="exclusionRules">The repository's exclusion rules.</param>
+    /// <param name="currentPassKeys">
+    ///     The client's currently configured review passes. A completed result recorded under a different set
+    ///     is reviewed again: it is finished work, but not the work the configuration now asks for.
+    /// </param>
     public static ReviewFileSelectionResult SelectFilesForReview(
         IReadOnlyList<ChangedFile> changedFiles,
         IReadOnlyDictionary<string, ReviewFileResult> existingResults,
-        ReviewExclusionRules exclusionRules)
+        ReviewExclusionRules exclusionRules,
+        IReadOnlyList<string>? currentPassKeys = null)
     {
+        var passKeys = currentPassKeys ?? [];
         var completedFiles = existingResults
-            .Where(kvp => kvp.Value.IsComplete)
+            .Where(kvp => kvp.Value.IsComplete
+                          && ReviewPassSignature.Matches(kvp.Value.ReviewedPassKeys, passKeys))
             .Select(kvp => kvp.Key)
             .ToHashSet();
 

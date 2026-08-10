@@ -93,6 +93,7 @@ jobs:
           echo "backend=${{ env.REGISTRY }}/${REPO}" >> "$GITHUB_OUTPUT"
           echo "procursor=${{ env.REGISTRY }}/${REPO}/procursor" >> "$GITHUB_OUTPUT"
           echo "frontend=${{ env.REGISTRY }}/${REPO}/frontend" >> "$GITHUB_OUTPUT"
+          echo "runner=${{ env.REGISTRY }}/${REPO}/runner" >> "$GITHUB_OUTPUT"
 
       - name: Compute Docker tags
         id: tags
@@ -100,6 +101,7 @@ jobs:
           BACKEND="${{ steps.images.outputs.backend }}"
           PROCURSOR="${{ steps.images.outputs.procursor }}"
           FRONTEND="${{ steps.images.outputs.frontend }}"
+          RUNNER="${{ steps.images.outputs.runner }}"
           VERSION="${{ steps.version.outputs.version }}"
 
           if [ "${{ steps.version.outputs.is_prerelease }}" = "true" ]; then
@@ -113,6 +115,9 @@ jobs:
               echo "ENDOFTAGS"
               echo "frontend<<ENDOFTAGS"
               echo "${FRONTEND}:${VERSION}"
+              echo "ENDOFTAGS"
+              echo "runner<<ENDOFTAGS"
+              echo "${RUNNER}:${VERSION}"
               echo "ENDOFTAGS"
             } >> "$GITHUB_OUTPUT"
           else
@@ -129,6 +134,10 @@ jobs:
               echo "frontend<<ENDOFTAGS"
               echo "${FRONTEND}:${VERSION}"
               echo "${FRONTEND}:latest"
+              echo "ENDOFTAGS"
+              echo "runner<<ENDOFTAGS"
+              echo "${RUNNER}:${VERSION}"
+              echo "${RUNNER}:latest"
               echo "ENDOFTAGS"
             } >> "$GITHUB_OUTPUT"
           fi
@@ -184,6 +193,52 @@ jobs:
         with:
           sarif_file: ${{ steps.scan-backend.outputs.sarif }}
           category: backend-image
+
+      # Runner image
+      #
+      # Published from the same release as the control plane. A runner has to stay inside the contract
+      # compatibility window of the control plane it leases from, so one tag covers the pair that is known
+      # to work together.
+
+      - name: Build and push runner image
+        id: build-runner
+        uses: docker/build-push-action@v7.2.0
+        with:
+          context: .
+          file: Dockerfile.runner
+          push: true
+          pull: true
+          tags: ${{ steps.tags.outputs.runner }}
+          labels: |
+            org.opencontainers.image.title=Meister DEV ProPR Runner
+            org.opencontainers.image.version=${{ steps.version.outputs.version }}
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Attest runner image
+        uses: actions/attest@v4.1.0
+        with:
+          subject-name: ${{ steps.images.outputs.runner }}
+          subject-digest: ${{ steps.build-runner.outputs.digest }}
+          push-to-registry: true
+
+      - name: Scan runner image
+        uses: anchore/scan-action@v7.4.0
+        id: scan-runner
+        with:
+          image: ${{ steps.images.outputs.runner }}@${{ steps.build-runner.outputs.digest }}
+          fail-build: false
+          output-format: sarif
+
+      - name: Upload runner scan results
+        uses: github/codeql-action/upload-sarif@v4
+        if: always()
+        continue-on-error: true
+        with:
+          sarif_file: ${{ steps.scan-runner.outputs.sarif }}
+          category: runner-image
 
       # ProCursor image
 

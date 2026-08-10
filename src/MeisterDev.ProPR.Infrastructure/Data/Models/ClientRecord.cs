@@ -117,6 +117,18 @@ public sealed class ClientRecord
     public IReadOnlyList<CommentSeverity> AutoResolveSeverities { get; set; } = [];
 
     /// <summary>
+    ///     Tags a runner must declare before this client's reviews may be offered to it, comma-separated.
+    ///     Empty by default, which every runner satisfies.
+    ///     <para>
+    ///         Routing needs belong to the client rather than to one pull request: they come from the
+    ///         repository's toolchain, its size, or where its code is allowed to be checked out, none of which
+    ///         change between two pull requests. A runner is offered a job only when it declares every tag
+    ///         named here, so adding one narrows the pool of eligible runners and can never widen it.
+    ///     </para>
+    /// </summary>
+    public string RequiredRunnerTags { get; set; } = string.Empty;
+
+    /// <summary>
     ///     Optional soft USD cap on this client's month-to-date review spend. When month-to-date spend reaches it,
     ///     new review jobs are held rather than started (running jobs finish). Null means no limit.
     /// </summary>

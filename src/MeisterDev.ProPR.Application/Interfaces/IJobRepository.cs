@@ -6,11 +6,12 @@ using MeisterDev.ProPR.Application.DTOs;
 using MeisterDev.ProPR.Domain.Entities;
 using MeisterDev.ProPR.Domain.Enums;
 using MeisterDev.ProPR.Domain.ValueObjects;
+using MeisterDev.ProPR.Application.Features.Reviewing.Execution.Ports;
 
 namespace MeisterDev.ProPR.Application.Interfaces;
 
 /// <summary>Interface for managing review jobs in the repository.</summary>
-public interface IJobRepository
+public interface IJobRepository : IReviewFileResultStore
 {
     /// <summary>Persists a new review job.</summary>
     Task AddAsync(ReviewJob job, CancellationToken ct = default);
@@ -130,14 +131,27 @@ public interface IJobRepository
     /// <summary>Returns all jobs with Status == Pending, oldest first.</summary>
     IReadOnlyList<ReviewJob> GetPendingJobs();
 
+    /// <summary>
+    ///     Returns at most <paramref name="limit" /> jobs eligible to be claimed, oldest first. Bounded on
+    ///     purpose: every host polls this, and a deep queue must not turn each poll cycle into a full scan of
+    ///     everything pending. They are candidates only, since the claim decides who actually gets one.
+    ///     <para>
+    ///         <paramref name="submittedAfter" /> continues from an earlier window's last candidate, so a
+    ///         caller whose whole window was ineligible can page deeper instead of starving whatever sits
+    ///         behind it. Submission times are effectively unique; a tie missed by the cursor is picked up
+    ///         on the next cycle.
+    ///     </para>
+    /// </summary>
+    Task<IReadOnlyList<ReviewJob>> GetClaimCandidatesAsync(
+        int limit,
+        DateTimeOffset? submittedAfter = null,
+        CancellationToken ct = default);
+
     /// <summary>Returns all jobs currently in the Processing state.</summary>
     Task<IReadOnlyList<ReviewJob>> GetProcessingJobsAsync(CancellationToken ct = default);
 
     /// <summary>Returns the number of jobs currently in the Processing state.</summary>
     Task<int> CountProcessingJobsAsync(CancellationToken ct = default);
-
-    /// <summary>Returns jobs that have been in <c>Processing</c> state for longer than the given threshold.</summary>
-    Task<IReadOnlyList<ReviewJob>> GetStuckProcessingJobsAsync(TimeSpan threshold, CancellationToken ct = default);
 
     /// <summary>Updates the retry count for a review job.</summary>
     Task UpdateRetryCountAsync(Guid id, int retryCount, CancellationToken ct = default);
@@ -146,8 +160,6 @@ public interface IJobRepository
     ///     Persists the in-scope changed-file count (denominator of the "files reviewed" progress metric),
     ///     fixed once at dispatch planning. No-op if the job does not exist.
     /// </summary>
-    Task UpdateInScopeChangedFileCountAsync(Guid id, int count, CancellationToken ct = default);
-
     /// <summary>
     ///     Counts the per-file results for a job that reached a terminal successful state — the live numerator
     ///     of the "files reviewed" progress metric. Excludes excluded, failed, and carried-forward files, and is a
@@ -174,14 +186,8 @@ public interface IJobRepository
     ///     Returns the <see cref="ReviewJob" /> with <c>FileReviewResults</c>
     ///     eagerly loaded, or <see langword="null" /> if no job with the given id exists.
     /// </summary>
-    Task<ReviewJob?> GetByIdWithFileResultsAsync(Guid id, CancellationToken ct = default);
-
     /// <summary>Adds a per-file review result for a job.</summary>
-    Task AddFileResultAsync(ReviewFileResult result, CancellationToken ct = default);
-
     /// <summary>Updates a per-file review result for a job.</summary>
-    Task UpdateFileResultAsync(ReviewFileResult result, CancellationToken ct = default);
-
     /// <summary>
     ///     Returns the <see cref="ReviewJob" /> with <c>Protocols</c> and <c>Protocols.Events</c>
     ///     eagerly loaded, or <see langword="null" /> if no job with the given id exists.

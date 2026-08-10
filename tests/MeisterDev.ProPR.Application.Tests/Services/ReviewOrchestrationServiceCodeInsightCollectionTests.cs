@@ -26,6 +26,50 @@ public sealed class ReviewOrchestrationServiceCodeInsightCollectionTests
     private const string OrganizationUrl = "https://dev.azure.com/org";
     private static readonly Guid ClientId = Guid.Parse("11111111-1111-1111-1111-111111111111");
 
+    // A push supersedes the job while its comments are going out. The publishing mark is the control
+    // plane's answer to "is this review still wanted", and publishing over a refusal puts a review on the
+    // pull request for work somebody already decided against.
+    [Fact]
+    public async Task ProcessAsync_WhenTheJobIsNoLongerProcessing_PostsNothing()
+    {
+        var leases = Substitute.For<IReviewJobLeaseStore>();
+        leases.TryMarkPublishingAsync(Arg.Any<Guid>(), Arg.Any<ReviewJobLease?>(), Arg.Any<CancellationToken>())
+            .Returns(false);
+        var harness = new Harness(leaseStore: leases);
+
+        await harness.RunAsync();
+
+        await harness.Publisher.DidNotReceiveWithAnyArgs().PublishReviewAsync(
+            default,
+            default!,
+            default!,
+            default!,
+            default!,
+            default,
+            default);
+    }
+
+    // The ordinary path still publishes: the guard must refuse a superseded job, not every job.
+    [Fact]
+    public async Task ProcessAsync_WhenTheJobIsStillProcessing_PublishesAsUsual()
+    {
+        var leases = Substitute.For<IReviewJobLeaseStore>();
+        leases.TryMarkPublishingAsync(Arg.Any<Guid>(), Arg.Any<ReviewJobLease?>(), Arg.Any<CancellationToken>())
+            .Returns(true);
+        var harness = new Harness(leaseStore: leases);
+
+        await harness.RunAsync();
+
+        await harness.Publisher.ReceivedWithAnyArgs(1).PublishReviewAsync(
+            default,
+            default!,
+            default!,
+            default!,
+            default!,
+            default,
+            default);
+    }
+
     [Fact]
     public async Task ProcessAsync_CollectsEveryProducedFindingWithItsAnchorAndProvenance()
     {
@@ -167,7 +211,8 @@ public sealed class ReviewOrchestrationServiceCodeInsightCollectionTests
             IReadOnlyList<ReviewComment>? comments = null,
             IReadOnlyList<PostedReviewCommentRef>? postedComments = null,
             bool collectionThrows = false,
-            bool withConsumer = true)
+            bool withConsumer = true,
+            IReviewJobLeaseStore? leaseStore = null)
         {
             this.IngestionService = Substitute.For<ICodeInsightFindingIngestionService>();
             if (collectionThrows)
@@ -226,6 +271,7 @@ public sealed class ReviewOrchestrationServiceCodeInsightCollectionTests
                 .Returns(new ReviewResult("Summary", comments ?? CreateComments()));
 
             var providerRegistry = CreateProviderRegistry(postedComments ?? []);
+            this.Publisher = providerRegistry.GetCodeReviewPublicationService(ScmProvider.AzureDevOps);
             var (aiRepo, chatFactory) = CreateAiSubstitutes();
 
             this._sut = new ReviewOrchestrationService(
@@ -245,10 +291,13 @@ public sealed class ReviewOrchestrationServiceCodeInsightCollectionTests
                 chatFactory,
                 fileByFileReviewOrchestrator,
                 workspaceManager: CreateWorkspaceManager(),
-                codeInsightFindingIngestionService: withConsumer ? this.IngestionService : null);
+                codeInsightFindingIngestionService: withConsumer ? this.IngestionService : null,
+                leaseStore: leaseStore);
         }
 
         public ICodeInsightFindingIngestionService IngestionService { get; }
+
+        public ICodeReviewPublicationService Publisher { get; } = null!;
 
         public IReviewJobExecutionStore Jobs { get; }
 

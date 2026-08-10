@@ -133,6 +133,50 @@ internal sealed class ReviewJobEntityTypeConfiguration : IEntityTypeConfiguratio
             .HasColumnName("error_message")
             .IsRequired(false);
 
+        builder.Property(j => j.LeaseOwner)
+            .HasColumnName("lease_owner")
+            .HasMaxLength(256)
+            .IsRequired(false);
+
+        // Zero means never claimed, so every real claim lands on generation 1 or higher and a party
+        // presenting generation zero can never match a live lease.
+        builder.Property(j => j.LeaseGeneration)
+            .HasColumnName("lease_generation")
+            .HasDefaultValue(0)
+            .IsRequired();
+
+        builder.Property(j => j.LeaseExpiresAt)
+            .HasColumnName("lease_expires_at")
+            .IsRequired(false);
+
+        builder.Property(j => j.LastHeartbeatAt)
+            .HasColumnName("last_heartbeat_at")
+            .IsRequired(false);
+
+        builder.Property(j => j.ConsecutiveReclaimCount)
+            .HasColumnName("consecutive_reclaim_count")
+            .HasDefaultValue(0)
+            .IsRequired();
+
+        builder.Property(j => j.TotalReclaimCount)
+            .HasColumnName("total_reclaim_count")
+            .HasDefaultValue(0)
+            .IsRequired();
+
+        builder.Property(j => j.LastReclaimedAt)
+            .HasColumnName("last_reclaimed_at")
+            .IsRequired(false);
+
+        builder.Property(j => j.PublishingStartedAt)
+            .HasColumnName("publishing_started_at")
+            .IsRequired(false);
+
+        builder.Property(j => j.FailureReason)
+            .HasColumnName("failure_reason")
+            .HasConversion<int>()
+            .HasDefaultValue(ReviewJobFailureReason.Unspecified)
+            .IsRequired();
+
         builder.Property(j => j.RetryCount)
             .HasColumnName("retry_count")
             .HasDefaultValue(0)
@@ -286,6 +330,16 @@ internal sealed class ReviewJobEntityTypeConfiguration : IEntityTypeConfiguratio
 
         builder.HasIndex(j => new { j.ClientId, j.Provider, j.RepositoryId, j.ExternalCodeReviewId })
             .HasDatabaseName("ix_review_jobs_client_provider_review");
+
+        // Backs the bounded claim-candidate query, which filters to claimable jobs and takes the oldest
+        // few. Without the submitted_at key the planner sorts every pending row on each poll cycle, and
+        // every host polls.
+        builder.HasIndex(j => new { j.Status, j.SubmittedAt })
+            .HasDatabaseName("ix_review_jobs_claim_candidates");
+
+        // Backs the lease-expiry scan that finds jobs whose holder stopped heartbeating.
+        builder.HasIndex(j => new { j.Status, j.LeaseExpiresAt })
+            .HasDatabaseName("ix_review_jobs_lease_expiry");
 
         builder.Ignore(j => j.ProCursorSourceIds);
         builder.Ignore(j => j.ProviderHost);

@@ -13,6 +13,7 @@ using MeisterDev.ProPR.Api.Extensions;
 using MeisterDev.ProPR.Api.Features.Clients.Controllers;
 using MeisterDev.ProPR.Api.Features.Crawling.Webhooks.Validators;
 using MeisterDev.ProPR.Api.Features.IdentityAndAccess.Authentication;
+using MeisterDev.ProPR.Api.Features.Reviewing.Runners;
 using MeisterDev.ProPR.Api.Features.IdentityAndAccess.Validators;
 using MeisterDev.ProPR.Api.Features.Licensing;
 using MeisterDev.ProPR.Api.Features.ProCursor;
@@ -145,6 +146,11 @@ try
             _ => { })
         .AddScheme<AuthenticationSchemeOptions, ProCursorSharedKeyAuthenticationHandler>(
             ProCursorSharedKeyAuthenticationDefaults.Scheme,
+            _ => { })
+        // Runners authenticate with the credential registration issued them. Pinned on their own endpoints
+        // rather than made a default, so nothing else in the API can be reached with a runner credential.
+        .AddScheme<AuthenticationSchemeOptions, RunnerAuthenticationHandler>(
+            RunnerAuthenticationDefaults.Scheme,
             _ => { });
 
     // Deny by default: every endpoint without an explicit [Authorize]/[AllowAnonymous] (or in-code gate)
@@ -222,6 +228,49 @@ try
     if (!disableHostedServices)
     {
         builder.Services.AddHostedService(sp => sp.GetRequiredService<ReviewJobWorker>());
+    }
+
+    // Drains the webhook delivery queue. Started wherever the review worker is: an installation that
+    // accepts deliveries and never turns them into reviews is worse than one that rejects them, because
+    // the provider was already told the delivery arrived.
+    builder.Services.AddOptions<WebhookDeliveryWorkerOptions>()
+        .Configure(opts =>
+        {
+            var configuration = builder.Configuration;
+            if (int.TryParse(configuration["WEBHOOK_DELIVERY_IDLE_POLL_SECONDS"], out var idle))
+            {
+                opts.IdlePollIntervalSeconds = idle;
+            }
+
+            if (int.TryParse(configuration["WEBHOOK_DELIVERY_CLAIM_SECONDS"], out var claim))
+            {
+                opts.ClaimDurationSeconds = claim;
+            }
+
+            if (int.TryParse(configuration["WEBHOOK_DELIVERY_MAX_CONCURRENCY"], out var concurrency))
+            {
+                opts.MaxConcurrency = concurrency;
+            }
+
+            if (int.TryParse(configuration["WEBHOOK_DELIVERY_MAX_ATTEMPTS"], out var attempts))
+            {
+                opts.MaxAttempts = attempts;
+            }
+
+            if (int.TryParse(configuration["WEBHOOK_DELIVERY_RETRY_BACKOFF_SECONDS"], out var backoff))
+            {
+                opts.RetryBackoffSeconds = backoff;
+            }
+        })
+        .ValidateDataAnnotations()
+        .ValidateOnStart();
+
+    // Gated on persistence because that is where the queue lives: with no database there is nothing to
+    // accept a delivery into and nothing to drain, and a worker polling for it would only log its own
+    // absence once a second.
+    if (hasDatabaseConnectionString && !disableHostedServices)
+    {
+        builder.Services.AddHostedService<WebhookDeliveryWorker>();
     }
 
     // AdoPrCrawlerWorker needs persistent crawl-configuration storage.
@@ -306,6 +355,14 @@ try
         builder.Services.AddHostedService(sp => sp.GetRequiredService<RetentionPurgeWorker>());
     }
 
+    // RunnerRegistryPruneWorker removes runners that stopped calling in. Gated on the database for the
+    // same reason as the sweep above; without one there is no registry to prune.
+    builder.Services.AddSingleton<RunnerRegistryPruneWorker>();
+    if (hasDatabaseConnectionString && !isTesting && !disableHostedServices)
+    {
+        builder.Services.AddHostedService(sp => sp.GetRequiredService<RunnerRegistryPruneWorker>());
+    }
+
     // CodeInsightClassificationWorker classifies collected findings by type, post-hoc. It depends on the
     // code-insight module, which is only registered when a database connection string is configured, so gate
     // it the same way to keep it inert in DB-less test runs. The collection gate keeps it inert per client.
@@ -358,7 +415,7 @@ try
         {
             policy
                 .WithOrigins(allowedOrigins)
-                // NOSONAR — a predicate is needed because *.visualstudio.com cannot be expressed as a
+                // NOSONAR: a predicate is needed because *.visualstudio.com cannot be expressed as a
                 // static origin string, so any subdomain is matched here instead.
                 .SetIsOriginAllowed(origin => BrowserOriginPolicy.IsAllowedOrigin(origin, allowedOrigins))
                 .AllowAnyHeader()
@@ -368,7 +425,7 @@ try
     });
 
     // Extension callers get a policy of their own, without credentials. Their origin cannot be
-    // enumerated — Firefox randomises it per installation — so it is matched by scheme, and a scheme
+    // enumerated, because Firefox randomises it per installation, so it is matched by scheme, and a scheme
     // match must not carry the refresh-token cookie.
     builder.Services.AddSingleton<Microsoft.AspNetCore.Cors.Infrastructure.ICorsPolicyProvider,
         BrowserCorsPolicyProvider>();
@@ -446,6 +503,7 @@ try
             opts.JsonSerializerOptions.Converters.Add(new JsonStringEnumConverter(JsonNamingPolicy.CamelCase)));
 
     builder.Services.AddSingleton<ReviewJobMetrics>();
+    builder.Services.AddSingleton<RunnerFleetMetrics>();
 
     builder.Services.AddProPrTelemetry(
         builder.Configuration,
@@ -534,11 +592,32 @@ try
 
     app.UseSerilogRequestLogging(opts =>
     {
-        opts.GetLevel = (httpContext, _, _) =>
-            httpContext.Request.Path.StartsWithSegments("/healthz")
-            || httpContext.Request.Path.StartsWithSegments("/livez")
-                ? LogEventLevel.Verbose // Verbose = Trace in Serilog
-                : LogEventLevel.Information;
+        opts.GetLevel = (httpContext, _, exception) =>
+        {
+            // Failures stay loud whatever they were asking for. A runner being refused is the one poll
+            // worth reading, and demoting it by path would hide exactly the thing an operator is looking
+            // for when a fleet goes quiet.
+            if (exception is not null || httpContext.Response.StatusCode >= 400)
+            {
+                return LogEventLevel.Information;
+            }
+
+            var path = httpContext.Request.Path;
+            if (path.StartsWithSegments("/healthz") || path.StartsWithSegments("/livez"))
+            {
+                return LogEventLevel.Verbose; // Verbose = Trace in Serilog
+            }
+
+            // Every runner asks for work every few seconds forever, so on an installation with a fleet
+            // these are most of the request log and none of the information in it: the answer is almost
+            // always "nothing for you". Kept at debug, where somebody chasing a lease is looking anyway.
+            if (path.StartsWithSegments("/runners/lease"))
+            {
+                return LogEventLevel.Debug;
+            }
+
+            return LogEventLevel.Information;
+        };
     });
 
     if (app.Environment.IsDevelopment())

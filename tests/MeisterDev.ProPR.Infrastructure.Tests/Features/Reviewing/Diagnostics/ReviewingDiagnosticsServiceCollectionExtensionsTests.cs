@@ -178,6 +178,11 @@ public sealed class ReviewingDiagnosticsServiceCollectionExtensionsTests
             return [];
         }
 
+        public Task<IReadOnlyList<ReviewJob>> GetClaimCandidatesAsync(int limit, DateTimeOffset? submittedAfter = null, CancellationToken ct = default)
+        {
+            return Task.FromResult<IReadOnlyList<ReviewJob>>([]);
+        }
+
         public Task<IReadOnlyList<ReviewJob>> GetProcessingJobsAsync(CancellationToken ct = default)
         {
             return Task.FromResult<IReadOnlyList<ReviewJob>>([]);
@@ -186,11 +191,6 @@ public sealed class ReviewingDiagnosticsServiceCollectionExtensionsTests
         public Task<int> CountProcessingJobsAsync(CancellationToken ct = default)
         {
             return Task.FromResult(0);
-        }
-
-        public Task<IReadOnlyList<ReviewJob>> GetStuckProcessingJobsAsync(TimeSpan threshold, CancellationToken ct = default)
-        {
-            return Task.FromResult<IReadOnlyList<ReviewJob>>([]);
         }
 
         public Task UpdateRetryCountAsync(Guid id, int retryCount, CancellationToken ct = default)

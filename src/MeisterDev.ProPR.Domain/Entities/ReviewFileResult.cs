@@ -11,6 +11,8 @@ namespace MeisterDev.ProPR.Domain.Entities;
 /// </summary>
 public class ReviewFileResult
 {
+    private List<string> _reviewedPassKeys = [];
+
     private ReviewFileResult()
     {
     } // EF Core
@@ -85,6 +87,19 @@ public class ReviewFileResult
     public ReviewContextBudgetOutcome ContextBudgetOutcome { get; private set; } = ReviewContextBudgetOutcome.Normal;
 
     /// <summary>
+    ///     Which configured review passes produced this result. Completion on its own does not say what the
+    ///     file was reviewed by, so a file finished under one pass list cannot be told apart from the same
+    ///     file finished under another, and a resume would adopt work that no longer matches the
+    ///     configuration. Empty on a result written before this was recorded and on a carried-forward
+    ///     result, both of which are taken at face value rather than re-reviewed.
+    /// </summary>
+    public IReadOnlyList<string> ReviewedPassKeys
+    {
+        get => this._reviewedPassKeys.AsReadOnly();
+        private set => this._reviewedPassKeys = [.. value];
+    }
+
+    /// <summary>
     ///     Creates a <see cref="ReviewFileResult" /> that carries forward the result from a prior
     ///     iteration without dispatching a new AI review for the file.
     /// </summary>
@@ -113,6 +128,7 @@ public class ReviewFileResult
         result.Comments = prior.Comments;
         result.ResumedFromJobId = prior.JobId;
         result.ResumedFromFileResultId = prior.Id;
+        result._reviewedPassKeys = [.. prior._reviewedPassKeys];
         return result;
     }
 
@@ -121,7 +137,14 @@ public class ReviewFileResult
     /// </summary>
     /// <param name="summary">The AI-generated per-file summary.</param>
     /// <param name="comments">The AI-generated review comments for the file.</param>
-    public void MarkCompleted(string summary, IReadOnlyList<ReviewComment> comments)
+    /// <param name="reviewedPassKeys">
+    ///     The configured passes that contributed, so a later resume can tell whether this result still
+    ///     matches the client's configuration.
+    /// </param>
+    public void MarkCompleted(
+        string summary,
+        IReadOnlyList<ReviewComment> comments,
+        IReadOnlyList<string>? reviewedPassKeys = null)
     {
         if (this.IsFailed)
         {
@@ -136,6 +159,7 @@ public class ReviewFileResult
         this.IsComplete = true;
         this.PerFileSummary = summary;
         this.Comments = comments;
+        this._reviewedPassKeys = reviewedPassKeys is null ? [] : [.. reviewedPassKeys];
     }
 
     /// <summary>

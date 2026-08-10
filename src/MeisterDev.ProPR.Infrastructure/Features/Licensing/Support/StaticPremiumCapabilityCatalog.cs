@@ -22,6 +22,11 @@ public sealed class StaticPremiumCapabilityCatalog : IPremiumCapabilityCatalog
             "A commercial license is required to run more than one active PR review at a time, including in self-hosted deployments.",
             "Parallel review execution is currently disabled for this installation."),
         new(
+            PremiumCapabilityKey.DistributedExecution,
+            "Distributed review execution",
+            "A commercial license is required to run reviews on registered runners, including in self-hosted deployments.",
+            "Distributed review execution is currently disabled for this installation."),
+        new(
             PremiumCapabilityKey.MultipleScmProviders,
             "Multiple SCM providers",
             "A commercial license is required to configure more than one SCM provider, including in self-hosted deployments.",

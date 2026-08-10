@@ -205,6 +205,61 @@ public sealed class ReviewJob
             this.ReviewPatchIdentity);
 
     /// <summary>
+    ///     Identity of the party currently holding this job's execution lease, or null when the job is not
+    ///     leased. Set by the atomic claim and cleared when the job reaches a terminal state.
+    /// </summary>
+    public string? LeaseOwner { get; private set; }
+
+    /// <summary>
+    ///     Fencing token for the execution lease, incremented by every claim. A party still holding an older
+    ///     generation has lost the job, so its writes are rejected rather than allowed to corrupt work that
+    ///     someone else has since taken over. Zero on a job that has never been claimed.
+    /// </summary>
+    public int LeaseGeneration { get; private set; }
+
+    /// <summary>
+    ///     When the current lease expires. Evaluated against the database clock, never a host clock, so
+    ///     skew between hosts cannot make one host consider another's lease expired early. Null when the
+    ///     job is not leased.
+    /// </summary>
+    public DateTimeOffset? LeaseExpiresAt { get; private set; }
+
+    /// <summary>
+    ///     When the lease holder last renewed the lease. This, not elapsed processing time, is the evidence
+    ///     that an execution is alive. Null when the job is not leased.
+    /// </summary>
+    public DateTimeOffset? LastHeartbeatAt { get; private set; }
+
+    /// <summary>
+    ///     Expiry-driven reclaims since this job last completed new per-file work. Completing a file resets
+    ///     it, so only a job that keeps cycling without progress exhausts its budget, while a job that is
+    ///     genuinely making headway across several interruptions is allowed to continue.
+    /// </summary>
+    public int ConsecutiveReclaimCount { get; private set; }
+
+    /// <summary>
+    ///     Every expiry-driven reclaim of this job. The consecutive count resets on progress, so this is the
+    ///     absolute ceiling that still terminates a job completing exactly one file per attempt and crashing.
+    /// </summary>
+    public int TotalReclaimCount { get; private set; }
+
+    /// <summary>When this job was last reclaimed after its lease expired. Null when it never has been.</summary>
+    public DateTimeOffset? LastReclaimedAt { get; private set; }
+
+    /// <summary>
+    ///     When publication of this job's findings began. While it is set, the job is not reclaimable: a
+    ///     reclaim racing outbound comment posting is how the same review gets published twice. Cleared when
+    ///     publication finishes.
+    /// </summary>
+    public DateTimeOffset? PublishingStartedAt { get; private set; }
+
+    /// <summary>
+    ///     Why this job failed, in a form a caller can branch on. <see cref="ErrorMessage" /> carries the
+    ///     detail; this says which kind of failure it was.
+    /// </summary>
+    public ReviewJobFailureReason FailureReason { get; private set; }
+
+    /// <summary>
     ///     Error message if the job failed.
     /// </summary>
     public string? ErrorMessage { get; set; }
@@ -489,6 +544,86 @@ public sealed class ReviewJob
         this.BudgetBlockCapKind = capKind;
         this.BudgetBlockThresholdUsd = thresholdUsd;
         this.BudgetBlockSpentUsd = spentUsd;
+    }
+
+    /// <summary>
+    ///     Records the lease stamped onto this job by a claim. The claim itself is a single conditional
+    ///     database update, so this exists for readers, in-memory stores, and tests rather than as the write
+    ///     path a live claim takes.
+    /// </summary>
+    /// <param name="owner">Identity of the claiming party.</param>
+    /// <param name="generation">The generation the claim assigned.</param>
+    /// <param name="expiresAt">When the lease expires.</param>
+    /// <param name="lastHeartbeatAt">When the lease was last renewed; the claim counts as the first renewal.</param>
+    public void ApplyLease(string owner, int generation, DateTimeOffset expiresAt, DateTimeOffset lastHeartbeatAt)
+    {
+        if (string.IsNullOrWhiteSpace(owner))
+        {
+            throw new ArgumentException("Lease owner required.", nameof(owner));
+        }
+
+        if (generation < 1)
+        {
+            throw new ArgumentOutOfRangeException(nameof(generation), "A claimed lease starts at generation 1.");
+        }
+
+        this.LeaseOwner = owner;
+        this.LeaseGeneration = generation;
+        this.LeaseExpiresAt = expiresAt;
+        this.LastHeartbeatAt = lastHeartbeatAt;
+    }
+
+    /// <summary>
+    ///     Clears the lease, leaving the generation intact so a party still holding it stays recognisably
+    ///     stale. Called when the job reaches a terminal state and when a lease is released gracefully.
+    /// </summary>
+    public void ClearLease()
+    {
+        this.LeaseOwner = null;
+        this.LeaseExpiresAt = null;
+        this.LastHeartbeatAt = null;
+    }
+
+    /// <summary>
+    ///     Records that this job's lease expired and it was taken back for another attempt. Reclaims are
+    ///     counted; a graceful release is not, because a deploy or a scale-in says nothing about whether the
+    ///     job itself is healthy.
+    /// </summary>
+    /// <param name="reclaimedAt">When the reclaim happened.</param>
+    public void RecordReclaim(DateTimeOffset reclaimedAt)
+    {
+        this.ConsecutiveReclaimCount++;
+        this.TotalReclaimCount++;
+        this.LastReclaimedAt = reclaimedAt;
+        this.ClearLease();
+    }
+
+    /// <summary>
+    ///     Records that this job has completed new per-file work, which clears the run of interruptions
+    ///     against it. Progress is the difference between a job that keeps being interrupted and a job that
+    ///     cannot get anywhere.
+    /// </summary>
+    public void ResetConsecutiveReclaims()
+    {
+        this.ConsecutiveReclaimCount = 0;
+    }
+
+    /// <summary>Records that publication has begun, which makes the job unreclaimable until it finishes.</summary>
+    public void MarkPublishingStarted(DateTimeOffset startedAt)
+    {
+        this.PublishingStartedAt = startedAt;
+    }
+
+    /// <summary>Records that publication has finished, one way or another.</summary>
+    public void ClearPublishing()
+    {
+        this.PublishingStartedAt = null;
+    }
+
+    /// <summary>Records the categorised reason this job failed.</summary>
+    public void SetFailureReason(ReviewJobFailureReason reason)
+    {
+        this.FailureReason = reason;
     }
 
     /// <summary>Records the AI connection and model used at job-start time.</summary>

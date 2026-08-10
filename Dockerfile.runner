@@ -1,0 +1,79 @@
+# The runner image.
+#
+# Deliberately not the application image with a different entrypoint. That image carries a public API and
+# an admin surface, and neither belongs on a host whose only job is computation and which may sit outside
+# the network the control plane trusts. Every endpoint this image does not have is one nobody has to
+# secure on a box holding a customer's source code.
+#
+# It is still a heavy image, and honestly so: a review needs the git CLI to fetch a repository, so the
+# same minimal-git slice the application image builds is staged in here as well.
+
+# Build stage
+# mcr.microsoft.com/dotnet/sdk:10.0
+FROM mcr.microsoft.com/dotnet/sdk@sha256:548d93f8a18a1acbe6cc127bc4f47281430d34a9e35c18afa80a8d6741c2adc3 AS build
+WORKDIR /source
+
+COPY MeisterDev.ProPR.slnx .
+COPY src/ src/
+COPY tests/ tests/
+
+RUN dotnet restore src/MeisterDev.ProPR.Runner/MeisterDev.ProPR.Runner.csproj
+
+RUN dotnet publish src/MeisterDev.ProPR.Runner/MeisterDev.ProPR.Runner.csproj \
+    -c Release -o /app --no-restore
+
+# Minimal git runtime slice. Same approach and same pinned Ubuntu digest as the application image: the
+# chiseled runtime ships no package manager, so git, its helpers, and their shared-library closure are
+# staged here and copied in. Noble matches the chiseled base's glibc.
+# ubuntu:24.04
+FROM ubuntu@sha256:4fbb8e6a8395de5a7550b33509421a2bafbc0aab6c06ba2cef9ebffbc7092d90 AS gittools
+RUN set -eux; \
+    apt-get update; \
+    apt-get install -y --no-install-recommends git ca-certificates; \
+    mkdir -p /git-root/usr/lib; \
+    # The job work root is staged here as an empty directory. The chiseled runtime has no shell, so it
+    # cannot be created with mkdir there, and it is copied in with the app user's ownership instead.
+    mkdir -p /work-root; \
+    for binary in /usr/bin/git /usr/bin/true; do \
+        install -D "$binary" "/git-root$binary"; \
+    done; \
+    cp -a /usr/lib/git-core /git-root/usr/lib/git-core; \
+    mkdir -p /git-root/etc/ssl/certs; \
+    cp -a /etc/ssl/certs/ca-certificates.crt /git-root/etc/ssl/certs/; \
+    # Copy the shared-library closure of git and its helpers, minus what the chiseled base already has.
+    for binary in /usr/bin/git /usr/lib/git-core/git-remote-http; do \
+        ldd "$binary" 2>/dev/null | awk '/=> \//{print $3}'; \
+    done | sort -u | while read -r library; do \
+        case "$library" in \
+            */libc.so.*|*/libm.so.*|*/libgcc_s.so.*|*/libstdc++.so.*|*/libpthread.so.*|*/libdl.so.*) continue ;; \
+        esac; \
+        install -D "$library" "/git-root$library"; \
+    done
+
+# Runtime stage
+# mcr.microsoft.com/dotnet/aspnet:10.0-noble-chiseled-extra
+FROM mcr.microsoft.com/dotnet/aspnet@sha256:f9bd6be9b5ab75b8196bff0f0972580edaea7fa8ca04e6ef530950e33caee5b0 AS runtime
+WORKDIR /app
+
+COPY --from=gittools /git-root/ /
+COPY --from=build --chown=1654:1654 --chmod=755 /app /app
+
+ENV GIT_EXEC_PATH=/usr/lib/git-core
+
+# Job-scoped content lives here and is purged when a job ends, so the container needs no write access
+# anywhere else on the filesystem. Owned by the app uid, because the container runs as that user and
+# would otherwise be unable to create a workspace under its own work root.
+COPY --from=gittools --chown=1654:1654 /work-root /work
+ENV RUNNER_WORK_ROOT=/work
+
+# Rootless. The chiseled base defines the non-root `app` user; nothing this host does needs more.
+USER app
+
+EXPOSE 8080
+ENV ASPNETCORE_URLS=http://+:8080
+ENV DOTNET_gcServer=1
+
+HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \
+    CMD ["dotnet", "MeisterDev.ProPR.Runner.dll", "--healthcheck", "http://127.0.0.1:8080/healthz"]
+
+ENTRYPOINT ["dotnet", "MeisterDev.ProPR.Runner.dll"]

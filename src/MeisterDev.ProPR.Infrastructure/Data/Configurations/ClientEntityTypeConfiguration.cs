@@ -121,6 +121,11 @@ internal sealed class ClientEntityTypeConfiguration : IEntityTypeConfiguration<C
             .HasColumnType("text")
             .HasDefaultValueSql("''");
 
+        builder.Property(c => c.RequiredRunnerTags)
+            .HasColumnName("required_runner_tags")
+            .HasColumnType("text")
+            .HasDefaultValueSql("''");
+
         builder.Property(c => c.MonthlyBudgetSoftCapUsd)
             .HasColumnName("monthly_budget_soft_cap_usd")
             .HasPrecision(18, 6)

@@ -7,6 +7,7 @@ using System.Text;
 using System.Text.Json;
 using MeisterDev.ProPR.Application.Features.Crawling.Execution.Models;
 using MeisterDev.ProPR.Application.Features.Crawling.Execution.Ports;
+using MeisterDev.ProPR.Application.Features.Crawling.Webhooks.Commands.HandleProviderWebhookDelivery;
 using MeisterDev.ProPR.Application.Features.Crawling.Webhooks.Models;
 using MeisterDev.ProPR.Application.Features.Crawling.Webhooks.Ports;
 using MeisterDev.ProPR.Application.Interfaces;
@@ -40,6 +41,7 @@ public sealed class WebhookReviewActivationIntegrationTests(WebhookReviewActivat
         var response = await client.SendAsync(request);
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        await factory.DrainQueueAsync();
 
         var persisted = await factory.GetLatestDeliveryAsync();
         Assert.NotNull(persisted);
@@ -72,6 +74,7 @@ public sealed class WebhookReviewActivationIntegrationTests(WebhookReviewActivat
         var response = await client.SendAsync(request);
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        await factory.DrainQueueAsync();
 
         var persisted = await factory.GetLatestDeliveryAsync();
         Assert.NotNull(persisted);
@@ -121,6 +124,9 @@ public sealed class WebhookReviewActivationIntegrationTests(WebhookReviewActivat
     {
         private readonly IWebhookReviewActivationService _activationService =
             Substitute.For<IWebhookReviewActivationService>();
+
+        /// <summary>Where an accepted delivery waits until <see cref="DrainQueueAsync" /> works it.</summary>
+        public InMemoryWebhookDeliveryQueue DeliveryQueue { get; } = new();
 
         private readonly IAdoWebhookBasicAuthVerifier _authVerifier = Substitute.For<IAdoWebhookBasicAuthVerifier>();
         private readonly IClientRegistry _clientRegistry = Substitute.For<IClientRegistry>();
@@ -208,10 +214,38 @@ public sealed class WebhookReviewActivationIntegrationTests(WebhookReviewActivat
 
         public async Task ResetDeliveryLogsAsync()
         {
+            this.DeliveryQueue.Clear();
+
             using var scope = this.Services.CreateScope();
             var db = scope.ServiceProvider.GetRequiredService<MeisterProPRDbContext>();
             db.WebhookDeliveryLogEntries.RemoveRange(db.WebhookDeliveryLogEntries);
             await db.SaveChangesAsync();
+        }
+
+        /// <summary>
+        ///     Does what the delivery worker does: takes each accepted delivery and runs the intake that the
+        ///     receiver no longer waits for. The receiver's answer and the review it leads to are two steps
+        ///     now, and a test that asserts the second has to take the first.
+        /// </summary>
+        public async Task DrainQueueAsync()
+        {
+            using var scope = this.Services.CreateScope();
+            var handler = scope.ServiceProvider.GetRequiredService<HandleProviderWebhookDeliveryHandler>();
+
+            while (await this.DeliveryQueue.ClaimNextAsync("tests", TimeSpan.FromMinutes(1)) is { } item)
+            {
+                var headers = JsonSerializer.Deserialize<Dictionary<string, string>>(item.HeadersJson)
+                              ?? new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+
+                await handler.HandleAsync(
+                    new HandleProviderWebhookDeliveryCommand(
+                        item.Provider,
+                        item.PathKey,
+                        headers,
+                        item.Payload,
+                        WebhookDeliveryProcessingMode.Process),
+                    CancellationToken.None);
+            }
         }
 
         public async Task<WebhookDeliveryLogEntryRecord?> GetLatestDeliveryAsync()
@@ -243,6 +277,7 @@ public sealed class WebhookReviewActivationIntegrationTests(WebhookReviewActivat
                     options.UseInMemoryDatabase(dbName, dbRoot));
                 services.AddScoped<IWebhookConfigurationRepository, EfWebhookConfigurationRepository>();
                 services.AddScoped<IWebhookDeliveryLogRepository, EfWebhookDeliveryLogRepository>();
+                services.AddSingleton<IWebhookDeliveryQueue>(this.DeliveryQueue);
 
                 ReplaceService(services, this._authVerifier);
                 ReplaceService(services, this._payloadParser);

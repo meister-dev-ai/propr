@@ -41,6 +41,15 @@ public sealed class MeisterProPRDbContext(DbContextOptions<MeisterProPRDbContext
     /// <summary>Per-file results of a review job.</summary>
     public DbSet<ReviewFileResult> ReviewFileResults => this.Set<ReviewFileResult>();
 
+    /// <summary>Enrolled review executors.</summary>
+    public DbSet<ReviewRunner> ReviewRunners => this.Set<ReviewRunner>();
+
+    /// <summary>Operator-issued invitations for a host to enroll as a runner.</summary>
+    public DbSet<RunnerRegistrationToken> RunnerRegistrationTokens => this.Set<RunnerRegistrationToken>();
+
+    /// <summary>Batches of executor output the control plane has already applied.</summary>
+    public DbSet<RunnerIngestReceipt> RunnerIngestReceipts => this.Set<RunnerIngestReceipt>();
+
     /// <summary>Mention reply jobs table.</summary>
     public DbSet<MentionReplyJob> MentionReplyJobs => this.Set<MentionReplyJob>();
 
@@ -133,6 +142,9 @@ public sealed class MeisterProPRDbContext(DbContextOptions<MeisterProPRDbContext
 
     /// <summary>Durable webhook delivery-history entries.</summary>
     public DbSet<WebhookDeliveryLogEntryRecord> WebhookDeliveryLogEntries => this.Set<WebhookDeliveryLogEntryRecord>();
+
+    /// <summary>Verified deliveries waiting to become reviews.</summary>
+    public DbSet<WebhookDeliveryQueueEntryRecord> WebhookDeliveryQueue => this.Set<WebhookDeliveryQueueEntryRecord>();
 
     /// <summary>Append-only provider-connection operational audit entries.</summary>
     public DbSet<ProviderConnectionAuditEntryRecord> ProviderConnectionAuditEntries =>

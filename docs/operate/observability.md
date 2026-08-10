@@ -63,6 +63,38 @@ so failure rates stay observable in aggregate even though the individual spans a
 If the volume is still too high after that, sample. Reach for `TELEMETRY_TRACE_SAMPLE_RATIO` last: it
 drops whole traces at random, so a request you care about is as likely to be missing as any other.
 
+## Runner, lease and queue metrics
+
+These are exported with the other review metrics. No extra exporter configuration is needed.
+
+| Metric | Kind | What it tells you |
+|---|---|---|
+| `review_job_queue_depth` | gauge | Jobs waiting. The one to scale a runner pool on. |
+| `review_runner_active_count` | gauge | Runners counted as active: enrolled, unrevoked, contract-compatible, heartbeating. |
+| `review_lease_held_count` | gauge | Runners currently holding at least one lease. |
+| `review_queue_stalled` | gauge | `1` when the queue has work nothing is taking, labelled `stall_cause`. |
+| `review_lease_reclaims_total` | counter | Leases taken back, labelled `reclaim_outcome`. |
+| `review_lease_expiries_total` | counter | Leases seen past expiry, whether or not the job was reclaimable. |
+| `review_runner_slot_refusals_total` | counter | Lease requests refused because the installation's concurrent-runner limit was already in use. |
+
+Scale a runner pool on `review_job_queue_depth`. Where clients set `required_runner_tags`, also gate on
+`review_queue_stalled` with cause `NoRunnerMatchesRequiredTags`: adding runners without the required
+tags does not drain that work.
+
+Read `review_lease_expiries_total` with `review_lease_reclaims_total`. Expiries count leases lost; the
+`reclaim_outcome` label says what happened to the job. Rising `failed_out_of_budget` means jobs are
+cycling rather than progressing.
+
+No label carries a repository path, a client or runner name, or a credential.
+
+An installation without a metrics stack can read the same picture from the Runners page, which shows how
+many runners are active, how many reviews are running and waiting, the age of the longest wait, and what
+each runner is working on right now. It is the fleet at a glance rather than a history: metrics are still
+what you alert on.
+
+Runner processes report `service.name` as `propr-runner` with the runner's display name as the service
+instance id.
+
 ## What to look at when a review misbehaves
 
 Server logs are the wrong place to start. Every review records its own protocol - each pass, model call,

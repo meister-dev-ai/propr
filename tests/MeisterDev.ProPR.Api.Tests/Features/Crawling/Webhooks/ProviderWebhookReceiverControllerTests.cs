@@ -6,6 +6,7 @@ using MeisterDev.ProPR.Application.DTOs.AzureDevOps;
 using MeisterDev.ProPR.Application.Features.Crawling.Execution.Models;
 using MeisterDev.ProPR.Application.Features.Crawling.Execution.Ports;
 using MeisterDev.ProPR.Application.Features.Crawling.Webhooks.Commands.HandleProviderWebhookDelivery;
+using MeisterDev.ProPR.Application.Features.Crawling.Webhooks.Ports;
 using MeisterDev.ProPR.Application.Features.Crawling.Webhooks.Dtos;
 using MeisterDev.ProPR.Application.Interfaces;
 using MeisterDev.ProPR.Domain.Enums;
@@ -183,7 +184,8 @@ public sealed class ProviderWebhookReceiverControllerTests
             clientRegistry,
             secretProtectionCodec,
             NullLogger<HandleProviderWebhookDeliveryHandler>.Instance,
-            synchronizationService);
+            synchronizationService,
+            Substitute.For<IWebhookDeliveryQueue>());
     }
 
     private static WebhookDeliveryEnvelope CreateEnvelope(ProviderHostRef host, string deliveryKind, string eventName)

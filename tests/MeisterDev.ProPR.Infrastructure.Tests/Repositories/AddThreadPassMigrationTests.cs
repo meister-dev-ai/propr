@@ -45,33 +45,7 @@ public sealed class AddThreadPassMigrationTests(PostgresContainerFixture fixture
             {
                 await MigrateToAsync(beforeUpgrade, PreviousMigration);
 
-                var tenantId = await beforeUpgrade.Tenants
-                    .Select(tenant => tenant.Id)
-                    .FirstOrDefaultAsync();
-                if (tenantId == Guid.Empty)
-                {
-                    tenantId = TenantCatalog.SystemTenantId;
-                    beforeUpgrade.Tenants.Add(
-                        new TenantRecord
-                        {
-                            Id = tenantId,
-                            Slug = "migration-test",
-                            DisplayName = "Migration Test Tenant",
-                            IsActive = true,
-                            CreatedAt = DateTimeOffset.UtcNow,
-                        });
-                }
-
-                beforeUpgrade.Clients.Add(
-                    new ClientRecord
-                    {
-                        Id = clientId,
-                        TenantId = tenantId,
-                        DisplayName = "Migration Test Client",
-                        IsActive = true,
-                        CreatedAt = DateTimeOffset.UtcNow,
-                    });
-                await beforeUpgrade.SaveChangesAsync();
+                clientId = await HistoricalSchemaSeed.SeedClientAsync(beforeUpgrade, "Migration Test Client");
 
                 // Written through raw SQL because the entity already carries the column this migration adds.
                 await beforeUpgrade.Database.ExecuteSqlRawAsync(
