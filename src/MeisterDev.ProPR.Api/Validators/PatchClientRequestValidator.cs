@@ -46,6 +46,10 @@ public sealed class PatchClientRequestValidator : AbstractValidator<PatchClientR
             .Must(_ => true)
             .When(r => r.ReviewEveryIncrementEnabled.HasValue);
 
+        this.RuleFor(r => r.WithholdOutOfScopeFindings)
+            .Must(_ => true)
+            .When(r => r.WithholdOutOfScopeFindings.HasValue);
+
         this.RuleFor(r => r.BaselineReasoningEffort)
             .Must(effort => Enum.IsDefined(effort!.Value))
             .WithMessage("BaselineReasoningEffort must be one of none, low, medium, high.")

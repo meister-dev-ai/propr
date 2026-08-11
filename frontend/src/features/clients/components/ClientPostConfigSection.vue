@@ -39,6 +39,21 @@
                         findings without adding manual resolution work.
                     </p>
                 </div>
+            </div>
+
+            <div class="inline-field-row review-publication-row">
+                <div class="form-field flex-1 review-publication-field">
+                    <label class="checkbox-field" for="withholdOutOfScopeFindings">
+                        <input id="withholdOutOfScopeFindings" v-model="editedWithholdOutOfScopeFindings"
+                            name="withholdOutOfScopeFindings" type="checkbox" />
+                        <strong>Do not post findings outside the changed lines</strong>
+                    </label>
+                    <p class="muted review-publication-copy">
+                        A review reads whole files, so it can find something in pre-existing code far from the
+                        lines a pull request changed. Those findings stay in the ProPR review and the pull request
+                        summary reports how many were held back.
+                    </p>
+                </div>
                 <button :disabled="!isPostConfigButtonEnabled()"
                     class="btn-primary inline-save-btn post-config-save-btn" @click="savePostConfiguration">
                     Save
@@ -62,6 +77,7 @@ const {
     saveError,
     editedMinimumSeverityToPost,
     editedAutoResolveSeverities,
+    editedWithholdOutOfScopeFindings,
     savePostConfiguration,
     isPostConfigButtonEnabled,
 } = vm;

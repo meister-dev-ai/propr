@@ -81,6 +81,7 @@ public sealed class ClientAdminService(
         bool? codeInsightsCollectionEnabled = null,
         string? outputLanguage = null,
         bool? reviewEveryIncrementEnabled = null,
+        bool? withholdOutOfScopeFindings = null,
         CancellationToken ct = default)
     {
         var isCommunityEdition = await this.IsCommunityEditionAsync(ct);
@@ -113,7 +114,8 @@ public sealed class ClientAdminService(
             minimumSeverityToPost,
             codeInsightsCollectionEnabled,
             outputLanguage,
-            reviewEveryIncrementEnabled);
+            reviewEveryIncrementEnabled,
+            withholdOutOfScopeFindings);
         ReplaceReviewPassesIfProvided(client, reviewPasses);
         ReplaceBudgetCapsIfProvided(client, budgetConfig);
         ReplaceAutoResolveSeveritiesIfProvided(client, autoResolveSeverities);
@@ -138,7 +140,8 @@ public sealed class ClientAdminService(
         CommentSeverity? minimumSeverityToPost,
         bool? codeInsightsCollectionEnabled,
         string? outputLanguage,
-        bool? reviewEveryIncrementEnabled)
+        bool? reviewEveryIncrementEnabled,
+        bool? withholdOutOfScopeFindings)
     {
         ApplyIfHasValue(isActive, value => client.IsActive = value);
         ApplyIfNotNull(displayName, value => client.DisplayName = value);
@@ -163,6 +166,7 @@ public sealed class ClientAdminService(
         ApplyIfHasValue(codeInsightsCollectionEnabled, value => client.CodeInsightsCollectionEnabled = value);
         ApplyIfHasValue(includeLinkedItemsInContext, value => client.IncludeLinkedItemsInContext = value);
         ApplyIfHasValue(reviewEveryIncrementEnabled, value => client.ReviewEveryIncrementEnabled = value);
+        ApplyIfHasValue(withholdOutOfScopeFindings, value => client.WithholdOutOfScopeFindings = value);
         ApplyIfHasValue(baselineReasoningEffort, value => client.BaselineReasoningEffort = value);
 
         // A blank tag reads as the default rather than as "clear it": the column is never empty, because every
@@ -463,7 +467,8 @@ public sealed class ClientAdminService(
             client.AutoResolveSeverities,
             client.CodeInsightsCollectionEnabled,
             ReviewOutputLanguage.Normalize(client.OutputLanguage),
-            client.ReviewEveryIncrementEnabled);
+            client.ReviewEveryIncrementEnabled,
+            client.WithholdOutOfScopeFindings);
     }
 
     private async Task<bool> IsCommunityEditionAsync(CancellationToken ct)

@@ -34,6 +34,32 @@ public class FindingDeduplicatorTests
 
     // T008 — 80% similar messages across files → merged
     [Fact]
+    public void Deduplicate_MergedComment_KeepsTheProvenanceOfItsAnchor()
+    {
+        var comments = new List<ReviewComment>
+        {
+            new("src/A.cs", 1, CommentSeverity.Warning, "Use IDisposable pattern here")
+            {
+                ScopeRelation = ReviewCommentScopeRelation.OutsideChange,
+                OriginPassKind = "Baseline",
+            },
+            new("src/B.cs", 2, CommentSeverity.Warning, "Use IDisposable pattern here")
+            {
+                ScopeRelation = ReviewCommentScopeRelation.OutsideChange,
+                OriginPassKind = "Baseline",
+            },
+        }.AsReadOnly();
+
+        var result = FindingDeduplicator.Deduplicate(comments);
+
+        // The merged comment is what publication decides on, so it has to keep the scope classification. Without
+        // it, a concern found in pre-existing code across two files is posted by a client that asked otherwise.
+        Assert.Single(result);
+        Assert.Equal(ReviewCommentScopeRelation.OutsideChange, result[0].ScopeRelation);
+        Assert.Equal("Baseline", result[0].OriginPassKind);
+    }
+
+    [Fact]
     public void Deduplicate_HighlySimilarMessagesAcrossFiles_Merges()
     {
         var comments = new List<ReviewComment>

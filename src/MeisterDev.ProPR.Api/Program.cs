@@ -407,6 +407,15 @@ try
         builder.Services.AddHostedService(sp => sp.GetRequiredService<CodeInsightConditionWorker>());
     }
 
+    // The same public address the allowed browser origin comes from, offered to the layers that have to name
+    // this installation in text they send elsewhere. Reading the configuration key stays with the resolver,
+    // so a review that wants to link to itself does not reach for host configuration of its own.
+    builder.Services.AddOptions<PublicApplicationOptions>()
+        .Configure(options =>
+            options.UiOrigin = PublicApplicationUrlResolver.GetConfiguredPublicUiOrigin(builder.Configuration))
+        .ValidateDataAnnotations()
+        .ValidateOnStart();
+
     var allowedOrigins = BrowserOriginPolicy.GetAllowedOrigins(builder.Configuration);
 
     builder.Services.AddCors(options =>

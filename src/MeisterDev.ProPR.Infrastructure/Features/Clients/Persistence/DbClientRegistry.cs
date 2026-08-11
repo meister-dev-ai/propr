@@ -219,6 +219,16 @@ public sealed class DbClientRegistry(
     }
 
     /// <inheritdoc />
+    public async Task<bool> GetWithholdOutOfScopeFindingsAsync(Guid clientId, CancellationToken ct = default)
+    {
+        return await dbContext.Clients
+                   .Where(c => c.Id == clientId)
+                   .Select(c => (bool?)c.WithholdOutOfScopeFindings)
+                   .FirstOrDefaultAsync(ct)
+               ?? false;
+    }
+
+    /// <inheritdoc />
     public async Task<IReadOnlyList<ReviewPassSpec>> GetReviewPassesAsync(Guid clientId, CancellationToken ct = default)
     {
         return await dbContext.ClientReviewPasses

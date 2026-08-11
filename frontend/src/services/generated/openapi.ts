@@ -1166,10 +1166,9 @@ export interface paths {
         put?: never;
         post?: never;
         /**
-         * Deletes a runner's row from the registry. This is how a stale identity — a host that was
-         *     redeployed and re-enrolled as somebody new — stops counting as capacity and stops sitting amber
-         *     in the fleet view forever. Refused while the runner holds a lease: revoke it first, let the
-         *     lease expire, then delete.
+         * Deletes a runner's row from the registry. A host that was redeployed and re-enrolled has a
+         *     new row, and the old one stops counting as capacity once it is deleted. The delete is refused
+         *     while the runner holds a lease. Revoke it first, wait for the lease to expire, then delete.
          */
         delete: {
             parameters: {
@@ -12823,8 +12822,8 @@ export interface paths {
          *     plane has for a job already in flight.
          *
          *     Answered 200 whether or not the renewal was accepted. A refusal has a reason the executor
-         *         must act on differently — a lost lease means stop quietly, a revoked client means stop and
-         *         say so — and a bare status code cannot carry that.
+         *         must act on differently. A lost lease means stop without reporting, and a revoked client
+         *         means stop and report the reason. A status code alone cannot carry that distinction.
          */
         post: {
             parameters: {
@@ -16978,6 +16977,7 @@ export interface components {
             codeInsightsCollectionEnabled?: boolean;
             outputLanguage?: string | null;
             reviewEveryIncrementEnabled?: boolean;
+            withholdOutOfScopeFindings?: boolean;
         };
         /** @description Client-scoped review profile response. */
         ClientReviewProfileResponse: {
@@ -18264,8 +18264,8 @@ export interface components {
             clientScope?: string[] | null;
             /**
              * Format: int32
-             * @description How long the token stays usable, in hours. Omit it for a token that does not expire — an
-             *     operator's choice, and the right one for a key a scaling group reads from its secret store.
+             * @description How long the token stays usable, in hours. Omit it for a token that does not expire, which is
+             *     the usual choice for a key a scaling group reads from its secret store.
              */
             validForHours?: number | null;
             /**
@@ -18581,6 +18581,7 @@ export interface components {
             codeInsightsCollectionEnabled?: boolean | null;
             outputLanguage?: string | null;
             reviewEveryIncrementEnabled?: boolean | null;
+            withholdOutOfScopeFindings?: boolean | null;
         };
         /** @description Patch payload for one premium capability override. */
         PatchPremiumCapabilityOverrideRequest: {
@@ -20214,11 +20215,11 @@ export interface components {
          * @description The portable slice of a relayed completion's options.
          *
          *     The review pipeline shapes every call with tools, a temperature, an output ceiling, and reasoning
-         *         settings. On the runner those live in a rich in-memory options object that cannot travel — tools
-         *         carry their implementations — so this record carries exactly the parts the provider needs to see:
-         *         each tool as a declaration (name, description, parameter schema) and the reasoning knobs in
-         *         neutral terms. A relay that dropped any of this would quietly turn a tool-using review into a
-         *         single-turn one, which is precisely what happened before the options rode the wire.
+         *         settings. On the runner those live in an in-memory options object that cannot be serialized,
+         *         because the tools carry their implementations. This record therefore carries the parts the
+         *         provider needs to see: each tool as a declaration (name, description, parameter schema) and the
+         *         reasoning settings in neutral terms. A relay that dropped any of this would turn a tool-using
+         *         review into a single-turn review, which is what happened before the options were sent.
          */
         RunnerChatOptions: {
             /**
@@ -20250,7 +20251,7 @@ export interface components {
             jobId?: string;
             /**
              * Format: int32
-             * @description The lease generation the caller believes it holds.
+             * @description The lease generation the caller claims to hold.
              */
             leaseGeneration?: number;
             /**
@@ -20268,7 +20269,7 @@ export interface components {
         };
         /**
          * @description One tool as the provider needs to see it: a name, a description, and a parameter schema. The
-         *     implementation never travels — the model's calls come back to the runner that offered the tool.
+         *     implementation is never sent, because the model's calls come back to the runner that offered the tool.
          */
         RunnerChatToolDefinition: {
             /** @description The tool name the model calls it by. */
@@ -20404,7 +20405,7 @@ export interface components {
             jobId?: string;
             /**
              * Format: int32
-             * @description The lease generation the caller believes it holds.
+             * @description The lease generation the caller claims to hold.
              */
             leaseGeneration?: number;
             /**
@@ -20441,8 +20442,9 @@ export interface components {
             expiresAt?: string | null;
             /**
              * @description Why the renewal was refused, as a stable token. `None` on an accepted renewal. The executor
-             *     needs this rather than a status code: a lost lease is somebody else's job now and this one stops
-             *     quietly, while a revoked client or an exhausted budget is a decision an operator made and has to
+             *     needs this rather than a status code. A lost lease means the job belongs to another runner and
+             *     this one stops without reporting, while a revoked client or an exhausted budget is an operator
+             *     decision that has to
              *     be reported as one.
              */
             stopReason?: string | null;
@@ -20456,7 +20458,7 @@ export interface components {
             jobId?: string;
             /**
              * Format: int32
-             * @description The lease generation the caller believes it holds.
+             * @description The lease generation the caller claims to hold.
              */
             leaseGeneration?: number;
             /**
@@ -20487,7 +20489,7 @@ export interface components {
             jobId?: string;
             /**
              * Format: int32
-             * @description The lease generation the caller believes it holds.
+             * @description The lease generation the caller claims to hold.
              */
             leaseGeneration?: number;
             /**
@@ -20528,11 +20530,11 @@ export interface components {
          *
          *     Configuration is otherwise read from the database throughout a review, which an executor without
          *         database access cannot do, and which also means a configuration change part-way through can
-         *         quietly alter a review already in progress. Resolving it once fixes both: the executor holds this
+         *         alter a review already in progress. Resolving it once fixes both: the executor holds this
          *         for the duration of its lease and never persists it.
          *     Secrets are structurally absent rather than merely left unset. There is no field here that can
          *         carry a credential, a connection string, or a key, and a test asserts it, because "we remember not
-         *         to populate it" is not a boundary.
+         *         to populate it" is not enforceable.
          */
         RunnerJobManifest: {
             /**
@@ -20588,17 +20590,16 @@ export interface components {
              * @description The base URL of the control-plane replica that granted this lease, when the operator advertises
              *     one. The workspace mirror is that replica's local disk and the budget, tool, and workspace
              *     registries are that replica's process, so every call this job makes has to reach the replica that
-             *     holds them — a load balancer in front of the fleet routes to whichever replica is next, which is
-             *     exactly the wrong answer. Unset on a single-replica installation, where the one configured URL is
+             *     holds them. A load balancer in front of the fleet routes to whichever replica is next, which is
+             *     the wrong replica. Unset on a single-replica installation, where the one configured URL is
              *     already the right one.
              */
             servedBy?: string | null;
             /**
              * @description Whether reviewing several files in parallel is licensed, resolved at dispatch because the license
              *     lives in the control plane's database. Without it the pipeline works one file at a time however
-             *     high the configured concurrency is — the same clamp the in-process planner applies. Null from an
-             *     older control plane reads as licensed, which is exactly what the review did before the field
-             *     existed.
+             *     high the configured concurrency is. This is the same clamp the in-process planner applies. Null from an
+             *     older control plane reads as licensed, which is how the review behaved before the field existed.
              */
             parallelReviewExecutionLicensed?: boolean | null;
         };
@@ -20611,7 +20612,7 @@ export interface components {
             jobId?: string;
             /**
              * Format: int32
-             * @description The lease generation the caller believes it holds.
+             * @description The lease generation the caller claims to hold.
              */
             leaseGeneration?: number;
             /**
@@ -20631,11 +20632,11 @@ export interface components {
             jobId?: string;
             /**
              * Format: int32
-             * @description The generation the runner believes it holds.
+             * @description The generation the runner claims to hold.
              */
             leaseGeneration?: number;
             /**
-             * @description Why the lease is coming back — MeisterDev.ProPR.Runner.Contracts.RunnerLeaseReleaseReasons. Absent from an older
+             * @description Why the lease is coming back. See MeisterDev.ProPR.Runner.Contracts.RunnerLeaseReleaseReasons. Absent from an older
              *     runner, which reads as a drain: the uncounted release every handback was before the field existed.
              */
             reason?: string | null;
@@ -20649,7 +20650,7 @@ export interface components {
             jobId?: string;
             /**
              * Format: int32
-             * @description The generation the runner believes it holds.
+             * @description The generation the runner claims to hold.
              */
             leaseGeneration?: number;
             /**
@@ -20712,7 +20713,7 @@ export interface components {
             jobId?: string;
             /**
              * Format: int32
-             * @description The lease generation the caller believes it holds.
+             * @description The lease generation the caller claims to hold.
              */
             leaseGeneration?: number;
             /**
@@ -20732,7 +20733,7 @@ export interface components {
             jobId?: string;
             /**
              * Format: int32
-             * @description The lease generation the caller believes it holds.
+             * @description The lease generation the caller claims to hold.
              */
             leaseGeneration?: number;
             /**
@@ -20897,7 +20898,7 @@ export interface components {
             jobId?: string;
             /**
              * Format: int32
-             * @description The lease generation the caller believes it holds.
+             * @description The lease generation the caller claims to hold.
              */
             leaseGeneration?: number;
             /**
@@ -20927,9 +20928,9 @@ export interface components {
          * @description Everything a review result says about itself beyond its summary and findings: what was carried
          *     forward, what was degraded or skipped for context, and whether the budget cut the scan short.
          *
-         *     A submission that carried only summary and comments flattened all of it — most visibly the
-         *         budget label, which made a soft-capped remote review indistinguishable from a complete one
-         *         everywhere the label is read.
+         *     A submission that carried only summary and comments dropped all of it. The clearest case is the
+         *         budget label, whose absence made a soft-capped remote review indistinguishable from a complete
+         *         one everywhere the label is read.
          */
         RunnerResultAnnotations: {
             /** @description Files whose results came from a prior iteration's review. */
@@ -20962,11 +20963,11 @@ export interface components {
          * @description The per-client decisions that change what a review does rather than which model runs it.
          *
          *     Carried because the executor cannot read them: they live on the client record, which a runner
-         *         has no database to reach. Absent, every one of them falls to its default and the review quietly
-         *         becomes a different review — multi-pass union off, screening off, verification off, temperature
-         *         unset, profile Balanced — with nothing in the result saying so.
+         *         has no database to reach. Absent, every one of them falls to its default and the review becomes
+         *         a different review, with multi-pass union off, screening off, verification off, temperature
+         *         unset and profile Balanced, and nothing in the result stating this.
          *     Optional on the contract so a manifest from an older control plane still deserializes. A runner
-         *         reading one without this reverts to exactly the behaviour it had before the field existed.
+         *         reading one without this reverts to the behaviour it had before the field existed.
          */
         RunnerReviewBehaviour: {
             /**
@@ -21002,8 +21003,8 @@ export interface components {
             scope?: string | null;
             /**
              * @description Whether the pass runs for comparison only. A shadow pass records its full trace and never publishes,
-             *     which is the whole point of running one, so an executor that ignored this flag would post findings
-             *     from a pass the client is still evaluating.
+             *     which is the reason for running one, so an executor that ignored this flag would post findings from a
+             *     pass the client is still evaluating.
              */
             shadow?: boolean;
         };
@@ -21053,7 +21054,7 @@ export interface components {
             /** @description The frozen changed-path scope of this revision. */
             changedPaths?: string[] | null;
             /**
-             * @description The conversation already on the review. The reviewer reads it to avoid raising again what somebody
+             * @description The conversation already on the review. The reviewer reads it to avoid raising again what a reviewer
              *     has already answered, so an executor without it would post duplicates of findings the author has
              *     addressed.
              */
@@ -21113,7 +21114,7 @@ export interface components {
             jobId?: string;
             /**
              * Format: int32
-             * @description The lease generation the caller believes it holds.
+             * @description The lease generation the caller claims to hold.
              */
             leaseGeneration?: number;
             /**

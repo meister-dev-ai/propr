@@ -11,11 +11,13 @@ function mountSection(options: { enabled?: boolean } = {}) {
   const savePostConfiguration = vi.fn()
   const editedMinimumSeverityToPost = ref<CommentSeverity>('info')
   const editedAutoResolveSeverities = ref<CommentSeverity[]>([])
+  const editedWithholdOutOfScopeFindings = ref(false)
   const vm = {
     client: ref({ id: 'c1' }),
     saveError: ref(''),
     editedMinimumSeverityToPost,
     editedAutoResolveSeverities,
+    editedWithholdOutOfScopeFindings,
     savePostConfiguration,
     isPostConfigButtonEnabled: () => options.enabled ?? true,
   }
@@ -42,6 +44,18 @@ describe('ClientPostConfigSection', () => {
     const { wrapper, vm } = mountSection()
     await wrapper.find('#autoResolve-warning').setValue(true)
     expect(vm.editedAutoResolveSeverities.value).toContain('warning')
+  })
+
+  it('binds the out-of-scope checkbox to the view-model', async () => {
+    const { wrapper, vm } = mountSection()
+    await wrapper.find('#withholdOutOfScopeFindings').setValue(true)
+    expect(vm.editedWithholdOutOfScopeFindings.value).toBe(true)
+  })
+
+  it('leaves out-of-scope findings publishable by default', () => {
+    const { wrapper } = mountSection()
+    const checkbox = wrapper.find('#withholdOutOfScopeFindings').element as HTMLInputElement
+    expect(checkbox.checked).toBe(false)
   })
 
   it('saves through the view-model when Save is clicked', async () => {

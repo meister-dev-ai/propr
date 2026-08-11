@@ -134,7 +134,10 @@ public static class FindingDeduplicator
         var fileList = string.Join(", ", affectedFiles);
         var consolidatedMessage = $"[Cross-file] {anchor.Message} — Affected files: {fileList}";
 
-        return new ReviewComment(null, null, anchor.Severity, consolidatedMessage);
+        // The anchor's provenance carries the group's, since consolidation only groups findings that already
+        // agree on severity and say the same thing. Rebuilding from severity and text alone dropped the scope
+        // classification, so a concern found in pre-existing code across several files came out unjudged.
+        return anchor.AsPullRequestLevel(consolidatedMessage);
     }
 
     /// <summary>

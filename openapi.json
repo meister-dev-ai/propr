@@ -1601,7 +1601,7 @@
         "tags": [
           "AdminRunners"
         ],
-        "summary": "Deletes a runner's row from the registry. This is how a stale identity — a host that was\nredeployed and re-enrolled as somebody new — stops counting as capacity and stops sitting amber\nin the fleet view forever. Refused while the runner holds a lease: revoke it first, let the\nlease expire, then delete.",
+        "summary": "Deletes a runner's row from the registry. A host that was redeployed and re-enrolled has a\nnew row, and the old one stops counting as capacity once it is deleted. The delete is refused\nwhile the runner holds a lease. Revoke it first, wait for the lease to expire, then delete.",
         "parameters": [
           {
             "name": "runnerId",
@@ -18194,7 +18194,7 @@
         "tags": [
           "RunnerLease"
         ],
-        "summary": "Keeps a lease alive while the review runs, and carries back the one instruction the control\nplane has for a job already in flight.\n\nAnswered 200 whether or not the renewal was accepted. A refusal has a reason the executor\n    must act on differently — a lost lease means stop quietly, a revoked client means stop and\n    say so — and a bare status code cannot carry that.",
+        "summary": "Keeps a lease alive while the review runs, and carries back the one instruction the control\nplane has for a job already in flight.\n\nAnswered 200 whether or not the renewal was accepted. A refusal has a reason the executor\n    must act on differently. A lost lease means stop without reporting, and a revoked client\n    means stop and report the reason. A status code alone cannot carry that distinction.",
         "requestBody": {
           "description": "The job and generation being renewed.",
           "content": {
@@ -24801,6 +24801,9 @@
           },
           "reviewEveryIncrementEnabled": {
             "type": "boolean"
+          },
+          "withholdOutOfScopeFindings": {
+            "type": "boolean"
           }
         },
         "additionalProperties": false,
@@ -27118,7 +27121,7 @@
           },
           "validForHours": {
             "type": "integer",
-            "description": "How long the token stays usable, in hours. Omit it for a token that does not expire — an\noperator's choice, and the right one for a key a scaling group reads from its secret store.",
+            "description": "How long the token stays usable, in hours. Omit it for a token that does not expire, which is\nthe usual choice for a key a scaling group reads from its secret store.",
             "format": "int32",
             "nullable": true
           },
@@ -27860,6 +27863,10 @@
             "nullable": true
           },
           "reviewEveryIncrementEnabled": {
+            "type": "boolean",
+            "nullable": true
+          },
+          "withholdOutOfScopeFindings": {
             "type": "boolean",
             "nullable": true
           }
@@ -31483,7 +31490,7 @@
           }
         },
         "additionalProperties": false,
-        "description": "The portable slice of a relayed completion's options.\n\nThe review pipeline shapes every call with tools, a temperature, an output ceiling, and reasoning\n    settings. On the runner those live in a rich in-memory options object that cannot travel — tools\n    carry their implementations — so this record carries exactly the parts the provider needs to see:\n    each tool as a declaration (name, description, parameter schema) and the reasoning knobs in\n    neutral terms. A relay that dropped any of this would quietly turn a tool-using review into a\n    single-turn one, which is precisely what happened before the options rode the wire."
+        "description": "The portable slice of a relayed completion's options.\n\nThe review pipeline shapes every call with tools, a temperature, an output ceiling, and reasoning\n    settings. On the runner those live in an in-memory options object that cannot be serialized,\n    because the tools carry their implementations. This record therefore carries the parts the\n    provider needs to see: each tool as a declaration (name, description, parameter schema) and the\n    reasoning settings in neutral terms. A relay that dropped any of this would turn a tool-using\n    review into a single-turn review, which is what happened before the options were sent."
       },
       "RunnerChatRequest": {
         "type": "object",
@@ -31495,7 +31502,7 @@
           },
           "leaseGeneration": {
             "type": "integer",
-            "description": "The lease generation the caller believes it holds.",
+            "description": "The lease generation the caller claims to hold.",
             "format": "int32"
           },
           "contractVersion": {
@@ -31547,7 +31554,7 @@
           }
         },
         "additionalProperties": false,
-        "description": "One tool as the provider needs to see it: a name, a description, and a parameter schema. The\nimplementation never travels — the model's calls come back to the runner that offered the tool."
+        "description": "One tool as the provider needs to see it: a name, a description, and a parameter schema. The\nimplementation is never sent, because the model's calls come back to the runner that offered the tool."
       },
       "RunnerContractError": {
         "type": "object",
@@ -31757,7 +31764,7 @@
           },
           "leaseGeneration": {
             "type": "integer",
-            "description": "The lease generation the caller believes it holds.",
+            "description": "The lease generation the caller claims to hold.",
             "format": "int32"
           },
           "contractVersion": {
@@ -31815,7 +31822,7 @@
           },
           "stopReason": {
             "type": "string",
-            "description": "Why the renewal was refused, as a stable token. `None` on an accepted renewal. The executor\nneeds this rather than a status code: a lost lease is somebody else's job now and this one stops\nquietly, while a revoked client or an exhausted budget is a decision an operator made and has to\nbe reported as one.",
+            "description": "Why the renewal was refused, as a stable token. `None` on an accepted renewal. The executor\nneeds this rather than a status code. A lost lease means the job belongs to another runner and\nthis one stops without reporting, while a revoked client or an exhausted budget is an operator\ndecision that has to\nbe reported as one.",
             "nullable": true
           }
         },
@@ -31832,7 +31839,7 @@
           },
           "leaseGeneration": {
             "type": "integer",
-            "description": "The lease generation the caller believes it holds.",
+            "description": "The lease generation the caller claims to hold.",
             "format": "int32"
           },
           "contractVersion": {
@@ -31888,7 +31895,7 @@
           },
           "leaseGeneration": {
             "type": "integer",
-            "description": "The lease generation the caller believes it holds.",
+            "description": "The lease generation the caller claims to hold.",
             "format": "int32"
           },
           "contractVersion": {
@@ -32019,17 +32026,17 @@
           },
           "servedBy": {
             "type": "string",
-            "description": "The base URL of the control-plane replica that granted this lease, when the operator advertises\none. The workspace mirror is that replica's local disk and the budget, tool, and workspace\nregistries are that replica's process, so every call this job makes has to reach the replica that\nholds them — a load balancer in front of the fleet routes to whichever replica is next, which is\nexactly the wrong answer. Unset on a single-replica installation, where the one configured URL is\nalready the right one.",
+            "description": "The base URL of the control-plane replica that granted this lease, when the operator advertises\none. The workspace mirror is that replica's local disk and the budget, tool, and workspace\nregistries are that replica's process, so every call this job makes has to reach the replica that\nholds them. A load balancer in front of the fleet routes to whichever replica is next, which is\nthe wrong replica. Unset on a single-replica installation, where the one configured URL is\nalready the right one.",
             "nullable": true
           },
           "parallelReviewExecutionLicensed": {
             "type": "boolean",
-            "description": "Whether reviewing several files in parallel is licensed, resolved at dispatch because the license\nlives in the control plane's database. Without it the pipeline works one file at a time however\nhigh the configured concurrency is — the same clamp the in-process planner applies. Null from an\nolder control plane reads as licensed, which is exactly what the review did before the field\nexisted.",
+            "description": "Whether reviewing several files in parallel is licensed, resolved at dispatch because the license\nlives in the control plane's database. Without it the pipeline works one file at a time however\nhigh the configured concurrency is. This is the same clamp the in-process planner applies. Null from an\nolder control plane reads as licensed, which is how the review behaved before the field existed.",
             "nullable": true
           }
         },
         "additionalProperties": false,
-        "description": "Everything non-secret a review needs, resolved once when the job is dispatched.\n\nConfiguration is otherwise read from the database throughout a review, which an executor without\n    database access cannot do, and which also means a configuration change part-way through can\n    quietly alter a review already in progress. Resolving it once fixes both: the executor holds this\n    for the duration of its lease and never persists it.\nSecrets are structurally absent rather than merely left unset. There is no field here that can\n    carry a credential, a connection string, or a key, and a test asserts it, because \"we remember not\n    to populate it\" is not a boundary."
+        "description": "Everything non-secret a review needs, resolved once when the job is dispatched.\n\nConfiguration is otherwise read from the database throughout a review, which an executor without\n    database access cannot do, and which also means a configuration change part-way through can\n    alter a review already in progress. Resolving it once fixes both: the executor holds this\n    for the duration of its lease and never persists it.\nSecrets are structurally absent rather than merely left unset. There is no field here that can\n    carry a credential, a connection string, or a key, and a test asserts it, because \"we remember not\n    to populate it\" is not enforceable."
       },
       "RunnerKnowledgeRequest": {
         "type": "object",
@@ -32041,7 +32048,7 @@
           },
           "leaseGeneration": {
             "type": "integer",
-            "description": "The lease generation the caller believes it holds.",
+            "description": "The lease generation the caller claims to hold.",
             "format": "int32"
           },
           "contractVersion": {
@@ -32068,12 +32075,12 @@
           },
           "leaseGeneration": {
             "type": "integer",
-            "description": "The generation the runner believes it holds.",
+            "description": "The generation the runner claims to hold.",
             "format": "int32"
           },
           "reason": {
             "type": "string",
-            "description": "Why the lease is coming back — MeisterDev.ProPR.Runner.Contracts.RunnerLeaseReleaseReasons. Absent from an older\nrunner, which reads as a drain: the uncounted release every handback was before the field existed.",
+            "description": "Why the lease is coming back. See MeisterDev.ProPR.Runner.Contracts.RunnerLeaseReleaseReasons. Absent from an older\nrunner, which reads as a drain: the uncounted release every handback was before the field existed.",
             "nullable": true
           }
         },
@@ -32090,7 +32097,7 @@
           },
           "leaseGeneration": {
             "type": "integer",
-            "description": "The generation the runner believes it holds.",
+            "description": "The generation the runner claims to hold.",
             "format": "int32"
           },
           "contractVersion": {
@@ -32197,7 +32204,7 @@
           },
           "leaseGeneration": {
             "type": "integer",
-            "description": "The lease generation the caller believes it holds.",
+            "description": "The lease generation the caller claims to hold.",
             "format": "int32"
           },
           "contractVersion": {
@@ -32224,7 +32231,7 @@
           },
           "leaseGeneration": {
             "type": "integer",
-            "description": "The lease generation the caller believes it holds.",
+            "description": "The lease generation the caller claims to hold.",
             "format": "int32"
           },
           "contractVersion": {
@@ -32487,7 +32494,7 @@
           },
           "leaseGeneration": {
             "type": "integer",
-            "description": "The lease generation the caller believes it holds.",
+            "description": "The lease generation the caller claims to hold.",
             "format": "int32"
           },
           "contractVersion": {
@@ -32589,7 +32596,7 @@
           }
         },
         "additionalProperties": false,
-        "description": "Everything a review result says about itself beyond its summary and findings: what was carried\nforward, what was degraded or skipped for context, and whether the budget cut the scan short.\n\nA submission that carried only summary and comments flattened all of it — most visibly the\n    budget label, which made a soft-capped remote review indistinguishable from a complete one\n    everywhere the label is read."
+        "description": "Everything a review result says about itself beyond its summary and findings: what was carried\nforward, what was degraded or skipped for context, and whether the budget cut the scan short.\n\nA submission that carried only summary and comments dropped all of it. The clearest case is the\n    budget label, whose absence made a soft-capped remote review indistinguishable from a complete\n    one everywhere the label is read."
       },
       "RunnerReviewBehaviour": {
         "type": "object",
@@ -32623,7 +32630,7 @@
           }
         },
         "additionalProperties": false,
-        "description": "The per-client decisions that change what a review does rather than which model runs it.\n\nCarried because the executor cannot read them: they live on the client record, which a runner\n    has no database to reach. Absent, every one of them falls to its default and the review quietly\n    becomes a different review — multi-pass union off, screening off, verification off, temperature\n    unset, profile Balanced — with nothing in the result saying so.\nOptional on the contract so a manifest from an older control plane still deserializes. A runner\n    reading one without this reverts to exactly the behaviour it had before the field existed."
+        "description": "The per-client decisions that change what a review does rather than which model runs it.\n\nCarried because the executor cannot read them: they live on the client record, which a runner\n    has no database to reach. Absent, every one of them falls to its default and the review becomes\n    a different review, with multi-pass union off, screening off, verification off, temperature\n    unset and profile Balanced, and nothing in the result stating this.\nOptional on the contract so a manifest from an older control plane still deserializes. A runner\n    reading one without this reverts to the behaviour it had before the field existed."
       },
       "RunnerReviewPass": {
         "type": "object",
@@ -32648,7 +32655,7 @@
           },
           "shadow": {
             "type": "boolean",
-            "description": "Whether the pass runs for comparison only. A shadow pass records its full trace and never publishes,\nwhich is the whole point of running one, so an executor that ignored this flag would post findings\nfrom a pass the client is still evaluating."
+            "description": "Whether the pass runs for comparison only. A shadow pass records its full trace and never publishes,\nwhich is the reason for running one, so an executor that ignored this flag would post findings from a\npass the client is still evaluating."
           }
         },
         "additionalProperties": false,
@@ -32740,7 +32747,7 @@
             "items": {
               "$ref": "#/components/schemas/RunnerReviewThread"
             },
-            "description": "The conversation already on the review. The reviewer reads it to avoid raising again what somebody\nhas already answered, so an executor without it would post duplicates of findings the author has\naddressed.",
+            "description": "The conversation already on the review. The reviewer reads it to avoid raising again what a reviewer\nhas already answered, so an executor without it would post duplicates of findings the author has\naddressed.",
             "nullable": true
           }
         },
@@ -32833,7 +32840,7 @@
           },
           "leaseGeneration": {
             "type": "integer",
-            "description": "The lease generation the caller believes it holds.",
+            "description": "The lease generation the caller claims to hold.",
             "format": "int32"
           },
           "contractVersion": {

@@ -379,6 +379,26 @@ public sealed class ClientRegistryTests(PostgresContainerFixture fixture) : IAsy
     }
 
     [Fact]
+    public async Task GetWithholdOutOfScopeFindingsAsync_ClientWithSetting_ReturnsPersistedValue()
+    {
+        var client = await this.SeedClientAsync();
+        client.WithholdOutOfScopeFindings = true;
+        await this._dbContext.SaveChangesAsync();
+
+        var result = await this._registry.GetWithholdOutOfScopeFindingsAsync(client.Id, CancellationToken.None);
+
+        Assert.True(result);
+    }
+
+    [Fact]
+    public async Task GetWithholdOutOfScopeFindingsAsync_UnknownClient_DefaultsToFalse()
+    {
+        var result = await this._registry.GetWithholdOutOfScopeFindingsAsync(Guid.NewGuid(), CancellationToken.None);
+
+        Assert.False(result);
+    }
+
+    [Fact]
     public async Task GetReviewPassesAsync_UnknownClient_ReturnsEmpty()
     {
         var result = await this._registry.GetReviewPassesAsync(Guid.NewGuid(), CancellationToken.None);

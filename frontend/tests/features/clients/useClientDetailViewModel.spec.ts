@@ -250,4 +250,38 @@ describe('useClientDetailViewModel (FR-007, FR-008, FR-012)', () => {
     expect(vm.notFound.value).toBe(false)
     expect(mockRouterPush).not.toHaveBeenCalledWith({ name: 'clients' })
   })
+
+  it('sends the whole post configuration, out-of-scope withholding included', async () => {
+    mockPatch.mockResolvedValue({
+      data: { ...sampleClient, withholdOutOfScopeFindings: true },
+      response: { ok: true },
+    })
+    const vm = useClientDetailViewModel({ autoLoad: false })
+    await vm.loadClient()
+    vm.editedWithholdOutOfScopeFindings.value = true
+
+    await vm.savePostConfiguration()
+
+    // The three controls share one Save, so the body carries all of them. A field missing here is a setting
+    // the user can tick and never persist.
+    expect(mockPatch).toHaveBeenCalledWith('/clients/{clientId}', {
+      params: { path: { clientId: 'client-1' } },
+      body: {
+        minimumSeverityToPost: 'info',
+        autoResolveSeverities: [],
+        withholdOutOfScopeFindings: true,
+      },
+    })
+  })
+
+  it('activates the post-configuration Save when only out-of-scope withholding changed', async () => {
+    const vm = useClientDetailViewModel({ autoLoad: false })
+    await vm.loadClient()
+
+    expect(vm.isPostConfigButtonEnabled()).toBe(false)
+
+    vm.editedWithholdOutOfScopeFindings.value = true
+
+    expect(vm.isPostConfigButtonEnabled()).toBe(true)
+  })
 })

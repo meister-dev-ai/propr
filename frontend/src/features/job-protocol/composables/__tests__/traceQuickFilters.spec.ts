@@ -45,6 +45,10 @@ describe('deriveEventCategory', () => {
         expect(deriveEventCategory('operational', 'publication_thread_post_failed', null)).toBe('publication')
     })
 
+    it('derives publication for findings a client policy kept off the pull request', () => {
+        expect(deriveEventCategory('operational', 'publication_withheld_findings', null)).toBe('publication')
+    })
+
     it('falls back to operational for unknown rows', () => {
         expect(deriveEventCategory('operational', 'mystery_event', null)).toBe('operational')
     })

@@ -62,7 +62,8 @@ public sealed partial class ReviewOrchestrationService(
     IBudgetScopeAccessor? budgetScopeAccessor = null,
     IBudgetEventPublisher? budgetEventPublisher = null,
     IPostedFindingIndex? postedFindingIndex = null,
-    IReviewJobLeaseStore? leaseStore = null) : IReviewJobProcessor, IReviewResultPublisher
+    IReviewJobLeaseStore? leaseStore = null,
+    IOptions<PublicApplicationOptions>? publicApplicationOptions = null) : IReviewJobProcessor, IReviewResultPublisher
 {
     private const string LocalWorkspacePreparedEventName = "local_workspace_prepared";
     private const string LocalWorkspaceFailedEventName = "local_workspace_failed";
@@ -866,11 +867,18 @@ public sealed partial class ReviewOrchestrationService(
         {
             var publicationResult = this.PrepareResultForPublication(job, pr, result);
 
-            // The minimum-severity filter governs SCM PUBLICATION only. The persisted result below keeps every
-            // finding, so a suppressed low-severity finding is still visible in the review record ("no comment
-            // posted" is not "no review").
+            // The client's post configuration governs SCM PUBLICATION only. The persisted result below keeps
+            // every finding, so a withheld one is still visible in the review record ("no comment posted" is
+            // not "no review"). The published summary carries the count, so what was held back is legible on
+            // the pull request itself rather than only to someone who opens ProPR.
             var minimumSeverityToPost = await clientRegistry.GetMinimumSeverityToPostAsync(job.ClientId, ct);
-            var publishResult = FilterCommentsByMinimumSeverity(publicationResult, minimumSeverityToPost);
+            var withholdOutOfScopeFindings = await clientRegistry.GetWithholdOutOfScopeFindingsAsync(job.ClientId, ct);
+            var publicationPolicy = ReviewPublicationPolicy.Apply(
+                publicationResult,
+                minimumSeverityToPost,
+                withholdOutOfScopeFindings,
+                this.TryBuildReviewRecordLink(job.Id));
+            var publishResult = publicationPolicy.PublishResult;
 
             IReadOnlySet<string> autoResolvedThreadIds = new HashSet<string>(StringComparer.Ordinal);
             var scmCommentPostingEnabled = await clientRegistry.GetScmCommentPostingEnabledAsync(job.ClientId, ct);
@@ -907,7 +915,7 @@ public sealed partial class ReviewOrchestrationService(
 
             // Both take the list the poster actually worked from. Pairing findings to the threads they became,
             // and reading back the ordinals the poster stamped, are only correct against that same list: the
-            // minimum-severity filter above can drop findings, and every one it drops shifts the alignment.
+            // publication policy above can drop findings, and every one it drops shifts the alignment.
             await this.IndexPostedFindingsAsync(job, publishResult, diagnostics, autoResolvedThreadIds, ct);
 
             await this.CollectCodeInsightFindingsAsync(job, pr, publicationResult, diagnostics, ct);
@@ -920,6 +928,14 @@ public sealed partial class ReviewOrchestrationService(
                     diagnostics,
                     MapPublishedOrdinalsToPersisted(publicationResult.Comments, publishResult.Comments),
                     ct);
+
+                // Only when comments were actually going out. With posting disabled nothing was published, so
+                // there is nothing the policy kept off the pull request either.
+                if (scmCommentPostingEnabled)
+                {
+                    await this.RecordWithheldFindingsAsync(protocolId.Value, publicationPolicy, ct);
+                }
+
                 await protocolRecorder.SetCompletedAsync(protocolId.Value, "Completed", 0, 0, 0, 0, null, ct);
             }
 
@@ -1629,23 +1645,54 @@ public sealed partial class ReviewOrchestrationService(
         }
     }
 
-    // Returns the subset of the result whose comments meet the client's minimum severity to post. The persisted
-    // review result is NOT filtered — only what is handed to the SCM publication adapter.
-    private static ReviewResult FilterCommentsByMinimumSeverity(ReviewResult result, CommentSeverity minimumSeverity)
+    /// <summary>
+    ///     Returns where this job's review can be read in ProPR, or <see langword="null" /> when the installation
+    ///     has no configured public address.
+    /// </summary>
+    /// <remarks>
+    ///     The job protocol view lists every finding the review produced, including the ones publication held
+    ///     back, each carrying its severity and its scope label. That makes it the page that answers what a
+    ///     withheld-findings note raises, and it needs only the job id, so the link cannot be built wrong.
+    /// </remarks>
+    private Uri? TryBuildReviewRecordLink(Guid jobId)
     {
-        // Info is the lowest rank, so an Info threshold posts everything — return the result untouched.
-        if (minimumSeverity == CommentSeverity.Info || result.Comments.Count == 0)
+        // Read lazily: the options are optional here, and an installation that never configured a public
+        // address publishes the counts without a link rather than guessing a host.
+        var uiOrigin = publicApplicationOptions?.Value.UiOrigin;
+
+        return Uri.TryCreate(uiOrigin, UriKind.Absolute, out var origin)
+            ? new Uri(origin, $"/jobs/{jobId.ToString("D", CultureInfo.InvariantCulture)}/protocol")
+            : null;
+    }
+
+    private async Task RecordWithheldFindingsAsync(
+        Guid protocolId,
+        AppliedReviewPublicationPolicy policy,
+        CancellationToken ct)
+    {
+        // Also recorded when nothing was withheld but findings reached publication unclassified. That case is
+        // how the out-of-scope rule would fail silently: it holds nothing back, which is indistinguishable from
+        // a pull request that had nothing out of scope unless the unjudged findings are counted somewhere.
+        if (!policy.AnythingWithheld && policy.PublishedWithoutScopeClassification == 0)
         {
-            return result;
+            return;
         }
 
-        var postable = result.Comments
-            .Where(comment => comment.Severity.MeetsMinimum(minimumSeverity))
-            .ToList();
+        var details = JsonSerializer.Serialize(
+            new
+            {
+                withheldCount = policy.WithheldTotal,
+                belowMinimumSeverity = policy.WithheldBelowMinimumSeverity,
+                outsideChangedLines = policy.WithheldOutsideChangedLines,
+                publishedWithoutScopeClassification = policy.PublishedWithoutScopeClassification,
+            });
 
-        return postable.Count == result.Comments.Count
-            ? result
-            : result with { Comments = postable.AsReadOnly() };
+        await protocolRecorder.RecordPublicationEventAsync(
+            protocolId,
+            "publication_withheld_findings",
+            details,
+            null,
+            ct);
     }
 
     // For each thread just posted whose finding severity the client marked for auto-resolution, posts an explanatory
@@ -1785,12 +1832,11 @@ public sealed partial class ReviewOrchestrationService(
                 comment.LineNumber.Value > 0)
             {
                 downgradedCount++;
-                normalizedComments.Add(
-                    new ReviewComment(
-                        null,
-                        null,
-                        comment.Severity,
-                        $"{NormalizeReviewPath(comment.FilePath)}:L{comment.LineNumber.Value}: {comment.Message}"));
+
+                // Keeps the comment's provenance across the rewrite. The scope classification is the one that
+                // decides publication, and a finding in pre-existing code never sits on an inserted line, so
+                // rebuilding without it would leave every out-of-scope finding unjudged on these providers.
+                normalizedComments.Add(comment.AsPullRequestLevel($"{NormalizeReviewPath(comment.FilePath)}:L{comment.LineNumber.Value}: {comment.Message}"));
                 continue;
             }
 

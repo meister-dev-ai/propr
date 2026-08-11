@@ -55,6 +55,7 @@ export interface ClientDetailDto {
   budgetConfig?: BudgetConfig | null
   minimumSeverityToPost?: CommentSeverity | null
   autoResolveSeverities?: CommentSeverity[] | null
+  withholdOutOfScopeFindings?: boolean | null
   codeInsightsCollectionEnabled?: boolean | null
 }
 
@@ -95,6 +96,7 @@ export interface ClientDetailViewModel {
   editedBaselineReasoningEffort: Ref<ReviewReasoningEffort>
   editedMinimumSeverityToPost: Ref<CommentSeverity>
   editedAutoResolveSeverities: Ref<CommentSeverity[]>
+  editedWithholdOutOfScopeFindings: Ref<boolean>
   editedCodeInsightsCollectionEnabled: Ref<boolean>
   editedMonthlyBudgetSoftCapUsd: Ref<string>
   editedMonthlyBudgetHardCapUsd: Ref<string>
@@ -354,6 +356,7 @@ export function useClientDetailViewModel(options: UseClientDetailViewModelOption
   const editedBaselineReasoningEffort = ref<ReviewReasoningEffort>('none')
   const editedMinimumSeverityToPost = ref<CommentSeverity>('info')
   const editedAutoResolveSeverities = ref<CommentSeverity[]>([])
+  const editedWithholdOutOfScopeFindings = ref(false)
   const editedCodeInsightsCollectionEnabled = ref(false)
   const editedMonthlyBudgetSoftCapUsd = ref('')
   const editedMonthlyBudgetHardCapUsd = ref('')
@@ -425,6 +428,7 @@ export function useClientDetailViewModel(options: UseClientDetailViewModelOption
     editedBaselineReasoningEffort.value = nextClient.baselineReasoningEffort ?? 'none'
     editedMinimumSeverityToPost.value = nextClient.minimumSeverityToPost ?? 'info'
     editedAutoResolveSeverities.value = [...(nextClient.autoResolveSeverities ?? [])]
+    editedWithholdOutOfScopeFindings.value = Boolean(nextClient.withholdOutOfScopeFindings)
     editedCodeInsightsCollectionEnabled.value = Boolean(nextClient.codeInsightsCollectionEnabled)
     editedMonthlyBudgetSoftCapUsd.value = capToInput(nextClient.budgetConfig?.monthlySoftCapUsd)
     editedMonthlyBudgetHardCapUsd.value = capToInput(nextClient.budgetConfig?.monthlyHardCapUsd)
@@ -672,11 +676,12 @@ export function useClientDetailViewModel(options: UseClientDetailViewModelOption
     saving.value = true
     saveError.value = ''
     try {
-      // Both post-configuration fields are patched together: minimum-severity threshold and the auto-resolve
-      // severity set (an empty array clears the set).
+      // The post-configuration fields are patched together: the minimum-severity threshold, the auto-resolve
+      // severity set (an empty array clears the set), and whether out-of-scope findings are posted.
       const result = await patchClientFn(clientId, {
         minimumSeverityToPost: editedMinimumSeverityToPost.value,
         autoResolveSeverities: editedAutoResolveSeverities.value,
+        withholdOutOfScopeFindings: editedWithholdOutOfScopeFindings.value,
       })
       if (isFailedPatch(result)) {
         saveError.value = extractValidationMessage(result.error, 'Failed to save post configuration.')
@@ -786,7 +791,8 @@ export function useClientDetailViewModel(options: UseClientDetailViewModelOption
       client.value !== null &&
       (
         editedMinimumSeverityToPost.value !== (client.value.minimumSeverityToPost ?? 'info') ||
-        !severitySetsEqual(editedAutoResolveSeverities.value, client.value.autoResolveSeverities ?? [])
+        !severitySetsEqual(editedAutoResolveSeverities.value, client.value.autoResolveSeverities ?? []) ||
+        editedWithholdOutOfScopeFindings.value !== Boolean(client.value.withholdOutOfScopeFindings)
       )
     )
   }
@@ -825,6 +831,7 @@ export function useClientDetailViewModel(options: UseClientDetailViewModelOption
     editedBaselineReasoningEffort,
     editedMinimumSeverityToPost,
     editedAutoResolveSeverities,
+    editedWithholdOutOfScopeFindings,
     editedCodeInsightsCollectionEnabled,
     editedMonthlyBudgetSoftCapUsd,
     editedMonthlyBudgetHardCapUsd,

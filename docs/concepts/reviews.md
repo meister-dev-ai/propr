@@ -59,8 +59,12 @@ The last step before publication is a deterministic gate. Every finding ends as 
 | Summary-only | Anything whose verification was degraded or inconclusive - the gate prefers caution |
 | Published | Everything else |
 
-Two further per-client filters sit after the gate: a **minimum severity to post**, and whether outbound
-SCM commenting is enabled at all - both in [what you can tune](#what-you-can-tune).
+Three further per-client filters sit after the gate: a **minimum severity to post**, whether findings
+outside the changed lines are posted, and whether outbound SCM commenting is enabled at all - all three in
+[what you can tune](#what-you-can-tune). A finding one of the first two holds back stays in the ProPR
+review, and the published summary reports how many were held back and why. It links to the review as well
+once `MEISTER_PUBLIC_BASE_URL` tells the installation its own address - see
+[public URL and browser origins](../operate/configuration.md#public-url-and-browser-origins).
 
 A dropped finding also has to leave the summary. The summary is written before the gate runs, so it can
 describe a finding the gate then rules out. To catch that, the summary pass names the findings its
@@ -92,8 +96,9 @@ Everything below is set in the management UI. Unless noted, the scope is one cli
 | Output language | Per client | The language the review writes in - see [Output language](#output-language) |
 | Linked work items and issues | Per client | Pulls the work items or issues linked to the pull request into the review context, so the change is judged against its intended direction. On by default |
 | Exclusion rules | Per repository | Glob patterns read from the repository - see [configuring ProPR from your repository](repository-configuration.md) |
-| Minimum severity to post | Per client | Findings below it stay out of the pull request but remain visible in the ProPR review. Order, high to low: error, warning, suggestion, info |
+| Minimum severity to post | Per client | Findings below it stay out of the pull request but remain visible in the ProPR review, and the published summary reports how many were held back. Order, high to low: error, warning, suggestion, info |
 | Auto-resolve severities | Per client | Comments of the chosen severities are posted and then immediately resolved with a note. Azure DevOps, GitHub and GitLab; on Forgejo the setting is a no-op |
+| Do not post findings outside the changed lines | Per client | Keeps findings in pre-existing code away from the diff out of the pull request. They stay visible in the ProPR review. Off by default - see [findings outside your changes](#findings-outside-your-changes) |
 | Resolving comment threads | Per client | What ProPR does with its own threads once a finding is acted on: resolve quietly (default), resolve with an explanation, or leave them alone. A question you ask is answered either way - see [how a review gets triggered](how-it-works.md#how-a-review-gets-triggered) |
 | SCM comment posting | Per client | Run reviews without publishing anything |
 | Review every pushed update | Per client | Whether pushes after the first one start another automatic review. Off by default - see [how a review gets triggered](how-it-works.md#how-a-review-gets-triggered) |
@@ -132,6 +137,24 @@ matched as data on pull requests ProPR already commented on: the severity prefix
 recognises its own comment and avoids posting it twice, and the summary heading is how ProPR keeps its own
 summary out of its recall measurements. Translating either would break those checks on every pull request
 that already exists.
+
+### Findings outside your changes
+
+A review reads whole files rather than the diff alone, so it can find something real in code the pull
+request never touched. Those findings are classified by comparing the line against the pull request's
+changed ranges, deterministically rather than by asking the model, and a finding far from every changed
+range is labelled as pre-existing code. Context lines within a few lines of an edit count as part of the
+change.
+
+By default such a finding is posted carrying that label, because it is still a defect somebody has to
+know about. A client that would rather keep its pull requests to the change itself can turn on **do not
+post findings outside the changed lines**. The findings then stay in the ProPR review, where the job
+protocol lists them with the same label, and the pull request summary reports the count.
+
+The classification needs the file's changed ranges to compare against, so a finding ProPR cannot place -
+one with no line number, or one in a file this pull request does not change at all - carries no label and
+is posted. A finding is only ever held back on evidence that it lies outside the change, never on the
+absence of evidence that it lies inside it.
 
 ### Review passes
 

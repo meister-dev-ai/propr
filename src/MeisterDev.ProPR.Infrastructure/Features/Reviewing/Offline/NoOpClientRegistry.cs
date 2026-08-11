@@ -89,6 +89,11 @@ public sealed class NoOpClientRegistry : IClientRegistry
         return Task.FromResult<IReadOnlyList<CommentSeverity>>([]);
     }
 
+    public Task<bool> GetWithholdOutOfScopeFindingsAsync(Guid clientId, CancellationToken ct = default)
+    {
+        return Task.FromResult(false);
+    }
+
     public Task<IReadOnlyList<ReviewPassSpec>> GetReviewPassesAsync(Guid clientId, CancellationToken ct = default)
     {
         return Task.FromResult<IReadOnlyList<ReviewPassSpec>>([]);

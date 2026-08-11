@@ -47,6 +47,37 @@ public sealed record ReviewComment
         this.Message = message;
     }
 
+    /// <summary>
+    ///     Returns a copy of this comment addressed at the pull request rather than at a file and line,
+    ///     carrying <paramref name="message" /> and every piece of provenance this comment holds.
+    /// </summary>
+    /// <param name="message">The message the pull-request-level comment carries.</param>
+    /// <remarks>
+    ///     Publication rewrites a comment into this shape in more than one place: a provider that only accepts
+    ///     an inline anchor on an inserted diff line, and the consolidation of one concern found across several
+    ///     files. Both once rebuilt the comment from four values, which silently dropped the rest, and
+    ///     provenance a later step needs was gone by the time it looked. Notably the scope classification: a
+    ///     finding in pre-existing code is never anchored to an inserted line, so on those providers every such
+    ///     finding lost the very label the publication policy decides on. Copying here rather than at each call
+    ///     site is what keeps a newly added property from being forgotten by the next one.
+    /// </remarks>
+    public ReviewComment AsPullRequestLevel(string message)
+    {
+        return new ReviewComment(null, null, this.Severity, message)
+        {
+            OriginPassKind = this.OriginPassKind,
+            OriginPassIndex = this.OriginPassIndex,
+            OriginPassLens = this.OriginPassLens,
+            OriginPassShadow = this.OriginPassShadow,
+            ScopeRelation = this.ScopeRelation,
+            SourceReadGrounding = this.SourceReadGrounding,
+            OriginModelId = this.OriginModelId,
+            OriginLogicalModelName = this.OriginLogicalModelName,
+            OriginSymbolName = this.OriginSymbolName,
+            OriginSymbolKind = this.OriginSymbolKind,
+        };
+    }
+
     /// <summary>Optional file path the comment refers to.</summary>
     public string? FilePath { get; }
 

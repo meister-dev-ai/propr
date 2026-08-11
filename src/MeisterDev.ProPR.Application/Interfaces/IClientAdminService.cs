@@ -73,6 +73,10 @@ public interface IClientAdminService
     ///     When non-null, sets whether an automatic trigger reviews every pushed update to a pull request rather than
     ///     only the first revision it sees.
     /// </param>
+    /// <param name="withholdOutOfScopeFindings">
+    ///     When non-null, sets whether findings in pre-existing code outside the pull request's changed lines are kept
+    ///     off the pull request. They remain in the persisted review result either way.
+    /// </param>
     /// <param name="ct">Cancellation token.</param>
     Task<ClientDto?> PatchAsync(
         Guid clientId,
@@ -94,6 +98,7 @@ public interface IClientAdminService
         bool? codeInsightsCollectionEnabled = null,
         string? outputLanguage = null,
         bool? reviewEveryIncrementEnabled = null,
+        bool? withholdOutOfScopeFindings = null,
         CancellationToken ct = default);
 
     /// <summary>

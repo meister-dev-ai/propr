@@ -134,6 +134,15 @@ public interface IClientRegistry
     Task<IReadOnlyList<CommentSeverity>> GetAutoResolveSeveritiesAsync(Guid clientId, CancellationToken ct = default);
 
     /// <summary>
+    ///     Returns whether findings in pre-existing code outside the pull request's changed lines are kept off the
+    ///     pull request for the given client. They are retained in the persisted review result either way. Defaults
+    ///     to <see langword="false" /> if the client does not exist, so an unknown client publishes them.
+    /// </summary>
+    /// <param name="clientId">Client identifier.</param>
+    /// <param name="ct">Cancellation token.</param>
+    Task<bool> GetWithholdOutOfScopeFindingsAsync(Guid clientId, CancellationToken ct = default);
+
+    /// <summary>
     ///     Returns the ordered per-client review-pass list — each configured model (in ordinal order) with its optional
     ///     specialist lens — that runs one additional multi-pass union pass after the implicit tier baseline. Empty
     ///     when the client has configured no additional passes (multi-pass union then degrades to a single baseline pass).

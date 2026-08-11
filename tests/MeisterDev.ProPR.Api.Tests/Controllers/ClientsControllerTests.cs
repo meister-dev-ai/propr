@@ -782,6 +782,41 @@ public sealed class ClientsControllerTests(ClientsControllerTests.ClientsApiFact
     }
 
     [Fact]
+    public async Task PatchClient_WithholdOutOfScopeFindings_PersistedAndReturned()
+    {
+        using var scope = factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<MeisterProPRDbContext>();
+        var tenantId = Guid.NewGuid();
+        db.Tenants.Add(CreateTenantRecord(tenantId, "withhold-scope-test", "Withhold Scope Tenant"));
+        var record = new ClientRecord
+        {
+            Id = Guid.NewGuid(),
+            TenantId = tenantId,
+            DisplayName = "Withhold Scope Test",
+            IsActive = true,
+            CreatedAt = DateTimeOffset.UtcNow,
+            WithholdOutOfScopeFindings = false,
+        };
+        db.Clients.Add(record);
+        await db.SaveChangesAsync();
+
+        var client = factory.CreateClient();
+        using var request = new HttpRequestMessage(HttpMethod.Patch, $"/clients/{record.Id}");
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", factory.GenerateAdminToken());
+        request.Content = JsonContent.Create(new { withholdOutOfScopeFindings = true });
+
+        var response = await client.SendAsync(request);
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+
+        var body = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        Assert.True(body.RootElement.GetProperty("withholdOutOfScopeFindings").GetBoolean());
+
+        db.ChangeTracker.Clear();
+        var updated = await db.Clients.SingleAsync(c => c.Id == record.Id);
+        Assert.True(updated.WithholdOutOfScopeFindings);
+    }
+
+    [Fact]
     public async Task PatchClient_BudgetConfig_PersistedAndReturned()
     {
         using var scope = factory.Services.CreateScope();

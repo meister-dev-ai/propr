@@ -328,6 +328,16 @@ public sealed class ClientsValidatorTests
     }
 
     [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void PatchClient_WithholdOutOfScopeFindingsBoolean_Passes(bool value)
+    {
+        var result = PatchClientValidator.Validate(new PatchClientRequest(WithholdOutOfScopeFindings: value));
+
+        Assert.True(result.IsValid);
+    }
+
+    [Theory]
     [InlineData(ReviewReasoningEffort.None)]
     [InlineData(ReviewReasoningEffort.Low)]
     [InlineData(ReviewReasoningEffort.Medium)]

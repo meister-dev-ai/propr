@@ -350,6 +350,7 @@ function buildMockClient(id: string, displayName = `Mocked Client ${id}`, overri
     enableEvidenceBackedVerification: false,
     enableMultiPassUnion: false,
     reviewEveryIncrementEnabled: false,
+    withholdOutOfScopeFindings: false,
     enableLanguageRobustScreening: false,
     outputLanguage: 'en',
     // Client "3" (Umbrella) is intentionally uncapped to exercise the no-budget state; others carry caps.

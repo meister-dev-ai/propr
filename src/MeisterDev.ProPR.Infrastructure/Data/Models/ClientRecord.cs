@@ -117,6 +117,14 @@ public sealed class ClientRecord
     public IReadOnlyList<CommentSeverity> AutoResolveSeverities { get; set; } = [];
 
     /// <summary>
+    ///     Controls whether findings in pre-existing code outside the pull request's changed lines are published
+    ///     to the SCM provider. Defaults to <see langword="false" />, which publishes them carrying the label that
+    ///     says where they are. Set to <see langword="true" /> to keep them off the pull request; they stay in the
+    ///     persisted review result either way, and the published summary reports how many were held back.
+    /// </summary>
+    public bool WithholdOutOfScopeFindings { get; set; } = false;
+
+    /// <summary>
     ///     Tags a runner must declare before this client's reviews may be offered to it, comma-separated.
     ///     Empty by default, which every runner satisfies.
     ///     <para>

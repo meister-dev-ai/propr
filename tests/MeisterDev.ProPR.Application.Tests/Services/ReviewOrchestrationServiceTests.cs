@@ -4427,7 +4427,13 @@ public partial class ReviewOrchestrationServiceTests
 
         var reviewResult = new ReviewResult(
             "Summary of review.",
-            [new ReviewComment("src/Foo.cs", 1, CommentSeverity.Warning, "This line is outside the changed hunk.")]);
+            [
+                new ReviewComment("src/Foo.cs", 1, CommentSeverity.Warning, "This line is outside the changed hunk.")
+                {
+                    ScopeRelation = ReviewCommentScopeRelation.OutsideChange,
+                    OriginPassKind = "Baseline",
+                },
+            ]);
         orchestrator.ReviewAsync(
                 Arg.Any<ReviewJob>(),
                 Arg.Any<PullRequest>(),
@@ -4468,7 +4474,14 @@ public partial class ReviewOrchestrationServiceTests
             result => result.Comments.Count == 1
                       && result.Comments[0].FilePath is null
                       && result.Comments[0].LineNumber is null
-                      && result.Comments[0].Message.Contains("src/Foo.cs:L1", StringComparison.Ordinal));
+                      && result.Comments[0].Message.Contains("src/Foo.cs:L1", StringComparison.Ordinal)
+
+                      // The rewrite must not cost the comment its provenance. The scope classification is what
+                      // the publication policy decides on, and a finding in pre-existing code is never anchored
+                      // to an inserted line, so losing it here leaves every one of them unjudged on GitLab and
+                      // Forgejo while the pull request still gets the comment.
+                      && result.Comments[0].ScopeRelation == ReviewCommentScopeRelation.OutsideChange
+                      && result.Comments[0].OriginPassKind == "Baseline");
     }
 
     [Fact]
@@ -4727,7 +4740,13 @@ public partial class ReviewOrchestrationServiceTests
 
         var reviewResult = new ReviewResult(
             "Summary of review.",
-            [new ReviewComment("src/Foo.cs", 1, CommentSeverity.Warning, "This line is outside the changed hunk.")]);
+            [
+                new ReviewComment("src/Foo.cs", 1, CommentSeverity.Warning, "This line is outside the changed hunk.")
+                {
+                    ScopeRelation = ReviewCommentScopeRelation.OutsideChange,
+                    OriginPassKind = "Baseline",
+                },
+            ]);
         orchestrator.ReviewAsync(
                 Arg.Any<ReviewJob>(),
                 Arg.Any<PullRequest>(),
@@ -4768,7 +4787,12 @@ public partial class ReviewOrchestrationServiceTests
             result => result.Comments.Count == 1
                       && result.Comments[0].FilePath is null
                       && result.Comments[0].LineNumber is null
-                      && result.Comments[0].Message.Contains("src/Foo.cs:L1", StringComparison.Ordinal));
+                      && result.Comments[0].Message.Contains("src/Foo.cs:L1", StringComparison.Ordinal)
+
+                      // Same guard as the GitLab path: the rewrite keeps the scope classification the
+                      // publication policy reads.
+                      && result.Comments[0].ScopeRelation == ReviewCommentScopeRelation.OutsideChange
+                      && result.Comments[0].OriginPassKind == "Baseline");
     }
 
     [Fact]

@@ -25,7 +25,7 @@ namespace MeisterDev.ProPR.Application.Tests.Services;
 ///     <see cref="ReviewOrchestrationService" />: the minimum-severity publication filter and the auto-resolution
 ///     of freshly posted threads.
 /// </summary>
-public class ReviewOrchestrationServicePostConfigurationTests
+public partial class ReviewOrchestrationServicePostConfigurationTests
 {
     private const string WarningFile = "src/A.cs";
     private const string SuggestionFile = "src/B.cs";
@@ -596,7 +596,9 @@ public class ReviewOrchestrationServicePostConfigurationTests
         bool resolutionSupported = true,
         IPostedCommentOriginStore? postedCommentOriginStore = null,
         string? autoResolveNoteCommentId = null,
-        IPostedFindingIndex? postedFindingIndex = null)
+        IPostedFindingIndex? postedFindingIndex = null,
+        string? publicUiOrigin = null,
+        IProtocolRecorder? protocolRecorder = null)
     {
         var prFetcher = Substitute.For<IPullRequestFetcher>();
         prFetcher.FetchRefAsync(
@@ -662,7 +664,7 @@ public class ReviewOrchestrationServicePostConfigurationTests
             providerRegistry,
             clientRegistry,
             prScanRepository,
-            Substitute.For<IProtocolRecorder>(),
+            protocolRecorder ?? Substitute.For<IProtocolRecorder>(),
             reviewContextToolsFactory,
             instructionFetcher,
             exclusionFetcher,
@@ -674,7 +676,8 @@ public class ReviewOrchestrationServicePostConfigurationTests
             orchestrator,
             workspaceManager: CreateDefaultWorkspaceManager(),
             postedCommentOriginStore: postedCommentOriginStore,
-            postedFindingIndex: postedFindingIndex);
+            postedFindingIndex: postedFindingIndex,
+            publicApplicationOptions: Microsoft.Extensions.Options.Options.Create(new PublicApplicationOptions { UiOrigin = publicUiOrigin }));
 
         return (service, providerRegistry);
     }

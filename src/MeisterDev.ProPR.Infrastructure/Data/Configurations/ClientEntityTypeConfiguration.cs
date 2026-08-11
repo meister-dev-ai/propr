@@ -121,6 +121,10 @@ internal sealed class ClientEntityTypeConfiguration : IEntityTypeConfiguration<C
             .HasColumnType("text")
             .HasDefaultValueSql("''");
 
+        builder.Property(c => c.WithholdOutOfScopeFindings)
+            .HasColumnName("withhold_out_of_scope_findings")
+            .HasDefaultValue(false);
+
         builder.Property(c => c.RequiredRunnerTags)
             .HasColumnName("required_runner_tags")
             .HasColumnType("text")

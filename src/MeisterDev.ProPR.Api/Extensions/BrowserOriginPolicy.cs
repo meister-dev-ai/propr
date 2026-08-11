@@ -19,7 +19,7 @@ internal static class BrowserOriginPolicy
         var extraOrigins = (configuration["CORS_ORIGINS"] ?? string.Empty)
             .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
 
-        var publicUiOrigin = TryGetPublicUiOrigin(configuration);
+        var publicUiOrigin = PublicApplicationUrlResolver.GetConfiguredPublicUiOrigin(configuration);
 
         return FixedOrigins
             .Concat(extraOrigins)
@@ -60,16 +60,5 @@ internal static class BrowserOriginPolicy
     {
         return origin.StartsWith("moz-extension://", StringComparison.OrdinalIgnoreCase)
                || origin.StartsWith("chrome-extension://", StringComparison.OrdinalIgnoreCase);
-    }
-
-    private static string? TryGetPublicUiOrigin(IConfiguration configuration)
-    {
-        var configuredPublicBaseUrl = PublicApplicationUrlResolver.GetConfiguredPublicBaseUrl(configuration);
-        if (!Uri.TryCreate(configuredPublicBaseUrl, UriKind.Absolute, out var publicBaseUri))
-        {
-            return null;
-        }
-
-        return publicBaseUri.GetLeftPart(UriPartial.Authority);
     }
 }
