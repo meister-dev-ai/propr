@@ -87,6 +87,15 @@ explanation** posts why first. Either way, a question you ask in one of its thre
 you asked it. **Leave threads alone** switches the pass off entirely, so nothing is resolved and nothing
 is answered.
 
+A comment is anchored to the location where a problem was observed, which is often not the location that
+has to change. A finding raised on an interface declaration, stating that the implementation does not
+check its arguments, is resolved by a change to the service, in a different file. The pass loads the diff
+of the file the thread is anchored to, along with the names of the other files the pull request changed,
+and the evaluation may request one of those files when the fix is plausibly there. It requests once, and
+only for files this pull request changed. How much it can retrieve is bounded by the context window of
+the model you configured, so a thread resolves on the evidence that settles it without the pass reading
+the whole pull request.
+
 An on-demand review is not held back by that setting. It reviews the revision the pull request is on
 when you ask, which is how you get a fresh review of a branch that has moved.
 

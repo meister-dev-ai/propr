@@ -193,17 +193,21 @@ public sealed partial class ThreadPassService(
 
         var canReply = ReviewThreadCapabilities.Advertises(capabilities, ReviewThreadCapabilities.Reply);
 
-        // Threads and pull-request metadata only. Downloading the content of every changed file to find out
-        // whether there is a thread to answer is what made this pass a per-push, per-pull-request bulk read;
-        // the one diff a code-change judgement needs is fetched for that thread alone.
-        var pullRequest = await pullRequestFetcher.FetchThreadContextAsync(
-            job.OrganizationUrl,
-            job.ProjectId,
-            job.RepositoryId,
-            job.PullRequestId,
-            job.IterationId,
-            clientId: job.ClientId,
-            cancellationToken: ct);
+        // Read before the pull request, because it determines what the pull request fetch has to request.
+        // Only a pass that evaluates code needs the changed-file names, and a pass with only replies to
+        // answer should not spend a provider call listing files nothing will read.
+        var scan = await prScans.GetAsync(job.ClientId, job.RepositoryId, job.PullRequestId, ct);
+        var revisionMoved = !string.Equals(
+            scan?.LastThreadPassRevisionKey,
+            job.RevisionKey,
+            StringComparison.Ordinal);
+
+        // Threads, pull-request metadata, and on a moved revision the names of the files that changed.
+        // Downloading the content of every changed file to determine whether a thread needs answering is
+        // what made this pass a per-push, per-pull-request bulk read; the diffs a code-change evaluation
+        // needs are retrieved per thread. The manifest holds names only, and it is what allows an evaluation
+        // to distinguish a fix that was never made from one in a file it was not supplied with.
+        var pullRequest = await this.FetchThreadContextAsync(job, revisionMoved, ct);
 
         // A pass queued before the pull request closed must not go on answering it. This is also what keeps a
         // pass rehydrated after a restart from speaking for a pull request that ended while the process was down.
@@ -247,12 +251,6 @@ public sealed partial class ThreadPassService(
         var ownership = await this.ResolveThreadOwnershipAsync(job, pullRequest, ct);
         var reviewerThreads = GetReviewerThreads(pullRequest, ownership.Resolver);
 
-        var scan = await prScans.GetAsync(job.ClientId, job.RepositoryId, job.PullRequestId, ct);
-        var revisionMoved = !string.Equals(
-            scan?.LastThreadPassRevisionKey,
-            job.RevisionKey,
-            StringComparison.Ordinal);
-
         var handled = await threadPassJobs.GetHandledThreadKeysAsync(
             job.ClientId,
             job.RepositoryId,
@@ -262,6 +260,10 @@ public sealed partial class ThreadPassService(
         var handledKeys = handled.ToHashSet();
 
         var runtime = reviewerThreads.Count == 0 ? null : await this.TryResolveRuntimeAsync(job, ct);
+
+        // Built once for the whole pass, so that several threads requesting the same file, which findings on
+        // one interface commonly do, cost one provider retrieval between them rather than one each.
+        var evidence = runtime is null ? null : this.BuildEvidenceAccess(job, runtime);
 
         var allThreadsDealtWith = true;
         var observedByThreadId = new Dictionary<string, int>(StringComparer.Ordinal);
@@ -295,6 +297,7 @@ public sealed partial class ThreadPassService(
                     canReply,
                     handledKeys,
                     runtime,
+                    evidence,
                     ct);
             }
             catch (Exception ex) when (ex is not OperationCanceledException and not BudgetHardCapReachedException)
@@ -395,6 +398,7 @@ public sealed partial class ThreadPassService(
         bool canReply,
         HashSet<ThreadPassHandledThreadKey> handledKeys,
         ThreadPassRuntime? runtime,
+        ThreadEvidenceAccess? evidence,
         CancellationToken ct)
     {
         if (IsResolvedStatus(thread.Status))
@@ -444,7 +448,8 @@ public sealed partial class ThreadPassService(
                 runtime.ModelId,
                 ct,
                 outputLanguage,
-                hasNewReplies)
+                hasNewReplies,
+                evidence)
             : await resolutionCore.EvaluateConversationalReplyAsync(
                 thread,
                 runtime.ChatClient,
@@ -488,6 +493,50 @@ public sealed partial class ThreadPassService(
     }
 
     /// <summary>
+    ///     Reads the conversation, requesting the changed-file names when a code change is to be evaluated.
+    /// </summary>
+    /// <remarks>
+    ///     The names are supplementary, and a pass that cannot obtain them still has threads to answer. Every
+    ///     provider reports an incomplete listing by throwing, and on a large pull request that is the most
+    ///     likely failure, so a manifest that fails to load falls back to the conversation-only read rather
+    ///     than costing the pass every thread it would otherwise have handled.
+    /// </remarks>
+    private async Task<PullRequest> FetchThreadContextAsync(
+        ThreadPassJob job,
+        bool includeChangedFileManifest,
+        CancellationToken ct)
+    {
+        if (includeChangedFileManifest)
+        {
+            try
+            {
+                return await pullRequestFetcher.FetchThreadContextAsync(
+                    job.OrganizationUrl,
+                    job.ProjectId,
+                    job.RepositoryId,
+                    job.PullRequestId,
+                    job.IterationId,
+                    clientId: job.ClientId,
+                    cancellationToken: ct,
+                    includeChangedFileManifest: true);
+            }
+            catch (Exception ex) when (!ct.IsCancellationRequested)
+            {
+                LogChangedFileManifestUnavailable(logger, job.Id, job.PullRequestId, ex);
+            }
+        }
+
+        return await pullRequestFetcher.FetchThreadContextAsync(
+            job.OrganizationUrl,
+            job.ProjectId,
+            job.RepositoryId,
+            job.PullRequestId,
+            job.IterationId,
+            clientId: job.ClientId,
+            cancellationToken: ct);
+    }
+
+    /// <summary>
     ///     Adds the diff of the one file a thread is anchored to, fetched for that file alone. A thread with
     ///     no file, or a file the provider has nothing to say about, gets the pull request as it came.
     /// </summary>
@@ -501,6 +550,11 @@ public sealed partial class ThreadPassService(
         {
             return pullRequest;
         }
+
+        // Read before the substitution below, because a pull request that arrived without a manifest derives
+        // one from its changed files. Replacing those with the anchor file alone would reduce the manifest to
+        // that same file, restoring the omission this path exists to correct.
+        var changedFileManifest = pullRequest.AllPrFileSummaries;
 
         try
         {
@@ -519,7 +573,11 @@ public sealed partial class ThreadPassService(
             // matches the two by string, so the fetched diff has to arrive under the name the thread uses.
             return file is null
                 ? pullRequest
-                : pullRequest with { ChangedFiles = [file with { Path = thread.FilePath }] };
+                : pullRequest with
+                {
+                    ChangedFiles = [file with { Path = thread.FilePath }],
+                    AllChangedFileSummaries = changedFileManifest,
+                };
         }
         catch (Exception ex) when (!ct.IsCancellationRequested)
         {
@@ -527,6 +585,63 @@ public sealed partial class ThreadPassService(
             LogThreadFileLookupFailed(logger, job.Id, thread.ThreadId ?? string.Empty, ex);
             return pullRequest;
         }
+    }
+
+    /// <summary>
+    ///     Allows one thread's evaluation to request the diff of a file it was not supplied with, bounded by
+    ///     the context window of the model performing the evaluation.
+    /// </summary>
+    /// <remarks>
+    ///     A comment is anchored to the location where a problem was observed, which is often not the
+    ///     location that has to change. Without this, a fix in another file is absent from the evaluation by
+    ///     construction, and the only accurate result the model can return is that the change is not visible
+    ///     to it, however many times the developer pushes it. Which files may be requested is determined
+    ///     against the pull request's own changed-file manifest, so no model-generated string reaches the
+    ///     provider as a path.
+    /// </remarks>
+    private ThreadEvidenceAccess BuildEvidenceAccess(ThreadPassJob job, ThreadPassRuntime runtime)
+    {
+        // One entry per path for the lifetime of the pass, holding the result that was returned including
+        // the absence of one. Findings raised on a single interface commonly refer to the same
+        // implementation, and retrieving it again per thread would spend provider calls on content the pass
+        // already holds.
+        var fetchedByPath = new Dictionary<string, ChangedFile?>(StringComparer.Ordinal);
+
+        return new ThreadEvidenceAccess(
+            async (path, token) =>
+            {
+                if (fetchedByPath.TryGetValue(path, out var cached))
+                {
+                    return cached;
+                }
+
+                ChangedFile? file;
+                try
+                {
+                    file = await pullRequestFetcher.FetchFileDiffAsync(
+                        job.OrganizationUrl,
+                        job.ProjectId,
+                        job.RepositoryId,
+                        job.PullRequestId,
+                        job.IterationId,
+                        path,
+                        clientId: job.ClientId,
+                        cancellationToken: token);
+                }
+                catch (Exception ex) when (!token.IsCancellationRequested)
+                {
+                    // Evaluated without it, because leaving the developer without an answer is a worse
+                    // outcome than one missing file. Not cached, so a later thread may still retrieve it.
+                    LogRequestedFileLookupFailed(logger, job.Id, path, ex);
+                    return null;
+                }
+
+                fetchedByPath[path] = file;
+                return file;
+            },
+            runtime.MaxContextTokens,
+            runtime.TokenizerName,
+            path => LogRequestedFileOutsidePullRequest(logger, job.Id, path));
     }
 
     private async Task ApplyResolvedThreadActionAsync(
@@ -602,7 +717,12 @@ public sealed partial class ThreadPassService(
             runtime.Model.RemoteModelId,
             ct);
 
-        return new ThreadPassRuntime(runtime.ChatClient, runtime.Model.RemoteModelId, runtime.LogicalModelName);
+        return new ThreadPassRuntime(
+            runtime.ChatClient,
+            runtime.Model.RemoteModelId,
+            runtime.LogicalModelName,
+            runtime.Model.MaxContextTokens,
+            runtime.Model.TokenizerName);
     }
 
     /// <summary>
@@ -643,29 +763,50 @@ public sealed partial class ThreadPassService(
             return;
         }
 
+        // An evaluation that had to request more code spent more than one call. Each is recorded separately
+        // so a trace can distinguish them, and the totals below are the sum, because the sum is what the
+        // client is billed.
+        var calls = resolution.Calls is { Count: > 0 } spentCalls
+            ? spentCalls
+            :
+            [
+                new ThreadResolutionCall(
+                    resolution.InputTokens,
+                    resolution.OutputTokens,
+                    resolution.CachedInputTokens,
+                    resolution.CacheWriteTokens,
+                    resolution.ReasoningTokens),
+            ];
+
         // The tokens are already spent and the developer is waiting on an answer. Accounting that fails costs a
         // number; refusing to answer because of it costs the work.
         try
         {
-            await protocolRecorder.RecordAiCallAsync(
-                id,
-                1,
-                resolution.InputTokens,
-                resolution.OutputTokens,
-                null,
-                null,
-                resolution.ReplyText,
-                ct,
-                cachedInputTokens: resolution.CachedInputTokens,
-                cacheWriteTokens: resolution.CacheWriteTokens,
-                reasoningTokens: resolution.ReasoningTokens);
+            for (var index = 0; index < calls.Count; index++)
+            {
+                var call = calls[index];
+                await protocolRecorder.RecordAiCallAsync(
+                    id,
+                    index + 1,
+                    call.InputTokens,
+                    call.OutputTokens,
+                    null,
+                    null,
+
+                    // The reply belongs to the call that produced it, which is the last one.
+                    index == calls.Count - 1 ? resolution.ReplyText : null,
+                    ct,
+                    cachedInputTokens: call.CachedInputTokens,
+                    cacheWriteTokens: call.CacheWriteTokens,
+                    reasoningTokens: call.ReasoningTokens);
+            }
 
             await protocolRecorder.SetCompletedAsync(
                 id,
                 resolution.IsResolved ? "Resolved" : "NotResolved",
                 resolution.InputTokens ?? 0,
                 resolution.OutputTokens ?? 0,
-                1,
+                calls.Count,
                 0,
                 null,
                 ct,
@@ -893,7 +1034,21 @@ public sealed partial class ThreadPassService(
     }
 
     /// <summary>The chat runtime one pass judges its threads with, resolved once for the whole pass.</summary>
-    private sealed record ThreadPassRuntime(IChatClient ChatClient, string ModelId, string? LogicalModelName);
+    /// <param name="ChatClient">The client-scoped chat client the evaluations run through.</param>
+    /// <param name="ModelId">The provider's own identifier for the deployed model.</param>
+    /// <param name="LogicalModelName">The name the model is configured under, for pricing and traces.</param>
+    /// <param name="MaxContextTokens">
+    ///     The model's context window, which determines how much code one evaluation may retrieve. A larger
+    ///     window permits more, so the limit follows the model the client configured rather than a fixed
+    ///     number.
+    /// </param>
+    /// <param name="TokenizerName">The model's tokenizer, so what fits is measured rather than estimated.</param>
+    private sealed record ThreadPassRuntime(
+        IChatClient ChatClient,
+        string ModelId,
+        string? LogicalModelName,
+        int? MaxContextTokens,
+        string? TokenizerName);
 
     /// <summary>
     ///     The pass's ownership answer, and whether every input it wanted was available.
@@ -1078,5 +1233,37 @@ public sealed partial class ThreadPassService(
         ILogger logger,
         Guid threadPassJobId,
         string threadId,
+        Exception exception);
+
+    [LoggerMessage(
+        EventId = 6419,
+        Level = LogLevel.Warning,
+        Message =
+            "Thread pass {ThreadPassJobId} could not fetch {FilePath}, requested by a thread evaluation; the thread is evaluated without it.")]
+    private static partial void LogRequestedFileLookupFailed(
+        ILogger logger,
+        Guid threadPassJobId,
+        string filePath,
+        Exception exception);
+
+    [LoggerMessage(
+        EventId = 6420,
+        Level = LogLevel.Warning,
+        Message =
+            "Thread pass {ThreadPassJobId} refused {FilePath}: a thread evaluation requested a file this pull request did not change.")]
+    private static partial void LogRequestedFileOutsidePullRequest(
+        ILogger logger,
+        Guid threadPassJobId,
+        string filePath);
+
+    [LoggerMessage(
+        EventId = 6421,
+        Level = LogLevel.Warning,
+        Message =
+            "Thread pass {ThreadPassJobId} could not list the files PR {PullRequestId} changed; its threads are evaluated without cross-file evidence.")]
+    private static partial void LogChangedFileManifestUnavailable(
+        ILogger logger,
+        Guid threadPassJobId,
+        int pullRequestId,
         Exception exception);
 }

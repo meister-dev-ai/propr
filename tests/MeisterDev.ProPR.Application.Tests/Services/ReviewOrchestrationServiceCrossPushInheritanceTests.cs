@@ -227,7 +227,8 @@ public partial class ReviewOrchestrationServiceTests
 
         public Task<PullRequest> FetchThreadContextAsync(
             string organizationUrl, string projectId, string repositoryId, int pullRequestId, int iterationId,
-            Guid? clientId = null, CancellationToken cancellationToken = default)
+            Guid? clientId = null, CancellationToken cancellationToken = default,
+            bool includeChangedFileManifest = false)
         {
             return this.FetchAsync(
                 organizationUrl,

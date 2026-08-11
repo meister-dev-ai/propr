@@ -170,9 +170,11 @@ public sealed partial class StubPullRequestFetcher(ILogger<StubPullRequestFetche
         int pullRequestId,
         int iterationId,
         Guid? clientId = null,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        bool includeChangedFileManifest = false)
     {
-        // Nothing is downloaded from a remote here, so the whole pull request is already the cheap answer.
+        // Nothing is downloaded from a remote here, so the whole pull request is already the cheap answer, and
+        // its changed files are their own manifest.
         return await this.FetchAsync(
             organizationUrl,
             projectId,

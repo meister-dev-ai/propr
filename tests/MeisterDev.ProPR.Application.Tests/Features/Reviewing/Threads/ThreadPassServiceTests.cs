@@ -257,7 +257,9 @@ public sealed class ThreadPassServiceTests
             Arg.Any<IChatClient>(),
             Arg.Any<string>(),
             Arg.Any<CancellationToken>(),
-            Arg.Any<string?>());
+            Arg.Any<string?>(),
+            Arg.Any<bool>(),
+            Arg.Any<ThreadEvidenceAccess?>());
         await harness.StatusWriter.Received(1).UpdateThreadStatusAsync(
             ClientId,
             Arg.Is<ReviewThreadRef>(thread => thread.ExternalThreadId == "17"),
@@ -283,7 +285,8 @@ public sealed class ThreadPassServiceTests
             Arg.Any<string>(),
             Arg.Any<CancellationToken>(),
             Arg.Any<string?>(),
-            true);
+            true,
+            Arg.Any<ThreadEvidenceAccess?>());
         await harness.ResolutionCore.DidNotReceive().EvaluateConversationalReplyAsync(
             Arg.Any<PrCommentThread>(),
             Arg.Any<IChatClient>(),
@@ -404,7 +407,8 @@ public sealed class ThreadPassServiceTests
             Arg.Any<string>(),
             Arg.Any<CancellationToken>(),
             Arg.Any<string?>(),
-            false);
+            false,
+            Arg.Any<ThreadEvidenceAccess?>());
         await harness.ReplyPublisher.DidNotReceive().ReplyAsync(
             Arg.Any<Guid>(),
             Arg.Any<ReviewThreadRef>(),
@@ -643,8 +647,11 @@ public sealed class ThreadPassServiceTests
     }
 
     [Fact]
-    public async Task ProcessAsync_JudgingACodeChange_FetchesOnlyTheFileTheThreadIsAnchoredTo()
+    public async Task ProcessAsync_JudgingACodeChange_LoadsTheAnchorFileDiffAndTheChangedFileNames()
     {
+        // One diff is downloaded up front, for the file the thread is anchored to. The names of the other
+        // changed files are included so the evaluation can distinguish a fix that was never made from one it
+        // was not supplied with, and request the file containing it.
         var harness = new Harness();
         harness.WithReviewerThread(observedNonReviewerComments: 0);
         harness.WithCodeChangeVerdict(isResolved: true, replyText: "Fixed.");
@@ -658,7 +665,8 @@ public sealed class ThreadPassServiceTests
             PullRequestId,
             IterationId,
             ClientId,
-            Arg.Any<CancellationToken>());
+            Arg.Any<CancellationToken>(),
+            true);
         await harness.PullRequestFetcher.Received(1).FetchFileDiffAsync(
             ScopePath,
             ProjectKey,
@@ -669,6 +677,101 @@ public sealed class ThreadPassServiceTests
             Arg.Any<int?>(),
             ClientId,
             Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task ProcessAsync_ChangedFileNamesCannotBeListed_StillJudgesTheThread()
+    {
+        // Listing the files a pull request changed is the most likely failure on a large one, and it
+        // supplements the evaluation rather than being a precondition for it. Its absence must not cost the
+        // pass every thread it would otherwise have answered.
+        var harness = new Harness();
+        harness.WithReviewerThread(observedNonReviewerComments: 0);
+        harness.WithUnlistableChangedFiles();
+        harness.WithCodeChangeVerdict(isResolved: true, replyText: "Fixed.");
+
+        await harness.RunAsync();
+
+        await harness.ResolutionCore.Received(1).EvaluateCodeChangeAsync(
+            Arg.Any<PrCommentThread>(),
+            Arg.Any<PullRequest>(),
+            Arg.Any<IChatClient>(),
+            Arg.Any<string>(),
+            Arg.Any<CancellationToken>(),
+            Arg.Any<string?>(),
+            Arg.Any<bool>(),
+            Arg.Any<ThreadEvidenceAccess?>());
+        await harness.ThreadPassJobs.Received(1).SetCompletedAsync(harness.Job.Id, Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task ProcessAsync_DeveloperRepliedWithoutAPush_DoesNotPayToListChangedFiles()
+    {
+        // Nothing on the conversational path reads the changed-file names, so the pass does not request
+        // them.
+        var harness = new Harness();
+        harness.WithThreadWatermarkAlreadyAtThisRevision();
+        harness.WithReviewerThread(observedNonReviewerComments: 1, storedReplyCount: 0);
+        harness.WithConversationalVerdict("Answered.");
+
+        await harness.RunAsync();
+
+        await harness.PullRequestFetcher.DidNotReceive().FetchThreadContextAsync(
+            Arg.Any<string>(),
+            Arg.Any<string>(),
+            Arg.Any<string>(),
+            Arg.Any<int>(),
+            Arg.Any<int>(),
+            Arg.Any<Guid?>(),
+            Arg.Any<CancellationToken>(),
+            true);
+    }
+
+    [Fact]
+    public async Task ProcessAsync_LoadingTheAnchorFile_KeepsTheOtherChangedFileNames()
+    {
+        // Substituting the anchor file into the changed-file collection must not discard the manifest with
+        // it. A pull request that arrived without one derives it from those same changed files, so an
+        // unguarded substitution would reduce the manifest to the one file already supplied.
+        var harness = new Harness();
+        harness.WithReviewerThread(observedNonReviewerComments: 0);
+        harness.WithDerivedChangedFileManifest("src/Foo.cs", "src/Service.cs");
+        harness.WithCodeChangeVerdict(isResolved: true, replyText: "Fixed.");
+
+        await harness.RunAsync();
+
+        await harness.ResolutionCore.Received(1).EvaluateCodeChangeAsync(
+            Arg.Any<PrCommentThread>(),
+            Arg.Is<PullRequest>(pr => pr.AllPrFileSummaries.Any(file => file.Path == "src/Service.cs")),
+            Arg.Any<IChatClient>(),
+            Arg.Any<string>(),
+            Arg.Any<CancellationToken>(),
+            Arg.Any<string?>(),
+            Arg.Any<bool>(),
+            Arg.Any<ThreadEvidenceAccess?>());
+    }
+
+    [Fact]
+    public async Task ProcessAsync_JudgingACodeChange_LetsTheEvaluationAskForAnotherFile()
+    {
+        // The fix for a finding raised on one file is often in another, and an evaluation that cannot be
+        // supplied with that file has no way to resolve the thread however many times the developer pushes
+        // it.
+        var harness = new Harness();
+        harness.WithReviewerThread(observedNonReviewerComments: 0);
+        harness.WithCodeChangeVerdict(isResolved: true, replyText: "Fixed.");
+
+        await harness.RunAsync();
+
+        await harness.ResolutionCore.Received(1).EvaluateCodeChangeAsync(
+            Arg.Any<PrCommentThread>(),
+            Arg.Any<PullRequest>(),
+            Arg.Any<IChatClient>(),
+            Arg.Any<string>(),
+            Arg.Any<CancellationToken>(),
+            Arg.Any<string?>(),
+            Arg.Any<bool>(),
+            Arg.Is<ThreadEvidenceAccess?>(evidence => evidence != null));
     }
 
     [Fact]
@@ -687,7 +790,8 @@ public sealed class ThreadPassServiceTests
             Arg.Any<int>(),
             Arg.Any<int>(),
             Arg.Any<Guid?>(),
-            Arg.Any<CancellationToken>());
+            Arg.Any<CancellationToken>(),
+            Arg.Any<bool>());
     }
 
     [Fact]
@@ -745,6 +849,75 @@ public sealed class ThreadPassServiceTests
             ConnectionId,
             "thread-pass-model",
             Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task ProcessAsync_EvaluationThatAskedForMoreCode_RecordsEveryCallAndBillsTheirSum()
+    {
+        // An evaluation that had to retrieve another file spent two calls. Recording only the first would
+        // omit the second from the trace and from what the client is billed.
+        var harness = new Harness();
+        harness.WithReviewerThread(observedNonReviewerComments: 0);
+        harness.WithTwoRoundCodeChangeVerdict();
+        var protocolId = harness.WithThreadProtocol();
+
+        await harness.RunAsync();
+
+        await harness.ProtocolRecorder.Received(1).RecordAiCallAsync(
+            protocolId,
+            1,
+            100,
+            10,
+            Arg.Any<string?>(),
+            Arg.Any<string?>(),
+
+            // The reply belongs to the call that produced it, so the earlier one holds none.
+            Arg.Is<string?>(sample => sample == null),
+            Arg.Any<CancellationToken>(),
+            Arg.Any<string?>(),
+            Arg.Any<string?>(),
+            Arg.Any<long?>(),
+            Arg.Any<CacheCallStatus>(),
+            Arg.Any<string?>(),
+            Arg.Any<PrefixEligibilityStatus>(),
+            Arg.Any<string?>(),
+            Arg.Any<string?>(),
+            Arg.Any<string?>(),
+            Arg.Any<long?>(),
+            Arg.Any<long?>());
+        await harness.ProtocolRecorder.Received(1).RecordAiCallAsync(
+            protocolId,
+            2,
+            250,
+            30,
+            Arg.Any<string?>(),
+            Arg.Any<string?>(),
+            Arg.Is<string?>(sample => sample == "The service now validates its arguments."),
+            Arg.Any<CancellationToken>(),
+            Arg.Any<string?>(),
+            Arg.Any<string?>(),
+            Arg.Any<long?>(),
+            Arg.Any<CacheCallStatus>(),
+            Arg.Any<string?>(),
+            Arg.Any<PrefixEligibilityStatus>(),
+            Arg.Any<string?>(),
+            Arg.Any<string?>(),
+            Arg.Any<string?>(),
+            Arg.Any<long?>(),
+            Arg.Any<long?>());
+        await harness.ProtocolRecorder.Received(1).SetCompletedAsync(
+            protocolId,
+            "Resolved",
+            350,
+            40,
+            2,
+            0,
+            null,
+            Arg.Any<CancellationToken>(),
+            Arg.Any<long?>(),
+            Arg.Any<CacheObservabilityStatus>(),
+            Arg.Any<long?>(),
+            Arg.Any<long?>());
     }
 
     [Fact]
@@ -895,6 +1068,8 @@ public sealed class ThreadPassServiceTests
         private readonly List<PrCommentThread> _threads = [];
         private PrStatus _pullRequestStatus = PrStatus.Active;
         private bool _threadsAreReadable = true;
+        private bool _changedFilesAreUnlistable;
+        private IReadOnlyList<ChangedFile> _changedFiles = [];
 
         public Harness()
         {
@@ -1047,7 +1222,8 @@ public sealed class ThreadPassServiceTests
                     Arg.Any<string>(),
                     Arg.Any<CancellationToken>(),
                     Arg.Any<string?>(),
-                    Arg.Any<bool>())
+                    Arg.Any<bool>(),
+                    Arg.Any<ThreadEvidenceAccess?>())
                 .ThrowsAsync(new BudgetHardCapReachedException(breach));
         }
 
@@ -1212,13 +1388,57 @@ public sealed class ThreadPassServiceTests
                     Arg.Any<string>(),
                     Arg.Any<CancellationToken>(),
                     Arg.Any<string?>(),
-                    Arg.Any<bool>())
+                    Arg.Any<bool>(),
+                    Arg.Any<ThreadEvidenceAccess?>())
                 .Returns(_ =>
                 {
                     // Read from inside the call, which is where the enforcing chat client reads it too.
                     this.ObservedScopeBaselineUsd = this._budgetScopeAccessor.Current?.Baseline.Increment.KnownUsd;
                     return new ThreadResolutionResult(isResolved, replyText, inputTokens, outputTokens);
                 });
+        }
+
+        /// <summary>A provider that cannot complete the changed-file listing and reports that by throwing.</summary>
+        public void WithUnlistableChangedFiles()
+        {
+            this._changedFilesAreUnlistable = true;
+        }
+
+        /// <summary>
+        ///     Names the files this pull request changed in the form used by a provider that reports no
+        ///     separate manifest: as changed files, from which the manifest is derived.
+        /// </summary>
+        public void WithDerivedChangedFileManifest(params string[] paths)
+        {
+            this._changedFiles = paths
+                .Select(path => new ChangedFile(path, ChangeType.Edit, "content", "diff"))
+                .ToList()
+                .AsReadOnly();
+        }
+
+        /// <summary>A verdict reached only after the evaluation requested a file it was not first supplied with.</summary>
+        public void WithTwoRoundCodeChangeVerdict()
+        {
+            this.ResolutionCore.EvaluateCodeChangeAsync(
+                    Arg.Any<PrCommentThread>(),
+                    Arg.Any<PullRequest>(),
+                    Arg.Any<IChatClient>(),
+                    Arg.Any<string>(),
+                    Arg.Any<CancellationToken>(),
+                    Arg.Any<string?>(),
+                    Arg.Any<bool>(),
+                    Arg.Any<ThreadEvidenceAccess?>())
+                .Returns(
+                    new ThreadResolutionResult(
+                        true,
+                        "The service now validates its arguments.",
+                        350,
+                        40,
+                        Calls:
+                        [
+                            new ThreadResolutionCall(100, 10),
+                            new ThreadResolutionCall(250, 30),
+                        ]));
         }
 
         public void WithConversationalVerdict(string replyText)
@@ -1241,8 +1461,24 @@ public sealed class ThreadPassServiceTests
                     Arg.Any<int>(),
                     Arg.Any<int>(),
                     Arg.Any<Guid?>(),
-                    Arg.Any<CancellationToken>())
+                    Arg.Any<CancellationToken>(),
+                    Arg.Any<bool>())
                 .Returns(this.CreatePullRequest());
+
+            if (this._changedFilesAreUnlistable)
+            {
+                this.PullRequestFetcher.FetchThreadContextAsync(
+                        Arg.Any<string>(),
+                        Arg.Any<string>(),
+                        Arg.Any<string>(),
+                        Arg.Any<int>(),
+                        Arg.Any<int>(),
+                        Arg.Any<Guid?>(),
+                        Arg.Any<CancellationToken>(),
+                        true)
+                    .ThrowsAsync(new InvalidOperationException("the changed-file listing was truncated."));
+            }
+
             this.PullRequestFetcher.FetchFileDiffAsync(
                     Arg.Any<string>(),
                     Arg.Any<string>(),
@@ -1288,7 +1524,7 @@ public sealed class ThreadPassServiceTests
                 null,
                 "feature",
                 "main",
-                [],
+                this._changedFiles,
                 this._pullRequestStatus,
                 this._threadsAreReadable ? this._threads.AsReadOnly() : null,
                 null,

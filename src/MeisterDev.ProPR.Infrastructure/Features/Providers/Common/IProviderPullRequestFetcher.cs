@@ -53,8 +53,11 @@ internal interface IProviderPullRequestFetcher
         int pullRequestId,
         int iterationId,
         Guid? clientId = null,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        bool includeChangedFileManifest = false)
     {
+        // A full fetch already includes every changed file, so a manifest the caller requested is derived
+        // from them at no additional cost in this fallback.
         return await this.FetchAsync(
             organizationUrl,
             projectId,

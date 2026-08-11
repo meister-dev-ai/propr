@@ -32,6 +32,13 @@ public interface IAiCommentResolutionCore
     ///     as well as judge the finding. A thread can gain a reply and move to a new revision at the same time,
     ///     and one evaluation covers both: two evaluations would cost twice and could contradict each other.
     /// </param>
+    /// <param name="evidence">
+    ///     Allows the evaluation to request the diff of a file it was not supplied with, for the common case
+    ///     of a finding whose fix belongs in a different file from the one the comment is anchored to.
+    ///     Requests are honoured only for files this pull request changed, and only once per evaluation, so a
+    ///     second model call is the maximum any thread can cost. <see langword="null" /> evaluates the diff
+    ///     supplied in <paramref name="pr" /> alone and always costs exactly one call.
+    /// </param>
     /// <returns>
     ///     A <see cref="ThreadResolutionResult" /> indicating whether the issue is resolved and
     ///     an optional reply to post in the thread.
@@ -43,7 +50,8 @@ public interface IAiCommentResolutionCore
         string modelId,
         CancellationToken cancellationToken = default,
         string? outputLanguage = null,
-        bool hasNewReplies = false);
+        bool hasNewReplies = false,
+        ThreadEvidenceAccess? evidence = null);
 
     /// <summary>
     ///     Generates a conversational response to new human replies in <paramref name="thread" />,

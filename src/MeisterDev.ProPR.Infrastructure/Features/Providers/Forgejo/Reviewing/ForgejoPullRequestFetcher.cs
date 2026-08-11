@@ -190,10 +190,12 @@ internal sealed class ForgejoPullRequestFetcher(
         int pullRequestId,
         int iterationId,
         Guid? clientId = null,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        bool includeChangedFileManifest = false)
     {
-        // Metadata and threads only: whether a reviewer thread needs answering is decided from the
-        // conversation, so the changed-file query and every content download are left out.
+        // Metadata and threads only: whether a reviewer thread needs answering is determined from the
+        // conversation, so every content download is omitted. The changed-file names are queried only when
+        // the caller requests them.
         if (!clientId.HasValue)
         {
             throw new InvalidOperationException("Forgejo pull-request fetches require a client identifier.");
@@ -215,6 +217,22 @@ internal sealed class ForgejoPullRequestFetcher(
             pullRequestId,
             cancellationToken);
 
+        IReadOnlyList<ChangedFileSummary>? changedFileManifest = null;
+        if (includeChangedFileManifest)
+        {
+            var files = await this.GetChangedFilesAsync(
+                context,
+                host,
+                repositoryPath,
+                pullRequestId,
+                cancellationToken);
+
+            changedFileManifest = files
+                .Select(file => new ChangedFileSummary(file.FileName, MapChangeType(file.Status)))
+                .ToList()
+                .AsReadOnly();
+        }
+
         return new PullRequest(
             organizationUrl,
             projectId,
@@ -229,6 +247,7 @@ internal sealed class ForgejoPullRequestFetcher(
             [],
             MapStatus(pullRequest),
             existingThreads,
+            changedFileManifest,
             AuthorizedIdentityName: context.AuthenticatedUsername);
     }
 

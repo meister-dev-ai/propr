@@ -185,10 +185,12 @@ internal sealed class GitLabPullRequestFetcher(
         int pullRequestId,
         int iterationId,
         Guid? clientId = null,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        bool includeChangedFileManifest = false)
     {
-        // Metadata and threads only: whether a reviewer thread needs answering is decided from the
-        // conversation, so the changes query and every content download are left out.
+        // Metadata and threads only: whether a reviewer thread needs answering is determined from the
+        // conversation, so every content download is omitted. The changed-file names are queried only when
+        // the caller requests them.
         if (!clientId.HasValue)
         {
             throw new InvalidOperationException("GitLab pull-request fetches require a client identifier.");
@@ -209,6 +211,22 @@ internal sealed class GitLabPullRequestFetcher(
             pullRequestId,
             cancellationToken);
 
+        IReadOnlyList<ChangedFileSummary>? changedFileManifest = null;
+        if (includeChangedFileManifest)
+        {
+            var changes = await this.GetMergeRequestChangesAsync(
+                context,
+                host,
+                repositoryId,
+                pullRequestId,
+                cancellationToken);
+
+            changedFileManifest = (changes.Changes ?? [])
+                .Select(MapSummary)
+                .ToList()
+                .AsReadOnly();
+        }
+
         return new PullRequest(
             organizationUrl,
             projectId,
@@ -223,6 +241,7 @@ internal sealed class GitLabPullRequestFetcher(
             [],
             MapStatus(mergeRequest.State),
             existingThreads,
+            changedFileManifest,
             AuthorizedIdentityName: context.AuthenticatedUsername);
     }
 

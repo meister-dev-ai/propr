@@ -26,9 +26,36 @@ namespace MeisterDev.ProPR.Domain.ValueObjects;
 /// <param name="CachedInputTokens">Cache-read input token count reported for this evaluation, or <see langword="null" />.</param>
 /// <param name="CacheWriteTokens">Cache-write token count reported for this evaluation, or <see langword="null" />.</param>
 /// <param name="ReasoningTokens">Reasoning token count reported for this evaluation, or <see langword="null" />.</param>
+/// <param name="Calls">
+///     What each model call of this evaluation reported, in the order they were made, when the evaluation
+///     required more than one. <see langword="null" /> for the single-call case, which covers most of them.
+///     The token fields above hold the total across every call, because that total is what the client is
+///     billed.
+/// </param>
 public sealed record ThreadResolutionResult(
     bool IsResolved,
     string? ReplyText,
+    long? InputTokens = null,
+    long? OutputTokens = null,
+    long? CachedInputTokens = null,
+    long? CacheWriteTokens = null,
+    long? ReasoningTokens = null,
+    IReadOnlyList<ThreadResolutionCall>? Calls = null)
+{
+    /// <summary>How many model calls this evaluation spent.</summary>
+    public int ModelCallCount => this.Calls?.Count ?? 1;
+}
+
+/// <summary>
+///     What one model call within a thread evaluation reported, so a trace can show each call separately
+///     rather than combining an evaluation that requested more code into a single indistinguishable row.
+/// </summary>
+/// <param name="InputTokens">Input token count reported for this call, or <see langword="null" />.</param>
+/// <param name="OutputTokens">Output token count reported for this call, or <see langword="null" />.</param>
+/// <param name="CachedInputTokens">Cache-read input token count reported for this call, or <see langword="null" />.</param>
+/// <param name="CacheWriteTokens">Cache-write token count reported for this call, or <see langword="null" />.</param>
+/// <param name="ReasoningTokens">Reasoning token count reported for this call, or <see langword="null" />.</param>
+public sealed record ThreadResolutionCall(
     long? InputTokens = null,
     long? OutputTokens = null,
     long? CachedInputTokens = null,

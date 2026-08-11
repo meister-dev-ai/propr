@@ -253,11 +253,13 @@ public sealed partial class AdoPrFetcher(
         int pullRequestId,
         int iterationId,
         Guid? clientId = null,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        bool includeChangedFileManifest = false)
     {
-        // Two API calls: the pull request itself and its threads. No iteration changes and no file content,
-        // because whether a reviewer thread needs answering is decided from the conversation alone. A pass
-        // that then wants one file's diff asks for that one file.
+        // Two API calls: the pull request itself and its threads. No file content, because whether a
+        // reviewer thread needs answering is determined from the conversation alone. A pass that then
+        // requires one file's diff requests that one file. The changed-file names cost a third call and are
+        // retrieved only when the caller requests them.
         var credentials = await AdoProviderAdapterHelpers.ResolveCredentialsAsync(
             connectionRepository,
             clientId,
@@ -281,6 +283,27 @@ public sealed partial class AdoPrFetcher(
             pullRequestId,
             cancellationToken);
 
+        IReadOnlyList<ChangedFileSummary>? changedFileManifest = null;
+        if (includeChangedFileManifest)
+        {
+            var changes = await AdoPullRequestIterationChangePager.LoadAllAsync(
+                (top, skip, ct) => gitClient.GetPullRequestIterationChangesAsync(
+                    projectId,
+                    repositoryId,
+                    pullRequestId,
+                    iterationId,
+                    top,
+                    skip,
+                    cancellationToken: ct),
+                cancellationToken);
+
+            changedFileManifest = changes
+                .Select(CreateSummaryFromChange)
+                .OfType<ChangedFileSummary>()
+                .ToList()
+                .AsReadOnly();
+        }
+
         return new PullRequest(
             organizationUrl,
             projectId,
@@ -300,6 +323,7 @@ public sealed partial class AdoPrFetcher(
                 _ => PrStatus.Active,
             },
             threads,
+            changedFileManifest,
             AuthorizedIdentityId: authorizedIdentityId);
     }
 

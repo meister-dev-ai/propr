@@ -130,6 +130,12 @@ public interface IPullRequestFetcher
     /// <param name="iterationId">The iteration the caller is reasoning about.</param>
     /// <param name="clientId">Optional client ID for credential retrieval.</param>
     /// <param name="cancellationToken">A token to monitor for cancellation requests.</param>
+    /// <param name="includeChangedFileManifest">
+    ///     When <c>true</c>, <c>AllChangedFileSummaries</c> is populated with the path and change type of
+    ///     every file the pull request changed. This is names only and downloads no content, but it costs one
+    ///     more provider call, so a caller that only reads the conversation leaves it off. A caller that has
+    ///     to distinguish a change that was never made from one it was not supplied with enables it.
+    /// </param>
     /// <returns>The pull request with its threads and no changed-file content.</returns>
     Task<PullRequest> FetchThreadContextAsync(
         string organizationUrl,
@@ -138,5 +144,6 @@ public interface IPullRequestFetcher
         int pullRequestId,
         int iterationId,
         Guid? clientId = null,
-        CancellationToken cancellationToken = default);
+        CancellationToken cancellationToken = default,
+        bool includeChangedFileManifest = false);
 }

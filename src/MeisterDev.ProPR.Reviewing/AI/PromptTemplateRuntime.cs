@@ -114,6 +114,26 @@ public static class PromptTemplateRuntime
         }
     }
 
+    /// <summary>
+    ///     Renders the <c>cross-file-evidence</c> shared partial, which states that a thread evaluation has
+    ///     been supplied with one file out of several and how to request another.
+    ///     <paramref name="finalRound" /> selects the wording for the call following such a request, where a
+    ///     further request has no effect.
+    /// </summary>
+    internal static string RenderCrossFileEvidence(bool finalRound)
+    {
+        try
+        {
+            var template = FileProvider.Value.ReadSharedPartial("cross-file-evidence");
+            var partials = PartialRegistry.Value.GetPartials();
+            return Renderer.Value.Render(template, new { finalRound }, partials).TrimEnd();
+        }
+        catch (InvalidOperationException ex)
+        {
+            throw new InvalidOperationException($"Failed to render cross-file-evidence partial: {ex.Message}", ex);
+        }
+    }
+
     internal static string RenderAgenticLoopGuidance(bool assertiveCertaintyGate, bool designReviewScope)
     {
         try

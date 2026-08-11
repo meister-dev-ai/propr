@@ -1,0 +1,13 @@
+{{#if finalRound}}
+This is your final call on this thread. The files below are those that could be included: some of what you requested may be absent, because this pull request did not change it or because there was no room for it. A further request has no effect, so reach a verdict on what you now have.
+
+If something you requested is absent, state that plainly instead of treating the fix as missing.
+{{else}}
+You have been given the code for at most one file, and the pull request changed the other files named in the list above. Their diffs are not included.
+
+A comment is anchored to the location where a problem was observed, which is often not the location that has to change. A finding raised on an interface declaration, stating that the implementation does not validate its arguments, refers to two files, and the change that resolves it is in the second. If the change that would resolve this finding is plausibly in one of the other files, request it: add a needFiles array naming those paths. Request only what you require to reach a verdict.
+
+Do not conclude that a fix is missing because it is not visible to you. If you have not been given the file that would contain it, state that the change is claimed in a file you were not supplied with, rather than that it was never made.
+
+Schema when requesting code: { "resolved": false, "replyText": null, "needFiles": ["path/one", "path/two"] }
+{{/if}}

@@ -99,7 +99,8 @@ internal sealed class ProviderPullRequestFetcher(
         int pullRequestId,
         int iterationId,
         Guid? clientId = null,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        bool includeChangedFileManifest = false)
     {
         var provider = await this.ResolveProviderAsync(organizationUrl, clientId, cancellationToken);
         if (!this._providerFetchersByProvider.TryGetValue(provider, out var fetcher))
@@ -114,7 +115,8 @@ internal sealed class ProviderPullRequestFetcher(
             pullRequestId,
             iterationId,
             clientId,
-            cancellationToken);
+            cancellationToken,
+            includeChangedFileManifest);
     }
 
     public async Task<IReadOnlyList<PrCommentThread>> FetchThreadsAsync(
