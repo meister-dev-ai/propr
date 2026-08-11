@@ -15,7 +15,7 @@ RUN mkdir -p /app/.data-protection-keys
 
 # Minimal Kerberos runtime slice for Azure DevOps client auth support.
 # ubuntu:24.04
-FROM ubuntu@sha256:561618e2c15bf2397621dd04f96926663a3b5616c189cf7e38db7e82f5c538ea AS kerberos
+FROM ubuntu@sha256:678c6550cc43645e08669028bc177f50be4e7c5b8cca677067b1914d4afc7a03 AS kerberos
 RUN apt-get update \
     && apt-get install -y --no-install-recommends libgssapi-krb5-2 \
     && rm -rf /var/lib/apt/lists/*
@@ -33,7 +33,7 @@ RUN mkdir -p /kerberos-root/usr/lib/x86_64-linux-gnu \
 
 # Runtime stage
 # mcr.microsoft.com/dotnet/aspnet:10.0-noble-chiseled-extra
-FROM mcr.microsoft.com/dotnet/aspnet@sha256:f9bd6be9b5ab75b8196bff0f0972580edaea7fa8ca04e6ef530950e33caee5b0 AS runtime
+FROM mcr.microsoft.com/dotnet/aspnet@sha256:f1126d438ccc359f51cc6d4701a8deae513856cf10f5fe645d29ea6403dcac6b AS runtime
 WORKDIR /app
 
 COPY --from=kerberos /kerberos-root/usr/lib/x86_64-linux-gnu/ /usr/lib/x86_64-linux-gnu/
