@@ -59,6 +59,36 @@ public class FindingDeduplicatorTests
         Assert.Equal("Baseline", result[0].OriginPassKind);
     }
 
+    [Theory]
+    [InlineData(ReviewCommentScopeRelation.OutsideChange, ReviewCommentScopeRelation.OnChangedLine)]
+    [InlineData(ReviewCommentScopeRelation.OnChangedLine, ReviewCommentScopeRelation.OutsideChange)]
+    [InlineData(ReviewCommentScopeRelation.OutsideChange, null)]
+    public void Deduplicate_MergedComment_ClaimsNoScopeWhenTheGroupDisagrees(
+        ReviewCommentScopeRelation anchorRelation,
+        ReviewCommentScopeRelation? otherRelation)
+    {
+        var comments = new List<ReviewComment>
+        {
+            new("src/A.cs", 1, CommentSeverity.Warning, "Use IDisposable pattern here")
+            {
+                ScopeRelation = anchorRelation,
+            },
+            new("src/B.cs", 2, CommentSeverity.Warning, "Use IDisposable pattern here")
+            {
+                ScopeRelation = otherRelation,
+            },
+        }.AsReadOnly();
+
+        var result = FindingDeduplicator.Deduplicate(comments);
+
+        // Grouping keys on path, severity and message similarity, so a group can hold findings that sit
+        // differently against the diff. One comment then carries one relation for all of them, and publication
+        // would either post the out-of-scope member or withhold the changed-line one. Neither is true of the
+        // group, so the merged comment claims no scope and is published.
+        Assert.Single(result);
+        Assert.Null(result[0].ScopeRelation);
+    }
+
     [Fact]
     public void Deduplicate_HighlySimilarMessagesAcrossFiles_Merges()
     {

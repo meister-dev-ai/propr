@@ -167,6 +167,23 @@ public class ReviewPublicationPolicyTests
         Assert.DoesNotContain("Open the full review in ProPR", applied.PublishResult.Summary, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public void Apply_WithARelativeReviewLink_ReportsTheCountsWithoutALink()
+    {
+        var result = BuildResult(Comment("a.cs", 10, CommentSeverity.Info, ReviewCommentScopeRelation.OnChangedLine));
+
+        var applied = ReviewPublicationPolicy.Apply(
+            result,
+            CommentSeverity.Warning,
+            false,
+            new Uri("/jobs/0f9b/protocol", UriKind.Relative));
+
+        // Reading AbsoluteUri off a relative Uri throws, which would turn a link nobody can follow into a failed
+        // publication. The counts are the part that matters and they still go out.
+        Assert.Contains("1 finding is held back", applied.PublishResult.Summary, StringComparison.Ordinal);
+        Assert.DoesNotContain("Open the full review in ProPR", applied.PublishResult.Summary, StringComparison.Ordinal);
+    }
+
     [Theory]
     [InlineData("")]
     [InlineData("   \n  ")]

@@ -63,7 +63,9 @@ internal static class ReviewPublicationPolicy
     /// </param>
     /// <param name="reviewLink">
     ///     Where to read the full review in ProPR, or <see langword="null" /> when the installation has no
-    ///     configured public URL. The footer reports the counts either way.
+    ///     configured public URL. The footer reports the counts either way. A link that is not absolute is
+    ///     treated as no link: it cannot be rendered for a reader outside ProPR, and losing the link is a
+    ///     smaller loss than failing the publication over it.
     /// </param>
     public static AppliedReviewPublicationPolicy Apply(
         ReviewResult result,
@@ -184,7 +186,9 @@ internal static class ReviewPublicationPolicy
                 $"- {withheldOutsideChangedLines.ToString(CultureInfo.InvariantCulture)} in pre-existing code outside this change");
         }
 
-        if (reviewLink is not null)
+        // Absolute only. AbsoluteUri throws on a relative Uri, and a link relative to nothing means nothing to
+        // a reader on the pull request, so the counts go out on their own instead.
+        if (reviewLink is { IsAbsoluteUri: true })
         {
             sb.AppendLine()
                 .AppendLine(CultureInfo.InvariantCulture, $"[{ReviewLinkLabel}]({reviewLink.AbsoluteUri})");

@@ -151,10 +151,16 @@ know about. A client that would rather keep its pull requests to the change itse
 post findings outside the changed lines**. The findings then stay in the ProPR review, where the job
 protocol lists them with the same label, and the pull request summary reports the count.
 
-The classification needs the file's changed ranges to compare against, so a finding ProPR cannot place -
-one with no line number, or one in a file this pull request does not change at all - carries no label and
-is posted. A finding is only ever held back on evidence that it lies outside the change, never on the
-absence of evidence that it lies inside it.
+Classification happens where the finding is produced and needs the file's changed ranges to compare
+against, so a finding ProPR cannot place there - one with no line number, or one in a file this pull
+request does not change at all - carries no label and is posted. A finding is only ever held back on
+evidence that it lies outside the change, never on the absence of evidence that it lies inside it.
+
+A label already earned survives later reshaping. One concern found in several files is consolidated into a
+single pull-request-level comment, and a provider that only anchors comments on inserted lines has ProPR
+rewrite the rest the same way. Neither carries a line number afterwards, and both keep the label, so they
+are held back on it like any other. The consolidated comment keeps a label only when every finding in it
+agrees; a mixed group claims none and is posted.
 
 ### Review passes
 

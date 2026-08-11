@@ -134,10 +134,17 @@ public static class FindingDeduplicator
         var fileList = string.Join(", ", affectedFiles);
         var consolidatedMessage = $"[Cross-file] {anchor.Message} — Affected files: {fileList}";
 
-        // The anchor's provenance carries the group's, since consolidation only groups findings that already
-        // agree on severity and say the same thing. Rebuilding from severity and text alone dropped the scope
-        // classification, so a concern found in pre-existing code across several files came out unjudged.
-        return anchor.AsPullRequestLevel(consolidatedMessage);
+        // Grouping keys on path, severity and message similarity, so members can sit differently against the
+        // diff. One comment carries one scope for all of them, and the publication policy acts on it, so the
+        // merged comment may only claim a scope the whole group agrees on. A mixed group claims none: that
+        // publishes it, and a finding is never held back on anything short of agreement that it lies outside
+        // the change. Rebuilding from severity and text alone instead dropped the classification entirely, so a
+        // concern found in pre-existing code across several files came out unjudged even when they all agreed.
+        var agreedScopeRelation = group.All(comment => comment.ScopeRelation == anchor.ScopeRelation)
+            ? anchor.ScopeRelation
+            : null;
+
+        return anchor.AsPullRequestLevel(consolidatedMessage) with { ScopeRelation = agreedScopeRelation };
     }
 
     /// <summary>

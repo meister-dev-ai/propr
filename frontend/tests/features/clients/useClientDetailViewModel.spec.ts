@@ -278,6 +278,9 @@ describe('useClientDetailViewModel (FR-007, FR-008, FR-012)', () => {
     const vm = useClientDetailViewModel({ autoLoad: false })
     await vm.loadClient()
 
+    // The loaded client carries no such field, which is what a client saved before the setting existed looks
+    // like. Hydration has to read that as off, or every one of them would show the box ticked.
+    expect(vm.editedWithholdOutOfScopeFindings.value).toBe(false)
     expect(vm.isPostConfigButtonEnabled()).toBe(false)
 
     vm.editedWithholdOutOfScopeFindings.value = true
