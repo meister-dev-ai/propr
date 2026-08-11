@@ -20,7 +20,7 @@ namespace MeisterDev.ProPR.Api.Controllers;
 ///         idempotency, the ordering, and the ceilings all live in the services these call, so nothing here
 ///         can accidentally implement a second version of any of it. What the controller adds is the
 ///         identity: it comes from the authenticated credential, never from the request body, because a
-///         caller that could name its own identity could name somebody else's.
+///         caller that could name its own identity could name another runner's.
 ///     </para>
 /// </summary>
 [ApiController]
@@ -311,7 +311,7 @@ public sealed class RunnerExecutionController(
 
         this.Response.ContentType = "application/x-git-upload-pack-result";
 
-        // Git compresses this request once the negotiation is big enough to be worth it, and says so in
+        // Git compresses this request once the negotiation is large enough, and reports that in
         // Content-Encoding. ASP.NET does not decompress request bodies, so piping the raw stream hands
         // upload-pack gzip bytes where it expects pkt-lines; it fails with "bad line length character",
         // which reads like a corrupt client rather than an undecoded body. A fetch small enough to stay
@@ -357,8 +357,8 @@ public sealed class RunnerExecutionController(
 
     /// <summary>
     ///     Builds the call context from the authenticated runner and the job the request names. The identity
-    ///     comes from the credential; the request only says which job and which generation it believes it
-    ///     holds, and the services check both against the job's current state.
+    ///     comes from the credential. The request only states which job and which generation the caller
+    ///     claims to hold, and the services check both against the job's current state.
     /// </summary>
     private bool TryBuildCall(RunnerJobCallRequest request, out RunnerCallContext call, out IActionResult? failure)
     {
@@ -402,7 +402,7 @@ public class RunnerJobCallRequest
     /// <summary>The job the call concerns.</summary>
     public Guid JobId { get; init; }
 
-    /// <summary>The lease generation the caller believes it holds.</summary>
+    /// <summary>The lease generation the caller claims to hold.</summary>
     public int LeaseGeneration { get; init; }
 
     /// <summary>The contract version the caller speaks.</summary>

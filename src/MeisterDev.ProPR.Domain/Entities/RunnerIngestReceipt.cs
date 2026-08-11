@@ -7,15 +7,15 @@ namespace MeisterDev.ProPR.Domain.Entities;
 /// <summary>
 ///     A batch of trace events, per-file results, and spend that the control plane has already applied.
 ///     <para>
-///         An executor spools its output locally and ships it in batches, so a network failure or a
-///         control-plane restart means it resends. Without a record of what has already landed, a resend
-///         writes the events twice and counts the spend twice, which is worse than losing them: a duplicated
-///         cost is a number nobody can reconcile afterwards.
+///         An executor spools its output locally and sends it in batches, so a network failure or a
+///         control-plane restart means it resends. Without a record of what has already been written, a
+///         resend writes the events twice and counts the spend twice, which is worse than losing them: a
+///         duplicated cost cannot be reconciled afterwards.
 ///     </para>
 ///     <para>
 ///         The receipt also carries the sequence, because idempotency alone does not give ordering. An
-///         executor that shipped batch 5 and then batch 7 has lost batch 6 somewhere, and the control plane
-///         has to say so rather than apply 7 and leave a hole in the trace.
+///         executor that sent batch 5 and then batch 7 has lost batch 6, and the control plane has to report
+///         that rather than apply 7 and leave a gap in the trace.
 ///     </para>
 /// </summary>
 public sealed class RunnerIngestReceipt

@@ -18,9 +18,9 @@ public interface IRunnerJobExecutor
 {
     /// <summary>
     ///     Executes the job the manifest describes. Returning means the job reached a terminal state and
-    ///     its results were shipped; throwing means it did not, and the loop hands the lease back so
-    ///     another runner can pick the job up rather than leaving it to expire. Cancellation is not a
-    ///     failure: the drain releases what it holds, so this must not also hand the lease back.
+    ///     its results were sent. Throwing means it did not, and the loop releases the lease so
+    ///     another runner can pick the job up rather than leaving it to expire. Cancellation does not count as
+    ///     a failure: the drain releases what it holds, so this must not release the lease as well.
     /// </summary>
     /// <param name="manifest">Everything non-secret the review needs, resolved once at dispatch.</param>
     /// <param name="ct">

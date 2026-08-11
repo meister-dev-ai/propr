@@ -39,9 +39,10 @@ public sealed record RunnerToolResult<T>
     public bool Unavailable { get; }
 
     /// <summary>
-    ///     What went wrong in transit, when the call never got an answer at all: a dropped connection, a
-    ///     5xx, an unreadable body. A distinct state on purpose — a blip during a rolling restart read as
-    ///     "not offered" told the reviewer the pull request changed no files, and it believed that.
+    ///     What went wrong in transit, when the call received no answer at all: a dropped connection, a 5xx,
+    ///     an unreadable body. A distinct state on purpose, because a transient failure during a rolling
+    ///     restart read as "not offered" reported to the reviewer that the pull request changed no files, and
+    ///     the reviewer acted on that.
     /// </summary>
     public string? Fault { get; }
 

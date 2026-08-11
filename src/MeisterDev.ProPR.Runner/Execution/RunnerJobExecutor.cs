@@ -28,9 +28,9 @@ namespace MeisterDev.ProPR.Runner.Execution;
 
 /// <summary>
 ///     Runs one leased job: fetches the code, composes the review pipeline against the control plane, and
-///     ships back what the review produced.
+///     sends back what the review produced.
 ///     <para>
-///         The pipeline this builds is the same one the control plane runs. Only its edges differ — the
+///         The pipeline this builds is the same one the control plane runs. Only its edges differ. The
 ///         model calls go through the relay, the credentialed tools go through the proxy, and the trace and
 ///         results go into the spool instead of into a database. Anywhere those substitutions changed
 ///         behaviour rather than destination, a review would mean one thing here and another there.
@@ -85,9 +85,9 @@ public sealed partial class RunnerJobExecutor(
 
             var result = await this.RunPipelineAsync(manifest, job, pullRequest, workspace, http, spool, ct);
 
-            // The spool goes first, and the order is not a preference. Submitting findings publishes the
+            // The spool goes first, and the order matters. Submitting findings publishes the
             // review and moves the job to a terminal state, and ingest refuses a job that is no longer
-            // executing — so findings-then-flush loses the whole trace, every file result, and every
+            // executing, so findings-then-flush loses the whole trace, every file result, and every
             // spend record of a review that succeeded. It cost a completed review showing zero tokens
             // and zero cost to notice.
             await FlushUntilEmptyAsync(spool);
@@ -126,8 +126,8 @@ public sealed partial class RunnerJobExecutor(
 
         // The pipeline asks this for each stage's model, and uses the answer for the client to call, the
         // model id it records, the tokenizer it counts prompts with, and the context window it budgets
-        // against. Without it every one of those is null and the review runs on the default client, blind:
-        // real token totals recorded against a protocol naming no model, and no spend shipped at all.
+        // against. Without it every one of those is null and the review runs on the default client:
+        // real token totals recorded against a protocol naming no model, and no spend reported at all.
         var runtimes = new RelayAiRuntimeResolver(manifest, Relay);
 
         var defaultClient = new RelayChatClient(
@@ -181,8 +181,8 @@ public sealed partial class RunnerJobExecutor(
 
     /// <summary>
     ///     Puts each deliberately-absent collaborator on the review's trace, under its own short protocol.
-    ///     A remote review that ran without the licensing clamp, the soft-cap wind-down, or PR-wide passes
-    ///     has to say so where an operator reads reviews — a log line on a host nobody tails is not saying it.
+    ///     A remote review that ran without the licensing clamp, the soft-cap wind-down, or PR-wide passes has
+    ///     to report that where an operator reads reviews. A log line on the runner host may not be read.
     /// </summary>
     private static async Task RecordAbsentCollaboratorsAsync(
         IProtocolRecorder recorder,
@@ -239,9 +239,9 @@ public sealed partial class RunnerJobExecutor(
         // The credentialed tools go over the proxy; the twelve that read the working copy stay local, which
         // is what keeps a review from becoming network traffic. The local set is handed a disabled
         // code-knowledge gateway because the proxy answers those two, and a second client here would need
-        // the credential this host does not have. The structural analyzer rides along so reference and
-        // definition lookups parse the worktrees instead of answering "unavailable" — an answer the model
-        // reads as "this repository has no cross-file references", which is a false negative, not a shrug.
+        // the credential this host does not have. The structural analyzer is supplied so that reference and
+        // definition lookups parse the worktrees instead of answering "unavailable", which the model reads as
+        // "this repository has no cross-file references", producing a false negative.
         var tools = new ProxyReviewContextTools(
             new RunnerCallContext(manifest.JobId, manifest.LeaseGeneration, string.Empty),
             new HttpRunnerToolProxy(http),
@@ -273,8 +273,8 @@ public sealed partial class RunnerJobExecutor(
             ProtocolRecorder = recorder,
             ReviewWorkspace = workspace,
             // Only what the manifest can vouch for. Managed sessions, background responses, and cache
-            // routing stay off: the relay serves whole completions only. Prompt caching is real — the
-            // provider behind the relay caches or not regardless of which side composed the prompt — so
+            // routing stay off: the relay serves whole completions only. Prompt caching still applies,
+            // because the provider behind the relay caches regardless of which side composed the prompt, so
             // reporting it unsupported here would mislabel every remote cache hit as provider_unsupported.
             RuntimeCapabilities = new AgentReviewRuntimeCapabilities(
                 SupportsProviderManagedSessions: false,
@@ -298,8 +298,8 @@ public sealed partial class RunnerJobExecutor(
             ],
 
             // The per-client decisions, carried because a runner has no client record to read them from.
-            // Without them every one falls to its default and the review quietly becomes a different
-            // review — most visibly the pass list above, which does nothing at all unless the union is on.
+            // Without them every one falls to its default and the review becomes a different review. The
+            // clearest case is the pass list above, which has no effect unless the union is on.
             EnableMultiPassUnion = manifest.Behaviour?.EnableMultiPassUnion ?? false,
             EnableLanguageRobustScreening = manifest.Behaviour?.EnableLanguageRobustScreening ?? false,
             EnableEvidenceBackedVerification = manifest.Behaviour?.EnableEvidenceBackedVerification ?? false,
@@ -351,7 +351,7 @@ public sealed partial class RunnerJobExecutor(
         if (!response.IsSuccessStatusCode)
         {
             // Thrown, so the loop hands the lease back and the job is picked up again. Losing the findings
-            // silently would leave a review that says it completed and posted nothing.
+            // without reporting would leave a review that says it completed and posted nothing.
             throw new InvalidOperationException($"The control plane refused this job's findings with {(int)response.StatusCode}.");
         }
 
@@ -363,8 +363,8 @@ public sealed partial class RunnerJobExecutor(
     ///     review resumes where it stopped and synthesizes over everything rather than over its own second
     ///     half.
     ///     <para>
-    ///         Fail-soft. A read that does not answer costs the job its resume — every file is reviewed
-    ///         again — which is worse than resuming and better than refusing to run at all.
+    ///         Fail-soft. A read that does not answer costs the job its resume, so every file is reviewed
+    ///         again. That is worse than resuming and better than refusing to run at all.
     ///     </para>
     /// </summary>
     private async Task SeedPriorResultsAsync(
@@ -405,8 +405,8 @@ public sealed partial class RunnerJobExecutor(
     }
 
     /// <summary>
-    ///     Ships what is left, retrying a failed batch a few times before giving up on it. A batch that
-    ///     cannot be shipped is a hole in the trace and a file the control plane will not know finished.
+    ///     Sends what is left, retrying a failed batch a few times before giving up on it. A batch that cannot
+    ///     be sent leaves a gap in the trace and a file the control plane does not record as finished.
     ///     <para>
     ///         Deliberately not on the job's cancellation token. This runs when the job is already over,
     ///         including when it was cancelled, and a flush that cancelled with it would throw away exactly
@@ -441,8 +441,8 @@ public sealed partial class RunnerJobExecutor(
             }
         }
 
-        // Said once, at the end, rather than per drop: a trace missing events has to say so, and a warning
-        // per dropped event would itself be the flood the ceiling exists to survive.
+        // Reported once, at the end, rather than per drop: a trace missing events has to report that, and a
+        // warning per dropped event would itself be the flood the ceiling exists to bound.
         if (spool.DroppedEvents > 0)
         {
             LogTraceTruncated(logger, spool.JobId, spool.DroppedEvents);

@@ -9,10 +9,10 @@ namespace MeisterDev.ProPR.Runner;
 /// <summary>
 ///     Everything the runner host is configured with, all of it from the environment.
 ///     <para>
-///         Note what is not here: no database connection string, no source-control credential, no AI
-///         provider key, no data-protection key ring. A runner is handed a manifest and a credential that
-///         only lets it talk to the control plane about jobs it holds, and that is the whole point of the
-///         host being separate. Adding a secret here would quietly undo it.
+///         Note what is not here: no database connection string, no source-control credential, no AI provider
+///         key, no data-protection key ring. A runner is handed a manifest and a credential that only lets it
+///         call the control plane about jobs it holds, which is the reason the host is separate. Adding a
+///         secret here would remove that separation.
 ///     </para>
 /// </summary>
 public sealed class RunnerHostOptions
@@ -46,8 +46,8 @@ public sealed class RunnerHostOptions
     public string Tags { get; set; } = string.Empty;
 
     /// <summary>
-    ///     How many jobs this runner runs at once. It asks for a lease only when it has a free slot, which
-    ///     is what lets the control plane dispatch without tracking anybody's capacity.
+    ///     How many jobs this runner runs at once. It asks for a lease only when it has a free slot, which is
+    ///     what lets the control plane dispatch without tracking runner capacity itself.
     /// </summary>
     [Range(1, 64, ErrorMessage = "RUNNER_CAPACITY must be between 1 and 64.")]
     public int Capacity { get; set; } = 2;

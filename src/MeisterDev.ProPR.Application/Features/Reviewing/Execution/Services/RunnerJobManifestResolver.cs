@@ -53,8 +53,8 @@ public sealed partial class RunnerJobManifestResolver(
 
         var job = request.Job;
 
-        // A revision the executor cannot pin is not reviewable: it would fetch whatever the branch happens
-        // to point at, which is not the change anybody asked about.
+        // A revision the executor cannot pin is not reviewable: it would fetch whatever the branch points
+        // at, which is not the change the review was requested for.
         if (string.IsNullOrWhiteSpace(job.RevisionHeadSha) || string.IsNullOrWhiteSpace(job.RevisionBaseSha))
         {
             return RunnerJobManifestResolution.Refused(
@@ -76,8 +76,8 @@ public sealed partial class RunnerJobManifestResolver(
             var (defaultBinding, defaultConnectionId) = defaultModel.Value;
 
             // The same stamp the in-process path writes at review start. Ingested spend is priced through
-            // job.AiConnectionId and the overview reads the model off the job — left unstamped, a remote
-            // review's tokens priced against nothing, and the job read as if no model had served it.
+            // job.AiConnectionId and the overview reads the model off the job. Left unstamped, a remote
+            // review's tokens are priced against nothing, and the job reads as if no model had served it.
             if (executionStore is not null)
             {
                 await executionStore.UpdateAiConfigAsync(
@@ -91,9 +91,9 @@ public sealed partial class RunnerJobManifestResolver(
             var passes = await clientRegistry.GetReviewPassesAsync(job.ClientId, ct);
 
             // The executor composes no PR-wide generator yet, so a job whose pass list publishes from a
-            // pr_wide entry would quietly review less than it was asked to. Refused like a
-            // connection-resolved model: loudly, at dispatch, naming what to change. A shadow entry still
-            // dispatches — it publishes nothing, so skipping it changes telemetry, not the review.
+            // pr_wide entry would review less than it was asked to, without reporting it. Refused the same
+            // way as a connection-resolved model: at dispatch, naming what to change. A shadow entry still
+            // dispatches, because it publishes nothing, so skipping it changes telemetry and not the review.
             if (passes.Any(pass => !pass.Shadow && string.Equals(pass.Scope, ReviewPassScope.PrWide, StringComparison.Ordinal)))
             {
                 return RunnerJobManifestResolution.Refused(
@@ -131,7 +131,7 @@ public sealed partial class RunnerJobManifestResolver(
             var overrides = await this.ResolvePromptOverridesAsync(job.ClientId, ct);
             var headroom = await this.ResolveBudgetHeadroomAsync(job, ct);
 
-            // Read once and used twice: the flag rides the manifest for the executor's tool gating, and it
+            // Read once and used twice: the flag is carried in the manifest for the executor's tool gating, and it
             // decides here whether linked items are discovered at all.
             var includeLinkedItems = await clientRegistry.GetIncludeLinkedItemsInContextEnabledAsync(job.ClientId, ct);
             var linkedItems = includeLinkedItems
@@ -206,7 +206,8 @@ public sealed partial class RunnerJobManifestResolver(
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
             // Refused rather than partly filled. An executor cannot tell a value that failed to resolve
-            // from one deliberately left empty, so it would review under configuration nobody chose.
+            // from one deliberately left empty, so it would review under configuration that was never
+            // chosen.
             LogResolutionFailed(logger, job.Id, ex);
             return RunnerJobManifestResolution.Refused($"Resolving the job manifest failed, so the job was not offered: {ex.Message}");
         }

@@ -138,8 +138,8 @@ public static class InfrastructureServiceExtensions
             .ValidateDataAnnotations()
             .ValidateOnStart();
 
-        // ReviewLeaseOptions — bound from individual env vars. Validated on start because a lease shorter
-        // than a few heartbeat intervals silently hands healthy jobs to another host.
+        // ReviewLeaseOptions, bound from individual env vars. Validated on start because a lease shorter
+        // than a few heartbeat intervals hands healthy jobs to another host.
         services.AddOptions<ReviewLeaseOptions>()
             .Configure(opts =>
             {
@@ -214,7 +214,7 @@ public static class InfrastructureServiceExtensions
                 + "times REVIEW_LEASE_HEARTBEAT_INTERVAL_SECONDS so a single late renewal cannot lose a healthy lease.")
             .ValidateOnStart();
 
-        // RunnerFleetOptions — what counts as a live fleet, and when a still queue is called a stall.
+        // RunnerFleetOptions: what counts as a live fleet, and when an idle queue counts as a stall.
         services.AddOptions<RunnerFleetOptions>()
             .Configure(opts =>
             {
@@ -239,7 +239,7 @@ public static class InfrastructureServiceExtensions
         // The one rule that spans two option sets, so neither one's own range check can catch it.
         services.AddSingleton<IValidateOptions<RunnerFleetOptions>, RunnerFleetOptionsValidator>();
 
-        // RunnerIngestOptions — bounds on what an executor may ship in one batch.
+        // RunnerIngestOptions: bounds on what an executor may send in one batch.
         services.AddOptions<RunnerIngestOptions>()
             .Configure(opts =>
             {

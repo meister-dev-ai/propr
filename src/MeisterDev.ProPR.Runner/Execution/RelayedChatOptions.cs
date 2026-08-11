@@ -14,9 +14,9 @@ namespace MeisterDev.ProPR.Runner.Execution;
 ///     <para>
 ///         The pipeline hands the relay client the same options object it hands a provider client: tools
 ///         with implementations attached, and reasoning settings hidden inside a per-client factory. Neither
-///         travels as-is. Tools go as declarations — the model's calls come back here to be invoked — and
-///         the reasoning knobs are recovered by asking that factory the same question a native-protocol
-///         driver would ask it.
+///         travels as-is. Tools go as declarations, because the model's calls come back here to be invoked,
+///         and the reasoning settings are recovered by asking that factory the same question a
+///         native-protocol driver would ask it.
 ///     </para>
 /// </summary>
 internal static class RelayedChatOptions

@@ -69,8 +69,8 @@ public sealed class RunnerFleetMetricsTests : IDisposable
         Assert.Equal(expectedTag, reclaim.Tags["reclaim_outcome"]);
     }
 
-    // An expiry and a reclaim are different questions: how often leases are being lost, and what happened
-    // to the jobs. A sweep that finds an expired lease somebody else already took counts for the first.
+    // An expiry and a reclaim answer different questions: how often leases are being lost, and what happened
+    // to the jobs. A sweep that finds an expired lease another host already took counts for the first.
     [Fact]
     public void AnExpiredLeaseNobodyCouldReclaim_StillCountsAsAnExpiry()
     {
@@ -93,8 +93,8 @@ public sealed class RunnerFleetMetricsTests : IDisposable
         Assert.Equal("SlotLimitReached", refusal.Tags["refusal"]);
     }
 
-    // The label values are mapped rather than emitted as enum names, so renaming a C# member cannot
-    // silently break a dashboard that has been filtering on the old value for a year.
+    // The label values are mapped rather than emitted as enum names, so renaming a C# member cannot break a
+    // dashboard that has been filtering on the old value.
     [Fact]
     public void ReclaimOutcomeLabels_AreStableRatherThanTheEnumMemberNames()
     {

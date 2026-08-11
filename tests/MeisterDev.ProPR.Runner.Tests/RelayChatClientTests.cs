@@ -55,9 +55,8 @@ public sealed class RelayChatClientTests
         Assert.True(signal.Exhausted);
     }
 
-    // The options the pipeline shaped are what make a review a review: without the tools on the wire, a
-    // remote review runs zero tool calls and ends after one turn, which is exactly what the first live
-    // runs did.
+    // The options the pipeline shaped are what make the call a review: without the tools on the wire, a remote
+    // review runs no tool calls and ends after one turn, which is what the first live runs did.
     [Fact]
     public async Task TheOptionsThePipelineBuilt_RideTheWire()
     {

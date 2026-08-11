@@ -30,7 +30,7 @@ public interface IRunnerRelayModelResolver
 /// <summary>
 ///     A resolved relay model: the client to call, and what its answers cost.
 ///     <para>
-///         Pricing rides along because the relay is where a remote review's spend is charged: it prices
+///         Pricing belongs here because the relay is where a remote review's spend is charged: it prices
 ///         each response against these rates exactly as the in-process budget decorator does. A relay that
 ///         could resolve a client but not its rates would charge nothing, and the job's cap would never
 ///         trip.
@@ -51,8 +51,8 @@ public interface IRunnerRelayUsageRecorder
 {
     /// <summary>
     ///     Records usage for one physical call, attributed to the logical model that served it. Pricing is
-    ///     not this port's job — the relay prices against the resolved model — it exists so token totals
-    ///     can be reconciled against what ingest later persisted.
+    ///     not this port's job, because the relay prices against the resolved model. This exists so token
+    ///     totals can be reconciled against what ingest later persisted.
     /// </summary>
     /// <param name="jobId">The job the completion belongs to.</param>
     /// <param name="logicalModelName">The model role that served it.</param>

@@ -90,8 +90,8 @@ public sealed class RunnerRegistry(MeisterProPRDbContext dbContext) : IRunnerReg
     /// <inheritdoc />
     public async Task<IReadOnlyList<ReviewRunner>> ListAsync(Guid tenantId, CancellationToken ct = default)
     {
-        // Revoked runners are listed too. An operator looking at the registry after an incident needs to
-        // see what was revoked and when, and a list that quietly drops them answers a different question.
+        // Revoked runners are listed too. An operator looking at the registry after an incident needs to see
+        // what was revoked and when, and a list that omits them answers a different question.
         return await dbContext.ReviewRunners
             .AsNoTracking()
             .Where(r => r.TenantId == tenantId)

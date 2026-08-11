@@ -17,7 +17,7 @@ namespace MeisterDev.ProPR.Runner.Execution;
 ///         In the control plane both the job and the pull request come out of the database and the provider
 ///         API. Neither is reachable here, so the manifest supplies the facts and the two worktrees supply
 ///         the content. The result has to be the same shape the in-process path builds, because the pipeline
-///         downstream cannot tell — and must not be able to tell — which side assembled it.
+///         downstream cannot determine, and must not be able to determine, which side assembled it.
 ///     </para>
 /// </summary>
 internal static class RunnerReviewSubject
@@ -53,9 +53,9 @@ internal static class RunnerReviewSubject
         job.SetReviewRevision(new ReviewRevision(target.HeadSha, target.BaseSha, null, target.ExternalReviewId, $"{target.BaseSha}...{target.HeadSha}"));
         job.SetPrContext(target.Title, target.RepositoryName, target.SourceBranch, target.TargetBranch);
         job.SetAiConfig(null, manifest.DefaultModel.RemoteModelId, manifest.Behaviour?.Temperature);
-        // The pipeline reads the profile off the job, not the context, so a manifest that carries one has
-        // to land it here — left unset, every remote review silently ran the Balanced profile whatever the
-        // client configured.
+        // The pipeline reads the profile off the job, not the context, so a manifest that carries one has to
+        // set it here. Left unset, every remote review ran the Balanced profile whatever the client
+        // configured, and nothing reported the substitution.
         job.SetReviewPipelineProfile(manifest.Behaviour?.ReviewPipelineProfileId);
         job.Status = JobStatus.Processing;
         return job;
@@ -65,9 +65,9 @@ internal static class RunnerReviewSubject
     ///     Puts back what an earlier attempt at this job already recorded.
     ///     <para>
     ///         The pipeline decides what to review, and what to synthesize over, from the job's file
-    ///         results. Seeded empty, a reclaimed review re-pays for every file and then publishes only what
-    ///         its own attempt happened to see — the earlier findings are in the control plane's database
-    ///         and nowhere in the review that is about to be posted.
+    ///         results. Seeded empty, a reclaimed review pays for every file again and then publishes only
+    ///         what its own attempt saw. The earlier findings stay in the control plane's database and do
+    ///         not appear in the review that is about to be posted.
     ///     </para>
     /// </summary>
     /// <param name="job">The in-memory job.</param>
@@ -79,7 +79,7 @@ internal static class RunnerReviewSubject
             var result = new ReviewFileResult(job.Id, seed.FilePath);
 
             // Order matters: a result can be both complete and excluded on the wire, and the entity refuses
-            // to be marked twice. Exclusion is the stronger statement — an excluded file was never reviewed.
+            // to be marked twice. Exclusion takes precedence, because an excluded file was never reviewed.
             if (seed.IsExcluded)
             {
                 result.MarkExcluded(seed.ExclusionReason ?? "excluded");
@@ -91,8 +91,8 @@ internal static class RunnerReviewSubject
             else if (seed.IsComplete && seed.IsCarriedForward)
             {
                 // Rebuilt through the same factory the control plane used to write it, so synthesis sees a
-                // carried-forward row — suppressing its candidates and labelling the file — instead of a
-                // freshly reviewed one that happens to have old comments.
+                // carried-forward row, which suppresses its candidates and labels the file, instead of a
+                // freshly reviewed row that happens to have old comments.
                 result.MarkCompleted(seed.PerFileSummary ?? string.Empty, seed.Comments, seed.ReviewedPassKeys);
                 result = ReviewFileResult.CreateCarriedForward(job.Id, result);
             }

@@ -28,7 +28,7 @@ public sealed class RunnerFleetOptions
     ///     <para>
     ///         This is the hysteresis. Without it a runner whose heartbeat flaps around the window would
     ///         toggle the whole installation between distributed and in-process execution every poll, and
-    ///         the isolation promise would hold only between flaps.
+    ///         the isolation guarantee would hold only between flaps.
     ///     </para>
     /// </summary>
     [Range(0, 3600, ErrorMessage = "FleetEmptySettleSeconds must be between 0 and 3600.")]

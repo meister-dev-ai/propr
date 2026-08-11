@@ -14,8 +14,8 @@ namespace MeisterDev.ProPR.Infrastructure.Features.Crawling.Webhooks.Persistence
 ///     <para>
 ///         Claiming is one conditional statement with <c>FOR UPDATE SKIP LOCKED</c>, the same shape the
 ///         review-job lease uses: two replicas polling at the same instant take different rows rather than
-///         waiting on each other, and a claim is never a read followed by a write somebody else can slip
-///         between.
+///         waiting on each other, and a claim is never a read followed by a write that another caller can
+///         interleave with.
 ///     </para>
 ///     <para>
 ///         Every timestamp is the database's own, never the host's: eligibility is written and compared in
@@ -67,8 +67,8 @@ public sealed class WebhookDeliveryQueue(MeisterProPRDbContext dbContext) : IWeb
                     submission.EventType,
 
                     // Null rather than empty, so the unique index treats a provider that sends no delivery
-                    // identifier — Azure DevOps — as having no key, rather than as one shared key that would
-                    // collapse every one of its deliveries into the first.
+                    // identifier, which is Azure DevOps, as having no key rather than as one shared key that
+                    // would collapse every one of its deliveries into the first.
                     submission.DeliveryKey ?? string.Empty,
                     submission.HeadersJson,
                     submission.Payload,

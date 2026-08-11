@@ -77,7 +77,7 @@ public static class RunnerCallerIdentity
     ///     <para>
     ///         This is what the lease authorization compares against the lease owner, which is why it comes
     ///         from the authenticated principal and never from the request body: a caller that could name its
-    ///         own identity could name somebody else's.
+    ///         own identity could name another runner's.
     ///     </para>
     /// </summary>
     public static Guid? RunnerId(HttpContext context)

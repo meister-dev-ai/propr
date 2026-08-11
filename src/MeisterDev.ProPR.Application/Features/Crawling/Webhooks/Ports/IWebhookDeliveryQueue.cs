@@ -9,10 +9,9 @@ namespace MeisterDev.ProPR.Application.Features.Crawling.Webhooks.Ports;
 ///     Where a verified delivery waits between being accepted and becoming a review.
 ///     <para>
 ///         Intake used to run inside the provider's HTTP request. Reading a pull request takes seconds, a
-///         burst of deliveries queues behind itself, and every provider gives up after a few — so the
-///         deliveries that arrived together were exactly the ones dropped, and nothing recorded the loss.
-///         Accepting first and working afterwards is what breaks the tie between an external timeout and
-///         whether a review happens.
+///         burst of deliveries queues behind itself, and every provider times out after a few seconds, so the
+///         deliveries that arrived together were the ones dropped, and nothing recorded the loss. Accepting
+///         first and working afterwards separates an external timeout from whether a review happens.
 ///     </para>
 /// </summary>
 public interface IWebhookDeliveryQueue

@@ -8,9 +8,9 @@ namespace MeisterDev.ProPR.Infrastructure.Tests.Features.Reviewing.Execution;
 
 /// <summary>
 ///     The dispatch preparer parses <c>git diff --name-only</c> into the carry-forward set with
-///     <c>core.quotePath</c> disabled. With quoting on, git answers <c>"src/caf\303\251.cs"</c> — the
-///     surrounding quotes included — which matches no stored file path, and a file that DID change is
-///     silently carried forward with the previous iteration's comments instead of being reviewed.
+///     <c>core.quotePath</c> disabled. With quoting on, git answers <c>"src/caf\303\251.cs"</c> including the
+///     surrounding quotes, which matches no stored file path, so a file that did change is carried forward
+///     with the previous iteration's comments instead of being reviewed.
 /// </summary>
 public sealed class MirrorDeltaQuotingTests : IDisposable
 {
@@ -40,7 +40,8 @@ public sealed class MirrorDeltaQuotingTests : IDisposable
         }
         catch (IOException)
         {
-            // A leftover temp directory is the OS's to clean; failing the test run over it helps nobody.
+            // A leftover temp directory is left for the operating system to clean. Failing the test run
+            // over it would serve no purpose.
         }
     }
 

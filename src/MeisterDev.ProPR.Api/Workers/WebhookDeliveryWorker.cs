@@ -10,20 +10,20 @@ using Microsoft.Extensions.Options;
 namespace MeisterDev.ProPR.Api.Workers;
 
 /// <summary>
-///     Turns accepted webhook deliveries into reviews, on its own time.
+///     Turns accepted webhook deliveries into reviews, outside the provider's request.
 ///     <para>
-///         The work this does — reading a pull request from the provider, resolving its revision, queueing
-///         the review — takes seconds, and used to happen inside the provider's own HTTP request. Every
-///         provider gives up after a few seconds, so a burst of deliveries dropped exactly the ones that
-///         arrived together, and nothing recorded the loss. Here there is no caller waiting, so a slow
+///         The work this does takes seconds: reading a pull request from the provider, resolving its
+///         revision, and queueing the review. It used to happen inside the provider's own HTTP request, and
+///         every provider times out after a few seconds, so a burst of deliveries dropped the ones that
+///         arrived together, with nothing recording the loss. Here there is no caller waiting, so a slow
 ///         provider costs latency instead of a review.
 ///     </para>
 ///     <para>
-///         Several deliveries at once, up to a configured bound. This began as strictly one at a time, on
-///         the reasoning that the reviews it queues have their own concurrency; measured against a runner
-///         fleet, that turned out to make intake the limit — roughly one job created every four seconds
-///         while six execution slots stood idle. The bound remains because each delivery reads a pull
-///         request from the provider that sent it, and the provider's rate limit is the real ceiling.
+///         Several deliveries at once, up to a configured bound. This began as strictly one at a time, on the
+///         reasoning that the reviews it queues have their own concurrency. Measured against a runner fleet,
+///         that made intake the limit: roughly one job created every four seconds while six execution slots
+///         were idle. The bound remains because each delivery reads a pull request from the provider that
+///         sent it, and the provider's rate limit is the effective ceiling.
 ///     </para>
 ///     <para>
 ///         Concurrency is several copies of the same loop rather than a batch: the claim is one atomic
@@ -56,8 +56,8 @@ public sealed partial class WebhookDeliveryWorker(
 
     private async Task DrainLoopAsync(WebhookDeliveryWorkerOptions settings, int slot, CancellationToken stoppingToken)
     {
-        // The slot rides on the claim owner so a delivery stuck in one loop can be told from a replica
-        // that stopped entirely.
+        // The slot is part of the claim owner so a delivery stuck in one loop can be told apart from a
+        // replica that stopped entirely.
         var owner = $"{ClaimOwner}#{slot}";
 
         while (!stoppingToken.IsCancellationRequested)

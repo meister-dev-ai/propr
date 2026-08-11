@@ -125,8 +125,9 @@ public sealed class HttpRunnerToolProxy(HttpClient http) : IRunnerToolProxy
             }
 
             // A server error is a fault, never "not offered": only the control plane's own envelope may
-            // say a tool is not part of this review's surface. A 502 during a rolling restart read as
-            // not-offered told the reviewer the pull request changed no files, and it believed that.
+            // report that a tool is not part of this review's surface. A 502 during a rolling restart read as
+            // not-offered reported to the reviewer that the pull request changed no files, and the reviewer
+            // acted on that.
             if (!response.IsSuccessStatusCode)
             {
                 return RunnerToolResult<T>.Faulted($"the control plane answered HTTP {(int)response.StatusCode}");
@@ -144,8 +145,9 @@ public sealed class HttpRunnerToolProxy(HttpClient http) : IRunnerToolProxy
         }
         catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException && !ct.IsCancellationRequested)
         {
-            // Unreachable is a fault, reported rather than thrown here: the pipeline's tool invoker turns
-            // it into a tool error the model sees and can retry, exactly as an in-process provider blip.
+            // Unreachable is a fault, reported rather than thrown here: the pipeline's tool invoker turns it
+            // into a tool error the model sees and can retry, exactly as it does for a transient in-process
+            // provider failure.
             return RunnerToolResult<T>.Faulted(ex.Message);
         }
     }

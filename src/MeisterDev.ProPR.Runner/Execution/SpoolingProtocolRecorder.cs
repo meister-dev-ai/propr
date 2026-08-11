@@ -15,17 +15,17 @@ namespace MeisterDev.ProPR.Runner.Execution;
 /// <summary>
 ///     The pipeline's trace recorder, on a host with no database.
 ///     <para>
-///         Every event the in-process path writes to <c>protocol_events</c> is buffered here and shipped
+///         Every event the in-process path writes to <c>protocol_events</c> is buffered here and sent
 ///         through ingest under the same event names, so a remote review's trace reads identically to a
 ///         local one. An operator opening the job protocol should not be able to tell which side ran it,
 ///         and a different vocabulary here would make that the first thing they noticed.
 ///     </para>
 ///     <para>
-///         One member throws rather than buffer: the thread-pass protocol is control-plane work the
-///         runner never performs, and a silent no-op would let a future caller believe it recorded
-///         something. Memory, dedup, and publication events are buffered like every other kind — the
-///         executor runs synthesis-time deduplication and proxied memory reconsideration itself, and an
-///         event kind that threw here would crash the first review that legitimately recorded one.
+///         One member throws rather than buffer: the thread-pass protocol is control-plane work the runner
+///         never performs, and a no-op would let a later caller assume something was recorded. Memory,
+///         dedup, and publication events are buffered like every other kind, because the executor runs
+///         synthesis-time deduplication and proxied memory reconsideration itself, and an event kind that
+///         threw here would crash the first review that legitimately recorded one.
 ///     </para>
 /// </summary>
 public sealed class SpoolingProtocolRecorder(JobSpool spool, TimeProvider timeProvider) : IProtocolRecorder
@@ -217,9 +217,9 @@ public sealed class SpoolingProtocolRecorder(JobSpool spool, TimeProvider timePr
         long? totalCacheWriteTokens = null,
         long? totalReasoningTokens = null)
     {
-        // Where a pass's tokens actually land. The pipeline accrues most of what a review spends here
-        // rather than through AddTokensAsync, and the trace events this recorder ships are stored as
-        // opaque detail — so a review whose spend was only read off the trace reported nothing at all.
+        // Where a pass's tokens are recorded. The pipeline accrues most of what a review spends here rather
+        // than through AddTokensAsync, and the trace events this recorder sends are stored as opaque detail,
+        // so a review whose spend was only read from the trace reported nothing at all.
         if (this._protocolModels.TryGetValue(protocolId, out var logicalModelName)
             && (totalInputTokens > 0 || totalOutputTokens > 0))
         {
@@ -288,8 +288,8 @@ public sealed class SpoolingProtocolRecorder(JobSpool spool, TimeProvider timePr
     /// <inheritdoc />
     public Task RecordMemoryEventAsync(Guid protocolId, string eventName, string? details, string? error, CancellationToken ct = default)
     {
-        // The store behind thread memory lives in the control plane, but the lookup is proxied — what the
-        // executor has to say about it (ran, degraded, refused) belongs on this trace like any other stage.
+        // The store behind thread memory lives in the control plane, but the lookup is proxied, so what the
+        // executor reports about it (ran, degraded, refused) belongs on this trace like any other stage.
         return this.RecordStage("protocol.memory", protocolId, eventName, details, null, error);
     }
 

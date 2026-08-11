@@ -8,9 +8,9 @@ namespace MeisterDev.ProPR.Runner.Execution;
 ///     Routes a job's calls to the control-plane replica that granted its lease.
 ///     <para>
 ///         The workspace mirror is that replica's local disk and the budget, tool, and workspace
-///         registries are that replica's process, so on a multi-replica installation every call a job
-///         makes — the execution surface, the workspace fetch, the heartbeat, the release — has to reach
-///         the replica named in the manifest. The configured control-plane URL stays what it is for
+///         registries are that replica's process, so on a multi-replica installation every call a job makes
+///         has to reach the replica named in the manifest: the execution surface, the workspace fetch, the
+///         heartbeat and the release. The configured control-plane URL stays what it is for
 ///         everything that is not job-scoped: enrollment, credential renewal, and asking for work.
 ///     </para>
 /// </summary>
@@ -18,8 +18,8 @@ internal static class RunnerReplicaAffinity
 {
     /// <summary>
     ///     Checks an advertised address against the same rule the host applies to its configured URL: the
-    ///     credential rides on every call, so anything not loopback must be https. An empty address is
-    ///     valid — it means the configured URL serves the job, which is the single-replica case.
+    ///     credential is sent on every call, so anything not loopback must be https. An empty address is
+    ///     valid and means the configured URL serves the job, which is the single-replica case.
     /// </summary>
     /// <param name="servedBy">The advertised base URL the manifest carries, when it carries one.</param>
     /// <param name="error">Why the address cannot be used, in words an operator can act on.</param>

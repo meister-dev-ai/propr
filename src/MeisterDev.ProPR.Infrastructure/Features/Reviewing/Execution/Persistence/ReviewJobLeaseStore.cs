@@ -15,9 +15,9 @@ namespace MeisterDev.ProPR.Infrastructure.Features.Reviewing.Execution.Persisten
 
 /// <summary>
 ///     Claiming and liveness against PostgreSQL. Every operation here is a single conditional statement whose
-///     predicate carries what the caller believes to be true, so the database decides the winner. Nothing is
-///     resolved by reading a row, checking it in memory, and writing it back: two hosts doing that both
-///     believe they won.
+///     predicate carries what the caller claims to be true, so the database decides the winner. Nothing is
+///     resolved by reading a row, checking it in memory, and writing it back: two hosts doing that would both
+///     be told they won.
 /// </summary>
 public sealed class ReviewJobLeaseStore(MeisterProPRDbContext dbContext, IJobRepository jobs) : IReviewJobLeaseStore
 {
@@ -88,7 +88,7 @@ public sealed class ReviewJobLeaseStore(MeisterProPRDbContext dbContext, IJobRep
     {
         ArgumentNullException.ThrowIfNull(lease);
 
-        // The predicate is the whole point: owner and generation must both still match, and the job must
+        // The predicate carries the guarantee: owner and generation must both still match, and the job must
         // still be executing. A holder that was reclaimed carries an older generation and renews nothing.
         var renewed = await dbContext.Database.ExecuteSqlRawAsync(
             """

@@ -85,11 +85,11 @@ public sealed partial class RunnerJobDispatchPreparer(
         var workspaceLease = workspace.Lease;
         var maxTransferBytes = (long)workspaceOptions.Value.MaxCacheSizeMegabytes * 1024 * 1024;
 
-        // Registered before the manifest is handed out, so the fetch path is ready the moment the runner
-        // has a reason to use it. The other order leaves a window where a fast runner asks for content the
-        // replica has not admitted it holds. The registry takes ownership of the workspace here: it must
-        // outlive this call — the runner fetches from the mirror throughout its execution — and it must
-        // still be disposed when the job leaves this replica, or its checkouts stay on disk forever.
+        // Registered before the manifest is handed out, so the fetch path is ready as soon as the runner
+        // needs it. The other order leaves a window where a fast runner asks for content the replica has
+        // not yet recorded that it holds. The registry takes ownership of the workspace here. It must
+        // outlive this call, because the runner fetches from the mirror throughout its execution, and it
+        // must still be disposed when the job leaves this replica, or its checkouts stay on disk.
         await registry.RegisterAsync(
             job.Id,
             new RunnerWorkspaceSource(
@@ -110,9 +110,9 @@ public sealed partial class RunnerJobDispatchPreparer(
         var conversation = await this.ReadConversationAsync(job, ct);
 
         // The tools the runner reaches back through, built here from the same factory and the same request
-        // the in-process path uses. Registered rather than merely constructed: the proxy answers a call by
-        // finding the job's tools on this replica, so tools that exist but were never registered are a
-        // surface that refuses everything — and refuses it as a lost lease, which is not what happened.
+        // the in-process path uses. Registered rather than only constructed: the proxy answers a call by
+        // finding the job's tools on this replica, so tools that exist but were never registered refuse
+        // every call, and report the refusal as a lost lease, which is not what happened.
         toolsRegistry.Register(
             job.Id,
             reviewContextToolsFactory.Create(
@@ -158,8 +158,8 @@ public sealed partial class RunnerJobDispatchPreparer(
     ///         Fail-soft in the one place the two paths cannot be identical: the in-process path
     ///         delta-scopes a full-coverage baseline through the provider, and this path computes the same
     ///         delta from the mirror. A delta the mirror cannot answer falls back to the partial-baseline
-    ///         rule — the same fallback the in-process path uses when the provider's compare handle is
-    ///         unusable — rather than guessing.
+    ///         rule rather than to a guess. That is the same fallback the in-process path uses when the
+    ///         provider's compare handle is unusable.
     ///     </para>
     /// </summary>
     private async Task AdoptPriorWorkAsync(
@@ -219,10 +219,10 @@ public sealed partial class RunnerJobDispatchPreparer(
     }
 
     /// <summary>
-    ///     The files changed between the baseline's head and this revision's head, from the mirror the
-    ///     workspace was just prepared from — the provider-neutral version of the compare the in-process
-    ///     fetch asks the provider for. Null when the mirror cannot answer, which the caller treats as the
-    ///     partial-baseline fallback.
+    ///     The files changed between the baseline's head and this revision's head, read from the mirror the
+    ///     workspace was just prepared from. This is the provider-neutral version of the compare the
+    ///     in-process fetch asks the provider for. Null when the mirror cannot answer, which the caller
+    ///     treats as the partial-baseline fallback.
     /// </summary>
     private async Task<HashSet<string>?> TryComputeDeltaSinceBaselineAsync(
         string mirrorPath,
@@ -239,9 +239,10 @@ public sealed partial class RunnerJobDispatchPreparer(
         {
             var git = new Workspace.GitCommandRunner(Microsoft.Extensions.Logging.Abstractions.NullLogger<Workspace.GitCommandRunner>.Instance);
 
-            // quotePath off, or any path with a byte outside ASCII comes back C-quoted — "src/caf\303\251.cs",
-            // quotes included — matches nothing in the stored rows, and a file that DID change is carried
-            // forward with the previous iteration's comments instead of being reviewed.
+            // quotePath is off because otherwise any path with a byte outside ASCII comes back C-quoted,
+            // for example "src/caf\303\251.cs" with the quotes included. Such a path matches nothing in
+            // the stored rows, so a file that did change is carried forward with the previous iteration's
+            // comments instead of being reviewed.
             var diff = await git.RunAsync(
                 mirrorPath,
                 ["-c", "core.quotePath=false", "diff", "--name-only", baselineHeadSha, currentHeadSha],

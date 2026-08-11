@@ -116,9 +116,9 @@ public sealed class RunnerReviewSubjectTests
         Assert.Equal("Bounded?", Assert.Single(thread.Comments).Content);
     }
 
-    // The profile and temperature live on the job, not the context, and the pipeline reads them there.
-    // Before these were seeded, every remote review silently ran the Balanced profile at default
-    // temperature whatever the client had configured.
+    // The profile and temperature live on the job, not the context, and the pipeline reads them there. Before
+    // these were seeded, every remote review ran the Balanced profile at default temperature whatever the
+    // client had configured, and nothing reported the substitution.
     [Fact]
     public void TheBehaviourSection_LandsOnTheJobsProfileAndTemperature()
     {
@@ -145,8 +145,8 @@ public sealed class RunnerReviewSubjectTests
         Assert.Null(job.ReviewTemperature);
     }
 
-    // Linked items ride the manifest because discovery is a credentialed call. The prompt reads them off
-    // the pull request exactly as in-process, so they have to land there, whole.
+    // Linked items are carried in the manifest because discovery is a credentialed call. The prompt reads them
+    // from the pull request exactly as in-process, so they have to be present there in full.
     [Fact]
     public async Task LinkedItems_ArriveOnThePullRequest()
     {
@@ -201,9 +201,9 @@ public sealed class RunnerReviewSubjectTests
         Assert.Contains("SomethingNewer", error.Message, StringComparison.Ordinal);
     }
 
-    // A reclaimed job resumes from what the earlier attempt recorded. Without this it re-reviews every
-    // file and, worse, synthesizes only over its own half — the earlier findings sit in the control
-    // plane's database and never reach the review that gets posted.
+    // A reclaimed job resumes from what the earlier attempt recorded. Without this it re-reviews every file
+    // and synthesizes only over its own part of the review: the earlier findings stay in the control plane's
+    // database and never reach the review that gets posted.
     [Fact]
     public void SeededPriorResults_PutBackWhatAnEarlierAttemptRecorded()
     {

@@ -12,8 +12,8 @@ namespace MeisterDev.ProPR.Application.Features.Reviewing.Execution.Ports;
 ///     <para>
 ///         Memory is the fourth proxied lookup, beside source-control metadata, code knowledge, and AI
 ///         completions: retrieval reads the memory store and computes embeddings, neither of which a
-///         credential-free executor can do. It is a lookup against what is there at the time of the review
-///         — resolving it into the manifest up front would change what memory is for.
+///         credential-free executor can do. It is a lookup against what is stored at the time of the review,
+///         and resolving it into the manifest up front would change what memory is for.
 ///     </para>
 ///     <para>
 ///         The draft crosses the wire whole and comes back whole, so the executor applies exactly the

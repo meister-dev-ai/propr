@@ -27,7 +27,7 @@ public sealed class RunnerFleetOptionsValidatorTests
 
     // The failure the rule exists for: a runner counted as available for an hour while its leases expire
     // every thirty seconds. Its own work keeps being reclaimed, and the control plane keeps waiting for a
-    // fleet it believes is healthy, so nothing runs the queue for as long as the window is set to.
+    // fleet it treats as healthy, so nothing runs the queue for as long as the window is set to.
     [Fact]
     public void AWindowLongerThanTheLease_IsRefusedAtStartup()
     {

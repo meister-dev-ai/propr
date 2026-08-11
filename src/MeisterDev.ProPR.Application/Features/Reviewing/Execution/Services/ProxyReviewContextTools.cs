@@ -14,10 +14,10 @@ namespace MeisterDev.ProPR.Application.Features.Reviewing.Execution.Services;
 ///     The review-context tools as an executor sees them: six operations reach the control plane, twelve
 ///     read the local working copy.
 ///     <para>
-///         This is where the classification stops being a document and becomes the code. The split is not a
-///         detail: the twelve local ones include every chatty operation a review makes (repository search,
-///         cross-file references, file content), and proxying those would turn the bulk of a review into
-///         network traffic. The six that remain need a credential or a service the executor must not reach.
+///         This is where the classification is implemented. The split matters: the twelve local operations
+///         include every high-frequency operation a review makes (repository search, cross-file references,
+///         file content), and proxying those would turn most of a review into network traffic. The six
+///         remaining operations need a credential or a service the executor must not reach.
 ///     </para>
 ///     <para>
 ///         The interface is unchanged, so nothing downstream knows which side answered. That is the point
@@ -187,15 +187,16 @@ public sealed class ProxyReviewContextTools(
     /// <summary>
     ///     Unwraps a proxied answer, or stops the review.
     ///     <para>
-    ///         A refusal is not a tool failing, which the tools are built to absorb and report as an empty
-    ///         answer. It means this executor no longer owns the job. Absorbing it would have the review
-    ///         carry on against a job somebody else is now running and produce findings from an empty
-    ///         context, so it has to stop.
+    ///         A refusal does not mean a tool failed, which the tools are built to absorb and report as an
+    ///         empty answer. It means this executor no longer owns the job. Absorbing it would let the
+    ///         review continue against a job another owner is now running and produce findings from an
+    ///         empty context, so the review has to stop.
     ///     </para>
     ///     <para>
-    ///         A fault is a tool failing, and it throws too — as the visible, retryable tool error an
-    ///         in-process provider blip produces. Absorbed into an empty answer, a 502 during a rolling
-    ///         restart told the reviewer the pull request changed no files, silently.
+    ///         A fault does mean a tool failed, and it throws as well, as the visible and retryable tool
+    ///         error that a transient in-process provider failure produces. Absorbed into an empty answer,
+    ///         a 502 during a rolling restart reported to the reviewer that the pull request changed no
+    ///         files, with no record of the failure.
     ///     </para>
     /// </summary>
     private static T? Require<T>(RunnerToolResult<T> result, string operation)
@@ -215,9 +216,9 @@ public sealed class ProxyReviewContextTools(
 }
 
 /// <summary>
-///     Thrown when a proxied tool call never got an answer. The pipeline's tool invoker reports it to the
-///     model as an ordinary tool error, which the model can see and retry — the same behaviour the
-///     in-process binding has when the service behind a tool blips.
+///     Thrown when a proxied tool call never received an answer. The pipeline's tool invoker reports it to
+///     the model as an ordinary tool error, which the model can see and retry. This is the same behaviour
+///     the in-process binding has when the service behind a tool fails transiently.
 /// </summary>
 public sealed class RunnerToolFaultedException(string operation, string reason)
     : InvalidOperationException($"The proxied call '{operation}' failed: {reason}.")

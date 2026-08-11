@@ -163,14 +163,14 @@ public sealed class HandleProviderWebhookDeliveryHandlerTests
                 && submission.Payload == payload),
             Arg.Any<CancellationToken>());
 
-        // Nothing reached the provider on the caller's thread. That is the whole point.
+        // Nothing reached the provider on the caller's thread, which is what the queueing mode is for.
         await synchronizationService.DidNotReceiveWithAnyArgs()
             .SynchronizeAsync(default!, default);
     }
 
-    // Providers retry a delivery they think failed. The retry carries the same delivery id, and the
-    // answer has to stay an acceptance — refusing it would make the provider retry harder — while the
-    // review happens once.
+    // Providers retry a delivery they consider failed. The retry carries the same delivery id, and the answer
+    // has to stay an acceptance, because refusing it makes the provider retry more often, while the review
+    // happens once.
     [Fact]
     public async Task HandleAsync_WhenTheProviderRetriesADelivery_AcceptsItWithoutQueueingItTwice()
     {

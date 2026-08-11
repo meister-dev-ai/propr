@@ -44,7 +44,7 @@ public sealed class RunnerWorkLoopTests
     }
 
     // Every ask carries the free-slot count, which is what lets the control plane answer without tracking
-    // anybody's capacity.
+    // runner capacity itself.
     [Fact]
     public async Task EveryAsk_SaysHowMuchRoomThereIs()
     {
@@ -144,14 +144,14 @@ public sealed class RunnerWorkLoopTests
         await loop.StopAsync(CancellationToken.None);
 
         // Matched by identity, not counted. Two releases of the wrong job, or of the right jobs at the
-        // wrong generation, would satisfy a count and still be a lease handed back that nobody held.
+        // wrong generation, would satisfy a count while still releasing a lease this runner did not hold.
         Assert.Equal(
             handler.LeasedJobs.Select(j => (j.JobId, j.LeaseGeneration)).OrderBy(x => x.JobId).ToArray(),
             handler.ReleasedLeases.OrderBy(x => x.JobId).ToArray());
     }
 
-    // Exactly once. A job cancelled by the drain is not a failure, and treating it as one would release a
-    // lease the drain already returned, handing back something another runner may by then hold.
+    // Released once. A job cancelled by the drain has not failed, and treating it as a failure would
+    // release a lease the drain already returned, which by then may be held by another runner.
     [Fact]
     public async Task ADrainedJob_HasItsLeaseReturnedExactlyOnce()
     {
@@ -221,8 +221,8 @@ public sealed class RunnerWorkLoopTests
         await loop.StopAsync(CancellationToken.None);
     }
 
-    // The heartbeat is the only channel that reaches a job already running. A refused renewal means the
-    // job is somebody else's now, and continuing would have two runners reviewing the same revision.
+    // The heartbeat is the only channel that reaches a job already running. A refused renewal means another
+    // owner now holds the job, and continuing would leave two runners reviewing the same revision.
     [Fact]
     public async Task ALeaseLostMidReview_StopsTheJobItBelongedTo()
     {
@@ -241,8 +241,8 @@ public sealed class RunnerWorkLoopTests
         time.Advance(TimeSpan.FromSeconds(25));
         await WaitUntilAsync(() => loop.InFlightCount == 0, "The job kept running after its lease was gone.");
 
-        // Not released: the lease is already somebody else's, and handing it back would return a job the
-        // holder is working on.
+        // Not released: the lease is already held by another owner, and releasing it would return a job
+        // that owner is working on.
         Assert.Empty(handler.ReleaseRequests);
 
         await loop.StopAsync(CancellationToken.None);
@@ -273,8 +273,10 @@ public sealed class RunnerWorkLoopTests
     }
 
 
-    // A host ships with a token, not a credential. Without this it can start, look healthy, and never be
-    // able to make a single call — every other operation presents the credential enrollment produces.
+    // A host is delivered with a token, not a credential. Without enrollment it can start, report itself
+    // healthy, and still not be able to make a single call, because every other operation presents the
+    // credential
+    // that enrollment produces.
     [Fact]
     public async Task AHostWithOnlyARegistrationToken_EnrolsBeforeAskingForWork()
     {
@@ -397,9 +399,9 @@ public sealed class RunnerWorkLoopTests
         Assert.Equal(RunnerLeaseReleaseReasons.Failure, release.RootElement.GetProperty("reason").GetString());
     }
 
-    // The credential rides on every call. An advertised replica address that is not https would leak it
-    // on every proxied tool call, relayed completion, and ingest batch — so the job is never started, the
-    // lease goes straight back, and the operator sees the misconfiguration instead of a slow review.
+    // The credential is sent on every call. An advertised replica address that is not https would leak it
+    // on every proxied tool call, relayed completion and ingest batch, so the job is never started, the
+    // lease is released immediately, and the operator sees the misconfiguration instead of a slow review.
     [Fact]
     public async Task AnInsecureAdvertisedReplica_HasItsLeaseHandedStraightBack()
     {

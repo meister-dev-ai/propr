@@ -35,9 +35,9 @@ public interface IRunnerWorkspaceServer
 public interface IRunnerWorkspaceRegistry
 {
     /// <summary>
-    ///     Holds a job's mirror — and the workspace behind it — for the life of its lease. The registry
-    ///     owns the workspace from here: nothing else disposes it, and a registration that replaces an
-    ///     earlier one for the same job releases the replaced workspace's disk.
+    ///     Holds a job's mirror, and the workspace behind it, for the life of its lease. The registry owns
+    ///     the workspace from here: nothing else disposes it, and a registration that replaces an earlier one
+    ///     for the same job releases the replaced workspace's disk.
     /// </summary>
     ValueTask RegisterAsync(Guid jobId, RunnerWorkspaceSource source, IAsyncDisposable? workspace = null);
 

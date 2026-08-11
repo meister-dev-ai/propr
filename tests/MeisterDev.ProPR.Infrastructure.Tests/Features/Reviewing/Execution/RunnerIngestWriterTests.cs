@@ -13,8 +13,8 @@ namespace MeisterDev.ProPR.Infrastructure.Tests.Features.Reviewing.Execution;
 
 /// <summary>
 ///     What an ingested per-file outcome becomes on disk. These rows are the resume checkpoints a reclaimed
-///     job reads back, so anything the wire carried but the row lost — findings above all — is anything a
-///     resumed review silently publishes without.
+///     job reads back, so anything the wire carried but the row lost, findings in particular, is missing from
+///     what a resumed review publishes.
 /// </summary>
 public sealed class RunnerIngestWriterTests
 {

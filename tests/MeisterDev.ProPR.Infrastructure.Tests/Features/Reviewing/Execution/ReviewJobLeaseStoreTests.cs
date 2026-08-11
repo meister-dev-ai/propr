@@ -17,8 +17,8 @@ namespace MeisterDev.ProPR.Infrastructure.Tests.Features.Reviewing.Execution;
 
 /// <summary>
 ///     Integration tests for claiming and liveness against a real PostgreSQL instance. These have to run
-///     against the real database: the whole point of the claim is that the database, not the process,
-///     decides who wins, and an in-memory double would prove nothing about that.
+///     against the real database, because the claim relies on the database rather than the process to decide
+///     which caller wins, and an in-memory double would prove nothing about that.
 /// </summary>
 [Collection("PostgresIntegration")]
 public sealed class ReviewJobLeaseStoreTests(PostgresContainerFixture fixture) : IAsyncLifetime
@@ -52,7 +52,7 @@ public sealed class ReviewJobLeaseStoreTests(PostgresContainerFixture fixture) :
     }
 
     // The defect this replaces: the claim used to load the row, compare its status in memory, and save.
-    // Two hosts running that at the same time both saw Pending and both believed they had won the job.
+    // Two hosts running that at the same time both saw Pending and both proceeded as the winner.
     [Fact]
     public async Task TryClaim_FromTwoHostsAtOnce_GrantsTheJobToExactlyOne()
     {
@@ -196,9 +196,9 @@ public sealed class ReviewJobLeaseStoreTests(PostgresContainerFixture fixture) :
         Assert.Equal(JobStatus.Processing, (await this.ReadJobAsync(job.Id)).Status);
     }
 
-    // The defect this replaces: crash and expiry were bounded by the reclaim budget, deliberate failure
-    // was not — a host that failed every attempt handed back cleanly and re-leased its own failure
-    // forever, at full AI cost per cycle. A live run reached generation 755 this way.
+    // The defect this replaces: crash and expiry were bounded by the reclaim budget and deliberate failure
+    // was not, so a host that failed every attempt released the lease as if healthy and re-leased its own
+    // failure without limit, at full AI cost per cycle. A live run reached generation 755 this way.
     [Fact]
     public async Task TryReleaseFailed_SpendsAReclaimAttemptOnTheWayBackToThePool()
     {
@@ -556,7 +556,7 @@ public sealed class ReviewJobLeaseStoreTests(PostgresContainerFixture fixture) :
     }
 
     // The requeue transition callers outside the lease subsystem use. The pool has to get the job back
-    // clean — lease columns left stamped make a Pending job read as held by an attempt that is over.
+    // clean, because lease columns left stamped make a Pending job read as held by an attempt that is over.
     [Fact]
     public async Task TryTransition_RequeueReturnsTheJobClean()
     {

@@ -40,8 +40,9 @@ public sealed class AdminRunnersController(
 {
     /// <summary>
     ///     Upper bound on the hours that can be added to the current time without leaving the range of
-    ///     <see cref="DateTimeOffset" />. This is not a policy limit. An operator may ask for any lifetime,
-    ///     and a request beyond this range is stored as a token that does not expire.
+    ///     <see cref="DateTimeOffset" />. This is a representation limit rather than a policy limit. An
+    ///     operator may ask for any lifetime, and a request beyond this range is stored as a token that does
+    ///     not expire.
     /// </summary>
     private const int MaxRepresentableHours = 24 * 365 * 1000;
 

@@ -78,9 +78,9 @@ public sealed class RunnerMemoryProxy(
     ///     The slice of the review context the reconsideration prompts actually read: the client's output
     ///     language, its custom system message, and its overrides for the memory stage.
     ///     <para>
-    ///         Passed as null, the prompt rendered the shipped defaults in English — a German client's
+    ///         Passed as null, the prompt rendered the built-in defaults in English. A German client's
     ///         remotely executed review came back with mixed-language findings, and an admin's override for
-    ///         this stage was silently ignored, neither of which the in-process path would do.
+    ///         this stage was ignored without any record, neither of which the in-process path does.
     ///     </para>
     /// </summary>
     private async Task<ReviewSystemContext?> BuildReconsiderationContextAsync(Guid clientId, CancellationToken ct)

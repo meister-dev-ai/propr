@@ -11,7 +11,7 @@ namespace MeisterDev.ProPR.Runner;
 ///     <para>
 ///         In memory only. Writing it down would put a reusable credential on the disk of a host that is
 ///         meant to be disposable, and the enrollment token exists precisely so a host can obtain one at
-///         start rather than be shipped with one.
+///         start rather than be delivered with one.
 ///     </para>
 ///     <para>
 ///         Mutable because a credential expires and is renewed in place. Every call reads it at the moment

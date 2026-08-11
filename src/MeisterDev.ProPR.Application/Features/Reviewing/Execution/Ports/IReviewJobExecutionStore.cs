@@ -21,7 +21,7 @@ public interface IReviewJobExecutionStore
     ReviewJob? GetById(Guid id);
 
     /// <summary>
-    ///     The job together with the per-file results already recorded for it — what adoption checks
+    ///     The job together with the per-file results already recorded for it. This is what adoption checks
     ///     before writing, so a job that already has rows never gains a second row for the same file.
     /// </summary>
     /// <param name="id">The review job identifier.</param>

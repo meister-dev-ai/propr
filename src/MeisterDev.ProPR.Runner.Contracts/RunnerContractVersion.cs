@@ -33,17 +33,17 @@ public static class RunnerContractVersion
 
     /// <summary>
     ///     The oldest version that can read this build's job manifest. Evolution inside the window is
-    ///     additive and a tolerant reader ignores what it does not know — but a version that changes
-    ///     shapes, as 2 did to the pass list's model binding, moves this floor. Every operation serves
-    ///     leased jobs, so a version that cannot read a manifest cannot usefully be served at all: the
-    ///     floor clamps the whole window rather than gating one call.
+    ///     additive and a tolerant reader ignores what it does not know, but a version that changes shapes,
+    ///     as 2 did to the pass list's model binding, moves this floor. Every operation serves leased jobs,
+    ///     so a version that cannot read a manifest cannot be served at all: the floor clamps the whole
+    ///     window rather than gating one call.
     /// </summary>
     public const int OldestManifestCompatible = 2;
 
     /// <summary>
-    ///     The oldest version this build will still serve: the compatibility window, clamped by the
-    ///     manifest floor. One value for every gate — an offer that refuses a version the heartbeat calls
-    ///     healthy is two answers to one question, and an operator chasing the wrong one.
+    ///     The oldest version this build will still serve: the compatibility window, clamped by the manifest
+    ///     floor. One value for every gate, because an offer that refuses a version the heartbeat accepts
+    ///     gives two answers to one question and sends an operator to the wrong side.
     /// </summary>
     public static int Oldest => Math.Max(Math.Max(1, Current - CompatibilityWindow), OldestManifestCompatible);
 
@@ -54,10 +54,10 @@ public static class RunnerContractVersion
     }
 
     /// <summary>
-    ///     The refusal to give an executor whose version cannot be served. Names both the version it
-    ///     reported and the range this control plane accepts, because an operator reading it needs to know
-    ///     which side to move — and when the manifest floor is what clamped the range, says so, because
-    ///     "too old" alone reads as an ordinary window miss rather than a shape change.
+    ///     The refusal to give an executor whose version cannot be served. Names both the version it reported
+    ///     and the range this control plane accepts, because an operator reading it needs to know which side
+    ///     to move. When the manifest floor is what clamped the range, it states that, because "too old" alone
+    ///     reads as an ordinary window miss rather than a shape change.
     /// </summary>
     /// <param name="reported">The version the executor reported.</param>
     public static string DescribeMismatch(int reported)

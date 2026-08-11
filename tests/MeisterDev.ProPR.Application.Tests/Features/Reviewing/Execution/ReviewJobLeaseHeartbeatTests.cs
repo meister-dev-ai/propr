@@ -89,8 +89,8 @@ public sealed class ReviewJobLeaseHeartbeatTests
         Assert.False(heartbeat.IsLeaseLost);
     }
 
-    // A rejection means somebody else holds the job now. Retrying cannot win it back, so the holder has to
-    // stop immediately rather than keep reviewing a job it no longer owns.
+    // A rejection means another owner now holds the job. Retrying cannot recover it, so the previous holder
+    // has to stop immediately rather than keep reviewing a job it no longer owns.
     [Fact]
     public async Task SignalsLeaseLost_AsSoonAsARenewalIsRejected()
     {
@@ -108,7 +108,7 @@ public sealed class ReviewJobLeaseHeartbeatTests
         Assert.True(heartbeat.IsLeaseLost);
     }
 
-    // A transient database blip is not the same as losing the job, so renewal retries. It gives up only
+    // A transient database failure differs from losing the job, so renewal retries. It gives up only
     // after the configured number of consecutive failures, because by then the lease is about to expire and
     // continuing would risk two hosts reviewing the same job.
     [Fact]
@@ -203,7 +203,7 @@ public sealed class ReviewJobLeaseHeartbeatTests
         Assert.Equal(ReviewJobStopReason.LeaseNoLongerHeld, heartbeat.StopReason);
     }
 
-    // A database outage is not a decision about the job, so the reason must not read as one.
+    // A database outage says nothing about the job, so the reason must not read as a decision about it.
     [Fact]
     public async Task ReportsRepeatedRenewalFailure_AsALostLeaseRatherThanADecision()
     {

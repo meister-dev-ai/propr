@@ -7,8 +7,8 @@ namespace MeisterDev.ProPR.Runner.Tests;
 
 /// <summary>
 ///     Where a job's calls go. The rule that matters: an advertised replica address routes everything
-///     job-scoped, an absent one changes nothing, and an insecure one is refused outright — the credential
-///     rides on every call, so "mostly https" is not a mode.
+///     job-scoped, an absent one changes nothing, and an insecure one is refused. The credential is sent on
+///     every call, so there is no partial-https case.
 /// </summary>
 public sealed class RunnerReplicaAffinityTests
 {

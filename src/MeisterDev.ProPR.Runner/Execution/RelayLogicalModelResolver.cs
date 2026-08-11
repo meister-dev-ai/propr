@@ -21,8 +21,9 @@ namespace MeisterDev.ProPR.Runner.Execution;
 ///     </para>
 ///     <para>
 ///         Only names the manifest carries resolve. A pass list that changed after dispatch is a
-///         configuration change the running review must not see, and a name nobody sent is a name the relay
-///         would refuse anyway — failing here says so with the pass in hand.
+///         configuration change the running review must not see, and a name the manifest never carried is a
+///         name the relay would refuse in any case. Failing here reports that while the pass is still in
+///         hand.
 ///     </para>
 /// </summary>
 public sealed class RelayLogicalModelResolver : ILogicalModelResolver
@@ -85,9 +86,10 @@ public sealed class RelayLogicalModelResolver : ILogicalModelResolver
         Guid? protocolId = null,
         CancellationToken ct = default)
     {
-        // The relay serves chat completions and nothing else. Everything that embeds — deduplication and
-        // the semantic screener — runs where findings are published, so a request here is a wiring mistake
-        // rather than a capability gap, and a stub returning zeros would corrupt a similarity comparison.
+        // The relay serves chat completions and nothing else. Everything that embeds, meaning deduplication
+        // and the semantic screener, runs where findings are published. A request here is therefore a wiring
+        // mistake rather than a capability gap, and a stub returning zeros would corrupt a similarity
+        // comparison.
         throw new NotSupportedException("A runner relays chat completions; embeddings are computed in the control plane.");
     }
 
@@ -161,12 +163,12 @@ public sealed class RelayChatRuntime : IResolvedAiChatRuntime
     public IChatClient ChatClient { get; }
 
     /// <summary>
-    ///     What the relay can actually do. Whole completions only: a provider-managed session or a
-    ///     background response would be held on the control plane's connection, not this one, and claiming
-    ///     either would have the reviewer wait for a continuation that never arrives. Prompt caching is the
-    ///     exception — the provider behind the relay caches or not regardless of which side composed the
-    ///     prompt, so this reports what the manifest says the binding supports; all-false here mislabelled
-    ///     every remote cache hit as provider_unsupported on the trace.
+    ///     What the relay supports. Whole completions only: a provider-managed session or a background
+    ///     response would be held on the control plane's connection rather than this one, and claiming
+    ///     either would leave the reviewer waiting for a continuation that never arrives. Prompt caching is
+    ///     the exception. The provider behind the relay caches or does not cache regardless of which side
+    ///     composed the prompt, so this reports what the manifest says the binding supports. Reporting
+    ///     all-false here labelled every remote cache hit as provider_unsupported on the trace.
     /// </summary>
     public AgentReviewRuntimeCapabilities Capabilities =>
         new(false, false, false, false, SupportsPromptCaching: this._binding.SupportsPromptCaching, SupportsPromptCacheRouting: false);

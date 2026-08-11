@@ -166,7 +166,7 @@ public static class ReviewingModuleServiceCollectionExtensions
         services.TryAddSingleton<IManagedReviewSessionTransportFactory, ManagedReviewSessionTransportFactory>();
         services.AddScoped<IReviewComplexityClassifier, ReviewTriageClassifier>();
         // The runner mirrors this composition in RunnerReviewPipeline, substituting only at the edges. A
-        // collaborator added here must be answered there too — supplied, equivalent, or declared absent —
+        // collaborator added here must be given a disposition there as well, supplied, equivalent or absent,
         // and RunnerReviewPipelineTests fails until it is.
         services.AddScoped<FileReviewer>(sp => new FileReviewer(
             sp.GetRequiredService<ApplicationIAiReviewCore>(),

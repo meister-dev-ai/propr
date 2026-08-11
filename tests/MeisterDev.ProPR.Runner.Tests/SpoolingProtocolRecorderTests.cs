@@ -12,10 +12,10 @@ namespace MeisterDev.ProPR.Runner.Tests;
 /// <summary>
 ///     What a review costs, on its way back.
 ///     <para>
-///         The trace events this recorder ships are stored as opaque detail, so anything the control plane
-///         has to act on — spend above all — must travel as its own record. A remote review that reported
-///         no spend looked complete and free, and the budget the relay charges against is metered from
-///         exactly these records.
+///         The trace events this recorder sends are stored as opaque detail, so anything the control plane has
+///         to act on, spend in particular, has to be sent as its own record. A remote review that reported no
+///         spend read as complete and free, and the budget the relay charges against is metered from these
+///         records.
 ///     </para>
 /// </summary>
 public sealed class SpoolingProtocolRecorderTests
@@ -40,7 +40,7 @@ public sealed class SpoolingProtocolRecorderTests
         Assert.Equal(340, spend.GetProperty("outputTokens").GetInt64());
     }
 
-    // A pass that spent nothing is not a spend record. Shipping zeros would open a priced protocol per
+    // A pass that spent nothing produces no spend record. Sending zeros would open a priced protocol per
     // stage on the control plane for stages that never called a model.
     [Fact]
     public async Task APassThatSpentNothing_ShipsNoSpend()

@@ -71,8 +71,8 @@ public sealed class RunnerFleetMonitor(
     /// </summary>
     private ReviewExecutionMode ResolveMode(int activeCount, int registeredCount, DateTimeOffset now)
     {
-        // An installation with no runners at all is not a distributed installation and never enters the
-        // hysteresis at all. This is the path every existing deployment stays on.
+        // An installation with no runners at all never enters the hysteresis. This is the path every existing
+        // deployment stays on.
         if (registeredCount == 0)
         {
             lock (Gate)

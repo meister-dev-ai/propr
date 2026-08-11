@@ -53,8 +53,8 @@ public static class ReviewingExecutionServiceCollectionExtensions
         // application layer and needs nothing from infrastructure beyond being registered.
         services.AddScoped<IRunnerJobManifestResolver, RunnerJobManifestResolver>();
         // One implementation of "what may this review adopt" for both execution paths: the in-process
-        // orchestration self-builds the same type from its own dependencies, the dispatch preparer
-        // resolves this one. Two implementations is how a remote review quietly becomes a different one.
+        // orchestration builds the same type from its own dependencies, and the dispatch preparer resolves
+        // this one. Two implementations would let a remote review become a different review.
         services.AddScoped(sp => new ReviewJobReuse(
             sp.GetRequiredService<IReviewJobExecutionStore>(),
             sp.GetRequiredService<IReviewPrScanWatermarkStore>(),
@@ -112,15 +112,15 @@ public static class ReviewingExecutionServiceCollectionExtensions
         services.AddSingleton<IReviewPipelineStage<PerFileReviewContext>, FileByFileInfoCommentStripStage>();
         services.AddTransient<IReviewJobProcessor>(sp => sp.GetRequiredService<ReviewOrchestrationService>());
         // The same instance behind both: a runner's findings and an in-process review must end on one
-        // publication, and two registrations would be two code paths waiting to drift.
+        // publication, and two registrations would be two code paths that could drift.
         services.AddTransient<IReviewResultPublisher>(sp => sp.GetRequiredService<ReviewOrchestrationService>());
-        // The ledger is a singleton because the two things intake correlates — the chunks of one
-        // submission, and a resend against what already published — never arrive on one request.
+        // The ledger is a singleton because the two things intake correlates never arrive on one request:
+        // the chunks of one submission, and a resend against what already published.
         services.AddSingleton<RunnerSubmissionLedger>();
         services.AddScoped<IRunnerFindingsIntake, RunnerFindingsIntake>();
 
-        // What a resuming executor reads back. Registered beside the findings intake because it is the
-        // other half of the same story: one ships results out, the other hands them back on a reclaim.
+        // What a resuming executor reads back. Registered beside the findings intake because the two are
+        // counterparts: one sends results out, the other returns them on a reclaim.
         services.AddScoped<IRunnerPriorResultsReader, RunnerPriorResultsReader>();
         services.AddCommentRelevanceFiltering(selectedCommentRelevanceFilterId);
         services.AddSingleton<IDeterministicReviewFindingGate, DeterministicReviewFindingGate>();

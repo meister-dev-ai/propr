@@ -28,7 +28,7 @@ public sealed class ReviewLeaseOptions : IValidatableObject
 
     /// <summary>
     ///     Seconds between lease renewals. Renewal runs on its own schedule rather than at pipeline
-    ///     checkpoints, so one long AI or tool call cannot starve it.
+    ///     checkpoints, so one long AI or tool call cannot delay it past the lease duration.
     ///     Bound to <c>REVIEW_LEASE_HEARTBEAT_INTERVAL_SECONDS</c>.
     /// </summary>
     [Range(5, 1200, ErrorMessage = "HeartbeatIntervalSeconds must be between 5 and 1200.")]
@@ -110,8 +110,8 @@ public sealed class ReviewLeaseOptions : IValidatableObject
     ///     The base URL this replica advertises to runners for job-scoped calls, when the installation runs
     ///     more than one control-plane replica. The workspace mirror is this replica's local disk and the
     ///     per-lease registries are this replica's process, so a runner must reach the replica that granted
-    ///     its lease directly — through a load balancer it reaches whichever replica is next, which is
-    ///     exactly the wrong one. Unset on a single-replica installation.
+    ///     its lease directly. Through a load balancer it reaches whichever replica is next, which holds
+    ///     neither. Unset on a single-replica installation.
     ///     Bound to <c>RUNNER_ADVERTISED_URL</c>.
     /// </summary>
     public string? AdvertisedRunnerUrl { get; set; }
@@ -142,7 +142,7 @@ public sealed class ReviewLeaseOptions : IValidatableObject
                 [nameof(this.LeaseDurationSeconds), nameof(this.HeartbeatIntervalSeconds)]);
         }
 
-        // The same rule the runner enforces on its configured URL: the credential rides on every call, so
+        // The same rule the runner enforces on its configured URL: the credential is sent on every call, so
         // an advertised address must be https unless it is loopback. Refused at startup rather than at the
         // first lease, because a misconfigured replica would otherwise poison every job it grants.
         if (!string.IsNullOrWhiteSpace(this.AdvertisedRunnerUrl))

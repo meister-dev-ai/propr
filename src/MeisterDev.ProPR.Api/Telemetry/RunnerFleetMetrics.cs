@@ -14,8 +14,8 @@ namespace MeisterDev.ProPR.Api.Telemetry;
 ///     the fleet.
 ///     <para>
 ///         On the same meter as the rest of the review metrics on purpose. A separate meter would need its
-///         own exporter configuration, and a metric an installation has to opt into is a metric nobody has
-///         when they need it.
+///         own exporter configuration, and a metric an installation has to opt into is usually missing when
+///         it is needed.
 ///     </para>
 ///     <para>
 ///         Every dimension here is a count, a cause, or a provider name. Deliberately no repository path,
@@ -116,8 +116,8 @@ public sealed class RunnerFleetMetrics : IDisposable
     }
 
     /// <summary>
-    ///     Reclaim outcomes as stable label values. Mapped rather than emitted as enum names so renaming a
-    ///     C# member does not silently break somebody's dashboard.
+    ///     Reclaim outcomes as stable label values. Mapped rather than emitted as enum names so that renaming
+    ///     a C# member does not break an existing dashboard.
     /// </summary>
     private static string ToOutcomeTag(ReviewJobReclaimOutcome outcome)
     {

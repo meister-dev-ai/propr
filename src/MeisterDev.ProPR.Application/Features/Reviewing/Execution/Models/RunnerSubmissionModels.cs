@@ -29,9 +29,9 @@ public sealed record RunnerFindingsChunk(
 ///     Everything a review result says about itself beyond its summary and findings: what was carried
 ///     forward, what was degraded or skipped for context, and whether the budget cut the scan short.
 ///     <para>
-///         A submission that carried only summary and comments flattened all of it — most visibly the
-///         budget label, which made a soft-capped remote review indistinguishable from a complete one
-///         everywhere the label is read.
+///         A submission that carried only summary and comments dropped all of it. The clearest case is the
+///         budget label, whose absence made a soft-capped remote review indistinguishable from a complete
+///         one everywhere the label is read.
 ///     </para>
 /// </summary>
 /// <param name="CarriedForwardFilePaths">Files whose results came from a prior iteration's review.</param>

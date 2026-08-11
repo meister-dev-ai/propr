@@ -142,7 +142,7 @@ internal sealed partial class ToolAwareAiReviewCore(
         string userMessage;
         if (systemContext.PerFileHint is { } hint)
         {
-            // Per-file review path: two System messages — global persona (S1) + per-file context (S2). Both stay
+            // Per-file review path: two System messages, the global persona (S1) and the per-file context (S2). Both stay
             // first and byte-stable on every iteration so the whole S1+S2 prefix remains eligible for the
             // provider's automatic prefix caching (a stable cached prefix is cheaper than re-sending a shorter one).
             state.Messages.Add(new ChatMessage(ChatRole.System, ReviewPrompts.BuildGlobalSystemPrompt(systemContext)));
@@ -179,7 +179,7 @@ internal sealed partial class ToolAwareAiReviewCore(
         // The durable baseline is snapshotted only once the diff is in place. It carries the change under review
         // (and the source-branch hint the tools need), so every later turn still knows what changed after
         // compaction rebuilds the transcript from this baseline. Snapshotting before this point left the agent
-        // reviewing the file blind to its diff from the first tool round onwards. The message is byte-stable, so
+        // reviewing the file without its diff from the first tool round onwards. The message is byte-stable, so
         // it stays inside the cacheable prefix.
         state.SetPersistentMessages(state.Messages);
 
@@ -559,7 +559,7 @@ internal sealed partial class ToolAwareAiReviewCore(
         }
         else
         {
-            // Pure review JSON without confidence_evaluations — treat as final
+            // Pure review JSON without confidence_evaluations. Treated as final.
             return TurnOutcome.TerminateLoop;
         }
 
@@ -995,7 +995,7 @@ internal sealed partial class ToolAwareAiReviewCore(
             return resultText;
         }
 
-        // Slice on the raw text length. Never end the slice on a lone high surrogate — that would
+        // Slice on the raw text length. Never end the slice on a lone high surrogate, because that would
         // corrupt the boundary character. (Because raw string results are unwrapped by
         // SerializeToolResult before bounding, the slice can no longer split a JSON escape sequence.)
         var cut = maxCharacters;
@@ -1035,7 +1035,7 @@ internal sealed partial class ToolAwareAiReviewCore(
     /// <summary>
     ///     Serialises a tool result for replay to the model. Tool functions surface their result as a
     ///     <see cref="JsonElement" /> (or, for some paths, a plain <see cref="string" />). When the result is a
-    ///     string scalar — e.g. file contents from <c>get_file_content</c> — re-serialising it double-encodes the
+    ///     string scalar (for example file contents from <c>get_file_content</c>), re-serialising it double-encodes the
     ///     payload: newlines, tabs and especially <c>&lt;</c>, <c>&gt;</c> and <c>&amp;</c> expand into escape
     ///     sequences (<c>&lt;</c> becomes six characters) that inflate the tokens sent to the model on every
     ///     replay. Unwrap the string scalar and pass the raw text through instead; Microsoft.Extensions.AI
@@ -1105,8 +1105,8 @@ internal sealed partial class ToolAwareAiReviewCore(
     /// <summary>
     ///     Removes assistant tool calls that are not answered by a tool result in the immediately following
     ///     message, returning a sanitized copy of the outgoing list (the input, and thus
-    ///     <see cref="ReviewLoopState.Messages" />, is never mutated). Strict providers — Anthropic reached via
-    ///     the LiteLLM Responses→Anthropic translation — reject a full-transcript replay that contains a
+    ///     <see cref="ReviewLoopState.Messages" />, is never mutated). Strict providers, such as Anthropic
+    ///     reached through the LiteLLM Responses to Anthropic translation, reject a full-transcript replay that contains a
     ///     <c>tool_use</c> block whose <c>tool_result</c> does not follow it. The review loop can produce exactly
     ///     that: when it breaks on a repeated assistant turn (see the turn-fingerprint guard) the unserviced tool
     ///     call is already in the transcript, and the schema-repair step then appends further messages behind it,
@@ -1114,7 +1114,7 @@ internal sealed partial class ToolAwareAiReviewCore(
     ///     <para>
     ///     Only unanswered tool <em>calls</em> are dropped, never tool <em>results</em>. This is what makes the
     ///     pass safe across session modes: a provider-managed continuation submits a lone tool result whose call
-    ///     is retained server-side, so results must survive — and because such a delta carries no assistant tool
+    ///     is retained server-side, so results must survive, and because such a delta carries no assistant tool
     ///     call, this pass is a no-op there. It only ever changes full-replay payloads, where the pairing
     ///     invariant must hold locally. When a call is removed, any accompanying assistant text is kept; an
     ///     assistant message left with no content is dropped entirely.
@@ -1573,8 +1573,8 @@ internal sealed partial class ToolAwareAiReviewCore(
         var latestTurn = state.TurnHistory.Count > 0 ? state.TurnHistory[^1] : null;
 
         // The full input/output transcript for this turn is already persisted in full on the paired
-        // ai_call_iter_N event (InputTextSample / OutputSummary). Re-storing it here — inside a JSON
-        // payload the read-time truncation deliberately leaves whole — duplicates tens of kilobytes per
+        // ai_call_iter_N event (InputTextSample / OutputSummary). Re-storing it here, inside a JSON
+        // payload that the read-time truncation leaves whole, duplicates tens of kilobytes per
         // turn. This event is about session/continuation mechanics, so keep only a short bounded excerpt.
         await systemContext.ProtocolRecorder.RecordReviewStrategyEventAsync(
             systemContext.ActiveProtocolId.Value,
@@ -1696,8 +1696,8 @@ internal sealed partial class ToolAwareAiReviewCore(
             {
                 var content = await reviewTools.GetFileContentAsync(path, branch, startLine, endLine, cancellationToken);
 
-                // Measure the read for grounding at the source, from the raw content — before it is annotated
-                // for the model or bounded for replay — so the reread gate never has to reconstruct it later.
+                // Measure the read for grounding at the source, from the raw content, before it is annotated
+                // for the model or bounded for replay. The reread gate then never has to reconstruct it.
                 recordFileRead(ReviewReadGroundingEvaluator.CreateReadRecord(path, startLine, endLine, content));
 
                 return AnnotateFileContentToolResult(content, startLine);
@@ -2212,7 +2212,7 @@ internal sealed partial class ToolAwareAiReviewCore(
             var dto = JsonSerializer.Deserialize<AgenticResponseDto>(normalized, JsonOptions);
             if (dto is null || dto.Comments is not null)
             {
-                // Either unparseable or Comments was present (possibly empty — that's valid).
+                // Either unparseable or Comments was present, possibly empty, which is valid.
                 return false;
             }
 
@@ -2232,7 +2232,7 @@ internal sealed partial class ToolAwareAiReviewCore(
         }
         catch
         {
-            // Unparseable — let ParseReviewResult handle/report the error.
+            // Unparseable. ParseReviewResult handles and reports the error.
             return false;
         }
     }
@@ -2565,7 +2565,7 @@ internal sealed partial class ToolAwareAiReviewCore(
                 }
                 else
                 {
-                    // Nested array/object — skip the whole value
+                    // Nested array or object. Skip the whole value.
                     reader.Skip();
                 }
             }
@@ -2613,7 +2613,7 @@ internal sealed partial class ToolAwareAiReviewCore(
                 return int.TryParse(s, out var parsed) ? parsed : 0;
             }
 
-            // Null or any other token — skip and return 0
+            // Null or any other token. Skip and return 0.
             reader.Skip();
             return 0;
         }
@@ -2660,7 +2660,7 @@ internal sealed partial class ToolAwareAiReviewCore(
                 }
                 else
                 {
-                    // String, number, nested array, etc. — skip the whole value
+                    // String, number, nested array and so on. Skip the whole value.
                     reader.Skip();
                 }
             }

@@ -114,7 +114,7 @@ public sealed class WebhookDeliveryQueuePostgresTests(PostgresContainerFixture f
                 .CountAsync(entry => entry.WebhookConfigurationId == this._configurationId));
     }
 
-    // Azure DevOps sends no delivery header, so its deliveries have no key. They must still queue —
+    // Azure DevOps sends no delivery header, so its deliveries have no key. They must still queue, because
     // deduplicating on a null key would collapse every ADO delivery into one.
     [Fact]
     public async Task DeliveriesWithoutAKey_AreAllAccepted()

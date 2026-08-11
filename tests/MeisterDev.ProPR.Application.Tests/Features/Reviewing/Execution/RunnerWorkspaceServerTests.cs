@@ -69,7 +69,7 @@ public sealed class RunnerWorkspaceServerTests
         await this._probe.DidNotReceive().MeasureAsync(Arg.Any<string>(), Arg.Any<CancellationToken>());
     }
 
-    // A ceiling checked while streaming is not a ceiling: by the time it trips, the egress is paid for.
+    // A ceiling checked while streaming bounds nothing: by the time it trips, the egress is paid for.
     [Fact]
     public async Task ContentLargerThanTheCeiling_IsRefusedBeforeAnythingIsSent()
     {
@@ -111,8 +111,8 @@ public sealed class RunnerWorkspaceServerTests
         Assert.NotNull(grant.Reason);
     }
 
-    // Job-scoped content is released when the job ends; a mirror still on offer afterwards is content
-    // being served for work nobody is doing.
+    // Job-scoped content is released when the job ends. A mirror still on offer afterwards serves content
+    // for work that is no longer running.
     [Fact]
     public async Task ReleasingAJob_StopsItsContentBeingServed()
     {

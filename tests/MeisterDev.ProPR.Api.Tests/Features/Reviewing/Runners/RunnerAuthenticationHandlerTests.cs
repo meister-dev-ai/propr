@@ -80,7 +80,7 @@ public sealed class RunnerAuthenticationHandlerTests
     }
 
     // The identity the lease authorization compares against comes from the credential, never from the
-    // request. A caller that could name its own identity could name somebody else's.
+    // request. A caller that could name its own identity could name another runner's.
     [Fact]
     public async Task TheResolvedIdentity_IsReadFromThePrincipalAndNotTheRequest()
     {
@@ -98,8 +98,8 @@ public sealed class RunnerAuthenticationHandlerTests
         var (result, _) = await this.AuthenticateAsync(null);
 
         Assert.False(result.Succeeded);
-        // No result rather than a failure: a request that carries no runner credential is not a rejected
-        // runner, it is a request for some other scheme to answer.
+        // No result rather than a failure: a request that carries no runner credential has not been rejected
+        // as a runner, it is a request for another scheme to answer.
         Assert.True(result.None);
         await this._registration.DidNotReceive().AuthenticateAsync(Arg.Any<string>(), Arg.Any<CancellationToken>());
     }

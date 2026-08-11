@@ -7,11 +7,11 @@ using System.ComponentModel.DataAnnotations;
 namespace MeisterDev.ProPR.Application.Options;
 
 /// <summary>
-///     Bounds on what an executor may ship in one batch.
+///     Bounds on what an executor may send in one batch.
 ///     <para>
 ///         Protocol payloads are already a known volume problem on the read side, and batching them is an
-///         easy way to make the write side worse. A ceiling turns that into a refusal the executor can act
-///         on by splitting, rather than a request that times out or a row nobody can read back.
+///         easy way to make the write side worse. A ceiling turns that into a refusal the executor can act on
+///         by splitting, rather than a request that times out or a row that cannot be read back.
 ///     </para>
 /// </summary>
 public sealed class RunnerIngestOptions

@@ -10,12 +10,12 @@ namespace MeisterDev.ProPR.Infrastructure.Features.Reviewing.Execution.Services;
 /// <summary>
 ///     Checks the two timers that have to agree with each other.
 ///     <para>
-///         Each is individually sensible and their ranges are validated separately, which is exactly why
-///         the bad combination gets through: the active-heartbeat window decides when a runner stops
-///         counting as capacity, and the lease duration decides when its work is taken back. A window
+///         Each is individually sensible and their ranges are validated separately, which is why the bad
+///         combination gets through: the active-heartbeat window decides when a runner stops counting as
+///         capacity, and the lease duration decides when its work is taken back. A window
 ///         longer than the lease opens a gap where a runner's jobs are already being reclaimed while the
 ///         control plane still counts it as alive, so nothing runs the work: not the runner, whose leases
-///         keep expiring, and not the control plane, which is waiting for a fleet it believes is healthy.
+///         keep expiring, and not the control plane, which is waiting for a fleet it treats as healthy.
 ///     </para>
 ///     <para>
 ///         Refused at startup rather than logged, because the symptom is a queue that stops moving for as

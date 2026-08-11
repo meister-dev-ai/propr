@@ -76,8 +76,8 @@ public sealed class RunnerIngestServiceTests
         await this._writer.DidNotReceive().WriteEventsAsync(Arg.Any<Guid>(), Arg.Any<IReadOnlyList<RunnerTraceEvent>>(), Arg.Any<CancellationToken>());
     }
 
-    // Idempotency alone does not give ordering. A trace with a hole in it is not a trace anybody can read,
-    // so the gap is named and the executor is told where to resume from.
+    // Idempotency alone does not give ordering, and a trace with a gap in it cannot be read, so the gap is
+    // named and the executor is told where to resume from.
     [Fact]
     public async Task ABatchThatSkipsAhead_IsRefusedAndTheGapIsNamed()
     {
@@ -101,7 +101,7 @@ public sealed class RunnerIngestServiceTests
     }
 
     // Refused whole rather than partly applied: a half-applied batch leaves the executor unable to say what
-    // still needs sending, which is exactly what the sequence exists to prevent.
+    // still needs sending, which is what the sequence exists to prevent.
     [Fact]
     public async Task AnOversizedBatch_IsRefusedWholeWithTheExpectedSequenceToResumeFrom()
     {

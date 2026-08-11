@@ -11,8 +11,7 @@ namespace MeisterDev.ProPR.Application.Features.Reviewing.Execution.Services;
 ///     Serves a resuming executor what its job already has recorded.
 ///     <para>
 ///         Authorized against the lease like every other call an executor makes. A job's file results carry
-///         its findings, so answering an unauthorized caller would hand somebody else's review to whoever
-///         asked.
+///         its findings, so answering an unauthorized caller would disclose another client's review.
 ///     </para>
 /// </summary>
 public sealed class RunnerPriorResultsReader(

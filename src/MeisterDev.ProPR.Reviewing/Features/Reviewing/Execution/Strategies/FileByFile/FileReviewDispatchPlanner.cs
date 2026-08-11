@@ -121,8 +121,8 @@ internal sealed class FileReviewDispatchPlanner(
                 // Per-increment soft cap: once this job's spend has reached it, stop starting new files. Files
                 // already in flight finish; queued files skip here so the review concludes with a synthesis over
                 // what was reviewed rather than being cut mid-call. Never applies to a job that has not spent yet.
-                // On a host whose spend is metered elsewhere, the signal carries the same verdict without
-                // the figures — the relay says the cap is reached, and this gate believes it the same way.
+                // On a host whose spend is metered elsewhere, the signal carries the same verdict without the
+                // figures: the relay reports that the cap is reached, and this gate acts on it the same way.
                 var budgetScope = budgetScopeAccessor?.Current;
                 if ((budgetScope is not null && budgetScope.IsIncrementSoftCapReached())
                     || budgetExhaustedSignal?.Invoke() == true)

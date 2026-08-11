@@ -18,9 +18,9 @@ namespace MeisterDev.ProPR.Infrastructure.Tests.Features.Reviewing.Execution;
 
 /// <summary>
 ///     Dispatch has to hand the runner two things this replica will be asked for later: the workspace it
-///     fetches from, and the tools it calls back through. The tools half was registered nowhere, so every
-///     proxied call missed the registry and came back refused — and refused as a lost lease, which sent the
-///     reader to the lease machinery for a problem that was never there.
+///     fetches from, and the tools it calls back through. The tools were registered nowhere, so every proxied
+///     call missed the registry and came back refused, and refused as a lost lease, which pointed the reader
+///     at the lease machinery for a problem that was not there.
 /// </summary>
 public sealed class RunnerJobDispatchPreparerTests
 {
@@ -173,10 +173,9 @@ public sealed class RunnerJobDispatchPreparerTests
 
     private IReviewRepositoryWorkspace? _preparedWorkspace;
 
-    // The workspace has to outlive the offer — the runner fetches from its mirror throughout its
-    // execution — and still be released when the job leaves this replica. The registry owns it for that
-    // whole span; a preparer that merely let it fall out of scope kept two checkouts on disk per job,
-    // forever.
+    // The workspace has to outlive the offer, because the runner fetches from its mirror throughout its
+    // execution, and still be released when the job leaves this replica. The registry owns it for that whole
+    // span. A preparer that let it fall out of scope instead kept two checkouts on disk per job.
     [Fact]
     public async Task ThePreparedWorkspace_IsOwnedByTheRegistryAndDisposedWithItsRelease()
     {

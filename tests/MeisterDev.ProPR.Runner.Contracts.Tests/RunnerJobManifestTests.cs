@@ -71,9 +71,9 @@ public sealed class RunnerJobManifestTests
         Assert.Equal(json, JsonSerializer.Serialize(restored, RunnerContractJson.Options));
     }
 
-    // The tolerant-reader half of the versioning contract: an additive field from a newer control plane
-    // must not refuse the whole manifest on an older runner — that is the deploy the compatibility window
-    // exists to survive. Shape changes are handled by the version gate's manifest floor, not the parser.
+    // The tolerant-reader half of the versioning contract: an additive field from a newer control plane must
+    // not refuse the whole manifest on an older runner, because that is the deploy the compatibility window
+    // exists to support. Shape changes are handled by the version gate's manifest floor, not the parser.
     [Fact]
     public void AnUnknownField_IsIgnoredByAProductionReader()
     {
@@ -97,14 +97,13 @@ public sealed class RunnerJobManifestTests
         Assert.Throws<JsonException>(() => JsonSerializer.Deserialize<RunnerJobManifest>(withExtra, RunnerContractJson.Options));
     }
 
-    // Structural, not procedural. "We remember not to populate it" is not a boundary: the schema must have
-    // nowhere to put a credential in the first place, so this walks the whole graph rather than the top level.
+    // Structural, not procedural. Remembering not to populate a field does not make a boundary: the schema
+    // must have nowhere to put a credential at all, so this walks the whole graph rather than the top level.
     [Fact]
     public void TheManifestSchema_HasNoFieldThatCouldCarryASecret()
     {
-        // Whole words a secret-bearing field would be named with. "pat" is deliberately spelled out:
-        // as three letters it also matches "path", and a check that fires on every path is a check
-        // somebody deletes.
+        // Whole words a secret-bearing field would be named with. "pat" is deliberately spelled out: as
+        // three letters it also matches "path", and a check that fires on every path would be deleted.
         string[] forbidden =
         [
             "secret", "credential", "password", "passphrase", "token", "apikey", "accesskey", "privatekey",

@@ -35,7 +35,7 @@ public sealed class RunnerHealthState
         /// <summary>Cannot reach the control plane, and retrying.</summary>
         Disconnected,
 
-        /// <summary>The control plane is draining, so no new work is being issued to anybody.</summary>
+        /// <summary>The control plane is draining, so no new work is being issued to any runner.</summary>
         Draining,
 
         /// <summary>Reachable, but this runner is being refused work for a reason an operator must fix.</summary>

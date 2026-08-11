@@ -69,9 +69,9 @@ public interface IRunnerLeaseOfferStore
     ///     </para>
     ///     <para>
     ///         Client eligibility is by tenant and stamped scope, deliberately not by tag. A job whose tags
-    ///         no runner declares must stay pending and show as unroutable: executing it in the control
-    ///         plane instead would quietly break the isolation promise on exactly the installation that
-    ///         asked for it.
+    ///         no runner declares must stay pending and show as unroutable: executing it in the control plane
+    ///         instead would break the isolation guarantee on the installation that asked for it, and leave
+    ///         no record of doing so.
     ///     </para>
     /// </summary>
     /// <param name="activeSince">A runner counts as active when it was last heard from at or after this instant.</param>

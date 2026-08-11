@@ -10,8 +10,8 @@ namespace MeisterDev.ProPR.Infrastructure.AI;
 /// <summary>
 ///     Binds the review options from environment variables.
 ///     <para>
-///         Shared by every host that runs a review, because the values decide how the pipeline behaves —
-///         how many iterations a file gets, what a finding must clear to be kept, which tools exist. Two
+///         Shared by every host that runs a review, because the values decide how the pipeline behaves: how
+///         many iterations a file gets, what a finding must clear to be kept, and which tools exist. Two
 ///         hosts binding them separately would drift, and a review would mean one thing in the control
 ///         plane and another on a runner without either side saying so.
 ///     </para>

@@ -7,8 +7,8 @@ using MeisterDev.ProPR.Application.Features.Crawling.Webhooks.Ports;
 namespace MeisterDev.ProPR.Api.Tests.Features.Crawling.Webhooks;
 
 /// <summary>
-///     Holds accepted deliveries for tests that drive the whole path — receiver, queue, worker — against an
-///     in-memory database. The real queue is one raw statement with <c>FOR UPDATE SKIP LOCKED</c>, which only
+///     Holds accepted deliveries for tests that drive the whole path, meaning receiver, queue and worker,
+///     against an in-memory database. The real queue is one raw statement with <c>FOR UPDATE SKIP LOCKED</c>, which only
 ///     PostgreSQL can answer; what it does under two replicas is covered there, and what these tests need is
 ///     somewhere for a delivery to wait between being answered and being worked.
 /// </summary>

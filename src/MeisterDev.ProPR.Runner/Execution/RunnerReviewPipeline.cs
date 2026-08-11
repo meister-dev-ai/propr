@@ -23,15 +23,15 @@ using Microsoft.Extensions.Options;
 namespace MeisterDev.ProPR.Runner.Execution;
 
 /// <summary>
-///     The review pipeline, composed for a host with no database and no credentials — from the same
-///     collaborators, in the same shape, as the control plane composes it.
+///     The review pipeline, composed for a host with no database and no credentials, from the same
+///     collaborators and in the same shape as the control plane composes it.
 ///     <para>
 ///         This mirrors the in-process composition in <c>ReviewingModuleServiceCollectionExtensions</c> and
 ///         <c>AddReviewingExecution</c>, substituting only at the edges: completions go through the relay,
-///         thread memory through the proxy, trace and results into the spool. Everything deterministic —
-///         the finding gate, invariant facts, verification, relevance filtering, triage, the lens
-///         prefilter, the profile catalogue, structural analysis — is the same code both sides, because a
-///         collaborator left out here is not a smaller review, it is a different one.
+///         thread memory through the proxy, trace and results into the spool. Every deterministic part is
+///         the same code on both sides: the finding gate, invariant facts, verification, relevance
+///         filtering, triage, the lens prefilter, the profile catalogue and structural analysis. A
+///         collaborator left out here would not produce a smaller review, it would produce a different one.
 ///     </para>
 ///     <para>
 ///         What cannot be supplied is declared, not dropped: every constructor parameter of the composed
@@ -86,8 +86,8 @@ internal sealed class RunnerReviewPipeline : IDisposable
         var logger = loggerFactory.CreateLogger<FileByFileReviewOrchestrator>();
 
         // The same seven stages the control plane registers, in the same construction. The screener is
-        // handed the relay resolver, which cannot serve embeddings — the stage degrades to keep-all and
-        // records comment_screening_degraded per file, so the divergence is on the trace, not silent.
+        // handed the relay resolver, which cannot serve embeddings. The stage then degrades to keep-all and
+        // records comment_screening_degraded per file, so the divergence is recorded on the trace.
         var perFilePipeline = new ReviewPipelineRunner<PerFileReviewContext>(
         [
             new FileByFileContextPrefetchStage(options, recorder, structuralAnalyzer),
@@ -197,9 +197,9 @@ internal sealed class RunnerReviewPipeline : IDisposable
     }
 
     /// <summary>
-    ///     Names every constructor parameter of the composed types. The dispositions are the whole point:
-    ///     an absent collaborator is a decided, recorded divergence, and a parameter missing from this list
-    ///     entirely fails the drift test until somebody decides.
+    ///     Names every constructor parameter of the composed types. The dispositions carry the meaning: an
+    ///     absent collaborator is a decided and recorded divergence, and a parameter missing from this list
+    ///     fails the drift test until it is given a disposition.
     /// </summary>
     private static List<RunnerCompositionEntry> BuildReport()
     {

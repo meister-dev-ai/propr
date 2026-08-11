@@ -72,9 +72,9 @@ public sealed partial class RunnerIngestWriter(
                      ?? [];
 
         // A file can appear more than once in one batch: the executor reports an outcome when a file
-        // finishes and again when it is revised, and both are buffered. Only the last one is written —
-        // inserting each of them violates the one-row-per-file constraint and takes the whole batch down,
-        // spend and trace included.
+        // finishes and again when it is revised, and both are buffered. Only the last one is written,
+        // because inserting each of them violates the one-row-per-file constraint and fails the whole
+        // batch, including its spend and trace.
         var lastPerPath = results
             .GroupBy(outcome => outcome.FilePath, StringComparer.Ordinal)
             .Select(group => group.Last());
@@ -114,8 +114,8 @@ public sealed partial class RunnerIngestWriter(
 
     private static void Apply(RunnerFileOutcome outcome, ReviewFileResult result)
     {
-        // Exclusion is the stronger statement — an excluded file was never reviewed — and the entity
-        // refuses to carry two marks, so it is checked first, exactly as the executor's own seeding does.
+        // Exclusion takes precedence, because an excluded file was never reviewed, and the entity refuses
+        // to carry two marks. It is therefore checked first, exactly as the executor's own seeding does.
         if (outcome.IsExcluded)
         {
             result.MarkExcluded(outcome.ExclusionReason ?? "excluded");
@@ -151,7 +151,7 @@ public sealed partial class RunnerIngestWriter(
 
             // Opening and closing a protocol is what accrues tokens onto the job and the client's usage
             // sample. Writing the totals directly would bypass the accrual the pricing pass reads. The
-            // physical model rides along when the logical name still resolves, because pricing is per
+            // physical model is recorded when the logical name still resolves, because pricing is per
             // physical model: a protocol carrying only the logical name priced against nothing, and a
             // remote review's cost stayed null however much it spent.
             var protocolId = await protocolRecorder.BeginAsync(
@@ -176,8 +176,9 @@ public sealed partial class RunnerIngestWriter(
 
     /// <summary>
     ///     The physical model behind a logical name, resolved once per name per batch. Fail-soft: a name
-    ///     whose binding is gone still records its tokens — unpriced beats unrecorded, the tokens being
-    ///     already spent — which is the same best-effort rule the pricing pass itself follows.
+    ///     whose binding is gone still records its tokens. The tokens were already spent, so recording them
+    ///     unpriced is better than not recording them, which is the same best-effort rule the pricing pass
+    ///     follows.
     /// </summary>
     private async Task<string?> TryResolvePhysicalModelAsync(
         Guid? clientId,

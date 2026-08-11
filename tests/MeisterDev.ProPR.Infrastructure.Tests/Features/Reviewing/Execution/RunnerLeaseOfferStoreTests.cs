@@ -15,10 +15,9 @@ using FactAttribute = Xunit.SkippableFactAttribute;
 namespace MeisterDev.ProPR.Infrastructure.Tests.Features.Reviewing.Execution;
 
 /// <summary>
-///     Which jobs a runner may be offered is decided entirely in SQL, because doing any of it in memory
-///     after a LIMIT would silently drop whatever the limit cut off. For the fairness rule that would be a
-///     starvation bug; for the scope rule it would be a cross-client leak. Both are asserted against the
-///     real database.
+///     Which jobs a runner may be offered is decided entirely in SQL, because doing any of it in memory after
+///     a LIMIT would drop whatever the limit cut off. For the fairness rule that would be a starvation bug,
+///     and for the scope rule a cross-client leak. Both are asserted against the real database.
 /// </summary>
 [Collection("PostgresIntegration")]
 public sealed class RunnerLeaseOfferStoreTests(PostgresContainerFixture fixture) : IAsyncLifetime

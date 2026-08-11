@@ -802,8 +802,8 @@ public sealed partial class ReviewOrchestrationService(
     ///     <para>
     ///         This exists so a runner's findings and an in-process review end on one publication rather
     ///         than two. Everything publication carries, deduplication at both layers, thread memory,
-    ///         posted-comment origins, and per-thread failure isolation, is behaviour nobody should be
-    ///         reimplementing for a remote executor, and a second entry point is how the two would drift.
+    ///         posted-comment origins, and per-thread failure isolation, would otherwise have to be
+    ///         reimplemented for a remote executor, and a second entry point is how the two would drift.
     ///     </para>
     /// </summary>
     /// <param name="jobId">The job whose findings to publish.</param>
@@ -845,12 +845,12 @@ public sealed partial class ReviewOrchestrationService(
         // are going out is how the same review gets posted twice. Marking it protects the job from reclaim
         // until publication finishes or its own, longer timeout passes.
         //
-        // The mark is refused when the job is no longer Processing — stopped, superseded, or already
-        // terminal — and that refusal is the answer to whether this review should be posted at all.
-        // Publishing over it puts a review on the pull request for work somebody already decided against:
-        // most visibly, a push supersedes this job while its comments are going out and the stale review
-        // lands anyway. The status guard further down only runs after the comments have been posted, so it
-        // cannot be the thing that stops this.
+        // The mark is refused when the job is no longer Processing, which covers stopped, superseded and
+        // already terminal. That refusal answers whether this review should be posted at all. Publishing
+        // over it puts a review on the pull request for work that was already decided against. The clearest
+        // case is a push that supersedes this job while its comments are going out, after which the stale
+        // review is posted anyway. The status guard further down only runs after the comments have been
+        // posted, so it cannot be what stops this.
         if (leaseStore is not null && !await leaseStore.TryMarkPublishingAsync(job.Id, ct: ct))
         {
             if (protocolId.HasValue)
@@ -1043,9 +1043,9 @@ public sealed partial class ReviewOrchestrationService(
         ReviewJob job,
         CancellationToken ct)
     {
-        // Delegated to the shared reuse service so the dispatch path adopts exactly what this path
-        // adopts. Two implementations of "what may this review inherit" is how a remote review quietly
-        // becomes a different review.
+        // Delegated to the shared reuse service so the dispatch path adopts exactly what this path adopts.
+        // Two implementations of "what may this review inherit" would let a remote review become a
+        // different review with nothing to show it.
         var state = await this.Reuse.LoadScanStateAsync(job, ct);
         return (
             state.IsNewIteration,

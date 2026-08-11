@@ -219,7 +219,7 @@ public sealed class RunnerLeaseHandbackRequest
     /// <summary>The job whose lease is being returned.</summary>
     public Guid JobId { get; init; }
 
-    /// <summary>The generation the runner believes it holds.</summary>
+    /// <summary>The generation the runner claims to hold.</summary>
     public int LeaseGeneration { get; init; }
 
     /// <summary>
@@ -235,7 +235,7 @@ public sealed class RunnerLeaseHeartbeatRequest
     /// <summary>The job whose lease is being renewed.</summary>
     public Guid JobId { get; init; }
 
-    /// <summary>The generation the runner believes it holds.</summary>
+    /// <summary>The generation the runner claims to hold.</summary>
     public int LeaseGeneration { get; init; }
 
     /// <summary>

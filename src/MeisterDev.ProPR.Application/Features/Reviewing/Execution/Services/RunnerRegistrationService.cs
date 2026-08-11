@@ -137,8 +137,8 @@ public sealed partial class RunnerRegistrationService(
 
         var (secret, credentialHash, lookupHash) = this.IssueCredential();
 
-        // Same identity, same scope. Renewal exists so a credential can expire without an operator having
-        // to enroll the host again, and re-stamping the scope here would quietly undo an operator's change.
+        // Same identity, same scope. Renewal exists so a credential can expire without an operator having to
+        // enroll the host again, and re-stamping the scope here would undo an operator's change.
         runner.RenewCredential(
             credentialHash,
             lookupHash,
@@ -219,11 +219,11 @@ public sealed partial class RunnerRegistrationService(
             now,
             expiresAt,
             // Single use by default, because an enrollment secret that enrolls an unbounded number of hosts
-            // is a larger thing to lose than one that enrolls a single host. It is not the only shape that
-            // has to work, though: a fleet the platform scales for you spawns replicas nobody is present to
-            // issue a token to, and one key per replica is not a ceremony an autoscaler can perform. A
-            // bounded count allows a scaling group to be provisioned from one token, while the remaining
-            // uses stay visible to the operator who issued it and the token can be revoked.
+            // is more damaging to lose than one that enrolls a single host. It is not the only case that has
+            // to work: a fleet scaled by the platform starts replicas with no operator present to issue a
+            // token for each one, and an autoscaler cannot issue one key per replica. A bounded count lets a
+            // scaling group be provisioned from one token, while the remaining uses stay visible to the
+            // operator who issued it and the token can be revoked.
             maxUses,
             issuedByUserId);
 

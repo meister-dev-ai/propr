@@ -14,9 +14,9 @@ using NSubstitute;
 namespace MeisterDev.ProPR.Application.Tests.Features.Reviewing.Execution;
 
 /// <summary>
-///     The control-plane half of proxied thread memory. Authorization first, always; then the same service
-///     an in-process review calls, on the job's own client — so what memory says about a finding does not
-///     depend on which side asked.
+///     The control-plane half of proxied thread memory. Authorization first in every case, then the same
+///     service an in-process review calls, on the job's own client, so what memory reports about a finding
+///     does not depend on which side asked.
 /// </summary>
 public sealed class RunnerMemoryProxyTests
 {
@@ -88,8 +88,8 @@ public sealed class RunnerMemoryProxyTests
     }
 
     // The reconsideration prompt reads the output language, the custom system message, and the stage
-    // override off the context. Passed as null, a German client's remote review came back with
-    // English reconsiderations, and an admin's override for this stage was silently ignored.
+    // override off the context. Passed as null, a German client's remote review came back with English
+    // reconsiderations, and an admin's override for this stage was ignored with nothing to show it.
     [Fact]
     public async Task WithTheClientConfigurationAtHand_TheContextCarriesLanguageAndOverrides()
     {

@@ -163,7 +163,7 @@ public sealed class RunnerBindingTranscriptEquivalenceTests
         var remoteWrites = new List<string>();
         await RunFlowAsync(proxyTools, proxyChat, remoteWrites.Add);
 
-        // Shipped the way a runner would ship them, then read back in arrival order.
+        // Sent the way a runner would send them, then read back in arrival order.
         var writer = new RecordingIngestWriter();
         var ledger = new InMemoryIngestLedger();
         var authorizer = Substitute.For<IRunnerCallAuthorizer>();

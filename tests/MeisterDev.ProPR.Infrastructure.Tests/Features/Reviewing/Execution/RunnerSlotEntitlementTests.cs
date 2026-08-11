@@ -78,8 +78,8 @@ public sealed class RunnerSlotEntitlementTests(PostgresContainerFixture fixture)
         Assert.Equal(RunnerLeaseRefusal.SlotLimitReached, admission.Refusal);
     }
 
-    // Malformed rather than meaningful. Reading it as unmetered would let bad data silently switch
-    // metering off, which is the one direction a storage mistake should never take.
+    // Malformed rather than meaningful. Reading it as unmetered would let bad data switch metering off, which
+    // is the one direction a storage mistake should never take.
     [Fact]
     public async Task ANegativeEntitlement_RefusesRatherThanDisablingMetering()
     {

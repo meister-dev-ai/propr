@@ -114,7 +114,7 @@ public sealed class RunnerToolProxyTests
     }
 
     // The replica that granted the lease is the one holding the job's tools open. Another replica cannot
-    // serve the call, and says so in the way the caller already knows how to handle.
+    // serve the call, and reports it in the way the caller already knows how to handle.
     [Fact]
     public async Task AReplicaNotHoldingTheJob_RefusesRatherThanImprovising()
     {

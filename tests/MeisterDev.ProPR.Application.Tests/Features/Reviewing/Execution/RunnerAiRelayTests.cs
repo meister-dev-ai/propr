@@ -135,8 +135,8 @@ public sealed class RunnerAiRelayTests
         Assert.Equal(RunnerRelayRefusal.BudgetHardCapReached, third.Refusal);
     }
 
-    // A model with no configured rates prices to null, and null is "unpriced", never zero — the total
-    // stays where it was and only the approximate flag moves. The cap cannot trip on unknowable spend.
+    // A model with no configured rates prices to null, and null means unpriced rather than zero: the total
+    // stays where it was and only the approximate flag moves. The cap cannot trip on unknown spend.
     [Fact]
     public async Task AnUnpricedModel_DoesNotAccrueTowardTheCap()
     {
@@ -208,7 +208,7 @@ public sealed class RunnerAiRelayTests
         Assert.Equal(RunnerRelayRefusal.JobNotHeld, result.Refusal);
     }
 
-    // Review passes use tool calling; a relay that dropped the options would quietly change the review.
+    // Review passes use tool calling, so a relay that dropped the options would change the review.
     [Fact]
     public async Task ChatOptionsIncludingTools_ReachTheProviderUnchanged()
     {

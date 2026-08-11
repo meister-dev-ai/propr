@@ -12,9 +12,9 @@ namespace MeisterDev.ProPR.Application.Features.Reviewing.Execution.Services;
 /// <summary>
 ///     Applies an executor's batched output exactly once, in order.
 ///     <para>
-///         Three separate guarantees, and each of them matters on its own. Exactly once, because a resend
-///         that writes the trace twice and counts the spend twice leaves a cost nobody can reconcile. In
-///         order, because idempotency does not give ordering and a trace with a hole in it is not readable.
+///         Three separate guarantees, and each of them matters on its own. Exactly once, because a resend that
+///         writes the trace twice and counts the spend twice leaves a cost that cannot be reconciled. In
+///         order, because idempotency does not give ordering and a trace with a gap in it is not readable.
 ///         Bounded, because the protocol payloads are already a known volume problem and batching them is
 ///         an easy way to make that worse.
 ///     </para>

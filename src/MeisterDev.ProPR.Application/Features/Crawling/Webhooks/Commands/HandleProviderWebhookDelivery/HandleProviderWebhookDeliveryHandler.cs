@@ -225,10 +225,11 @@ public sealed partial class HandleProviderWebhookDeliveryHandler(
             return CompleteDecision(activity, startedAt, providerTagValue, delivery.EventName, true, rejected);
         }
 
-        // The seam. Everything above reads only the delivery and this installation's own configuration;
-        // everything below reads the provider — the revision, the reviewer, the pull request itself — and
-        // that is the part no provider's delivery timeout will wait for. So an accepted delivery is
-        // recorded here and answered immediately, and the work happens on a worker that owns its own time.
+        // The seam. Everything above reads only the delivery and this installation's own configuration.
+        // Everything below reads the provider, meaning the revision, the reviewer and the pull request
+        // itself, and that is the part no provider's delivery timeout will wait for. An accepted delivery is
+        // therefore recorded here and answered immediately, and the work happens on a worker that is not
+        // bound by that timeout.
         if (command.Mode == WebhookDeliveryProcessingMode.AcceptAndQueue)
         {
             var queued = await deliveryQueue.EnqueueAsync(
@@ -244,10 +245,10 @@ public sealed partial class HandleProviderWebhookDeliveryHandler(
 
             var accepted = NormalizeDecision(new WebhookDeliveryQueueOutcome(queued).ToDecision(OkStatusCode));
 
-            // Logged on acceptance rather than left to the worker, so a delivery this installation took
-            // responsibility for is visible from the moment it did. The worker records what processing made
-            // of it as its own entry; a delivery with only the first of the two is one that never got that
-            // far, which is exactly the case that used to leave no trace at all.
+            // Logged on acceptance rather than left to the worker, so a delivery this installation accepted
+            // is visible from that point on. The worker records the result of processing as its own entry. A
+            // delivery with only the first of the two entries never reached processing, which is the case
+            // that previously left no record at all.
             await this.PersistLogAsync(
                 configuration.Id,
                 delivery.EventName,

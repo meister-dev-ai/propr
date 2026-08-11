@@ -47,7 +47,7 @@ public sealed class RelayChatClient(
             messages = messages.ToArray(),
 
             // The tools, temperature, output ceiling, and reasoning settings the pipeline shaped this call
-            // with. Dropped, a tool-using review silently becomes a single-turn one.
+            // with. Dropped, a tool-using review becomes a single-turn review with nothing to show it.
             options = RelayedChatOptions.FromChatOptions(options),
 
             // Idempotent per call so a retry after a network failure is charged once. The relay keeps the

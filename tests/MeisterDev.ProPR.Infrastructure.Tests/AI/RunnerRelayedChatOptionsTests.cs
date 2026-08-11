@@ -11,10 +11,10 @@ using Microsoft.Extensions.AI;
 namespace MeisterDev.ProPR.Infrastructure.Tests.AI;
 
 /// <summary>
-///     Rebuilding a relayed completion's options on the control plane. What the runner's pipeline shaped
-///     has to reach the provider intact — tools as declarations, the ceiling and temperature as sent, and
-///     the reasoning knobs re-applied against the actual client — or a remote review quietly runs as a
-///     different review than the same job run in-process.
+///     Rebuilding a relayed completion's options on the control plane. What the runner's pipeline shaped has
+///     to reach the provider intact: tools as declarations, the ceiling and temperature as sent, and the
+///     reasoning settings re-applied against the actual client. Otherwise a remote review runs as a different
+///     review from the same job run in process.
 /// </summary>
 public sealed class RunnerRelayedChatOptionsTests
 {
@@ -59,7 +59,7 @@ public sealed class RunnerRelayedChatOptionsTests
     }
 
     // The implementation lives on the runner; reaching invocation here means a composition bug, and it
-    // must fail loudly rather than return something a review would treat as a tool answer.
+    // must fail rather than return something a review would treat as a tool answer.
     [Fact]
     public async Task ARelayedDeclaration_RefusesInvocation()
     {
@@ -85,7 +85,7 @@ public sealed class RunnerRelayedChatOptionsTests
     }
 
     // A newer runner naming a level this build does not know still gets its completion, at the provider's
-    // default effort — and keeps its temperature, because no effort was actually applied.
+    // default effort, and keeps its temperature, because no effort was applied.
     [Fact]
     public void AnUnknownEffort_FallsBackToTheProviderDefault()
     {

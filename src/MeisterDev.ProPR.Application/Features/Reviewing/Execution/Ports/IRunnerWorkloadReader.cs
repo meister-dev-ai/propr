@@ -8,9 +8,9 @@ namespace MeisterDev.ProPR.Application.Features.Reviewing.Execution.Ports;
 ///     What the fleet is doing right now, as opposed to what it is.
 ///     <para>
 ///         The registry answers which runners exist and whether they are healthy. It cannot answer the
-///         question an operator actually arrives with — is the work moving, and which host has it — because
-///         that lives on the jobs rather than the runners. Reading it here keeps the two joined in one place
-///         instead of leaving a browser to correlate a list of hosts with a list of jobs.
+///         two questions an operator arrives with, whether the work is progressing and which host holds it,
+///         because those live on the jobs rather than the runners. Reading it here keeps the two joined in
+///         one place instead of leaving a browser to correlate a list of hosts with a list of jobs.
 ///     </para>
 /// </summary>
 public interface IRunnerWorkloadReader

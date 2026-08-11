@@ -38,8 +38,8 @@ public sealed class RunnerWorkspaceServer(
             return RunnerWorkspaceGrant.NoMirror();
         }
 
-        // Measured before anything is sent. A ceiling checked while streaming is not a ceiling: by the time
-        // it trips, the egress has been paid for.
+        // Measured before anything is sent. A ceiling checked while streaming does not bound anything,
+        // because by the time it trips the egress has already been paid for.
         var measured = await sizeProbe.MeasureAsync(source.MirrorPath, ct);
         if (measured > source.MaxTransferBytes)
         {
@@ -70,8 +70,8 @@ public sealed class RunnerWorkspaceRegistry : IRunnerWorkspaceRegistry
         var replaced = this._byJob.TryGetValue(jobId, out var previous) ? previous : null;
         this._byJob[jobId] = new Entry(source, workspace);
 
-        // A re-dispatch replaces the previous attempt's workspace. Its disk is released now rather than
-        // never — the new entry serves every fetch from here on.
+        // A re-dispatch replaces the previous attempt's workspace. Its disk is released now, because the new
+        // entry serves every fetch from this point on.
         if (replaced?.Workspace is not null && !ReferenceEquals(replaced.Workspace, workspace))
         {
             await DisposeQuietlyAsync(replaced.Workspace);

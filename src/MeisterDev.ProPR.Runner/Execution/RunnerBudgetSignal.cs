@@ -7,8 +7,8 @@ namespace MeisterDev.ProPR.Runner.Execution;
 /// <summary>
 ///     One job's word from the relay that its budget is spent.
 ///     <para>
-///         The figures live in the control plane — every completion is priced and capped there — so what
-///         travels back is a bit, not a number: the soft cap has been reached, or a completion was refused
+///         The figures live in the control plane, where every completion is priced and capped, so what comes
+///         back is a flag rather than a number: the soft cap has been reached, or a completion was refused
 ///         outright. The planner reads it before starting each file, which is the graceful version of what
 ///         otherwise happens anyway: every remaining file failing one 402 at a time.
 ///     </para>

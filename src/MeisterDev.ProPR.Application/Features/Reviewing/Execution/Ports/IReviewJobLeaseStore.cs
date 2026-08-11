@@ -51,7 +51,7 @@ public interface IReviewJobLeaseStore
     ///     is not the recorded owner, or whose job has since reached a terminal state is rejected and the
     ///     expiry is left untouched.
     /// </summary>
-    /// <param name="lease">The lease the caller believes it holds.</param>
+    /// <param name="lease">The lease the caller claims to hold.</param>
     /// <param name="leaseDuration">How far ahead to move the expiry.</param>
     /// <param name="ct">The cancellation token.</param>
     Task<ReviewJobLeaseRenewal> TryRenewAsync(
@@ -81,7 +81,7 @@ public interface IReviewJobLeaseStore
     ///     Reports whether the caller's lease is still the current one. The generation is the fencing token:
     ///     a holder that was paused past its expiry and reclaimed by someone else fails this check.
     /// </summary>
-    /// <param name="lease">The lease the caller believes it holds.</param>
+    /// <param name="lease">The lease the caller claims to hold.</param>
     /// <param name="ct">The cancellation token.</param>
     Task<bool> IsLeaseCurrentAsync(ReviewJobLease lease, CancellationToken ct = default);
 

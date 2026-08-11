@@ -68,11 +68,11 @@ public interface IRunnerRegistrationService
     Task<bool> RevokeRegistrationTokenAsync(Guid tokenId, CancellationToken ct = default);
 
     /// <summary>
-    ///     Removes a runner's row entirely. Without this, every re-enrollment mints a new identity and the
+    ///     Removes a runner's row entirely. Without this, every re-enrollment creates a new identity and the
     ///     old rows are permanent: they count toward the registered-runner total, keep the installation off
-    ///     the no-runners fast path, and sit amber in the fleet view forever, indistinguishable from a
-    ///     wedged live host. Refused while the runner still holds a lease, because deleting the identity under a
-    ///     running job would orphan work the lease machinery is still tracking.
+    ///     the no-runners fast path, and stay in the fleet view as entries that cannot be told apart from a
+    ///     live host that has stopped making progress. Refused while the runner still holds a lease, because
+    ///     deleting the identity under a running job would orphan work the lease machinery is still tracking.
     /// </summary>
     /// <param name="runnerId">The runner to delete.</param>
     /// <param name="ct">The cancellation token.</param>

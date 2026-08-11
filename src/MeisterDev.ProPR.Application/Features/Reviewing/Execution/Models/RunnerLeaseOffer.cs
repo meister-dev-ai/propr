@@ -87,7 +87,7 @@ public sealed record RunnerLeaseOffer
     {
         // None means a lease was granted, so a refusal carrying it is neither granted nor refused. The
         // controller's fallback would answer 204 and the caller would read an invalid state as an empty
-        // queue, which is the one outcome nobody would investigate.
+        // queue, which is the one outcome that prompts no investigation.
         if (refusal == RunnerLeaseRefusal.None)
         {
             throw new ArgumentOutOfRangeException(

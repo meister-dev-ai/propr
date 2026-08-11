@@ -12,7 +12,7 @@ namespace MeisterDev.ProPR.Application.Features.Reviewing.Execution.Models;
 /// </summary>
 /// <param name="Sequence">
 ///     Position in this job's stream, starting at 1. Idempotency alone does not give ordering, and a trace
-///     with a hole in it is not a trace anybody can read.
+///     with a gap in it cannot be read.
 /// </param>
 /// <param name="IdempotencyKey">Identifies the batch, so a resend is recognised rather than applied twice.</param>
 /// <param name="Events">Trace events, in the order they occurred.</param>

@@ -46,7 +46,7 @@ public interface IRunnerPriorResultsReader
 /// <param name="PerFileSummary">The per-file summary synthesis reads.</param>
 /// <param name="ReviewedPassKeys">
 ///     Which passes have run against it. The selector compares these against the configured pass list, so
-///     a file reviewed under an older list is reviewed again rather than silently kept.
+///     a file reviewed under an older list is reviewed again rather than kept.
 /// </param>
 /// <param name="Comments">
 ///     The findings this file produced. Carried because synthesis reasons over every file's findings, and a

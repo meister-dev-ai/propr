@@ -7,9 +7,9 @@ using MeisterDev.ProPR.Runner.Execution;
 namespace MeisterDev.ProPR.Runner.Tests;
 
 /// <summary>
-///     What a review may ask about the license on a host that has none. The carried capability answers;
-///     anything else fails loudly, because a guessed answer un-licenses or silently disables a feature —
-///     the same quiet-null defect class, in both directions.
+///     What a review may ask about the license on a host that has none. The carried capability answers, and
+///     anything else fails, because a guessed answer either enables an unlicensed feature or disables a
+///     licensed one, which is the same unreported-null defect class in both directions.
 /// </summary>
 public sealed class ManifestLicensingTests
 {

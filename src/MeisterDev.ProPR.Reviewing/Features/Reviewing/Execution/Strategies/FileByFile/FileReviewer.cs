@@ -52,7 +52,7 @@ internal sealed partial class FileReviewer(
     private const int SymbolAttributionLineBudget = 50;
 
     // The embedded ProRV catalog is compiled into the ProRV assembly, so its assembly version is a stable token
-    // that changes only when the assets change — used to key the per-job focused-guidance cache.
+    // that changes only when the assets change. It keys the per-job focused-guidance cache.
     private static readonly string ProRvCatalogVersion =
         typeof(IProRVPrefilter).Assembly.GetName().Version?.ToString() ?? "0";
 
@@ -228,7 +228,7 @@ internal sealed partial class FileReviewer(
             // locally-verified comments into this result before it is persisted, so the synthesis inlet sees the
             // union rather than a single pass. Ordinary passes run only on Medium/High tiers; a security-lens pass
             // runs on any tier when the file is security-flagged. Flag off (or nothing in scope) returns the
-            // baseline result untouched — behavior is identical to a single-pass review.
+            // baseline result untouched, so behavior is identical to a single-pass review.
             result = await this.MaybeApplyMultiPassUnionAsync(
                 new MultiPassUnionInputs(
                     job,
@@ -269,7 +269,7 @@ internal sealed partial class FileReviewer(
     {
         if (existingResult is { IsComplete: false })
         {
-            // Reuse the existing row — covers both jobs killed mid-flight (interrupted)
+            // Reuse the existing row. This covers both jobs killed mid-flight (interrupted)
             // and previously failed rows (IsFailed=true, IsComplete=false).
             // Reset it so MarkCompleted / MarkFailed work correctly.
             existingResult.ResetForRetry();
@@ -361,7 +361,7 @@ internal sealed partial class FileReviewer(
     ///     Runs additional independent passes over one file and unions their locally-verified comments with the
     ///     baseline pass when the client opted into multi-pass union and the file's resolved tier is Medium or High.
     ///     Low-tier files (and the flag-off path) return the baseline result unchanged, so the single-pass behavior
-    ///     is byte-identical. Duplicates are not collapsed here — that happens downstream at the synthesis dedup
+    ///     is byte-identical. Duplicates are not collapsed here. That happens downstream at the synthesis dedup
     ///     inlet; this step preserves every distinct finding produced by any pass.
     /// </summary>
     private async Task<ReviewResult> MaybeApplyMultiPassUnionAsync(MultiPassUnionInputs inputs)
@@ -373,9 +373,9 @@ internal sealed partial class FileReviewer(
 
         // Ordinary/resample passes are gated to Medium/High tiers; a security-lens pass runs on any tier when the
         // file is security-flagged; a prorv-lens pass runs on any tier when the file is catalog-eligible. Enter
-        // planning when any is in scope — the per-pass gate in the planners then drops the passes that are out of
+        // planning when any is in scope. The per-pass gate in the planners then drops the passes that are out of
         // scope, so a file that qualifies for none is byte-identical to today. A pr_wide-scope pass never runs per
-        // file, so it is excluded here — a pass list of only pr_wide entries is not a reason to fan out per-file.
+        // file, so it is excluded here. A pass list of only pr_wide entries does not require a per-file fan-out.
         var hasEligibleProRvPass = proRvPrefilter is not null
                                    && IsProRvEligible(inputs.File)
                                    && inputs.FileContext.ReviewPasses.Any(pass =>
@@ -514,7 +514,8 @@ internal sealed partial class FileReviewer(
 
     // Production path: one resample per entry in the ordered per-client review-pass list, each resolved to its own
     // configured model (connection implied). An empty list records the whole-file skip; an unresolvable entry records
-    // a per-pass skip and is dropped while the rest run — never a same-tier-model resample fallback.
+    // a per-pass skip and is dropped while the rest run. This path never falls back to a same-tier-model
+    // resample.
     private async Task<(IReadOnlyList<PlannedResamplePass> Passes, string ArmLabel, bool SkippedWholeFile)> PlanReviewListResamplePassesAsync(
         MultiPassUnionInputs inputs)
     {
@@ -538,7 +539,7 @@ internal sealed partial class FileReviewer(
         foreach (var pass in reviewPasses)
         {
             // A pr_wide-scope entry runs once at the job level over the whole change set, not per file, so this
-            // per-file planner skips it — like an out-of-scope entry — while still consuming its ordinal so a pass's
+            // per-file planner skips it, as it would an out-of-scope entry, while still consuming its ordinal so a pass's
             // "Pass N" index stays tied to its position in the configured list. PR-wide execution is handled
             // separately; here the entry simply contributes nothing to the per-file union.
             if (pass.Scope == ReviewPassScope.PrWide)
@@ -548,7 +549,7 @@ internal sealed partial class FileReviewer(
             }
 
             // A security-lens entry runs on any tier when the file is security-flagged; a ProRV-lens entry runs on any
-            // tier when the file is deterministically catalog-eligible (a text file with a diff — the model ranking
+            // tier when the file is deterministically catalog-eligible (a text file with a diff, since the model ranking
             // that picks the applicable checks, and decides whether any apply, runs inside the pass); an ordinary
             // entry runs only on the in-scope (Medium/High) tiers. Out-of-scope entries are dropped without a trace
             // (the common case is a lens configured on a client whose file under review is not relevant) but still
@@ -608,7 +609,7 @@ internal sealed partial class FileReviewer(
     }
 
     // Cheap deterministic ProRV eligibility screen (no model call): a text file with an actual diff. The model
-    // ranking that decides which catalog checks apply — and whether any do — runs inside the pass.
+    // ranking that decides which catalog checks apply, and whether any do, runs inside the pass.
     private static bool IsProRvEligible(ChangedFile file)
     {
         return !file.IsBinary
@@ -814,7 +815,7 @@ internal sealed partial class FileReviewer(
             // A ProRV-lens pass screens the file against the embedded catalog first. The applicability ranking is a
             // single model call on this pass's own configured model; it both gates the pass and produces the focused
             // guidance. No applicable check (or a deterministic ineligibility) skips the review with a reason-coded
-            // trace and NO review model call — the pass contributes nothing to the union.
+            // trace and NO review model call. The pass contributes nothing to the union.
             if (string.Equals(inputs.PassArm.Lens, ReviewPassLens.ProRV, StringComparison.Ordinal))
             {
                 focusedGuidance = await this.ResolveProRvLensGuidanceAsync(inputs, protocolId, inputs.Ct);
@@ -845,7 +846,7 @@ internal sealed partial class FileReviewer(
             // Each resample pass runs at the resampling temperature. The pass model + client + capabilities were
             // already resolved by the caller and threaded in here (an eval-harness arm-model override reusing the
             // tier connection, or a production review-pass model resolved to its own runtime), so CreateFileContext
-            // has set them — the baseline pass keeps the tier model, only these resample passes switch, so any recall
+            // has set them. The baseline pass keeps the tier model and only these resample passes switch, so any recall
             // lift comes from a different sampler reviewing the file, not from re-sampling the same one.
             passContext.Temperature = inputs.Diversity.ResampleTemperature;
 
@@ -890,7 +891,7 @@ internal sealed partial class FileReviewer(
     // so a repeated prorv pass over the same file on the same model reuses the ranking; the model id is part of the
     // key because the ranking is a model call, not deterministic across models. Only a successful ranking is cached,
     // so a transient failure or a skip never poisons a later pass. Returns an empty list when the file is ineligible
-    // or no catalog check applies — the caller then skips the pass without a review model call.
+    // or no catalog check applies. The caller then skips the pass without a review model call.
     private async Task<IReadOnlyList<FocusedReviewGuidanceItem>> ResolveProRvLensGuidanceAsync(
         MultiPassUnionPassInputs inputs,
         Guid? protocolId,
@@ -976,7 +977,7 @@ internal sealed partial class FileReviewer(
         int passIndex,
         CancellationToken ct)
     {
-        // A pass that names a logical model resolves through the logical-model catalog — its connection, model,
+        // A pass that names a logical model resolves through the logical-model catalog. Its connection, model,
         // reasoning effort, and protocol come from the resolved role. Legacy passes bind a concrete configured model
         // and carry their own per-pass effort.
         if (!string.IsNullOrEmpty(pass.LogicalModelName))

@@ -15,7 +15,7 @@ namespace MeisterDev.ProPR.Application.Tests.Features.Reviewing.Execution;
 ///     What a resuming executor is allowed to read back, and what it gets.
 ///     <para>
 ///         A file result carries its findings, so this is the one runner read where answering the wrong
-///         caller hands somebody else's review away.
+///         caller discloses another client's review.
 ///     </para>
 /// </summary>
 public sealed class RunnerPriorResultsReaderTests
@@ -56,8 +56,8 @@ public sealed class RunnerPriorResultsReaderTests
         Assert.True(prior.Single(entry => entry.FilePath == "src/b.cs").IsFailed);
     }
 
-    // The findings of a review nobody else is entitled to see. A refusal rather than an empty list, so a
-    // caller cannot read "you may not ask" as "there is nothing recorded" and start over.
+    // The findings of a review no other caller is entitled to see. A refusal rather than an empty list, so a
+    // caller cannot read "not permitted" as "nothing recorded" and start over.
     [Fact]
     public async Task ACallerWithoutTheLease_IsRefusedRatherThanAnsweredEmpty()
     {

@@ -66,7 +66,7 @@ public sealed partial class RunnerRelayModelResolver(
 ///     <para>
 ///         Deliberately does not write token totals itself. In-process passes accrue their tokens through
 ///         the protocol recorder when a pass completes, and a runner's spend reaches the same place the same
-///         way: the executor ships spend records and the ingest path writes them through that recorder. A
+///         way: the executor sends spend records and the ingest path writes them through that recorder. A
 ///         second write path here would double-count against the one the pricing pass already reads.
 ///     </para>
 ///     <para>

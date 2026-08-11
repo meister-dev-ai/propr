@@ -11,7 +11,7 @@ namespace MeisterDev.ProPR.Infrastructure.Features.Reviewing.Execution.Persisten
 ///     <para>
 ///         An over-estimate of what a fetch transfers, since git compresses and the executor may already
 ///         hold most of the history in its cache. Erring high is the right direction for a ceiling whose
-///         job is to stop a repository nobody expected from being shipped at all.
+///         purpose is to stop an unexpectedly large repository from being transferred at all.
 ///     </para>
 /// </summary>
 public sealed class DirectorySizeProbe : IRunnerWorkspaceSizeProbe

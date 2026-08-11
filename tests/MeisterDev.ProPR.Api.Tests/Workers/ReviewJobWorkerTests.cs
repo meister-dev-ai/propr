@@ -245,9 +245,9 @@ public class ReviewJobWorkerTests
             Arg.Any<CancellationToken>());
     }
 
-    // A window the fleet skip emptied completely used to end the cycle, so a tenant with no runner whose
-    // job sat behind another tenant's runner-backed backlog was never even considered — not reviewed
-    // slowly, not reviewed at all until that backlog drained below the window size.
+    // A window the fleet skip emptied completely used to end the cycle, so a tenant with no runner whose job
+    // sat behind another tenant's runner-backed backlog was not considered at all until that backlog drained
+    // below the window size.
     [Fact]
     public async Task AWindowFullOfRunnerReservedJobs_DoesNotStarveTheTenantBehindIt()
     {
@@ -385,7 +385,7 @@ public class ReviewJobWorkerTests
         cts.Cancel();
         await worker.StopAsync(CancellationToken.None);
 
-        // Job should have been picked up — a lease was claimed for it.
+        // The job should have been picked up, which means a lease was claimed for it.
         await leaseStore.Received()
             .TryClaimAsync(job.Id, Arg.Any<string>(), Arg.Any<TimeSpan>(), Arg.Any<CancellationToken>());
     }
@@ -675,7 +675,7 @@ public class ReviewJobWorkerTests
     }
 
     // The isolation guarantee the whole feature rests on: with a live runner fleet this process executes
-    // nothing at all. Asserted on the processor rather than on a log line, because the promise is about
+    // nothing at all. Asserted on the processor rather than on a log line, because the guarantee is about
     // where the work runs and nothing else proves that.
     [Fact]
     public async Task Worker_ExecutesNothingItself_WhileARunnerFleetIsActive()

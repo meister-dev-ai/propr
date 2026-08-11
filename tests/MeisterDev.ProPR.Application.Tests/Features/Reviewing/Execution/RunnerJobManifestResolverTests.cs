@@ -140,9 +140,9 @@ public sealed class RunnerJobManifestResolverTests
             executionStore: executionStore);
     }
 
-    // The same stamp the in-process path writes at review start. Ingested spend is priced through the
-    // job's connection and the overview reads the model off the job — a dispatched job that never passed
-    // through review start had neither, so its cost stayed null however much it spent.
+    // The same stamp the in-process path writes at review start. Ingested spend is priced through the job's
+    // connection and the overview reads the model off the job. A dispatched job that never passed through
+    // review start had neither, so its cost stayed null however much it spent.
     [Fact]
     public async Task ResolvingAManifest_StampsTheJobsAiConfigLikeReviewStartWould()
     {
@@ -161,7 +161,8 @@ public sealed class RunnerJobManifestResolverTests
     }
 
     // The executor composes no PR-wide generator. A job whose pass list publishes from a pr_wide entry
-    // must be refused at dispatch, not leased to a host that would quietly review less than asked.
+    // must be refused at dispatch, not leased to a host that would review less than was asked without
+    // reporting it.
     [Fact]
     public async Task APublishingPrWidePass_RefusesDispatchByName()
     {
@@ -368,8 +369,9 @@ public sealed class RunnerJobManifestResolverTests
     // The pass ordinal is how a pass's trace is identified, so the order the client configured has to
     // survive into the manifest rather than being reconstructed on the far side.
     // The per-client decisions that change what a review does. A runner has no client record to read them
-    // from, so a manifest that omits them makes every one fall to its default and the review quietly
-    // becomes a different review — most visibly the pass list, which does nothing unless the union is on.
+    // from, so a manifest that omits them lets every one fall to its default, and the review becomes a
+    // different review with nothing to show it. The clearest case is the pass list, which does nothing
+    // unless the union is on.
     [Fact]
     public async Task TheManifest_CarriesThePerClientDecisionsThatChangeWhatAReviewDoes()
     {
@@ -391,7 +393,7 @@ public sealed class RunnerJobManifestResolverTests
         Assert.Equal(0.25f, behaviour.Temperature);
     }
 
-    // Read from the client, not assumed: a client with everything off must produce a manifest that says so
+    // Read from the client, not assumed: a client with everything off must produce a manifest that states it
     // rather than one that omits the section and lets the executor guess.
     [Fact]
     public async Task TheManifest_SaysSoWhenEveryDecisionIsOff()
@@ -453,7 +455,7 @@ public sealed class RunnerJobManifestResolverTests
     }
 
     // An executor cannot tell a value that failed to resolve from one deliberately left empty, so a partial
-    // manifest would have it review under configuration nobody chose.
+    // manifest would have it review under configuration that was never chosen.
     [Fact]
     public async Task AFailureAnywhereInResolution_RefusesTheLeaseInsteadOfSendingAPartialManifest()
     {
@@ -599,7 +601,7 @@ public sealed class RunnerJobManifestResolverTests
         Assert.Equal("Medium", pass.Model.ReasoningEffort);
     }
 
-    // The reviewer reads the conversation to avoid raising again what somebody already answered, and it
+    // The reviewer reads the conversation to avoid raising again what has already been answered, and it
     // cannot fetch it: reading a review's threads needs a credential the executor does not hold.
     [Fact]
     public async Task TheConversationAlreadyOnTheReview_TravelsWithTheManifest()

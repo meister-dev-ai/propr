@@ -18,9 +18,9 @@ namespace MeisterDev.ProPR.Runner.Execution;
 ///     </para>
 ///     <para>
 ///         The job it holds is seeded with whatever the control plane already recorded, read back at the
-///         start of the execution. That is what lets a reclaimed job skip what it finished — and, more than
-///         cost, what keeps synthesis reasoning over the whole review rather than over the half this
-///         attempt happened to produce.
+///         start of the execution. That is what lets a reclaimed job skip what it finished, and, beyond the
+///         cost saved, what keeps synthesis reasoning over the whole review rather than over the part this
+///         attempt produced.
 ///     </para>
 /// </summary>
 public sealed class SpoolingFileResultStore(ReviewJob job, JobSpool spool) : IReviewFileResultStore
@@ -31,7 +31,7 @@ public sealed class SpoolingFileResultStore(ReviewJob job, JobSpool spool) : IRe
     public Task<ReviewJob?> GetByIdWithFileResultsAsync(Guid id, CancellationToken ct = default)
     {
         // One job per lease, so an id that is not this one is a wiring mistake rather than a miss, and
-        // answering null would let the pipeline quietly review the wrong thing.
+        // answering null would let the pipeline review the wrong job with nothing to show it.
         if (id != job.Id)
         {
             throw new InvalidOperationException($"This runner holds job {job.Id} and was asked for {id}.");
@@ -61,7 +61,7 @@ public sealed class SpoolingFileResultStore(ReviewJob job, JobSpool spool) : IRe
 
         // Buffered again rather than replaced in the batch. The control plane keys file outcomes by path
         // and takes the last one, so a retry's result wins there without this having to reach into a
-        // batch that may already have been shipped.
+        // batch that may already have been sent.
         this.Buffer(result);
         return Task.CompletedTask;
     }
@@ -87,8 +87,8 @@ public sealed class SpoolingFileResultStore(ReviewJob job, JobSpool spool) : IRe
                 result.PerFileSummary,
                 result.ErrorMessage,
                 [.. result.ReviewedPassKeys],
-                // The findings travel with the checkpoint. A row persisted without them reads, on the next
-                // attempt, as a finished file that found nothing — and synthesis believes it.
+                // The findings are written with the checkpoint. A row persisted without them reads, on the
+                // next attempt, as a finished file that found nothing, and synthesis treats it as such.
                 result.Comments is { Count: > 0 } ? [.. result.Comments] : null,
                 result.IsExcluded,
                 result.ExclusionReason));

@@ -594,9 +594,9 @@ try
     {
         opts.GetLevel = (httpContext, _, exception) =>
         {
-            // Failures stay loud whatever they were asking for. A runner being refused is the one poll
-            // worth reading, and demoting it by path would hide exactly the thing an operator is looking
-            // for when a fleet goes quiet.
+            // Failures keep their level whatever the request was. A runner being refused is the one poll
+            // worth reading, and demoting it by path would hide what an operator looks for when a fleet
+            // stops taking work.
             if (exception is not null || httpContext.Response.StatusCode >= 400)
             {
                 return LogEventLevel.Information;
@@ -608,9 +608,9 @@ try
                 return LogEventLevel.Verbose; // Verbose = Trace in Serilog
             }
 
-            // Every runner asks for work every few seconds forever, so on an installation with a fleet
-            // these are most of the request log and none of the information in it: the answer is almost
-            // always "nothing for you". Kept at debug, where somebody chasing a lease is looking anyway.
+            // Every runner asks for work every few seconds, so on an installation with a fleet these are
+            // most of the request log and carry almost none of its information: the answer is nearly always
+            // that there is no work. Kept at debug, which is where a lease is investigated anyway.
             if (path.StartsWithSegments("/runners/lease"))
             {
                 return LogEventLevel.Debug;

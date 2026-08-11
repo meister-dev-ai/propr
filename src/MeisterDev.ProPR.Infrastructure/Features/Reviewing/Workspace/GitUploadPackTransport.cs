@@ -69,9 +69,9 @@ public sealed class GitUploadPackTransport : IGitUploadPackTransport
     ///     <para>
     ///         Git hooks export <c>GIT_DIR</c>, <c>GIT_INDEX_FILE</c>, and friends, and a child git process
     ///         inherits them. A server invoked from a hook would then operate on the hook's repository
-    ///         instead of the one it was handed, which is the sort of thing that silently rewrites somebody
-    ///         else's index. The mirror path is passed explicitly; nothing about the caller's environment
-    ///         should be able to override it.
+    ///         instead of the one it was handed, which can rewrite an unrelated repository's index with
+    ///         nothing to show it. The mirror path is passed explicitly, and nothing about the caller's
+    ///         environment should be able to override it.
     ///     </para>
     /// </summary>
     private static void ScrubInheritedGitEnvironment(ProcessStartInfo startInfo)

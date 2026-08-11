@@ -12,23 +12,24 @@ using MeisterDev.ProPR.Runner.Contracts;
 namespace MeisterDev.ProPR.Runner.Execution;
 
 /// <summary>
-///     Everything one job produces on its way back to the control plane, held until it can be shipped.
+///     Everything one job produces on its way back to the control plane, held until it can be sent.
 ///     <para>
 ///         A review emits far more than its findings: a trace event per stage, a result per file, and a
 ///         spend record per completion. Sending each one as it happens would make a review's latency the
 ///         sum of its network round trips, and would lose whatever was in flight when the control plane
-///         blinked. Batching is what makes a blip survivable.
+///         became unreachable. Batching is what lets a short outage be survived.
 ///     </para>
 ///     <para>
 ///         Bounded on purpose. An unbounded buffer turns a long outage into memory exhaustion, so past the
 ///         ceiling the oldest trace events are dropped and counted. File results and spend are never
 ///         dropped: they are the review's output and its cost, where a trace event is a description of how
-///         it got there. The count is reported so a trace with holes says so rather than looking complete.
+///         it got there. The count is reported so a trace with gaps reports them rather than reading as
+///         complete.
 ///     </para>
 ///     <para>
 ///         The sequence advances on acknowledgement, not on attempt. The ledger requires contiguity, so a
-///         batch that failed in transit must be resent under its own number — incrementing per attempt
-///         leaves a permanent gap, and every later batch is refused as out of order for the rest of the
+///         batch that failed in transit must be resent under its own number. Incrementing per attempt leaves
+///         a permanent gap, after which every later batch is refused as out of order for the rest of the
 ///         job.
 ///     </para>
 /// </summary>
@@ -50,15 +51,16 @@ public sealed partial class JobSpool(
     private readonly SemaphoreSlim _flushGate = new(1, 1);
 
     /// <summary>
-    ///     How many buffered items may accumulate before the oldest trace events are dropped. Generous,
-    ///     because the ordinary case is a blip; the ceiling is here so a long outage cannot exhaust memory.
+    ///     How many buffered items may accumulate before the oldest trace events are dropped. Set high,
+    ///     because the ordinary case is a short outage. The ceiling is here so a long outage cannot exhaust
+    ///     memory.
     /// </summary>
     private const int MaxBufferedItems = 5000;
 
     /// <summary>The last sequence the control plane acknowledged. The next batch is this plus one.</summary>
     private int _acknowledgedSequence;
 
-    /// <summary>Trace events dropped at the ceiling, so a shortened trace can say so.</summary>
+    /// <summary>Trace events dropped at the ceiling, so a shortened trace can report the loss.</summary>
     private int _droppedEvents;
 
     /// <summary>
@@ -106,7 +108,7 @@ public sealed partial class JobSpool(
     public Guid JobId => jobId;
 
     /// <summary>
-    ///     Ships everything buffered, in one batch, and keeps it buffered if the ship fails.
+    ///     Sends everything buffered, in one batch, and keeps it buffered if the send fails.
     ///     <para>
     ///         Items are only dropped once the control plane has acknowledged them. A flush that throws
     ///         away its batch on a transport failure would lose exactly the trace an operator needs to
@@ -168,8 +170,8 @@ public sealed partial class JobSpool(
                     }
                     else if (conflict.ExpectedSequence is { } expected)
                     {
-                        // Resume where the ledger says it stopped, which may be behind or ahead of what
-                        // this spool believes it sent.
+                        // Resume where the ledger reports it stopped, which may be behind or ahead of what
+                        // this spool recorded as sent.
                         this._acknowledgedSequence = expected - 1;
                     }
                 }

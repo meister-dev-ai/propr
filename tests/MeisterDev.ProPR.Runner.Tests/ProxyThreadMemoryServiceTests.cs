@@ -14,8 +14,8 @@ using NSubstitute;
 namespace MeisterDev.ProPR.Runner.Tests;
 
 /// <summary>
-///     Thread memory over the proxy. The one behaviour that matters everywhere: whatever the wire does,
-///     the review keeps a result — memory degrades, the review does not — and the trace says which
+///     Thread memory over the proxy. The behaviour that matters in every case: whatever the transport does,
+///     the review keeps a result. Memory degrades and the review continues, and the trace records which
 ///     happened.
 /// </summary>
 public sealed class ProxyThreadMemoryServiceTests
@@ -75,8 +75,9 @@ public sealed class ProxyThreadMemoryServiceTests
             Arg.Any<CancellationToken>());
     }
 
-    // A refused lease ends the review at the next relay or ingest call; memory just steps aside. What it
-    // must not do is throw — this interface promises the review never dies on a memory failure.
+    // A refused lease ends the review at the next relay or ingest call, and memory returns the draft
+    // unchanged. What it must not do is throw, because this interface guarantees that a memory failure never
+    // ends the review.
     [Fact]
     public async Task ARefusedLease_KeepsTheDraftAndSaysSo()
     {
@@ -90,8 +91,8 @@ public sealed class ProxyThreadMemoryServiceTests
             ProtocolId, Arg.Is("memory_operation_failed"), Arg.Any<string?>(), Arg.Any<string?>(), Arg.Any<CancellationToken>());
     }
 
-    // An older control plane answers 404 here. The review runs without memory, exactly as it did before
-    // the operation existed — and the trace records the degradation instead of imitating "nothing found".
+    // An older control plane answers 404 here. The review runs without memory, exactly as it did before the
+    // operation existed, and the trace records the degradation rather than reporting "nothing found".
     [Theory]
     [InlineData(HttpStatusCode.NotFound)]
     [InlineData(HttpStatusCode.InternalServerError)]
@@ -147,7 +148,7 @@ public sealed class ProxyThreadMemoryServiceTests
     }
 
     // The crawl, publication, and admin paths never run on an executor. Answering them with a no-op would
-    // let a future caller believe it wrote to a store this host does not have.
+    // let a later caller assume it wrote to a store this host does not have.
     [Fact]
     public async Task TheNonReviewOperations_RefuseLoudly()
     {

@@ -117,10 +117,10 @@ public sealed class RunnerFindingsIntake(
     /// <summary>
     ///     Fills in the soft-cap figures a remote review cannot know.
     ///     <para>
-    ///         The executor sees only the verdict — the wind-down signal carries no numbers, because the
-    ///         completions are priced here, against the job's budget scope. Persisted figure-less, the
-    ///         result never gets its budget block, and the paid resume that budget block gates silently
-    ///         re-bills the whole review instead of continuing it.
+    ///         The executor sees only the verdict, because the wind-down signal carries no numbers: the
+    ///         completions are priced here, against the job's budget scope. Persisted without figures, the
+    ///         result never gets its budget block, and the paid resume that the budget block gates re-bills
+    ///         the whole review instead of continuing it.
     ///     </para>
     /// </summary>
     private ReviewResult FillSoftCapFigures(Guid jobId, ReviewResult result)

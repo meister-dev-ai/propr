@@ -114,10 +114,9 @@ public sealed class StartupRecoveryTests(PostgresContainerFixture fixture) : IAs
     }
 
     /// <summary>
-    ///     A leased job is alive on another replica — or, once its lease expires, the counted reclaim
-    ///     sweep's to take back — and a publishing job must never be requeued at all: a rolling deploy that
-    ///     requeued it is how the same review got posted twice. Startup recovery only touches lease-less
-    ///     rows.
+    ///     A leased job is running on another replica, and once its lease expires the counted reclaim sweep
+    ///     takes it back. A publishing job must never be requeued at all: a rolling deploy that requeued it
+    ///     is how the same review got posted twice. Startup recovery only touches lease-less rows.
     /// </summary>
     [SkippableFact]
     public async Task Startup_LeavesLeasedAndPublishingJobsToTheLeaseSubsystem()

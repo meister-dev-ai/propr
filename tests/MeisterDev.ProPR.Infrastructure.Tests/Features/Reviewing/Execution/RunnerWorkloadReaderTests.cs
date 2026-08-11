@@ -113,8 +113,8 @@ public sealed class RunnerWorkloadReaderTests(PostgresContainerFixture fixture) 
         Assert.Empty(mine.Executing);
     }
 
-    // The throughput figure is a window, not a lifetime total: a runner that did fifty reviews last month
-    // and nothing since is not a busy runner.
+    // The throughput figure covers a window rather than the runner's lifetime: a runner that did fifty reviews
+    // last month and nothing since should not read as busy.
     [Fact]
     public async Task WorkFinishedBeforeTheWindow_IsNotCounted()
     {

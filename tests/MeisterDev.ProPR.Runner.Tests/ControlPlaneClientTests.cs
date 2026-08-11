@@ -8,9 +8,9 @@ using Microsoft.Extensions.Logging.Abstractions;
 namespace MeisterDev.ProPR.Runner.Tests;
 
 /// <summary>
-///     Which control plane a lease call actually reaches. The heartbeat and the release drop per-lease
-///     state only the granting replica holds, so when the manifest names that replica, routing these
-///     anywhere else succeeds in the database and quietly leaks everything else.
+///     Which control plane a lease call reaches. The heartbeat and the release drop per-lease state that only
+///     the granting replica holds, so when the manifest names that replica, routing these anywhere else
+///     succeeds in the database and leaks the rest with no record.
 /// </summary>
 public sealed class ControlPlaneClientTests
 {
@@ -41,7 +41,7 @@ public sealed class ControlPlaneClientTests
         Assert.Equal(Contracts.RunnerContractVersion.Current, body.RootElement.GetProperty("contractVersion").GetInt32());
     }
 
-    // A version refusal is not an outage to ride out: this control plane can no longer serve this
+    // A version refusal differs from a transient outage: this control plane can no longer serve this
     // runner's calls at all, so the answer is a lost lease with the skew named, and the review stops now.
     [Fact]
     public async Task AVersionRefusedHeartbeat_ReadsAsALostLeaseRatherThanAnOutage()

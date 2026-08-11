@@ -27,7 +27,7 @@ public enum ReviewJobStopReason
     /// <summary>An administrator halted the review deliberately.</summary>
     OperatorStop = 1,
 
-    /// <summary>A newer revision arrived, so this review is reviewing something nobody is waiting for.</summary>
+    /// <summary>A newer revision arrived, so this review targets a revision that is no longer current.</summary>
     Superseded = 2,
 
     /// <summary>A hard budget cap was reached, so the job finalises as budget-exceeded, not as a failure.</summary>

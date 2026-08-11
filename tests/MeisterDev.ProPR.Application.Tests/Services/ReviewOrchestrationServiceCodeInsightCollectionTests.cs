@@ -26,9 +26,9 @@ public sealed class ReviewOrchestrationServiceCodeInsightCollectionTests
     private const string OrganizationUrl = "https://dev.azure.com/org";
     private static readonly Guid ClientId = Guid.Parse("11111111-1111-1111-1111-111111111111");
 
-    // A push supersedes the job while its comments are going out. The publishing mark is the control
-    // plane's answer to "is this review still wanted", and publishing over a refusal puts a review on the
-    // pull request for work somebody already decided against.
+    // A push supersedes the job while its comments are going out. The publishing mark is the control plane's
+    // answer to whether this review is still wanted, and publishing over a refusal puts a review on the pull
+    // request for work that was already decided against.
     [Fact]
     public async Task ProcessAsync_WhenTheJobIsNoLongerProcessing_PostsNothing()
     {

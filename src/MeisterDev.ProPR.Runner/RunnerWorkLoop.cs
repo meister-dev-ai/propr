@@ -13,8 +13,8 @@ namespace MeisterDev.ProPR.Runner;
 ///     The runner's whole job: ask for work when there is room, run it, hand the lease back.
 ///     <para>
 ///         The loop asks only when it has a free slot. That is what lets the control plane dispatch without
-///         tracking anybody's capacity, and it means a runner that dies takes its own capacity out of the
-///         pool by simply not asking again.
+///         tracking runner capacity itself, and it means a runner that stops responding removes its own
+///         capacity from the pool by not asking again.
 ///     </para>
 ///     <para>
 ///         Nothing here exits on a bad answer. A quiet queue, a full slot pool, an unreachable control
@@ -43,7 +43,7 @@ public sealed partial class RunnerWorkLoop(
     {
         LogRunnerStarted(logger, options.Value.DisplayName, options.Value.Capacity);
 
-        // Before asking for anything. A runner that died mid-job left a working copy of somebody's source
+        // Before asking for anything. A runner that died mid-job left a working copy of a customer's source
         // on disk, and the first thing a restarted host should do is get rid of it rather than add to it.
         workspaces.Purge();
 
@@ -119,7 +119,7 @@ public sealed partial class RunnerWorkLoop(
             case LeaseOutcome.Leased:
                 // The same https-or-loopback rule the host applies to its configured URL, applied to the
                 // address the manifest tells this job to call. Falling back to the configured URL instead
-                // would silently reintroduce the split-brain the address exists to prevent, so the job is
+                // would reintroduce the split-brain the address exists to prevent, so the job is
                 // handed back and the misconfiguration is reported where an operator reads it.
                 if (!RunnerReplicaAffinity.TryValidate(result.Manifest!.ServedBy, out var affinityError))
                 {
@@ -149,7 +149,7 @@ public sealed partial class RunnerWorkLoop(
 
             case LeaseOutcome.Draining:
                 // Backed off rather than polled at the normal rate: a drain lasts as long as an upgrade,
-                // and hammering a control plane that is deliberately shedding work helps nobody. Reported
+                // and repeatedly calling a control plane that is shedding work has no benefit. Reported
                 // as draining rather than idle so an operator sees the upgrade rather than a capacity fault.
                 LogControlPlaneDraining(logger, result.Detail ?? "no detail");
                 health.Report(RunnerHealthState.Status.Draining, result.Detail);
@@ -229,7 +229,7 @@ public sealed partial class RunnerWorkLoop(
         }
 
         // Carries on with the credential it has. It is still valid until it expires, and refusing to work
-        // for the last hour of a credential's life because the renewal failed once helps nobody.
+        // for the last hour of a credential's life because the renewal failed once has no benefit.
         LogRenewalFailed(logger, renewed.Refusal ?? "no detail");
         return true;
     }
@@ -263,7 +263,7 @@ public sealed partial class RunnerWorkLoop(
                 {
                     // Cancelled because the host is draining or the lease was lost. Neither is a failure of
                     // this job, and neither releases the lease here: the drain does that for everything it
-                    // holds, and releasing again would hand back a lease somebody else may already hold.
+                    // holds, and releasing again would hand back a lease another runner may already hold.
                 }
 #pragma warning disable CA1031 // One job failing must not take the loop with it.
                 catch (Exception ex)
@@ -306,7 +306,7 @@ public sealed partial class RunnerWorkLoop(
     ///     <para>
     ///         An unreachable control plane is ridden out rather than acted on. It has not said the lease is
     ///         gone, and abandoning a review on a transient fault would throw away everything the review has
-    ///         already spent — the lease expires on its own if the outage really lasts.
+    ///         already spent. The lease expires on its own if the outage lasts.
     ///     </para>
     /// </summary>
     private async Task HeartbeatUntilDoneAsync(RunnerJobManifest manifest, CancellationTokenSource jobCts)
@@ -394,7 +394,7 @@ public sealed partial class RunnerWorkLoop(
 
         // Every held lease is returned, and one job failing to give its back must not cost the others
         // theirs. An earlier version let a single exception here abort the loop, which meant a job that
-        // happened to finish mid-shutdown silently stranded every remaining lease until it expired.
+        // happened to finish mid-shutdown left every remaining lease held until it expired.
         foreach (var job in held)
         {
             try

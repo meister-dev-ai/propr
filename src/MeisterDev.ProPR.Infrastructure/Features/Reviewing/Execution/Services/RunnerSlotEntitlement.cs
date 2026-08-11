@@ -48,9 +48,9 @@ public sealed class RunnerSlotEntitlement(
             .FirstOrDefaultAsync(ct);
 
         // Null is unmetered; zero is zero. Folding them together made an explicit "no slots" entitlement
-        // admit every runner, which is the opposite of what setting it to zero asks for. A negative value
-        // is malformed rather than meaningful, so it is treated as no slots too rather than as unmetered,
-        // which would let bad data silently disable metering.
+        // admit every runner, which is the opposite of what setting it to zero asks for. A negative value is
+        // malformed rather than meaningful, so it is also treated as no slots rather than as unmetered, which
+        // would let bad data disable metering.
         if (entitled is null)
         {
             return RunnerSlotAdmission.Admitted;

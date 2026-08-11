@@ -87,7 +87,7 @@ public sealed partial class JobRepository(
 
         // One conditional statement, carrying the expected status in its predicate, so the database picks the
         // winner. Loading the row, comparing its status in memory, and saving it back let two hosts both
-        // believe they had won: there is no concurrency token on this model for the save to catch.
+        // be told they had won: there is no concurrency token on this model for the save to catch.
         var candidates = dbContext.ReviewJobs.Where(j => j.Id == id && j.Status == from);
         if (from == JobStatus.Processing && to == JobStatus.Pending)
         {

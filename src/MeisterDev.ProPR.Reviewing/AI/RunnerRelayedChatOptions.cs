@@ -12,11 +12,11 @@ namespace MeisterDev.ProPR.Infrastructure.AI;
 /// <summary>
 ///     Rebuilds a relayed completion's options on the side that holds the provider client.
 ///     <para>
-///         The runner sent tools as declarations and the reasoning knobs in neutral terms. Tools become
-///         declaration-only functions — the provider serializes their name and schema into the request and
-///         the model's calls travel back to the runner that owns the implementations — and reasoning goes
-///         back through the same per-client shaping the in-process path uses, because only here is the
-///         actual provider client known.
+///         The runner sent tools as declarations and the reasoning settings in neutral terms. Tools become
+///         declaration-only functions: the provider serializes their name and schema into the request, and
+///         the model's calls travel back to the runner that owns the implementations. Reasoning goes back
+///         through the same per-client shaping the in-process path uses, because the actual provider client
+///         is known only here.
 ///     </para>
 /// </summary>
 public static class RunnerRelayedChatOptions
@@ -69,8 +69,9 @@ public static class RunnerRelayedChatOptions
             AIFunctionArguments arguments,
             CancellationToken cancellationToken)
         {
-            // The implementation lives on the runner. Nothing on the control plane invokes tools — the
-            // resolved clients carry no invocation wrapper — so reaching this line means a composition bug.
+            // The implementation lives on the runner. Nothing on the control plane invokes tools, because
+            // the resolved clients carry no invocation wrapper, so reaching this line means a composition
+            // bug.
             throw new NotSupportedException($"Tool '{definition.Name}' is a relayed declaration; it is invoked on the runner that offered it.");
         }
     }

@@ -14,8 +14,8 @@ namespace MeisterDev.ProPR.Infrastructure.Features.Reviewing.Execution.Persisten
 ///     Offer candidate selection against PostgreSQL.
 ///     <para>
 ///         Scope, tags, and fairness are all decided in the one statement that reads the candidates. Doing
-///         any of it in memory after a LIMIT would silently starve whatever the limit cut off, which for the
-///         scope filter would not be a fairness problem but a correctness one.
+///         any of it in memory after a LIMIT would omit whatever the limit cut off, and for the scope
+///         filter that would be a correctness problem rather than a fairness problem.
 ///     </para>
 /// </summary>
 public sealed class RunnerLeaseOfferStore(MeisterProPRDbContext dbContext) : IRunnerLeaseOfferStore
@@ -41,13 +41,12 @@ public sealed class RunnerLeaseOfferStore(MeisterProPRDbContext dbContext) : IRu
         // An empty stamped scope means every client the runner may serve, so the scope predicate is written
         // to be satisfied by cardinality rather than by a separate query shape.
         //
-        // The tenant predicate is the boundary the whole enrollment design exists to keep, and a runner
-        // enrolled in a tenant never escapes it. The System tenant is the one exception, and it is not a
-        // hole in the rule so much as the rule applied to a tenant that belongs to the installation rather
-        // than to a customer: only platform administrators can enroll into it, so a host there is the
-        // operator's own, and one shared pool is what an installation running many small tenants can
-        // actually staff. Such a runner is offered every tenant's work; its stamped scope, if it has one,
-        // still narrows which clients.
+        // The tenant predicate is the boundary the enrollment design exists to keep, and a runner enrolled
+        // in a tenant is never offered work outside it. The System tenant is the one exception, and it is
+        // the same rule applied to a tenant that belongs to the installation rather than to a customer:
+        // only platform administrators can enroll into it, so a host there is the operator's own, and one
+        // shared pool is what an installation running many small tenants can staff. Such a runner is
+        // offered every tenant's work. Its stamped scope, if it has one, still narrows which clients.
         var servesEveryTenant = TenantCatalog.IsSystemTenant(tenantId);
         var scope = clientScope.ToArray();
         var tags = runnerTags.Select(t => t.Trim().ToLowerInvariant()).Where(t => t.Length > 0).ToArray();
@@ -114,10 +113,10 @@ public sealed class RunnerLeaseOfferStore(MeisterProPRDbContext dbContext) : IRu
             return [];
         }
 
-        // The mirror image of the candidate query: a pending job whose client requires tags, where no
-        // active runner in the tenant declares all of them. Written as NOT EXISTS rather than by comparing
-        // counts, because a tenant with no active runners at all should report its tagged jobs as
-        // unroutable too, and a count comparison would quietly report nothing.
+        // The inverse of the candidate query: a pending job whose client requires tags, where no active
+        // runner in the tenant declares all of them. Written as NOT EXISTS rather than by comparing counts,
+        // because a tenant with no active runners at all should also report its tagged jobs as unroutable,
+        // and a count comparison would report nothing.
         var rows = await dbContext.Database
             .SqlQueryRaw<UnroutableJobRow>(
                 """
@@ -194,9 +193,9 @@ public sealed class RunnerLeaseOfferStore(MeisterProPRDbContext dbContext) : IRu
             return new RunnerFleetSnapshot(registered, 0, new HashSet<Guid>());
         }
 
-        // Which clients an active runner could actually be offered work for: tenant and stamped scope, and
-        // deliberately not tags. A job whose tags nothing declares must stay pending and surface as
-        // unroutable rather than quietly falling back into the control plane.
+        // Which clients an active runner can be offered work for: tenant and stamped scope, and deliberately
+        // not tags. A job whose tags no runner declares must stay pending and be reported as unroutable
+        // rather than falling back into the control plane without any record.
         var eligibleClients = await dbContext.Database
             .SqlQueryRaw<Guid>(
                 """

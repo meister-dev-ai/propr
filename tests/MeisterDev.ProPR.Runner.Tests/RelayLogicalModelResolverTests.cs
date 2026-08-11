@@ -11,8 +11,8 @@ namespace MeisterDev.ProPR.Runner.Tests;
 
 /// <summary>
 ///     The catalog a review resolves its models through on a host with no database. What matters is that a
-///     pass reaches the model it was configured with, described the way the pipeline needs it, and that a
-///     name nobody sent fails loudly rather than quietly falling back to the default.
+///     pass reaches the model it was configured with, described the way the pipeline needs it, and that a name
+///     the manifest never carried fails rather than falling back to the default.
 /// </summary>
 public sealed class RelayLogicalModelResolverTests
 {
@@ -60,7 +60,7 @@ public sealed class RelayLogicalModelResolverTests
     }
 
     // Models are resolved once, at dispatch. A name that is not in the manifest is one this review was not
-    // configured with, and answering with the default would silently run a pass on the wrong model.
+    // configured with, and answering with the default would run a pass on the wrong model.
     [Fact]
     public async Task AnUnknownName_FailsRatherThanFallingBack()
     {

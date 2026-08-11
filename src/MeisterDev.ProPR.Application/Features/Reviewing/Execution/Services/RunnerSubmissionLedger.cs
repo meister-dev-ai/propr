@@ -28,8 +28,8 @@ public sealed class RunnerSubmissionLedger
     internal ConcurrentDictionary<Guid, string> Published { get; } = new();
 
     /// <summary>
-    ///     Drops what is held for a job once nothing can legitimately resend for it — its lease has ended
-    ///     on this replica, and every later call is refused by lease authorization before it gets here.
+    ///     Drops what is held for a job once nothing can legitimately resend for it. Its lease has ended on
+    ///     this replica, and every later call is refused by lease authorization before it reaches here.
     /// </summary>
     public void Release(Guid jobId)
     {
@@ -89,9 +89,9 @@ internal sealed class RunnerSubmissionAssembly(string submissionId, int chunkCou
             var summary = ordered.Select(chunk => chunk.Summary).LastOrDefault(s => !string.IsNullOrEmpty(s));
             var result = new ReviewResult(summary ?? string.Empty, comments);
 
-            // What the review said about itself rides the final chunk. Rebuilt onto the result here
-            // so publication reads the same labels an in-process review carries — a soft-capped or
-            // context-degraded remote review must not read as complete just because it travelled.
+            // The review's own annotations are carried on the final chunk. They are rebuilt onto the result
+            // here so publication reads the same labels an in-process review carries: a soft-capped or
+            // context-degraded remote review must not read as complete because it was relayed.
             var annotations = ordered.Select(chunk => chunk.Annotations).LastOrDefault(a => a is not null);
             return annotations is null
                 ? result

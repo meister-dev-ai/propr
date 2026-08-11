@@ -64,7 +64,7 @@ public sealed record RunnerRegistrationTokenIssue(Guid TokenId, string Token, Da
     /// <summary>
     ///     Redacted. A positional record prints every property, so the generated version would put the
     ///     plaintext token into any log line, exception message, or diagnostic dump that formats this,
-    ///     which is exactly the exposure the one-time return is meant to avoid.
+    ///     which is the exposure the one-time return is meant to avoid.
     /// </summary>
     public override string ToString()
     {

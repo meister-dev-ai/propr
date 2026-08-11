@@ -175,15 +175,15 @@ public sealed partial class ReviewJobWorker(
             var stopScanning = false;
             foreach (var job in candidates)
             {
-                // A job a runner could take is left for one, with no fallback: a silent one would void the
-                // isolation promise on exactly the installations relying on it, and without telling anybody.
-                // A job no active runner is eligible for is still this process's to run.
+                // A job a runner could take is left for a runner. There is no in-process fallback,
+                // because an unreported fallback would break the isolation guarantee on the installations
+                // that depend on it. A job no active runner is eligible for is still run here.
                 if (fleet is not null && !fleet.MayExecuteInProcess(job.ClientId))
                 {
-                    // The one deliberate exception: a publishing pr_wide pass never dispatches to a
-                    // runner, so leaving such a job "for a runner" strands it un-reviewed while every
-                    // lease offer refuses its manifest. Running it here is named in the log, because an
-                    // operator relying on runner isolation should see each review that stayed local.
+                    // One deliberate exception: a publishing pr_wide pass never dispatches to a runner,
+                    // so leaving such a job for a runner would leave it un-reviewed while every lease
+                    // offer refuses its manifest. Running it here is recorded in the log, because an
+                    // operator relying on runner isolation should see each review that ran locally.
                     if (!await RequiresInProcessExecutionAsync(job.ClientId))
                     {
                         continue;
@@ -222,8 +222,9 @@ public sealed partial class ReviewJobWorker(
                     var breach = await EvaluateAdmissionBreachAsync(budgetCapsProvider, spendAccumulator, job, stoppingToken);
                     if (breach is not null)
                     {
-                        // A soft or hard cap is already reached, so this new review is held rather than started. It
-                        // runs only when an operator restarts it after freeing budget — there is no automatic resume.
+                        // A soft or hard cap is already reached, so this new review is held rather than
+                        // started. It runs only when an operator restarts it after freeing budget. There is
+                        // no automatic resume.
                         await jobRepository.SetBudgetHeldAsync(job.Id, breach.Scope, breach.CapKind, breach.ThresholdUsd, breach.SpentUsd, stoppingToken);
                         if (budgetEventPublisher is not null)
                         {
@@ -287,8 +288,9 @@ public sealed partial class ReviewJobWorker(
             }
             catch (Exception ex) when (ex is not OperationCanceledException)
             {
-                // Unreadable configuration keeps today's behaviour — leave the job for a runner — rather
-                // than turning a config-read blip into a worker crash or a surprise local execution.
+                // Unreadable configuration keeps the current behaviour of leaving the job for a runner,
+                // rather than turning a failed configuration read into a worker crash or an unexpected
+                // local execution.
                 LogPassListUnreadable(logger, clientId, ex);
             }
 
@@ -507,10 +509,10 @@ public sealed partial class ReviewJobWorker(
     /// <summary>
     ///     Takes back jobs whose lease expired, and fails those whose publication never finished.
     ///     <para>
-    ///         This replaces failing jobs by age. Age could not tell a long review from an abandoned one, and
-    ///         the exemption that protected a running job lived in the memory of the process running it, so a
-    ///         second host would fail another host's healthy review the moment it crossed the timeout. An
-    ///         expired lease says something age cannot: nobody is renewing this any more.
+    ///         This replaces failing jobs by age. Age cannot distinguish a long review from an abandoned
+    ///         one, and the exemption that protected a running job was held in the memory of the process
+    ///         running it, so a second host would fail another host's healthy review as soon as it crossed
+    ///         the timeout. An expired lease states what age cannot: the lease is no longer being renewed.
     ///     </para>
     /// </summary>
     private async Task ReclaimExpiredLeasesAsync(CancellationToken ct)
@@ -538,16 +540,17 @@ public sealed partial class ReviewJobWorker(
                     options.MaxTotalReclaims,
                     ct);
 
-                // Counted whatever the outcome, including "somebody else got there first". A reclaim rate
-                // an operator can act on has to include the sweeps that found nothing to do.
+                // Counted whatever the outcome, including the case where another host claimed the job
+                // first. A reclaim rate an operator can act on has to include the sweeps that found
+                // nothing to do.
                 fleetMetrics?.RecordReclaim(outcome);
 
                 switch (outcome)
                 {
                     case ReviewJobReclaimOutcome.Requeued:
-                        // Whoever held this job is not coming back to it, so the budget scope this replica
-                        // was holding open for them goes with the lease. Without this, a runner that dies
-                        // mid-review leaves a scope behind for the life of the process.
+                        // The previous holder is not returning to this job, so the budget scope this
+                        // replica was holding open for it is released with the lease. Without this, a
+                        // runner that stops mid-review leaves a scope behind for the life of the process.
                         budgets?.Release(lease.JobId);
                         LogJobReclaimed(logger, lease.JobId, lease.ExpiredAt);
                         break;
@@ -557,8 +560,8 @@ public sealed partial class ReviewJobWorker(
                         break;
                     case ReviewJobReclaimOutcome.NotReclaimed:
                     default:
-                        // The holder recovered and renewed, or another host got there first. Either way
-                        // somebody owns this job and it is not ours to touch.
+                        // The holder recovered and renewed, or another host claimed the job first. Either
+                        // way the job has an owner, so this sweep leaves it alone.
                         break;
                 }
             }
@@ -583,11 +586,12 @@ public sealed partial class ReviewJobWorker(
     ///     Releases the per-job state this replica still holds for jobs that are no longer executing.
     ///     <para>
     ///         The workspace, the budget scope, the tools, and the submission memory are all process-local,
-    ///         and the ordinary release paths run only when the runner comes back to say it is done. A
-    ///         runner that vanishes never says so: its job is reclaimed through the database by whichever
+    ///         and the ordinary release paths run only when the runner reports that it is done. A runner
+    ///         that stops responding never reports: its job is reclaimed through the database by whichever
     ///         replica sweeps first, and the replica that served it would keep two full checkouts on disk
-    ///         per such job forever. Anything held for a job that is no longer Processing has no legitimate
-    ///         caller left — lease authorization refuses them — so it is only disk and memory.
+    ///         for that job indefinitely. Anything held for a job that is no longer Processing has no
+    ///         legitimate caller left, because lease authorization refuses them, so what remains is only
+    ///         disk and memory.
     ///     </para>
     /// </summary>
     private async Task ScrubAbandonedRunnerStateAsync(IServiceScope scope, CancellationToken ct)

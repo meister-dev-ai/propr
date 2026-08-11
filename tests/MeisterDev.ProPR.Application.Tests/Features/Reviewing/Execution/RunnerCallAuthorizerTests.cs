@@ -68,7 +68,7 @@ public sealed class RunnerCallAuthorizerTests
     }
 
     // Two different problems. An operator reading the audit needs to see whether a runner was overtaken or
-    // whether somebody is calling about a job that was never theirs.
+    // whether a caller is asking about a job it never held.
     [Fact]
     public async Task AnImpostorAndAnOvertakenRunner_AreRefusedForDifferentReasons()
     {

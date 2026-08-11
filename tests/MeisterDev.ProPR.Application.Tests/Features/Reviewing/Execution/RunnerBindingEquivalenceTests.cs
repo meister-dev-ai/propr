@@ -15,7 +15,7 @@ namespace MeisterDev.ProPR.Application.Tests.Features.Reviewing.Execution;
 /// <summary>
 ///     Proves the two bindings answer the same. Two adapter sets behind one pipeline drift, and a proxy
 ///     adapter that differs subtly from its direct counterpart produces a review that is wrong only when
-///     executed remotely, which is the hardest class of defect to notice and the easiest to ship.
+///     executed remotely, which is the hardest class of defect to notice and the easiest to release.
 ///     <para>
 ///         Runs entirely in process against a recorded fixture: no transport, no provider, no paid call, so
 ///         it belongs in the standard gate rather than in a nightly.
@@ -153,8 +153,8 @@ public sealed class RunnerBindingEquivalenceTests
         Assert.Empty(remote.Results);
     }
 
-    // A refusal is not a tool failure the review should absorb. Losing the lease has to stop the review,
-    // not quietly give it an empty context to draw conclusions from.
+    // A refusal does not mean a tool failed, so the review must not absorb it. Losing the lease has to stop
+    // the review rather than leave it drawing conclusions from an empty context.
     [Fact]
     public async Task WhenTheControlPlaneRefuses_TheProxyBindingStopsRatherThanDegrades()
     {
@@ -183,9 +183,9 @@ public sealed class RunnerBindingEquivalenceTests
         Assert.Contains("ResolveLinkedItem", thrown.Operation, StringComparison.Ordinal);
     }
 
-    // A transport fault is a tool failure the model should see and may retry — the same behaviour an
-    // in-process provider blip has. Absorbed into an empty answer, a 502 during a rolling restart told
-    // the reviewer the pull request changed no files, silently.
+    // A transport fault is a tool failure the model should see and may retry, which is the same behaviour a
+    // transient in-process provider failure produces. Absorbed into an empty answer, a 502 during a rolling
+    // restart reported to the reviewer that the pull request changed no files, with no record of the failure.
     [Fact]
     public async Task ATransportFault_SurfacesAsAToolErrorRatherThanAnEmptyAnswer()
     {

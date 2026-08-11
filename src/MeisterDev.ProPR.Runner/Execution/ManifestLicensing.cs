@@ -10,13 +10,13 @@ using MeisterDev.ProPR.Runner.Contracts;
 namespace MeisterDev.ProPR.Runner.Execution;
 
 /// <summary>
-///     The licensing answers a review may ask on a host with no license store: exactly the ones the
-///     manifest carries, resolved at the same dispatch that resolved everything else.
+///     The licensing answers a review may ask on a host with no license store: the ones the manifest
+///     carries, resolved at the same dispatch that resolved everything else.
 ///     <para>
-///         Only the capability the pipeline actually reads is carried. Any other key is answered with a
-///         throw rather than a guess, because a guessed "no" silently disables a licensed feature and a
-///         guessed "yes" un-licenses one — the same defect class, in both directions, that quiet nulls
-///         produced across this composition before every divergence was made to speak.
+///         Only the capability the pipeline reads is carried. Any other key is answered with a throw rather
+///         than a guess, because a guessed "no" disables a licensed feature and a guessed "yes" enables an
+///         unlicensed one, in both cases without any record. That is the same defect class the unreported
+///         nulls in this composition produced before every divergence was made to report itself.
 ///     </para>
 /// </summary>
 internal sealed class ManifestLicensing(RunnerJobManifest manifest) : ILicensingCapabilityService
@@ -26,8 +26,8 @@ internal sealed class ManifestLicensing(RunnerJobManifest manifest) : ILicensing
     {
         if (string.Equals(capabilityKey, PremiumCapabilityKey.ParallelReviewExecution, StringComparison.Ordinal))
         {
-            // Null means an older control plane that did not resolve the capability — the review behaves
-            // exactly as it did before the field existed, which was unclamped.
+            // Null means an older control plane that did not resolve the capability. The review then behaves
+            // as it did before the field existed, which was unclamped.
             return ValueTask.FromResult(manifest.ParallelReviewExecutionLicensed ?? true);
         }
 

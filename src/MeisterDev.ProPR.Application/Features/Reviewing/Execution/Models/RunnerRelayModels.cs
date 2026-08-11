@@ -17,7 +17,7 @@ namespace MeisterDev.ProPR.Application.Features.Reviewing.Execution.Models;
 /// <param name="Messages">The conversation to complete.</param>
 /// <param name="Options">
 ///     Chat options, including any tools the pass offers. Tool calling is not optional here: review passes
-///     use it, and a relay that dropped it would quietly turn a tool-using review into a different one.
+///     use it, and a relay that dropped it would turn a tool-using review into a different review.
 /// </param>
 /// <param name="IdempotencyKey">
 ///     Identifies this completion attempt. A retry carrying the same key is answered from what the first

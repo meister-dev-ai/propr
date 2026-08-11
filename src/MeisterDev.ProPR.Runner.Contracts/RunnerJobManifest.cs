@@ -9,13 +9,13 @@ namespace MeisterDev.ProPR.Runner.Contracts;
 ///     <para>
 ///         Configuration is otherwise read from the database throughout a review, which an executor without
 ///         database access cannot do, and which also means a configuration change part-way through can
-///         quietly alter a review already in progress. Resolving it once fixes both: the executor holds this
+///         alter a review already in progress. Resolving it once fixes both: the executor holds this
 ///         for the duration of its lease and never persists it.
 ///     </para>
 ///     <para>
 ///         Secrets are structurally absent rather than merely left unset. There is no field here that can
 ///         carry a credential, a connection string, or a key, and a test asserts it, because "we remember not
-///         to populate it" is not a boundary.
+///         to populate it" is not enforceable.
 ///     </para>
 /// </summary>
 /// <param name="ContractVersion">The contract version this manifest was written against.</param>
@@ -51,16 +51,15 @@ namespace MeisterDev.ProPR.Runner.Contracts;
 ///     The base URL of the control-plane replica that granted this lease, when the operator advertises
 ///     one. The workspace mirror is that replica's local disk and the budget, tool, and workspace
 ///     registries are that replica's process, so every call this job makes has to reach the replica that
-///     holds them — a load balancer in front of the fleet routes to whichever replica is next, which is
-///     exactly the wrong answer. Unset on a single-replica installation, where the one configured URL is
+///     holds them. A load balancer in front of the fleet routes to whichever replica is next, which is
+///     the wrong replica. Unset on a single-replica installation, where the one configured URL is
 ///     already the right one.
 /// </param>
 /// <param name="ParallelReviewExecutionLicensed">
 ///     Whether reviewing several files in parallel is licensed, resolved at dispatch because the license
 ///     lives in the control plane's database. Without it the pipeline works one file at a time however
-///     high the configured concurrency is — the same clamp the in-process planner applies. Null from an
-///     older control plane reads as licensed, which is exactly what the review did before the field
-///     existed.
+///     high the configured concurrency is. This is the same clamp the in-process planner applies. Null from an
+///     older control plane reads as licensed, which is how the review behaved before the field existed.
 /// </param>
 public sealed record RunnerJobManifest(
     int ContractVersion,
@@ -115,13 +114,13 @@ public sealed record RunnerLinkedItemRef(
 ///     The per-client decisions that change what a review does rather than which model runs it.
 ///     <para>
 ///         Carried because the executor cannot read them: they live on the client record, which a runner
-///         has no database to reach. Absent, every one of them falls to its default and the review quietly
-///         becomes a different review — multi-pass union off, screening off, verification off, temperature
-///         unset, profile Balanced — with nothing in the result saying so.
+///         has no database to reach. Absent, every one of them falls to its default and the review becomes
+///         a different review, with multi-pass union off, screening off, verification off, temperature
+///         unset and profile Balanced, and nothing in the result stating this.
 ///     </para>
 ///     <para>
 ///         Optional on the contract so a manifest from an older control plane still deserializes. A runner
-///         reading one without this reverts to exactly the behaviour it had before the field existed.
+///         reading one without this reverts to the behaviour it had before the field existed.
 ///     </para>
 /// </summary>
 /// <param name="EnableMultiPassUnion">
@@ -181,7 +180,7 @@ public sealed record RunnerRepositoryInstruction(
 /// <param name="BaseSha">The base commit the revision is compared against.</param>
 /// <param name="ChangedPaths">The frozen changed-path scope of this revision.</param>
 /// <param name="ExistingThreads">
-///     The conversation already on the review. The reviewer reads it to avoid raising again what somebody
+///     The conversation already on the review. The reviewer reads it to avoid raising again what a reviewer
 ///     has already answered, so an executor without it would post duplicates of findings the author has
 ///     addressed.
 /// </param>
@@ -250,8 +249,8 @@ public sealed record RunnerWorkspaceReference(
 /// <param name="Scope">Whether the pass runs per file or once over the whole change set.</param>
 /// <param name="Shadow">
 ///     Whether the pass runs for comparison only. A shadow pass records its full trace and never publishes,
-///     which is the whole point of running one, so an executor that ignored this flag would post findings
-///     from a pass the client is still evaluating.
+///     which is the reason for running one, so an executor that ignored this flag would post findings from a
+///     pass the client is still evaluating.
 /// </param>
 public sealed record RunnerReviewPass(
     int Ordinal,

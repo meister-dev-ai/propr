@@ -91,9 +91,9 @@ public sealed class RunnerLeaseOfferServiceTests
         Assert.Equal(RunnerLeaseRefusal.NoMatchingWork, offer.Refusal);
     }
 
-    // One review at a time has to mean across every host sharing the database — and a runner fleet is
-    // exactly the topology where that stops being the same as "on this host". The same rule the in-process
-    // worker applies, at the same kind of moment: before anything is claimed.
+    // One review at a time has to mean across every host sharing the database, and in a runner fleet that is
+    // not the same as "on this host". The same rule the in-process worker applies, and at the same point:
+    // before anything is claimed.
     [Fact]
     public async Task AnUnlicensedInstallation_WithAReviewAlreadyRunning_OffersNothing()
     {
@@ -151,8 +151,9 @@ public sealed class RunnerLeaseOfferServiceTests
         await executionStore.DidNotReceive().CountProcessingJobsAsync(Arg.Any<CancellationToken>());
     }
 
-    // Losing the claim is the normal outcome when several runners ask at once. It must cost the loser the
-    // candidate, not the whole offer, or a busy installation would starve every runner but the fastest.
+    // Losing the claim is the normal outcome when several runners ask at once. It must cost the losing runner
+    // the candidate rather than the whole offer, or a busy installation would only ever serve the fastest
+    // runner.
     [Fact]
     public async Task LosingAClaim_MovesToTheNextCandidateRatherThanGivingUp()
     {
@@ -321,8 +322,8 @@ public sealed class RunnerLeaseOfferServiceTests
     }
 
     // A client that configures no caps still gets a scope. Returning null for it would make "nothing to
-    // enforce" and "this replica is not holding the job" the same answer, which is exactly how an
-    // unconfigured client's completions all ended up refused.
+    // enforce" and "this replica is not holding the job" the same answer, which is how an unconfigured
+    // client's completions were all refused.
     [Fact]
     public async Task AClientWithNoCapsConfigured_IsStillHeldOpen()
     {
@@ -366,8 +367,8 @@ public sealed class RunnerLeaseOfferServiceTests
     }
 
     // A publishing pr_wide pass never dispatches, and the refusal used to come after the claim and the
-    // mirror preparation: generation bump, full repository clone, release — every poll, forever. The skip
-    // has to happen before anything is claimed, and the job stays Pending for the in-process worker.
+    // mirror preparation, so every poll cost a generation bump, a full repository clone and a release. The
+    // skip has to happen before anything is claimed, and the job stays Pending for the in-process worker.
     [Fact]
     public async Task AClientWithAPublishingPrWidePass_IsSkippedBeforeAnythingIsClaimed()
     {

@@ -9,8 +9,8 @@ namespace MeisterDev.ProPR.Infrastructure.Data.Models;
 ///     EF Core persistence model for a verified webhook delivery waiting to be turned into a review.
 ///     <para>
 ///         The payload is kept whole rather than as the parsed pieces the intake needs. Re-parsing costs
-///         nothing, and a delivery a future build reads differently — a field it learns to use, a bug it
-///         learns to avoid — can be replayed as the provider sent it.
+///         nothing, and a delivery that a later build reads differently, because it uses a field the current
+///         build ignores or avoids a bug the current build has, can be replayed as the provider sent it.
 ///     </para>
 /// </summary>
 public sealed class WebhookDeliveryQueueEntryRecord

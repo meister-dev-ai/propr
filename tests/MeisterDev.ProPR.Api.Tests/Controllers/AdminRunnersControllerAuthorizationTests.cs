@@ -124,8 +124,8 @@ public sealed class AdminRunnersControllerAuthorizationTests
             Arg.Any<CancellationToken>());
     }
 
-    // A System-tenant runner is offered every tenant's work, so enrolling one hands a host the right to
-    // fetch any customer's source. That stays a platform decision even for somebody holding the System
+    // A System-tenant runner is offered every tenant's work, so enrolling one gives a host the right to fetch
+    // any customer's source. That stays a platform decision, including for a caller holding the System
     // tenant's own administrator role.
     [Fact]
     public async Task IssueToken_ForTheSystemTenant_RefusesEvenItsOwnTenantAdministrator()
@@ -269,9 +269,9 @@ public sealed class AdminRunnersControllerAuthorizationTests
     [Fact]
     public async Task AssignScope_ClientOfAnotherTenant_IsRefusedEvenForAPlatformAdministrator()
     {
-        // The lease offer joins the runner's tenant to the client's before it consults the stamped scope,
-        // so a foreign client would be stored and then never matched. Refusing says so rather than leaving
-        // a scope that reads as set and silently routes nothing.
+        // The lease offer joins the runner's tenant to the client's before it consults the stamped scope, so
+        // a foreign client would be stored and then never matched. Refusing reports that, rather than leaving
+        // a scope that reads as set and routes nothing.
         var runner = CreateRunner(OwningTenant);
         var foreignClient = Guid.NewGuid();
 

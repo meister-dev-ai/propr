@@ -150,7 +150,7 @@ public sealed class ReviewRunner
 
     /// <summary>
     ///     Revokes the runner. It can no longer lease, and every call it makes from here fails
-    ///     authentication — so its live leases stop renewing and are reclaimed when they expire, up to one
+    ///     authentication, so its live leases stop renewing and are reclaimed when they expire, up to one
     ///     lease duration later. Nothing reclaims them earlier.
     /// </summary>
     public void Revoke(DateTimeOffset at)

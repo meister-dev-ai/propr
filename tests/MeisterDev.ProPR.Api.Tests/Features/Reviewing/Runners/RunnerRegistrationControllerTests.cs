@@ -98,7 +98,7 @@ public sealed class RunnerRegistrationControllerTests
     }
 
     // Renewal keeps the identity the server stamped. A runner that could rename itself here would be
-    // re-enrolling under a scope nobody granted it.
+    // re-enrolling under a scope no operator granted it.
     [Fact]
     public async Task Renewal_UsesTheAuthenticatedIdentityRatherThanTheBody()
     {

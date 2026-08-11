@@ -36,10 +36,10 @@ builder.Host.UseSerilog((context, configuration) => configuration
     // happens.
     .MinimumLevel.Is(ParseLogLevel(context.Configuration["RUNNER_LOG_LEVEL"]))
     .MinimumLevel.Override("Microsoft", LogEventLevel.Warning)
-    // The HTTP client factory narrates four lines per request at Information, and an idle runner asks for
-    // work every few seconds. At Information that traffic makes up most of the log and is charged per
-    // line wherever logs are shipped. Held at Warning unless the operator has asked for Debug, where the
-    // request trace is what is being read.
+    // The HTTP client factory writes four lines per request at Information, and an idle runner asks for work
+    // every few seconds. At Information that traffic makes up most of the log and is charged per line by
+    // most log backends. Held at Warning unless the operator has asked for Debug, where the request trace is
+    // what is being read.
     .MinimumLevel.Override(
         "System.Net.Http.HttpClient",
         ParseLogLevel(context.Configuration["RUNNER_LOG_LEVEL"]) <= LogEventLevel.Debug
@@ -106,8 +106,8 @@ builder.Services.AddSingleton(TimeProvider.System);
 builder.Services.AddSingleton<RunnerHealthState>();
 
 // The credential lives in memory and changes: a host enrolls after its clients exist and renews without
-// restarting. It rides on every call through a handler rather than a header fixed at construction, which
-// on a first start would fix "no credential at all".
+// restarting. It is attached to every call through a handler rather than a header fixed at construction,
+// which on a first start would fix the value as "no credential at all".
 builder.Services.AddSingleton<RunnerCredentialStore>();
 builder.Services.AddTransient<RunnerCredentialHandler>();
 
@@ -180,7 +180,7 @@ builder.Services.AddHealthChecks()
 var app = builder.Build();
 
 // Health and nothing else. This host has no API and no admin surface: it is a computation host, and every
-// endpoint it does not have is an endpoint nobody has to secure on a box that holds a customer's code.
+// endpoint it does not have is one less endpoint to secure on a machine that holds a customer's code.
 app.MapHealthChecks("/livez", new HealthCheckOptions { Predicate = _ => false });
 app.MapHealthChecks("/healthz");
 

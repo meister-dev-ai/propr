@@ -9,12 +9,12 @@ namespace MeisterDev.ProPR.Runner.Tests;
 
 /// <summary>
 ///     What a runner host must not keep. A review's working copy is a customer's source on a machine that
-///     exists to be disposable and may be imaged, recycled, or shared; the whole reason this host is
-///     treated as untrusted storage is that the code it reads does not belong to it.
+///     exists to be disposable and may be imaged, recycled, or shared. This host is treated as untrusted
+///     storage because the code it reads does not belong to it.
 ///     <para>
-///         The rest of what a review produces — its trace, its per-file outcomes, its spend — never touches
-///         this disk at all: the spool is a memory buffer that ships to the control plane. The working copy
-///         is the only thing there is to remove.
+///         The rest of what a review produces never touches this disk: its trace, its per-file outcomes and
+///         its spend all go through the spool, which is a memory buffer sent to the control plane. The working
+///         copy is the only thing to remove.
 ///     </para>
 /// </summary>
 public sealed class WorkspacePurgeTests : IDisposable
@@ -40,8 +40,8 @@ public sealed class WorkspacePurgeTests : IDisposable
         Assert.True(Directory.Exists(Path.Combine(this._root, other.ToString("D"))));
     }
 
-    // A host that died mid-review left somebody's source on disk. The first thing a restarted runner does
-    // is get rid of it, before it asks for anything new to add to it.
+    // A host that stopped mid-review left a customer's source on disk. A restarted runner removes it before
+    // it asks for any new work that would add more.
     [Fact]
     public void AStartupSweep_RemovesWhateverAPreviousLifeLeft()
     {

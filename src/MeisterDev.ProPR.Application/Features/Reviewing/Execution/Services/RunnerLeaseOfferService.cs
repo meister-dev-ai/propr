@@ -22,14 +22,14 @@ namespace MeisterDev.ProPR.Application.Features.Reviewing.Execution.Services;
 ///     Answers a runner asking for work.
 ///     <para>
 ///         The decision stays on the asking side. A runner asks only when it has a free slot, so the control
-///         plane never has to maintain a view of who is busy, and a runner that dies takes its own capacity
-///         out of the pool by simply not asking again. What the control plane decides is which jobs this
+///         plane never has to maintain a view of who is busy, and a runner that stops responding removes its
+///         own capacity from the pool by not asking again. What the control plane decides is which jobs this
 ///         particular runner is allowed to see, which is a correctness boundary rather than a preference.
 ///     </para>
 ///     <para>
 ///         Winning a candidate is the same conditional claim the in-process worker uses. Two runners handed
-///         the same candidate resolve it in the database, so an offer is never a promise and never has to be
-///         held anywhere.
+///         the same candidate resolve it in the database, so an offer never guarantees the job and never has
+///         to be held anywhere.
 ///     </para>
 /// </summary>
 public sealed partial class RunnerLeaseOfferService(
@@ -57,9 +57,9 @@ public sealed partial class RunnerLeaseOfferService(
 
         // One gate for every call site: the served window is already clamped by the manifest floor, so a
         // version refused here is refused by the heartbeat and the execution surface for the same reason,
-        // with the same words. Admitting a below-floor runner used to grant a lease whose manifest it
-        // could not deserialize — the generation bumped, the failure unnamed, three such offers failing
-        // the job.
+        // with the same wording. Admitting a runner below the floor previously granted a lease whose
+        // manifest the runner could not deserialize. The generation was bumped, the failure was not
+        // named, and three such offers failed the job.
         if (!RunnerContractVersion.IsSupported(request.ContractVersion))
         {
             return RunnerLeaseOffer.Refuse(
@@ -67,8 +67,8 @@ public sealed partial class RunnerLeaseOfferService(
                 RunnerContractVersion.DescribeMismatch(request.ContractVersion));
         }
 
-        // A runner that asks with no free slot is a runner whose own accounting has drifted. Refusing is
-        // cheaper than trusting it, and the typed reason makes the drift visible instead of looking like an
+        // A runner that asks with no free slot has drifted in its own slot accounting. Refusing is cheaper
+        // than trusting the request, and the typed reason makes the drift visible instead of reporting an
         // empty queue.
         if (request.FreeSlots <= 0)
         {
@@ -91,11 +91,10 @@ public sealed partial class RunnerLeaseOfferService(
             }
         }
 
-        // The same one-review-at-a-time rule the in-process worker applies, at the same kind of moment:
-        // before anything is claimed. Without the parallel-execution capability, one review runs across
-        // the whole installation — and a runner fleet is exactly the topology where "across every host
-        // sharing the database" and "on this host" stop being the same thing, so the database's count
-        // decides, not anybody's local view.
+        // The same one-review-at-a-time rule the in-process worker applies, and at the same point: before
+        // anything is claimed. Without the parallel-execution capability, one review runs across the whole
+        // installation. In a runner fleet, "across every host sharing the database" and "on this host" are
+        // not the same set, so the database's count decides rather than any local view.
         if (licensing is not null
             && executionStore is not null
             && !await licensing.IsEnabledAsync(PremiumCapabilityKey.ParallelReviewExecution, ct)
@@ -118,9 +117,9 @@ public sealed partial class RunnerLeaseOfferService(
         foreach (var job in candidates)
         {
             // A publishing pr_wide pass never dispatches, and the manifest resolver's refusal comes after
-            // the claim and the mirror preparation. Skipping before the claim is what keeps that refusal
-            // from becoming a hot loop — generation bump, full repository preparation, release, every
-            // poll, forever — while the job itself stays claimable by the in-process worker, which runs it.
+            // the claim and the mirror preparation. Skipping before the claim keeps that refusal from
+            // repeating on every poll, each repetition costing a generation bump, a full repository
+            // preparation and a release. The job stays claimable by the in-process worker, which runs it.
             if (await this.HasPublishingPrWidePassAsync(job.ClientId, prWideByClient, ct))
             {
                 LogSkippedPublishingPrWide(logger, job.Id, job.ClientId);
@@ -130,8 +129,8 @@ public sealed partial class RunnerLeaseOfferService(
             var lease = await leases.TryClaimAsync(job.Id, owner, leaseOptions.Value.LeaseDuration, ct);
             if (lease is null)
             {
-                // Somebody else won it between the read and the claim. That is the normal outcome under
-                // load, not an error, so the next candidate is simply tried.
+                // Another owner claimed the job between the read and the claim. That is the normal outcome
+                // under load rather than an error, so the next candidate is tried.
                 continue;
             }
 
@@ -144,8 +143,8 @@ public sealed partial class RunnerLeaseOfferService(
                 var preparation = await preparer.PrepareAsync(job, lease, ct);
                 if (!preparation.Succeeded)
                 {
-                    // The job cannot be dispatched, which is nothing to do with this runner. Handing the
-                    // lease back means the failure does not also cost the runner its turn.
+                    // The job cannot be dispatched, for reasons unrelated to this runner. Releasing the
+                    // lease means the failure does not also consume the runner's request.
                     LogDispatchPreparationFailed(logger, job.Id, preparation.Failure ?? "unknown");
                     continue;
                 }
@@ -170,10 +169,10 @@ public sealed partial class RunnerLeaseOfferService(
             {
                 if (!granted)
                 {
-                    // Released on a token of its own. Using the request's would mean an aborted request
-                    // cancels the very cleanup the abort made necessary. The workspace goes too: an offer
-                    // that stopped after preparation would otherwise leave two checkouts on disk per
-                    // refusal, and nothing later ever takes them back.
+                    // Released on a token of its own. Using the request's token would let an aborted
+                    // request cancel the cleanup that the abort requires. The workspace is released as
+                    // well: an offer that stopped after preparation would otherwise leave two checkouts
+                    // on disk per refusal, and no later path releases them.
                     budgets.Release(job.Id);
                     tools.Release(job.Id);
                     await workspaces.ReleaseAsync(job.Id);
@@ -189,9 +188,9 @@ public sealed partial class RunnerLeaseOfferService(
     ///     The budget this job's relayed completions are charged against.
     ///     <para>
     ///         Always a scope, even for a client that configures no caps. The registry is what tells the
-    ///         relay this replica is holding the job open, and returning null for an unconfigured client
-    ///         would make "nothing to enforce" and "not my job" the same answer — which is how every
-    ///         completion for such a client ends up refused.
+    ///         relay this replica is holding the job open. Returning null for an unconfigured client would
+    ///         make "nothing to enforce" and "not this replica's job" the same answer, and every completion
+    ///         for such a client would then be refused.
     ///     </para>
     ///     <para>
     ///         A scope built on <see cref="BudgetCaps.None" /> has nothing to trip, so an unconfigured

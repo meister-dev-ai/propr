@@ -13,10 +13,10 @@ using NSubstitute;
 namespace MeisterDev.ProPR.Application.Tests.Services;
 
 /// <summary>
-///     Adoption must be idempotent against rows the job already carries. A job can reach adoption with
-///     rows written — dispatched to a runner, adopted there, then refused and later run in-process — and
-///     the file-result store holds one row per file: adding the same path again fails the review outright
-///     with a constraint violation instead of running it.
+///     Adoption must be idempotent against rows the job already carries. A job can reach adoption with rows
+///     already written, for example dispatched to a runner, adopted there, then refused and later run
+///     in-process, and the file-result store holds one row per file: adding the same path again fails the
+///     review with a constraint violation instead of running it.
 /// </summary>
 public sealed class ReviewJobReuseTests
 {

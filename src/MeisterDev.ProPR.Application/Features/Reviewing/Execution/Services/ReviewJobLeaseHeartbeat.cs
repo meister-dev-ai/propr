@@ -137,8 +137,8 @@ public sealed partial class ReviewJobLeaseHeartbeat : IAsyncDisposable
                 var renewal = await this._store.TryRenewAsync(this._lease, this._options.LeaseDuration, ct);
                 if (renewal.Directive == ReviewJobDirective.Stop)
                 {
-                    // Definitive rather than transient, whichever reason it carries: either somebody decided
-                    // this job should stop, or this party no longer owns it. Retrying changes neither.
+                    // Definitive rather than transient, whichever reason it carries: either the job was told
+                    // to stop, or this holder no longer owns it. Retrying changes neither.
                     this.StopReason = renewal.StopReason;
                     LogStopDirective(this._logger, this._lease.JobId, this._lease.Generation, renewal.StopReason);
                     await this._leaseLost.CancelAsync();

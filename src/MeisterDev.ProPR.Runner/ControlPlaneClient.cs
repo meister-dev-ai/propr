@@ -85,8 +85,8 @@ public sealed partial class ControlPlaneClient(HttpClient http, ILogger<ControlP
                 case HttpStatusCode.TooManyRequests:
                     return new LeaseResult(LeaseOutcome.NoSlot, Detail: await ReadErrorAsync(response, ct));
 
-                // A drain is a deliberate operator action, not a capacity problem. Reporting it as one
-                // would have a host say "no slot is free" through an upgrade and tell nobody why.
+                // A drain is a deliberate operator action, not a capacity problem. Reporting it as one would
+                // have a host report "no slot is free" throughout an upgrade, with no reason given.
                 case HttpStatusCode.ServiceUnavailable:
                     return new LeaseResult(LeaseOutcome.Draining, Detail: await ReadErrorAsync(response, ct));
 
@@ -163,7 +163,7 @@ public sealed partial class ControlPlaneClient(HttpClient http, ILogger<ControlP
     /// <summary>
     ///     Renews one job's lease and reports what the control plane said about it.
     ///     <para>
-    ///         A review outlives its lease many times over — a single model call can run for minutes — so
+    ///         A review runs for many times the lease duration, and a single model call can take minutes, so
     ///         renewal has to happen on its own schedule rather than at pipeline milestones. It is also the
     ///         only channel that reaches a job already in flight: a stop, a supersede, and an exhausted
     ///         budget all arrive as a refused renewal.
@@ -182,8 +182,8 @@ public sealed partial class ControlPlaneClient(HttpClient http, ILogger<ControlP
                 new { jobId, leaseGeneration, contractVersion = RunnerContractVersion.Current },
                 ct);
 
-            // A version refusal is not an outage to ride out: this control plane can no longer serve this
-            // runner's calls at all, so the honest answer is a lost lease with the skew named, and the
+            // A version refusal differs from a transient outage: this control plane can no longer serve this
+            // runner's calls at all, so the accurate answer is a lost lease with the skew named, and the
             // review stops now instead of failing one refused execution call at a time.
             if (response.StatusCode == HttpStatusCode.Conflict)
             {
@@ -194,8 +194,8 @@ public sealed partial class ControlPlaneClient(HttpClient http, ILogger<ControlP
 
             if (!response.IsSuccessStatusCode)
             {
-                // Unreachable rather than lost. A control plane answering 500 is a fault to ride out, and
-                // treating it as a lost lease would abandon a review that is otherwise fine.
+                // Unreachable rather than lost. A control plane answering 500 is a transient fault, and
+                // treating it as a lost lease would abandon a review that is otherwise healthy.
                 return HeartbeatResult.NoAnswer;
             }
 
@@ -220,13 +220,13 @@ public sealed partial class ControlPlaneClient(HttpClient http, ILogger<ControlP
     /// <param name="ct">The cancellation token.</param>
     /// <param name="servedBy">
     ///     The granting replica's advertised base URL, when the manifest carries one. The release drops
-    ///     per-lease state — the budget scope, the tools, the workspace registration — that only the
-    ///     granting replica holds, so a release routed anywhere else succeeds in the database and leaks
-    ///     all of it until the lease would have expired anyway.
+    ///     per-lease state that only the granting replica holds: the budget scope, the tools and the
+    ///     workspace registration. A release routed anywhere else succeeds in the database and leaks all of
+    ///     it until the lease would have expired.
     /// </param>
     /// <param name="reason">
-    ///     Why the lease is coming back — <see cref="RunnerLeaseReleaseReasons" />. A failure spends one
-    ///     of the job's reclaim attempts; a drain costs it nothing, so the two must not read alike.
+    ///     Why the lease is being released, from <see cref="RunnerLeaseReleaseReasons" />. A failure spends
+    ///     one of the job's reclaim attempts and a drain spends none, so the two must not be reported alike.
     /// </param>
     public async Task<bool> ReleaseLeaseAsync(
         Guid jobId,

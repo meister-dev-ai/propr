@@ -10,11 +10,11 @@ namespace MeisterDev.ProPR.Runner.Contracts;
 ///     The portable slice of a relayed completion's options.
 ///     <para>
 ///         The review pipeline shapes every call with tools, a temperature, an output ceiling, and reasoning
-///         settings. On the runner those live in a rich in-memory options object that cannot travel — tools
-///         carry their implementations — so this record carries exactly the parts the provider needs to see:
-///         each tool as a declaration (name, description, parameter schema) and the reasoning knobs in
-///         neutral terms. A relay that dropped any of this would quietly turn a tool-using review into a
-///         single-turn one, which is precisely what happened before the options rode the wire.
+///         settings. On the runner those live in an in-memory options object that cannot be serialized,
+///         because the tools carry their implementations. This record therefore carries the parts the
+///         provider needs to see: each tool as a declaration (name, description, parameter schema) and the
+///         reasoning settings in neutral terms. A relay that dropped any of this would turn a tool-using
+///         review into a single-turn review, which is what happened before the options were sent.
 ///     </para>
 /// </summary>
 /// <param name="Temperature">The sampling temperature, when the job pins one.</param>
@@ -34,7 +34,7 @@ public sealed record RunnerChatOptions(
 
 /// <summary>
 ///     One tool as the provider needs to see it: a name, a description, and a parameter schema. The
-///     implementation never travels — the model's calls come back to the runner that offered the tool.
+///     implementation is never sent, because the model's calls come back to the runner that offered the tool.
 /// </summary>
 /// <param name="Name">The tool name the model calls it by.</param>
 /// <param name="Description">What the tool does, as shown to the model.</param>

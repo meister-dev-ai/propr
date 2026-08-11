@@ -13,9 +13,9 @@ using Microsoft.Extensions.Logging.Abstractions;
 namespace MeisterDev.ProPR.Runner.Tests;
 
 /// <summary>
-///     What the spool must never do: lose what it was given. Everything a review produces on its way back
-///     to the control plane passes through here, and a batch dropped on a transport failure is a trace
-///     with holes nobody can see and a file result the control plane will never record.
+///     What the spool must never do: lose what it was given. Everything a review produces on its way back to
+///     the control plane passes through here, and a batch dropped on a transport failure leaves gaps in the
+///     trace and a file result the control plane never records.
 /// </summary>
 public sealed class JobSpoolTests
 {
@@ -70,7 +70,7 @@ public sealed class JobSpoolTests
         Assert.Equal(1, batch.GetProperty("fileResults").GetArrayLength());
     }
 
-    // A refusal is not a transport failure, but it is equally not an acknowledgement, so the batch is
+    // A refusal differs from a transport failure, but it is not an acknowledgement either, so the batch is
     // kept for the same reason.
     [Fact]
     public async Task ARefusedFlush_AlsoKeepsItsBatch()
@@ -165,7 +165,7 @@ public sealed class JobSpoolTests
     }
 
     // The expected sequence is the whole backpressure contract, and it was being thrown away. A ledger
-    // further ahead than the spool believes tells it where to resume.
+    // further ahead than the spool recorded tells it where to resume.
     [Fact]
     public async Task AnOutOfOrderRefusal_ResumesFromTheSequenceTheLedgerAsksFor()
     {
@@ -304,7 +304,7 @@ public sealed class JobSpoolTests
 
         public List<JsonElement> Batches { get; } = [];
 
-        /// <summary>Every attempt, accepted or not — the sequence a refused batch carries is the point.</summary>
+        /// <summary>Every attempt, accepted or not. The tests assert on what a refused batch carries.</summary>
         public List<JsonElement> Attempts { get; } = [];
 
         protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)

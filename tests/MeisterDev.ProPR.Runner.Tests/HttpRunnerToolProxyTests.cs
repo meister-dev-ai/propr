@@ -10,9 +10,9 @@ namespace MeisterDev.ProPR.Runner.Tests;
 
 /// <summary>
 ///     What each answer from the control plane means. The states must stay distinct: a refusal means this
-///     executor lost the job, not-offered means the installation has no such tool, and a fault means the
-///     call never got an answer. Collapsing a fault into not-offered told the reviewer, mid rolling
-///     restart, that the pull request changed no files — and it believed that.
+///     executor lost the job, not-offered means the installation has no such tool, and a fault means the call
+///     never received an answer. Collapsing a fault into not-offered reported to the reviewer, during a
+///     rolling restart, that the pull request changed no files, and the reviewer acted on that.
 /// </summary>
 public sealed class HttpRunnerToolProxyTests
 {
@@ -51,8 +51,8 @@ public sealed class HttpRunnerToolProxyTests
         Assert.Null(result.Fault);
     }
 
-    // Only the control plane's own envelope may say a tool is not offered. A 502 is somebody's proxy
-    // mid-restart, and it must surface as the retryable tool error it is.
+    // Only the control plane's own envelope may report that a tool is not offered. A 502 comes from an
+    // intermediate proxy during a restart, and it has to be reported as a retryable tool error.
     [Fact]
     public async Task AServerError_IsAFaultNeverNotOffered()
     {

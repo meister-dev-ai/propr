@@ -68,8 +68,8 @@ public sealed class RunnerFleetMonitorTests(PostgresContainerFixture fixture) : 
         }
     }
 
-    // The path every existing deployment stays on. An installation with no runners is not a distributed
-    // installation and must behave exactly as it always did.
+    // The path every existing deployment stays on. An installation with no runners must behave exactly as it
+    // did before runners existed.
     [Fact]
     public async Task WithNoRunnerRegistered_TheControlPlaneKeepsExecuting()
     {

@@ -12,17 +12,17 @@ namespace MeisterDev.ProPR.Runner.Execution;
 /// <summary>
 ///     Which model each stage of the review runs on, on a host with no connection repository.
 ///     <para>
-///         The pipeline asks this for a purpose — the per-file tier, triage, verification — and uses the
-///         answer for four things: the client to call, the model id it records, the tokenizer it counts
+///         The pipeline asks this for a purpose, such as the per-file tier, triage or verification, and uses
+///         the answer for four things: the client to call, the model id it records, the tokenizer it counts
 ///         prompts with, and the context window it budgets against. Without a resolver every one of those
-///         comes back null, and the review still runs — on the default client, blind. That is how a remote
-///         review recorded real token totals against a protocol that named no model, and shipped no spend
-///         at all.
+///         comes back null and the review still runs, on the default client and with none of those four
+///         values. That is how a remote review recorded real token totals against a protocol that named no
+///         model, and reported no spend at all.
 ///     </para>
 ///     <para>
 ///         Every purpose resolves to the manifest's default model. The manifest carries one default plus a
 ///         named binding per configured pass, and a pass is resolved by name through the logical-model
-///         resolver rather than by purpose — so there is nothing else here to choose between. A client that
+///         resolver rather than by purpose, so there is nothing else here to choose between. A client that
 ///         wants a different model per tier configures it as a pass.
 ///     </para>
 /// </summary>
@@ -58,7 +58,7 @@ public sealed class RelayAiRuntimeResolver(RunnerJobManifest manifest, Func<stri
         int? expectedDimensions = null,
         CancellationToken ct = default)
     {
-        // Everything that embeds — deduplication and the semantic screener — runs where findings are
+        // Everything that embeds, meaning deduplication and the semantic screener, runs where findings are
         // published. A stub returning zeros would corrupt every similarity comparison downstream of it.
         throw new NotSupportedException("A runner relays chat completions; embeddings are computed in the control plane.");
     }

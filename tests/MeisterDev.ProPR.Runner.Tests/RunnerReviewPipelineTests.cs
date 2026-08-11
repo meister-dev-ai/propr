@@ -20,11 +20,11 @@ namespace MeisterDev.ProPR.Runner.Tests;
 ///     The drift guard on the runner's side of the composition.
 ///     <para>
 ///         The defect class this exists for: a collaborator is added to the in-process pipeline, the
-///         runner's composition is not updated, the null takes a quiet early return, and a remote review
-///         becomes a materially different review with nothing reporting it. These tests hold the
-///         composition's report complete against the constructors it mirrors, so the addition fails a test
-///         here until somebody decides: supply it, declare it equivalent, or declare it absent — and an
-///         absence is recorded on every remote review's trace.
+///         runner's composition is not updated, the null takes an early return, and a remote review becomes a
+///         materially different review with nothing reporting it. These tests hold the composition's report
+///         complete against the constructors it mirrors, so the addition fails a test here until it is given
+///         a disposition: supplied, equivalent, or absent. An absence is recorded on every remote review's
+///         trace.
 ///     </para>
 /// </summary>
 public sealed class RunnerReviewPipelineTests
@@ -65,7 +65,7 @@ public sealed class RunnerReviewPipelineTests
     }
 
     // Absences are decisions, not defaults. A new absence must be added here deliberately, with its
-    // consequence written down — that is the difference between a smaller review and a different one.
+    // consequence written down, which is what separates a smaller review from a different one.
     [Fact]
     public void TheAbsences_AreExactlyTheDecidedOnes()
     {

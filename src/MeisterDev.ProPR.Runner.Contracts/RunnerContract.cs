@@ -41,7 +41,7 @@ public static class RunnerContractOperations
     /// <summary>Relay a chat completion, where usage is captured and the hard cap is enforced.</summary>
     public const string ChatRelay = "runner.ai.chat";
 
-    /// <summary>Ship a batch of trace events, per-file results, and spend.</summary>
+    /// <summary>Send a batch of trace events, per-file results, and spend.</summary>
     public const string Ingest = "runner.ingest";
 
     /// <summary>Submit findings for the control plane to deduplicate and publish.</summary>
@@ -49,10 +49,10 @@ public static class RunnerContractOperations
 }
 
 /// <summary>
-///     Why a lease is being handed back. A drain and a failure are different operational events — one is
-///     a planned shutdown that must cost the job nothing, the other spends one of the job's reclaim
-///     attempts — and a release that did not say which let a failing host hand back and re-lease the same
-///     job forever.
+///     Why a lease is being released. A drain and a failure are different operational events: a drain is a
+///     planned shutdown that must cost the job nothing, and a failure spends one of the job's reclaim
+///     attempts. A release that did not state which let a failing host release and re-lease the same job
+///     without limit.
 /// </summary>
 public static class RunnerLeaseReleaseReasons
 {
@@ -71,10 +71,10 @@ public static class RunnerContractJson
     /// <summary>
     ///     Refuses unknown members, which is what makes a round-trip test detect a field the schema lost.
     ///     <para>
-    ///         Deliberately NOT what production readers use. A reader that refused unknown fields would
-    ///         reject the whole manifest the moment an older peer met a newer one's additive field — the
-    ///         exact deploy the compatibility window exists to survive. Production readers tolerate what
-    ///         they do not know; a version that actually changes shapes moves
+    ///         Deliberately not what production readers use. A reader that refused unknown fields would
+    ///         reject the whole manifest as soon as an older peer received a newer peer's additive field,
+    ///         which is the deploy the compatibility window exists to support. Production readers tolerate
+    ///         fields they do not know. A version that changes shapes moves
     ///         <see cref="RunnerContractVersion.OldestManifestCompatible" /> instead, and the version gate
     ///         refuses below it.
     ///     </para>

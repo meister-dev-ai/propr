@@ -50,9 +50,9 @@ public sealed partial class WorkspaceFetcher(
 
         var mirror = Path.Combine(workRoot, "mirror");
 
-        // The mirror is served from the granting replica's local disk, so the fetch has to go there when
-        // the manifest names it — through a load balancer it reaches a replica that has never heard of
-        // this job's workspace.
+        // The mirror is served from the granting replica's local disk, so the fetch has to go there when the
+        // manifest names it. Sent through a load balancer, it can reach a replica that holds no workspace
+        // for this job.
         var remote = RunnerReplicaAffinity.ResolveAbsolute(
             manifest.ServedBy,
             options.Value.ControlPlaneUrl,
@@ -61,14 +61,14 @@ public sealed partial class WorkspaceFetcher(
         LogFetching(logger, manifest.JobId, manifest.Workspace.HeadSha);
 
         // Initialised and fetched rather than cloned, because of how the control plane's mirror is
-        // organised: every ref it holds lives under refs/remotes/ — the branches it tracks and the
-        // per-review refs it fetches from the provider. `git clone` asks for refs/heads/*, matches none
-        // of them, and produces an empty repository with no objects and no error, so the failure only
-        // appears later as an unresolvable head commit. The explicit refspec takes the refs as they are.
+        // organised: every ref it holds lives under refs/remotes/, both the branches it tracks and the
+        // per-review refs it fetches from the provider. `git clone` asks for refs/heads/*, matches none of
+        // them, and produces an empty repository with no objects and no error, so the failure only appears
+        // later as an unresolvable head commit. The explicit refspec takes the refs as they are.
         await RunGitAsync(workRoot, ct, "init", "--bare", mirror);
         await RunGitAsync(mirror, ct, "remote", "add", "origin", remote);
 
-        // The credential rides in a header rather than in the URL. A credential in a remote URL is written
+        // The credential is sent in a header rather than in the URL. A credential in a remote URL is written
         // into .git/config and every subsequent git error message, which is a durable copy of a secret on
         // a host that exists to be disposable.
         await RunGitAsync(
@@ -151,8 +151,8 @@ public sealed partial class WorkspaceFetcher(
 
     private static async Task<string> ReadGitAsync(string workingDirectory, CancellationToken ct, params string[] arguments)
     {
-        // Named from the first argument that is not a -c override, so a failed fetch reports "fetch"
-        // rather than the config flag that happened to precede it.
+        // Named from the first argument other than a -c override, so a failed fetch reports "fetch" rather
+        // than the config flag that preceded it.
         var operation = Array.Find(arguments, argument => !argument.StartsWith('-') && !argument.Contains('=', StringComparison.Ordinal))
                         ?? arguments[0];
 
@@ -171,8 +171,8 @@ public sealed partial class WorkspaceFetcher(
         }
 
         // Ambient git state is stripped for the same reason the control plane's transport strips it: an
-        // inherited GIT_DIR points a child git at somebody else's repository, and this one runs commands
-        // that write.
+        // inherited GIT_DIR points a child git at an unrelated repository, and this one runs commands that
+        // write.
         foreach (var inherited in new[]
                  {
                      "GIT_DIR", "GIT_WORK_TREE", "GIT_INDEX_FILE", "GIT_PREFIX", "GIT_OBJECT_DIRECTORY",

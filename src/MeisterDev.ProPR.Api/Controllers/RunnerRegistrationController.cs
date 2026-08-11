@@ -17,13 +17,13 @@ namespace MeisterDev.ProPR.Api.Controllers;
 ///     <para>
 ///         Enrollment is the one runner operation that cannot present a runner credential, because
 ///         obtaining one is the point. It presents an operator-issued registration token instead, which is
-///         single-use and carries the scope the operator chose — the runner never names its own tenant or
+///         single-use and carries the scope the operator chose. The runner never names its own tenant or
 ///         which clients it may serve, because a host that could would be choosing its own permissions.
 ///     </para>
 ///     <para>
 ///         Renewal does present a credential, and is authorized like everything else. It exists so a
-///         credential can expire without an operator having to re-enroll every host by hand, which is the
-///         thing that makes short expiries survivable.
+///         credential can expire without an operator having to re-enroll every host by hand, which is what
+///         makes short expiries practical.
 ///     </para>
 /// </summary>
 [ApiController]
@@ -33,9 +33,9 @@ public sealed class RunnerRegistrationController(IRunnerRegistrationService regi
     /// <summary>Enrolls a host presenting an operator-issued registration token.</summary>
     /// <param name="request">The token, the name the host reports, and the contract it speaks.</param>
     /// <param name="ct">Cancellation token for the request.</param>
-    // Anonymous because obtaining a credential is the point, and rate-limited with the same policy the
-    // sign-in endpoints use: it is the one runner endpoint an attacker can reach, and a single-use token
-    // is still a secret somebody can try values for.
+    // Anonymous because obtaining a credential is the purpose of the call, and rate-limited with the same
+    // policy the sign-in endpoints use: it is the one runner endpoint an attacker can reach, and a
+    // single-use token is still a secret whose values can be guessed.
     [HttpPost("register")]
     [AllowAnonymous]
     [EnableRateLimiting("auth")]
@@ -101,8 +101,8 @@ public sealed class RunnerRegistrationController(IRunnerRegistrationService regi
             return this.Conflict(RunnerContractError.ForUnsupportedVersion(request.ContractVersion));
         }
 
-        // The credential it is renewing comes from the header the authentication already validated, not
-        // from the body: a caller that could name a credential could name somebody else's.
+        // The credential it is renewing comes from the header the authentication already validated, not from
+        // the body: a caller that could name a credential could name another runner's.
         var presented = this.Request.Headers[RunnerAuthenticationDefaults.CredentialHeader].ToString();
         var result = await registration.RenewCredentialAsync(runnerId.Value, presented, request.ContractVersion, ct);
 

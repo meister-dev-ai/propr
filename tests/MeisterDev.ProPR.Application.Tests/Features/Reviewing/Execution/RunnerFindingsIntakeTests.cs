@@ -73,9 +73,9 @@ public sealed class RunnerFindingsIntakeTests
         Assert.Equal(["src/huge.cs"], published.ContextSkippedFilePaths);
     }
 
-    // The executor only ever sees the wind-down verdict — the figures live in the budget scope the control
-    // plane holds, where the completions were priced. Published without them, the job never gets its
-    // budget block, and the paid resume that block gates re-bills the whole review.
+    // The executor only sees the wind-down verdict, because the figures live in the budget scope the control
+    // plane holds, where the completions were priced. Published without them, the job never gets its budget
+    // block, and the paid resume that block gates re-bills the whole review.
     [Fact]
     public async Task AFigurelessSoftCap_GetsItsFiguresFromTheHeldBudget()
     {
@@ -200,7 +200,7 @@ public sealed class RunnerFindingsIntakeTests
     }
 
     // The publish-once guard exists for the resend, and the resend arrives on a different request by
-    // definition — a runner retries after its first POST timed out server-side but published anyway.
+    // definition: a runner retries after its first POST timed out server-side but published anyway.
     [Fact]
     public async Task AResendOnADifferentIntakeInstance_PostsNothingFurther()
     {

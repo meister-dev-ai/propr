@@ -185,8 +185,8 @@ public sealed class RunnerRegistrationServiceTests
         Assert.Contains(RunnerContractVersion.Current.ToString(), result.Refusal!, StringComparison.Ordinal);
     }
 
-    // Renewal exists so a credential can expire without an operator enrolling the host again, which means
-    // it must not quietly re-stamp a scope the operator has since changed.
+    // Renewal exists so a credential can expire without an operator enrolling the host again, which means it
+    // must not re-stamp a scope the operator has since changed.
     [Fact]
     public async Task RenewingACredential_KeepsTheIdentityAndTheScope()
     {
@@ -310,8 +310,8 @@ public sealed class RunnerRegistrationServiceTests
         Assert.NotEqual(first.Credential, second.Credential);
     }
 
-    // The stale-row case this exists for: a redeployed host re-enrolled as a new identity, and the old
-    // row sat in the registry forever, counting as capacity and showing amber in the fleet view.
+    // The stale-row case this exists for: a redeployed host re-enrolled as a new identity, and the old row
+    // stayed in the registry, counting as capacity and shown as unreachable in the fleet view.
     [Fact]
     public async Task DeletingAnIdleRunner_RemovesItsRow()
     {

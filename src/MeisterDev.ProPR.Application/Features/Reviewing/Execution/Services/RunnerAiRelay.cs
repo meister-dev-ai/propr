@@ -83,9 +83,9 @@ public sealed class RunnerAiRelay(
             response.Usage,
             ct);
 
-        // Priced here, against the resolved binding's rates — the same extractor and calculator the
+        // Priced here, against the resolved binding's rates, with the same extractor and calculator the
         // in-process budget decorator uses. An unpriced call charging nothing is how a capped job used to
-        // spend unbounded through a runner.
+        // spend without limit through a runner.
         budget.RecordCall(
             AiCostCalculator.Calculate(
                 AiTokenUsageExtractor.FromResponse(response, model.ProviderKind),

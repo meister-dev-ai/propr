@@ -7,7 +7,7 @@ using MeisterDev.ProPR.Application.Features.Reviewing.Execution.Models;
 namespace MeisterDev.ProPR.Application.Features.Reviewing.Execution.Ports;
 
 /// <summary>
-///     Decides where reviews run, and says so out loud when nothing is running them.
+///     Decides where reviews run, and reports it when nothing is running them.
 ///     <para>
 ///         One predicate, in one place. "Is there an active runner" is asked by the worker before it claims
 ///         anything and by the stall check that explains an idle queue, and two implementations of it would
@@ -29,8 +29,8 @@ public enum ReviewExecutionMode
 
     /// <summary>
     ///     At least one runner is active, so the control plane executes nothing and waits for runners to
-    ///     take the work. There is deliberately no automatic fallback: a silent one would void the isolation
-    ///     promise on exactly the installations relying on it, and would do so without telling anybody.
+    ///     take the work. There is deliberately no automatic fallback: an unreported fallback would break the
+    ///     isolation guarantee on the installations that depend on it, and leave no record of doing so.
     /// </summary>
     RunnersOnly,
 }

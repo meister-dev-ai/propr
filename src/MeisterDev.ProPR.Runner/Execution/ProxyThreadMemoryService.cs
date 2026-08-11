@@ -21,9 +21,9 @@ namespace MeisterDev.ProPR.Runner.Execution;
 ///     reconsideration go to the control plane, which answers with the reconsidered draft.
 ///     <para>
 ///         Fail-soft in every direction, because that is this interface's contract and because a review
-///         without memory is a legitimate review. A refusal, an older control plane without the operation,
-///         or an unreachable network all leave the draft as it was — recorded on the trace, so a remote
-///         review that ran without memory says so instead of reading like one that found nothing.
+///         without memory is still a valid review. A refusal, an older control plane without the operation,
+///         or an unreachable network all leave the draft as it was, and each is recorded on the trace, so a
+///         remote review that ran without memory reports that rather than reading as one that found nothing.
 ///     </para>
 ///     <para>
 ///         Only reconsideration is served. The other operations on this interface belong to the crawl,
@@ -90,7 +90,7 @@ public sealed partial class ProxyThreadMemoryService(
             if (!response.IsSuccessStatusCode)
             {
                 // Includes an older control plane that does not serve the operation yet. The review goes
-                // on without memory, and the trace says so.
+                // on without memory, and the trace records that.
                 await this.RecordAsync(protocolId, "memory_retrieval_degraded", filePath, $"the control plane answered {(int)response.StatusCode}", ct);
                 return draftResult;
             }
@@ -127,8 +127,8 @@ public sealed partial class ProxyThreadMemoryService(
         catch (Exception ex)
 #pragma warning restore CA1031
         {
-            // The interface promises this never throws into a review — the in-process implementation
-            // swallows even cancellation here and returns the draft, so this one does too.
+            // The interface guarantees this never throws into a review. The in-process implementation absorbs
+            // even cancellation here and returns the draft, so this one does the same.
             LogReconsiderationFailed(logger, filePath, ex);
             await this.RecordAsync(protocolId, "memory_operation_failed", filePath, ex.Message, CancellationToken.None);
             return draftResult;

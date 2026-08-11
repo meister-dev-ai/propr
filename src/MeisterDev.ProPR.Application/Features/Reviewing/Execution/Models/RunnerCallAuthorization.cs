@@ -6,14 +6,14 @@ namespace MeisterDev.ProPR.Application.Features.Reviewing.Execution.Models;
 
 /// <summary>
 ///     What an executor presents with every proxied call: which job it is calling about, which lease
-///     generation it believes it holds, and who it is.
+///     generation it claims to hold, and who it is.
 /// </summary>
 /// <param name="JobId">The job the call concerns.</param>
 /// <param name="Generation">The lease generation the caller holds.</param>
 /// <param name="CallerIdentity">
-///     The authenticated caller, which must match the lease owner. Registration issues this identity; until
-///     then nothing populates it from a credential, which is exactly why the proxy endpoints are not
-///     exposed over HTTP yet.
+///     The authenticated caller, which must match the lease owner. Registration issues this identity, and
+///     until then nothing populates it from a credential, which is why the proxy endpoints are not exposed
+///     over HTTP yet.
 /// </param>
 public sealed record RunnerCallContext(Guid JobId, int Generation, string CallerIdentity);
 
